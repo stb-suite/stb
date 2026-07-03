@@ -1,10 +1,12 @@
 """Single source of truth for reading/writing SIESTA .fdf structure files.
 
-Consolidates 7 independent .fdf parsers that used to live in kgrid.py,
-kpath.py, stacking2D.py, elastic_inputs.py, inputfile.py, cohesive_energy.py
-and strain.py, several of which diverged in how they handled LatticeConstant
-and AtomicCoordinatesFormat. translate.py keeps its own .fdf reader/writer for
-now (it also handles every other structure format) and is not migrated here.
+Consolidates 8 independent .fdf parsers that used to live in kgrid.py,
+kpath.py, stacking2D.py, elastic_inputs.py, inputfile.py, cohesive_energy.py,
+strain.py and translate.py, several of which diverged in how they handled
+LatticeConstant and AtomicCoordinatesFormat. translate.py's own fractional/
+cartesian coordinate-conversion engine (convert_coordinates, shared by every
+format it supports, not just .fdf) stays in translate.py -- write_fdf() here
+only knows how to serialize an already-resolved FdfStructure.
 
 Note on units: `FdfStructure.lattice` is the physical lattice (LatticeConstant
 already applied, in Angstrom) -- the right thing for tools that need the true
@@ -33,7 +35,7 @@ class FdfStructure:
     species_meta: dict[str, dict]  # {symbol: {'id': str, 'Z': int}}, as declared in the file
     atoms: list[tuple[str, np.ndarray]]  # (symbol, position as given in file)
     coord_format: str  # 'fractional' or 'cartesian'
-    raw_lines: list[str] = field(repr=False)  # original file lines, for surgical rewrite
+    raw_lines: list[str] = field(default_factory=list, repr=False)  # original file lines, if read from disk
 
 
 def _strip_comment(line: str) -> str:
@@ -197,6 +199,55 @@ def to_pymatgen(structure: FdfStructure) -> Structure:
     coords = [pos for _, pos in structure.atoms]
     is_cartesian = structure.coord_format == "cartesian"
     return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
+
+
+def write_fdf(structure: FdfStructure, path: str) -> None:
+    """Writes a fresh .fdf file from scratch, built from an FdfStructure.
+
+    Species with zero atoms in structure.atoms are omitted (mirrors the old
+    per-caller "if count > 0" filtering). Positions are written in whatever
+    structure.coord_format says (fractional or cartesian); this function does
+    not convert between the two -- build the FdfStructure already in the
+    desired format (e.g. via a fractional/cartesian conversion done by the
+    caller) before calling this.
+    """
+    atoms_by_species: dict[str, list[np.ndarray]] = {}
+    for symbol, pos in structure.atoms:
+        atoms_by_species.setdefault(symbol, []).append(pos)
+
+    species_with_atoms = [s for s in structure.species if atoms_by_species.get(s)]
+    if not species_with_atoms:
+        raise ValueError("Cannot write .fdf: no species with at least one atom.")
+
+    raw_lattice = raw_lattice_vectors(structure)
+    coord_label = "Fractional" if structure.coord_format == "fractional" else "Ang"
+    total_atoms = sum(len(atoms_by_species[s]) for s in species_with_atoms)
+
+    lines = [
+        "# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)\n\n",
+        f"NumberOfSpecies    {len(species_with_atoms)}\n",
+        f"NumberofAtoms      {total_atoms}\n\n",
+        "%block ChemicalSpeciesLabel\n",
+    ]
+    for symbol in species_with_atoms:
+        meta = structure.species_meta[symbol]
+        lines.append(f" {meta['id']}   {meta['Z']}   {symbol}\n")
+    lines.append("%endblock ChemicalSpeciesLabel\n\n")
+    lines.append(f"LatticeConstant {structure.lattice_constant} Ang\n\n")
+    lines.append(f"AtomicCoordinatesFormat  {coord_label}\n\n")
+    lines.append("%block LatticeVectors\n")
+    for vec in raw_lattice:
+        lines.append(f" {vec[0]:.8f}   {vec[1]:.8f}   {vec[2]:.8f}\n")
+    lines.append("%endblock LatticeVectors\n\n")
+    lines.append("%block AtomicCoordinatesAndAtomicSpecies\n")
+    for symbol in species_with_atoms:
+        species_id = structure.species_meta[symbol]["id"]
+        for pos in atoms_by_species[symbol]:
+            lines.append(f"  {pos[0]:.8f}   {pos[1]:.8f}   {pos[2]:.8f}   {species_id}\n")
+    lines.append("%endblock AtomicCoordinatesAndAtomicSpecies\n")
+
+    with open(path, "w") as f:
+        f.writelines(lines)
 
 
 def rewrite_fdf_lattice(source_path: str, new_lattice: np.ndarray, out_path: str) -> None:

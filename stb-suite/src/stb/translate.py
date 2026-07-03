@@ -19,6 +19,7 @@ from typing import List, Dict
 import argparse
 from ase.io import read as ase_read
 import numpy as np
+from stb.core import structure_io
 
 
 # Cores ANSI para terminal
@@ -485,168 +486,67 @@ def getatomsandvectors_xsf(input_xsf):
 
     return typevectors, latticeparameter, vectors, getatoms, atomic_position
 
-##### NOVO #####
-# Esta é a nova função para ler arquivos .fdf
 def getatomsandvectors_fdf(input_fdf):
     """
     Extrai dados de estrutura de um arquivo .fdf do SIESTA.
+
+    Delegates parsing to stb.core.structure_io.read_fdf and adapts the result
+    to translate.py's own canonical 5-tuple format.
     """
-    element, atomicnumber = periodic_table()
-    datafdf = readfile(input_fdf)
+    structure = structure_io.read_fdf(input_fdf)
 
-    latticeparameter = "1.00"
-    typevectors = None
-    vectors = []
-    species_map = {}  # Mapeia índice (str) para símbolo (str), ex: '1' -> 'C'
-    atomic_position_raw = [] # Lista temporária de [x, y, z, species_index]
-    
-    # Dicionário final para posições (símbolo -> lista de posições)
-    atomic_position = {} 
+    typevectors = 'Direct' if structure.coord_format == 'fractional' else 'Cartesian'
+    latticeparameter = str(structure.lattice_constant)
+    # Raw (unscaled) vectors: writefilefdf writes latticeparameter as its own
+    # line, so the vectors themselves must not be pre-multiplied by it.
+    vectors = [[f"{v:.8f}" for v in row] for row in structure_io.raw_lattice_vectors(structure)]
+
+    atomic_position = {}
+    for symbol, pos in structure.atoms:
+        atomic_position.setdefault(symbol, []).append([f"{pos[0]:.8f}", f"{pos[1]:.8f}", f"{pos[2]:.8f}"])
+
     getatoms = []
-
-    # Estados para parsing dos blocos
-    in_vectors_block = False
-    in_species_block = False
-    in_coords_block = False
-
-    for line in datafdf:
-        if not line: # Pula linhas em branco
-            continue
-        
-        # Converte tudo para minúsculas para evitar problemas de case
-        key = line[0].lower()
-        
-        # Controla entrada nos blocos
-        if key == '%block':
-            # Pega o nome do bloco, também em minúsculas
-            block_name = line[1].lower() 
-            if block_name == 'latticevectors':
-                in_vectors_block = True
-                continue
-            elif block_name == 'chemicalspecieslabel':
-                in_species_block = True
-                continue
-            elif block_name == 'atomiccoordinatesandatomicspecies':
-                in_coords_block = True
-                continue
-        
-        # Controla saída dos blocos
-        if key == '%endblock':
-            in_vectors_block = False
-            in_species_block = False
-            in_coords_block = False
-            continue
-
-        # Processa linhas dentro de cada bloco
-        if in_vectors_block:
-            vectors.append([line[0], line[1], line[2]])
-        
-        elif in_species_block:
-            # Mapeia o índice (ex: '1') para o símbolo (ex: 'C')
-            species_map[line[0]] = line[2] 
-        
-        elif in_coords_block:
-            # Armazena posições [x, y, z, index_especie]
-            atomic_position_raw.append([line[0], line[1], line[2], line[3]])
-        
-        # Processa linhas fora dos blocos
-        else:
-            if key == 'latticeconstant':
-                latticeparameter = line[1]
-            elif key == 'atomiccoordinatesformat':
-                if line[1].lower() == 'fractional':
-                    typevectors = 'Direct'
-                elif line[1].lower() == 'ang':
-                    typevectors = 'Cartesian'
-    
-    # Se o formato não foi especificado, assume 'Direct' (Fracionário)
-    # como padrão, que é comum em muitos arquivos FDF.
-    if typevectors is None:
-        print("[WARNING] AtomicCoordinatesFormat not found. Assuming 'Direct' (Fractional).")
-        typevectors = 'Direct'
-
-    # --- Pós-processamento ---
-    # Agora, convertemos os dados brutos nos formatos de retorno padrão
-
-    # 1. Processar posições:
-    #    Converte de [x, y, z, index] para { 'Simbolo': [[x,y,z], ...], ... }
-    for pos in atomic_position_raw:
-        x, y, z, species_index = pos
-        # Usa o mapa de espécies para encontrar o símbolo (ex: 'C')
-        symbol = species_map[species_index] 
-        
-        if symbol not in atomic_position:
-            atomic_position[symbol] = []
-        atomic_position[symbol].append([x, y, z])
-
-    # 2. Montar 'getatoms':
-    #    Cria a lista de espécies na ordem definida em ChemicalSpeciesLabel
-    
-    # Ordena as chaves (índices '1', '2', '3') numericamente
-    sorted_species_indices = sorted(species_map.keys(), key=int)
-
-    for index_str in sorted_species_indices:
-        symbol = species_map[index_str]
-        atomic_num = element[symbol]
-        # Pega a contagem de átomos do dicionário 'atomic_position'
+    for symbol in structure.species:
+        meta = structure.species_meta[symbol]
         count = len(atomic_position.get(symbol, []))
-        
-        # Adiciona apenas se houver átomos dessa espécie
         if count > 0:
-             getatoms.append([index_str, str(atomic_num), symbol, str(count)])
+            getatoms.append([meta['id'], str(meta['Z']), symbol, str(count)])
 
     return typevectors, latticeparameter, vectors, getatoms, atomic_position
-##### FIM DA NOVA FUNÇÃO #####
 
 
 ###################### Write functions ################
 
 
 def writefilefdf(typevectors, latticeparameter, vectors, getatoms, atomsposition, outfilename, coord_format=None):
-    
-    # --- NEW: Convert coordinates ---
+    """Writes a .fdf file, delegating serialization to stb.core.structure_io.write_fdf.
+
+    translate.py keeps owning the coordinate conversion (convert_coordinates)
+    since it's shared by every output format this tool writes, not just .fdf.
+    """
     final_type, final_positions = convert_coordinates(
         typevectors, latticeparameter, vectors, atomsposition, coord_format
     )
-    # --- END NEW ---
 
-    numberofatoms = 0
-    for lin in getatoms:
-        numberofatoms = numberofatoms+int(lin[3])
-    outfile = []
-    outfile.append(
-        '# automatic create  using stb-translate (https://github.com/bastoscmo/stb-suite)\n\n')
-    outfile.append(f"NumberOfSpecies    {len(getatoms)}")
-    outfile.append(f"NumberofAtoms      {numberofatoms}\n\n")
-    outfile.append("%block ChemicalSpeciesLabel")
-    for atoms in getatoms:
-        outfile.append(f" {atoms[0]}   {atoms[1]}   {atoms[2]}")
-    outfile.append("%endblock ChemicalSpeciesLabel \n")
-    outfile.append(f"LatticeConstant {latticeparameter} Ang \n")
-    
-    # --- MODIFIED: Use final_type ---
-    if final_type == 'Direct':
-        outfile.append("AtomicCoordinatesFormat  Fractional \n\n")
-    if final_type == 'Cartesian':
-        outfile.append("AtomicCoordinatesFormat  Ang\n\n")
-    # --- END MODIFIED ---
+    species = [elem[2] for elem in getatoms]
+    species_meta = {elem[2]: {'id': elem[0], 'Z': elem[1]} for elem in getatoms}
+    atoms = [
+        (elem[2], np.array([float(p[0]), float(p[1]), float(p[2])]))
+        for elem in getatoms
+        for p in final_positions[elem[2]]
+    ]
+    lattice_constant = float(latticeparameter)
+    raw_lattice = np.array(vectors, dtype=float)
 
-    outfile.append("%block LatticeVectors")
-    for lin in vectors:
-        outfile.append(f" {lin[0]}   {lin[1]}   {lin[2]} ")
-    outfile.append("%endblock LatticeVectors\n\n")
-    outfile.append("%block AtomicCoordinatesAndAtomicSpecies")
-    
-    # --- MODIFIED: Use final_positions ---
-    for elem in getatoms:
-        for position in final_positions[elem[2]]:
-            outfile.append(
-                f"  {position[0]}   {position[1]}   {position[2]}   {elem[0]}  ")
-    # --- END MODIFIED ---
-
-    outfile.append("%endblock AtomicCoordinatesAndAtomicSpecies")
-    np.savetxt(outfilename, outfile, fmt='%s')
-    return
+    structure = structure_io.FdfStructure(
+        lattice=raw_lattice * lattice_constant,
+        lattice_constant=lattice_constant,
+        species=species,
+        species_meta=species_meta,
+        atoms=atoms,
+        coord_format='fractional' if final_type == 'Direct' else 'cartesian',
+    )
+    structure_io.write_fdf(structure, outfilename)
 
 
 def writefileposcar(typevectors, latticeparameter, vectors, getatoms, atomsposition, outfilename, coord_format=None):

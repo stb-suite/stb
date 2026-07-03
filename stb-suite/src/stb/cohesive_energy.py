@@ -16,6 +16,7 @@ import shutil
 import argparse
 from time import sleep
 import numpy as np
+from stb.core import structure_io
 
 # ANSI colors for terminal
 COLORS = {                          
@@ -119,56 +120,9 @@ DM.UseSaveDM            .true.
 
 def parse_structure_fdf(filename):
     """Parses .fdf for lattice vectors and species info"""
-    in_lattice_block = False
-    in_species_block = False
-    all_values = []
-    species_dict = {}
-    lattice_constant = 1.0 
-
     try:
-        with open(filename, 'r') as f:
-            for line in f:
-                cleaned_line = line.split('#', 1)[0].strip()
-                if not cleaned_line: continue
-                parts = cleaned_line.split()
-                lower_line = cleaned_line.lower()
-
-                if lower_line.startswith('latticeconstant'):
-                    try:
-                        lattice_constant = float(parts[1])
-                    except (IndexError, ValueError): pass
-                    continue 
-
-                if lower_line == '%block latticevectors':
-                    in_lattice_block = True; continue 
-                if lower_line == '%endblock latticevectors':
-                    in_lattice_block = False; continue 
-                if lower_line == '%block chemicalspecieslabel':
-                    in_species_block = True; continue
-                if lower_line == '%endblock chemicalspecieslabel':
-                    in_species_block = False; continue
-
-                if in_lattice_block:
-                    for part in parts:
-                        try: all_values.append(float(part))
-                        except ValueError: pass
-                
-                if in_species_block:
-                    if len(parts) >= 3:
-                        species_dict[parts[2]] = {'id': parts[0], 'Z': parts[1]}
-        
-        if len(all_values) != 9:
-            print(color_text(f"[ERROR] Expected 9 values in LatticeVectors block, found {len(all_values)}.", 'red'))
-            sys.exit(1)
-            
-        lattice = np.array(all_values).reshape(3, 3) * lattice_constant
-        
-        if not species_dict:
-            print(color_text("[ERROR] No chemical species found in ChemicalSpeciesLabel block.", 'red'))
-            sys.exit(1)
-
-        return lattice, species_dict
-
+        structure = structure_io.read_fdf(filename)
+        return structure.lattice, structure_io.species_dict(structure)
     except FileNotFoundError:
         print(color_text(f"[ERROR] Structure file '{filename}' not found.", 'red'))
         sys.exit(1)

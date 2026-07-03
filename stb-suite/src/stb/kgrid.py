@@ -14,11 +14,12 @@ import numpy as np
 import math
 import sys
 import os
+from stb.core import structure_io
 # Try to import ASE, required only for .cif files
 try:
     import ase.io
 except ImportError:
-    pass 
+    pass
 
 COLORS = {                          
     'reset': '\033[0m',             
@@ -122,61 +123,6 @@ def parse_fhi(filename):
         sys.exit(1)
         
     lattice = np.array(vecs)
-    return lattice
-
-def parse_fdf(filename):
-    """Reads an .fdf (Siesta) file and returns the lattice vectors as a 3x3 numpy array."""
-    in_block = False
-    all_values = []
-    lattice_constant = 1.0 # Default value
-
-    with open(filename, 'r') as f:
-        for line in f:
-            # Remove comments (anything after '#') and strip whitespace
-            cleaned_line = line.split('#', 1)[0].strip()
-            
-            if not cleaned_line: # Skip blank lines
-                continue
-                
-            parts = cleaned_line.split()
-            lower_line = cleaned_line.lower()
-
-            # Look for LatticeConstant (can be anywhere)
-            if lower_line.startswith('latticeconstant'):
-                try:
-                    lattice_constant = float(parts[1])
-                except (IndexError, ValueError):
-                    print(f"Error: 'LatticeConstant' line malformed in {filename}: {line}")
-                    sys.exit(1)
-                continue 
-
-            # Look for the start of the block
-            if lower_line == '%block latticevectors':
-                in_block = True
-                continue 
-
-            # Look for the end of the block
-            if lower_line == '%endblock latticevectors':
-                in_block = False
-                continue 
-
-            # If we are inside the block, collect all numerical values
-            if in_block:
-                for part in parts:
-                    try:
-                        all_values.append(float(part))
-                    except ValueError:
-                        # Ignore non-numeric parts if any
-                        pass
-    
-    # After reading the file, check if we have 9 values
-    if len(all_values) != 9:
-        print(f"Error: Expected 9 values in LatticeVectors block, but found {len(all_values)}.")
-        sys.exit(1)
-        
-    # Convert list to 3x3 array and apply the constant
-    lattice = np.array(all_values).reshape(3, 3)
-    lattice = lattice * lattice_constant
     return lattice
 
 def compute_monkhorts(cella, cellb, cellc, k_density):
@@ -287,7 +233,7 @@ def main():
 
         elif file_type == 'fdf':
             print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice = parse_fdf(filename)
+            lattice = structure_io.lattice_only(filename)
         # --- End of Update ---
             
     except FileNotFoundError:

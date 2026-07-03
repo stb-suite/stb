@@ -19,6 +19,7 @@ from typing import List, Dict
 import os
 import argparse
 import numpy as np
+from stb.core import structure_io
 
 
 
@@ -171,24 +172,7 @@ def main():
     print("[INFO] Read file")
     print("[INFO] Generating FDF files with strain...")
 
-    with open(args.file, "r") as f:
-        lines = f.readlines()
-
-    # Locate LatticeVectors section
-    lv_start = None
-    for i, line in enumerate(lines):
-        if "LatticeVectors" in line:
-            lv_start = i + 1
-            break
-
-    if lv_start is None:
-        raise ValueError("[FAIL] LatticeVectors section not found in the FDF file.")
-
-    lattice_vectors = []
-    for i in range(3):
-        vec = list(map(float, lines[lv_start + i].split()))
-        lattice_vectors.append(np.array(vec))
-    lattice_vectors = np.array(lattice_vectors)
+    lattice_vectors = structure_io.raw_lattice_vectors(args.file)
 
     # Generate strained structures
 #    strain_values = [i / 100 for i in range(args.stmin, args.stmax + 1, args.step)]
@@ -202,12 +186,9 @@ def main():
         os.makedirs(folder, exist_ok=True)
 
         new_vectors = apply_cartesian_strain(lattice_vectors, strain, norm_dir)
-        new_lv_lines = [f"  {'  '.join(f'{x:.6f}' for x in vec)}\n" for vec in new_vectors]
-        new_lines = lines[:lv_start] + new_lv_lines + lines[lv_start + 3:]
 
         output_fdf = os.path.join(folder, args.file)
-        with open(output_fdf, "w") as f:
-            f.writelines(new_lines)
+        structure_io.rewrite_fdf_lattice(args.file, new_vectors, output_fdf)
         print(f"[OK] Generated: {output_fdf} (strain: {strain*100:.1f}%)")
         
     print("[INFO] Complete job!") 

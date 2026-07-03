@@ -9,9 +9,10 @@
 VERSION = "1.8.0"
 
 from time import sleep
-from pymatgen.core import Structure, Lattice
+from pymatgen.core import Structure
 from pymatgen.symmetry.bandstructure import HighSymmKpath
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from stb.core import structure_io
 import sys
 import os
 import argparse 
@@ -77,123 +78,15 @@ class Cores:
 # --- End of Color Class ---
 
 def parse_fdf_to_structure(fdf_file="struct.fdf"):
-    """
-    Reads a SIESTA .fdf file and converts it into a 
-    pymatgen Structure object.
-    
-    This parser is now more robust against comments.
-    """
-    
+    """Reads a SIESTA .fdf file and converts it into a pymatgen Structure object."""
     try:
-        with open(fdf_file, 'r') as f:
-            lines = f.readlines()
+        return structure_io.to_pymatgen(structure_io.read_fdf(fdf_file))
     except FileNotFoundError:
         print(f"{Cores.RED}Error: File '{fdf_file}' not found.{Cores.RESET}")
         return None
-
-    # Variables to store the data
-    lattice_vectors = []
-    species_map = {}
-    atom_coords = []
-    atom_species_names = []
-    
-    lattice_constant = 1.0 # Default
-    coords_format = "Fractional" # Default
-    
-    # Flags for reading blocks
-    in_species_block = False
-    in_lattice_block = False
-    in_coords_block = False
-    
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        
-        # Convert line to lowercase for robust detection
-        lower_line = line.lower()
-        
-        # Block detection
-        if lower_line.startswith('%block chemicalspecieslabel'):
-            in_species_block = True
-            continue
-        elif lower_line.startswith('%endblock chemicalspecieslabel'):
-            in_species_block = False
-            continue
-        elif lower_line.startswith('%block latticevectors'):
-            in_lattice_block = True
-            continue
-        elif lower_line.startswith('%endblock latticevectors'):
-            in_lattice_block = False
-            continue
-        elif lower_line.startswith('%block atomiccoordinatesandatomicspecies'):
-            in_coords_block = True
-            continue
-        elif lower_line.startswith('%endblock atomiccoordinatesandatomicspecies'):
-            in_coords_block = False
-            continue
-            
-        # Reading simple parameters
-        if not (in_species_block or in_lattice_block or in_coords_block):
-            if lower_line.startswith('latticeconstant'):
-                lattice_constant = float(line.split()[1])
-            if lower_line.startswith('atomiccoordinatesformat'):
-                coords_format = line.split()[1]
-            continue
-            
-        # --- PARSER (HANDLING COMMENTS) ---
-        try:
-            if in_species_block:
-                parts = line.split()
-                # Format: 1 50 Sn [optional comment]
-                species_map[parts[0]] = parts[2] # Maps index (string '1') to name ('Sn')
-                
-            elif in_lattice_block:
-                parts = line.split()
-                # Format: 4.88... 0.0... 0.0... [optional comment]
-                # Takes only the first 3 parts
-                lattice_vectors.append([float(p) for p in parts[0:3]])
-                
-            elif in_coords_block:
-                parts = line.split()
-                if len(parts) < 4:
-                    continue # Skip invalid lines
-                
-                # Format: x y z species_index [optional comment]
-                coords = [float(parts[0]), float(parts[1]), float(parts[2])]
-                atom_coords.append(coords)
-                
-                species_index = parts[3] # ex: '1'
-                species_name = species_map.get(species_index) # ex: 'Sn'
-                if species_name:
-                    atom_species_names.append(species_name)
-                else:
-                    print(f"{Cores.RED}Error: Species index '{species_index}' not found in the map.{Cores.RESET}")
-                    return None
-                    
-        except (ValueError, IndexError) as e:
-            print(f"{Cores.YELLOW}Warning: Skipping malformed line in FDF: {line} ({e}){Cores.RESET}")
-            continue
-        # --- END OF PARSER ---
-
-    # Check if the coordinate format is as expected
-    is_cartesian = (coords_format.lower() != "fractional")
-
-    # Create the Lattice object (assuming vectors are in Angstrom)
-    if not lattice_vectors:
-        print(f"{Cores.RED}Error: No lattice vectors found in file.{Cores.RESET}")
+    except ValueError as e:
+        print(f"{Cores.RED}Error: {e}{Cores.RESET}")
         return None
-        
-    lattice = Lattice(lattice_vectors)
-    
-    # Create the Structure object
-    if not atom_species_names or not atom_coords:
-        print(f"{Cores.RED}Error: No atoms found in file.{Cores.RESET}")
-        return None
-        
-    structure = Structure(lattice, atom_species_names, atom_coords, coords_are_cartesian=is_cartesian)
-    
-    return structure
 
 
 def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50, output_filename="kpath_bs.fdf"):

@@ -11,6 +11,7 @@ import sys
 import argparse
 import numpy as np
 from time import sleep
+from stb.core import structure_io
 
 # ==========================================
 #           UI / VISUALS
@@ -100,56 +101,6 @@ def get_strain_matrix(direction, delta):
             
     return np.eye(3) + epsilon
 
-def read_fdf_structure(filepath):
-    """Reads lattice vectors from an FDF file."""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Input file '{filepath}' not found.")
-
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
-
-    lattice = []
-    in_lattice = False
-    
-    for line in lines:
-        lower = line.strip().lower()
-        if lower.startswith("%block latticevectors"):
-            in_lattice = True
-            continue 
-        if lower.startswith("%endblock latticevectors"):
-            in_lattice = False
-            continue
-        if in_lattice:
-            parts = line.split()
-            if len(parts) >= 3:
-                try:
-                    lattice.append([float(parts[0]), float(parts[1]), float(parts[2])])
-                except ValueError: pass 
-        
-    if not lattice:
-        raise ValueError("Block '%block LatticeVectors' not found.")
-        
-    return np.array(lattice), lines
-
-def write_deformed_fdf(filename, original_lines, new_lattice):
-    """Writes a new FDF file with the deformed lattice vectors."""
-    with open(filename, 'w') as f:
-        in_lattice_block = False
-        for line in original_lines:
-            lower = line.strip().lower()
-            if lower.startswith("%block latticevectors"):
-                f.write("%block LatticeVectors\n")
-                for vec in new_lattice:
-                    f.write(f" {vec[0]:12.8f}  {vec[1]:12.8f}  {vec[2]:12.8f}\n")
-                in_lattice_block = True
-                continue 
-            if lower.startswith("%endblock latticevectors"):
-                f.write("%endblock LatticeVectors\n")
-                in_lattice_block = False
-                continue
-            if in_lattice_block: continue
-            f.write(line)
-
 def generate_verify_script():
     """Generates a small helper script to check calculation status."""
     content = r"""#!/bin/bash
@@ -202,7 +153,7 @@ def main():
         dirs_to_run = args.dirs
 
     try:
-        lattice, raw_lines = read_fdf_structure(args.file)
+        lattice = structure_io.raw_lattice_vectors(args.file)
         print(f"{color_text('[INFO]', 'green')} Loaded: {args.file}")
     except Exception as e:
         sys.exit(f"{color_text('[ERROR]', 'red')} {e}")
@@ -224,7 +175,7 @@ def main():
             folder = f"strain_{d}_{'m' if s < 0 else ''}{abs(s):.2f}"
             if not os.path.exists(folder): os.makedirs(folder)
             
-            write_deformed_fdf(os.path.join(folder, args.output), raw_lines, new_lattice)
+            structure_io.rewrite_fdf_lattice(args.file, new_lattice, os.path.join(folder, args.output))
             count += 1
             
     print(f"\n{color_text('[SUCCESS]', 'green')} Generated {count} structures.")

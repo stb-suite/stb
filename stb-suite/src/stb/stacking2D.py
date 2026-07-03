@@ -25,6 +25,7 @@ from pymatgen.core import Structure, Lattice
 from pymatgen.core.operations import SymmOp
 from pymatgen.analysis.interfaces.zsl import ZSLGenerator
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from stb.core import structure_io
 
 # Suppress Pymatgen warnings for cleaner CLI output
 warnings.filterwarnings("ignore")
@@ -80,40 +81,8 @@ def show_intro() -> None:
 
 def parse_fdf_to_pymatgen(filepath):
     """Parses a Siesta .fdf file and returns a Pymatgen Structure object."""
-    lattice_vectors = []
-    species_dict = {}
-    coords = []
-    atomic_species = []
-    
-    in_species = False
-    in_lattice = False
-    in_coords = False
-    
     try:
-        with open(filepath, 'r') as f:
-            for line in f:
-                parts = line.strip().split()
-                if not parts or line.startswith('#'): continue
-                    
-                if '%block ChemicalSpeciesLabel' in line: in_species = True; continue
-                elif '%endblock ChemicalSpeciesLabel' in line: in_species = False; continue
-                elif '%block LatticeVectors' in line: in_lattice = True; continue
-                elif '%endblock LatticeVectors' in line: in_lattice = False; continue
-                elif '%block AtomicCoordinatesAndAtomicSpecies' in line: in_coords = True; continue
-                elif '%endblock AtomicCoordinatesAndAtomicSpecies' in line: in_coords = False; continue
-                
-                if in_species: species_dict[parts[0]] = parts[2]
-                elif in_lattice: lattice_vectors.append([float(x) for x in parts[:3]])
-                elif in_coords:
-                    coords.append([float(x) for x in parts[:3]])
-                    atomic_species.append(species_dict[parts[3]])
-                    
-        if not lattice_vectors or not coords:
-            raise ValueError(f"Missing lattice vectors or coordinates in {filepath}.")
-
-        lattice = Lattice(lattice_vectors)
-        return Structure(lattice, atomic_species, coords, coords_are_cartesian=False)
-
+        return structure_io.to_pymatgen(structure_io.read_fdf(filepath))
     except Exception as e:
         print(color_text(f"[ERROR] Error parsing {filepath}: {e}", 'red'))
         sys.exit(1)

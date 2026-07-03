@@ -15,6 +15,7 @@ import sys
 import os
 import shutil
 import argparse
+from stb.core import structure_io
 
 COLORS = {                          
     'reset': '\033[0m',             
@@ -897,65 +898,9 @@ def parse_structure_fdf(filename):
     """
     Parses a .fdf (Siesta) file and returns the lattice vectors and
     the list of chemical species symbols.
-    Modified to 'raise Exception' instead of 'sys.exit'.
     """
-    in_lattice_block = False
-    in_species_block = False
-    all_values = []
-    species_list = []
-    lattice_constant = 1.0 # Default value
-
-    try:
-        with open(filename, 'r') as f:
-            for line in f:
-                cleaned_line = line.split('#', 1)[0].strip()
-                if not cleaned_line: continue
-                parts = cleaned_line.split()
-                lower_line = cleaned_line.lower()
-
-                if lower_line.startswith('latticeconstant'):
-                    try:
-                        lattice_constant = float(parts[1])
-                    except (IndexError, ValueError):
-                        raise ValueError(f"'LatticeConstant' line malformed: {line}")
-                    continue 
-
-                if lower_line == '%block latticevectors':
-                    in_lattice_block = True; continue 
-                if lower_line == '%endblock latticevectors':
-                    in_lattice_block = False; continue 
-                if lower_line == '%block chemicalspecieslabel':
-                    in_species_block = True; continue
-                if lower_line == '%endblock chemicalspecieslabel':
-                    in_species_block = False; continue
-
-                if in_lattice_block:
-                    for part in parts:
-                        try: all_values.append(float(part))
-                        except ValueError: pass
-                
-                if in_species_block:
-                    try:
-                        symbol = parts[2] # ex: 'C', 'B', 'N'
-                        if symbol not in species_list:
-                            species_list.append(symbol)
-                    except IndexError: pass
-        
-        if len(all_values) != 9:
-            raise ValueError(f"Expected 9 values in LatticeVectors block, found {len(all_values)}.")
-            
-        lattice = np.array(all_values).reshape(3, 3) * lattice_constant
-        
-        if not species_list:
-            raise ValueError("No chemical species found in ChemicalSpeciesLabel block.")
-
-        return lattice, species_list
-
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Structure file '{filename}' not found.")
-    except Exception as e:
-        # Re-raise other errors
-        raise e
+    structure = structure_io.read_fdf(filename)
+    return structure.lattice, structure_io.species_list(structure)
 
 def compute_monkhorts(cella, cellb, cellc, k_density):
     """

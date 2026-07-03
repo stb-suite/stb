@@ -12,63 +12,7 @@ import argparse
 import numpy as np
 from time import sleep
 from stb.core import structure_io
-
-# ==========================================
-#           UI / VISUALS
-# ==========================================
-
-COLORS = {
-    'reset': '\033[0m',
-    'cyan': '\033[96m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m',
-    'magenta': '\033[95m' 
-}
-
-def color_text(text: str, color: str) -> str:
-    """Returns text formatted with ANSI color codes."""
-    return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    """Displays the stylized STB-SUITE introduction."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
-""", 'cyan')
-
-    print(logo)
-    print(color_text("    Siesta Tool Box - Suite", 'bold').center(60))
-    print(color_text(f"    v{VERSION}", 'blue').center(60))
-    print("\n" + "="*60)
-    
-    description = [
-        "Siesta ToolBox Suite - Elastic Generator",
-        "Strain Structure Generator (Batch Mode)",
-        f"Version {VERSION} | University of Brasilia - 2025",
-        "Integrated Style Refactoring"
-    ]
-    
-    for line in description:
-        print(color_text(line, 'yellow').center(60))
-        sleep(0.05)
-        
-    print("="*60 + "\n")
-    sleep(0.2)
+from stb.core.cli import COLORS, color_text, show_intro
 
 # ==========================================
 #           HELPER FUNCTIONS
@@ -143,7 +87,12 @@ def main():
 
     # Shows intro if --no-intro flag is NOT used
     if args.intro:
-        show_intro()
+        show_intro([
+            "Siesta ToolBox Suite - Elastic Generator",
+            "Strain Structure Generator (Batch Mode)",
+            f"Version {VERSION} | University of Brasilia - 2025",
+            "Integrated Style Refactoring"
+        ])
 
     # Expand 'all' keyword
     dirs_to_run = []

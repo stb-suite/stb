@@ -14,53 +14,9 @@ import numpy as np
 import sisl
 from typing import Tuple
 from stb.core import siesta_log
+from stb.core.cli import COLORS, color_text, show_intro
 
 VERSION = "1.8.0"
-COLORS = {
-    'reset': '\033[0m',
-    'cyan': '\033[96m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m'
-}
-
-def color_text(text: str, color: str) -> str:
-    """Format text with ANSI color codes"""
-    return f"{COLORS[color]}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    """Display STB-SUITE introduction banner"""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
-""", 'cyan')
-
-    description = [
-        "Siesta ToolBox Suite",
-        "SIESTA-to-Wantibexos Hamiltonian Interface",
-        f"Version {VERSION} | University of Brasilia - 2025",
-        ""
-    ]
-    
-    print(logo)
-    print("\n" + "="*60)
-    for line in description:
-        print(line.center(60))
-        sleep(0.1)
-    print("="*60 + "\n")
 
 def parse_arguments() -> argparse.Namespace:
     """Handle command-line arguments with argparse"""
@@ -318,7 +274,12 @@ def main():
     show_banner = args.quiet 
     
     if show_banner:
-        show_intro()
+        show_intro([
+            "Siesta ToolBox Suite",
+            "SIESTA-to-Wantibexos Hamiltonian Interface",
+            f"Version {VERSION} | University of Brasilia - 2025",
+            ""
+        ])
         print("\n" + color_text("SIESTA-WANTIBEXOS Interface:", 'bold'))
         print("-"*60)
         print(color_text("[INFO] Initializing Hamiltonian processing...", 'yellow'))

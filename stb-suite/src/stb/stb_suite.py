@@ -20,55 +20,9 @@ try:
     import readline
     readline.parse_and_bind("tab: complete")
 except ImportError:
-    pass 
+    pass
 
-
-COLORS = {
-    'reset': '\033[0m',
-    'cyan': '\033[96m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m'
-}
-
-def color_text(text: str, color: str) -> str:
-    """Returns text formatted with ANSI color"""
-    return f"{COLORS[color]}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    """Displays the stylized STB-SUITE introduction"""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
- """, 'cyan')
-
-    description = [
-        "Siesta ToolBox Suite",
-        "A comprehensive toolkit for SIESTA DFT simulations",
-        f"Version {VERSION} | University of Brasilia - 2025",
-        "Developed by Dr. Carlos M. O. Bastos"
-    ]
-
-    print(logo)
-    print("\n" + "="*60)
-    for line in description:
-        print(line.center(60))
-        sleep(0.2) # Mantive seu sleep original
-    print("="*60 + "\n")
+from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
 
 def show_main_menu() -> None:
     """Displays the main category menu"""
@@ -105,37 +59,6 @@ def run_tool(tool_name: str, args: List[str]) -> None:
         print(color_text(f"\nTool {tool_name} not found!", 'red'))
         print(color_text(f"Make sure {tool_name} is in your system's PATH.", 'yellow'))
     input("\nPress Enter to continue...")
-
-def get_input(prompt: str, color: str = 'green') -> str:
-    """
-    Gets user input with a colored prompt.
-    Graças ao 'import readline', esta função agora suporta Tab-completion!
-    """
-    return input(color_text(prompt, color))
-
-def get_float_input(prompt: str, default: float = None) -> float:
-    """Gets a float number from the user"""
-    while True:
-        try:
-            # get_input() já tem o tab-completion
-            value_str = get_input(prompt)
-            if value_str == "" and default is not None:
-                return default
-            return float(value_str)
-        except ValueError:
-            print(color_text("Please enter a valid number", 'red'))
-
-def get_int_input(prompt: str, default: int = None) -> int:
-    """Gets an integer number from the user"""
-    while True:
-        try:
-            # get_input() já tem o tab-completion
-            value_str = get_input(prompt)
-            if value_str == "" and default is not None:
-                return default
-            return int(value_str)
-        except ValueError:
-            print(color_text("Please enter a valid integer", 'red'))
 
 # ==========================================================
 # TOOL FUNCTIONS
@@ -1445,8 +1368,13 @@ def run_sub_menu(title: str, tools_dict: Dict) -> None:
 
 def main():
     """Main function to run the STB-SUITE interface"""
-    show_intro()
-    
+    show_intro([
+        "Siesta ToolBox Suite",
+        "A comprehensive toolkit for SIESTA DFT simulations",
+        f"Version {VERSION} | University of Brasilia - 2025",
+        "Developed by Dr. Carlos M. O. Bastos"
+    ])
+
     while True:
         show_main_menu()
         

@@ -23,53 +23,7 @@ except ImportError:
     sys.exit(1)
 
 # ANSI Colors for terminal
-COLORS = {
-    'reset': '\033[0m',
-    'cyan': '\033[96m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m'
-}
-
-def color_text(text: str, color: str) -> str:
-    """Returns text formatted with ANSI color."""
-    return f"{COLORS[color]}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    """Displays the stylized STB-SUITE introduction."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
- """, 'cyan')
-
-    description = [
-        "Siesta ToolBox Suite - Grid Converter",
-        "Professional Grid to Cube Converter",
-        f"Version {VERSION} | University of Brasilia - 2025",
-        "Developed by Dr. Carlos M. O. Bastos"
-    ]
-
-    print(logo)
-    print("\n" + "="*60)
-    for line in description:
-        print(line.center(60))
-        sleep(0.1)
-    print("="*60 + "\n")
-    return
+from stb.core.cli import COLORS, color_text, show_intro
 
 def get_cell_matrix(lattice_obj):
     """
@@ -114,7 +68,12 @@ def main():
     output_file = args.output if args.output else f"{args.label}_{args.type}.cube"
 
     if args.intro:
-        show_intro()
+        show_intro([
+            "Siesta ToolBox Suite - Grid Converter",
+            "Professional Grid to Cube Converter",
+            f"Version {VERSION} | University of Brasilia - 2025",
+            "Developed by Dr. Carlos M. O. Bastos"
+        ])
 
     print("\n" + color_text("GRID CONVERTER:", 'bold'))
     print("-" * 60)

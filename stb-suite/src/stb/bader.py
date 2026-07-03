@@ -38,36 +38,7 @@ PyBaderCalc = pybader.interface.Bader
 
 
 # ================= ANSI COLORS =================
-COLORS = {
-    'reset': '\033[0m', 'cyan': '\033[96m', 'blue': '\033[94m',
-    'green': '\033[92m', 'yellow': '\033[93m', 'red': '\033[91m',
-    'bold': '\033[1m', 'underline': '\033[4m',
-    'bg_red': '\033[41m', 'white': '\033[97m' # High visibility
-}
-
-def color_text(text: str, color: str) -> str:
-    return f"{COLORS[color]}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    os.system('cls' if os.name == 'nt' else 'clear')
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
- """, 'cyan')
-    print(logo)
-    print("\n" + "="*60)
-    print("Siesta ToolBox Suite - Bader Analysis".center(60))
-    print(f"Version {VERSION} | University of Brasilia".center(60))
-    print("="*60 + "\n")
+from stb.core.cli import COLORS, color_text, show_intro
 
 # ================= SCIENTIFIC DATA =================
 
@@ -343,7 +314,7 @@ def main():
     args = parser.parse_args()
 
     if args.intro:
-        show_intro()
+        show_intro(["Siesta ToolBox Suite - Bader Analysis", f"Version {VERSION} | University of Brasilia"])
 
     solve_bader(args.label, args.output, args.speed, args.ref)
     

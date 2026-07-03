@@ -20,56 +20,7 @@ import numpy as np
 import re
 import argparse
 import matplotlib.pyplot as plt
-
-
-# Cores ANSI para terminal
-COLORS = {
-    'reset': '\033[0m',
-    'cyan': '\033[96m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m'
-}
-
-def color_text(text: str, color: str) -> str:
-    """Retorna texto formatado com cor ANSI"""
-    return f"{COLORS[color]}{text}{COLORS['reset']}"
-
-def show_intro() -> None:
-    """Exibe a introdução estilizada da STB-SUITE"""
-    os.system('cls' if os.name == 'nt' else 'clear')
-    
-    logo = color_text(r"""
-.----------------.  .----------------.  .----------------.
-| .--------------. || .--------------. || .--------------. |
-| |    _______   | || |  _________   | || |   ______     | |
-| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
-| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
-| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
-| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
-| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
-| |              | || |              | || |              | |
-| '--------------' || '--------------' || '--------------' |
- '----------------'  '----------------'  '----------------'
- """, 'cyan')
-
-    description = [
-        "Siesta ToolBox Suite",
-        "A comprehensive toolkit for SIESTA DFT simulations",
-        f"Version {VERSION} | University of Brasilia - 2025",
-        "Developed by Dr. Carlos M. O. Bastos"
-    ]
-
-    print(logo)
-    print("\n" + "="*60)
-    for line in description:
-        print(line.center(60))
-        sleep(0.2)
-    print("="*60 + "\n")
-    return
+from stb.core.cli import COLORS, color_text, show_intro
 
 def plot_gnuplot(high_sym):
 ######################### PDF Plot
@@ -254,7 +205,12 @@ def main():
         parser.error("--manual-value is required when --shift is set to 'manual'.")
     
     if args.intro == True:
-        show_intro()
+        show_intro([
+            "Siesta ToolBox Suite",
+            "A comprehensive toolkit for SIESTA DFT simulations",
+            f"Version {VERSION} | University of Brasilia - 2025",
+            "Developed by Dr. Carlos M. O. Bastos"
+        ])
 
     print("\n" + color_text("BANDS:", 'bold'))
     print("-"*60)

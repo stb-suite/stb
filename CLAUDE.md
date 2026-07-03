@@ -83,13 +83,14 @@ imports what it needs from `stb.core`, plus a new entry in `[project.scripts]` i
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into three dicts — `PREPARATION_TOOLS`,
 `ANALYSIS_TOOLS`, `UTILITY_TOOLS` — each keyed by menu number to
-`{'title', 'description', 'func'}`. Selected tools are invoked one of two ways
-depending on the function, so check which pattern a given `run_*` function uses before
-modifying it:
-- `run_tool(tool_name, args)` — shells out to the **installed** console command by name
-  (must be on `PATH`).
-- some `run_*` functions instead resolve `os.path.dirname(os.path.realpath(__file__))`
-  and invoke a sibling script file directly via `subprocess` with `sys.executable`.
+`{'title', 'description', 'func'}`. Every `run_*` function builds an `args: List[str]`
+from interactive prompts (`get_input`/`get_float_input`/`get_int_input`) and dispatches
+via `run_tool(tool_name, args)`, which shells out to the **installed** console command
+by name (`subprocess.run`, must be on `PATH`) and centralizes error handling plus the
+"Press Enter to continue" pause. Don't reintroduce a second dispatch path (resolving a
+sibling script file via `__file__` and invoking it with `sys.executable`) — that used to
+coexist for about a third of the tools for no documented reason and was consolidated
+onto `run_tool()` alone.
 
 ## Domain conventions worth knowing
 

@@ -9,7 +9,6 @@
 VERSION = "1.9.0"  
 
 import os
-import sys
 import subprocess
 from time import sleep
 import argparse
@@ -104,15 +103,7 @@ def run_phonon_postprocessing() -> None:
     tstep = get_float_input("Temperature step (K) [default: 10]: ", 10.0)
         
 
-    suite_dir = os.path.dirname(os.path.realpath(__file__))
-    script_path = os.path.join(suite_dir, "phonons_pos.py")
-    
-    if not os.path.exists(script_path):
-        print(color_text(f"\n[ERROR] Core script missing: {script_path}", 'red'))
-        return
-    
     args = [
-        sys.executable, script_path,
         "-dir", phonon_dir,
         "-l", sys_label,
         "-m", str(m_x), str(m_y), str(m_z),
@@ -121,15 +112,9 @@ def run_phonon_postprocessing() -> None:
         "--tstep", str(tstep),
         "--no-intro"
     ]
-    
+
     print(color_text("\nStarting Phonon post-processing...", 'green'))
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing post-processing script.", 'red'))
-        
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-phononsPos", args)
     
     
 
@@ -176,11 +161,7 @@ def run_phonon_generator() -> None:
         pseudo_dir = "."
         
     # 6. Preparar e executar o script
-    suite_dir = os.path.dirname(os.path.realpath(__file__))
-    script_path = os.path.join(suite_dir, "phonons_create.py")
-    
     args = [
-        sys.executable, script_path,
         "-s", structure_file,
         "-c", calc_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
@@ -188,16 +169,9 @@ def run_phonon_generator() -> None:
         "-p", pseudo_dir,
         "--no-intro"
     ]
-    
+
     print(color_text("\nGenerating phonon displacement folders...", 'green'))
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing phonon script.", 'red'))
-        print(color_text("Check if the input files exist and the pseudopotentials are available.", 'yellow'))
-        
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-phononsCreate", args)
 
 
 def run_cohesive_setup() -> None:
@@ -334,29 +308,16 @@ def run_2d_stacker() -> None:
     sm_map = {'1': 'top', '2': 'bottom', '3': 'sym'}
     strain_mode = sm_map.get(sm_choice, 'top')
 
-    # Resolve script execution path
-    script_path = os.path.join(os.path.dirname(__file__), "stacking2D.py")
-    if not os.path.exists(script_path):
-        script_path = "stb-2Dstacking" # Fallback to pip installed entry point
-
     # 6. Build Command and Execute ONCE
     args = [
-        sys.executable if "stb-2Dstacking" not in script_path else script_path, 
-        "-l1", layer1, 
-        "-l2", layer2, 
+        "-l1", layer1,
+        "-l2", layer2,
         "-i", # Always included as requested
-        "-a", str(max_area), 
-        "-s", str(max_strain), 
+        "-a", str(max_area),
+        "-s", str(max_strain),
         "-sm", strain_mode,
         "--no-intro"
     ]
-
-    # Fix sys.executable requirement if using global entry point
-    if script_path == "stb-2Dstacking":
-        args.pop(0) 
-        args.insert(0, script_path)
-    else:
-        args.insert(1, script_path)
 
     # Adiciona os argumentos de Gap (seja -g ou --gap_range)
     args.extend(gap_args)
@@ -368,17 +329,9 @@ def run_2d_stacker() -> None:
         args.extend(["-t", str(twist), "-tx", str(shift_x), "-ty", str(shift_y)])
 
     print(color_text(f"\n--- Running 2D Stacker ---", 'green'))
-    
-    try:
-        # A chamada é feita uma única vez. O stacking2D.py lida com o resto.
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text(f"\nError executing 2Dstacking script.", 'red'))
-        print(color_text("Please check if the FDF files are valid and formatted correctly.", 'yellow'))
-    except FileNotFoundError:
-         print(color_text(f"\nError: Could not find '{script_path}'. Make sure the package is installed.", 'red'))
-    
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-2Dstacking", args)
+
+
 def run_grid_to_cube() -> None:
     """Interface for the Grid to Cube Converter (cube.py)"""
     print("\n" + "="*60)
@@ -406,22 +359,10 @@ def run_grid_to_cube() -> None:
     print(f"\nTarget File: {color_text(f'{label}.{selected_type}', 'cyan')}")
 
     # 3. Execução
-    script_path = os.path.join(os.path.dirname(__file__), "cube.py")
-    if not os.path.exists(script_path):
-        script_path = "cube.py" # Fallback
-
-    # Argumentos: python cube.py --label X --type Y --no-intro
-    args = [sys.executable, script_path, "--label", label, "--type", selected_type, "--no-intro"]
+    args = ["--label", label, "--type", selected_type, "--no-intro"]
 
     print(color_text("\nConverting to Cube format...", 'green'))
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing conversion script.", 'red'))
-        print(color_text(f"Check if '{label}.{selected_type}' and '{label}.XV' exist.", 'yellow'))
-    
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-cube", args)
 
 
 
@@ -445,11 +386,7 @@ def run_density_plotter() -> None:
     mode_choice = get_input("Select mode (1-2) [default: 1]: ").strip()
     
     # Argumentos base
-    script_path = os.path.join(os.path.dirname(__file__), "density.py")
-    if not os.path.exists(script_path):
-        script_path = "density.py" # Fallback
-
-    args = [sys.executable, script_path, "--label", label, "--no-intro"]
+    args = ["--label", label, "--no-intro"]
 
     # Lógica para 3D vs 2D
     if mode_choice == '2':
@@ -475,14 +412,7 @@ def run_density_plotter() -> None:
             args.extend(["--pos", pos_str])
 
     print(color_text("\nProcessing Density...", 'green'))
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing density script.", 'red'))
-        print(color_text("Ensure 'sisl' is installed and the .RHO file exists.", 'yellow'))
-    
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-density", args)
 
 
 def run_workfunction_calculator() -> None:
@@ -517,31 +447,18 @@ def run_workfunction_calculator() -> None:
         print(color_text("Invalid axis. Using default (z).", 'red'))
         axis_choice = 2
 
-    # Construir comando
-    script_path = os.path.join(os.path.dirname(__file__), "workfunction.py")
-    if not os.path.exists(script_path):
-        # Fallback caso o script não esteja no mesmo diretório
-        script_path = "workfunction.py"
-
     # Montar argumentos
-    args = [sys.executable, script_path, "--label", label, "--axis", str(axis_choice), "--no-intro"]
-    
+    args = ["--label", label, "--axis", str(axis_choice), "--no-intro"]
+
     if grid_file:
         args.extend(["--grid", grid_file])
-    
+
     if fermi_file:
         # Nota: O workfunction.py usa --fdf para ler o arquivo de saída (Fermi)
-        args.extend(["--file", fermi_file]) 
-    
+        args.extend(["--file", fermi_file])
+
     print(color_text("\nRunning Work Function analysis...", 'green'))
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing workfunction script.", 'red'))
-        print(color_text("Ensure 'sisl' is installed (pip install sisl) and files exist.", 'yellow'))
-    
-    input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-workfunction", args)
 
 
 def run_bader_calculator() -> None:
@@ -572,28 +489,18 @@ def run_bader_calculator() -> None:
     speed_choice = get_input("Choice (1-2, default: 1): ", 'green')
     speed_mode = 'fast' if speed_choice == '2' else 'normal'
 
-    # Construir comando para chamar o bader.py
-    script_path = os.path.join(os.path.dirname(__file__), "bader.py")
-    if not os.path.exists(script_path):
-        script_path = "bader.py"
-
     # Argumentos básicos
-    args = [sys.executable, script_path, "--label", label, "--speed", speed_mode, "--no-intro"]
-    
+    args = ["--label", label, "--speed", speed_mode, "--no-intro"]
+
     # Argumentos opcionais
     if output_file:
         args.extend(["--output", output_file])
-    
+
     # --- NOVO: Adiciona a flag --ref se o usuário digitou algo ---
     if ref_file:
         args.extend(["--ref", ref_file])
-    
-    try:
-        subprocess.check_call(args)
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing Bader analysis.", 'red'))
-    
-    input(color_text("\nPress Enter to continue...", 'green'))
+
+    run_tool("stb-bader", args)
     
 
 def run_elastic_generator() -> None:
@@ -638,30 +545,19 @@ def run_elastic_generator() -> None:
     selected_dirs = dirs_map.get(mode, dirs_map['1'])
     print(f"Selected directions: {color_text(str(selected_dirs), 'green')}\n")
     
-    # Construir comando
-    script_path = os.path.join(os.path.dirname(__file__), "elastic_inputs.py")
-    if not os.path.exists(script_path):
-        script_path = "elastic_inputs.py"
-
     # Monta a lista de argumentos base
     args = [
-        sys.executable, script_path, 
-        "--file", input_file, 
-        "--max", str(max_strain), 
+        "--file", input_file,
+        "--max", str(max_strain),
         "--steps", str(steps),
         "--no-intro",
         "--dirs" # Adiciona a flag --dirs
     ]
-    
+
     # Adiciona as direções escolhidas à lista de argumentos
     args.extend(selected_dirs)
-    
-    try:
-        subprocess.check_call(args)
-        input(color_text("\nPress Enter to continue...", 'green'))
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing script.", 'red'))
-        input(color_text("\nPress Enter to continue...", 'green'))
+
+    run_tool("stb-elasticInputs", args)
 
 def run_elastic_analyzer() -> None:
     """Interface for the Elastic Properties Analyzer """
@@ -669,12 +565,8 @@ def run_elastic_analyzer() -> None:
     print(color_text("ELASTIC PROPERTIES ANALYZER", 'bold').center(60))
     print("="*60 + "\n")
     
-    script_path = os.path.join(os.path.dirname(__file__), "elastic_analysis.py")
-    if not os.path.exists(script_path):
-        script_path = "elastic_analysis.py"
-        
-    args = [sys.executable, script_path]
-    
+    args = []
+
     # --- NOVO: Solicita o nome do arquivo de output ---
     print(color_text("Enter the Siesta output filename located inside strain folders.", 'yellow'))
     output_filename = get_input("Filename (default: calc.out): ").strip()
@@ -694,13 +586,7 @@ def run_elastic_analyzer() -> None:
         print(color_text("-> 2D Mode Enabled", 'green'))
     
     print(color_text("\nRunning analysis in current directory...", 'yellow'))
-    
-    try:
-        subprocess.check_call(args)
-        input(color_text("\nPress Enter to continue...", 'green'))
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing script.", 'red'))
-        input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-elasticAnalysis", args)
 
 def run_input_generator() -> None:
     """Interface for the Input File Generator (stb-inputfile)"""
@@ -929,13 +815,7 @@ def run_strain_post_processor() -> None:
     print("="*60 + "\n")
     print(color_text("This tool analyzes 'strain_*' folders in the current directory.", 'yellow'))
     
-    # Localiza o script strain_analysis.py no mesmo diretório
-    script_path = os.path.join(os.path.dirname(__file__), "strain_analysis.py")
-    if not os.path.exists(script_path):
-        # Fallback para tentar chamar como comando do sistema caso não esteja na pasta
-        script_path = "strain_analysis.py"
-        
-    args = [sys.executable, script_path]
+    args = []
 
     # 1. Pergunta qual o nome do ficheiro de output
     print(color_text("Enter the Siesta output filename located inside strain folders.", 'yellow'))
@@ -958,13 +838,7 @@ def run_strain_post_processor() -> None:
     # -------------------------
 
     print(color_text("\nRunning analysis...", 'yellow'))
-    
-    try:
-        subprocess.check_call(args)
-        input(color_text("\nPress Enter to continue...", 'green'))
-    except subprocess.CalledProcessError:
-        print(color_text("\nError executing script.", 'red'))
-        input(color_text("\nPress Enter to continue...", 'green'))
+    run_tool("stb-strainAnalysis", args)
 
 
 def run_bands_analyzer() -> None:

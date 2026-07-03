@@ -47,22 +47,38 @@ in `test.sh`.
 
 ## Architecture
 
-**Each module in `stb-suite/src/stb/` is a fully self-contained CLI script**, not a
-library used by others. There is no shared `utils`/`common` module. Each tool:
+**Each module in `stb-suite/src/stb/` is a thin CLI script** (argparse `main()`,
+registered as a console script in `stb-suite/pyproject.toml` under
+`[project.scripts]`, e.g. `stb-kgrid = "stb.kgrid:main"`) that delegates shared logic
+to `stb-suite/src/stb/core/`:
 
-- defines its own `COLORS` dict + `color_text()` helper and `show_intro()` banner
-  (duplicated verbatim across files — this is the existing convention, not an
-  oversight; follow it rather than trying to extract a shared module unless asked),
-- parses arguments with `argparse` in a `main()` function,
-- is registered as a console script in `stb-suite/pyproject.toml` under
-  `[project.scripts]` (e.g. `stb-kgrid = "stb.kgrid:main"`),
-- re-implements its own structure-file readers where needed (e.g. `parse_poscar`,
-  `parse_cif`, `parse_fdf`, `parse_fhi` appear independently in `kgrid.py`,
-  `kpath.py`, and `stacking2D.py` rather than being imported from one place).
+- `core/structure_io.py` — the only `.fdf` reader/writer (`read_fdf`, `write_fdf`,
+  `to_pymatgen`, `rewrite_fdf_lattice`, plus thin accessors like `lattice_only`,
+  `species_list`/`species_dict`). Use `raw_lattice_vectors()` instead of
+  `lattice_only()`/`.lattice` when you're about to write back into an existing file's
+  `%block LatticeVectors` while leaving its `LatticeConstant` line untouched (see the
+  module docstring) — using the wrong one double-applies the lattice constant.
+- `core/siesta_log.py` — parsers for SIESTA `.out` logs: `get_fermi_energy`,
+  `get_cell_height`, `get_stress_tensor` (matrix block + Voigt fallback, eV/Å³),
+  `get_stress_voigt_kbar` (Voigt-only, raw kBar — kept separate from
+  `get_stress_tensor` because their two callers do incompatible downstream math),
+  `get_free_energy`, `parse_strain_folder_name`. All return `None` on
+  not-found/parse-error rather than raising (these are used in loops that scan many
+  `strain_*` folders and tolerate incomplete ones).
+- `core/kspace.py` — `compute_monkhorts` (Monkhorst-Pack grid from lattice + target
+  density). Raises `ValueError` on zero cell volume.
+- `core/cli.py` — `COLORS`, `color_text()`, `show_intro(lines, delay=0.2)` (banner
+  content/title is still per-tool, passed in as `lines`), `get_input`/
+  `get_float_input`/`get_int_input`.
 
-When adding a new tool, mirror this pattern: a new standalone `stb/<name>.py` with its
-own `main()`, plus a new entry in `[project.scripts]` in `pyproject.toml` (and update
-`test/` with a fixture if practical).
+New format-specific structure readers/writers (POSCAR, CIF, XYZ, XSF, FHI, DFTB) still
+live only in `translate.py` — it's the sole consumer of those formats, so there's
+nothing to extract yet. If a second tool needs one of them, move it into
+`core/structure_io.py` first rather than copying `translate.py`'s implementation.
+
+When adding a new tool, mirror this pattern: a new standalone `stb/<name>.py` that
+imports what it needs from `stb.core`, plus a new entry in `[project.scripts]` in
+`pyproject.toml` (and update `test/` with a fixture if practical).
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into three dicts — `PREPARATION_TOOLS`,
@@ -74,18 +90,6 @@ modifying it:
   (must be on `PATH`).
 - some `run_*` functions instead resolve `os.path.dirname(os.path.realpath(__file__))`
   and invoke a sibling script file directly via `subprocess` with `sys.executable`.
-
-**`stb_suite_OLD.py`** is a legacy version of the dispatcher kept in the source tree
-for reference. It is not registered in `pyproject.toml` and not reachable from any
-installed command — treat it as dead code, not a file to update.
-
-## Known inconsistency
-
-`pyproject.toml` declares `stb-strainAnalysis = "stb.strain_pos:main"`, but no
-`strain_pos.py` module exists — the relevant code lives in `strain_analysis.py`. This
-entry point is currently broken; if touching strain-analysis tooling, be aware the
-installed `stb-strainAnalysis` command will fail until this is fixed (either rename
-the module or fix the entry point).
 
 ## Domain conventions worth knowing
 

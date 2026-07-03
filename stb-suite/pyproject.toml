@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stb_suite"
+version = "1.9.1"
+description = "Siesta ToolBox (STB) suite with softwares pre and pos processing for Siesta code."
+readme = "README.md"
+license = {file = "LICENSE"}
+dependencies = [
+    "numpy",
+    "ase",
+    "matplotlib",
+    "pymatgen",
+    "spglib",
+    "sisl",
+    "pybader",
+    "setuptools",
+    "scipy",
+    "phonopy"
+]
+
+[project.scripts]
+stb-bands = "stb.bands:main"
+stb-convdos = "stb.convdos:main"
+stb-structural = "stb.structural:main"
+stb-translate = "stb.translate:main"
+stb-strain = "stb.strain:main"
+stb-suite = "stb.stb_suite:main"
+stb-clean = "stb.clean:main"
+stb-symmetry = "stb.symmetry:main"
+stb-siesta2wtb = "stb.wantibexos:main"
+stb-dos = "stb.dos:main"
+stb-inputfile = "stb.inputfile:main"
+stb-kgrid = "stb.kgrid:main"
+stb-kpath = "stb.kpath:main"
+stb-strainAnalysis="stb.strain_pos:main"
+stb-elasticInputs="stb.elastic_inputs:main"
+stb-elasticAnalysis="stb.elastic_analysis:main"
+stb-bader="stb.bader:main"
+stb-cube="stb.cube:main"
+stb-density="stb.density:main"
+stb-workfunction="stb.workfunction:main"
+stb-2Dstacking="stb.stacking2D:main"
+stb-cohesive="stb.cohesive_energy:main"
+stb-cohesiveAnalysis="stb.cohesive_analysis:main"
+stb-phononsCreate="stb.phonons_create:main"
+stb-phononsPos="stb.phonons_pos:main"

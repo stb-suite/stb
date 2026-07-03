@@ -36,8 +36,6 @@ def warn_handler(message, category, filename, lineno, file=None, line=None):
     logging.warning(log_message)
     print("[WARNING] Warning detected! Check warnings.log for details.")
 
-__version__ = "1.0.0"
-
 def compute_ecn(structure, mode, atoms_position=None):
     with open("structural_information.dat", "w") as f:
 
@@ -149,11 +147,13 @@ def main():
     logging.basicConfig(filename="warnings.log", level=logging.WARNING, format="%(message)s")
     warnings.showwarning = warn_handler
 
-    parser = argparse.ArgumentParser(description=f"Compute ECN from structure file. Version: {__version__}.")
+    parser = argparse.ArgumentParser(description="Compute ECN from structure file.")
     parser.add_argument("--file", required=True, help="Path to structure file.")
     parser.add_argument("--format", required=True, choices=["poscar", "cif", "siesta"], help="Input file format: poscar, cif, or siesta")
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated). Example: [1,4,5,7] - Required for 'list' mode")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 

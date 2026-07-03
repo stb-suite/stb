@@ -347,7 +347,7 @@ def main():
     parser.add_argument("--sym_out", default="symmetry_report.txt", help="Output text file for symmetry analysis")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
     
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("--version", action="version", version=f"stb-2Dstacking {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()

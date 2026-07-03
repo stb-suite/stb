@@ -43,6 +43,8 @@ def main():
         '--path', default='.',
         help="Directory to clean (default: current directory)"
     )
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-clean {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()

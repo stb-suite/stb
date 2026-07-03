@@ -268,10 +268,10 @@ def main():
 
     args = parse_arguments()
     
-    # Hides the intro if --quiet is used
+    # Hides the intro if --quiet or --no-intro is used
     # Note the quiet logic is inverted (action='store_false')
-    # So args.quiet will be 'False' if -q is passed
-    show_banner = args.quiet 
+    # So args.quiet will be 'False' if -q is passed (same for args.intro/--no-intro)
+    show_banner = args.quiet and args.intro
     
     if show_banner:
         show_intro([

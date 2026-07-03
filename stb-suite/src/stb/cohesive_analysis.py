@@ -77,7 +77,7 @@ def main():
     parser.add_argument("-d", "--dir", dest="dir_path", type=str, default=".", 
                         help="Path to the folder containing 'structure' and 'atoms' directories (default: current directory)")
     
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-cohesiveAnalysis {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
                         help="Do not show the introduction")

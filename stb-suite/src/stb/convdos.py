@@ -130,6 +130,8 @@ def main():
     parser.add_argument("--size", type=int, required=True, help="Size of Gaussian mask.")
     parser.add_argument("--sigma", type=float, required=True, help="Standard deviation of the Gaussian function.")
     parser.add_argument("--out", required=True,dest="outfile", help="Output file with filtered data.")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-convdos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 

@@ -309,7 +309,9 @@ def main():
     parser.add_argument("-o", "--output", required=False, help="Output filename")
     parser.add_argument("--ref", required=False, default=None, help="Path to a specific .out file (Overrides default)")
     parser.add_argument("--speed", choices=['normal', 'fast'], default='normal', help="Optimization level")
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Skip intro")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-bader {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
 

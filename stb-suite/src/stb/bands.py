@@ -193,7 +193,7 @@ def main():
     parser.add_argument("--manual-value", type=float,
                         help="Custom energy shift value (required if --shift manual is used).")
 
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 

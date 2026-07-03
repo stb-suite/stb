@@ -187,8 +187,8 @@ def main():
     parser.add_argument("-a", "--axis", type=int, default=2, choices=[0,1,2], help="Axis normal to the map (0=X, 1=Y, 2=Z)")
     parser.add_argument("-p", "--pos", type=float, help="Position (Angstrom) of the 2D cut")
     
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Skip intro")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-density {VERSION}")
 
     args = parser.parse_args()
     filename = f"{args.label}.RHO"

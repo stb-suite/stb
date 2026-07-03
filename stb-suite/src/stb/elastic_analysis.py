@@ -127,6 +127,8 @@ def main():
                         help="Siesta log/output filename inside strain folders (default: calc.out)")
     
     parser.add_argument("--2d", dest="is2d", action="store_true", help="Enable 2D mode (N/m)")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 

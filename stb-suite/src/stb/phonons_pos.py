@@ -41,7 +41,7 @@ def main():
     parser.add_argument("--tmin", type=float, default=0.0, help="Minimum temperature in K (default: 0)")
     parser.add_argument("--tmax", type=float, default=1000.0, help="Maximum temperature in K (default: 1000)")
     parser.add_argument("--tstep", type=float, default=10.0, help="Temperature step in K (default: 10)")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-phononsPos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()

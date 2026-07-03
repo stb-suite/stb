@@ -158,9 +158,9 @@ def main():
     
     parser.add_argument("--fermi", type=float, help="Manually force Fermi Energy (eV).", default=None)
     parser.add_argument("--no-plot", action="store_true", help="Disable automatic plotting.")
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction.")
-    
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+
+    parser.add_argument("-v", "--version", action="version", version=f"stb-workfunction {VERSION}")
 
     args = parser.parse_args()
 

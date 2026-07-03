@@ -98,6 +98,8 @@ def main():
                        help="Maximum strain percentage (default: 25).")
     parser.add_argument("--step", type=float, default=1,
                        help="Strain step percentage (default: 1).")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-strain {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 

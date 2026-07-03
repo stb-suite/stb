@@ -106,7 +106,9 @@ def main():
     parser.add_argument("-o", "--output", default="mechanical_curve.dat", help="Output raw data file.")
     parser.add_argument("--2d", dest="is2d", action="store_true", help="Enable 2D units (N/m).")
     parser.add_argument("--thickness", type=float, default=20.0, help="Vacuum height (Z) for 2D conversion (Angstrom).")
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Hide intro.")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-strainAnalysis {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     
     args = parser.parse_args()
 

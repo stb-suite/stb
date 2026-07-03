@@ -57,8 +57,8 @@ def main():
     parser.add_argument("-t", "--type", help="File type to convert.", choices=['VT', 'VH', 'RHO', 'BADER'], required=True)
     parser.add_argument("-o", "--output", help="Custom output filename. Default: label_type.cube", default=None)
     
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction.")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-cube {VERSION}")
 
     args = parser.parse_args()
 

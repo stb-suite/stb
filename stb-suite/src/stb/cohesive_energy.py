@@ -147,7 +147,7 @@ def main():
     parser.add_argument("--spin", dest="spin", action="store_true", 
                         help="Set the full structure calculation to spin polarized")
     
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-cohesive {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
                         help="Do not show the introduction")

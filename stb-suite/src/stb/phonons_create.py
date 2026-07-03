@@ -64,7 +64,7 @@ def main():
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".", 
                         help="Directory containing the pseudopotentials (.psf or .psml) (default: current directory)")
     
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
                         help="Do not show the introduction")

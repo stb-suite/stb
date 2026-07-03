@@ -80,6 +80,8 @@ def main():
     parser.add_argument("--steps", type=int, default=4, help="Steps per direction")
     parser.add_argument("--output", default="structure.fdf", help="Output filename")
     
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-elasticInputs {VERSION}")
     # --- NEW: Argument --no-intro ---
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     

@@ -251,7 +251,8 @@ def main():
     print(f"Dimensionality  : {'2D (Sheet)' if args.is2d else '3D (Bulk)'}")
     print("-" * 50)
     
-    print(f"Young's Modulus : {color_text(f'{results['modulus']:.2f} {u}', 'green')} (R²={results['r_squared']:.4f})")
+    modulus_str = f"{results['modulus']:.2f} {u}"
+    print(f"Young's Modulus : {color_text(modulus_str, 'green')} (R²={results['r_squared']:.4f})")
     print(f"UTS (Max Stress): {color_text(f'{results['uts']:.2f} {u}', 'red')}")
     print(f"Toughness       : {results['toughness']:.4f} {'J/m^2' if args.is2d else 'GJ/m^3'}")
     

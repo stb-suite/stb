@@ -32,6 +32,7 @@ requirements:
     - phonopy
     - setuptools
     - scipy==1.13.1
+    - pandas
 
 about:
   home: "https://github.com/bastoscmo"

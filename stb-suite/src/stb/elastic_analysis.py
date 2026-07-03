@@ -293,138 +293,137 @@ def main():
     
     CONV_FACTOR = Lz * CONV_EVA2_TO_NM if args.is2d else CONV_EVA3_TO_GPA
 
-    f_out = open(REPORT_FILE, "w")
-    print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)
+    with open(REPORT_FILE, "w") as f_out:
+        print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)
     
-    loaded_count = 0
-    print(f"\n{color_text('READING FOLDERS:', 'bold')}")
+        loaded_count = 0
+        print(f"\n{color_text('READING FOLDERS:', 'bold')}")
     
-    for folder in folders:
-        match = regex.match(folder)
-        if not match: continue
-        direction, sign, val = match.group(1), match.group(2), float(match.group(3))
-        if sign == 'm': val *= -1
-        strain = val / 100.0
+        for folder in folders:
+            match = regex.match(folder)
+            if not match: continue
+            direction, sign, val = match.group(1), match.group(2), float(match.group(3))
+            if sign == 'm': val *= -1
+            strain = val / 100.0
         
-        # Read the specified file
-        S, E, V = get_siesta_data(os.path.join(folder, args.file))
+            # Read the specified file
+            S, E, V = get_siesta_data(os.path.join(folder, args.file))
         
-        # --- MODIFICAÇÃO: Imprimir status da pasta ---
-        msg = f"   -> {folder:<25} : "
-        if S is not None:
-            if direction not in data: data[direction] = {'eps': [], 'stress': []}
-            data[direction]['eps'].append(strain)
-            data[direction]['stress'].append(S)
-            loaded_count += 1
-            msg += color_text("OK", 'green')
+            # --- MODIFICAÇÃO: Imprimir status da pasta ---
+            msg = f"   -> {folder:<25} : "
+            if S is not None:
+                if direction not in data: data[direction] = {'eps': [], 'stress': []}
+                data[direction]['eps'].append(strain)
+                data[direction]['stress'].append(S)
+                loaded_count += 1
+                msg += color_text("OK", 'green')
+            else:
+                msg += color_text("FAIL", 'red') + " (No stress data found)"
+        
+            print(msg)
+            # ---------------------------------------------
+            
+        print(f"\n[OK] Loaded {loaded_count} calculations from {len(folders)} folders.")
+
+        if not data:
+            print(f"{color_text('[FAIL]', 'red')} No valid data found in strain folders.")
+            print(f"       Check if '{args.file}' exists and has 'Stress tensor'.")
+            sys.exit(1)
+
+
+        # --- C_ij Calculation ---
+        C = np.zeros((6, 6))
+
+        # Eixo X (C11, C21, C31) - Tenta 'xx' ou 'x'
+        if 'xx' in data:
+            e, S = data['xx']['eps'], np.array(data['xx']['stress'])
+            for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+        elif 'x' in data:
+            e, S = data['x']['eps'], np.array(data['x']['stress'])
+            for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+
+        # Eixo Y (C12, C22, C32) - Tenta 'yy' ou 'y'
+        if 'yy' in data:
+            e, S = data['yy']['eps'], np.array(data['yy']['stress'])
+            for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+        elif 'y' in data:
+            e, S = data['y']['eps'], np.array(data['y']['stress'])
+            for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+
+        # Eixo Z (C13, C23, C33) - Tenta 'zz' ou 'z'
+        if 'zz' in data:
+            e, S = data['zz']['eps'], np.array(data['zz']['stress'])
+            for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+        elif 'z' in data:
+            e, S = data['z']['eps'], np.array(data['z']['stress'])
+            for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
+
+        # C44 (Shear YZ)
+        if 'yz' in data: 
+            C[3, 3] = calculate_slope(data['yz']['eps'], np.array(data['yz']['stress'])[:, 1, 2], CONV_FACTOR) / 2.0
+
+        # C55 (Shear XZ ou ZX) - Suas pastas usam 'zx'
+        if 'zx' in data: 
+            C[4, 4] = calculate_slope(data['zx']['eps'], np.array(data['zx']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
+        elif 'xz' in data:
+            C[4, 4] = calculate_slope(data['xz']['eps'], np.array(data['xz']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
+
+        # C66 (Shear XY)
+        if 'xy' in data: 
+            C[5, 5] = calculate_slope(data['xy']['eps'], np.array(data['xy']['stress'])[:, 0, 1], CONV_FACTOR) / 2.0
+
+        C_sym = 0.5 * (C + C.T)
+
+        # --- CONDITIONAL OUTPUT ---
+        if args.is2d:
+            # 2D REPORT
+            print_dual(f"\n{color_text('[1] 2D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
+            print_dual("      xx       yy       xy", f_out)
+        
+            indices_2d = [0, 1, 5]
+            labels_2d = ["xx", "yy", "xy"]
+        
+            for r, label_r in zip(indices_2d, labels_2d):
+                row_str = f"{label_r} | "
+                for c in indices_2d:
+                    val = C_sym[r, c]
+                    if abs(val) < 0.01: val = 0.0
+                    row_str += f"{val:8.2f} "
+                print_dual(row_str, f_out)
+            
+            print_dual(f"\n{color_text('[2] RELEVANT CONSTANTS (2D)', 'magenta')}", f_out)
+            labels_show = ["C11", "C22", "C12", "C66"]
+            idx_show = [(0,0), (1,1), (0,1), (5,5)]
+        
+            buf = ""
+            for l, (r, c) in zip(labels_show, idx_show):
+                buf += f"{color_text(l, 'cyan')}: {color_text(f'{C_sym[r,c]:6.2f}', 'bold')} {unit_label}   "
+            print_dual(buf, f_out)
+
         else:
-            msg += color_text("FAIL", 'red') + " (No stress data found)"
-        
-        print(msg)
-        # ---------------------------------------------
+            # 3D REPORT
+            if abs(C_sym[2,2]) < 0.1 * abs(C_sym[0,0]) and abs(C_sym[0,0]) > 10.0:
+                print_dual(f"\n{color_text('[WARNING] Material seems to be 2D (C33 << C11). Consider using --2d', 'yellow')}", f_out)
             
-    print(f"\n[OK] Loaded {loaded_count} calculations from {len(folders)} folders.")
-
-    if not data:
-        print(f"{color_text('[FAIL]', 'red')} No valid data found in strain folders.")
-        print(f"       Check if '{args.file}' exists and has 'Stress tensor'.")
-        sys.exit(1)
-
-
-# --- C_ij Calculation ---
-    C = np.zeros((6, 6))
-
-    # Eixo X (C11, C21, C31) - Tenta 'xx' ou 'x'
-    if 'xx' in data:
-        e, S = data['xx']['eps'], np.array(data['xx']['stress'])
-        for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-    elif 'x' in data:
-        e, S = data['x']['eps'], np.array(data['x']['stress'])
-        for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-    # Eixo Y (C12, C22, C32) - Tenta 'yy' ou 'y'
-    if 'yy' in data:
-        e, S = data['yy']['eps'], np.array(data['yy']['stress'])
-        for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-    elif 'y' in data:
-        e, S = data['y']['eps'], np.array(data['y']['stress'])
-        for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-    # Eixo Z (C13, C23, C33) - Tenta 'zz' ou 'z'
-    if 'zz' in data:
-        e, S = data['zz']['eps'], np.array(data['zz']['stress'])
-        for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-    elif 'z' in data:
-        e, S = data['z']['eps'], np.array(data['z']['stress'])
-        for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-    # C44 (Shear YZ)
-    if 'yz' in data: 
-        C[3, 3] = calculate_slope(data['yz']['eps'], np.array(data['yz']['stress'])[:, 1, 2], CONV_FACTOR) / 2.0
-
-    # C55 (Shear XZ ou ZX) - Suas pastas usam 'zx'
-    if 'zx' in data: 
-        C[4, 4] = calculate_slope(data['zx']['eps'], np.array(data['zx']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
-    elif 'xz' in data:
-        C[4, 4] = calculate_slope(data['xz']['eps'], np.array(data['xz']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
-
-    # C66 (Shear XY)
-    if 'xy' in data: 
-        C[5, 5] = calculate_slope(data['xy']['eps'], np.array(data['xy']['stress'])[:, 0, 1], CONV_FACTOR) / 2.0
-
-    C_sym = 0.5 * (C + C.T)
-
-    # --- CONDITIONAL OUTPUT ---
-    if args.is2d:
-        # 2D REPORT
-        print_dual(f"\n{color_text('[1] 2D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
-        print_dual("      xx       yy       xy", f_out)
-        
-        indices_2d = [0, 1, 5]
-        labels_2d = ["xx", "yy", "xy"]
-        
-        for r, label_r in zip(indices_2d, labels_2d):
-            row_str = f"{label_r} | "
-            for c in indices_2d:
-                val = C_sym[r, c]
-                if abs(val) < 0.01: val = 0.0
-                row_str += f"{val:8.2f} "
-            print_dual(row_str, f_out)
+            print_dual(f"\n{color_text('[1] 3D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
+            header = "      " + "".join([f"{f'j={j+1}':<9}" for j in range(6)])
+            print_dual(f"{header}", f_out)
+            for i in range(6):
+                print_dual(f"i={i+1} | " + "".join([f"{C_sym[i,j]:9.2f}" for j in range(6)]), f_out)
             
-        print_dual(f"\n{color_text('[2] RELEVANT CONSTANTS (2D)', 'magenta')}", f_out)
-        labels_show = ["C11", "C22", "C12", "C66"]
-        idx_show = [(0,0), (1,1), (0,1), (5,5)]
-        
-        buf = ""
-        for l, (r, c) in zip(labels_show, idx_show):
-            buf += f"{color_text(l, 'cyan')}: {color_text(f'{C_sym[r,c]:6.2f}', 'bold')} {unit_label}   "
-        print_dual(buf, f_out)
+            print_dual(f"\n{color_text('[2] MAIN CONSTANTS', 'magenta')}", f_out)
+            labels = ["C11", "C22", "C33", "C44", "C55", "C66", "C12", "C13", "C23"]
+            idx = [(0,0), (1,1), (2,2), (3,3), (4,4), (5,5), (0,1), (0,2), (1,2)]
+            buf = ""
+            for k, (l, (r, c)) in enumerate(zip(labels, idx)):
+                buf += f"{l}: {C_sym[r,c]:7.1f} {unit_label}  "
+                if (k+1)%3==0: 
+                    print_dual(buf, f_out); buf=""
+            if buf: print_dual(buf, f_out)
 
-    else:
-        # 3D REPORT
-        if abs(C_sym[2,2]) < 0.1 * abs(C_sym[0,0]) and abs(C_sym[0,0]) > 10.0:
-            print_dual(f"\n{color_text('[WARNING] Material seems to be 2D (C33 << C11). Consider using --2d', 'yellow')}", f_out)
-            
-        print_dual(f"\n{color_text('[1] 3D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
-        header = "      " + "".join([f"{f'j={j+1}':<9}" for j in range(6)])
-        print_dual(f"{header}", f_out)
-        for i in range(6):
-            print_dual(f"i={i+1} | " + "".join([f"{C_sym[i,j]:9.2f}" for j in range(6)]), f_out)
-            
-        print_dual(f"\n{color_text('[2] MAIN CONSTANTS', 'magenta')}", f_out)
-        labels = ["C11", "C22", "C33", "C44", "C55", "C66", "C12", "C13", "C23"]
-        idx = [(0,0), (1,1), (2,2), (3,3), (4,4), (5,5), (0,1), (0,2), (1,2)]
-        buf = ""
-        for k, (l, (r, c)) in enumerate(zip(labels, idx)):
-            buf += f"{l}: {C_sym[r,c]:7.1f} {unit_label}  "
-            if (k+1)%3==0: 
-                print_dual(buf, f_out); buf=""
-        if buf: print_dual(buf, f_out)
-
-    # Stability and Properties Check
-    check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
+        # Stability and Properties Check
+        check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
     
-    f_out.close()
     print("-" * 60)
     print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")
     print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))

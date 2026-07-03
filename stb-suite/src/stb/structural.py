@@ -77,15 +77,10 @@ def show_intro() -> None:
     print("="*60 + "\n")
     return
 
-# Configure logger for warnings
-logging.basicConfig(filename="warnings.log", level=logging.WARNING, format="%(message)s")
-
 def warn_handler(message, category, filename, lineno, file=None, line=None):
     log_message = f"{category.__name__}: {message} (File: {filename}, Line: {lineno})"
     logging.warning(log_message)
     print("[WARNING] Warning detected! Check warnings.log for details.")
-
-warnings.showwarning = warn_handler
 
 __version__ = "1.0.0"
 
@@ -195,6 +190,11 @@ def compute_ecn(structure, mode, atoms_position=None):
             pos_atomics.append([i+1, str(site.specie.symbol), site.coords])
 
 def main():
+    # Configure logger for warnings (done here, not at module level, so importing
+    # stb.structural has no side effect of creating warnings.log on disk)
+    logging.basicConfig(filename="warnings.log", level=logging.WARNING, format="%(message)s")
+    warnings.showwarning = warn_handler
+
     parser = argparse.ArgumentParser(description=f"Compute ECN from structure file. Version: {__version__}.")
     parser.add_argument("--file", required=True, help="Path to structure file.")
     parser.add_argument("--format", required=True, choices=["poscar", "cif", "siesta"], help="Input file format: poscar, cif, or siesta")

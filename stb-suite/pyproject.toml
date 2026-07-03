@@ -18,7 +18,8 @@ dependencies = [
     "pybader",
     "setuptools",
     "scipy",
-    "phonopy"
+    "phonopy",
+    "pandas"
 ]
 
 [project.scripts]
@@ -35,7 +36,7 @@ stb-dos = "stb.dos:main"
 stb-inputfile = "stb.inputfile:main"
 stb-kgrid = "stb.kgrid:main"
 stb-kpath = "stb.kpath:main"
-stb-strainAnalysis="stb.strain_pos:main"
+stb-strainAnalysis="stb.strain_analysis:main"
 stb-elasticInputs="stb.elastic_inputs:main"
 stb-elasticAnalysis="stb.elastic_analysis:main"
 stb-bader="stb.bader:main"

@@ -79,7 +79,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('-q', '--quiet', action='store_false',
                         help='Suppress terminal animations and colors')
     parser.add_argument("-v", "--version", action="version",
-                        version=f"stb-translate {VERSION}")
+                        version=f"stb-siesta2wtb {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     
     return parser.parse_args()

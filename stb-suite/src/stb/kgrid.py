@@ -11,10 +11,9 @@ VERSION = "1.8.0"
 from time import sleep
 import argparse
 import numpy as np
-import math
 import sys
 import os
-from stb.core import structure_io
+from stb.core import structure_io, kspace
 # Try to import ASE, required only for .cif files
 try:
     import ase.io
@@ -125,22 +124,6 @@ def parse_fhi(filename):
     lattice = np.array(vecs)
     return lattice
 
-def compute_monkhorts(cella, cellb, cellc, k_density):
-    """Computes the reciprocal vectors and the number of Monkhorst-Pack divisions."""
-    volume = np.dot(cella, np.cross(cellb, cellc))
-    
-    if abs(volume) < 1e-9:
-        print("Error: Cell volume is zero. Check lattice vectors.")
-        sys.exit(1)
-        
-    b1 = 2 * np.pi * np.cross(cellb, cellc) / volume
-    b2 = 2 * np.pi * np.cross(cellc, cella) / volume
-    b3 = 2 * np.pi * np.cross(cella, cellb) / volume
-
-    lengths = [np.linalg.norm(b) for b in (b1, b2, b3)]
-    divisions = [max(1, math.ceil(length / k_density)) for length in lengths]
-    return divisions
-
 def print_density_recommendation():
     """Prints a friendly k-point density recommendation table."""
     print("\n" + "="*65)
@@ -244,7 +227,11 @@ def main():
         return
 
     # Calculate divisions
-    divisions = compute_monkhorts(lattice[0], lattice[1], lattice[2], args.density)
+    try:
+        divisions = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.density)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
     # Print recommendation table
     print_density_recommendation()

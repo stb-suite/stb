@@ -10,12 +10,11 @@ VERSION = "1.8.0"
 
 from time import sleep
 import numpy as np
-import math
 import sys
 import os
 import shutil
 import argparse
-from stb.core import structure_io
+from stb.core import structure_io, kspace
 
 COLORS = {                          
     'reset': '\033[0m',             
@@ -902,24 +901,6 @@ def parse_structure_fdf(filename):
     structure = structure_io.read_fdf(filename)
     return structure.lattice, structure_io.species_list(structure)
 
-def compute_monkhorts(cella, cellb, cellc, k_density):
-    """
-    Calculates the reciprocal vectors and the number of Monkhorst-Pack divisions.
-    Modified to 'raise' errors.
-    """
-    volume = np.dot(cella, np.cross(cellb, cellc))
-    
-    if abs(volume) < 1e-9:
-        raise ValueError("Cell volume is zero. Check lattice vectors.")
-        
-    b1 = 2 * np.pi * np.cross(cellb, cellc) / volume
-    b2 = 2 * np.pi * np.cross(cellc, cella) / volume
-    b3 = 2 * np.pi * np.cross(cella, cellb) / volume
-
-    lengths = [np.linalg.norm(b) for b in (b1, b2, b3)]
-    divisions = [max(1, math.ceil(length / k_density)) for length in lengths]
-    return divisions
-
 def copy_pseudopotentials(species_list, pp_path):
     """
     Copies the required .psml or .psf files from the 'pp_path' folder to
@@ -1040,7 +1021,7 @@ def generate_calculation(struct_file, chosen_mode, pp_path):
             replace_kgrid = True
             print("ℹ️  Calculating K-grid (density = 0.2 1/Å)...")
             k_density = 0.2
-            kgrid_divs = compute_monkhorts(lattice[0], lattice[1], lattice[2], k_density)
+            kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], k_density)
             kgrid_line_new = f"kgrid.MonkhorstPack   [{kgrid_divs[0]}  {kgrid_divs[1]}  {kgrid_divs[2]}]"
             print(f"  Suggested K-grid: {kgrid_divs[0]} {kgrid_divs[1]} {kgrid_divs[2]}")
 

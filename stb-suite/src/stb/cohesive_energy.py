@@ -11,12 +11,11 @@ VERSION = "1.1.1"
 import os
 import sys
 import re
-import math
 import shutil
 import argparse
 from time import sleep
 import numpy as np
-from stb.core import structure_io
+from stb.core import structure_io, kspace
 
 # ANSI colors for terminal
 COLORS = {                          
@@ -130,22 +129,6 @@ def parse_structure_fdf(filename):
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
-def compute_monkhorts(cella, cellb, cellc, k_density):
-    """Calculates the Monkhorst-Pack divisions based on lattice vectors"""
-    volume = np.dot(cella, np.cross(cellb, cellc))
-    
-    if abs(volume) < 1e-9:
-        print(color_text("[ERROR] Cell volume is zero. Check lattice vectors.", 'red'))
-        sys.exit(1)
-        
-    b1 = 2 * np.pi * np.cross(cellb, cellc) / volume
-    b2 = 2 * np.pi * np.cross(cellc, cella) / volume
-    b3 = 2 * np.pi * np.cross(cella, cellb) / volume
-
-    lengths = [np.linalg.norm(b) for b in (b1, b2, b3)]
-    divisions = [max(1, math.ceil(length / k_density)) for length in lengths]
-    return divisions
-
 def generate_isolated_atom_fdf(symbol, z_num, out_path):
     """Creates a structure.fdf for a single isolated atom in a large box"""
     content = f"""# Isolated {symbol} atom for cohesive energy
@@ -232,7 +215,11 @@ def main():
     
     # Calculate K-grid for the full structure
     print("[INFO] Calculate Monkhorst-Pack grid ...")
-    kgrid_divs = compute_monkhorts(lattice[0], lattice[1], lattice[2], args.k_density)
+    try:
+        kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.k_density)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
     print(f"[INFO] Calculated K-grid for full structure: {kgrid_divs[0]} {kgrid_divs[1]} {kgrid_divs[2]} (density = {args.k_density})")
 
     # 1. Setup full structure directory directly in current folder

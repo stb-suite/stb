@@ -12,6 +12,7 @@ import os
 import sys
 import argparse
 from time import sleep
+from stb.core import siesta_log
 
 # ANSI colors for terminal
 COLORS = {                          
@@ -109,28 +110,6 @@ def get_atom_counts(fdf_path):
         print(color_text(f"[ERROR] Structure file '{fdf_path}' not found.", 'red'))
         sys.exit(1)
 
-def extract_final_energy(folder_path, out_filename):
-    """Finds the specific output file in the folder and extracts the final FreeEng"""
-    target_file = os.path.join(folder_path, out_filename)
-    
-    if not os.path.exists(target_file):
-        return None
-    
-    energy = None
-    
-    with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            # Search ignoring exact spaces
-            if "siesta: FreeEng" in line and "=" in line:
-                try:
-                    # Get everything after '=' and extract the first number
-                    val_str = line.split('=')[1].split()[0]
-                    energy = float(val_str)
-                except (IndexError, ValueError):
-                    pass
-        
-    return energy
-
 def main():
     parser = argparse.ArgumentParser(
         description="Process cohesive energy results from SIESTA calculations.",
@@ -187,7 +166,7 @@ def main():
     errors = False
     
     # Bulk Energy
-    e_bulk = extract_final_energy(struct_dir, args.out_file)
+    e_bulk = siesta_log.get_free_energy(os.path.join(struct_dir, args.out_file))
     if e_bulk is None:
         print(color_text(f"[WARNING] Could not find '{args.out_file}' or finished calculation for the full structure.", 'yellow'))
         errors = True
@@ -200,7 +179,7 @@ def main():
     
     for sym, count in atom_counts.items():
         sym_dir = os.path.join(atoms_dir, sym)
-        e_atom = extract_final_energy(sym_dir, args.out_file)
+        e_atom = siesta_log.get_free_energy(os.path.join(sym_dir, args.out_file))
         
         if e_atom is None:
             print(color_text(f"[WARNING] Could not find '{args.out_file}' or results for isolated atom: {sym}", 'yellow'))

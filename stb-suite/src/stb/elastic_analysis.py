@@ -15,6 +15,7 @@ import re
 import numpy as np
 from time import sleep
 from scipy.stats import linregress
+from stb.core import siesta_log
 
 # ==========================================
 #           UI / VISUALS
@@ -84,82 +85,9 @@ def print_dual(text, file_handle=None):
         clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
         file_handle.write(clean_text + "\n")
 
-def parse_float_line(line):
-    try:
-        parts = line.replace(',', ' ').split()
-        nums = [float(x) for x in parts[:3]]
-        return nums if len(nums) >= 3 else None
-    except: return None
-
 # ==========================================
 #           DATA MINING LOGIC
 # ==========================================
-
-def get_lattice_z(filepath):
-    """Reads Lz (Cell Height) for 2D normalization."""
-    lz = 1.0
-    try:
-        with open(filepath, 'r', errors='ignore') as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            if "outcell: Unit cell vectors" in line:
-                vec_c = parse_float_line(lines[i+3])
-                if vec_c:
-                    lz = np.linalg.norm(vec_c)
-                    break
-    except: pass
-    return lz
-
-def get_siesta_data(filepath):
-    """Parses Siesta output for Stress, Energy, and Volume."""
-    if not os.path.exists(filepath): return None, None, None
-    stress_tensor, energy, volume = None, None, None
-    try:
-        with open(filepath, 'r', errors='ignore') as f:
-            lines = f.readlines()
-        
-        # Reverse search for Energy/Volume
-        for line in reversed(lines):
-            if energy is not None and volume is not None: break
-            if "siesta: Total =" in line and energy is None:
-                try: energy = float(line.split()[-2])
-                except: pass
-            if "siesta: Cell volume =" in line and volume is None:
-                try: volume = float(line.split()[-2])
-                except: pass
-
-        idx_matrix, idx_voigt = -1, -1
-        for i, line in enumerate(lines):
-            if "siesta: Stress tensor (static)" in line: idx_matrix = i
-            if "Stress tensor Voigt" in line: idx_voigt = i
-        
-        # Strategy A: Matrix Block
-        if idx_matrix != -1:
-            try:
-                rows = []
-                offset = 1
-                while len(rows) < 3 and offset < 10:
-                    nums = parse_float_line(lines[idx_matrix + offset].strip())
-                    if nums: rows.append(nums)
-                    offset += 1
-                if len(rows) == 3: stress_tensor = np.array(rows)
-            except: pass
-        
-        # Strategy B: Voigt Line (Backup)
-        if stress_tensor is None and idx_voigt != -1:
-            try:
-                parts = lines[idx_voigt].split(':')[-1].split()
-                v_vals = [float(x) for x in parts] # kbar
-                fator = 0.1 / CONV_EVA3_TO_GPA
-                v_ev = [v * fator for v in v_vals]
-                stress_tensor = np.array([
-                    [v_ev[0], v_ev[5], v_ev[4]],
-                    [v_ev[5], v_ev[1], v_ev[3]],
-                    [v_ev[4], v_ev[3], v_ev[2]]
-                ])
-            except: pass
-        return stress_tensor, energy, volume
-    except: return None, None, None
 
 def calculate_slope(x, y, factor):
     if len(x) < 2: return 0.0
@@ -271,19 +199,18 @@ def main():
 
     # --- Data Mining ---
     print(f"[INFO] Scanning for 'strain_*' folders...")
-    regex = re.compile(r"strain_([a-zA-Z0-9]+)_(m?)(\d+\.\d+)")
     folders = sorted([f for f in os.listdir('.') if os.path.isdir(f) and f.startswith("strain_")])
     data = {}
-    
+
     Lz = 1.0
     found_lz = False
-    
+
     # Pre-scan for Lz (Unit Cell Height) if 2D
     for folder in folders:
         path = os.path.join(folder, args.file)
         if os.path.exists(path):
-            val = get_lattice_z(path)
-            if val > 1.0: 
+            val = siesta_log.get_cell_height(path)
+            if val > 1.0:
                 Lz = val
                 found_lz = True
                 break
@@ -300,14 +227,12 @@ def main():
         print(f"\n{color_text('READING FOLDERS:', 'bold')}")
     
         for folder in folders:
-            match = regex.match(folder)
-            if not match: continue
-            direction, sign, val = match.group(1), match.group(2), float(match.group(3))
-            if sign == 'm': val *= -1
+            direction, val = siesta_log.parse_strain_folder_name(folder)
+            if direction is None: continue
             strain = val / 100.0
-        
+
             # Read the specified file
-            S, E, V = get_siesta_data(os.path.join(folder, args.file))
+            S = siesta_log.get_stress_tensor(os.path.join(folder, args.file))
         
             # --- MODIFICAÇÃO: Imprimir status da pasta ---
             msg = f"   -> {folder:<25} : "

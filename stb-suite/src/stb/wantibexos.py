@@ -13,6 +13,7 @@ from time import sleep
 import numpy as np
 import sisl
 from typing import Tuple
+from stb.core import siesta_log
 
 VERSION = "1.8.0"
 COLORS = {
@@ -104,16 +105,6 @@ def get_system_label(fdf_path: str) -> str:
     except Exception as e:
         pass
     return default_label
-
-def get_fermi_energy(output_file: str) -> float:
-    """Extract Fermi energy from SIESTA output"""
-    try:
-        with open(output_file, 'r') as f:
-            for line in reversed(f.readlines()):
-                if 'Fermi =' in line:
-                    return float(line.split()[-1])
-    except (FileNotFoundError, IndexError) as e:
-        raise RuntimeError(f"Fermi energy extraction failed: {str(e)}")
 
 from typing import Tuple
 
@@ -360,7 +351,9 @@ def main():
             print(f"[OK] Using manual Fermi Energy ( {fermi} eV )")
         elif args.output is not None:
             print(f"[INFO] Reading Fermi energy from: {args.output}")
-            fermi = get_fermi_energy(args.output)
+            fermi = siesta_log.get_fermi_energy(args.output)
+            if fermi is None:
+                raise RuntimeError(f"Could not find Fermi energy in '{args.output}'.")
             print(f"[OK] Read the Fermi Energy ( {fermi} eV )")
         else:
             print(f"[WARN] No output file (-o) or manual Fermi level (-f) provided. Using Fermi = 0.0 eV")

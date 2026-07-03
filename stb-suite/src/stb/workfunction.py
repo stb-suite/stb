@@ -14,6 +14,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from time import sleep
+from stb.core import siesta_log
 
 # Try to import sisl
 try:
@@ -75,63 +76,6 @@ def show_intro() -> None:
     print("="*60 + "\n")
     return
 
-def get_fermi_robust(filepath):
-    """
-    Extracts Fermi Energy from SIESTA output file (.out).
-    Strategies:
-    1. Final Summary ("siesta: Fermi = ...")
-    2. Classic Format ("Fermi energy: ...")
-    3. SCF Table (column 'Ef' or 'Ef(eV)')
-    """
-    E_f = None
-    scf_ef_idx = None
-    
-    try:
-        with open(filepath, 'r') as f:
-            for line in f:
-                parts = line.strip().split()
-                if not parts: continue
-                
-                # Strategy 1: Explicit Summary (SIESTA 5.x)
-                if "Fermi" in parts and "=" in parts:
-                    try:
-                        eq_idx = parts.index("=")
-                        if eq_idx + 1 < len(parts):
-                            E_f = float(parts[eq_idx + 1])
-                    except ValueError:
-                        pass
-                
-                # Strategy 2: Classic Format
-                elif "Fermi" in line and "energy:" in line:
-                    try:
-                        colon_idx = -1
-                        for i, p in enumerate(parts):
-                            if p.endswith(':'):
-                                colon_idx = i
-                        if colon_idx != -1 and colon_idx + 1 < len(parts):
-                            val = parts[colon_idx + 1].replace('eV','')
-                            E_f = float(val)
-                    except ValueError:
-                        pass
-
-                # Strategy 3: SCF Table
-                if "iscf" in line and ("Ef" in line or "Ef(eV)" in line):
-                    for i, p in enumerate(parts):
-                        if "Ef" in p:
-                            scf_ef_idx = i
-                            break
-                
-                elif scf_ef_idx is not None and parts[0] == 'scf:':
-                    try:
-                        data_idx = scf_ef_idx + 1
-                        if data_idx < len(parts):
-                            E_f = float(parts[data_idx])
-                    except ValueError:
-                        pass
-        return E_f
-    except Exception as e:
-        print(f"{COLORS['red']}[ERROR] Parsing file {filepath}: {e}{COLORS['reset']}")
-        return None
 
 def read_grid_data(grid_file):
     """Reads the grid using sisl and converts to eV."""
@@ -283,7 +227,7 @@ def main():
     
     if E_f is None:
         if os.path.exists(out_file):
-            E_f = get_fermi_robust(out_file)
+            E_f = siesta_log.get_fermi_energy(out_file)
         else:
             print(f"{COLORS['yellow']}[WARNING] File {out_file} not found. Cannot auto-detect Fermi.{COLORS['reset']}")
 

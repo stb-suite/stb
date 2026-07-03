@@ -11,12 +11,12 @@ VERSION = "1.9.0"
 
 import os
 import sys
-import re
 import argparse
 import numpy as np
 from scipy.stats import linregress
 # Use trapezoid for compatibility with new Scipy
-from scipy.integrate import trapezoid 
+from scipy.integrate import trapezoid
+from stb.core import siesta_log
 
 # ==========================================
 #           UI / VISUALS
@@ -64,54 +64,6 @@ def show_intro() -> None:
 # ==========================================
 #           CORE LOGIC
 # ==========================================
-
-def parse_folder_name(folder_name):
-    """
-    Parses the folder name to extract direction and strain value.
-    Format: strain_{dir}_{prefix}{value} -> e.g., strain_xx_m1.00
-    """
-    match = re.search(r"strain_([a-zA-Z0-9]+)_(m?)(\d+\.\d+)", folder_name)
-    
-    if match:
-        direction = match.group(1)
-        is_negative = match.group(2) == 'm'
-        value = float(match.group(3))
-        if is_negative:
-            value = -value
-        return direction, value
-    return None, None
-
-def get_stress_from_file(filepath):
-    """
-    Reads the Siesta output file and extracts the LAST Voigt stress tensor.
-    Returns [xx, yy, zz, yz, xz, xy] in kBar.
-    """
-    last_stress = None
-    try:
-        with open(filepath, 'r') as f:
-            for line in f:
-                if "Stress tensor Voigt" in line and "(kbar)" in line:
-                    parts = line.split(":")[-1].split()
-                    if len(parts) >= 6:
-                        last_stress = [float(x) for x in parts[:6]]
-    except Exception:
-        return None
-    return last_stress
-
-def get_lattice_z_vector(filepath):
-    """Extracts the Z-vector magnitude from output for 2D height normalization."""
-    z_len = 1.0
-    try:
-        with open(filepath, 'r') as f:
-            lines = f.readlines()
-            for i in range(len(lines)-1, 0, -1):
-                if "outcell: Unit cell vectors" in lines[i]:
-                    vec_z = lines[i+3].split()
-                    z_len = np.linalg.norm([float(x) for x in vec_z[:3]])
-                    break
-    except:
-        pass
-    return z_len
 
 def calculate_yield_stress(strain, stress, modulus, offset=0.002):
     """
@@ -214,7 +166,7 @@ def main():
     
     # Detect Z-height automatically if 2D
     if args.is2d and os.path.exists(os.path.join(folders[0], args.file)):
-        z_auto = get_lattice_z_vector(os.path.join(folders[0], args.file))
+        z_auto = siesta_log.get_cell_height(os.path.join(folders[0], args.file))
         if z_auto > 1.0:
             print(f"{color_text('[INFO]', 'cyan')} Detected Cell Z-Height: {z_auto:.2f} Ang (used for N/m conversion)")
             args.thickness = z_auto
@@ -222,12 +174,12 @@ def main():
     print(f"   Found {len(folders)} strain steps.")
     
     for f in folders:
-        d, val = parse_folder_name(f)
+        d, val = siesta_log.parse_strain_folder_name(f)
         if d: detected_dir = d
-        
+
         fpath = os.path.join(f, args.file)
         if os.path.exists(fpath):
-            stress = get_stress_from_file(fpath)
+            stress = siesta_log.get_stress_voigt_kbar(fpath)
             if stress:
                 row = [val, val/100.0] + stress
                 data.append(row)

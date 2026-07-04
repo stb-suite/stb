@@ -703,27 +703,19 @@ def run_kpath_generator() -> None:
     print("="*60 + "\n")
     
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input structure file (fdf/poscar): ")
+    input_file = get_input("Input structure file (fdf): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
 
-    type_list = ['fdf', 'poscar']
-    print(f"\n{color_text('Available types:', 'yellow')} {', '.join(type_list)}")
-    file_type = get_input("Structure file type (fdf/poscar): ").lower()
-    while file_type not in type_list:
-        print(color_text(f"Invalid type! Must be one of {type_list}", 'red'))
-        file_type = get_input("Structure file type (fdf/poscar): ").lower()
-    
-    precision = get_float_input("\nSymmetry precision (default: 0.01): ", 0.01)
+    precision = get_float_input("\nBravais-lattice detection tolerance / eps (default: 0.0002): ", 0.0002)
 
     args = [
         "--file", input_file,
-        "--type", file_type,
         "--prec", str(precision),
         "--no-intro"
     ]
-    
+
     run_tool("stb-kpath", args)
 
 def run_dos_parser() -> None:

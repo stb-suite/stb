@@ -9,19 +9,19 @@
 VERSION = "1.9.1"
 
 from time import sleep
-from pymatgen.core import Structure
-from pymatgen.symmetry.bandstructure import HighSymmKpath
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from stb.core import structure_io
+import numpy as np
+from ase.cell import Cell
+from ase.dft.kpoints import parse_path_string
+from stb.core import structure_io, kspace
 from stb.core.cli import COLORS, color_text, show_intro
 import sys
 import os
 import argparse
 
 def parse_fdf_to_structure(fdf_file="struct.fdf"):
-    """Reads a SIESTA .fdf file and converts it into a pymatgen Structure object."""
+    """Reads a SIESTA .fdf file and returns its FdfStructure."""
     try:
-        return structure_io.to_pymatgen(structure_io.read_fdf(fdf_file))
+        return structure_io.read_fdf(fdf_file)
     except FileNotFoundError:
         print(color_text(f"Error: File '{fdf_file}' not found.", 'red'))
         return None
@@ -158,185 +158,102 @@ def write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, outpu
 # --- END OF SIESTA WRITE FUNCTIONS ---
 
 
-# --- NEW FUNCTION FOR VASP KPOINTS ---
-def write_vasp_kpoints_file(kpoints_dict, path_segments, num_points=50, output_filename="KPOINTS"):
+def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002):
     """
-    Writes the k-path to a VASP-formatted KPOINTS file for band structure.
-
-    This function handles disjointed paths by adding a blank line.
-    """
-
-    # --- Fix \Gamma vs GAMMA issue ---
-    # Create a copy of the dictionary and paths to avoid modifying the original
-    kpoints_dict_fixed = kpoints_dict.copy()
-
-    # Pymatgen sometimes uses '\Gamma' in paths but 'GAMMA' in the kpoints dict.
-    # We replace '\Gamma' with 'GAMMA' everywhere to be consistent.
-    if r'\Gamma' in kpoints_dict and 'GAMMA' not in kpoints_dict:
-        kpoints_dict_fixed['GAMMA'] = kpoints_dict_fixed.pop(r'\Gamma')
-        print("  " + color_text("Note: Standardizing '\\Gamma' to 'GAMMA' internally.", 'cyan'))
-    elif r'\Gamma' not in kpoints_dict and 'GAMMA' in kpoints_dict:
-         pass # Already in 'GAMMA' format
-    elif r'\Gamma' in kpoints_dict and 'GAMMA' in kpoints_dict:
-         # This case is ambiguous, but we'll prefer GAMMA
-         kpoints_dict_fixed.pop(r'\Gamma', None)
-         print("  " + color_text("Warning: Both '\\Gamma' and 'GAMMA' found, using 'GAMMA'.", 'yellow'))
-
-    # Fix the path segments to use 'GAMMA'
-    path_segments_fixed = []
-    for segment in path_segments:
-        path_segments_fixed.append(['GAMMA' if label == r'\Gamma' else label for label in segment])
-    # --- End of fix ---
-
-    try:
-        with open(output_filename, 'w') as f:
-            f.write(f"K-Path for Band Structure calculation\n")
-            f.write(f" {num_points}\n")
-            f.write("Line-mode\n")
-            f.write("Reciprocal\n")
-
-            # path_segments is like [['A', 'B', 'C'], ['D', 'E']]
-            for i, segment_list in enumerate(path_segments_fixed):
-
-                # Add a blank line *between* disjointed paths
-                # (e.g., between C and D)
-                if i > 0:
-                    f.write("\n")
-                    # Fix 'GAMMA' to '\Gamma' for display
-                    label_from = r'\Gamma' if path_segments_fixed[i-1][-1] == 'GAMMA' else path_segments_fixed[i-1][-1]
-                    label_to = r'\Gamma' if segment_list[0] == 'GAMMA' else segment_list[0]
-                    print(f"  {color_text(f'Note: Disjointed path detected (jump from {label_from} to {label_to}).', 'cyan')}")
-
-                # Write all segments in the current continuous path
-                # (e.g., A-B, then B-C)
-                for j in range(len(segment_list) - 1):
-                    start_label = segment_list[j]
-                    end_label = segment_list[j+1]
-
-                    start_coords = kpoints_dict_fixed[start_label]
-                    end_coords = kpoints_dict_fixed[end_label]
-
-                    # Fix 'GAMMA' to '\Gamma' label in file
-                    f_start_label = r'\Gamma' if start_label == 'GAMMA' else start_label
-                    f_end_label = r'\Gamma' if end_label == 'GAMMA' else end_label
-
-                    # Write start point
-                    f.write(f"  {start_coords[0]:.10f}  {start_coords[1]:.10f}  {start_coords[2]:.10f}   ! {f_start_label}\n")
-                    # Write end point
-                    f.write(f"  {end_coords[0]:.10f}  {end_coords[1]:.10f}  {end_coords[2]:.10f}   ! {f_end_label}\n")
-
-                    # Add a blank line to separate this segment (e.g., A-B)
-                    # from the next (e.g., B-C)
-                    f.write("\n")
-
-        print(f"  {color_text('Success:', 'green')} VASP file '{color_text(output_filename, 'bold')}' has been created.")
-
-    except KeyError as e:
-         print(f"  {color_text(f'Error writing file: K-point label {e} found in path but not in k-points list.', 'red')}")
-         print(f"  {color_text(f'Available labels: {list(kpoints_dict_fixed.keys())}', 'red')}")
-    except Exception as e:
-        print(f"  {color_text(f'Error writing {output_filename}: {e}', 'red')}")
-# --- END OF VASP WRITE FUNCTION ---
-
-
-def get_kpath_from_structure(structure, symprec=0.01, write_fdf_file=False, write_kpoints_file=False):
-    """
-    Takes a Pymatgen Structure object and prints
-    its space group and high-symmetry k-path.
-
-    If write_fdf_file is True, it also writes the k-path to 'kpath_bs.fdf'.
-    If write_kpoints_file is True, it also writes the k-path to 'KPOINTS'.
+    Takes an FdfStructure, detects its dimensionality from vacuum-padded axes
+    (see kspace.detect_vacuum_axes), and prints/writes its high-symmetry
+    k-path using ASE's dimension-aware Bravais-lattice path finder
+    (ase.cell.Cell.bandpath), then writes it to 'kpath_bs.fdf'.
     """
     try:
+        lattice = fdf_structure.lattice
+        positions = np.array([pos for _, pos in fdf_structure.atoms])
+        is_cartesian = fdf_structure.coord_format == 'cartesian'
+        frac_coords = kspace.to_fractional(positions, lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice, vacuum_gap)
+        dimension = 3 - sum(vacuum_axes)
 
-        # We pass the structure to HighSymmKpath, which finds the
-        # primitive cell itself.
-        kpath = HighSymmKpath(structure, symprec=symprec)
+        pymatgen_structure = structure_io.to_pymatgen(fdf_structure)
 
-        # Use SpacegroupAnalyzer on the primitive cell (kpath.prim)
-        analyzer = SpacegroupAnalyzer(kpath.prim)
-
-        space_group_symbol = analyzer.get_space_group_symbol()
-        space_group_number = analyzer.get_space_group_number()
-        bravais_lattice = analyzer.get_lattice_type()
-
-        # --- IMPROVED OUTPUT ---
         print(color_text("--- 1. Structure Analysis ---", 'bold'))
-        print(f"  {color_text('Formula:', 'cyan')} {structure.composition.reduced_formula}")
-        print(f"  {color_text('Space Group:', 'cyan')} {color_text(f'{space_group_symbol} (No. {space_group_number})', 'bold')}")
-        print(f"  {color_text('Bravais Lattice:', 'cyan')} {bravais_lattice}")
-        print(f"  {color_text('Using precision (symprec):', 'yellow')} {symprec}")
+        print(f"  {color_text('Formula:', 'cyan')} {pymatgen_structure.composition.reduced_formula}")
 
+        if dimension == 0:
+            print(f"  {color_text('Dimensionality:', 'cyan')} {color_text('0D (isolated molecule)', 'bold')}")
+            print("\n" + color_text(
+                "No periodic direction detected (every axis is vacuum-padded) -- a k-path\n"
+                "is not physically meaningful for an isolated molecule. Skipping file generation.",
+                'yellow'))
+            return
+
+        pbc = tuple(not v for v in vacuum_axes)
+        cell = Cell(lattice)
+        bravais = cell.get_bravais_lattice(eps=eps, pbc=pbc)
+
+        dim_label = {1: "1D", 2: "2D", 3: "3D"}[dimension]
+        print(f"  {color_text('Dimensionality:', 'cyan')} {color_text(dim_label, 'bold')}")
+        print(f"  {color_text('Bravais Lattice:', 'cyan')} {color_text(f'{bravais.longname} ({bravais.name})', 'bold')}")
+        if dimension < 3:
+            print(color_text(
+                "  Note: this reflects only the periodic axes (vacuum-padded axes excluded);\n"
+                "  it is not a 3D space group.", 'yellow'))
+        print(f"  {color_text('Using vacuum gap threshold:', 'yellow')} {vacuum_gap} Ang")
+
+        bp = cell.bandpath(pbc=pbc, npoints=0, eps=eps)
+
+        # ASE labels the Gamma point 'G'; translate to 'GAMMA' so the writer's
+        # existing '\Gamma' display/formatting logic keeps working unchanged.
+        kpoints_dict = {('GAMMA' if label == 'G' else label): coords
+                        for label, coords in bp.special_points.items()}
+        path_segments = [[('GAMMA' if label == 'G' else label) for label in segment]
+                         for segment in parse_path_string(bp.path)]
 
         print("\n" + color_text("--- 2. High-Symmetry K-Points (Fractional Coordinates) ---", 'bold'))
-        kpoints = kpath.kpath['kpoints']
-        for label, coords in kpoints.items():
-            # Format coordinates
+        for label, coords in kpoints_dict.items():
             coord_str = ", ".join([f"{c:8.5f}" for c in coords])
-            # Fix 'GAMMA' to '\Gamma' for display
             display_label = r'\Gamma' if label == 'GAMMA' else label
             print(f"  {color_text(f'{display_label:<5}:', 'green')} ({coord_str})")
 
         print("\n" + color_text("--- 3. Suggested K-Path ---", 'bold'))
-        path = kpath.kpath['path']
         path_segments_str_list = []
-
-        # Transform the list of lists into a readable string
-        # ex: [['A', 'B'], ['C', 'D']] -> "A-B | C-D"
-        for segment_list in path:
-             # Fix 'GAMMA' to '\Gamma' for display
+        for segment_list in path_segments:
             display_segment = [r'\Gamma' if label == 'GAMMA' else label for label in segment_list]
             path_segments_str_list.append("-".join(display_segment))
 
         print(f"  Path: {color_text(color_text(' | '.join(path_segments_str_list), 'bold'), 'green')}")
 
-        # --- ADDED REFERENCE ---
+        # --- METHODOLOGY ---
         print("\n" + color_text("Methodology:", 'cyan'))
-        print(f"  The path follows the Setyawan & Curtarolo (2010) convention,")
-        print(f"  as implemented by the Pymatgen library.")
-        print(f"  {color_text('Reference:', 'yellow')}")
-        print(f"    Setyawan, W., & Curtarolo, S. (2010).")
-        print(f"    High-throughput electronic band structure calculations: Challenges and tools.")
-        print(f"    Computational Materials Science, 49(2), 299-312.")
-        print(f"    DOI: 10.1016/j.commatsci.2010.05.010")
-        # --- END OF REFERENCE ---
+        print(f"  The path follows ASE's dimension-aware Bravais-lattice convention,")
+        print(f"  which extends the Setyawan & Curtarolo (2010) 3D scheme to 1D/2D")
+        print(f"  systems via their periodic-axes mask (pbc).")
+        # --- END OF METHODOLOGY ---
 
         num_points_per_segment = 50
 
         # --- FILE GENERATION ---
         print("\n" + color_text("--- 4. Output File Generation ---", 'bold'))
 
-        # Write the SIESTA k-path file if requested
-        if write_fdf_file:
-            write_siesta_kpath_file(
-                kpath.kpath['kpoints'],
-                kpath.kpath['path'], # Pass the original list of lists
-                num_points_per_segment,
-                "kpath_bs.fdf" # Output filename
-            )
-
-        # Write the VASP k-path file if requested
-        elif write_kpoints_file:
-            write_vasp_kpoints_file(
-                kpath.kpath['kpoints'],
-                kpath.kpath['path'], # Pass the original list of lists
-                num_points_per_segment,
-                "KPOINTS" # Output filename
-            )
+        write_siesta_kpath_file(
+            kpoints_dict,
+            path_segments,
+            num_points_per_segment,
+            "kpath_bs.fdf" # Output filename
+        )
         # --- END OF GENERATION ---
 
     except Exception as e:
         print("\n" + color_text(f"An error occurred while analyzing the structure: {e}", 'red'))
-        print(color_text(f"It might be necessary to adjust the 'symprec' parameter (current: {symprec}).", 'yellow'))
-        print(color_text("This often happens if the input structure is distorted or the FDF/POSCAR parse failed.", 'yellow'))
+        print(color_text(f"It might be necessary to adjust the 'vacuum_gap' or 'eps' parameters (current: {vacuum_gap} Ang, {eps}).", 'yellow'))
+        print(color_text("This often happens if the input structure is distorted or the FDF parse failed.", 'yellow'))
 
 
 def main():
 
     # 1. Configure ArgParse
     parser = argparse.ArgumentParser(
-        description=f"""{color_text("Finds the high-symmetry k-path for FDF (SIESTA) or POSCAR (VASP) files.", 'bold')}
-Uses the Setyawan & Curtarolo (2010) methodology via Pymatgen.""",
+        description=f"""{color_text("Finds the high-symmetry k-path for FDF (SIESTA) files.", 'bold')}
+Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -346,28 +263,27 @@ Uses the Setyawan & Curtarolo (2010) methodology via Pymatgen.""",
         dest="filename", # Stores the value in 'args.filename'
         type=str,
         required=True,  # Makes this flag mandatory
-        help="The structure file name (e.g., struct.fdf, POSCAR, CONTCAR)."
+        help="The structure file name (e.g., struct.fdf)."
     )
 
-    # Argument 2: File type (optional)
-    parser.add_argument(
-        "-t", "--type",
-        type=str,
-        choices=['fdf', 'poscar'],
-        default=None,
-        help="Specifies the file type.\n"
-             "  'fdf':    For SIESTA FDF files.\n"
-             "  'poscar': For VASP POSCAR/CONTCAR files.\n"
-             "If omitted, the script will try to guess from the filename."
-    )
-
-    # Argument 3: Precision (optional)
+    # Argument 2: Precision (optional)
     parser.add_argument(
         "-p", "--prec",
+        dest="eps",
         type=float,
-        default=0.01,
-        help="Sets the precision (symprec) for symmetry analysis.\n"
-             "Default: 0.01"
+        default=0.0002,
+        help="Tolerance (ase.cell.Cell's 'eps') for Bravais-lattice/symmetry detection.\n"
+             "Default: 0.0002"
+    )
+
+    # Argument 3: Vacuum gap threshold (optional)
+    parser.add_argument(
+        "--vacuum-gap",
+        type=float,
+        default=10.0,
+        help="Minimum empty span (in Angstrom) between atoms along an axis, wrapped "
+             "periodically, to treat that axis as vacuum-padded (non-periodic) when "
+             "detecting the system's dimensionality. Default: 10.0"
     )
 
     parser.add_argument("-v", "--version", action="version",
@@ -385,7 +301,7 @@ Uses the Setyawan & Curtarolo (2010) methodology via Pymatgen.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("Suggested k-path from structure (only bulk):", 'bold'))
+    print("\n" + color_text("Suggested k-path from structure:", 'bold'))
     print("-"*60)
 
 
@@ -395,63 +311,28 @@ Uses the Setyawan & Curtarolo (2010) methodology via Pymatgen.""",
     # 2. Process the arguments
 
     filename = args.filename
-    precision = args.prec
-    file_type = args.type
+    eps = args.eps
+    vacuum_gap = args.vacuum_gap
 
     # Check if the file exists
     if not os.path.exists(filename):
         print(color_text(f"Error: File '{filename}' not found.", 'red'))
         sys.exit(1)
 
-    # Try to guess the type if not provided
-    if file_type is None:
-        print(color_text("File type not specified, trying to guess...", 'yellow'))
-        if filename.lower().endswith('.fdf'):
-            file_type = 'fdf'
-        # Common VASP filenames
-        elif 'poscar' in filename.lower() or 'contcar' in filename.lower() or filename.lower().endswith('.vasp'):
-            file_type = 'poscar'
-        else:
-            print(color_text(f"Error: Could not guess file type for '{filename}'.", 'red'))
-            print(f"Please use the -t 'fdf' or -t 'poscar' option.")
-            sys.exit(1)
-
-    print(color_text(f"Reading file: {filename} (Type: {file_type})", 'cyan') + "\n")
+    print(color_text(f"Reading file: {filename} (Type: fdf)", 'cyan') + "\n")
 
     # 3. Load the Structure object
 
-    structure_obj = None
-
     try:
-        if file_type == 'fdf':
-            # Use your parsing function for FDF
-            structure_obj = parse_fdf_to_structure(filename)
-
-        elif file_type == 'poscar':
-            # Use Pymatgen's native reader for POSCAR
-            structure_obj = Structure.from_file(filename)
-
+        structure_obj = parse_fdf_to_structure(filename)
     except Exception as e:
         print(color_text(f"An error occurred while READING the file '{filename}':", 'red'))
         print(f"{e}")
         sys.exit(1)
 
-
     # 4. Run the analysis (if loading was successful)
     if structure_obj:
-
-        # Determine which output file to write
-        create_fdf_output = (file_type == 'fdf')
-        create_kpoints_output = (file_type == 'poscar')
-
-        # Get the k-path from the Structure object, passing the flags
-        get_kpath_from_structure(
-            structure_obj,
-            symprec=precision,
-            write_fdf_file=create_fdf_output,
-            write_kpoints_file=create_kpoints_output
-        )
-
+        get_kpath_from_structure(structure_obj, vacuum_gap=vacuum_gap, eps=eps)
     else:
         print(color_text("Error: Could not create the structure object from the file.", 'red'))
 

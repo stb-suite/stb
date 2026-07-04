@@ -204,6 +204,58 @@ def to_pymatgen(structure: FdfStructure) -> Structure:
     return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
 
 
+def from_pymatgen(
+    structure: Structure, species_meta: dict[str, dict] | None = None, coord_format: str = "fractional"
+) -> FdfStructure:
+    """Builds an FdfStructure from a pymatgen Structure (e.g. after make_supercell()).
+
+    lattice_constant is always 1.0 (the physical lattice is written out as-is,
+    matching write_fdf()'s expectations). If species_meta is given (typically
+    the original structure's, via species_dict()), its 'id' assignments are
+    reused for any symbol present in it, so species numbering stays stable
+    across the transformation; any symbol not in it gets the next free id,
+    with 'Z' looked up from the periodic table.
+    """
+    from pymatgen.core.periodic_table import Element
+
+    symbols = [site.specie.symbol for site in structure]
+    species = list(dict.fromkeys(symbols))
+
+    meta: dict[str, dict] = {}
+    used_ids = set()
+    if species_meta:
+        for symbol, info in species_meta.items():
+            if symbol in species:
+                meta[symbol] = dict(info)
+                used_ids.add(str(info["id"]))
+
+    next_id = 1
+    for symbol in species:
+        if symbol in meta:
+            continue
+        while str(next_id) in used_ids:
+            next_id += 1
+        meta[symbol] = {"id": str(next_id), "Z": Element(symbol).Z}
+        used_ids.add(str(next_id))
+        next_id += 1
+
+    is_cartesian = coord_format == "cartesian"
+    atoms = [
+        (site.specie.symbol, np.array(site.coords if is_cartesian else site.frac_coords))
+        for site in structure
+    ]
+
+    return FdfStructure(
+        lattice=np.array(structure.lattice.matrix),
+        lattice_constant=1.0,
+        species=species,
+        species_meta=meta,
+        atoms=atoms,
+        coord_format=coord_format,
+        raw_lines=[],
+    )
+
+
 def write_fdf(structure: FdfStructure, path: str) -> None:
     """Writes a fresh .fdf file from scratch, built from an FdfStructure.
 

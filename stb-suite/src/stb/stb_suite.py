@@ -718,6 +718,39 @@ def run_kpath_generator() -> None:
 
     run_tool("stb-kpath", args)
 
+def run_supercell_generator() -> None:
+    """Interface for the Supercell Builder (stb-supercell)"""
+    print("\n" + "="*60)
+    print(color_text("SUPERCELL BUILDER (stb-supercell)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    # Esta linha agora terá Tab-completion!
+    input_file = get_input("Input structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file: ")
+
+    print(f"\n{color_text('Supercell dimensions:', 'yellow')}")
+    print("  Enter 3 numbers for a diagonal supercell (e.g. '2 2 2')")
+    print("  or 9 numbers for a full row-major 3x3 matrix (e.g. '2 0 0 0 2 0 0 0 1')")
+    dim_values = get_input("Dimensions: ").split()
+    while len(dim_values) not in (3, 9):
+        print(color_text("Please enter exactly 3 or 9 numbers.", 'red'))
+        dim_values = get_input("Dimensions: ").split()
+
+    output_file = get_input("\nOutput file name [default: supercell.fdf]: ").strip()
+    if not output_file:
+        output_file = "supercell.fdf"
+
+    args = [
+        "--file", input_file,
+        "--dim", *dim_values,
+        "--output", output_file,
+        "--no-intro"
+    ]
+
+    run_tool("stb-supercell", args)
+
 def run_dos_parser() -> None:
     """Interface for the PDOS XML Parser (stb-dos)"""
     print("\n" + "="*60)
@@ -1145,6 +1178,9 @@ INPUT_TOOLS = {
     4:  {'title': '2D Monolayer Stacker (stb-2Dstacking)',
          'description': 'Stacks two monolayers into a heterostructure using the ZSL algorithm.',
          'func': run_2d_stacker},
+    5: {'title': "Supercell Builder (stb-supercell)",
+        'description': "Build a supercell from a structure file using a user-defined transformation matrix.",
+        'func': run_supercell_generator},
          }
 
 

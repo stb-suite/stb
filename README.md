@@ -55,7 +55,7 @@ Paired preparation + analysis tools for a specific property calculation, from ge
 * **`stb-clean`** – Remove unnecessary calculation files and clean directories.
 * **`stb-cube`** – Convert SIESTA grid files (VT, VH, RHO) to Gaussian Cube format.
 * **`stb-siesta2wtb`** – Export SIESTA Hamiltonians to the **Wantibexos** tight-binding format.
-* **`stb-suite`** – Unified terminal interface providing interactive access to all tools.
+* **`stb-suite`** – Unified terminal interface providing interactive access to all tools; browse by category or jump straight to a tool with a code like `3.1.2`.
 
 ---
 

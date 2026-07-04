@@ -33,6 +33,7 @@ def show_main_menu() -> None:
     print(f"{color_text('4.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
     print(f"{color_text('0.', 'yellow')} {color_text('Exit', 'red')}")
     print("-"*60)
+    print(color_text("Tip: you can also type a tool code directly (e.g. 3.1.2) to jump straight to it.", 'yellow'))
 
 def show_sub_menu(title: str, tools_dict: Dict) -> None:
     """Displays a sub-menu for a specific tool category"""
@@ -1176,31 +1177,46 @@ ANALYSIS_TOOLS = {
 
 
 WORKFLOW_TOOLS = {
-    1: {'title': "Strain Generator (stb-strain)",
-        'description': "Generate strained structures for calculations.",
-        'func': run_strain_generator},
-    2: {'title': "Strain Post-Processing (stb-strainAnalysis)",
-        'description': "Extract stress-strain curves from strain_* folders.",
-        'func': run_strain_post_processor},
-    3: {'title': 'Elastic Constants Setup (stb-elasticInputs)',
-        'description': 'Generates deformed structures to calculate elastic constants.',
-        'func': run_elastic_generator},
-    4: {'title': 'Elastic Properties Analyzer (stb-elasticAnalysis)',
-        'description': 'Calculates Stiffness Matrix, Young Modulus and Stability from outputs.',
-        'func': run_elastic_analyzer},
-    5: {
-        'title': "Cohesive Energy Setup (stb-cohesive)",
-        'description': "Prepare folder structure and inputs for cohesive energy calculations.",
-        'func': run_cohesive_setup},
-    6: {'title': "Cohesive Energy Analysis (stb_cohesive_analysis)", 'description': "Process and calculate the final cohesive energy per atom.",
-        'func': run_cohesive_analysis},
-    7: {
-        'title': "Phonon Displacement Generator",
-        'description': "Automate SIESTA phonon displacement folders using Phonopy.",
-        'func': run_phonon_generator},
-    8: {'title': "Phonon Post-Processing",
-        'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
-        'func': run_phonon_postprocessing},
+    1: {'title': "Stress-Strain",
+        'description': "Generate strained structures, then extract stress-strain curves and mechanical properties.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-strain)",
+                'description': "Generate strained structures for calculations.",
+                'func': run_strain_generator},
+            2: {'title': "Stage 2 - Analysis (stb-strainAnalysis)",
+                'description': "Extract stress-strain curves from strain_* folders.",
+                'func': run_strain_post_processor},
+        }},
+    2: {'title': "Elastic Constants",
+        'description': "Generate deformed structures, then compute the stiffness matrix and elastic moduli.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-elasticInputs)",
+                'description': 'Generates deformed structures to calculate elastic constants.',
+                'func': run_elastic_generator},
+            2: {'title': "Stage 2 - Analysis (stb-elasticAnalysis)",
+                'description': 'Calculates Stiffness Matrix, Young Modulus and Stability from outputs.',
+                'func': run_elastic_analyzer},
+        }},
+    3: {'title': "Cohesive Energy",
+        'description': "Set up bulk + isolated-atom calculations, then compute the cohesive energy per atom.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-cohesive)",
+                'description': "Prepare folder structure and inputs for cohesive energy calculations.",
+                'func': run_cohesive_setup},
+            2: {'title': "Stage 2 - Analysis (stb_cohesive_analysis)",
+                'description': "Process and calculate the final cohesive energy per atom.",
+                'func': run_cohesive_analysis},
+        }},
+    4: {'title': "Phonons",
+        'description': "Generate displaced supercells via Phonopy, then post-process into thermal properties.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-phononsCreate)",
+                'description': "Automate SIESTA phonon displacement folders using Phonopy.",
+                'func': run_phonon_generator},
+            2: {'title': "Stage 2 - Analysis (stb-phononsPos)",
+                'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
+                'func': run_phonon_postprocessing},
+        }},
        }
 
 
@@ -1217,23 +1233,54 @@ UTILITY_TOOLS = {
         'func': run_wantibexos_interface},
 }
 
+
+def _flatten_tool_codes() -> Dict[str, Callable]:
+    """Builds a flat {"1.1": func, ..., "3.1.2": func, ..., "4.4": func} lookup
+    across all 4 categories, from the dicts above -- lets the main menu jump
+    straight to a tool via a dotted code instead of navigating level by level.
+    """
+    codes: Dict[str, Callable] = {}
+    for key, info in INPUT_TOOLS.items():
+        codes[f"1.{key}"] = info['func']
+    for key, info in ANALYSIS_TOOLS.items():
+        codes[f"2.{key}"] = info['func']
+    for prop_key, prop_info in WORKFLOW_TOOLS.items():
+        for stage_key, stage_info in prop_info['stages'].items():
+            codes[f"3.{prop_key}.{stage_key}"] = stage_info['func']
+    for key, info in UTILITY_TOOLS.items():
+        codes[f"4.{key}"] = info['func']
+    return codes
+
+
+TOOL_CODES = _flatten_tool_codes()
+
+
 def run_sub_menu(title: str, tools_dict: Dict) -> None:
-    """Handles the logic for showing and running a sub-menu"""
+    """Handles the logic for showing and running a sub-menu.
+
+    Recurses one level deeper when an entry has a 'stages' dict instead of a
+    'func' (this is how Workflow's category -> property -> stage nesting
+    works, with no separate menu function needed).
+    """
     while True:
         show_sub_menu(title, tools_dict)
         try:
             choice_str = get_input(f"\nSelect an option (0-{len(tools_dict)}): ")
-            
+
             if choice_str == '0':
                 break # Go back to the main menu
-            
+
             try:
                 choice = int(choice_str)
             except ValueError:
                 choice = float(choice_str)
 
             if choice in tools_dict:
-                tools_dict[choice]['func']() # Run the selected tool
+                entry = tools_dict[choice]
+                if 'stages' in entry:
+                    run_sub_menu(entry['title'], entry['stages'])
+                else:
+                    entry['func']() # Run the selected tool
             else:
                 print(color_text(f"\nInvalid choice! Please select between 0 and {len(tools_dict)}.", 'red'))
                 sleep(1)
@@ -1261,9 +1308,11 @@ def main():
         show_main_menu()
         
         try:
-            choice = get_input("\nSelect an option (0-4): ")
+            choice = get_input("\nSelect an option (0-4, or a tool code like 3.1.2): ")
 
-            if choice == '1':
+            if choice in TOOL_CODES:
+                TOOL_CODES[choice]()
+            elif choice == '1':
                 run_sub_menu("Inputs", INPUT_TOOLS)
             elif choice == '2':
                 run_sub_menu("Analysis", ANALYSIS_TOOLS)
@@ -1275,7 +1324,7 @@ def main():
                 print(color_text("\nThank you for using STB-SUITE!", 'cyan'))
                 break
             else:
-                print(color_text("\nInvalid choice! Please select between 0 and 4.", 'red'))
+                print(color_text("\nInvalid choice! Please select between 0 and 4, or a valid tool code.", 'red'))
                 sleep(1)
                 
         except ValueError:

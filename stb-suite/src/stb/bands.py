@@ -232,8 +232,9 @@ def main():
     print("[INFO] Write files...")
     print("[WARNING] \n")
     
-    write_gnuplot_bands(shift_bands(dic_bands,rshift))
-    plot(shift_bands(dic_bands,rshift),high_sym)
+    shifted_bands = shift_bands(dic_bands, rshift)
+    write_gnuplot_bands(shifted_bands)
+    plot(shifted_bands, high_sym)
     plot_gnuplot(high_sym)
     
     print("\n[INFO] Complete job!") 

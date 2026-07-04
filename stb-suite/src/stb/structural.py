@@ -135,11 +135,9 @@ def compute_ecn(structure, mode, atoms_position=None):
             f.write("   No distances could be computed.\n")
 
         # Atomic positions
-        pos_atomics = []
         f.write("\nAtomic positions:\n")
-        for i, site in enumerate(structure):
-            f.write(f"{i+1}  {site.specie.symbol} cartesian position: {site.coords}\n")
-            pos_atomics.append([i+1, str(site.specie.symbol), site.coords])
+        for atom_id, symbol, coords in pos_atomics:
+            f.write(f"{atom_id}  {symbol} cartesian position: {coords}\n")
 
 def main():
     # Configure logger for warnings (done here, not at module level, so importing

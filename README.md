@@ -2,7 +2,7 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows**
 
-![Version](https://img.shields.io/badge/version-1.8.1-blue.svg)
+![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.9-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
@@ -28,6 +28,10 @@ It provides a unified, intuitive interface that simplifies and accelerates compu
 * **`stb-kgrid`** – Automatically suggest Monkhorst-Pack k-point grids based on a target density.
 * **`stb-kpath`** – Generate high-symmetry paths for band-structure calculations.
 * **`stb-strain`** – Create supercells with uniaxial or biaxial strain (Cartesian coordinates).
+* **`stb-elasticInputs`** – Generate batches of deformed structures (strain tensor components) for elastic constant calculations.
+* **`stb-cohesive`** – Set up cohesive energy workflows (bulk structure plus isolated-atom calculations).
+* **`stb-phononsCreate`** – Generate displaced supercells for phonon calculations via Phonopy.
+* **`stb-2Dstacking`** – Stack two monolayers into a heterostructure using the ZSL algorithm, with twist/shift control.
 
 ### 📊 Analysis & Post-Processing
 
@@ -36,6 +40,14 @@ It provides a unified, intuitive interface that simplifies and accelerates compu
 * **`stb-convdos`** – Apply Gaussian convolution to DOS data for smoothing.
 * **`stb-structural`** – Compute lattice parameters, coordination numbers, and ECN values.
 * **`stb-symmetry`** – Identify space group, point group, crystal system, and Wyckoff positions.
+* **`stb-strainAnalysis`** – Extract stress-strain curves and mechanical properties (Young's modulus, UTS) from `strain_*` folders.
+* **`stb-elasticAnalysis`** – Compute the stiffness matrix, elastic moduli, and Born stability criteria from `strain_*` folders.
+* **`stb-cohesiveAnalysis`** – Calculate cohesive energy per atom from a completed cohesive-energy workflow.
+* **`stb-bader`** – Perform Bader charge (AIM) analysis on SIESTA charge density grids.
+* **`stb-cube`** – Convert SIESTA grid files (VT, VH, RHO) to Gaussian Cube format.
+* **`stb-density`** – Export charge density as 2D slice maps or 3D point clouds for plotting.
+* **`stb-workfunction`** – Calculate work function from the planar-averaged electrostatic potential.
+* **`stb-phononsPos`** – Post-process phonon displacement calculations into thermal properties.
 
 ### ⚙️ Utilities & Interfaces
 

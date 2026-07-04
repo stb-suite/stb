@@ -96,6 +96,7 @@ def main():
 
     # 3. Propriedades Térmicas usando a API Python do Phonopy
     print(f"\n[INFO] Initializing Phonopy API and loading FORCE_SETS ...")
+    original_dir = os.getcwd()
     try:
         # Como o yaml e o FORCE_SETS estão na mesma pasta, precisamos avisar o phonopy ou mudar o dir de execução
         os.chdir(phonon_dir)
@@ -134,7 +135,7 @@ def main():
     print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, dat_filename)}'", 'cyan'))
     
     # Retorna ao diretório original
-    os.chdir("..")
+    os.chdir(original_dir)
 
     print("\n" + "-" * 60)
     print(color_text("Post-processing complete! Results are in your phonon directory.\n", 'bold'))

@@ -147,7 +147,10 @@ def read_fdf(path: str) -> FdfStructure:
             "whether coordinates are fractional or cartesian."
         )
 
-    species = list(dict.fromkeys(species_map[idx] for idx in sorted(species_map, key=int)))
+    try:
+        species = list(dict.fromkeys(species_map[idx] for idx in sorted(species_map, key=int)))
+    except ValueError:
+        raise ValueError(f"Non-numeric species index in %block ChemicalSpeciesLabel in {path}.")
 
     atoms: list[tuple[str, np.ndarray]] = []
     for x, y, z, species_index in raw_atoms:

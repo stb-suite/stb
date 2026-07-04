@@ -165,7 +165,9 @@ def stack_heterostructure(layer1, layer2, gaps, target_vacuum, max_area, max_str
             else:
                 base_lattice = Lattice((layer1_supercell.lattice.matrix + layer2_supercell.lattice.matrix) / 2.0)
 
-            max_strain_val = max(abs(base_lattice.a / layer1_supercell.lattice.a - 1.0), abs(base_lattice.a / layer2_supercell.lattice.a - 1.0))
+            strain_a = max(abs(base_lattice.a / layer1_supercell.lattice.a - 1.0), abs(base_lattice.a / layer2_supercell.lattice.a - 1.0))
+            strain_b = max(abs(base_lattice.b / layer1_supercell.lattice.b - 1.0), abs(base_lattice.b / layer2_supercell.lattice.b - 1.0))
+            max_strain_val = max(strain_a, strain_b)
 
             # 2. FLAWLESS MAPPING OF ROTATED ATOMS TO THE NEW LATTICE BOX
             l1_frac = [s.frac_coords for s in layer1_supercell]

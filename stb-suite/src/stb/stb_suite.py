@@ -188,7 +188,10 @@ def run_cohesive_setup() -> None:
         
     # 2. Obter densidade K
     k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
-    
+    while k_density <= 0:
+        print(color_text("Density must be a positive number!", 'red'))
+        k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
+
     # 3. Obter caminho do PP
     pp_path = get_input("Pseudopotentials folder path (-p) [optional, press Enter to skip]: ").strip()
     

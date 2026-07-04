@@ -15,8 +15,13 @@ import numpy as np
 def compute_monkhorts(cella, cellb, cellc, k_density: float) -> list[int]:
     """Computes the reciprocal lattice vectors and Monkhorst-Pack divisions.
 
-    Raises ValueError if the cell volume is (numerically) zero.
+    Raises ValueError if the cell volume is (numerically) zero, or if
+    k_density isn't a positive number (zero overflows math.ceil, negative
+    silently returns a meaningless [1, 1, 1] grid).
     """
+    if k_density <= 0:
+        raise ValueError(f"k_density must be positive, got {k_density}.")
+
     volume = np.dot(cella, np.cross(cellb, cellc))
 
     if abs(volume) < 1e-9:

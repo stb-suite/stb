@@ -205,9 +205,19 @@ def get_free_energy(path: str) -> float | None:
 
 
 def _parse_float_line(line: str) -> list[float] | None:
-    try:
-        parts = line.replace(',', ' ').split()
-        nums = [float(x) for x in parts[:3]]
-        return nums if len(nums) >= 3 else None
-    except Exception:
-        return None
+    """First 3 numeric tokens on the line, skipping any non-numeric ones.
+
+    SIESTA prefixes some repeated blocks (e.g. the last "Stress tensor
+    (static)" block in a relaxation run) with a leading "siesta:" label on
+    each data line -- skip it and any other stray token instead of assuming
+    the first 3 tokens are always the numbers.
+    """
+    nums: list[float] = []
+    for tok in line.replace(',', ' ').split():
+        try:
+            nums.append(float(tok))
+        except ValueError:
+            continue
+        if len(nums) == 3:
+            break
+    return nums if len(nums) == 3 else None

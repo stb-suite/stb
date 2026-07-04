@@ -69,11 +69,18 @@ Diag.ParallelOverK      .true.
 DM.UseSaveDM            .true.
 """
 
+VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded
+
 def parse_structure_fdf(filename):
-    """Parses .fdf for lattice vectors and species info"""
+    """Parses .fdf for lattice vectors, species info, and per-axis vacuum flags
+    (see kspace.detect_vacuum_axes) used to compute a dimensionality-aware k-grid."""
     try:
         structure = structure_io.read_fdf(filename)
-        return structure.lattice, structure_io.species_dict(structure)
+        positions = np.array([pos for _, pos in structure.atoms])
+        is_cartesian = structure.coord_format == 'cartesian'
+        frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, VACUUM_GAP_ANG)
+        return structure.lattice, structure_io.species_dict(structure), vacuum_axes
     except FileNotFoundError:
         print(color_text(f"[ERROR] Structure file '{filename}' not found.", 'red'))
         sys.exit(1)
@@ -167,13 +174,13 @@ def main():
     
     # Extract structure data
     print("\n[INFO] Read structure file ...")
-    lattice, species = parse_structure_fdf(args.structure)
+    lattice, species, vacuum_axes = parse_structure_fdf(args.structure)
     print(f"[INFO] Detected species: {', '.join(species.keys())}")
-    
+
     # Calculate K-grid for the full structure
     print("[INFO] Calculate Monkhorst-Pack grid ...")
     try:
-        kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.k_density)
+        kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.k_density, vacuum_axes)
     except ValueError as e:
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)

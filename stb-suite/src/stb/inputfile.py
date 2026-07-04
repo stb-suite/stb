@@ -843,13 +843,20 @@ WriteMDXmol             .true.
 
 # --- Calculation Logic Functions ---
 
+VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded
+
 def parse_structure_fdf(filename):
     """
-    Parses a .fdf (Siesta) file and returns the lattice vectors and
-    the list of chemical species symbols.
+    Parses a .fdf (Siesta) file and returns the lattice vectors, the list of
+    chemical species symbols, and the per-axis vacuum flags (see
+    kspace.detect_vacuum_axes) used to compute a dimensionality-aware k-grid.
     """
     structure = structure_io.read_fdf(filename)
-    return structure.lattice, structure_io.species_list(structure)
+    positions = np.array([pos for _, pos in structure.atoms])
+    is_cartesian = structure.coord_format == 'cartesian'
+    frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
+    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, VACUUM_GAP_ANG)
+    return structure.lattice, structure_io.species_list(structure), vacuum_axes
 
 def copy_pseudopotentials(species_list, pp_path):
     """
@@ -955,13 +962,13 @@ def generate_calculation(struct_file, chosen_mode, pp_path):
         template_lines = template_string.splitlines(keepends=True)
 
         # Parse structure and get species
-        lattice, species = parse_structure_fdf(struct_file)
+        lattice, species, vacuum_axes = parse_structure_fdf(struct_file)
         print(f"  Species found: {', '.join(species)}")
 
         # --- K-Grid Conditional Logic ---
         replace_kgrid = False
         kgrid_line_new = "" # Initialize
-        
+
         if chosen_mode in ['aimd', 'aimd+d3']:
             # For AIMD, do nothing, keep the K-grid from the template
             replace_kgrid = False
@@ -971,7 +978,7 @@ def generate_calculation(struct_file, chosen_mode, pp_path):
             replace_kgrid = True
             print("ℹ️  Calculating K-grid (density = 0.2 1/Å)...")
             k_density = 0.2
-            kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], k_density)
+            kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], k_density, vacuum_axes)
             kgrid_line_new = f"kgrid.MonkhorstPack   [{kgrid_divs[0]}  {kgrid_divs[1]}  {kgrid_divs[2]}]"
             print(f"  Suggested K-grid: {kgrid_divs[0]} {kgrid_divs[1]} {kgrid_divs[2]}")
 

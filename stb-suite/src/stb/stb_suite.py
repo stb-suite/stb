@@ -668,19 +668,25 @@ def run_kgrid_generator() -> None:
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
-    
+
     type_list = ['fdf', 'poscar', 'cif', 'fhi']
-    print(f"\n{color_text('Available types:', 'yellow')} {', '.join(type_list)}")
-    file_type = get_input("Structure file type: ").lower()
-    while file_type not in type_list:
-        print(color_text("Invalid type!", 'red'))
-        file_type = get_input("Structure file type: ").lower()
-    
-    density = get_float_input("\nK-point density (e.g., 0.2): ")
+    print(f"\n{color_text('Available file types:', 'yellow')}")
+    for i, t in enumerate(type_list, 1):
+        print(f"  {color_text(str(i)+'.', 'yellow')} {t}")
+
+    max_choice = len(type_list)
+    type_choice = get_int_input(f"\nSelect file type (1-{max_choice}) [default: 1 = fdf]: ", 1)
+    while not (1 <= type_choice <= max_choice):
+        print(color_text(f"Invalid choice! Please select between 1 and {max_choice}.", 'red'))
+        type_choice = get_int_input(f"Select file type (1-{max_choice}) [default: 1 = fdf]: ", 1)
+    file_type = type_list[type_choice - 1]
+    print(f"Selected type: {color_text(file_type, 'cyan')}")
+
+    density = get_float_input("\nK-point density (e.g., 0.2) [default: 0.2]: ", 0.2)
     while density <= 0:
         print(color_text("Density must be a positive number!", 'red'))
-        density = get_float_input("K-point density (e.g., 0.2): ")
-    
+        density = get_float_input("K-point density (e.g., 0.2) [default: 0.2]: ", 0.2)
+
     args = [
         "--file", input_file,
         "--type", file_type,

@@ -23,7 +23,12 @@ except ImportError:
 
 
 def parse_poscar(filename):
-    """Reads a POSCAR file and returns the lattice vectors as a 3x3 numpy array."""
+    """Reads a POSCAR file and returns (lattice, positions, is_cartesian).
+
+    positions are as literally written (fractional under 'Direct', Cartesian
+    Angstrom -- pre-scale -- under 'Cartesian'), one row per atom across all
+    species, in file order.
+    """
     with open(filename, 'r') as f:
         lines = [l.strip() for l in f if l.strip()]
     scale = float(lines[1])
@@ -33,14 +38,27 @@ def parse_poscar(filename):
         vec = [float(p) for p in parts]
         vecs.append(vec)
     lattice = np.array(vecs) * scale
-    return lattice
+
+    counts = [int(x) for x in lines[6].split()]
+    n_atoms = sum(counts)
+    coord_type = lines[7].strip().lower()
+    is_cartesian = coord_type.startswith(('c', 'k'))  # Cartesian, or old VASP 'Kartesian'
+
+    positions = []
+    for i in range(8, 8 + n_atoms):
+        parts = lines[i].split()
+        positions.append([float(parts[0]), float(parts[1]), float(parts[2])])
+    positions = np.array(positions)
+
+    return lattice, positions, is_cartesian
 
 def parse_cif(filename):
-    """Reads a CIF file using ASE and returns the lattice vectors."""
+    """Reads a CIF file using ASE and returns (lattice, fractional_positions, is_cartesian=False)."""
     try:
         atoms = ase.io.read(filename)
         lattice = atoms.get_cell()
-        return lattice
+        positions = atoms.get_scaled_positions()
+        return lattice, positions, False
     except NameError:
         print("Error: The 'ase' library is required to read .cif files.")
         print("Please install it using: pip install ase")
@@ -50,14 +68,23 @@ def parse_cif(filename):
         sys.exit(1)
 
 def parse_fhi(filename):
-    """Reads a geometry.in (FHI-aims) file and returns the lattice vectors as a 3x3 numpy array."""
+    """Reads a geometry.in (FHI-aims) file and returns (lattice, positions, is_cartesian).
+
+    is_cartesian reflects whichever atom keyword ('atom_frac' vs 'atom') was
+    actually used in the file; mixing both in the same file isn't supported.
+    """
     vecs = []
+    positions = []
+    is_cartesian = False
     with open(filename, 'r') as f:
         for line in f:
             # Remove comments and whitespace
             cleaned_line = line.split('#', 1)[0].strip()
-            
-            if cleaned_line.startswith('lattice_vector'):
+            if not cleaned_line:
+                continue
+            keyword = cleaned_line.split()[0]
+
+            if keyword == 'lattice_vector':
                 parts = cleaned_line.split()
                 if len(parts) >= 4:
                     try:
@@ -67,15 +94,29 @@ def parse_fhi(filename):
                     except ValueError:
                         print(f"Error: 'lattice_vector' line malformed in {filename}: {line}")
                         sys.exit(1)
+            elif keyword in ('atom_frac', 'atom'):
+                parts = cleaned_line.split()
+                if len(parts) >= 4:
+                    try:
+                        positions.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                        is_cartesian = (keyword == 'atom')
+                    except ValueError:
+                        print(f"Error: '{keyword}' line malformed in {filename}: {line}")
+                        sys.exit(1)
 
     # Check if we found exactly 3 vectors
     if len(vecs) != 3:
         print(f"Error: Could not find 3 'lattice_vector' lines in file {filename}.")
         print(f"Found: {len(vecs)}")
         sys.exit(1)
-        
+
+    if not positions:
+        print(f"Error: Could not find any 'atom_frac'/'atom' lines in file {filename}.")
+        sys.exit(1)
+
     lattice = np.array(vecs)
-    return lattice
+    positions = np.array(positions)
+    return lattice, positions, is_cartesian
 
 def print_density_recommendation():
     """Prints a friendly k-point density recommendation table."""
@@ -92,25 +133,24 @@ def print_density_recommendation():
     print("     generally accurate enough while keeping cost reasonable.")
     print("="*65 + "\n")
 
-def analyze_dimensionality(divisions):
-    """Analyzes the computed grid to suggest the system's dimensionality."""
-    ones_count = divisions.count(1)
-    
+def analyze_dimensionality(vacuum_axes):
+    """Prints the system's dimensionality, derived from which axes were
+    flagged as vacuum-padded by detect_vacuum_axes (not from the divisions
+    themselves -- a genuinely periodic but large-celled axis can also round
+    down to a single division, and shouldn't be mislabeled as vacuum)."""
+    vacuum_count = sum(vacuum_axes)
+
     print("--- Dimensionality Analysis ---")
-    if ones_count == 3:
-        # Grid is [1, 1, 1]
+    if vacuum_count == 3:
         print("System appears to be 0D (e.g., a molecule).")
         print("A 1x1x1 grid (Gamma point) is typically sufficient.")
-    elif ones_count == 2:
-        # Grid is [N, 1, 1] or [1, N, 1] or [1, 1, N]
+    elif vacuum_count == 2:
         print("System appears to be 1D (e.g., a nanotube or polymer).")
         print("The '1's in the grid correspond to the vacuum-padded directions.")
-    elif ones_count == 1:
-        # Grid is [N, M, 1] or [N, 1, M] or [1, N, M]
+    elif vacuum_count == 1:
         print("System appears to be 2D (e.g., a slab or surface).")
         print("The '1' in the grid corresponds to the vacuum-padded direction.")
     else:
-        # Grid is [N, M, P]
         print("System appears to be 3D (bulk material).")
     print("---------------------------------\n")
 
@@ -130,8 +170,14 @@ def main():
     parser.add_argument(
         "--type", "-t", type=str, required=True,
         # Changed 'geometry' to 'fhi'
-        choices=['poscar', 'cif', 'fhi', 'fdf'], 
+        choices=['poscar', 'cif', 'fhi', 'fdf'],
         help="Type of the structure file. Currently supports: 'poscar', 'cif', 'fhi', 'fdf'."
+    )
+    parser.add_argument(
+        "--vacuum-gap", type=float, default=10.0,
+        help="Minimum empty span (in Angstrom) between atoms along an axis, wrapped "
+             "periodically, to treat that axis as vacuum-padded (non-periodic) and force "
+             "a single k-point there regardless of density. Default: 10.0"
     )
 
 
@@ -162,21 +208,24 @@ def main():
         # --- Updated Decision Logic ---
         if file_type == 'cif':
             print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (using ASE)...")
-            lattice = parse_cif(filename)
-            
+            lattice, positions, is_cartesian = parse_cif(filename)
+
         elif file_type == 'poscar':
             print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice = parse_poscar(filename)
+            lattice, positions, is_cartesian = parse_poscar(filename)
 
         elif file_type == 'fhi': # Changed from 'geometry'
             print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice = parse_fhi(filename) # Renamed function call
+            lattice, positions, is_cartesian = parse_fhi(filename) # Renamed function call
 
         elif file_type == 'fdf':
             print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice = structure_io.lattice_only(filename)
+            structure = structure_io.read_fdf(filename)
+            lattice = structure.lattice
+            positions = np.array([pos for _, pos in structure.atoms])
+            is_cartesian = structure.coord_format == 'cartesian'
         # --- End of Update ---
-            
+
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
         return
@@ -184,22 +233,24 @@ def main():
         print(f"An unexpected error occurred while reading the file: {e}")
         return
 
-    # Calculate divisions
+    # Detect vacuum-padded axes from the actual atomic layout, then compute divisions
     try:
-        divisions = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.density)
+        frac_coords = kspace.to_fractional(positions, lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice, args.vacuum_gap)
+        divisions = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.density, vacuum_axes)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
     # Print recommendation table
     print_density_recommendation()
-    
+
     # Print the suggested grid
     print(f"✅ Suggested Monkhorst-Pack grid: {divisions[0]} {divisions[1]} {divisions[2]}\n")
-    
+
     # --- New feature ---
     # Analyze and print dimensionality
-    analyze_dimensionality(divisions)
+    analyze_dimensionality(vacuum_axes)
     # --- End of new feature ---
 
 if __name__ == "__main__":

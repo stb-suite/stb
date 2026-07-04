@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
     
-VERSION = "1.1.1"    
+VERSION = "1.9.1"    
 
 import os
 import sys

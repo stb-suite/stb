@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -25,7 +25,7 @@ from stb.core.cli import COLORS, color_text, show_intro
 
 def gaussian_kernel_1d(size, sigma):
     """Creates a 1D Gaussian kernel."""
-    kernel_1d = np.linspace(-(size // 2), size // 2, size)
+    kernel_1d = np.arange(size) - (size - 1) / 2.0
     kernel_1d = np.exp(-(kernel_1d**2) / (2 * sigma**2))
     kernel_1d /= np.sum(kernel_1d)  # Normalize the kernel
     return kernel_1d

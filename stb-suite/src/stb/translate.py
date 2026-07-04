@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
     
-VERSION = "1.8.0"    
+VERSION = "1.9.1"    
 
 import os
 import sys
@@ -352,10 +352,10 @@ def getatomsandvectors_siesta(input_siesta):
         dicatoms[pos[0]].append([pos[0], pos[1], atomicnumber[pos[1]]])
     getatoms = []
     for atoms in dicatoms:
-        getatoms.append([dicatoms[atoms[0]][0][0],
-                        dicatoms[atoms[0]][0][1],
-                        dicatoms[atoms[0]][0][2],
-                        str(len(dicatoms[atoms[0]]))])
+        getatoms.append([dicatoms[atoms][0][0],
+                        dicatoms[atoms][0][1],
+                        dicatoms[atoms][0][2],
+                        str(len(dicatoms[atoms]))])
     atomic_position = {}
     for position in datasiesta[4:]:
         if atomicnumber[position[1]] not in atomic_position:
@@ -814,8 +814,8 @@ def convert_coordinates(typevectors_in: str,
             atomsposition_out[symbol] = []
             for pos in positions:
                 pos_np = np.array(pos, dtype=float)
-                # v_cart = M . v_direct
-                cart_pos = np.dot(lattice_matrix, pos_np)
+                # v_cart = v_direct . M  (lattice_matrix rows are the lattice vectors)
+                cart_pos = np.dot(pos_np, lattice_matrix)
                 # Format back to list of strings
                 atomsposition_out[symbol].append(
                     [f"{cart_pos[0]:.8f}", f"{cart_pos[1]:.8f}", f"{cart_pos[2]:.8f}"]
@@ -825,13 +825,13 @@ def convert_coordinates(typevectors_in: str,
     elif type_in_norm == 'Cartesian' and type_out_norm == 'Direct':
         # --- Convert from Cartesian -> Direct ---
         print("[INFO] Converting coordinates from Cartesian -> Direct...")
-        # v_direct = M_inv . v_cart
+        # v_direct = v_cart . M_inv
         inv_lattice = np.linalg.inv(lattice_matrix)
         for symbol, positions in atomsposition_in.items():
             atomsposition_out[symbol] = []
             for pos in positions:
                 pos_np = np.array(pos, dtype=float)
-                direct_pos = np.dot(inv_lattice, pos_np)
+                direct_pos = np.dot(pos_np, inv_lattice)
                 # Format back to list of strings
                 atomsposition_out[symbol].append(
                     [f"{direct_pos[0]:.8f}", f"{direct_pos[1]:.8f}", f"{direct_pos[2]:.8f}"]

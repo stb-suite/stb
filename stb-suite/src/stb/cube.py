@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -14,13 +14,8 @@ import argparse
 import numpy as np
 from time import sleep
 
-# Try to import sisl
-try:
-    import sisl
-except ImportError:
-    print("\n\033[91m[CRITICAL ERROR] sisl library not found.\033[0m")
-    print("Please install it using: pip install sisl")
-    sys.exit(1)
+from stb.core.deps import require_sisl
+sisl = require_sisl()
 
 # ANSI Colors for terminal
 from stb.core.cli import COLORS, color_text, show_intro

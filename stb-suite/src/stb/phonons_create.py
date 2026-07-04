@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -141,11 +141,11 @@ def main():
         os.makedirs(folder_name, exist_ok=True)
         
         # A. Escreve a supercélula deslocada
-        disp_struct_path = os.path.join(folder_name, args.structure)
+        disp_struct_path = os.path.join(folder_name, os.path.basename(args.structure))
         write_siesta(disp_struct_path, scell)
-        
+
         # B. Copia o calc.fdf
-        shutil.copy(args.calc, os.path.join(folder_name, args.calc))
+        shutil.copy(args.calc, os.path.join(folder_name, os.path.basename(args.calc)))
         
         # C. Copia apenas os pseudopotenciais exigidos
         for pseudo_path in pseudos_to_copy:

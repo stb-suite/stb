@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.0"  
+VERSION = "1.9.1"  
 
 import os
 import sys
@@ -20,11 +20,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pybader")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # --- Library Imports ---
-#try:
-import sisl
-#except ImportError:
-#    print("\033[91m[CRITICAL] Library 'sisl' not found.\033[0m")
-#    sys.exit(1)
+from stb.core.deps import require_sisl
+sisl = require_sisl()
 
 #try:
 from pybader.interface import Bader as PyBaderCalc

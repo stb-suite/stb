@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -131,8 +131,8 @@ def main():
     lattice_vectors = structure_io.raw_lattice_vectors(args.file)
 
     # Generate strained structures
-#    strain_values = [i / 100 for i in range(args.stmin, args.stmax + 1, args.step)]
-    strain_values = list(np.arange(args.stmin, args.stmax + args.step, args.step) / 100)
+    n_steps = int(round((args.stmax - args.stmin) / args.step)) + 1
+    strain_values = list(np.linspace(args.stmin, args.stmin + (n_steps - 1) * args.step, n_steps) / 100)
 
 
     for strain in strain_values:

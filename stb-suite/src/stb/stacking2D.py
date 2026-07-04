@@ -12,7 +12,7 @@ Reads two Siesta .fdf files, finds a commensurate supercell using the ZSL algori
 and stacks them into a van der Waals heterostructure.
 """
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys

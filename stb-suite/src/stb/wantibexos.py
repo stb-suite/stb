@@ -11,12 +11,13 @@ import argparse
 import textwrap
 from time import sleep
 import numpy as np
-import sisl
 from typing import Tuple
 from stb.core import siesta_log
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.deps import require_sisl
+sisl = require_sisl()
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 def parse_arguments() -> argparse.Namespace:
     """Handle command-line arguments with argparse"""

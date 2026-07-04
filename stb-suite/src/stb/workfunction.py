@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -16,25 +16,17 @@ import matplotlib.pyplot as plt
 from time import sleep
 from stb.core import siesta_log
 
-# Try to import sisl
-try:
-    import sisl
-except ImportError:
-    print("\n\033[91m[CRITICAL ERROR] sisl library not found.\033[0m")
-    print("Please install it using: pip install sisl")
-    sys.exit(1)
-
-# Constants
-Ry2eV = 13.605693123
+from stb.core.deps import require_sisl
+sisl = require_sisl()
 
 # ANSI Colors for terminal
 from stb.core.cli import COLORS, color_text, show_intro
 
 def read_grid_data(grid_file):
-    """Reads the grid using sisl and converts to eV."""
+    """Reads the grid using sisl (.VT grids are already returned in eV by sisl)."""
     try:
         grid = sisl.get_sile(grid_file).read_grid()
-        potential_ev = grid.grid * Ry2eV
+        potential_ev = grid.grid
         return grid, potential_ev
     except Exception as e:
         print(f"{COLORS['red']}[ERROR] Reading grid: {e}{COLORS['reset']}")

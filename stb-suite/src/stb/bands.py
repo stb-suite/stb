@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.8.0"
+VERSION = "1.9.1"
 
 import os
 import sys
@@ -64,7 +64,7 @@ def plot_gnuplot(high_sym):
     fileout.append('\n')
     fileout.append('# Annotations\n')
     fileout.append('#set label "Critical point" at 10, 100 front font ",12" textcolor rgb "red"\n')
-    fileout.append(f'set arrow from {high_sym[0][1]},0.0 to {high_sym[-1][1]} ,0.0 nohead dt 2 lc rgb "dark-gray" lw 4 back\n')
+    fileout.append(f'set arrow from {float(high_sym[0][0])},0.0 to {float(high_sym[-1][0])} ,0.0 nohead dt 2 lc rgb "dark-gray" lw 4 back\n')
     for i in range(len(high_sym)-2):
         fileout.append(f'set arrow from {float(high_sym[i+1][0])} ,graph 0 to {float(high_sym[i+1][0])},graph 1 nohead dt 2 lc rgb "dark-gray" lw 4 back\n')
     fileout.append('\n')
@@ -100,10 +100,14 @@ def read_data(file_path = "siesta.bands"):
         lines = f.readlines()[2:]
         for i, line in enumerate(lines):
             if i >1:
-                if line.startswith("     "):  #Identify blank space
-                    dic_bands[key].append(line.split())
-                elif len(line.split())<=2:
-                    high_sym.append(line.split())
+                parts = line.split()
+                if len(parts) == 1:
+                    # count of high-symmetry points, not band data
+                    continue
+                elif line.startswith("     "):  #Identify blank space
+                    dic_bands[key].append(parts)
+                elif len(parts)<=2:
+                    high_sym.append(parts)
                 else:
                     key=float(line.split()[0])
                     dic_bands.setdefault(key,[])

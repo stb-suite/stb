@@ -9,7 +9,7 @@
 #  to include (l,m) orbital projection support    #
 #################################################
 
-VERSION = "1.9.0" # Updated version
+VERSION = "1.9.1" # Updated version
 
 import xml.etree.ElementTree as ET
 import numpy as np

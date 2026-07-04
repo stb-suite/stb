@@ -4,7 +4,7 @@
 #     Siesta Tool Box - Elastic Generator       #
 #################################################
 
-VERSION = "2.1.2"
+VERSION = "1.9.1"
 
 import os
 import sys

@@ -22,38 +22,39 @@ It provides a unified, intuitive interface that simplifies and accelerates compu
 
 ## 🚀 Features
 
-### 🧩 Calculation Preparation
+### 🧩 Inputs
 
 * **`stb-inputfile`** – Generate FDF input files from structure files with suggested settings.
 * **`stb-kgrid`** – Automatically suggest Monkhorst-Pack k-point grids based on a target density.
 * **`stb-kpath`** – Generate high-symmetry paths for band-structure calculations.
-* **`stb-strain`** – Create supercells with uniaxial or biaxial strain (Cartesian coordinates).
-* **`stb-elasticInputs`** – Generate batches of deformed structures (strain tensor components) for elastic constant calculations.
-* **`stb-cohesive`** – Set up cohesive energy workflows (bulk structure plus isolated-atom calculations).
-* **`stb-phononsCreate`** – Generate displaced supercells for phonon calculations via Phonopy.
 * **`stb-2Dstacking`** – Stack two monolayers into a heterostructure using the ZSL algorithm, with twist/shift control.
 
-### 📊 Analysis & Post-Processing
+### 📊 Analysis
 
 * **`stb-bands`** – Analyze SIESTA band structures and calculate band gaps.
 * **`stb-dos`** – Parse `PDOS.xml` files for total and projected density of states.
 * **`stb-convdos`** – Apply Gaussian convolution to DOS data for smoothing.
 * **`stb-structural`** – Compute lattice parameters, coordination numbers, and ECN values.
 * **`stb-symmetry`** – Identify space group, point group, crystal system, and Wyckoff positions.
-* **`stb-strainAnalysis`** – Extract stress-strain curves and mechanical properties (Young's modulus, UTS) from `strain_*` folders.
-* **`stb-elasticAnalysis`** – Compute the stiffness matrix, elastic moduli, and Born stability criteria from `strain_*` folders.
-* **`stb-cohesiveAnalysis`** – Calculate cohesive energy per atom from a completed cohesive-energy workflow.
 * **`stb-bader`** – Perform Bader charge (AIM) analysis on SIESTA charge density grids.
-* **`stb-cube`** – Convert SIESTA grid files (VT, VH, RHO) to Gaussian Cube format.
-* **`stb-density`** – Export charge density as 2D slice maps or 3D point clouds for plotting.
 * **`stb-workfunction`** – Calculate work function from the planar-averaged electrostatic potential.
-* **`stb-phononsPos`** – Post-process phonon displacement calculations into thermal properties.
+* **`stb-density`** – Export charge density as 2D slice maps or 3D point clouds for plotting.
 
-### ⚙️ Utilities & Interfaces
+### 🔄 Workflow
+
+Paired preparation + analysis tools for a specific property calculation, from generating the deformed/perturbed structures to extracting the final result:
+
+* **`stb-strain`** + **`stb-strainAnalysis`** – Create uniaxial/biaxial strained supercells, then extract stress-strain curves and mechanical properties (Young's modulus, UTS).
+* **`stb-elasticInputs`** + **`stb-elasticAnalysis`** – Generate deformed structures for elastic constants, then compute the stiffness matrix, elastic moduli, and Born stability criteria.
+* **`stb-cohesive`** + **`stb-cohesiveAnalysis`** – Set up bulk + isolated-atom calculations, then calculate cohesive energy per atom.
+* **`stb-phononsCreate`** + **`stb-phononsPos`** – Generate displaced supercells via Phonopy, then post-process the forces into thermal properties.
+
+### ⚙️ Utils
 
 * **`stb-translate`** – Convert between structure formats (CIF, POSCAR, FDF, XYZ, XSF, FHI, DFTB).
-* **`stb-siesta2wtb`** – Export SIESTA Hamiltonians to the **Wantibexos** tight-binding format.
 * **`stb-clean`** – Remove unnecessary calculation files and clean directories.
+* **`stb-cube`** – Convert SIESTA grid files (VT, VH, RHO) to Gaussian Cube format.
+* **`stb-siesta2wtb`** – Export SIESTA Hamiltonians to the **Wantibexos** tight-binding format.
 * **`stb-suite`** – Unified terminal interface providing interactive access to all tools.
 
 ---

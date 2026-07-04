@@ -19,9 +19,11 @@ whose source lives under `stb-suite/src/stb/`.
 - `stb-suite/pyproject.toml` — package metadata and the `[project.scripts]` table that
   maps each `stb-*` shell command to a module's `main()`.
 - `stb-suite/meta.yaml` — conda-forge recipe (mirrors `pyproject.toml` dependencies).
-- `test/` — example input files and manual smoke scripts organized by workflow stage
-  (`1-preparation`, `2-analysis`, `3-utilities`), each mirroring one or more tools.
-  This is **not** an automated test suite (no pytest/unittest, no CI config exists).
+- `test/` — example input files and manual smoke scripts organized by category
+  (`1-inputs`, `2-analysis`, `3-workflow`, `4-utils`), each mirroring one or more
+  tools. `3-workflow/<property>/` has `prep/` + `analysis/` subfolders for the 4
+  paired prep+analysis tools (strain, elastic, cohesive, phonons). This is **not**
+  an automated test suite (no pytest/unittest, no CI config exists).
   `test/test_translate/test.sh` is representative: it generates sample structure
   files in every supported format, runs the built CLI against them, and greps the
   output for expected content.
@@ -81,8 +83,9 @@ imports what it needs from `stb.core`, plus a new entry in `[project.scripts]` i
 `pyproject.toml` (and update `test/` with a fixture if practical).
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
-shows a menu and organizes tools into three dicts — `PREPARATION_TOOLS`,
-`ANALYSIS_TOOLS`, `UTILITY_TOOLS` — each keyed by menu number to
+shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,
+`WORKFLOW_TOOLS` (the 4 paired prep+analysis tools: strain, elastic, cohesive,
+phonons), `UTILITY_TOOLS` — each keyed by menu number to
 `{'title', 'description', 'func'}`. Every `run_*` function builds an `args: List[str]`
 from interactive prompts (`get_input`/`get_float_input`/`get_int_input`) and dispatches
 via `run_tool(tool_name, args)`, which shells out to the **installed** console command

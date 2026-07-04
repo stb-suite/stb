@@ -27,9 +27,10 @@ def show_main_menu() -> None:
     """Displays the main category menu"""
     print("\n" + color_text("STB-SUITE Main Menu:", 'bold'))
     print("-"*60)
-    print(f"{color_text('1.', 'yellow')} {color_text('Calculation (Preparation)', 'blue')}\n    Tools to set up new calculations (inputs, k-grids, etc.)\n")
-    print(f"{color_text('2.', 'yellow')} {color_text('Analysis (Post-processing)', 'blue')}\n    Tools to analyze simulation results (bands, DOS, structures)\n")
-    print(f"{color_text('3.', 'yellow')} {color_text('Utilities & Interfaces', 'blue')}\n    Helper tools for file management and conversion\n")
+    print(f"{color_text('1.', 'yellow')} {color_text('Inputs', 'blue')}\n    Tools to set up new calculations (inputs, k-grids, stacking, etc.)\n")
+    print(f"{color_text('2.', 'yellow')} {color_text('Analysis', 'blue')}\n    Tools to analyze simulation results (bands, DOS, structures, charge density, etc.)\n")
+    print(f"{color_text('3.', 'yellow')} {color_text('Workflow', 'blue')}\n    Complete prep + analysis pipelines for a specific property (strain, elastic constants, cohesive energy, phonons)\n")
+    print(f"{color_text('4.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
     print(f"{color_text('0.', 'yellow')} {color_text('Exit', 'red')}")
     print("-"*60)
 
@@ -1132,7 +1133,7 @@ def run_wantibexos_interface() -> None:
 # ==========================================================
 
 # Define the tool dictionaries
-PREPARATION_TOOLS = {
+INPUT_TOOLS = {
     1: {'title': "Input File Generator (stb-inputfile)",
         'description': "Create a 'calc.fdf' input file from a structure file.",
         'func': run_input_generator},
@@ -1142,23 +1143,9 @@ PREPARATION_TOOLS = {
     3: {'title': "K-Path Generator (stb-kpath)",
         'description': "Generate a high-symmetry k-path for band structure calculations.",
         'func': run_kpath_generator},
-    4: {'title': "Strain Generator (stb-strain)",
-        'description': "Generate strained structures for calculations.",
-        'func': run_strain_generator},
-    5: {'title': 'Elastic Constants Setup (stb-elasticInputs)',
-        'description': 'Generates deformed structures to calculate elastic constants.',
-        'func': run_elastic_generator},
-    6:  {'title': '2D Monolayer Stacker (stb-2Dstacking)',
+    4:  {'title': '2D Monolayer Stacker (stb-2Dstacking)',
          'description': 'Stacks two monolayers into a heterostructure using the ZSL algorithm.',
          'func': run_2d_stacker},
-    7: {
-        'title': "Cohesive Energy Setup (stb-cohesive)", 
-        'description': "Prepare folder structure and inputs for cohesive energy calculations.", 
-        'func': run_cohesive_setup},
-    8: {
-        'title': "Phonon Displacement Generator",
-        'description': "Automate SIESTA phonon displacement folders using Phonopy.",
-        'func': run_phonon_generator}
          }
 
 
@@ -1169,35 +1156,53 @@ ANALYSIS_TOOLS = {
     2: {'title': "PDOS XML Parser (stb-dos)",
         'description': "Extract data from PDOS.xml by total, atom, and species.",
         'func': run_dos_parser},
-    3: {'title': "DOS Processor (Convolution) (stb-convdos)", 
+    3: {'title': "DOS Processor (Convolution) (stb-convdos)",
         'description': "Apply Gaussian convolution to Density of States (DOS) files.",
         'func': run_dos_convolution},
-    4: {'title': "Structure Analyzer (stb-structural)", 
+    4: {'title': "Structure Analyzer (stb-structural)",
         'description': "Calculate ECN and analyze structural properties.",
         'func': run_structure_analyzer},
     5: {'title': "Symmetry Analyzer (stb-symmetry)",
         'description': "Analyze the symmetry of crystal structures.",
         'func': run_symmetry_analyzer},
-    6: {'title': "Strain Post-Processing (stb-strainAnalysis)",
-        'description': "Extract stress-strain curves from strain_* folders.",
-        'func': run_strain_post_processor},
-    7: {'title': 'Elastic Properties Analyzer (stb-elasticAnalysis)',
-        'description': 'Calculates Stiffness Matrix, Young Modulus and Stability from outputs.',
-        'func': run_elastic_analyzer},
-    8: {'title': 'Bader Charge Analysis',
+    6: {'title': 'Bader Charge Analysis',
         'description': 'Calculate atomic charges using the Bader AIM method from .RHO and .XV files.',
         'func': run_bader_calculator},
-    9: {'title': "Work Function Calculator", 'description': "Calculate Work Function from electrostatic potential (.VT).",
+    7: {'title': "Work Function Calculator", 'description': "Calculate Work Function from electrostatic potential (.VT).",
         'func': run_workfunction_calculator},
-   10: {'title': "Density Plotter (RHO)", 'description': "Export 2D Charge Density Maps or 3D Clouds.",
+    8: {'title': "Density Plotter (RHO)", 'description': "Export 2D Charge Density Maps or 3D Clouds.",
         'func': run_density_plotter},
-   11: {'title': "Cohesive Energy Analysis (stb_cohesive_analysis)", 'description': "Process and calculate the final cohesive energy per atom.", 
-        'func': run_cohesive_analysis},     
-   12: {'title': "Phonon Post-Processing",
-        'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
-        'func': run_phonon_postprocessing}    
        }
-    
+
+
+WORKFLOW_TOOLS = {
+    1: {'title': "Strain Generator (stb-strain)",
+        'description': "Generate strained structures for calculations.",
+        'func': run_strain_generator},
+    2: {'title': "Strain Post-Processing (stb-strainAnalysis)",
+        'description': "Extract stress-strain curves from strain_* folders.",
+        'func': run_strain_post_processor},
+    3: {'title': 'Elastic Constants Setup (stb-elasticInputs)',
+        'description': 'Generates deformed structures to calculate elastic constants.',
+        'func': run_elastic_generator},
+    4: {'title': 'Elastic Properties Analyzer (stb-elasticAnalysis)',
+        'description': 'Calculates Stiffness Matrix, Young Modulus and Stability from outputs.',
+        'func': run_elastic_analyzer},
+    5: {
+        'title': "Cohesive Energy Setup (stb-cohesive)",
+        'description': "Prepare folder structure and inputs for cohesive energy calculations.",
+        'func': run_cohesive_setup},
+    6: {'title': "Cohesive Energy Analysis (stb_cohesive_analysis)", 'description': "Process and calculate the final cohesive energy per atom.",
+        'func': run_cohesive_analysis},
+    7: {
+        'title': "Phonon Displacement Generator",
+        'description': "Automate SIESTA phonon displacement folders using Phonopy.",
+        'func': run_phonon_generator},
+    8: {'title': "Phonon Post-Processing",
+        'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
+        'func': run_phonon_postprocessing},
+       }
+
 
 UTILITY_TOOLS = {
     1: {'title': "File Translator (stb-translate)",
@@ -1256,19 +1261,21 @@ def main():
         show_main_menu()
         
         try:
-            choice = get_input("\nSelect an option (0-3): ")
-            
+            choice = get_input("\nSelect an option (0-4): ")
+
             if choice == '1':
-                run_sub_menu("Calculation (Preparation)", PREPARATION_TOOLS)
+                run_sub_menu("Inputs", INPUT_TOOLS)
             elif choice == '2':
-                run_sub_menu("Analysis (Post-processing)", ANALYSIS_TOOLS)
+                run_sub_menu("Analysis", ANALYSIS_TOOLS)
             elif choice == '3':
-                run_sub_menu("Utilities & Interfaces", UTILITY_TOOLS)
+                run_sub_menu("Workflow", WORKFLOW_TOOLS)
+            elif choice == '4':
+                run_sub_menu("Utils", UTILITY_TOOLS)
             elif choice == '0':
                 print(color_text("\nThank you for using STB-SUITE!", 'cyan'))
                 break
             else:
-                print(color_text("\nInvalid choice! Please select between 0 and 3.", 'red'))
+                print(color_text("\nInvalid choice! Please select between 0 and 4.", 'red'))
                 sleep(1)
                 
         except ValueError:

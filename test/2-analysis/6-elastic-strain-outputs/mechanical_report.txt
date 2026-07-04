@@ -1,0 +1,8 @@
+========================================
+      MECHANICAL PROPERTIES REPORT      
+========================================
+Direction: xx
+Young's Modulus: 1000.0000 GPa
+UTS:             20.0000 GPa
+Yield (0.2%):    0.0000 GPa
+Toughness:       0.1500

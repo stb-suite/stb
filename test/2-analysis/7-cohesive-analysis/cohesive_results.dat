@@ -1,0 +1,16 @@
+==================================================
+             COHESIVE ENERGY RESULTS              
+==================================================
+
+Total atoms in cell: 1
+  -> C: 1 atoms
+--------------------------------------------------
+Energy (Full Structure):      -500.123456 eV
+Energy (Isolated C):         -50.012345 eV
+--------------------------------------------------
+Sum of Isolated Atoms:         -50.012345 eV
+
+Total Cohesive Energy:          -450.1111 eV
+Cohesive Energy per Atom:       -450.1111 eV/atom
+
+==================================================

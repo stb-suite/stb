@@ -1,0 +1,26 @@
+===== ELASTIC PROPERTIES REPORT =====
+
+[WARNING] Material seems to be 2D (C33 << C11). Consider using --2d
+
+[1] 3D STIFFNESS MATRIX (GPa)
+      j=1      j=2      j=3      j=4      j=5      j=6      
+i=1 |     16.02     0.00     0.00     0.00     0.00     0.00
+i=2 |      0.00     0.00     0.00     0.00     0.00     0.00
+i=3 |      0.00     0.00     0.00     0.00     0.00     0.00
+i=4 |      0.00     0.00     0.00     0.00     0.00     0.00
+i=5 |      0.00     0.00     0.00     0.00     0.00     0.00
+i=6 |      0.00     0.00     0.00     0.00     0.00     0.00
+
+[2] MAIN CONSTANTS
+C11:    16.0 GPa  C22:     0.0 GPa  C33:     0.0 GPa  
+C44:     0.0 GPa  C55:     0.0 GPa  C66:     0.0 GPa  
+C12:     0.0 GPa  C13:     0.0 GPa  C23:     0.0 GPa  
+
+[4] STABILITY AND PROPERTIES
+------------------------------------------------------------
+Young's Modulus (E)  : 2.67 GPa
+Bulk Modulus    (B)  : 1.78 GPa
+Poisson's Ratio (v)  : 0.250
+
+
+VERDICT: UNSTABLE

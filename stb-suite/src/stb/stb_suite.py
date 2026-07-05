@@ -970,6 +970,82 @@ def run_sqs_generator() -> None:
     run_tool("stb-sqs", args)
 
 
+def run_convergence_generator() -> None:
+    """Interface for the Convergence Test Prep (stb-convergence)"""
+    print("\n" + "="*60)
+    print(color_text("CONVERGENCE TEST GENERATOR", 'bold').center(60))
+    print("="*60 + "\n")
+
+    struct_file = get_input("Input structure file (-s): ")
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Input structure file (-s): ")
+
+    calc_file = get_input("Calc.fdf template file (-c): ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ")
+
+    print(f"\n{color_text('Select Parameter to Sweep:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Mesh.CutOff (Ry)")
+    print(f"  {color_text('2', 'cyan')} = PAO.EnergyShift (Ry)")
+    print(f"  {color_text('3', 'cyan')} = K-grid density (1/Ang)")
+    param_choice = get_input("Select option (1-3): ").strip()
+    param_map = {'1': 'meshcutoff', '2': 'energyshift', '3': 'kgrid'}
+    parameter = param_map.get(param_choice, 'meshcutoff')
+
+    min_value = get_float_input("\nMinimum value: ")
+    max_value = get_float_input("Maximum value: ")
+    step_value = get_float_input("Step: ")
+
+    args = [
+        "--structure", struct_file,
+        "--calc", calc_file,
+        "--parameter", parameter,
+        "--min", str(min_value),
+        "--max", str(max_value),
+        "--step", str(step_value),
+        "--no-intro"
+    ]
+
+    if parameter == 'kgrid':
+        vacuum_gap = get_float_input("\nVacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+
+    output_dir = get_input("\nOutput directory [default: convergence_runs]: ").strip()
+    if not output_dir:
+        output_dir = "convergence_runs"
+    args.extend(["--output-dir", output_dir])
+
+    run_tool("stb-convergence", args)
+
+
+def run_convergence_analyzer() -> None:
+    """Interface for the Convergence Test Analysis (stb-convergenceAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("CONVERGENCE TEST ANALYZER", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with 'convergence_*' folders [default: convergence_runs]: ").strip()
+    if not run_dir:
+        run_dir = "convergence_runs"
+
+    output_filename = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    tolerance = get_float_input("Convergence tolerance in eV/atom [default: 0.001]: ", 0.001)
+
+    args = [
+        "--dir", run_dir,
+        "--file", output_filename,
+        "--tolerance", str(tolerance),
+        "--no-intro"
+    ]
+
+    run_tool("stb-convergenceAnalysis", args)
+
+
 def run_dos_parser() -> None:
     """Interface for the PDOS XML Parser (stb-dos)"""
     print("\n" + "="*60)
@@ -1481,6 +1557,16 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-phononsPos)",
                 'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
                 'func': run_phonon_postprocessing},
+        }},
+    5: {'title': "Convergence Tests",
+        'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-convergence)",
+                'description': "Generate a sweep of calc.fdf variants for one parameter.",
+                'func': run_convergence_generator},
+            2: {'title': "Stage 2 - Analysis (stb-convergenceAnalysis)",
+                'description': "Extract energies from convergence_* folders and report the converged value.",
+                'func': run_convergence_analyzer},
         }},
        }
 

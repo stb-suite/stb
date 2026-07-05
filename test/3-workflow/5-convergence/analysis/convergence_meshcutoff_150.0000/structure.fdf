@@ -1,0 +1,24 @@
+# Example fixture: 3D system (bulk silicon, diamond cubic structure).
+# All 3 axes are periodic (5.43 Ang lattice parameter, no vacuum padding).
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.4300000000   0.0000000000   0.0000000000
+ 0.0000000000   5.4300000000   0.0000000000
+ 0.0000000000   0.0000000000   5.4300000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.250000000   0.250000000   0.250000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

@@ -12,3 +12,14 @@ def require_sisl():
         print("Please install it using: pip install sisl")
         sys.exit(1)
     return sisl
+
+
+def require_icet():
+    """Imports and returns icet, or exits with a clear error if it's missing."""
+    try:
+        import icet
+    except ImportError:
+        print("\n\033[91m[CRITICAL ERROR] icet library not found.\033[0m")
+        print("Please install it using: pip install icet")
+        sys.exit(1)
+    return icet

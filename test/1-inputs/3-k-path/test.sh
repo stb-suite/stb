@@ -189,6 +189,21 @@ check_contains "Default: 10.0" log_help.txt
 check_contains "Default: 0.0002" log_help.txt
 
 
+# --- 5b. -o/--output custom filename ---
+echo -e "\n--- Testing -o/--output custom filename ---"
+rm -f kpath_bs.fdf my_kpath.fdf
+stb-kpath -f example_2D_graphene.fdf -o my_kpath.fdf --no-intro > log_custom_output.txt 2>&1
+check_success my_kpath.fdf
+if [ -s kpath_bs.fdf ]; then
+    echo -e "   -> ${RED}Failed:${NC} default kpath_bs.fdf was also created"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} default kpath_bs.fdf was not created"
+    PASS=$((PASS+1))
+fi
+rm -f my_kpath.fdf
+
+
 # --- 6. Interactive path (stb-suite, shortcut 1.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.3) ---"
 

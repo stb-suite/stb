@@ -339,7 +339,7 @@ def main():
     gap_group.add_argument("-g", "--gap", type=float, default=3.2, help="Van der Waals gap in Angstroms (default: 3.2)")
     gap_group.add_argument("--gap_range", type=float, nargs=3, metavar=('START', 'END', 'STEPS'), help="Range for energy curve. Ex: 2.5 4.5 11")
     
-    parser.add_argument("-v", "--vacuum", type=float, default=None, help="Target vacuum space in Angstroms. Inherits L1 by default.")
+    parser.add_argument("--vacuum", type=float, default=None, help="Target vacuum space in Angstroms. Inherits L1 by default.")
     parser.add_argument("-t", "--twist", type=float, default=0.0, help="Twist angle of layer 2 in degrees (default: 0.0)")
     parser.add_argument("-tx", "--shift_x", type=float, default=0.0, help="Fractional shift of layer 2 in X (default: 0.0)")
     parser.add_argument("-ty", "--shift_y", type=float, default=0.0, help="Fractional shift of layer 2 in Y (default: 0.0)")
@@ -349,7 +349,7 @@ def main():
     parser.add_argument("--sym_out", default="symmetry_report.txt", help="Output text file for symmetry analysis")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
     
-    parser.add_argument("--version", action="version", version=f"stb-2Dstacking {VERSION}")
+    parser.add_argument("-v", "--version", action="version", version=f"stb-2Dstacking {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()

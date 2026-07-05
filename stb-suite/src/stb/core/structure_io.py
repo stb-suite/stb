@@ -204,6 +204,30 @@ def to_pymatgen(structure: FdfStructure) -> Structure:
     return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
 
 
+def ensure_species_id(species_meta: dict[str, dict], symbol: str) -> dict[str, dict]:
+    """Returns a copy of species_meta with `symbol` added, if not already present.
+
+    The new entry gets the next free integer id (as a string, matching the
+    rest of species_meta) and 'Z' looked up from pymatgen's periodic table.
+    Used whenever a symbol not already declared in a file is introduced --
+    e.g. from_pymatgen() below, or a tool adding/substituting an atom of a
+    new element.
+    """
+    if symbol in species_meta:
+        return species_meta
+
+    from pymatgen.core.periodic_table import Element
+
+    used_ids = {str(info["id"]) for info in species_meta.values()}
+    next_id = 1
+    while str(next_id) in used_ids:
+        next_id += 1
+
+    new_meta = dict(species_meta)
+    new_meta[symbol] = {"id": str(next_id), "Z": Element(symbol).Z}
+    return new_meta
+
+
 def from_pymatgen(
     structure: Structure, species_meta: dict[str, dict] | None = None, coord_format: str = "fractional"
 ) -> FdfStructure:
@@ -213,31 +237,21 @@ def from_pymatgen(
     matching write_fdf()'s expectations). If species_meta is given (typically
     the original structure's, via species_dict()), its 'id' assignments are
     reused for any symbol present in it, so species numbering stays stable
-    across the transformation; any symbol not in it gets the next free id,
-    with 'Z' looked up from the periodic table.
+    across the transformation; any symbol not in it gets the next free id
+    (see ensure_species_id()), with 'Z' looked up from the periodic table.
     """
-    from pymatgen.core.periodic_table import Element
-
     symbols = [site.specie.symbol for site in structure]
     species = list(dict.fromkeys(symbols))
 
     meta: dict[str, dict] = {}
-    used_ids = set()
     if species_meta:
         for symbol, info in species_meta.items():
             if symbol in species:
                 meta[symbol] = dict(info)
-                used_ids.add(str(info["id"]))
 
-    next_id = 1
     for symbol in species:
-        if symbol in meta:
-            continue
-        while str(next_id) in used_ids:
-            next_id += 1
-        meta[symbol] = {"id": str(next_id), "Z": Element(symbol).Z}
-        used_ids.add(str(next_id))
-        next_id += 1
+        if symbol not in meta:
+            meta = ensure_species_id(meta, symbol)
 
     is_cartesian = coord_format == "cartesian"
     atoms = [

@@ -751,6 +751,225 @@ def run_supercell_generator() -> None:
 
     run_tool("stb-supercell", args)
 
+def run_slab_generator() -> None:
+    """Interface for the Slab Builder (stb-slab)"""
+    print("\n" + "="*60)
+    print(color_text("SLAB BUILDER (stb-slab)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input bulk structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input bulk structure file (fdf): ")
+
+    hkl_values = []
+    while len(hkl_values) != 3 or hkl_values == [0, 0, 0]:
+        hkl_input = get_input("\nMiller index, 3 integers (e.g. '1 0 0'): ").split()
+        try:
+            hkl_values = [int(v) for v in hkl_input]
+        except ValueError:
+            hkl_values = []
+        if len(hkl_values) != 3:
+            print(color_text("Please enter exactly 3 integers.", 'red'))
+        elif hkl_values == [0, 0, 0]:
+            print(color_text("Miller index (0, 0, 0) is not valid.", 'red'))
+
+    min_slab_size = get_float_input("\nMinimum slab thickness in Ang [default: 10.0]: ", 10.0)
+    min_vacuum_size = get_float_input("Minimum vacuum thickness in Ang [default: 15.0]: ", 15.0)
+
+    primitive_choice = get_input("\nReduce to primitive cell before cutting? (y/N): ").strip().lower()
+    center_choice = get_input("Center the slab in the vacuum? (y/N): ").strip().lower()
+    symmetrize_choice = get_input("Try to symmetrize polar/asymmetric terminations? (y/N): ").strip().lower()
+
+    print(f"\n{color_text('Select Termination Mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = First best termination only (non-polar/symmetric preferred) [Default]")
+    print(f"  {color_text('2', 'cyan')} = Interactive (show all terminations, choose one)")
+    print(f"  {color_text('3', 'cyan')} = All terminations (writes one file per termination)")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+
+    output_file = get_input("\nOutput file name [default: slab.fdf]: ").strip()
+    if not output_file:
+        output_file = "slab.fdf"
+
+    args = [
+        "--file", input_file,
+        "--hkl", *[str(v) for v in hkl_values],
+        "--min-slab-size", str(min_slab_size),
+        "--min-vacuum-size", str(min_vacuum_size),
+        "--output", output_file,
+        "--no-intro"
+    ]
+
+    if primitive_choice in ('y', 'yes'):
+        args.append("--primitive")
+    if center_choice in ('y', 'yes'):
+        args.append("--center-slab")
+    if symmetrize_choice in ('y', 'yes'):
+        args.append("--symmetrize")
+
+    if mode_choice == '2':
+        args.append("--interactive")
+    elif mode_choice == '3':
+        args.append("--all")
+
+    run_tool("stb-slab", args)
+
+
+def run_nanotube_generator() -> None:
+    """Interface for the Nanotube/Nanoribbon Builder (stb-nanotube)"""
+    print("\n" + "="*60)
+    print(color_text("NANOTUBE/NANORIBBON BUILDER (stb-nanotube)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input 2D monolayer structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input 2D monolayer structure file (fdf): ")
+
+    chirality = []
+    while len(chirality) != 2 or chirality == [0, 0]:
+        chir_input = get_input("\nChirality indices, 2 integers (e.g. '6 0'): ").split()
+        try:
+            chirality = [int(v) for v in chir_input]
+        except ValueError:
+            chirality = []
+        if len(chirality) != 2:
+            print(color_text("Please enter exactly 2 integers.", 'red'))
+        elif chirality == [0, 0]:
+            print(color_text("Chirality (0, 0) is not valid.", 'red'))
+
+    print(f"\n{color_text('Select Mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Nanotube (roll into a cylinder) [Default]")
+    print(f"  {color_text('2', 'cyan')} = Nanoribbon (finite-width flat strip)")
+    mode_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+    mode = 'ribbon' if mode_choice == '2' else 'tube'
+
+    repeats = get_int_input(
+        "\nRepeats (axial for tube, width for ribbon) [default: 1]: ", 1)
+    while repeats < 1:
+        print(color_text("Repeats must be >= 1!", 'red'))
+        repeats = get_int_input("Repeats [default: 1]: ", 1)
+
+    min_vacuum_size = get_float_input("\nVacuum padding around the structure in Ang [default: 15.0]: ", 15.0)
+
+    output_file = get_input("\nOutput file name [default: nanotube.fdf]: ").strip()
+    if not output_file:
+        output_file = "nanotube.fdf"
+
+    args = [
+        "--file", input_file,
+        "--chirality", *[str(v) for v in chirality],
+        "--mode", mode,
+        "--repeats", str(repeats),
+        "--min-vacuum-size", str(min_vacuum_size),
+        "--output", output_file,
+        "--no-intro"
+    ]
+
+    run_tool("stb-nanotube", args)
+
+
+def run_defect_generator() -> None:
+    """Interface for the Point Defect Generator (stb-defect)"""
+    print("\n" + "="*60)
+    print(color_text("POINT DEFECT GENERATOR (stb-defect)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    print(f"\n{color_text('Select Defect Type:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Vacancy (remove an atom)")
+    print(f"  {color_text('2', 'cyan')} = Substitution (replace an atom's species)")
+    print(f"  {color_text('3', 'cyan')} = Interstitial (add a new atom)")
+    type_choice = get_input("Select option (1-3): ").strip()
+    type_map = {'1': 'vacancy', '2': 'substitution', '3': 'interstitial'}
+    defect_type = type_map.get(type_choice, 'vacancy')
+
+    args = ["--file", input_file, "--type", defect_type, "--no-intro"]
+
+    if defect_type in ('vacancy', 'substitution'):
+        print(f"\n{color_text('Select Site:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = By atom index (e.g. '3,7')")
+        print(f"  {color_text('2', 'cyan')} = By nearest position to a target point")
+        site_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+
+        if site_choice == '2':
+            coords = get_input("Target position, 3 numbers (e.g. '0.5 0.5 0.5'): ").split()
+            fmt_choice = get_input("Format: (f)ractional or (c)artesian [default: f]: ").strip().lower()
+            fmt = 'cartesian' if fmt_choice == 'c' else 'fractional'
+            filter_sp = get_input("Restrict search to one element (optional, Enter to skip): ").strip()
+            args.extend(["--nearest", *coords, "--nearest-format", fmt])
+            if filter_sp:
+                args.extend(["--filter-species", filter_sp])
+        else:
+            index_str = get_input("Atom index/indices, comma-separated (e.g. '3,7'): ").strip()
+            args.extend(["--index", index_str])
+
+        if defect_type == 'substitution':
+            new_species = get_input("New element symbol: ").strip()
+            args.extend(["--new-species", new_species])
+    else:
+        coords = get_input("Position for the new atom, 3 numbers (e.g. '0.5 0.5 0.5'): ").split()
+        fmt_choice = get_input("Format: (f)ractional or (c)artesian [default: f]: ").strip().lower()
+        fmt = 'cartesian' if fmt_choice == 'c' else 'fractional'
+        species = get_input("Element symbol of the new atom: ").strip()
+        args.extend(["--position", *coords, "--position-format", fmt, "--species", species])
+
+    output_file = get_input("\nOutput file name [default: defect.fdf]: ").strip()
+    if not output_file:
+        output_file = "defect.fdf"
+    args.extend(["--output", output_file])
+
+    run_tool("stb-defect", args)
+
+
+def run_sqs_generator() -> None:
+    """Interface for the SQS Generator (stb-sqs)"""
+    print("\n" + "="*60)
+    print(color_text("SPECIAL QUASIRANDOM STRUCTURE GENERATOR (stb-sqs)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    sublattice = get_input("\nSpecies to disorder (e.g. 'Ni'): ").strip()
+    composition = get_input("Target composition, e.g. 'Ni:0.5,Fe:0.5': ").strip()
+    scaling = get_int_input("Scaling factor (positive integer): ")
+    while scaling < 1:
+        print(color_text("Scaling must be >= 1!", 'red'))
+        scaling = get_int_input("Scaling factor (positive integer): ")
+
+    print(f"\n{color_text('Select Search Method:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Monte Carlo [Default]")
+    print(f"  {color_text('2', 'cyan')} = Enumeration (exact, only feasible for small cells)")
+    method_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+    method = 'enumeration' if method_choice == '2' else 'monte_carlo'
+
+    temperature = get_float_input("\nMonte Carlo starting temperature [default: 1.0]: ", 1.0)
+
+    output_file = get_input("\nOutput file name [default: sqs.fdf]: ").strip()
+    if not output_file:
+        output_file = "sqs.fdf"
+
+    args = [
+        "--file", input_file,
+        "--sublattice", sublattice,
+        "--composition", composition,
+        "--scaling", str(scaling),
+        "--method", method,
+        "--temperature", str(temperature),
+        "--output", output_file,
+        "--no-intro"
+    ]
+
+    run_tool("stb-sqs", args)
+
+
 def run_dos_parser() -> None:
     """Interface for the PDOS XML Parser (stb-dos)"""
     print("\n" + "="*60)
@@ -1175,12 +1394,24 @@ INPUT_TOOLS = {
     3: {'title': "K-Path Generator (stb-kpath)",
         'description': "Generate a high-symmetry k-path for band structure calculations.",
         'func': run_kpath_generator},
-    4:  {'title': '2D Monolayer Stacker (stb-2Dstacking)',
-         'description': 'Stacks two monolayers into a heterostructure using the ZSL algorithm.',
-         'func': run_2d_stacker},
+    4: {'title': "2D Monolayer Stacker (stb-2Dstacking)",
+        'description': "Stacks two monolayers into a heterostructure using the ZSL algorithm.",
+        'func': run_2d_stacker},
     5: {'title': "Supercell Builder (stb-supercell)",
         'description': "Build a supercell from a structure file using a user-defined transformation matrix.",
         'func': run_supercell_generator},
+    6: {'title': "Slab Builder (stb-slab)",
+        'description': "Cut a Miller-index slab from a bulk structure, with vacuum.",
+        'func': run_slab_generator},
+    7: {'title': "Nanotube/Nanoribbon Builder (stb-nanotube)",
+        'description': "Roll a 2D monolayer into a nanotube or nanoribbon, given (n, m) chirality.",
+        'func': run_nanotube_generator},
+    8: {'title': "Point Defect Generator (stb-defect)",
+        'description': "Introduce a vacancy, substitution, or interstitial defect.",
+        'func': run_defect_generator},
+    9: {'title': "SQS Generator (stb-sqs)",
+        'description': "Generate a Special Quasirandom Structure for a substitutional alloy.",
+        'func': run_sqs_generator},
          }
 
 

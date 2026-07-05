@@ -33,6 +33,7 @@ requirements:
     - setuptools
     - scipy==1.13.1
     - pandas
+    - icet
 
 about:
   home: "https://github.com/bastoscmo"

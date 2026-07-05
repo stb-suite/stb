@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# --- Setup ---
+# Smoke test for stb-defect (Point Defect Generator, item 1.8)
+FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEST_DIR="$FIXTURE_DIR/test_files"
+
+# Output colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+PASS=0
+FAIL=0
+
+# --- Check helpers ---
+
+# Checks that file $1 exists and is not empty
+check_success() {
+    if [ -s "$1" ]; then
+        echo -e " ... ${GREEN}OK${NC} (file '$1' created)"
+        PASS=$((PASS+1))
+    else
+        echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that file $2 contains (grep -q) pattern $1
+check_contains() {
+    if grep -q "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' NOT found in '$2'"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that $1 (actual exit code) equals $2 (expected exit code)
+check_exit_code() {
+    if [ "$1" -eq "$2" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} exit code $1 (expected $2)"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} exit code $1 (expected $2)"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+
+# --- 1. Preparation ---
+echo "--- Starting tester for STB-Defect (item 1.8) ---"
+rm -rf "$TEST_DIR"
+mkdir -p "$TEST_DIR"
+cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/graphene.fdf" "$TEST_DIR/"
+echo "Test directory '$TEST_DIR' prepared."
+
+pushd "$TEST_DIR" > /dev/null
+
+
+# --- 2. Vacancy by index ---
+echo -e "\n--- Testing vacancy by --index ---"
+rm -f vac.fdf
+stb-defect -f structure.fdf --type vacancy --index 1 -o vac.fdf --no-intro > log_vacancy.txt 2>&1
+check_contains "Selected site:.*#1 (Si)" log_vacancy.txt
+check_contains "Output atoms:.*1" log_vacancy.txt
+check_success vac.fdf
+check_contains "NumberofAtoms      1" vac.fdf
+
+
+# --- 3. Substitution by index ---
+echo -e "\n--- Testing substitution by --index (Si -> Ge) ---"
+rm -f sub.fdf
+stb-defect -f structure.fdf --type substitution --index 2 --new-species Ge -o sub.fdf --no-intro > log_substitution.txt 2>&1
+check_contains "Substitution:.*-> Ge" log_substitution.txt
+check_contains "Output formula:.*SiGe" log_substitution.txt
+check_success sub.fdf
+check_contains " 2   32   Ge" sub.fdf
+
+
+# --- 4. Interstitial ---
+echo -e "\n--- Testing interstitial ---"
+rm -f inter.fdf
+stb-defect -f structure.fdf --type interstitial --position 0.5 0.5 0.5 --species N -o inter.fdf --no-intro > log_interstitial.txt 2>&1
+check_contains "Output atoms:.*3" log_interstitial.txt
+check_success inter.fdf
+check_contains " 2   7   N" inter.fdf
+check_contains "0.50000000   0.50000000   0.50000000   2" inter.fdf
+
+
+# --- 5. --nearest with periodic wraparound ---
+echo -e "\n--- Testing --nearest (graphene.fdf, target just outside the cell) ---"
+rm -f vac_near.fdf
+stb-defect -f graphene.fdf --type vacancy --nearest 1.05 0.02 0.5 -o vac_near.fdf --no-intro > log_nearest.txt 2>&1
+check_contains "Selected site:.*#1 (C)" log_nearest.txt
+check_success vac_near.fdf
+
+echo -e "\n--- Testing --nearest with --filter-species (no match found) ---"
+stb-defect -f graphene.fdf --type vacancy --nearest 0 0 0.5 --filter-species N --no-intro > log_nearest_nomatch.txt 2>&1
+check_exit_code $? 1
+check_contains "No atoms of species" log_nearest_nomatch.txt
+
+
+# --- 6. Error and robustness cases ---
+echo -e "\n--- Testing error cases ---"
+
+echo "Testing: index out of range"
+stb-defect -f structure.fdf --type vacancy --index 5 --no-intro > log_oob.txt 2>&1
+check_exit_code $? 1
+check_contains "out of range" log_oob.txt
+
+echo "Testing: duplicate index"
+stb-defect -f structure.fdf --type vacancy --index 1,1 --no-intro > log_dup.txt 2>&1
+check_exit_code $? 1
+check_contains "duplicate" log_dup.txt
+
+echo "Testing: --index and --nearest together (mutually exclusive)"
+stb-defect -f structure.fdf --type vacancy --index 1 --nearest 0 0 0 --no-intro > log_mutex.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: substitution missing --new-species"
+stb-defect -f structure.fdf --type substitution --index 1 --no-intro > log_missing_newsp.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: interstitial missing --position/--species"
+stb-defect -f structure.fdf --type interstitial --no-intro > log_missing_inter.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: invalid element symbol"
+stb-defect -f structure.fdf --type substitution --index 1 --new-species Xx --no-intro > log_bad_element.txt 2>&1
+check_exit_code $? 1
+check_contains "not a valid Element" log_bad_element.txt
+
+echo "Testing: missing structure file"
+stb-defect -f does_not_exist.fdf --type vacancy --index 1 --no-intro > log_missing_file.txt 2>&1
+check_exit_code $? 1
+check_contains "not found" log_missing_file.txt
+
+echo "Testing: -f/--file missing (required)"
+stb-defect --type vacancy --index 1 --no-intro > log_missing_file_arg.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: --version"
+stb-defect --version > log_version.txt 2>&1
+check_contains "stb-defect" log_version.txt
+
+echo "Testing: --help documents index/nearest/position"
+stb-defect --help > log_help.txt 2>&1
+check_contains "index" log_help.txt
+check_contains "nearest" log_help.txt
+
+
+# --- 7. Interactive path (stb-suite, shortcut 1.8) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.8) ---"
+
+echo "Testing: navigate 1.8 -> invalid file then valid -> vacancy -> by index '1' -> default output -> quit"
+rm -f defect.fdf
+printf '1.8\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n0\n' | stb-suite > log_menu.txt 2>&1
+check_contains "File not found" log_menu.txt
+check_contains "Success" log_menu.txt
+check_success defect.fdf
+
+
+popd > /dev/null
+
+# --- 8. Summary ---
+echo -e "\n--- Tests Complete ---"
+echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
+
+read -p "Remove the '$TEST_DIR' directory and all test files? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Cleaning up test files..."
+    rm -rf "$TEST_DIR"
+    echo -e "${GREEN}Cleanup complete.${NC}"
+else
+    echo "Test files were kept in '$TEST_DIR/' for inspection."
+fi
+
+[ "$FAIL" -eq 0 ]

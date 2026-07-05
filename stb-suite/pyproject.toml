@@ -19,7 +19,8 @@ dependencies = [
     "setuptools",
     "scipy",
     "phonopy",
-    "pandas"
+    "pandas",
+    "icet"
 ]
 
 [project.scripts]
@@ -37,6 +38,10 @@ stb-inputfile = "stb.inputfile:main"
 stb-kgrid = "stb.kgrid:main"
 stb-kpath = "stb.kpath:main"
 stb-supercell = "stb.supercell:main"
+stb-slab = "stb.slab:main"
+stb-nanotube = "stb.nanotube:main"
+stb-defect = "stb.defect:main"
+stb-sqs = "stb.sqs:main"
 stb-strainAnalysis="stb.strain_analysis:main"
 stb-elasticInputs="stb.elastic_inputs:main"
 stb-elasticAnalysis="stb.elastic_analysis:main"

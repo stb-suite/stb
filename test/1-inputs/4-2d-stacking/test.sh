@@ -155,8 +155,8 @@ else
 fi
 rm -f stacked_structure.fdf symmetry_report.txt
 
-echo "Testing: -v/--vacuum custom value"
-stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -v 15.0 --no-intro > log_vacuum.txt 2>&1
+echo "Testing: --vacuum custom value"
+stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --vacuum 15.0 --no-intro > log_vacuum.txt 2>&1
 check_contains "Vacuum Corrected" log_vacuum.txt
 rm -f stacked_structure.fdf symmetry_report.txt
 

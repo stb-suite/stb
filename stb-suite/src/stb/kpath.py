@@ -158,12 +158,12 @@ def write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, outpu
 # --- END OF SIESTA WRITE FUNCTIONS ---
 
 
-def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002):
+def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002, output_filename="kpath_bs.fdf"):
     """
     Takes an FdfStructure, detects its dimensionality from vacuum-padded axes
     (see kspace.detect_vacuum_axes), and prints/writes its high-symmetry
     k-path using ASE's dimension-aware Bravais-lattice path finder
-    (ase.cell.Cell.bandpath), then writes it to 'kpath_bs.fdf'.
+    (ase.cell.Cell.bandpath), then writes it to `output_filename`.
     """
     try:
         lattice = fdf_structure.lattice
@@ -238,7 +238,7 @@ def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002):
             kpoints_dict,
             path_segments,
             num_points_per_segment,
-            "kpath_bs.fdf" # Output filename
+            output_filename
         )
         # --- END OF GENERATION ---
 
@@ -284,6 +284,13 @@ Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
         help="Minimum empty span (in Angstrom) between atoms along an axis, wrapped "
              "periodically, to treat that axis as vacuum-padded (non-periodic) when "
              "detecting the system's dimensionality. Default: 10.0"
+    )
+
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default="kpath_bs.fdf",
+        help="Output .fdf file name (default: kpath_bs.fdf)."
     )
 
     parser.add_argument("-v", "--version", action="version",
@@ -332,7 +339,7 @@ Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
 
     # 4. Run the analysis (if loading was successful)
     if structure_obj:
-        get_kpath_from_structure(structure_obj, vacuum_gap=vacuum_gap, eps=eps)
+        get_kpath_from_structure(structure_obj, vacuum_gap=vacuum_gap, eps=eps, output_filename=args.output)
     else:
         print(color_text("Error: Could not create the structure object from the file.", 'red'))
 

@@ -115,7 +115,6 @@ def main():
     print("-" * len(header))
 
     rows = []
-    converged_value = None
     prev_e_per_atom = None
     for value, energy, n_atoms in data:
         e_per_atom = energy / n_atoms
@@ -125,12 +124,18 @@ def main():
         delta_str = f"{delta:.6f}" if delta is not None else "--"
         print(f"{value:<12.4f} {energy:<16.6f} {e_per_atom:<14.6f} {delta_str:<16}")
 
-        if converged_value is None and delta is not None and delta < args.tolerance:
-            converged_value = value
-
         prev_e_per_atom = e_per_atom
 
     print("-" * len(header))
+
+    # A single small delta can be a coincidence rather than a real plateau
+    # (e.g. odd/even k-grid parity effects), so only accept a point as
+    # converged if every subsequent step also stays within tolerance.
+    converged_value = None
+    for i in range(1, len(rows)):
+        if all(d is not None and d < args.tolerance for _, _, _, d in rows[i:]):
+            converged_value = rows[i][0]
+            break
 
     if converged_value is not None:
         print(f"\n{color_text('Converged at:', 'green')} {parameter_name} = {converged_value:.4f} "

@@ -1220,6 +1220,48 @@ def run_molecule_generator() -> None:
     run_tool("stb-molecule", args)
 
 
+def run_mlrelax_generator() -> None:
+    """Interface for the ML Pre-Relaxation (stb-mlrelax)"""
+    print("\n" + "="*60)
+    print(color_text("ML PRE-RELAXATION (stb-mlrelax)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml] -- PyTorch + "
+        "mace-torch). Fast heuristic pre-relax, not a substitute for a real DFT "
+        "relaxation.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    relax_cell = get_input(
+        "\nAlso relax the cell? Only for bulk (no vacuum) structures (y/N): "
+    ).strip().lower()
+
+    model = get_input("Model size, small/medium/large [default: small]: ").strip()
+    if not model:
+        model = "small"
+
+    fmax = get_float_input("Force convergence, eV/Ang [default: 0.05]: ", 0.05)
+
+    output_file = get_input("\nOutput file name [default: relaxed.fdf]: ").strip()
+    if not output_file:
+        output_file = "relaxed.fdf"
+
+    args = [
+        "--file", input_file,
+        "--model", model,
+        "--fmax", str(fmax),
+        "--output", output_file,
+        "--no-intro"
+    ]
+    if relax_cell in ('y', 'yes'):
+        args.append("--relax-cell")
+
+    run_tool("stb-mlrelax", args)
+
+
 def run_convergence_generator() -> None:
     """Interface for the Convergence Test Prep (stb-convergence)"""
     print("\n" + "="*60)
@@ -1753,6 +1795,9 @@ INPUT_TOOLS = {
     14: {'title': "Reference Molecule Builder (stb-molecule)",
          'description': "Build a reference molecule (e.g. H2O, CO2) from ASE's G2 database.",
          'func': run_molecule_generator},
+    15: {'title': "ML Pre-Relaxation (stb-mlrelax)",
+         'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
+         'func': run_mlrelax_generator},
          }
 
 

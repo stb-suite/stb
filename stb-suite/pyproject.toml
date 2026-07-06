@@ -23,6 +23,15 @@ dependencies = [
     "icet"
 ]
 
+[project.optional-dependencies]
+# Heavy (PyTorch-based) stack for stb-mlrelax's ML pre-relaxation, kept out
+# of the core dependencies so installing the suite doesn't force a PyTorch
+# install. Install with: pip install stb_suite[ml]
+ml = [
+    "torch",
+    "mace-torch"
+]
+
 [project.scripts]
 stb-bands = "stb.bands:main"
 stb-convdos = "stb.convdos:main"
@@ -47,6 +56,7 @@ stb-crystalbuilder = "stb.crystalbuilder:main"
 stb-fetch = "stb.fetch:main"
 stb-passivate = "stb.passivate:main"
 stb-molecule = "stb.molecule:main"
+stb-mlrelax = "stb.mlrelax:main"
 stb-convergence = "stb.convergence:main"
 stb-convergenceAnalysis = "stb.convergence_analysis:main"
 stb-strainAnalysis="stb.strain_analysis:main"

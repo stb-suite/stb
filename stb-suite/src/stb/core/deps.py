@@ -23,3 +23,19 @@ def require_icet():
         print("Please install it using: pip install icet")
         sys.exit(1)
     return icet
+
+
+def require_mace():
+    """Imports and returns the mace.calculators module, or exits with a clear
+    error if it (or its PyTorch dependency) is missing. This is the suite's
+    only heavy/optional dependency -- not part of the core install.
+    """
+    try:
+        import mace.calculators
+    except ImportError:
+        print("\n\033[91m[CRITICAL ERROR] mace-torch (and/or PyTorch) not found.\033[0m")
+        print("This tool needs the optional 'ml' extra. Install it with:")
+        print("  pip install stb_suite[ml]")
+        print("(or directly: pip install torch mace-torch)")
+        sys.exit(1)
+    return mace.calculators

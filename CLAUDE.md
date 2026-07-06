@@ -134,6 +134,19 @@ Newer `1-inputs` tools worth knowing about specifically:
 - `stb-molecule` — builds an isolated reference molecule (H2O, CO2, benzene, ...) in a
   vacuum box from ASE's bundled G2 database (`ase.build.molecule`, 162 entries, names
   are case-sensitive — `--list` prints them all).
+- `stb-mlrelax` — the suite's **first tool with a heavy optional dependency**
+  (`pip install stb_suite[ml]`, PyTorch + `mace-torch`; everything else installs with
+  the core `dependencies` list alone). Fast pre-relaxation with the MACE-MP-0
+  foundation potential before a real SIESTA relaxation -- like `stb-fetch`, needs
+  network access on first use (model download, then cached under `~/.cache/mace/`).
+  A heuristic, not a DFT replacement. `--relax-cell` auto-adapts to the structure's
+  periodicity (reuses `core/kspace.py::detect_vacuum_axes`, same as `stb-kgrid`): a
+  vacuum-padded axis (2D slab, 1D wire) is masked out of `FrechetCellFilter`'s Voigt
+  strain (`mlrelax.py::build_cell_mask`) so only the genuinely periodic direction(s)
+  relax and the vacuum thickness stays exactly fixed -- verified against a graphene
+  slab, in-plane `a` relaxed to the real ~2.46-2.50 Ang value while the vacuum axis
+  changed by exactly 0. A fully isolated structure (0D, vacuum on all 3 axes) has
+  nothing to relax; `--relax-cell` is a no-op there, positions-only still runs.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,

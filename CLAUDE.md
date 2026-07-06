@@ -78,6 +78,16 @@ to `stb-suite/src/stb/core/`:
   consistent install hint and exits if missing) used by every tool that reads SIESTA
   grid/Hamiltonian files via `sisl` (`cube.py`, `density.py`, `workfunction.py`,
   `bader.py`, `wantibexos.py`).
+- `core/symmetry.py` — `reduce_to_unitcell(structure, mode, symprec, angle_tolerance)`,
+  wrapping pymatgen's `SpacegroupAnalyzer` to reduce a structure to its primitive cell,
+  conventional cell, or a symmetry-refined version of the input cell (positions snapped
+  to the detected symmetry, same cell size). Shared by `stb-unitcell` and `stb-fetch`'s
+  `--unitcell` option — extracted here once the second consumer needed it, same
+  extract-on-second-use policy as `structure_io.py` below. Note: the output's atom order
+  and coordinate origin are never guaranteed to match the input, in any mode — spglib
+  rebuilds the cell from the detected symmetry operations from scratch and is free to
+  pick any symmetry-equivalent origin, which even tiny input noise can flip for highly
+  symmetric structures. Not a bug; the crystal is the same, just relabeled.
 
 New format-specific structure readers/writers (POSCAR, CIF, XYZ, XSF, FHI, DFTB) still
 live only in `translate.py` — it's the sole consumer of those formats, so there's
@@ -87,6 +97,27 @@ nothing to extract yet. If a second tool needs one of them, move it into
 When adding a new tool, mirror this pattern: a new standalone `stb/<name>.py` that
 imports what it needs from `stb.core`, plus a new entry in `[project.scripts]` in
 `pyproject.toml` (and update `test/` with a fixture if practical).
+
+Newer `1-inputs` tools worth knowing about specifically:
+- `stb-unitcell` — reduces a structure to its primitive/conventional cell, or refines
+  noisy positions to exact symmetry (`--mode primitive|conventional|refined`).
+- `stb-crystalbuilder` — the inverse: builds a full structure from a space group +
+  the minimal symmetrically-distinct Wyckoff sites, via pymatgen's
+  `Structure.from_spacegroup`.
+- `stb-defect --all-inequivalent-sites` — auto-enumerates symmetrically distinct sites
+  (via `SpacegroupAnalyzer`) instead of requiring the user to pick atom indices by
+  hand; writes one output structure per site.
+- `stb-fetch` — the suite's **first network-dependent tool** (everything else is pure
+  local file processing). Fetches a structure by exact id or formula search from COD
+  (anonymous REST, no key), Materials Project (pymatgen's native `MPRester`, needs a
+  free `PMG_MAPI_KEY`), or any OPTIMADE-compliant database (pymatgen's
+  `OptimadeRester`, generic client for ~30 known provider aliases or a raw base URL —
+  chosen over one-off per-database clients since OPTIMADE is a standardized API many
+  databases already implement, e.g. AFLOW, JARVIS, OQMD, and 2D-materials databases
+  like `twodmatpedia`). Fetched structures are often disordered even for common
+  materials (e.g. oxidation-state-split sites); same-element disorder is collapsed
+  automatically, genuine multi-element disorder is rejected with a clear error rather
+  than silently producing a wrong structure.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,

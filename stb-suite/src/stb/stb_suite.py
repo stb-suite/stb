@@ -939,10 +939,11 @@ def run_sqs_generator() -> None:
 
     sublattice = get_input("\nSpecies to disorder (e.g. 'Ni'): ").strip()
     composition = get_input("Target composition, e.g. 'Ni:0.5,Fe:0.5': ").strip()
-    scaling = get_int_input("Scaling factor (positive integer): ")
-    while scaling < 1:
-        print(color_text("Scaling must be >= 1!", 'red'))
-        scaling = get_int_input("Scaling factor (positive integer): ")
+    scaling_str = get_input("Scaling factor (positive integer, blank = auto-detect): ").strip()
+    while scaling_str and (not scaling_str.isdigit() or int(scaling_str) < 1):
+        print(color_text("Scaling must be blank (auto-detect) or a positive integer!", 'red'))
+        scaling_str = get_input("Scaling factor (positive integer, blank = auto-detect): ").strip()
+    scaling = int(scaling_str) if scaling_str else None
 
     print(f"\n{color_text('Select Search Method:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Monte Carlo [Default]")
@@ -960,12 +961,13 @@ def run_sqs_generator() -> None:
         "--file", input_file,
         "--sublattice", sublattice,
         "--composition", composition,
-        "--scaling", str(scaling),
         "--method", method,
         "--temperature", str(temperature),
         "--output", output_file,
         "--no-intro"
     ]
+    if scaling is not None:
+        args.extend(["--scaling", str(scaling)])
 
     run_tool("stb-sqs", args)
 

@@ -15,8 +15,11 @@ import numpy as np
 from pymatgen.core.sites import PeriodicSite
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
+from stb.core import mace_relax
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.deps import require_mace
 
 
 def parse_index_list(spec, n_atoms):
@@ -159,6 +162,15 @@ automatically at every symmetrically distinct site.""",
     parser.add_argument("--symprec", type=float, default=1e-3,
                         help="Symmetry precision for --all-inequivalent-sites "
                              "(default: 1e-3, matches stb-symmetry/stb-unitcell).")
+    parser.add_argument("--ml-rank", action="store_true",
+                        help="Only valid with --all-inequivalent-sites. Quickly relaxes each "
+                             "candidate site's local geometry (positions only) with the "
+                             "MACE-MP-0 potential (needs the optional 'ml' extra: pip install "
+                             "stb_suite[ml]), then prints them ranked by relaxed energy -- a "
+                             "fast pre-screen for which site is most likely favorable, before "
+                             "spending DFT time on all of them. Overwrites each site's output "
+                             "file with its relaxed geometry. This is a relative comparison "
+                             "from a fast ML potential, not an absolute DFT formation energy.")
 
     parser.add_argument("--new-species", type=str, default=None,
                         help="Replacement element symbol (required for --type substitution).")
@@ -193,6 +205,12 @@ automatically at every symmetrically distinct site.""",
             parser.error("--index/--nearest/--new-species are only valid with --type vacancy/substitution.")
         if args.all_inequivalent_sites:
             parser.error("--all-inequivalent-sites is only valid with --type vacancy/substitution.")
+
+    if args.ml_rank and not args.all_inequivalent_sites:
+        parser.error("--ml-rank is only valid with --all-inequivalent-sites.")
+
+    if args.ml_rank:
+        require_mace()
 
     if args.intro:
         show_intro([
@@ -254,9 +272,16 @@ automatically at every symmetrically distinct site.""",
         if args.type == "substitution":
             print(f"\n  {color_text('Substitution:', 'cyan')} -> {args.new_species}")
 
+        calc = None
+        if args.ml_rank:
+            print(f"\n  {color_text('ML ranking:', 'cyan')} relaxing each site with MACE-MP-0 "
+                  "(positions only)...")
+            calc = mace_relax.get_calculator()
+
         stem, ext = os.path.splitext(args.output)
         ext = ext or ".fdf"
         written = []
+        rankings = []
         print()
         for idx, wyckoff, multiplicity in sites:
             one_indexed = idx + 1
@@ -271,6 +296,16 @@ automatically at every symmetrically distinct site.""",
                 atoms=new_atoms,
                 coord_format=structure.coord_format,
             )
+
+            if args.ml_rank:
+                site_pmg = structure_io.to_pymatgen(new_structure)
+                site_atoms = AseAtomsAdaptor.get_atoms(site_pmg)
+                mace_relax.relax(site_atoms, calc, fmax=0.05, max_steps=200)
+                energy = site_atoms.get_potential_energy()
+                relaxed_pmg = AseAtomsAdaptor.get_structure(site_atoms)
+                new_structure = structure_io.from_pymatgen(relaxed_pmg, species_meta=new_species_meta)
+                rankings.append((one_indexed, atoms[idx][0], wyckoff, energy))
+
             out_name = f"{stem}_site{one_indexed}{ext}"
             structure_io.write_fdf(new_structure, out_name)
             written.append(out_name)
@@ -278,6 +313,19 @@ automatically at every symmetrically distinct site.""",
                   f"({atoms[idx][0]}, Wyckoff {wyckoff}): {out_name}")
 
         print(f"\n{color_text('Success:', 'green')} {len(written)} structure(s) written.")
+
+        if args.ml_rank:
+            rankings.sort(key=lambda r: r[3])
+            e_min = rankings[0][3]
+            print(f"\n{color_text('ML-ranked sites (MACE-MP-0, relaxed energy, most stable first):', 'bold')}")
+            print(f"  {'Rank':<5}{'Site':<7}{'Species':<9}{'Wyckoff':<9}{'Energy (eV)':<14}{'dE (eV)':<10}")
+            for rank, (one_indexed, symbol, wyckoff, energy) in enumerate(rankings, start=1):
+                print(f"  {rank:<5}#{one_indexed:<6}{symbol:<9}{wyckoff:<9}{energy:<14.4f}{energy - e_min:<10.4f}")
+            print(color_text(
+                "\n  Note: a relative comparison from a fast ML potential, not an absolute "
+                "DFT formation energy -- use it to prioritize which site(s) to relax with "
+                "SIESTA, not as a final answer.", 'yellow'))
+
         return
 
     if args.type in ("vacancy", "substitution"):

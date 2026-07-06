@@ -97,6 +97,13 @@ to `stb-suite/src/stb/core/`:
   -bond atoms; atoms missing 2+ bonds are geometrically underdetermined from local
   coordination alone and are reported instead of guessed. Shared by `stb-passivate`
   and `stb-slab`'s `--passivate` option.
+- `core/mace_relax.py` — `build_cell_mask(vacuum_axes)`, `get_calculator(model,
+  device)`, `relax(atoms, calc, cell_mask, ...)`: the MACE-MP-0 load/relax logic
+  shared by `stb-mlrelax` and `stb-defect`'s `--ml-rank`. Callers must call
+  `core.deps.require_mace()` themselves first — this module only imports
+  `mace`/`ase.optimize`/`ase.filters` lazily inside each function, never at module
+  level, so merely importing it (e.g. from `defect.py`, which most users run without
+  ever touching `--ml-rank`) doesn't force the heavy optional dependency to load.
 
 New format-specific structure readers/writers (POSCAR, CIF, XYZ, XSF, FHI, DFTB) still
 live only in `translate.py` — it's the sole consumer of those formats, so there's
@@ -115,7 +122,13 @@ Newer `1-inputs` tools worth knowing about specifically:
   `Structure.from_spacegroup`.
 - `stb-defect --all-inequivalent-sites` — auto-enumerates symmetrically distinct sites
   (via `SpacegroupAnalyzer`) instead of requiring the user to pick atom indices by
-  hand; writes one output structure per site.
+  hand; writes one output structure per site. `--ml-rank` (needs the optional `ml`
+  extra) additionally relaxes each candidate's local geometry with MACE-MP-0
+  (positions only, via `core/mace_relax.py`) and prints them ranked by relaxed
+  energy — a fast pre-screen for which site to prioritize for real DFT, verified
+  against magnetite's 2 distinct Fe sites (tetrahedral vs octahedral): the
+  octahedral-site vacancy ranked ~0.06 eV more stable, a physically sensible,
+  non-degenerate result.
 - `stb-fetch` — the suite's **first network-dependent tool** (everything else is pure
   local file processing). Fetches a structure by exact id or formula search from COD
   (anonymous REST, no key), Materials Project (pymatgen's native `MPRester`, needs a

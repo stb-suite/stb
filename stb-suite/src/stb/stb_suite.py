@@ -926,6 +926,11 @@ def run_defect_generator() -> None:
             args.append("--all-inequivalent-sites")
             if filter_sp:
                 args.extend(["--filter-species", filter_sp])
+            ml_rank = get_input(
+                "Rank sites by MACE-relaxed energy? Needs the optional 'ml' extra (y/N): "
+            ).strip().lower()
+            if ml_rank in ('y', 'yes'):
+                args.append("--ml-rank")
         else:
             index_str = get_input("Atom index/indices, comma-separated (e.g. '3,7'): ").strip()
             args.extend(["--index", index_str])

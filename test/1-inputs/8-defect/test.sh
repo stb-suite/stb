@@ -148,6 +148,30 @@ check_exit_code $? 2
 check_contains "only valid with --type vacancy/substitution" log_all_sites_interstitial.txt
 
 
+# --- 5c. --ml-rank (needs the optional 'ml' extra; skipped otherwise) ---
+echo -e "\n--- Testing --ml-rank ---"
+
+echo "Testing: --ml-rank without --all-inequivalent-sites (invalid, doesn't need mace)"
+stb-defect -f magnetite.fdf --type vacancy --index 1 --ml-rank --no-intro > log_ml_rank_mutex.txt 2>&1
+check_exit_code $? 2
+check_contains "only valid with --all-inequivalent-sites" log_ml_rank_mutex.txt
+
+if python3 -c "import mace" 2>/dev/null; then
+    echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe --ml-rank (site #1 ranked above #5)"
+    rm -f magrank_site*.fdf
+    stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Fe --ml-rank \
+        -o magrank.fdf --no-intro > log_ml_rank.txt 2>&1
+    check_exit_code $? 0
+    check_contains "ML-ranked sites" log_ml_rank.txt
+    check_contains "1    #1     Fe       d" log_ml_rank.txt
+    check_contains "2    #5     Fe       a" log_ml_rank.txt
+    check_success magrank_site1.fdf
+    check_success magrank_site5.fdf
+else
+    echo -e "${YELLOW}Skipped:${NC} the optional 'ml' extra is not installed (pip install stb_suite[ml])."
+fi
+
+
 # --- 6. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -191,11 +215,12 @@ echo "Testing: --version"
 stb-defect --version > log_version.txt 2>&1
 check_contains "stb-defect" log_version.txt
 
-echo "Testing: --help documents index/nearest/position/all-inequivalent-sites"
+echo "Testing: --help documents index/nearest/position/all-inequivalent-sites/ml-rank"
 stb-defect --help > log_help.txt 2>&1
 check_contains "index" log_help.txt
 check_contains "nearest" log_help.txt
 check_contains "all-inequivalent-sites" log_help.txt
+check_contains "ml-rank" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 1.8) ---
@@ -208,12 +233,23 @@ check_contains "File not found" log_menu.txt
 check_contains "Success" log_menu.txt
 check_success defect.fdf
 
-echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> default output -> quit"
+echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> no ml-rank -> default output -> quit"
 rm -f defect_site1.fdf defect_site5.fdf
-printf '1.8\nmagnetite.fdf\n1\n3\nFe\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
+printf '1.8\nmagnetite.fdf\n1\n3\nFe\nn\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
 check_contains "Symmetrically distinct sites found:.*2" log_menu_all_sites.txt
 check_success defect_site1.fdf
 check_success defect_site5.fdf
+
+if python3 -c "import mace" 2>/dev/null; then
+    echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> ml-rank yes -> default output -> quit"
+    rm -f defect_site1.fdf defect_site5.fdf
+    printf '1.8\nmagnetite.fdf\n1\n3\nFe\ny\n\n0\n' | stb-suite > log_menu_ml_rank.txt 2>&1
+    check_contains "ML-ranked sites" log_menu_ml_rank.txt
+    check_success defect_site1.fdf
+    check_success defect_site5.fdf
+else
+    echo -e "${YELLOW}Skipped:${NC} the optional 'ml' extra is not installed (pip install stb_suite[ml])."
+fi
 
 
 popd > /dev/null

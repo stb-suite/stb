@@ -15,40 +15,13 @@ import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import kspace
+from stb.core import mace_relax
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.deps import require_mace
 
 require_mace()
-from mace.calculators import mace_mp
-from ase.optimize import FIRE, BFGS, LBFGS
-from ase.filters import FrechetCellFilter
 
-OPTIMIZERS = {"FIRE": FIRE, "BFGS": BFGS, "LBFGS": LBFGS}
-
-# ASE/Voigt strain order: [xx, yy, zz, yz, xz, xy]. Maps each shear component
-# to the pair of axes it mixes, so any vacuum axis also fixes the shears that
-# would tilt it into the periodic directions.
-_VOIGT_SHEAR_AXES = {3: (1, 2), 4: (0, 2), 5: (0, 1)}
-
-
-def build_cell_mask(vacuum_axes):
-    """Returns a 6-element Voigt strain mask (True = relax, False = fixed) that
-    relaxes every direction NOT flagged as vacuum, and fixes the rest -- the
-    normal strain along each vacuum axis, plus any shear that mixes a vacuum
-    axis with another one. This generalizes --relax-cell to 2D (1 vacuum
-    axis, e.g. a slab: in-plane lattice relaxes, vacuum thickness doesn't)
-    and 1D (2 vacuum axes, e.g. a wire: only the periodic axis relaxes)
-    structures, not just bulk 3D ones.
-
-    Verified live against a graphene slab (vacuum along c): masked relaxation
-    from a deliberately-off in-plane lattice constant converged to the real
-    graphene value (~2.46-2.50 Ang) while the vacuum axis length changed by
-    exactly 0.
-    """
-    mask = [not v for v in vacuum_axes]
-    for ax_a, ax_b in _VOIGT_SHEAR_AXES.values():
-        mask.append(not (vacuum_axes[ax_a] or vacuum_axes[ax_b]))
-    return mask
+OPTIMIZERS = ["FIRE", "BFGS", "LBFGS"]
 
 
 def main():
@@ -140,7 +113,7 @@ that distribution.""",
                 "molecule) -- there is no periodic direction to relax. Ignoring --relax-cell, "
                 "doing positions-only.", 'yellow'))
         else:
-            cell_mask = build_cell_mask(vacuum_axes)
+            cell_mask = mace_relax.build_cell_mask(vacuum_axes)
             fixed = [axis_names[i] for i, v in enumerate(vacuum_axes) if v]
             relaxed = [axis_names[i] for i, v in enumerate(vacuum_axes) if not v]
             if fixed:
@@ -153,7 +126,7 @@ that distribution.""",
     print(f"  {color_text('Mode:', 'cyan')} {'positions + cell' if cell_mask is not None else 'positions only'}")
     print(f"  {color_text('Model:', 'cyan')} MACE-MP-0 ({args.model})")
 
-    calc = mace_mp(model=args.model, device=args.device, default_dtype="float64")
+    calc = mace_relax.get_calculator(model=args.model, device=args.device)
     atoms.calc = calc
 
     e0 = atoms.get_potential_energy()
@@ -163,13 +136,10 @@ that distribution.""",
     positions_before = atoms.get_positions().copy()
     cell_before = atoms.get_cell().copy()
 
-    target = FrechetCellFilter(atoms, mask=cell_mask) if cell_mask is not None else atoms
-    optimizer_cls = OPTIMIZERS[args.optimizer]
-    opt = optimizer_cls(target, logfile=None)
-
     print(f"\n  {color_text('Relaxing...', 'yellow')} (fmax={args.fmax}, max {args.max_steps} steps)")
-    converged = opt.run(fmax=args.fmax, steps=args.max_steps)
-    steps_used = opt.nsteps
+    converged, steps_used = mace_relax.relax(
+        atoms, calc, cell_mask=cell_mask, optimizer=args.optimizer,
+        fmax=args.fmax, max_steps=args.max_steps)
 
     e1 = atoms.get_potential_energy()
     f1 = np.abs(atoms.get_forces()).max()

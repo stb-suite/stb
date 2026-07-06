@@ -1,0 +1,43 @@
+# Example fixture: FCC nickel, conventional cubic cell (4-atom basis), same as
+# 9-sqs/fcc_ni.fdf but with a small (~1e-4 Ang) asymmetric perturbation added
+# to each atomic position -- e.g. residual noise from a DFT relaxation or a
+# hand-typed/CIF-derived structure. Small enough that spglib still detects
+# Fm-3m (No. 225) at the default --symprec 1e-3, so `stb-unitcell --mode
+# refined` snaps the positions back to the exact symmetric values (0, 0.5)
+# without changing the atom count -- unlike fcc_ni.fdf, where refining an
+# already-exact structure doesn't visibly change any coordinate.
+#
+# Note: the refined atom order/origin will NOT line up index-for-index with
+# this file's -- e.g. the atom near (0,0,0) here may come back near (0.5,0,0).
+# That's spglib rebuilding the standardized cell from the detected symmetry
+# operations from scratch, free to pick any symmetry-equivalent origin; for
+# this monoatomic FCC lattice (192 symmetry operations, every site
+# equivalent) even this tiny noise is enough to flip which one it picks.
+# Confirmed with pymatgen's StructureMatcher: refining this file and refining
+# the clean fcc_ni.fdf give the exact same crystal, just rigidly shifted by
+# (0.5, 0, 0) -- not a bug, and not something stb-unitcell can or should
+# "fix" (there is no single correct origin to prefer).
+
+NumberOfSpecies    1
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   28   Ni
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.5200000000   0.0000000000   0.0000000000
+ 0.0000000000   3.5200000000   0.0000000000
+ 0.0000000000   0.0000000000   3.5200000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000030000   0.999980000   0.000010000   1
+ 0.499980000   0.500030000   0.999990000   1
+ 0.500010000   0.999970000   0.500020000   1
+ 0.999990000   0.500020000   0.499970000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

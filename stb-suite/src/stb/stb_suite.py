@@ -972,6 +972,41 @@ def run_sqs_generator() -> None:
     run_tool("stb-sqs", args)
 
 
+def run_unitcell_generator() -> None:
+    """Interface for the Unit Cell Finder (stb-unitcell)"""
+    print("\n" + "="*60)
+    print(color_text("UNIT CELL FINDER (stb-unitcell)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    print(f"\n{color_text('Select Mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Primitive (smallest cell) [Default]")
+    print(f"  {color_text('2', 'cyan')} = Conventional (standardized, usually larger)")
+    print(f"  {color_text('3', 'cyan')} = Refined (conventional cell, positions snapped to symmetry)")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    mode = {'2': 'conventional', '3': 'refined'}.get(mode_choice, 'primitive')
+
+    symprec = get_float_input("\nSymmetry precision [default: 1e-3]: ", 1e-3)
+
+    output_file = get_input("\nOutput file name [default: unitcell.fdf]: ").strip()
+    if not output_file:
+        output_file = "unitcell.fdf"
+
+    args = [
+        "--file", input_file,
+        "--mode", mode,
+        "--symprec", str(symprec),
+        "--output", output_file,
+        "--no-intro"
+    ]
+
+    run_tool("stb-unitcell", args)
+
+
 def run_convergence_generator() -> None:
     """Interface for the Convergence Test Prep (stb-convergence)"""
     print("\n" + "="*60)
@@ -1490,6 +1525,9 @@ INPUT_TOOLS = {
     9: {'title': "SQS Generator (stb-sqs)",
         'description': "Generate a Special Quasirandom Structure for a substitutional alloy.",
         'func': run_sqs_generator},
+    10: {'title': "Unit Cell Finder (stb-unitcell)",
+         'description': "Find the primitive or conventional unit cell of a structure.",
+         'func': run_unitcell_generator},
          }
 
 

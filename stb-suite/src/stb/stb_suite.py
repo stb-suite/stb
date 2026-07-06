@@ -894,7 +894,8 @@ def run_defect_generator() -> None:
         print(f"\n{color_text('Select Site:', 'yellow')}")
         print(f"  {color_text('1', 'cyan')} = By atom index (e.g. '3,7')")
         print(f"  {color_text('2', 'cyan')} = By nearest position to a target point")
-        site_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+        print(f"  {color_text('3', 'cyan')} = Every symmetrically distinct site (auto, via spglib)")
+        site_choice = get_input("Select option (1-3) [default: 1]: ").strip()
 
         if site_choice == '2':
             coords = get_input("Target position, 3 numbers (e.g. '0.5 0.5 0.5'): ").split()
@@ -902,6 +903,11 @@ def run_defect_generator() -> None:
             fmt = 'cartesian' if fmt_choice == 'c' else 'fractional'
             filter_sp = get_input("Restrict search to one element (optional, Enter to skip): ").strip()
             args.extend(["--nearest", *coords, "--nearest-format", fmt])
+            if filter_sp:
+                args.extend(["--filter-species", filter_sp])
+        elif site_choice == '3':
+            filter_sp = get_input("Restrict to one element (optional, Enter for all species): ").strip()
+            args.append("--all-inequivalent-sites")
             if filter_sp:
                 args.extend(["--filter-species", filter_sp])
         else:
@@ -1005,6 +1011,55 @@ def run_unitcell_generator() -> None:
     ]
 
     run_tool("stb-unitcell", args)
+
+
+def run_crystalbuilder_generator() -> None:
+    """Interface for the Crystal Builder (stb-crystalbuilder)"""
+    print("\n" + "="*60)
+    print(color_text("CRYSTAL BUILDER (stb-crystalbuilder)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    spacegroup = get_input("Space group (symbol e.g. 'Fm-3m' or number e.g. '225'): ").strip()
+
+    a = get_float_input("\nLattice constant a (Ang): ")
+    b_str = get_input("Lattice constant b (Ang) [default: same as a]: ").strip()
+    c_str = get_input("Lattice constant c (Ang) [default: same as a]: ").strip()
+    alpha = get_float_input("Lattice angle alpha (deg) [default: 90]: ", 90.0)
+    beta = get_float_input("Lattice angle beta (deg) [default: 90]: ", 90.0)
+    gamma = get_float_input("Lattice angle gamma (deg) [default: 90]: ", 90.0)
+
+    args = [
+        "--spacegroup", spacegroup,
+        "--a", str(a),
+        "--alpha", str(alpha), "--beta", str(beta), "--gamma", str(gamma),
+    ]
+    if b_str:
+        args.extend(["--b", b_str])
+    if c_str:
+        args.extend(["--c", c_str])
+
+    print(f"\n{color_text('Enter each symmetrically-distinct Wyckoff site:', 'yellow')}")
+    print("  (element symbol + fractional x y z, e.g. 'Ni 0 0 0'; blank line to finish)")
+    while True:
+        site = get_input("Site (blank to finish): ").strip()
+        if not site:
+            break
+        parts = site.split()
+        if len(parts) != 4:
+            print(color_text("Expected 4 values: SYMBOL X Y Z.", 'red'))
+            continue
+        args.extend(["--site", *parts])
+
+    if "--site" not in args:
+        print(color_text("No sites given -- aborting.", 'red'))
+        return
+
+    output_file = get_input("\nOutput file name [default: crystal.fdf]: ").strip()
+    if not output_file:
+        output_file = "crystal.fdf"
+    args.extend(["--output", output_file, "--no-intro"])
+
+    run_tool("stb-crystalbuilder", args)
 
 
 def run_convergence_generator() -> None:
@@ -1528,6 +1583,9 @@ INPUT_TOOLS = {
     10: {'title': "Unit Cell Finder (stb-unitcell)",
          'description': "Find the primitive or conventional unit cell of a structure.",
          'func': run_unitcell_generator},
+    11: {'title': "Crystal Builder (stb-crystalbuilder)",
+         'description': "Build a structure from a space group and Wyckoff positions.",
+         'func': run_crystalbuilder_generator},
          }
 
 

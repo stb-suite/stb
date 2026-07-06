@@ -56,6 +56,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/magnetite.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -104,6 +105,49 @@ check_exit_code $? 1
 check_contains "No atoms of species" log_nearest_nomatch.txt
 
 
+# --- 5b. --all-inequivalent-sites (magnetite.fdf: 2 distinct Fe sites, 1 O site) ---
+echo -e "\n--- Testing --all-inequivalent-sites ---"
+
+echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe (expect 2 sites, 2 files)"
+rm -f magvac_site*.fdf
+stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Fe \
+    -o magvac.fdf --no-intro > log_all_sites_fe.txt 2>&1
+check_contains "Space group:.*Fd-3m" log_all_sites_fe.txt
+check_contains "Symmetrically distinct sites found:.*2" log_all_sites_fe.txt
+check_contains "2 structure(s) written" log_all_sites_fe.txt
+check_success magvac_site1.fdf
+check_success magvac_site5.fdf
+check_contains "NumberofAtoms      13" magvac_site1.fdf
+
+echo "Testing: substitution, --all-inequivalent-sites, no filter (expect 3 sites: 2 Fe + 1 O)"
+rm -f magsub_site*.fdf
+stb-defect -f magnetite.fdf --type substitution --new-species Ni --all-inequivalent-sites \
+    -o magsub.fdf --no-intro > log_all_sites_all.txt 2>&1
+check_contains "Symmetrically distinct sites found:.*3" log_all_sites_all.txt
+check_contains "3 structure(s) written" log_all_sites_all.txt
+check_success magsub_site1.fdf
+check_success magsub_site5.fdf
+check_success magsub_site7.fdf
+check_contains " 3   28   Ni" magsub_site7.fdf
+
+echo "Testing: --all-inequivalent-sites with --filter-species not present (error)"
+stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Au --no-intro \
+    > log_all_sites_nomatch.txt 2>&1
+check_exit_code $? 1
+check_contains "no atoms of species" log_all_sites_nomatch.txt
+
+echo "Testing: --all-inequivalent-sites and --index together (mutually exclusive)"
+stb-defect -f magnetite.fdf --type vacancy --index 1 --all-inequivalent-sites --no-intro \
+    > log_all_sites_mutex.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: --all-inequivalent-sites with --type interstitial (invalid combination)"
+stb-defect -f magnetite.fdf --type interstitial --position 0 0 0 --species N \
+    --all-inequivalent-sites --no-intro > log_all_sites_interstitial.txt 2>&1
+check_exit_code $? 2
+check_contains "only valid with --type vacancy/substitution" log_all_sites_interstitial.txt
+
+
 # --- 6. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -147,10 +191,11 @@ echo "Testing: --version"
 stb-defect --version > log_version.txt 2>&1
 check_contains "stb-defect" log_version.txt
 
-echo "Testing: --help documents index/nearest/position"
+echo "Testing: --help documents index/nearest/position/all-inequivalent-sites"
 stb-defect --help > log_help.txt 2>&1
 check_contains "index" log_help.txt
 check_contains "nearest" log_help.txt
+check_contains "all-inequivalent-sites" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 1.8) ---
@@ -162,6 +207,13 @@ printf '1.8\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n0\n' | stb-suite > lo
 check_contains "File not found" log_menu.txt
 check_contains "Success" log_menu.txt
 check_success defect.fdf
+
+echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> default output -> quit"
+rm -f defect_site1.fdf defect_site5.fdf
+printf '1.8\nmagnetite.fdf\n1\n3\nFe\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
+check_contains "Symmetrically distinct sites found:.*2" log_menu_all_sites.txt
+check_success defect_site1.fdf
+check_success defect_site5.fdf
 
 
 popd > /dev/null

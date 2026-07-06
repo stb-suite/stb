@@ -787,6 +787,15 @@ def run_slab_generator() -> None:
     print(f"  {color_text('3', 'cyan')} = All terminations (writes one file per termination)")
     mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
 
+    passivate_choice = get_input("\nPassivate dangling bonds on the cut surface? (y/N): ").strip().lower()
+    passivant = None
+    cutoff_str = ""
+    bond_length_str = ""
+    if passivate_choice in ('y', 'yes'):
+        passivant = get_input("Passivant element [default: H]: ").strip() or "H"
+        cutoff_str = get_input("Neighbor cutoff, Ang (blank = auto-detect): ").strip()
+        bond_length_str = get_input("Bond length, Ang (blank = auto per species pair): ").strip()
+
     output_file = get_input("\nOutput file name [default: slab.fdf]: ").strip()
     if not output_file:
         output_file = "slab.fdf"
@@ -811,6 +820,13 @@ def run_slab_generator() -> None:
         args.append("--interactive")
     elif mode_choice == '3':
         args.append("--all")
+
+    if passivant is not None:
+        args.extend(["--passivate", "--passivant", passivant])
+        if cutoff_str:
+            args.extend(["--cutoff", cutoff_str])
+        if bond_length_str:
+            args.extend(["--bond-length", bond_length_str])
 
     run_tool("stb-slab", args)
 
@@ -1148,6 +1164,37 @@ def run_fetch_generator() -> None:
     args.extend(["--output", output_file, "--no-intro"])
 
     run_tool("stb-fetch", args)
+
+
+def run_passivate_generator() -> None:
+    """Interface for the Surface Passivator (stb-passivate)"""
+    print("\n" + "="*60)
+    print(color_text("SURFACE PASSIVATOR (stb-passivate)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input structure file (fdf, typically a cut slab): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    passivant = get_input("\nPassivant element [default: H]: ").strip()
+    if not passivant:
+        passivant = "H"
+
+    cutoff_str = get_input("Neighbor cutoff, Ang (blank = auto-detect): ").strip()
+    bond_length_str = get_input("Bond length, Ang (blank = auto per species pair): ").strip()
+
+    output_file = get_input("\nOutput file name [default: passivated.fdf]: ").strip()
+    if not output_file:
+        output_file = "passivated.fdf"
+
+    args = ["--file", input_file, "--passivant", passivant, "--output", output_file, "--no-intro"]
+    if cutoff_str:
+        args.extend(["--cutoff", cutoff_str])
+    if bond_length_str:
+        args.extend(["--bond-length", bond_length_str])
+
+    run_tool("stb-passivate", args)
 
 
 def run_convergence_generator() -> None:
@@ -1677,6 +1724,9 @@ INPUT_TOOLS = {
     12: {'title': "Structure Fetcher (stb-fetch)",
          'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
          'func': run_fetch_generator},
+    13: {'title': "Surface Passivator (stb-passivate)",
+         'description': "Cap dangling bonds on a cut surface with a passivating atom (e.g. H).",
+         'func': run_passivate_generator},
          }
 
 

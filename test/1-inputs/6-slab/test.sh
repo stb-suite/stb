@@ -72,6 +72,22 @@ check_success slab.fdf
 check_contains "NumberofAtoms      4" slab.fdf
 
 
+# --- 2b. --passivate (cut + passivate in one step, reuses core/passivation.py) ---
+echo -e "\n--- Testing --passivate (structure.fdf, hkl 1 1 1) ---"
+rm -f slab_passivated.fdf
+stb-slab -f structure.fdf --hkl 1 1 1 --passivate -o slab_passivated.fdf --no-intro \
+    > log_passivate.txt 2>&1
+check_contains "Dangling bonds found:" log_passivate.txt
+check_contains "Auto-passivated:.* with H" log_passivate.txt
+check_success slab_passivated.fdf
+check_contains " 2   1   H" slab_passivated.fdf
+
+echo "Testing: --passivant rejected without --passivate"
+stb-slab -f structure.fdf --hkl 1 0 0 --passivant F --no-intro > log_passivant_bad.txt 2>&1
+check_exit_code $? 2
+check_contains "only valid with --passivate" log_passivant_bad.txt
+
+
 # --- 3. --all writes every termination ---
 echo -e "\n--- Testing --all (writes one file per termination) ---"
 rm -f slab_term0.fdf slab_term1.fdf
@@ -152,10 +168,11 @@ echo "Testing: --version"
 stb-slab --version > log_version.txt 2>&1
 check_contains "stb-slab" log_version.txt
 
-echo "Testing: --help documents the Miller index and vacuum options"
+echo "Testing: --help documents the Miller index, vacuum, and passivate options"
 stb-slab --help > log_help.txt 2>&1
 check_contains "Miller index" log_help.txt
 check_contains "vacuum" log_help.txt
+check_contains "passivate" log_help.txt
 
 
 # --- 9. Interactive path (stb-suite, shortcut 1.6) ---
@@ -163,7 +180,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
 
 echo "Testing: navigate 1.6 -> invalid file then valid -> hkl '1 0 0' -> defaults -> mode 1 -> default output -> quit"
 rm -f slab.fdf
-printf '1.6\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '1.6\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Slab Summary" log_menu.txt
 check_success slab.fdf

@@ -6,14 +6,16 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "1.10.0"
 
 import sys
 import os
 import argparse
+from pymatgen.core.periodic_table import Element
 from pymatgen.core.surface import SlabGenerator
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.passivation import passivate_dangling_bonds
 
 
 def slab_metrics(slab):
@@ -100,6 +102,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                "  %(prog)s -f bulk.fdf --hkl 1 0 0\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 -i\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 --all -o surface.fdf\n"
+               "  %(prog)s -f bulk.fdf --hkl 1 1 1 --passivate\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -131,6 +134,20 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     parser.add_argument("--all", action="store_true",
                         help="Write every termination found, instead of just one.")
 
+    parser.add_argument("--passivate", action="store_true",
+                        help="Cap dangling bonds on each written termination with a passivating "
+                             "atom (same logic as stb-passivate). Only single-missing-bond sites "
+                             "are auto-passivated; sites missing 2+ bonds are reported instead of "
+                             "guessed.")
+    parser.add_argument("--passivant", type=str, default="H",
+                        help="Element to cap dangling bonds with, only with --passivate (default: H).")
+    parser.add_argument("--cutoff", type=float, default=None,
+                        help="Neighbor-search radius in Angstrom for --passivate. "
+                             "Default: auto-detected (see stb-passivate --help).")
+    parser.add_argument("--bond-length", type=float, default=None,
+                        help="Passivant bond length in Angstrom for --passivate. "
+                             "Default: auto per species pair (see stb-passivate --help).")
+
     parser.add_argument("-o", "--output", type=str, default="slab.fdf",
                         help="Output .fdf file name (default: slab.fdf). When more than one "
                              "termination is written, it is suffixed '_term0', '_term1', ...")
@@ -138,6 +155,19 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+
+    if not args.passivate:
+        if args.passivant != "H":
+            parser.error("--passivant is only valid with --passivate.")
+        if args.cutoff is not None:
+            parser.error("--cutoff is only valid with --passivate.")
+        if args.bond_length is not None:
+            parser.error("--bond-length is only valid with --passivate.")
+    else:
+        try:
+            Element(args.passivant)
+        except ValueError as e:
+            parser.error(str(e))
 
     if args.intro:
         show_intro([
@@ -209,8 +239,25 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     for idx in chosen_indices:
         slab = slabs[idx]
         print_slab_summary(idx, slab, hkl, args.symprec)
+        species_meta = structure.species_meta
+
+        if args.passivate:
+            slab, report = passivate_dangling_bonds(
+                slab, passivant=args.passivant, cutoff=args.cutoff, bond_length=args.bond_length)
+            n_passivated = len(report["passivated"])
+            n_unresolved = len(report["unresolved"])
+            print(f"  {color_text('Dangling bonds found:', 'cyan')} {n_passivated + n_unresolved}")
+            print(f"  {color_text('Auto-passivated:', 'cyan')} {n_passivated} with {args.passivant}")
+            if n_unresolved:
+                print(color_text(
+                    f"  Warning: {n_unresolved} atom(s) missing 2+ bonds -- left unpassivated "
+                    "(geometrically underdetermined from local coordination alone). Review:", 'yellow'))
+                for atom_idx, symbol, pos, deficit in report["unresolved"]:
+                    print(f"    #{atom_idx + 1:<4} {symbol:<3} deficit={deficit}  at {pos}")
+            species_meta = structure_io.ensure_species_id(dict(species_meta), args.passivant)
+
         out_path = f"{base}_term{idx}{ext}" if multi else args.output
-        write_slab(slab, structure.species_meta, out_path)
+        write_slab(slab, species_meta, out_path)
         print(f"  {color_text('Success:', 'green')} Slab written to '{color_text(out_path, 'bold')}'")
 
     print("\n" + color_text("Complete job!", 'bold'))

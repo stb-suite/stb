@@ -88,6 +88,15 @@ to `stb-suite/src/stb/core/`:
   rebuilds the cell from the detected symmetry operations from scratch and is free to
   pick any symmetry-equivalent origin, which even tiny input noise can flip for highly
   symmetric structures. Not a bug; the crystal is the same, just relabeled.
+- `core/passivation.py` — `passivate_dangling_bonds(structure, passivant, cutoff,
+  bond_length)`, caps undercoordinated atoms (e.g. a cut slab's surface) with a
+  passivating atom along the missing-bond direction, determined purely from local
+  coordination geometry (vector-sum of existing-neighbor directions, negated — no
+  bulk-lattice assumptions hard-coded in; verified against a real Si(111) slab to
+  recover the exact 109.5-degree tetrahedral angle). Only auto-caps single-missing
+  -bond atoms; atoms missing 2+ bonds are geometrically underdetermined from local
+  coordination alone and are reported instead of guessed. Shared by `stb-passivate`
+  and `stb-slab`'s `--passivate` option.
 
 New format-specific structure readers/writers (POSCAR, CIF, XYZ, XSF, FHI, DFTB) still
 live only in `translate.py` — it's the sole consumer of those formats, so there's
@@ -118,6 +127,10 @@ Newer `1-inputs` tools worth knowing about specifically:
   materials (e.g. oxidation-state-split sites); same-element disorder is collapsed
   automatically, genuine multi-element disorder is rejected with a clear error rather
   than silently producing a wrong structure.
+- `stb-passivate` / `stb-slab --passivate` — H-terminates (or any element) dangling
+  bonds on a cut surface; see `core/passivation.py` above. Available both as its own
+  tool (works on any structure, not just fresh-from-`stb-slab` output) and as a
+  same-step convenience flag on `stb-slab`.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,

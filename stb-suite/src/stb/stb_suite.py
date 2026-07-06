@@ -1197,6 +1197,29 @@ def run_passivate_generator() -> None:
     run_tool("stb-passivate", args)
 
 
+def run_molecule_generator() -> None:
+    """Interface for the Reference Molecule Builder (stb-molecule)"""
+    print("\n" + "="*60)
+    print(color_text("REFERENCE MOLECULE BUILDER (stb-molecule)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    print("Names are case-sensitive (e.g. 'H2O', not 'h2o'). Type 'list' to see all names.")
+    name = get_input("Molecule name: ").strip()
+    while name.lower() == "list" or not name:
+        run_tool("stb-molecule", ["--list", "--no-intro"])
+        name = get_input("Molecule name: ").strip()
+
+    vacuum = get_float_input("\nVacuum padding in Ang [default: 10.0]: ", 10.0)
+
+    output_file = get_input("\nOutput file name [default: molecule.fdf]: ").strip()
+    if not output_file:
+        output_file = "molecule.fdf"
+
+    args = ["--name", name, "--vacuum", str(vacuum), "--output", output_file, "--no-intro"]
+
+    run_tool("stb-molecule", args)
+
+
 def run_convergence_generator() -> None:
     """Interface for the Convergence Test Prep (stb-convergence)"""
     print("\n" + "="*60)
@@ -1727,6 +1750,9 @@ INPUT_TOOLS = {
     13: {'title': "Surface Passivator (stb-passivate)",
          'description': "Cap dangling bonds on a cut surface with a passivating atom (e.g. H).",
          'func': run_passivate_generator},
+    14: {'title': "Reference Molecule Builder (stb-molecule)",
+         'description': "Build a reference molecule (e.g. H2O, CO2) from ASE's G2 database.",
+         'func': run_molecule_generator},
          }
 
 

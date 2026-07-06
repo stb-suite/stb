@@ -131,6 +131,9 @@ Newer `1-inputs` tools worth knowing about specifically:
   bonds on a cut surface; see `core/passivation.py` above. Available both as its own
   tool (works on any structure, not just fresh-from-`stb-slab` output) and as a
   same-step convenience flag on `stb-slab`.
+- `stb-molecule` — builds an isolated reference molecule (H2O, CO2, benzene, ...) in a
+  vacuum box from ASE's bundled G2 database (`ase.build.molecule`, 162 entries, names
+  are case-sensitive — `--list` prints them all).
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,

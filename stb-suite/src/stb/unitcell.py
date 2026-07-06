@@ -6,14 +6,14 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.10.2"
+VERSION = "1.10.3"
 
 import sys
 import os
 import argparse
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from stb.core.symmetry import reduce_to_unitcell
 
 
 def generate_txt_report(args, sga, input_formula, input_atoms, output_formula, output_atoms):
@@ -115,23 +115,15 @@ unit cell, which may be much smaller than the literal input cell (e.g. a
     print(f"  {color_text('Input atoms:', 'cyan')} {input_atoms}")
 
     try:
-        sga = SpacegroupAnalyzer(pmg, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
-        space_group = f"{sga.get_space_group_symbol()} (No. {sga.get_space_group_number()})"
+        new_pmg, sga = reduce_to_unitcell(pmg, args.mode, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
     except ValueError as e:
         print(color_text(f"Error: symmetry detection failed: {e}", 'red'))
         sys.exit(1)
 
-    print(f"  {color_text('Space group:', 'cyan')} {space_group}")
+    print(f"  {color_text('Space group:', 'cyan')} {sga.get_space_group_symbol()} (No. {sga.get_space_group_number()})")
     print(f"  {color_text('Point group:', 'cyan')} {sga.get_point_group_symbol()}")
     print(f"  {color_text('Crystal system:', 'cyan')} {sga.get_crystal_system()}")
     print(f"  {color_text('Mode:', 'cyan')} {args.mode}")
-
-    if args.mode == "primitive":
-        new_pmg = sga.get_primitive_standard_structure()
-    elif args.mode == "conventional":
-        new_pmg = sga.get_conventional_standard_structure()
-    else:
-        new_pmg = sga.get_refined_structure()
 
     output_formula = new_pmg.composition.reduced_formula
     output_atoms = len(new_pmg)

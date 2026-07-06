@@ -1062,6 +1062,94 @@ def run_crystalbuilder_generator() -> None:
     run_tool("stb-crystalbuilder", args)
 
 
+def run_fetch_generator() -> None:
+    """Interface for the Structure Fetcher (stb-fetch)"""
+    print("\n" + "="*60)
+    print(color_text("STRUCTURE FETCHER (stb-fetch)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    # Keep in sync with fetch.py's CURATED_OPTIMADE_PROVIDERS.
+    curated_optimade_providers = [
+        ("twodmatpedia", "2D Materials Encyclopedia -- confirmed working"),
+        ("jarvis", "NIST JARVIS-DFT (2D + 3D materials)"),
+        ("aflow", "AFLOW"),
+        ("oqmd", "Open Quantum Materials Database"),
+        ("alexandria.pbe", "Alexandria (PBE)"),
+        ("odbx", "Open Database of Xtals"),
+        ("mcloud.mc2d", "Materials Cloud 2D Structures Database"),
+        ("mcloud.2dtopo", "Materials Cloud 2D Topological Database"),
+        ("cmr", "DTU Computational Materials Repository, incl. C2DB -- currently unreliable"),
+    ]
+
+    print(f"{color_text('Select Source:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Crystallography Open Database (COD) -- no account needed")
+    print(f"  {color_text('2', 'cyan')} = Materials Project -- needs a free API key")
+    print(f"  {color_text('3', 'cyan')} = OPTIMADE -- many databases (2D materials, C2DB-adjacent, ...)")
+    source_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    source = {'2': 'materials-project', '3': 'optimade'}.get(source_choice, 'cod')
+
+    args = ["--source", source]
+
+    if source == "optimade":
+        print(f"\n{color_text('Select Provider:', 'yellow')}")
+        for i, (alias, desc) in enumerate(curated_optimade_providers):
+            print(f"  {color_text(str(i + 1), 'cyan')} = {alias} -- {desc}")
+        print(f"  {color_text('0', 'cyan')} = Other (type an alias or URL)")
+        provider_choice = get_input(f"Select option (0-{len(curated_optimade_providers)}) [default: 1]: ").strip()
+        if provider_choice == "0":
+            provider = get_input("Provider alias or OPTIMADE base URL: ").strip()
+        elif provider_choice.isdigit() and 1 <= int(provider_choice) <= len(curated_optimade_providers):
+            provider = curated_optimade_providers[int(provider_choice) - 1][0]
+        else:
+            provider = curated_optimade_providers[0][0]
+        args.extend(["--provider", provider])
+
+    print(f"\n{color_text('Select Query:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = By exact id")
+    print(f"  {color_text('2', 'cyan')} = By chemical formula")
+    query_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+
+    if query_choice == "2":
+        formula = get_input("Formula (e.g. 'Fe3O4'): ").strip()
+        args.extend(["--formula", formula])
+        if source == "materials-project":
+            most_stable = get_input("Auto-pick the most stable match? (y/n) [default: n]: ").strip().lower()
+            if most_stable == "y":
+                args.append("--most-stable")
+    else:
+        if source == "materials-project":
+            material_id = get_input("Materials Project id (e.g. 'mp-19306'): ").strip()
+            args.extend(["--material-id", material_id])
+        elif source == "optimade":
+            optimade_id = get_input("Id within the chosen provider (e.g. '2dm-2127'): ").strip()
+            args.extend(["--optimade-id", optimade_id])
+        else:
+            cod_id = get_input("COD numeric id (e.g. '1010369'): ").strip()
+            args.extend(["--cod-id", cod_id])
+
+    if source == "materials-project":
+        api_key = get_input("API key (blank = use PMG_MAPI_KEY env var): ").strip()
+        if api_key:
+            args.extend(["--api-key", api_key])
+
+    print(f"\n{color_text('Reduce to unit cell?', 'yellow')}")
+    print(f"  {color_text('0', 'cyan')} = No, keep the structure as fetched [Default]")
+    print(f"  {color_text('1', 'cyan')} = Primitive (smallest cell)")
+    print(f"  {color_text('2', 'cyan')} = Conventional (standardized, usually larger)")
+    print(f"  {color_text('3', 'cyan')} = Refined (conventional cell, positions snapped to symmetry)")
+    unitcell_choice = get_input("Select option (0-3) [default: 0]: ").strip()
+    unitcell_map = {'1': 'primitive', '2': 'conventional', '3': 'refined'}
+    if unitcell_choice in unitcell_map:
+        args.extend(["--unitcell", unitcell_map[unitcell_choice]])
+
+    output_file = get_input("\nOutput file name [default: fetched.fdf]: ").strip()
+    if not output_file:
+        output_file = "fetched.fdf"
+    args.extend(["--output", output_file, "--no-intro"])
+
+    run_tool("stb-fetch", args)
+
+
 def run_convergence_generator() -> None:
     """Interface for the Convergence Test Prep (stb-convergence)"""
     print("\n" + "="*60)
@@ -1586,6 +1674,9 @@ INPUT_TOOLS = {
     11: {'title': "Crystal Builder (stb-crystalbuilder)",
          'description': "Build a structure from a space group and Wyckoff positions.",
          'func': run_crystalbuilder_generator},
+    12: {'title': "Structure Fetcher (stb-fetch)",
+         'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
+         'func': run_fetch_generator},
          }
 
 

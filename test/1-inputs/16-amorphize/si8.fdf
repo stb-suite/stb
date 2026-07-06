@@ -1,0 +1,42 @@
+# Example fixture: bulk Si (diamond cubic, conventional 8-atom cell,
+# a=5.463 Ang, the correct/expected lattice constant -- unlike
+# 15-mlrelax's si_wrong_a.fdf, no deliberate error here). Used to exercise
+# stb-amorphize's melt-quench protocol.
+#
+# Deliberately tiny (8 atoms) with correspondingly tiny --melt-steps/
+# --quench-steps in test.sh, purely so the automated smoke test finishes
+# quickly -- this is NOT representative of real amorphization quality
+# (too few atoms and MD steps for meaningful statistics). The actual
+# physics (bond-angle std going from 0 to a large value while the mean
+# stays near the tetrahedral angle, matching real amorphous-Si behavior)
+# was validated live during planning with a proper 64-atom cell and
+# realistic step counts -- see CLAUDE.md's stb-amorphize entry.
+
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.46300000   0.00000000   0.00000000
+ 0.00000000   5.46300000   0.00000000
+ 0.00000000   0.00000000   5.46300000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

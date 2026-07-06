@@ -155,11 +155,24 @@ Newer `1-inputs` tools worth knowing about specifically:
   A heuristic, not a DFT replacement. `--relax-cell` auto-adapts to the structure's
   periodicity (reuses `core/kspace.py::detect_vacuum_axes`, same as `stb-kgrid`): a
   vacuum-padded axis (2D slab, 1D wire) is masked out of `FrechetCellFilter`'s Voigt
-  strain (`mlrelax.py::build_cell_mask`) so only the genuinely periodic direction(s)
-  relax and the vacuum thickness stays exactly fixed -- verified against a graphene
-  slab, in-plane `a` relaxed to the real ~2.46-2.50 Ang value while the vacuum axis
-  changed by exactly 0. A fully isolated structure (0D, vacuum on all 3 axes) has
-  nothing to relax; `--relax-cell` is a no-op there, positions-only still runs.
+  strain (`core/mace_relax.py::build_cell_mask`) so only the genuinely periodic
+  direction(s) relax and the vacuum thickness stays exactly fixed -- verified against
+  a graphene slab, in-plane `a` relaxed to the real ~2.46-2.50 Ang value while the
+  vacuum axis changed by exactly 0. A fully isolated structure (0D, vacuum on all 3
+  axes) has nothing to relax; `--relax-cell` is a no-op there, positions-only still
+  runs.
+- `stb-amorphize` — melt-quench amorphous structure generator, the third
+  `core/mace_relax.py` consumer: heats a crystalline structure (`ase.md.nptberendsen.
+  NPTBerendsen`) above its melting point to erase crystalline memory, then ramps the
+  temperature back down, giving a fast heuristic amorphous starting guess. Bulk (3D
+  periodic) only — rejects any vacuum-padded axis (melting/NPT-relaxing a slab/wire/
+  molecule is physically meaningless). Uses float32 for the MD stages (MACE's own
+  guidance: faster, recommended for MD) and a separate float64 calculator for the
+  optional final static relax (geometry optimization wants float64). Verified live on
+  bulk Si: bond-angle std went from 0.00 deg (perfect crystal) to ~18.6 deg after
+  melt-quench while the mean stayed near the tetrahedral angle — the expected
+  signature of losing long-range order while keeping short-range coordination,
+  matching real amorphous-Si physics.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
 shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,

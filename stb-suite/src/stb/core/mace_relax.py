@@ -1,8 +1,9 @@
-"""Shared MACE-MP-0 relaxation helpers, used by stb-mlrelax and stb-defect's
---ml-rank. Callers must call core.deps.require_mace() themselves first --
-this module assumes mace/torch are already available, and only imports them
-lazily inside each function (not at module level), so merely importing this
-module never forces the heavy PyTorch/mace dependency chain to load.
+"""Shared MACE-MP-0 relaxation helpers, used by stb-mlrelax, stb-defect's
+--ml-rank, and stb-amorphize. Callers must call core.deps.require_mace()
+themselves first -- this module assumes mace/torch are already available,
+and only imports them lazily inside each function (not at module level),
+so merely importing this module never forces the heavy PyTorch/mace
+dependency chain to load.
 """
 
 # ASE/Voigt strain order: [xx, yy, zz, yz, xz, xy]. Maps each shear component
@@ -31,13 +32,15 @@ def build_cell_mask(vacuum_axes):
     return mask
 
 
-def get_calculator(model="small", device="cpu"):
+def get_calculator(model="small", device="cpu", dtype="float64"):
     """Loads the MACE-MP-0 foundation potential as an ASE calculator.
-    Always float64 -- MACE's own guidance is unambiguous that float32 is for
-    MD, not geometry optimization.
+    Default float64 for geometry optimization (MACE's own guidance is
+    unambiguous that float32 is for MD, not geometry optimization) --
+    callers doing MD (e.g. stb-amorphize's melt/quench stages) should pass
+    dtype="float32" explicitly.
     """
     from mace.calculators import mace_mp
-    return mace_mp(model=model, device=device, default_dtype="float64")
+    return mace_mp(model=model, device=device, default_dtype=dtype)
 
 
 def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=200):

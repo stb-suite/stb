@@ -1267,6 +1267,49 @@ def run_mlrelax_generator() -> None:
     run_tool("stb-mlrelax", args)
 
 
+def run_amorphize_generator() -> None:
+    """Interface for the Amorphous Structure Generator (stb-amorphize)"""
+    print("\n" + "="*60)
+    print(color_text("AMORPHOUS STRUCTURE GENERATOR (stb-amorphize)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Melt-quench MD "
+        "with MACE-MP-0 -- a fast heuristic starting guess, bulk (3D periodic) "
+        "structures only. Can take a few minutes.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf, typically a supercell): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    melt_temp = get_float_input("\nMelt temperature, K [default: 3000]: ", 3000.0)
+    melt_steps = get_int_input("Melt steps [default: 500]: ", 500)
+    quench_temp = get_float_input("Quench target temperature, K [default: 300]: ", 300.0)
+    quench_steps = get_int_input("Quench steps [default: 1000]: ", 1000)
+
+    final_relax = get_input(
+        "\nDo a final static relax after the quench? (Y/n): "
+    ).strip().lower()
+
+    output_file = get_input("\nOutput file name [default: amorphous.fdf]: ").strip()
+    if not output_file:
+        output_file = "amorphous.fdf"
+
+    args = [
+        "--file", input_file,
+        "--melt-temp", str(melt_temp),
+        "--melt-steps", str(melt_steps),
+        "--quench-temp", str(quench_temp),
+        "--quench-steps", str(quench_steps),
+        "--output", output_file,
+        "--no-intro"
+    ]
+    if final_relax in ('n', 'no'):
+        args.append("--no-final-relax")
+
+    run_tool("stb-amorphize", args)
+
+
 def run_convergence_generator() -> None:
     """Interface for the Convergence Test Prep (stb-convergence)"""
     print("\n" + "="*60)
@@ -1803,6 +1846,9 @@ INPUT_TOOLS = {
     15: {'title': "ML Pre-Relaxation (stb-mlrelax)",
          'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
          'func': run_mlrelax_generator},
+    16: {'title': "Amorphous Structure Generator (stb-amorphize)",
+         'description': "Melt-quench MD with MACE-MP-0 to build an amorphous starting guess (needs the optional 'ml' extra).",
+         'func': run_amorphize_generator},
          }
 
 

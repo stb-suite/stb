@@ -26,7 +26,7 @@ def _is_gamma(label):
     clean_text = re.sub(r'[^a-zA-Z\s]', '', label).lower()
     return "gamma" in clean_text.split()
 
-def plot_gnuplot(high_sym):
+def plot_gnuplot(high_sym, nspin):
 ######################### PDF Plot
     # Build gnuplot-formatted labels (Gamma -> {/Symbol G}) in a local list
     # instead of mutating the caller's high_sym. xticsl below already wraps
@@ -83,11 +83,18 @@ def plot_gnuplot(high_sym):
     fileout.append('\n')
     fileout.append('# Line styles\n')
     fileout.append('set style line 1 lc rgb "#1f77b4" lt 1 lw 3 pt 7 ps 1.5   # Solid blue line with points\n')
-    fileout.append('#set style line 2 lc rgb "#ff7f0e" lt 2 lw 2 pt 5 ps 1.5   # Dashed orange line\n')
+    if nspin == 2:
+        fileout.append('set style line 2 lc rgb "#d62728" lt 2 dt 2 lw 3        # Dashed red line (spin down)\n')
+    else:
+        fileout.append('#set style line 2 lc rgb "#ff7f0e" lt 2 lw 2 pt 5 ps 1.5   # Dashed orange line\n')
     fileout.append('#set style line 3 lc rgb "#2ca02c" lt 3 lw 2               # Solid green line\n')
     fileout.append('\n')
     fileout.append('# Plot commands\n')
-    fileout.append(f'plot "bands_gnuplot.dat" using 1:2 with lines ls 1 title "" \n')
+    if nspin == 2:
+        fileout.append('plot "bands_gnuplot.dat" using 1:2 with lines ls 1 title "Spin Up", '
+                        '"" using 1:3 with lines ls 2 title "Spin Down"\n')
+    else:
+        fileout.append(f'plot "bands_gnuplot.dat" using 1:2 with lines ls 1 title "" \n')
     with open('bands.gplot', 'w') as file:
         file.writelines(fileout)
     return
@@ -119,7 +126,10 @@ def read_data(file_path = "siesta.bands"):
         while len(values) < values_per_k:
             values.extend(lines[idx].split())
             idx += 1
-        dic_bands[key] = np.array(values, dtype=float)
+        # First nbands values are the spin-up channel, the next nbands (if
+        # any) are spin-down -- confirmed against sisl's own bandsSileSiesta
+        # ("eb[ik, :, :] = l.reshape(ns, no)"), not interleaved per band.
+        dic_bands[key] = np.array(values, dtype=float).reshape(nspin, nbands)
 
     # Whatever remains is deterministically the high-symmetry footer: we
     # already consumed exactly nk k-blocks by token count, so there is no
@@ -132,31 +142,33 @@ def read_data(file_path = "siesta.bands"):
     high_sym = []
     for _ in range(n_high_sym):
         parts = lines[idx].split()
-        label = parts[1].strip("'\"") if len(parts) > 1 else ""
+        label = " ".join(parts[1:]).strip("'\"")
         high_sym.append([parts[0], label])
         idx += 1
 
-    return fermi_energy, high_sym, dic_bands
+    return fermi_energy, high_sym, dic_bands, nspin
 
-def write_gnuplot_bands(dic_bands):
+def write_gnuplot_bands(dic_bands, nspin):
     # define initial key
     key_init = next(iter(dic_bands))
+    nbands = dic_bands[key_init].shape[1]
     # write the file
     file_name="bands_gnuplot.dat"
     with open(file_name, 'w') as file:
-        for i in range(len(dic_bands[key_init])):
+        for i in range(nbands):
             for key in dic_bands.keys():
-                file.write(f"{key}     {dic_bands[key][i]}\n")
+                cols = "     ".join(f"{dic_bands[key][s][i]}" for s in range(nspin))
+                file.write(f"{key}     {cols}\n")
             file.write("\n")
     return
 
-def cbm_vbm(fermi_energy,high_sym,dic_bands):
+def _band_extrema(values_by_k, fermi_energy, gap_tol):
     # Start value as infinity
     vbm = -np.inf
     cbm = np.inf
     vbm_k = None
     cbm_k = None
-    for k, band in dic_bands.items():
+    for k, band in values_by_k.items():
         below = band[band <= fermi_energy]
         above = band[band > fermi_energy]
         if below.size > 0:
@@ -170,16 +182,40 @@ def cbm_vbm(fermi_energy,high_sym,dic_bands):
                 cbm = local_cbm
                 cbm_k = k
     band_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
-    if band_gap == 0.0:
+    if band_gap < gap_tol:
         gap_type = "Metallic"
     elif vbm_k == cbm_k:
         gap_type = "Direct"
     else:
         gap_type = "Indirect"
-    print(f"[INFO] Fermi: {fermi_energy} \n[INFO] VBM: {vbm:.6f} (k={vbm_k}) \n[INFO] CBM: {cbm:.6f} (k={cbm_k})\n[INFO] Band Gap: {band_gap:.6f} eV ({gap_type})")
     return vbm, cbm, vbm_k, cbm_k, band_gap, gap_type
 
-def write_analysis_report(fermi_energy, vbm, cbm, vbm_k, cbm_k, band_gap, gap_type):
+def cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, gap_tol=0.01):
+    combined = _band_extrema(
+        {k: arr.reshape(-1) for k, arr in dic_bands.items()}, fermi_energy, gap_tol
+    )
+    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = combined
+    print(f"[INFO] Fermi: {fermi_energy} \n[INFO] VBM: {vbm:.6f} (k={vbm_k}) \n[INFO] CBM: {cbm:.6f} (k={cbm_k})\n[INFO] Band Gap: {band_gap:.6f} eV ({gap_type})")
+
+    result = {"combined": combined, "spins": [], "half_metallic": False}
+    if nspin == 2:
+        for s in range(nspin):
+            spin_result = _band_extrema(
+                {k: arr[s] for k, arr in dic_bands.items()}, fermi_energy, gap_tol
+            )
+            result["spins"].append(spin_result)
+            spin_name = "Up" if s == 0 else "Down"
+            svbm, scbm, svbm_k, scbm_k, sgap, sgap_type = spin_result
+            print(f"[INFO] Spin {spin_name}: VBM={svbm:.6f} (k={svbm_k}) CBM={scbm:.6f} (k={scbm_k}) Gap={sgap:.6f} eV ({sgap_type})")
+        gaps = [spin_result[4] for spin_result in result["spins"]]
+        result["half_metallic"] = min(gaps) < gap_tol and max(gaps) >= gap_tol
+        if result["half_metallic"]:
+            print("[INFO] Half-metallic character detected (one spin channel metallic, the other has a gap)")
+
+    return result
+
+def write_analysis_report(fermi_energy, result, nspin):
+    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
     lines = [
         "BAND STRUCTURE ANALYSIS REPORT - STB Suite",
         "-"*60,
@@ -189,30 +225,40 @@ def write_analysis_report(fermi_energy, vbm, cbm, vbm_k, cbm_k, band_gap, gap_ty
         f"Band gap     : {band_gap:.6f} eV",
         f"Gap type     : {gap_type}",
     ]
+    if nspin == 2:
+        lines.append("")
+        lines.append("== Per-spin channel ==")
+        for s, (svbm, scbm, svbm_k, scbm_k, sgap, sgap_type) in enumerate(result["spins"]):
+            spin_name = "Spin Up" if s == 0 else "Spin Down"
+            lines.append(f"{spin_name:<10}: VBM={svbm:.6f} eV (k={svbm_k})  CBM={scbm:.6f} eV (k={scbm_k})  Gap={sgap:.6f} eV ({sgap_type})")
+        lines.append("")
+        lines.append(f"Half-metallic: {'Yes' if result['half_metallic'] else 'No'}")
     content = "\n".join(lines) + "\n"
     with open("bands_analysis.txt", "w") as f:
         f.write(content)
     return content
 
 def shift_bands(dic, val):
-    return {k: [v - val for v in list] for k, list in dic.items()}
+    return {k: arr - val for k, arr in dic.items()}
 
-def plot(dic,custom_ticks):
+def plot(dic, custom_ticks, nspin):
     # Organize the data
     x_values = sorted(dic.keys())
-    num_lines = len(next(iter(dic.values())))
-    y_series = [[] for _ in range(num_lines)]
-    for x in x_values:
-        for i in range(num_lines):
-            y_series[i].append(dic[x][i])
+    nbands = next(iter(dic.values())).shape[1]
     # Organize the high symmetries points
     tick_positions = [float(t[0]) for t in custom_ticks]
     tick_labels = ["Γ" if _is_gamma(t[1]) else t[1] for t in custom_ticks]
-    # plot
+    # plot: spin channels overlaid in a single panel (up: solid blue,
+    # down: dashed red), one legend entry per channel rather than per band.
+    spin_styles = [("blue", "-", "Spin Up"), ("red", "--", "Spin Down")]
     plt.figure(figsize=(8, 6))
-    for i, y_vals in enumerate(y_series):
-        plt.xticks(tick_positions, tick_labels)
-        plt.plot(x_values, y_vals,color='blue')
+    plt.xticks(tick_positions, tick_labels)
+    for s in range(nspin):
+        color, linestyle, label = spin_styles[s]
+        for i in range(nbands):
+            y_vals = [dic[x][s][i] for x in x_values]
+            plt.plot(x_values, y_vals, color=color, linestyle=linestyle,
+                     label=label if (nspin == 2 and i == 0) else None)
     # vertical lines in High Symmetries
     for pos in tick_positions:
         plt.axvline(x=pos, color='gray', linestyle='--', linewidth=1)
@@ -220,6 +266,8 @@ def plot(dic,custom_ticks):
     plt.ylim(-20, 20)
     plt.ylabel("Energy")
     plt.grid(True)
+    if nspin == 2:
+        plt.legend()
     plt.show()
 
 
@@ -245,6 +293,10 @@ def main():
     parser.add_argument("--manual-value", type=float,
                         help="Custom energy shift value (required if --shift manual is used).")
 
+    parser.add_argument("--gap-tol", type=float, default=0.01,
+                        help="Energy tolerance in eV below which a gap is classified as Metallic "
+                             "(default: 0.01).")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -269,11 +321,12 @@ def main():
 
     # Condition to shift the band structure
     print("\n[INFO] Read file ...")
-    fermi_energy,high_sym,dic_bands=read_data(args.input_file)
+    fermi_energy,high_sym,dic_bands,nspin=read_data(args.input_file)
     print("[INFO] Calculate VBM and CBM ...")
-    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = cbm_vbm(fermi_energy, high_sym, dic_bands)
-    write_analysis_report(fermi_energy, vbm, cbm, vbm_k, cbm_k, band_gap, gap_type)
+    result = cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, args.gap_tol)
+    write_analysis_report(fermi_energy, result, nspin)
     print("[INFO] Output saved to bands_analysis.txt")
+    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
 
     if args.shift == "vbm":
         rshift = vbm
@@ -287,9 +340,9 @@ def main():
     print("[WARNING] \n")
 
     shifted_bands = shift_bands(dic_bands, rshift)
-    write_gnuplot_bands(shifted_bands)
-    plot(shifted_bands, high_sym)
-    plot_gnuplot(high_sym)
+    write_gnuplot_bands(shifted_bands, nspin)
+    plot(shifted_bands, high_sym, nspin)
+    plot_gnuplot(high_sym, nspin)
 
     print("\n[INFO] Complete job!") 
     print("\n"+"-"*60)

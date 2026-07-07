@@ -88,6 +88,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/siesta.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta_edge_nbands21.bands" "$TEST_DIR/"
+cp "$FIXTURE_DIR/siesta_spin2.bands" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -156,6 +157,34 @@ echo "Verifying repeated Gamma labels (start and end of path) both render clean"
 check_contains "Gap type" bands_analysis.txt
 check_contains '{/Symbol G}' bands.gplot
 check_not_contains "'GAMMA'" bands.gplot
+
+
+# --- 4b. Synthetic nspin=2 fixture: half-metallic (spin-up metallic, spin-down 2 eV gap) ---
+echo -e "\n--- Testing spin-polarized bands (nspin=2, half-metallic synthetic fixture) ---"
+rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt
+stb-bands --file siesta_spin2.bands --shift fermi --no-intro > log_spin2.txt 2>&1
+check_exit_code $? 0
+check_success bands_gnuplot.dat
+check_success bands.gplot
+check_success bands_analysis.txt
+
+echo "Verifying bands_gnuplot.dat has 3 columns (k, spin-up, spin-down)"
+check_column_count bands_gnuplot.dat 3
+
+echo "Verifying bands.gplot has one plot command per spin channel"
+check_contains 'using 1:2 with lines ls 1 title "Spin Up"' bands.gplot
+check_contains 'using 1:3 with lines ls 2 title "Spin Down"' bands.gplot
+
+echo "Verifying bands_analysis.txt reports per-spin channel + half-metallic character"
+check_contains "Per-spin channel" bands_analysis.txt
+check_contains "Spin Up" bands_analysis.txt
+check_contains "Spin Down" bands_analysis.txt
+check_contains "Half-metallic: Yes" bands_analysis.txt
+
+echo "Testing: --gap-tol tightened below the synthetic up-channel gap (no longer half-metallic)"
+stb-bands --file siesta_spin2.bands --shift fermi --gap-tol 0.0001 --no-intro > log_spin2_tol.txt 2>&1
+check_exit_code $? 0
+check_contains "Half-metallic: No" bands_analysis.txt
 
 
 # --- 5. Error and robustness cases ---

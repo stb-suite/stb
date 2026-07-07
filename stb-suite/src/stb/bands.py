@@ -22,14 +22,18 @@ import argparse
 import matplotlib.pyplot as plt
 from stb.core.cli import COLORS, color_text, show_intro
 
+def _is_gamma(label):
+    clean_text = re.sub(r'[^a-zA-Z\s]', '', label).lower()
+    return "gamma" in clean_text.split()
+
 def plot_gnuplot(high_sym):
 ######################### PDF Plot
-    #verify gamma symbol and change for symbol
-    for i in range(len(high_sym)):
-        clean_text = re.sub(r'[^a-zA-Z\s]', '', high_sym[i][1]).lower()
-        words = clean_text.split()
-        if "gamma" in words:
-            high_sym[i][1]="'{/Symbol G}'"
+    # Build gnuplot-formatted labels (Gamma -> {/Symbol G}) in a local list
+    # instead of mutating the caller's high_sym. xticsl below already wraps
+    # each label in its own quotes, so no quotes are added here.
+    gplot_labels = [
+        "{/Symbol G}" if _is_gamma(label) else label for _, label in high_sym
+    ]
     # Plot
     fileout=[]
     fileout.append('# Set terminal and output\n')
@@ -54,7 +58,7 @@ def plot_gnuplot(high_sym):
     fileout.append('# Tics and formatting\n')
     xticsl="set xtics ("
     for i in range(len(high_sym)):
-        xticsl=xticsl+f' "{high_sym[i][1]}" {float(high_sym[i][0])} , '
+        xticsl=xticsl+f' "{gplot_labels[i]}" {float(high_sym[i][0])} , '
     xticsl=xticsl[:-2]
     xticsl=xticsl+')  font "Arial,28"\n'
     fileout.append(xticsl)
@@ -89,33 +93,50 @@ def plot_gnuplot(high_sym):
     return
 
 def read_data(file_path = "siesta.bands"):
-    # Init vectors and dictionary
-    high_sym=[]
-    dic_bands={}
-    # Read file
+    # SIESTA .bands format:
+    #   line 0: Fermi energy
+    #   line 1: kmin kmax
+    #   line 2: emin emax
+    #   line 3: nbands nspin nk
+    #   body:   nk k-blocks (first line has the k value, then as many
+    #           continuation lines as needed to reach nbands*nspin values)
+    #   footer: a line with the count of high-symmetry points, followed by
+    #           that many "position 'LABEL'" lines
     with open(file_path, "r") as f:
-        fermi_energy = float(f.readlines()[0].split()[0])
+        lines = f.readlines()
 
-    with open(file_path, "r") as f:
-        lines = f.readlines()[2:]
-        for i, line in enumerate(lines):
-            if i >1:
-                parts = line.split()
-                if len(parts) == 1:
-                    # count of high-symmetry points, not band data
-                    continue
-                elif line.startswith("     "):  #Identify blank space
-                    dic_bands[key].append(parts)
-                elif len(parts)<=2:
-                    high_sym.append(parts)
-                else:
-                    key=float(line.split()[0])
-                    dic_bands.setdefault(key,[])
-                    dic_bands[key].append(line.split()[1:])
-    # convert the dictionary to float
-    for key in dic_bands:
-        dic_bands[key]=np.array([elem for sublista in dic_bands[key] for elem in sublista],dtype=float)
-    return fermi_energy,high_sym, dic_bands
+    fermi_energy = float(lines[0].split()[0])
+    nbands, nspin, nk = (int(x) for x in lines[3].split())
+    values_per_k = nbands * nspin
+
+    dic_bands = {}
+    idx = 4
+    for _ in range(nk):
+        tokens = lines[idx].split()
+        key = float(tokens[0])
+        values = tokens[1:]
+        idx += 1
+        while len(values) < values_per_k:
+            values.extend(lines[idx].split())
+            idx += 1
+        dic_bands[key] = np.array(values, dtype=float)
+
+    # Whatever remains is deterministically the high-symmetry footer: we
+    # already consumed exactly nk k-blocks by token count, so there is no
+    # ambiguity left between a continuation line and the count line.
+    while idx < len(lines) and not lines[idx].split():
+        idx += 1
+    n_high_sym = int(lines[idx].split()[0])
+    idx += 1
+
+    high_sym = []
+    for _ in range(n_high_sym):
+        parts = lines[idx].split()
+        label = parts[1].strip("'\"") if len(parts) > 1 else ""
+        high_sym.append([parts[0], label])
+        idx += 1
+
+    return fermi_energy, high_sym, dic_bands
 
 def write_gnuplot_bands(dic_bands):
     # define initial key
@@ -133,18 +154,45 @@ def cbm_vbm(fermi_energy,high_sym,dic_bands):
     # Start value as infinity
     vbm = -np.inf
     cbm = np.inf
-    below_fermi=[]
-    above_fermi=[]
-    for band in dic_bands.values():
-        below_fermi = np.append(below_fermi,band[band <= fermi_energy])
-        above_fermi = np.append(above_fermi,band[band > fermi_energy])
-    if len(below_fermi) > 0:
-        vbm = max(vbm, np.nanmax(below_fermi))
-    if len(above_fermi) > 0:
-        cbm = min(cbm, np.nanmin(above_fermi))
+    vbm_k = None
+    cbm_k = None
+    for k, band in dic_bands.items():
+        below = band[band <= fermi_energy]
+        above = band[band > fermi_energy]
+        if below.size > 0:
+            local_vbm = np.nanmax(below)
+            if local_vbm > vbm:
+                vbm = local_vbm
+                vbm_k = k
+        if above.size > 0:
+            local_cbm = np.nanmin(above)
+            if local_cbm < cbm:
+                cbm = local_cbm
+                cbm_k = k
     band_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
-    print(f"[INFO] Fermi: {fermi_energy} \n[INFO] VBM: {vbm:.6f} \n[INFO] CBM: {cbm:.6f}\n[INFO] Band Gap in lines: {band_gap:.6f}")
-    return vbm,cbm
+    if band_gap == 0.0:
+        gap_type = "Metallic"
+    elif vbm_k == cbm_k:
+        gap_type = "Direct"
+    else:
+        gap_type = "Indirect"
+    print(f"[INFO] Fermi: {fermi_energy} \n[INFO] VBM: {vbm:.6f} (k={vbm_k}) \n[INFO] CBM: {cbm:.6f} (k={cbm_k})\n[INFO] Band Gap: {band_gap:.6f} eV ({gap_type})")
+    return vbm, cbm, vbm_k, cbm_k, band_gap, gap_type
+
+def write_analysis_report(fermi_energy, vbm, cbm, vbm_k, cbm_k, band_gap, gap_type):
+    lines = [
+        "BAND STRUCTURE ANALYSIS REPORT - STB Suite",
+        "-"*60,
+        f"Fermi energy : {fermi_energy:.6f} eV",
+        f"VBM          : {vbm:.6f} eV (k = {vbm_k})",
+        f"CBM          : {cbm:.6f} eV (k = {cbm_k})",
+        f"Band gap     : {band_gap:.6f} eV",
+        f"Gap type     : {gap_type}",
+    ]
+    content = "\n".join(lines) + "\n"
+    with open("bands_analysis.txt", "w") as f:
+        f.write(content)
+    return content
 
 def shift_bands(dic, val):
     return {k: [v - val for v in list] for k, list in dic.items()}
@@ -159,7 +207,7 @@ def plot(dic,custom_ticks):
             y_series[i].append(dic[x][i])
     # Organize the high symmetries points
     tick_positions = [float(t[0]) for t in custom_ticks]
-    tick_labels = [t[1] for t in custom_ticks]
+    tick_labels = ["Γ" if _is_gamma(t[1]) else t[1] for t in custom_ticks]
     # plot
     plt.figure(figsize=(8, 6))
     for i, y_vals in enumerate(y_series):
@@ -223,7 +271,9 @@ def main():
     print("\n[INFO] Read file ...")
     fermi_energy,high_sym,dic_bands=read_data(args.input_file)
     print("[INFO] Calculate VBM and CBM ...")
-    vbm,cbm=cbm_vbm(fermi_energy,high_sym,dic_bands)
+    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = cbm_vbm(fermi_energy, high_sym, dic_bands)
+    write_analysis_report(fermi_energy, vbm, cbm, vbm_k, cbm_k, band_gap, gap_type)
+    print("[INFO] Output saved to bands_analysis.txt")
 
     if args.shift == "vbm":
         rshift = vbm
@@ -235,12 +285,12 @@ def main():
         rshift = args.manual_value
     print("[INFO] Write files...")
     print("[WARNING] \n")
-    
+
     shifted_bands = shift_bands(dic_bands, rshift)
     write_gnuplot_bands(shifted_bands)
     plot(shifted_bands, high_sym)
     plot_gnuplot(high_sym)
-    
+
     print("\n[INFO] Complete job!") 
     print("\n"+"-"*60)
     print(color_text("Bands found! But still no sign of Metallica.\n\n", 'bold'))

@@ -8,19 +8,11 @@
 
 VERSION = "1.9.1"
 
-import os
-import sys
-import warnings
-import subprocess
-from time import sleep
 import argparse
-import textwrap
-from typing import List, Dict
 import numpy as np
 import re
-import argparse
 import matplotlib.pyplot as plt
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import color_text, show_intro
 from stb.core.deps import require_sisl
 
 def _is_gamma(label):
@@ -199,6 +191,11 @@ def _band_extrema(values_by_k, fermi_energy, gap_tol):
             if local_cbm < cbm:
                 cbm = local_cbm
                 cbm_k = k
+    if vbm_k is None or cbm_k is None:
+        raise ValueError(
+            f"No occupied/empty states found on {'both sides' if vbm_k is None and cbm_k is None else ('the occupied side' if vbm_k is None else 'the empty side')} "
+            f"of Fermi energy {fermi_energy:.6f} eV -- check that this Fermi energy actually matches the eigenvalue file."
+        )
     band_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
     if band_gap < gap_tol:
         gap_type = "Metallic"
@@ -232,7 +229,7 @@ def cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, gap_tol=0.01):
 
     return result
 
-def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01):
+def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01, mesh_warnings=None):
     vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
     lines = [
         "BAND STRUCTURE ANALYSIS REPORT - STB Suite",
@@ -257,7 +254,13 @@ def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol
         diff = m_gap - band_gap
         lines.append("")
         lines.append("== Mesh (k-grid) vs Line (k-path) comparison ==")
+        for w in (mesh_warnings or []):
+            lines.append(f"[WARNING] {w}")
+        lines.append(f"Line VBM (k-path)  : {vbm:.6f} eV (k = {vbm_k})")
+        lines.append(f"Line CBM (k-path)  : {cbm:.6f} eV (k = {cbm_k})")
         lines.append(f"Line gap (k-path)  : {band_gap:.6f} eV ({gap_type})")
+        lines.append(f"Mesh VBM (k-grid)  : {m_vbm:.6f} eV (k-index = {m_vbm_k})")
+        lines.append(f"Mesh CBM (k-grid)  : {m_cbm:.6f} eV (k-index = {m_cbm_k})")
         lines.append(f"Mesh gap (k-grid)  : {m_gap:.6f} eV ({m_gap_type})")
         lines.append(f"Difference (mesh - line): {diff:.6f} eV")
         if abs(diff) < gap_tol:
@@ -270,6 +273,15 @@ def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol
             lines.append("[WARNING] Mesh gap is larger than the line gap: the k-mesh may be too "
                           "coarse to capture the extrema found on the path. Consider a denser "
                           "--eig-file mesh.")
+
+        if mesh_result["spins"]:
+            lines.append("")
+            lines.append("== Mesh per-spin channel ==")
+            for s, (svbm, scbm, svbm_k, scbm_k, sgap, sgap_type) in enumerate(mesh_result["spins"]):
+                spin_name = "Spin Up" if s == 0 else "Spin Down"
+                lines.append(f"{spin_name:<10}: VBM={svbm:.6f} eV (k-index={svbm_k})  CBM={scbm:.6f} eV (k-index={scbm_k})  Gap={sgap:.6f} eV ({sgap_type})")
+            lines.append("")
+            lines.append(f"Mesh half-metallic: {'Yes' if mesh_result['half_metallic'] else 'No'}")
 
     content = "\n".join(lines) + "\n"
     with open("bands_analysis.txt", "w") as f:
@@ -314,7 +326,9 @@ def main():
         description="Process the band structure data.",
         epilog="Example usage:\n"
                "  stb_bands --file siesta.bands --shift fermi\n"
-               "  stb_bands --file siesta.bands --shift manual --manual-value 0.5",
+               "  stb_bands --file siesta.bands --shift manual --manual-value 0.5\n"
+               "  stb_bands --file siesta.bands --shift fermi --gap-tol 0.05\n"
+               "  stb_bands --file siesta.bands --shift fermi --eig-file siesta.EIG",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -369,19 +383,26 @@ def main():
     result = cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, args.gap_tol)
 
     mesh_result = None
+    mesh_warnings = []
     if args.eig_file:
         print("[INFO] Read --eig-file (k-mesh) ...")
         fermi_mesh, dic_mesh, nspin_mesh = read_eig_mesh(args.eig_file)
         if abs(fermi_mesh - fermi_energy) > 1e-3:
-            print(f"[WARNING] Fermi energy mismatch between --file ({fermi_energy:.6f} eV) and "
-                  f"--eig-file ({fermi_mesh:.6f} eV); the two inputs may be from different calculations.")
+            mesh_warnings.append(
+                f"Fermi energy mismatch between --file ({fermi_energy:.6f} eV) and "
+                f"--eig-file ({fermi_mesh:.6f} eV); the two inputs may be from different calculations."
+            )
         if nspin_mesh != nspin:
-            print(f"[WARNING] nspin mismatch between --file (nspin={nspin}) and --eig-file "
-                  f"(nspin={nspin_mesh}); mesh comparison uses combined values only.")
+            mesh_warnings.append(
+                f"nspin mismatch between --file (nspin={nspin}) and --eig-file "
+                f"(nspin={nspin_mesh}); mesh comparison uses combined values only."
+            )
+        for w in mesh_warnings:
+            print(f"[WARNING] {w}")
         print("[INFO] Calculate mesh (k-grid) VBM and CBM ...")
         mesh_result = cbm_vbm(fermi_mesh, [], dic_mesh, nspin_mesh, args.gap_tol)
 
-    write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol)
+    write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol, mesh_warnings)
     print("[INFO] Output saved to bands_analysis.txt")
     vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
 

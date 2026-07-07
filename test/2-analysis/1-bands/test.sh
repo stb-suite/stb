@@ -90,6 +90,8 @@ cp "$FIXTURE_DIR/siesta.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta_edge_nbands21.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta_spin2.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/Sn3O4.EIG" "$TEST_DIR/"
+cp "$FIXTURE_DIR/siesta_spin2_mesh.EIG" "$TEST_DIR/"
+cp "$FIXTURE_DIR/siesta_bad_fermi.bands" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -200,7 +202,11 @@ check_success bands_analysis.txt
 
 echo "Verifying bands_analysis.txt reports the mesh vs line comparison"
 check_contains "Mesh (k-grid) vs Line (k-path) comparison" bands_analysis.txt
+check_contains "Line VBM (k-path)  : -4.471500 eV (k = 0.744142)" bands_analysis.txt
+check_contains "Line CBM (k-path)  : -2.333400 eV (k = 1.343953)" bands_analysis.txt
 check_contains "Line gap (k-path)  : 2.138100 eV" bands_analysis.txt
+check_contains "Mesh VBM (k-grid)  : -4.474676 eV (k-index = 42)" bands_analysis.txt
+check_contains "Mesh CBM (k-grid)  : -2.372184 eV (k-index = 74)" bands_analysis.txt
 check_contains "Mesh gap (k-grid)  : 2.102492 eV" bands_analysis.txt
 check_contains "Mesh gap is smaller than the line gap" bands_analysis.txt
 
@@ -208,6 +214,20 @@ echo "Testing: --file without --eig-file has no mesh section (unchanged behavior
 rm -f bands_analysis.txt
 stb-bands --file siesta.bands --shift fermi --no-intro > log_no_eig.txt 2>&1
 check_not_contains "Mesh (k-grid)" bands_analysis.txt
+
+echo "Testing: --eig-file with a spin-polarized mesh reports the mesh per-spin section too"
+rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt
+stb-bands --file siesta_spin2.bands --eig-file siesta_spin2_mesh.EIG --shift fermi --no-intro > log_eig_spin.txt 2>&1
+check_exit_code $? 0
+check_contains "Mesh per-spin channel" bands_analysis.txt
+check_contains "Mesh half-metallic: Yes" bands_analysis.txt
+
+
+# --- 4d. Robustness: Fermi energy outside the eigenvalue range ---
+echo -e "\n--- Testing Fermi energy outside the eigenvalue range (should error, not report 'inf') ---"
+stb-bands --file siesta_bad_fermi.bands --shift fermi --no-intro > log_bad_fermi.txt 2>&1
+check_exit_code $? 1
+check_contains "No occupied/empty states found" log_bad_fermi.txt
 
 
 # --- 5. Error and robustness cases ---

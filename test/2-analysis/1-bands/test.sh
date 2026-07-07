@@ -89,6 +89,7 @@ mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/siesta.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta_edge_nbands21.bands" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta_spin2.bands" "$TEST_DIR/"
+cp "$FIXTURE_DIR/Sn3O4.EIG" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -185,6 +186,28 @@ echo "Testing: --gap-tol tightened below the synthetic up-channel gap (no longer
 stb-bands --file siesta_spin2.bands --shift fermi --gap-tol 0.0001 --no-intro > log_spin2_tol.txt 2>&1
 check_exit_code $? 0
 check_contains "Half-metallic: No" bands_analysis.txt
+
+
+# --- 4c. --eig-file: mesh (k-grid) vs line (k-path) gap comparison ---
+# Sn3O4.EIG is the same SIESTA calculation as siesta.bands (same Fermi
+# energy, same nbands/nspin) but samples the full SCF k-mesh (89 points)
+# instead of just the high-symmetry path.
+echo -e "\n--- Testing --eig-file (mesh vs line gap comparison) ---"
+rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt
+stb-bands --file siesta.bands --eig-file Sn3O4.EIG --shift fermi --no-intro > log_eig.txt 2>&1
+check_exit_code $? 0
+check_success bands_analysis.txt
+
+echo "Verifying bands_analysis.txt reports the mesh vs line comparison"
+check_contains "Mesh (k-grid) vs Line (k-path) comparison" bands_analysis.txt
+check_contains "Line gap (k-path)  : 2.138100 eV" bands_analysis.txt
+check_contains "Mesh gap (k-grid)  : 2.102492 eV" bands_analysis.txt
+check_contains "Mesh gap is smaller than the line gap" bands_analysis.txt
+
+echo "Testing: --file without --eig-file has no mesh section (unchanged behavior)"
+rm -f bands_analysis.txt
+stb-bands --file siesta.bands --shift fermi --no-intro > log_no_eig.txt 2>&1
+check_not_contains "Mesh (k-grid)" bands_analysis.txt
 
 
 # --- 5. Error and robustness cases ---

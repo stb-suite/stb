@@ -86,6 +86,35 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
         else:
             print("Warning: <fermi_energy> tag not found. Using 0.0 eV as default Fermi level.", file=sys.stderr)
 
+        # --- 1b. Get nspin: each <orbital>'s <data> holds nspin values per
+        # energy point, interleaved (e0-spin1, e0-spin2, e1-spin1, ...), not
+        # one block of num_energy_points values -- matches sisl's own reader
+        # (pdosSileSiesta.read_data(): "DOS = ...reshape(-1, nspin)"). A
+        # fixed nspin=1 assumption here silently drops all PDOS data on any
+        # spin-polarized/non-collinear file (every orbital's data length
+        # would mismatch num_energy_points and get skipped).
+        nspin_element = root.find('nspin')
+        nspin = 1
+        if nspin_element is not None:
+            try:
+                nspin = int(nspin_element.text.strip())
+            except (TypeError, ValueError):
+                print("Warning: <nspin> tag could not be parsed. Assuming nspin=1.", file=sys.stderr)
+        else:
+            print("Warning: <nspin> tag not found. Assuming nspin=1.", file=sys.stderr)
+
+        if nspin == 1:
+            spin_suffixes = ['']
+        elif nspin == 2:
+            spin_suffixes = ['_up', '_down']
+            print(f"Detected nspin=2 (spin-polarized); exporting {spin_suffixes} columns per orbital.")
+        else:
+            spin_suffixes = [f'_s{s + 1}' for s in range(nspin)]
+            print(f"Warning: nspin={nspin} (non-collinear/SOC) -- spin components exported "
+                  f"as raw {spin_suffixes} without physical relabeling (SIESTA orders these "
+                  "as total/Mx/My/Mz); consult your SIESTA documentation for the exact "
+                  "convention.", file=sys.stderr)
+
         # --- 2. Determine Energy Shift ---
         shift_value = 0.0
         if shift_str.lower() == 'fermi':
@@ -103,25 +132,25 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
         energy_values_element = root.find('energy_values')
         if energy_values_element is None:
             print("Error: <energy_values> tag not found. Cannot proceed.", file=sys.stderr)
-            return
-        
+            sys.exit(1)
+
         energies_str = energy_values_element.text.strip()
         energy_values = parse_data_string(energies_str)
         energies_shifted = energy_values - shift_value
         num_energy_points = len(energies_shifted)
-        
+
         if num_energy_points == 0:
             print("Error: No energy points found. Cannot proceed.", file=sys.stderr)
-            return
-            
+            sys.exit(1)
+
         print(f"Found {num_energy_points} energy points.")
 
         # --- 4. Find and Process Orbital Data ---
         all_orbital_tags = root.findall('orbital')
-        
+
         if not all_orbital_tags:
             print("Error: No <orbital> tags found in the XML file.", file=sys.stderr)
-            return
+            sys.exit(1)
 
         print(f"Found {len(all_orbital_tags)} <orbital> tags to process...")
         print(f"Using orbital projection mode: '{projection_mode}'")
@@ -130,7 +159,9 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
         atom_data = {}
         all_species = set()
         processed_atoms_count = 0
-        
+        skipped_lm_orbitals = 0
+        skipped_l_values = set()
+
         # --- MODIFIED: This loop is updated for dynamic orbital handling ---
         for orbital in all_orbital_tags:
             try:
@@ -138,11 +169,11 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
                 atom_species = orbital.attrib.get('species', 'Unknown')
                 l_val = int(orbital.attrib.get('l', -1))
                 m_val = int(orbital.attrib.get('m', 999)) # Get m value, 999 as invalid flag
-                
+
                 if atom_index == -1:
                     print(f"Warning: Orbital found with no 'atom_index' attribute. Skipping.", file=sys.stderr)
                     continue
-                
+
                 # --- MODIFIED: Choose orbital name based on projection mode ---
                 orbital_name = None
                 if projection_mode == 'l':
@@ -150,8 +181,15 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
                 elif projection_mode == 'ml':
                     orbital_name = get_detailed_orbital_name(l_val, m_val)
 
-                # Skip if orbital is not one we want to process (e.g., l > 3 or invalid m)
+                # Skip if orbital is not one we want to process (l > 3, i.e.
+                # g-orbitals and beyond, or an m outside the (l,m) map).
+                # Counted (not silently dropped) so the excluded fraction of
+                # the basis is visible -- a summed 'total' DOS built only
+                # from s/p/d/f will otherwise look complete while quietly
+                # missing any g-orbital contribution.
                 if orbital_name is None:
+                    skipped_lm_orbitals += 1
+                    skipped_l_values.add(l_val)
                     continue
 
                 # --- MODIFIED: Initialize atom data dynamically ---
@@ -165,27 +203,36 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
                 if data_element is not None:
                     data_text = data_element.text
 
-                orbital_pdos_data = parse_data_string(data_text)
-                
-                if len(orbital_pdos_data) == num_energy_points:
-                    # --- MODIFIED: Initialize orbital array if not present ---
+                raw_pdos_data = parse_data_string(data_text)
+                expected_len = num_energy_points * nspin
+
+                if len(raw_pdos_data) == expected_len:
+                    # nspin values per energy point, interleaved -- see the
+                    # nspin-detection comment above. Shape (ne, nspin) even
+                    # for nspin=1, so downstream aggregation/output code is
+                    # uniform regardless of spin polarization.
+                    orbital_pdos_data = raw_pdos_data.reshape(num_energy_points, nspin)
                     if orbital_name not in atom_data[atom_index]:
-                        atom_data[atom_index][orbital_name] = np.zeros(num_energy_points)
-                        
+                        atom_data[atom_index][orbital_name] = np.zeros((num_energy_points, nspin))
+
                     atom_data[atom_index][orbital_name] += orbital_pdos_data
                 else:
                     print(f"Warning: Data mismatch for atom {atom_index}, l={l_val}. Skipping orbital.", file=sys.stderr)
-                    print(f"Expected {num_energy_points} points, found {len(orbital_pdos_data)}", file=sys.stderr)
+                    print(f"Expected {expected_len} points (nspin={nspin}), found {len(raw_pdos_data)}", file=sys.stderr)
 
             except Exception as e:
                 print(f"Error processing orbital {orbital.attrib.get('index', 'N/A')}: {e}", file=sys.stderr)
         
         if not atom_data:
             print("Error: No valid atom data was processed.", file=sys.stderr)
-            return
+            sys.exit(1)
             
         print(f"Successfully processed data for {processed_atoms_count} atoms.")
         print(f"Found species: {sorted(list(all_species))}")
+        if skipped_lm_orbitals:
+            print(f"Warning: skipped {skipped_lm_orbitals} orbital(s) with l={sorted(skipped_l_values)} "
+                  "(l > 3, i.e. g-orbitals or beyond, are not supported) or an unrecognized m -- "
+                  "excluded from all output DOS.", file=sys.stderr)
 
         # --- 5. Prepare and Write Output Data ---
         
@@ -203,30 +250,45 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
         for orb in sorted(list(all_orbital_names)):
             if orb not in sorted_columns:
                 sorted_columns.append(orb)
-        
-        print(f"Will generate files with columns: {['Energy(eV)'] + sorted_columns}")
+
+        # 5b2. Expand each base orbital column (e.g. 'p') into one column per
+        # spin channel (e.g. 'p_up', 'p_down') -- a no-op for nspin=1, where
+        # spin_suffixes == [''].
+        spin_columns = [f"{col}{suf}" for col in sorted_columns for suf in spin_suffixes]
+
+        def _orbital_array(atom_entry, orb_name):
+            # (num_energy_points, nspin) array, zeros if this atom has no
+            # data for orb_name (e.g. an atom with no d-orbitals in the
+            # basis when other atoms do).
+            arr = atom_entry.get(orb_name)
+            if arr is None:
+                return np.zeros((num_energy_points, nspin))
+            return arr
+
+        print(f"Will generate files with columns: {['Energy(eV)'] + spin_columns}")
 
         # 5c. Create dynamic header and column list for pandas
         header_parts = [f"#{'Energy(eV)':<14}"]
-        header_parts.extend([f'{col:<12}' for col in sorted_columns])
+        header_parts.extend([f'{col:<12}' for col in spin_columns])
         header_str = "\t".join(header_parts) + "\n"
-        
-        all_df_columns = ['Energy(eV)'] + sorted_columns
+
+        all_df_columns = ['Energy(eV)'] + spin_columns
         float_format_str = '%14.6E'
-        
+
         # --- Mode 1: Total DOS ---
         if 'total' in dos_types:
             # Initialize a dictionary for total DOS
-            total_dos = {col: np.zeros(num_energy_points) for col in sorted_columns}
+            total_dos = {col: np.zeros(num_energy_points) for col in spin_columns}
 
             for atom_index in atom_data:
                 for orb_name in sorted_columns:
-                    # Use .get() to safely add, defaulting to 0 if orbital doesn't exist on an atom
-                    total_dos[orb_name] += atom_data[atom_index].get(orb_name, 0.0)
-            
+                    arr = _orbital_array(atom_data[atom_index], orb_name)
+                    for s, suf in enumerate(spin_suffixes):
+                        total_dos[f"{orb_name}{suf}"] += arr[:, s]
+
             total_dos['Energy(eV)'] = energies_shifted
             df_total = pd.DataFrame(total_dos)
-            
+
             output_file_total = "dos_total.dat"
             with open(output_file_total, 'w') as f:
                 f.write(header_str)
@@ -240,24 +302,26 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
             output_dir_atoms = "dos_per_atom"
             if not os.path.exists(output_dir_atoms):
                 os.makedirs(output_dir_atoms)
-                
+
             for atom_index in sorted(atom_data.keys()):
                 species = atom_data[atom_index]['species']
-                
+
                 # Build data for this atom's DataFrame
                 atom_dos_data = {'Energy(eV)': energies_shifted}
                 for col in sorted_columns:
-                    atom_dos_data[col] = atom_data[atom_index].get(col, np.zeros(num_energy_points))
-                
+                    arr = _orbital_array(atom_data[atom_index], col)
+                    for s, suf in enumerate(spin_suffixes):
+                        atom_dos_data[f"{col}{suf}"] = arr[:, s]
+
                 df_atom = pd.DataFrame(atom_dos_data)
-                
+
                 output_file_atom = os.path.join(output_dir_atoms, f"{species}_{atom_index}.dat")
                 with open(output_file_atom, 'w') as f:
                     f.write(header_str)
                 df_atom.to_csv(output_file_atom, sep='\t', index=False, header=False, mode='a',
                                columns=all_df_columns, # Use dynamic columns
                                float_format=float_format_str)
-                
+
             print(f"Saved DOS per atom to '{output_dir_atoms}' directory.")
 
         # --- Mode 3: DOS per Species ---
@@ -269,13 +333,15 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
             species_dos = {}
             for species_name in sorted(list(all_species)):
                 # Initialize dict for each species with all possible columns
-                species_dos[species_name] = {col: np.zeros(num_energy_points) for col in sorted_columns}
-                
+                species_dos[species_name] = {col: np.zeros(num_energy_points) for col in spin_columns}
+
             for atom_index in atom_data:
                 species = atom_data[atom_index]['species']
                 if species in species_dos:
                     for col in sorted_columns:
-                        species_dos[species][col] += atom_data[atom_index].get(col, 0.0)
+                        arr = _orbital_array(atom_data[atom_index], col)
+                        for s, suf in enumerate(spin_suffixes):
+                            species_dos[species][f"{col}{suf}"] += arr[:, s]
 
             for species_name in species_dos:
                 # Build DataFrame for this species
@@ -296,12 +362,15 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
     except ET.ParseError as e:
         print(f"Error parsing XML file '{input_file}': {e}", file=sys.stderr)
         print("The file might be corrupted or not well-formed XML.", file=sys.stderr)
+        sys.exit(1)
     except FileNotFoundError:
         print(f"Error: File not found at '{input_file}'", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
+        sys.exit(1)
 
 def main():
 

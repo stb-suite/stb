@@ -1519,11 +1519,15 @@ def run_bands_analyzer() -> None:
     print("="*60 + "\n")
     
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input bands file (e.g., siesta.bands): ")
-    while not os.path.isfile(input_file):
-        print(color_text("File not found!", 'red'))
-        input_file = get_input("Input bands file: ")
-    
+    label = get_input("SIESTA label (e.g. 'siesta' for siesta.bands [+ siesta.EIG if present]): ")
+    while not os.path.isfile(f"{label}.bands"):
+        print(color_text(f"File '{label}.bands' not found!", 'red'))
+        label = get_input("SIESTA label: ")
+    if os.path.isfile(f"{label}.EIG"):
+        print(color_text(f"-> Found '{label}.EIG', mesh (k-grid) gap comparison will be included.", 'green'))
+    else:
+        print(color_text(f"-> No '{label}.EIG' found, mesh (k-grid) gap comparison will be skipped.", 'yellow'))
+
     shift_options = {
         '1': ('vbm', "Valence Band Maximum"),
         '2': ('cbm', "Conduction Band Minimum"),
@@ -1541,8 +1545,8 @@ def run_bands_analyzer() -> None:
         choice = get_input("Select reference (1-4): ")
     
     shift_type, _ = shift_options[choice]
-    args = ["--file", input_file, "--shift", shift_type, "--no-intro"]
-    
+    args = ["--label", label, "--shift", shift_type, "--no-intro"]
+
     if shift_type == "manual":
         manual_value = get_float_input("Enter custom shift value: ")
         args.extend(["--manual-value", str(manual_value)])

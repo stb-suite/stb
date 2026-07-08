@@ -9,6 +9,8 @@
 VERSION = "1.9.1"
 
 import argparse
+import os
+from datetime import datetime
 import numpy as np
 import re
 import matplotlib.pyplot as plt
@@ -141,7 +143,7 @@ def read_data(file_path = "siesta.bands"):
 
     return fermi_energy, high_sym, dic_bands, nspin
 
-def read_eig_mesh(eig_file):
+def read_eig_mesh(eig_file, kp_file=None):
     # A SIESTA .EIG file holds the eigenvalues at every k-point of the SCF
     # k-mesh (not just the high-symmetry path in .bands), which is what a
     # gap comparison against the path needs. Reuse sisl's own reader
@@ -156,7 +158,20 @@ def read_eig_mesh(eig_file):
     # Same (nspin, nbands)-per-k convention as read_data(); add Ef back so
     # values are absolute eV, matching the rest of this module.
     dic_mesh = {ik: eigs[:, ik, :] + fermi_energy for ik in range(nk)}
-    return fermi_energy, dic_mesh, nspin
+
+    kpoints = None
+    if kp_file:
+        # The .EIG file itself has no k-vectors, only a bare mesh index --
+        # the .KP file (same calculation) holds the actual Cartesian
+        # (kx, ky, kz), in 1/Ang (sisl converts from the file's raw 1/Bohr).
+        kp_sile = sisl.get_sile(kp_file)
+        kpoints, _weights = kp_sile.read_data()
+        if kpoints.shape[0] != nk:
+            raise ValueError(
+                f"--kp-file '{kp_file}' has {kpoints.shape[0]} k-points but "
+                f"'{eig_file}' has {nk} -- they must be from the same calculation."
+            )
+    return fermi_energy, dic_mesh, nspin, kpoints
 
 def write_gnuplot_bands(dic_bands, nspin):
     # define initial key
@@ -178,6 +193,10 @@ def _band_extrema(values_by_k, fermi_energy, gap_tol):
     cbm = np.inf
     vbm_k = None
     cbm_k = None
+    # Direct gap: the smallest CBM(k) - VBM(k) at one and the same k --
+    # tracked alongside the (possibly different-k) global VBM/CBM below.
+    direct_gap = np.inf
+    direct_k = None
     for k, band in values_by_k.items():
         below = band[band <= fermi_energy]
         above = band[band > fermi_energy]
@@ -191,80 +210,161 @@ def _band_extrema(values_by_k, fermi_energy, gap_tol):
             if local_cbm < cbm:
                 cbm = local_cbm
                 cbm_k = k
+            if below.size > 0:
+                local_gap = local_cbm - local_vbm
+                if local_gap < direct_gap:
+                    direct_gap = local_gap
+                    direct_k = k
     if vbm_k is None or cbm_k is None:
         raise ValueError(
             f"No occupied/empty states found on {'both sides' if vbm_k is None and cbm_k is None else ('the occupied side' if vbm_k is None else 'the empty side')} "
             f"of Fermi energy {fermi_energy:.6f} eV -- check that this Fermi energy actually matches the eigenvalue file."
         )
-    band_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
-    if band_gap < gap_tol:
+    # Indirect (= fundamental) gap: CBM - VBM regardless of whether they sit
+    # at the same k. Always <= direct_gap, since direct_gap is the same
+    # quantity restricted to matching k. When they coincide (within
+    # gap_tol) the fundamental gap is itself direct.
+    indirect_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
+    if indirect_gap < gap_tol:
         gap_type = "Metallic"
-    elif vbm_k == cbm_k:
+    elif direct_k is not None and (direct_gap - indirect_gap) < gap_tol:
         gap_type = "Direct"
     else:
         gap_type = "Indirect"
-    return vbm, cbm, vbm_k, cbm_k, band_gap, gap_type
+    return vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k
 
-def cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, gap_tol=0.01):
+def _default_k_format(k):
+    return f"{k:.6f}"
+
+def mesh_k_formatter(kpoints):
+    # kpoints is None (plain mesh index) or an (nk, 3) array of Cartesian
+    # (kx, ky, kz) in 1/Ang read from a companion .KP file -- see
+    # read_eig_mesh().
+    if kpoints is None:
+        return lambda k: f"index {k}"
+    def fmt(k):
+        kx, ky, kz = kpoints[k]
+        return f"kx={kx:.6f}, ky={ky:.6f}, kz={kz:.6f} 1/Ang (index {k})"
+    return fmt
+
+def cbm_vbm(fermi_energy, dic_bands, nspin, gap_tol=0.01, k_format=None):
+    # Pure computation, no printing -- callers render the result (console
+    # and/or bands_analysis.txt) via write_analysis_report(), so the same
+    # numbers are never formatted two different ways in two places.
+    k_format = k_format or _default_k_format
     combined = _band_extrema(
         {k: arr.reshape(-1) for k, arr in dic_bands.items()}, fermi_energy, gap_tol
     )
-    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = combined
-    print(f"[INFO] Fermi: {fermi_energy} \n[INFO] VBM: {vbm:.6f} (k={vbm_k}) \n[INFO] CBM: {cbm:.6f} (k={cbm_k})\n[INFO] Band Gap: {band_gap:.6f} eV ({gap_type})")
-
-    result = {"combined": combined, "spins": [], "half_metallic": False}
+    result = {"combined": combined, "spins": [], "half_metallic": False, "k_format": k_format}
     if nspin == 2:
         for s in range(nspin):
             spin_result = _band_extrema(
                 {k: arr[s] for k, arr in dic_bands.items()}, fermi_energy, gap_tol
             )
             result["spins"].append(spin_result)
-            spin_name = "Up" if s == 0 else "Down"
-            svbm, scbm, svbm_k, scbm_k, sgap, sgap_type = spin_result
-            print(f"[INFO] Spin {spin_name}: VBM={svbm:.6f} (k={svbm_k}) CBM={scbm:.6f} (k={scbm_k}) Gap={sgap:.6f} eV ({sgap_type})")
-        gaps = [spin_result[4] for spin_result in result["spins"]]
+        gaps = [spin_result[4] for spin_result in result["spins"]]  # indirect gap
         result["half_metallic"] = min(gaps) < gap_tol and max(gaps) >= gap_tol
-        if result["half_metallic"]:
-            print("[INFO] Half-metallic character detected (one spin channel metallic, the other has a gap)")
 
     return result
 
-def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01, mesh_warnings=None):
-    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
-    lines = [
-        "BAND STRUCTURE ANALYSIS REPORT - STB Suite",
-        "-"*60,
-        f"Fermi energy : {fermi_energy:.6f} eV",
-        f"VBM          : {vbm:.6f} eV (k = {vbm_k})",
-        f"CBM          : {cbm:.6f} eV (k = {cbm_k})",
-        f"Band gap     : {band_gap:.6f} eV",
-        f"Gap type     : {gap_type}",
+# --- Report formatting -----------------------------------------------
+# Plain-text report, but laid out like a short write-up: a title block,
+# then one category per physically distinct source of data (line vs.
+# mesh), a comparison section only when both are available, and a
+# one-line summary at the end that states the headline result plainly.
+
+_WIDTH = 74
+_LABEL_W = 14
+
+def _rule(char="-"):
+    return char * _WIDTH
+
+def _kv(label, value, width=_LABEL_W):
+    return f"{label:<{width}}: {value}"
+
+def _extrema_lines(combined, k_format, indent=""):
+    vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k = combined
+    return [
+        indent + _kv("VBM", f"{vbm:.6f} eV  (k = {k_format(vbm_k)})"),
+        indent + _kv("CBM", f"{cbm:.6f} eV  (k = {k_format(cbm_k)})"),
+        indent + _kv("Indirect gap", f"{indirect_gap:.6f} eV  (fundamental: CBM - VBM, any k)"),
+        indent + _kv("Direct gap", f"{direct_gap:.6f} eV  (same-k minimum, k = {k_format(direct_k)})"),
+        indent + _kv("Gap type", gap_type),
     ]
+
+def _spin_block(result, k_format):
+    lines = []
+    for s, spin_result in enumerate(result["spins"]):
+        spin_name = "Spin up" if s == 0 else "Spin down"
+        lines.append(f"{spin_name}:")
+        lines.extend(_extrema_lines(spin_result, k_format, indent="  "))
+        lines.append("")
+    lines.append(_kv("Half-metallic", "Yes" if result["half_metallic"] else "No"))
+    return lines
+
+def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01,
+                           mesh_warnings=None, input_file=None, eig_file=None, kp_file=None):
+    combined = result["combined"]
+    k_format = result["k_format"]
+    indirect_gap, gap_type = combined[4], combined[5]
+
+    lines = []
+    lines.append(_rule("="))
+    lines.append("BAND STRUCTURE ANALYSIS REPORT - STB Suite".center(_WIDTH))
+    lines.append(_rule("="))
+    lines.append("")
+    lines.append(_kv("Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), width=16))
+    lines.append(_kv("Fermi energy", f"{fermi_energy:.6f} eV", width=16))
+    lines.append(_kv("Spin channels", f"{nspin} ({'non-polarized' if nspin == 1 else 'polarized'})", width=16))
+    lines.append(_kv("Gap tolerance", f"{gap_tol:.6f} eV", width=16))
+
+    lines.append("")
+    lines.append(_rule())
+    lines.append("LINE (K-PATH) RESULTS")
+    lines.append(_rule())
+    if input_file:
+        lines.append(_kv("Source file", input_file))
+        lines.append("")
+    lines.extend(_extrema_lines(combined, k_format))
     if nspin == 2:
         lines.append("")
-        lines.append("== Per-spin channel ==")
-        for s, (svbm, scbm, svbm_k, scbm_k, sgap, sgap_type) in enumerate(result["spins"]):
-            spin_name = "Spin Up" if s == 0 else "Spin Down"
-            lines.append(f"{spin_name:<10}: VBM={svbm:.6f} eV (k={svbm_k})  CBM={scbm:.6f} eV (k={scbm_k})  Gap={sgap:.6f} eV ({sgap_type})")
+        lines.extend(_spin_block(result, k_format))
+
+    lines.append("")
+    lines.append(_rule())
+    lines.append("MESH (K-GRID) RESULTS")
+    lines.append(_rule())
+    if mesh_result is None:
+        lines.append("Not available -- no k-mesh eigenvalues were given (--eig-file, or")
+        lines.append("<label>.EIG auto-detected next to --label). The indirect gap above")
+        lines.append("may be an overestimate if the true VBM/CBM lie off the high-symmetry path.")
+    else:
+        m_combined = mesh_result["combined"]
+        m_k_format = mesh_result["k_format"]
+        if eig_file:
+            lines.append(_kv("Source file", eig_file))
+        if kp_file:
+            lines.append(_kv("k-points file", kp_file))
+        else:
+            lines.append("k-points file : not given -- mesh k-points shown by mesh index only.")
         lines.append("")
-        lines.append(f"Half-metallic: {'Yes' if result['half_metallic'] else 'No'}")
+        lines.extend(_extrema_lines(m_combined, m_k_format))
+        if mesh_result["spins"]:
+            lines.append("")
+            lines.extend(_spin_block(mesh_result, m_k_format))
 
     if mesh_result is not None:
-        m_vbm, m_cbm, m_vbm_k, m_cbm_k, m_gap, m_gap_type = mesh_result["combined"]
-        diff = m_gap - band_gap
+        m_indirect, m_gap_type = mesh_result["combined"][4], mesh_result["combined"][5]
+        diff = m_indirect - indirect_gap
         lines.append("")
-        lines.append("== Mesh (k-grid) vs Line (k-path) comparison ==")
+        lines.append(_rule())
+        lines.append("MESH vs LINE COMPARISON")
+        lines.append(_rule())
         for w in (mesh_warnings or []):
             lines.append(f"[WARNING] {w}")
-        lines.append(f"Line VBM (k-path)  : {vbm:.6f} eV (k = {vbm_k})")
-        lines.append(f"Line CBM (k-path)  : {cbm:.6f} eV (k = {cbm_k})")
-        lines.append(f"Line gap (k-path)  : {band_gap:.6f} eV ({gap_type})")
-        lines.append(f"Mesh VBM (k-grid)  : {m_vbm:.6f} eV (k-index = {m_vbm_k})")
-        lines.append(f"Mesh CBM (k-grid)  : {m_cbm:.6f} eV (k-index = {m_cbm_k})")
-        lines.append(f"Mesh gap (k-grid)  : {m_gap:.6f} eV ({m_gap_type})")
-        lines.append(f"Difference (mesh - line): {diff:.6f} eV")
+        lines.append(_kv("Indirect gap diff", f"{diff:.6f} eV  (mesh - line)", width=20))
         if abs(diff) < gap_tol:
-            lines.append("Line and mesh gaps agree within tolerance.")
+            lines.append("Line and mesh indirect gaps agree within tolerance.")
         elif diff < 0:
             lines.append("[WARNING] Mesh gap is smaller than the line gap: the true VBM/CBM "
                           "likely lie off the high-symmetry path. Trust the mesh value for the "
@@ -274,14 +374,27 @@ def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol
                           "coarse to capture the extrema found on the path. Consider a denser "
                           "--eig-file mesh.")
 
-        if mesh_result["spins"]:
-            lines.append("")
-            lines.append("== Mesh per-spin channel ==")
-            for s, (svbm, scbm, svbm_k, scbm_k, sgap, sgap_type) in enumerate(mesh_result["spins"]):
-                spin_name = "Spin Up" if s == 0 else "Spin Down"
-                lines.append(f"{spin_name:<10}: VBM={svbm:.6f} eV (k-index={svbm_k})  CBM={scbm:.6f} eV (k-index={scbm_k})  Gap={sgap:.6f} eV ({sgap_type})")
-            lines.append("")
-            lines.append(f"Mesh half-metallic: {'Yes' if mesh_result['half_metallic'] else 'No'}")
+    lines.append("")
+    lines.append(_rule())
+    lines.append("SUMMARY")
+    lines.append(_rule())
+    if mesh_result is not None:
+        best_indirect, best_type = mesh_result["combined"][4], mesh_result["combined"][5]
+        best_source = "the k-mesh (denser sampling than the path)"
+        half_metallic = mesh_result["half_metallic"] if nspin == 2 else False
+    else:
+        best_indirect, best_type = indirect_gap, gap_type
+        best_source = "the k-path (no k-mesh was provided)"
+        half_metallic = result["half_metallic"] if nspin == 2 else False
+    lines.append(f"Best fundamental (indirect) gap estimate: {best_indirect:.6f} eV ({best_type}), from {best_source}.")
+    if nspin == 2 and half_metallic:
+        lines.append("Half-metallic character detected (one spin channel metallic, the other has a gap).")
+    lines.append(_rule("="))
+
+    content = "\n".join(lines) + "\n"
+    with open("bands_analysis.txt", "w") as f:
+        f.write(content)
+    return content
 
     content = "\n".join(lines) + "\n"
     with open("bands_analysis.txt", "w") as f:
@@ -325,6 +438,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Process the band structure data.",
         epilog="Example usage:\n"
+               "  stb_bands --label siesta --shift fermi\n"
                "  stb_bands --file siesta.bands --shift fermi\n"
                "  stb_bands --file siesta.bands --shift manual --manual-value 0.5\n"
                "  stb_bands --file siesta.bands --shift fermi --gap-tol 0.05\n"
@@ -332,8 +446,18 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument("--file",  dest="input_file", type=str, required=True,
-                        help="Path to the input file containing band structure data (e.g., siesta.bands).")
+    parser.add_argument("--label", type=str, default=None,
+                        help="SIESTA output label (e.g. 'siesta'). Shorthand for "
+                             "--file <label>.bands, and auto-detects <label>.EIG next "
+                             "to it for the mesh (k-grid) gap comparison -- if that "
+                             ".EIG isn't there, the mesh comparison is skipped rather "
+                             "than treated as an error. Also auto-detects <label>.KP "
+                             "(mesh k-point coordinates) alongside the .EIG, if present. "
+                             "Mutually exclusive with --file/--eig-file/--kp-file.")
+
+    parser.add_argument("--file",  dest="input_file", type=str, default=None,
+                        help="Path to the input file containing band structure data (e.g., siesta.bands). "
+                             "Alternative to --label when you need an explicit path.")
 
     parser.add_argument("--shift", type=str, choices=["vbm", "cbm", "fermi", "manual"], required=True,
                         help="Reference energy shift:\n"
@@ -354,6 +478,11 @@ def main():
                              "When given, compares the k-mesh gap against the k-path gap from --file "
                              "-- the high-symmetry path may not pass through the true VBM/CBM. Requires sisl.")
 
+    parser.add_argument("--kp-file", type=str, default=None,
+                        help="Optional SIESTA .KP file matching --eig-file's k-mesh (Cartesian "
+                             "kx,ky,kz in 1/Ang). When given, mesh VBM/CBM/direct-gap k-points are "
+                             "reported as (kx, ky, kz) instead of a bare mesh index. Requires --eig-file.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -364,7 +493,29 @@ def main():
     # verify the manual value
     if args.shift == "manual" and args.manual_value is None:
         parser.error("--manual-value is required when --shift is set to 'manual'.")
-    
+
+    # Resolve --label into --file/--eig-file/--kp-file, or fall back to explicit paths.
+    if args.label:
+        if args.input_file or args.eig_file or args.kp_file:
+            parser.error("--label cannot be combined with --file/--eig-file/--kp-file.")
+        args.input_file = f"{args.label}.bands"
+        eig_candidate = f"{args.label}.EIG"
+        if os.path.isfile(eig_candidate):
+            args.eig_file = eig_candidate
+            kp_candidate = f"{args.label}.KP"
+            if os.path.isfile(kp_candidate):
+                args.kp_file = kp_candidate
+            else:
+                print(f"[INFO] No '{kp_candidate}' found next to the label; "
+                      "mesh VBM/CBM/direct-gap k-points will be reported by mesh index only.")
+        else:
+            print(f"[INFO] No '{eig_candidate}' found next to the label; "
+                  "mesh (k-grid) gap comparison will be skipped.")
+    elif not args.input_file:
+        parser.error("one of --label or --file is required.")
+    elif args.kp_file and not args.eig_file:
+        parser.error("--kp-file requires --eig-file.")
+
     if args.intro == True:
         show_intro([
             "Siesta ToolBox Suite",
@@ -377,16 +528,15 @@ def main():
     print("-"*60)
 
     # Condition to shift the band structure
-    print("\n[INFO] Read file ...")
+    print("[INFO] Reading band structure data ...")
     fermi_energy,high_sym,dic_bands,nspin=read_data(args.input_file)
-    print("[INFO] Calculate VBM and CBM ...")
-    result = cbm_vbm(fermi_energy, high_sym, dic_bands, nspin, args.gap_tol)
+    result = cbm_vbm(fermi_energy, dic_bands, nspin, args.gap_tol)
 
     mesh_result = None
     mesh_warnings = []
     if args.eig_file:
-        print("[INFO] Read --eig-file (k-mesh) ...")
-        fermi_mesh, dic_mesh, nspin_mesh = read_eig_mesh(args.eig_file)
+        print("[INFO] Reading k-mesh eigenvalues (--eig-file) ...")
+        fermi_mesh, dic_mesh, nspin_mesh, mesh_kpoints = read_eig_mesh(args.eig_file, args.kp_file)
         if abs(fermi_mesh - fermi_energy) > 1e-3:
             mesh_warnings.append(
                 f"Fermi energy mismatch between --file ({fermi_energy:.6f} eV) and "
@@ -397,14 +547,14 @@ def main():
                 f"nspin mismatch between --file (nspin={nspin}) and --eig-file "
                 f"(nspin={nspin_mesh}); mesh comparison uses combined values only."
             )
-        for w in mesh_warnings:
-            print(f"[WARNING] {w}")
-        print("[INFO] Calculate mesh (k-grid) VBM and CBM ...")
-        mesh_result = cbm_vbm(fermi_mesh, [], dic_mesh, nspin_mesh, args.gap_tol)
+        mesh_result = cbm_vbm(fermi_mesh, dic_mesh, nspin_mesh, args.gap_tol,
+                               k_format=mesh_k_formatter(mesh_kpoints))
 
-    write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol, mesh_warnings)
-    print("[INFO] Output saved to bands_analysis.txt")
-    vbm, cbm, vbm_k, cbm_k, band_gap, gap_type = result["combined"]
+    report = write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol, mesh_warnings,
+                                    input_file=args.input_file, eig_file=args.eig_file, kp_file=args.kp_file)
+    print("\n" + report)
+    print("[INFO] Full report saved to bands_analysis.txt")
+    vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k = result["combined"]
 
     if args.shift == "vbm":
         rshift = vbm

@@ -1578,24 +1578,25 @@ def run_dos_convolution() -> None:
     
     # Esta linha agora terá Tab-completion!
     out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
-    size = get_int_input("Gaussian mask size, must be a positive odd number (default: 11): ", 11)
-    while size <= 0 or size % 2 == 0:
-        print(color_text("Size must be a positive odd number!", 'red'))
-        size = get_int_input("Gaussian mask size (default: 11): ", 11)
-    sigma = get_float_input("Standard deviation (default: 1.0): ", 1.0)
+
+    sigma = get_float_input("Gaussian broadening sigma, in eV (default: 0.05): ", 0.05)
     while sigma <= 0:
-        print(color_text("Standard deviation must be positive!", 'red'))
-        sigma = get_float_input("Standard deviation (default: 1.0): ", 1.0)
+        print(color_text("Sigma must be positive!", 'red'))
+        sigma = get_float_input("Sigma in eV (default: 0.05): ", 0.05)
+
+    size_str = get_input("Kernel size in samples (optional, blank = auto-sized from sigma): ").strip()
+
     plot_choice = get_input("Show before/after plot? (Y/n): ").strip().lower()
 
     args = [
         "--file", input_file,
-        "--size", str(size),
         "--sigma", str(sigma),
         "--out", out_file,
         "--no-intro"
     ]
 
+    if size_str:
+        args.extend(["--size", size_str])
     if plot_choice in ['n', 'no']:
         args.append("--no-plot")
 

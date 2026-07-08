@@ -16,11 +16,33 @@ from stb.core.cli import color_text, show_intro
 
 
 def gaussian_kernel_1d(size, sigma):
-    """Creates a normalized 1D Gaussian kernel of the given odd size."""
+    """Creates a normalized 1D Gaussian kernel of the given odd size.
+    `sigma` is in samples (grid points), not eV -- see energy_grid_spacing()
+    for the eV -> samples conversion callers are expected to do first."""
     kernel_1d = np.arange(size) - (size - 1) / 2.0
     kernel_1d = np.exp(-(kernel_1d**2) / (2 * sigma**2))
     kernel_1d /= np.sum(kernel_1d)  # Normalize the kernel
     return kernel_1d
+
+
+def energy_grid_spacing(energy):
+    """Median spacing (eV) between consecutive energy points, so --sigma can
+    be given in physically meaningful eV instead of grid samples -- whose
+    count depends on how densely the input file happens to be sampled.
+    Raises ValueError if the energy column isn't increasing (spacing would
+    be zero or negative, meaning sigma-in-samples can't be computed)."""
+    d_energy = float(np.median(np.diff(energy)))
+    if d_energy <= 0:
+        raise ValueError("Energy column must be sorted in strictly increasing order.")
+    return d_energy
+
+
+def kernel_size_for_sigma(sigma_samples):
+    """Smallest odd kernel width covering about 3 standard deviations on
+    each side of center (>99% of a Gaussian's mass), used when --size isn't
+    given explicitly."""
+    half_width = max(1, int(np.ceil(3 * sigma_samples)))
+    return 2 * half_width + 1
 
 
 def read_column_labels(path, n_columns):
@@ -98,18 +120,23 @@ def main():
     parser = argparse.ArgumentParser(
         description="Apply Gaussian convolution to broaden a DOS file's columns.",
         epilog="Example usage:\n"
-               "  stb-convdos --file dos_total.dat --size 11 --sigma 1.0 --out dos_filtered.dat\n"
-               "  stb-convdos --file dos_total.dat --size 21 --sigma 2.0 --out dos_filtered.dat --no-plot",
+               "  stb-convdos --file dos_total.dat --sigma 0.1 --out dos_filtered.dat\n"
+               "  stb-convdos --file dos_total.dat --sigma 0.05 --size 41 --out dos_filtered.dat --no-plot",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--file", dest="input_file", required=True,
                         help="Input DOS file: whitespace-separated columns, energy first.")
-    parser.add_argument("--size", type=int, required=True,
-                        help="Gaussian kernel size, in samples. Must be a positive odd number "
-                             "-- an even size shifts the filtered curve by half a bin, since it "
-                             "has no single center sample.")
     parser.add_argument("--sigma", type=float, required=True,
-                        help="Standard deviation of the Gaussian kernel, in samples. Must be positive.")
+                        help="Gaussian broadening standard deviation, in eV. Converted internally "
+                             "to grid samples using the input file's own energy spacing, so the "
+                             "same --sigma gives the same physical broadening regardless of how "
+                             "densely the file is sampled. Must be positive.")
+    parser.add_argument("--size", type=int, default=None,
+                        help="Gaussian kernel width, in samples. Optional -- by default sized "
+                             "automatically from --sigma to cover about 3 standard deviations on "
+                             "each side. Must be a positive odd number if given explicitly (an "
+                             "even size shifts the filtered curve by half a bin, since it has no "
+                             "single center sample).")
     parser.add_argument("--out", required=True, dest="outfile",
                         help="Output file for the filtered data.")
     parser.add_argument("--no-plot", dest="plot", action="store_false",
@@ -119,10 +146,10 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 
-    if args.size <= 0 or args.size % 2 == 0:
-        parser.error("--size must be a positive odd number.")
     if args.sigma <= 0:
         parser.error("--sigma must be positive.")
+    if args.size is not None and (args.size <= 0 or args.size % 2 == 0):
+        parser.error("--size must be a positive odd number.")
 
     if args.intro == True:
         show_intro([
@@ -139,21 +166,42 @@ def main():
     if inp_file.ndim != 2 or inp_file.shape[1] < 2:
         print(color_text("[ERROR] Input file needs at least 2 columns (energy + at least one DOS column).", 'red'))
         sys.exit(1)
+    if inp_file.shape[0] < 2:
+        print(color_text("[ERROR] Input file needs at least 2 energy points to determine grid spacing.", 'red'))
+        sys.exit(1)
 
     labels = read_column_labels(args.input_file, inp_file.shape[1])
     energy_label = labels[0] if labels else "Energy"
     dos_labels = labels[1:] if labels else [f"DOS_{i}" for i in range(1, inp_file.shape[1])]
 
-    kernel = gaussian_kernel_1d(args.size, args.sigma)
+    try:
+        d_energy = energy_grid_spacing(inp_file[:, 0])
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
+
+    sigma_samples = args.sigma / d_energy
+    size = args.size if args.size is not None else kernel_size_for_sigma(sigma_samples)
+    print(f"[INFO] Energy grid spacing: {d_energy:.6f} eV -> sigma = {sigma_samples:.3f} samples, "
+          f"kernel size = {size}")
+
+    kernel = gaussian_kernel_1d(size, sigma_samples)
     print("[INFO] Applying Gaussian convolution ...")
     energy, filtered = filter_columns(inp_file, kernel)
 
-    if args.plot:
-        print("[INFO] Plotting original vs. filtered ...")
-        plot_all(energy, inp_file, filtered, dos_labels)
-
+    # Write the actual deliverable before plotting, so a display/backend
+    # problem (e.g. no X11 and MPLBACKEND unset) can't cost the already-done
+    # convolution work -- the result file is saved either way.
     write_output(args.outfile, energy, filtered, energy_label, dos_labels)
     print(f"\n[OK] Filtered data written to {args.outfile}")
+
+    if args.plot:
+        n_cols = filtered.shape[1]
+        if n_cols > 12:
+            print(f"[INFO] {n_cols} columns to plot -- the combined figure will be tall; "
+                  "pass --no-plot to skip it.")
+        print("[INFO] Plotting original vs. filtered ...")
+        plot_all(energy, inp_file, filtered, dos_labels)
     print("[INFO] Complete job!")
     print("\n"+"-"*60)
     print(color_text("We’ve convoluted everything… including the soul of the electron.\n\n", 'bold'))

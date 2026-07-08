@@ -77,19 +77,32 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Real fixture: default run (6000 points x 4 DOS columns from stb-dos) ---
-echo -e "\n--- Testing default run (real fixture, odd kernel size, --no-plot) ---"
+# --- 2. Real fixture: default run (6000 points x 4 DOS columns from stb-dos,
+#     energy grid spacing 0.01 eV) -- --sigma is in eV and --size is
+#     auto-computed (not given here) ---
+echo -e "\n--- Testing default run (real fixture, --sigma in eV, auto --size, --no-plot) ---"
 rm -f filtered.dat
-stb-convdos --file dos_total.dat --size 11 --sigma 1.0 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0.05 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success filtered.dat
 check_line_count filtered.dat 6001
 
+echo "Verifying --sigma (eV) is converted using the file's own energy spacing, and --size is auto-sized"
+check_contains "Energy grid spacing: 0.010000 eV -> sigma = 5.000 samples, kernel size = 31" log_default.txt
+
 echo "Verifying the header lists every actual DOS column (used to be hardcoded 'Energy DOS_filtered' regardless of column count)"
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" filtered.dat
 
-echo "Verifying a known filtered data point (energy-conserving Gaussian broadening, size=11 sigma=1.0)"
-check_contains "13.188850 0.010257 0.904246 2.202389 0.000000" filtered.dat
+echo "Verifying a known filtered data point (sigma=0.05 eV -> 5 samples, auto size=31)"
+check_contains "13.188850 0.010066 0.788188 1.782186 0.000000" filtered.dat
+
+
+# --- 2b. Explicit --size overrides the auto-computed default ---
+echo -e "\n--- Testing an explicit --size override ---"
+rm -f filtered_explicit.dat
+stb-convdos --file dos_total.dat --sigma 0.05 --size 41 --out filtered_explicit.dat --no-plot --no-intro > log_explicit_size.txt 2>&1
+check_exit_code $? 0
+check_contains "kernel size = 41" log_explicit_size.txt
 
 
 # --- 3. Kernel/energy-conservation sanity: total DOS is approximately
@@ -111,13 +124,30 @@ EOF
 check_exit_code $? 0
 
 
+# --- 3b. Many-column input (e.g. stb-dos --projection ml output) prints a
+#     heads-up about the combined figure being tall instead of silently
+#     opening/blocking on one window per column like it used to ---
+echo -e "\n--- Testing the many-columns plotting heads-up ---"
+python3 - << 'EOF'
+import numpy as np
+ncols = 16
+energy = np.linspace(-10, 10, 200)
+data = np.column_stack([energy, np.random.rand(200, ncols)])
+header = "Energy(eV) " + " ".join(f"c{i}" for i in range(ncols))
+np.savetxt("many_cols.dat", data, header=header)
+EOF
+stb-convdos --file many_cols.dat --sigma 0.5 --out many_cols_filtered.dat --no-intro > log_many_cols.txt 2>&1
+check_exit_code $? 0
+check_contains "16 columns to plot" log_many_cols.txt
+
+
 # --- 4. Plotting path: a single figure (one plt.show() call), not one per
 #     column -- used to require closing N blocking windows in a row. Under
 #     MPLBACKEND=Agg this can't block, but it must still not crash and must
 #     produce identical numeric output to the --no-plot run. ---
 echo -e "\n--- Testing the plotting path (single combined figure) ---"
 rm -f filtered_plot.dat
-stb-convdos --file dos_total.dat --size 11 --sigma 1.0 --out filtered_plot.dat --no-intro > log_plot.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0.05 --out filtered_plot.dat --no-intro > log_plot.txt 2>&1
 check_exit_code $? 0
 diff -q filtered.dat filtered_plot.dat > /dev/null 2>&1
 if [ $? -eq 0 ]; then
@@ -135,25 +165,25 @@ fi
 echo -e "\n--- Testing --size/--sigma validation ---"
 
 echo "Testing: even --size is rejected"
-stb-convdos --file dos_total.dat --size 10 --sigma 1.0 --out f.dat --no-intro > log_even.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0.05 --size 10 --out f.dat --no-intro > log_even.txt 2>&1
 check_exit_code $? 2
 check_contains "must be a positive odd number" log_even.txt
 
 echo "Testing: --size 0 is rejected"
-stb-convdos --file dos_total.dat --size 0 --sigma 1.0 --out f.dat --no-intro > log_size0.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0.05 --size 0 --out f.dat --no-intro > log_size0.txt 2>&1
 check_exit_code $? 2
 
 echo "Testing: negative --size is rejected"
-stb-convdos --file dos_total.dat --size -5 --sigma 1.0 --out f.dat --no-intro > log_sizeneg.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0.05 --size -5 --out f.dat --no-intro > log_sizeneg.txt 2>&1
 check_exit_code $? 2
 
 echo "Testing: --sigma 0 is rejected"
-stb-convdos --file dos_total.dat --size 11 --sigma 0 --out f.dat --no-intro > log_sigma0.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 0 --out f.dat --no-intro > log_sigma0.txt 2>&1
 check_exit_code $? 2
 check_contains "must be positive" log_sigma0.txt
 
 echo "Testing: negative --sigma is rejected"
-stb-convdos --file dos_total.dat --size 11 --sigma -1.0 --out f.dat --no-intro > log_sigmaneg.txt 2>&1
+stb-convdos --file dos_total.dat --sigma -1.0 --out f.dat --no-intro > log_sigmaneg.txt 2>&1
 check_exit_code $? 2
 
 
@@ -161,14 +191,20 @@ check_exit_code $? 2
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: nonexistent input file"
-stb-convdos --file does_not_exist.dat --size 11 --sigma 1.0 --out f.dat --no-intro > log_missing.txt 2>&1
+stb-convdos --file does_not_exist.dat --sigma 0.05 --out f.dat --no-intro > log_missing.txt 2>&1
 check_exit_code $? 1
 
 echo "Testing: single-column input file (no DOS columns to filter)"
 printf "1.0\n2.0\n3.0\n" > single_col.dat
-stb-convdos --file single_col.dat --size 3 --sigma 1.0 --out f.dat --no-intro > log_single_col.txt 2>&1
+stb-convdos --file single_col.dat --sigma 0.05 --out f.dat --no-intro > log_single_col.txt 2>&1
 check_exit_code $? 1
 check_contains "at least 2 columns" log_single_col.txt
+
+echo "Testing: non-increasing energy column (can't determine grid spacing)"
+printf "1.0 1.0\n1.0 2.0\n0.5 3.0\n" > unsorted.dat
+stb-convdos --file unsorted.dat --sigma 0.05 --out f.dat --no-intro > log_unsorted.txt 2>&1
+check_exit_code $? 1
+check_contains "strictly increasing order" log_unsorted.txt
 
 echo "Testing: missing required arguments"
 stb-convdos --file dos_total.dat --no-intro > log_missing_args.txt 2>&1
@@ -182,9 +218,9 @@ check_contains "stb-convdos" log_version.txt
 # --- 7. Interactive path (stb-suite, shortcut 2.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
 
-echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> size 11 -> sigma 1.0 -> no plot"
+echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 0.05 eV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\ndos_total.dat\n\n11\n1.0\nn\n' | stb-suite > log_menu.txt 2>&1
+printf '2.3\ndos_total.dat\n\n0.05\n\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
 

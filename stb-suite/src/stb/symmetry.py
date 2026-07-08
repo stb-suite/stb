@@ -184,7 +184,7 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     lines.append(_rule())
     lines.append("ATOMIC SITES (fractional coordinates)")
     lines.append(_rule())
-    lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Fractional coordinates':<32}{'Orbit'}")
+    lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Frac. x':>10}  {'Frac. y':>10}  {'Frac. z':>10}  Orbit")
     for site in results["sites"]:
         fc = site["frac_coords"]
         lines.append(f"{site['atom_id']:>4}  {site['species']:<3}  {site['wyckoff']:<8}  "

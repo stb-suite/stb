@@ -139,6 +139,10 @@ check_contains "4b        Cl        4         m-3m            5" symmetry.dat
 check_contains "   1  Na   4a  " symmetry.dat
 check_contains "   5  Cl   4b  " symmetry.dat
 
+echo "Verifying the ATOMIC SITES header's 'Orbit' column lines up with the actual orbit digit in the data rows"
+check_contains "Atom  Sp.  Wyckoff      Frac. x     Frac. y     Frac. z  Orbit" symmetry.dat
+check_contains "   1  Na   4a          0.000000    0.000000    0.000000  1" symmetry.dat
+
 echo "Verifying all 192 symmetry operations are listed, in compact x,y,z notation"
 check_contains "SYMMETRY OPERATIONS (192), in x,y,z notation" symmetry.dat
 check_contains "   1: x, y, z" symmetry.dat

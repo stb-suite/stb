@@ -78,29 +78,29 @@ pushd "$TEST_DIR" > /dev/null
 
 
 # --- 2. Real fixture: default run (6000 points x 4 DOS columns from stb-dos,
-#     energy grid spacing 0.01 eV) -- --sigma is in eV and --size is
+#     energy grid spacing 0.01 eV) -- --sigma is in meV and --size is
 #     auto-computed (not given here) ---
-echo -e "\n--- Testing default run (real fixture, --sigma in eV, auto --size, --no-plot) ---"
+echo -e "\n--- Testing default run (real fixture, --sigma in meV, auto --size, --no-plot) ---"
 rm -f filtered.dat
-stb-convdos --file dos_total.dat --sigma 0.05 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success filtered.dat
 check_line_count filtered.dat 6001
 
-echo "Verifying --sigma (eV) is converted using the file's own energy spacing, and --size is auto-sized"
-check_contains "Energy grid spacing: 0.010000 eV -> sigma = 5.000 samples, kernel size = 31" log_default.txt
+echo "Verifying --sigma (meV) is converted using the file's own energy spacing, and --size is auto-sized"
+check_contains "Energy grid spacing: 0.010000 eV -> sigma = 50.000 meV = 5.000 samples, kernel size = 31" log_default.txt
 
 echo "Verifying the header lists every actual DOS column (used to be hardcoded 'Energy DOS_filtered' regardless of column count)"
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" filtered.dat
 
-echo "Verifying a known filtered data point (sigma=0.05 eV -> 5 samples, auto size=31)"
+echo "Verifying a known filtered data point (sigma=50 meV -> 5 samples, auto size=31)"
 check_contains "13.188850 0.010066 0.788188 1.782186 0.000000" filtered.dat
 
 
 # --- 2b. Explicit --size overrides the auto-computed default ---
 echo -e "\n--- Testing an explicit --size override ---"
 rm -f filtered_explicit.dat
-stb-convdos --file dos_total.dat --sigma 0.05 --size 41 --out filtered_explicit.dat --no-plot --no-intro > log_explicit_size.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --size 41 --out filtered_explicit.dat --no-plot --no-intro > log_explicit_size.txt 2>&1
 check_exit_code $? 0
 check_contains "kernel size = 41" log_explicit_size.txt
 
@@ -147,7 +147,7 @@ check_contains "16 columns to plot" log_many_cols.txt
 #     produce identical numeric output to the --no-plot run. ---
 echo -e "\n--- Testing the plotting path (single combined figure) ---"
 rm -f filtered_plot.dat
-stb-convdos --file dos_total.dat --sigma 0.05 --out filtered_plot.dat --no-intro > log_plot.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --out filtered_plot.dat --no-intro > log_plot.txt 2>&1
 check_exit_code $? 0
 diff -q filtered.dat filtered_plot.dat > /dev/null 2>&1
 if [ $? -eq 0 ]; then
@@ -165,16 +165,16 @@ fi
 echo -e "\n--- Testing --size/--sigma validation ---"
 
 echo "Testing: even --size is rejected"
-stb-convdos --file dos_total.dat --sigma 0.05 --size 10 --out f.dat --no-intro > log_even.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --size 10 --out f.dat --no-intro > log_even.txt 2>&1
 check_exit_code $? 2
 check_contains "must be a positive odd number" log_even.txt
 
 echo "Testing: --size 0 is rejected"
-stb-convdos --file dos_total.dat --sigma 0.05 --size 0 --out f.dat --no-intro > log_size0.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --size 0 --out f.dat --no-intro > log_size0.txt 2>&1
 check_exit_code $? 2
 
 echo "Testing: negative --size is rejected"
-stb-convdos --file dos_total.dat --sigma 0.05 --size -5 --out f.dat --no-intro > log_sizeneg.txt 2>&1
+stb-convdos --file dos_total.dat --sigma 50 --size -5 --out f.dat --no-intro > log_sizeneg.txt 2>&1
 check_exit_code $? 2
 
 echo "Testing: --sigma 0 is rejected"
@@ -191,18 +191,18 @@ check_exit_code $? 2
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: nonexistent input file"
-stb-convdos --file does_not_exist.dat --sigma 0.05 --out f.dat --no-intro > log_missing.txt 2>&1
+stb-convdos --file does_not_exist.dat --sigma 50 --out f.dat --no-intro > log_missing.txt 2>&1
 check_exit_code $? 1
 
 echo "Testing: single-column input file (no DOS columns to filter)"
 printf "1.0\n2.0\n3.0\n" > single_col.dat
-stb-convdos --file single_col.dat --sigma 0.05 --out f.dat --no-intro > log_single_col.txt 2>&1
+stb-convdos --file single_col.dat --sigma 50 --out f.dat --no-intro > log_single_col.txt 2>&1
 check_exit_code $? 1
 check_contains "at least 2 columns" log_single_col.txt
 
 echo "Testing: non-increasing energy column (can't determine grid spacing)"
 printf "1.0 1.0\n1.0 2.0\n0.5 3.0\n" > unsorted.dat
-stb-convdos --file unsorted.dat --sigma 0.05 --out f.dat --no-intro > log_unsorted.txt 2>&1
+stb-convdos --file unsorted.dat --sigma 50 --out f.dat --no-intro > log_unsorted.txt 2>&1
 check_exit_code $? 1
 check_contains "strictly increasing order" log_unsorted.txt
 
@@ -218,9 +218,9 @@ check_contains "stb-convdos" log_version.txt
 # --- 7. Interactive path (stb-suite, shortcut 2.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
 
-echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 0.05 eV -> auto size -> no plot"
+echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\ndos_total.dat\n\n0.05\n\nn\n' | stb-suite > log_menu.txt 2>&1
+printf '2.3\ndos_total.dat\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
 

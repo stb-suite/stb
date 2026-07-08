@@ -120,14 +120,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="Apply Gaussian convolution to broaden a DOS file's columns.",
         epilog="Example usage:\n"
-               "  stb-convdos --file dos_total.dat --sigma 0.1 --out dos_filtered.dat\n"
-               "  stb-convdos --file dos_total.dat --sigma 0.05 --size 41 --out dos_filtered.dat --no-plot",
+               "  stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat\n"
+               "  stb-convdos --file dos_total.dat --sigma 50 --size 41 --out dos_filtered.dat --no-plot",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--file", dest="input_file", required=True,
                         help="Input DOS file: whitespace-separated columns, energy first.")
     parser.add_argument("--sigma", type=float, required=True,
-                        help="Gaussian broadening standard deviation, in eV. Converted internally "
+                        help="Gaussian broadening standard deviation, in meV. Converted internally "
                              "to grid samples using the input file's own energy spacing, so the "
                              "same --sigma gives the same physical broadening regardless of how "
                              "densely the file is sampled. Must be positive.")
@@ -180,10 +180,11 @@ def main():
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
-    sigma_samples = args.sigma / d_energy
+    sigma_ev = args.sigma / 1000.0
+    sigma_samples = sigma_ev / d_energy
     size = args.size if args.size is not None else kernel_size_for_sigma(sigma_samples)
-    print(f"[INFO] Energy grid spacing: {d_energy:.6f} eV -> sigma = {sigma_samples:.3f} samples, "
-          f"kernel size = {size}")
+    print(f"[INFO] Energy grid spacing: {d_energy:.6f} eV -> sigma = {args.sigma:.3f} meV "
+          f"= {sigma_samples:.3f} samples, kernel size = {size}")
 
     kernel = gaussian_kernel_1d(size, sigma_samples)
     print("[INFO] Applying Gaussian convolution ...")

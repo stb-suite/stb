@@ -1579,10 +1579,10 @@ def run_dos_convolution() -> None:
     # Esta linha agora terá Tab-completion!
     out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
 
-    sigma = get_float_input("Gaussian broadening sigma, in eV (default: 0.05): ", 0.05)
+    sigma = get_float_input("Gaussian broadening sigma, in meV (default: 50): ", 50.0)
     while sigma <= 0:
         print(color_text("Sigma must be positive!", 'red'))
-        sigma = get_float_input("Sigma in eV (default: 0.05): ", 0.05)
+        sigma = get_float_input("Sigma in meV (default: 50): ", 50.0)
 
     size_str = get_input("Kernel size in samples (optional, blank = auto-sized from sigma): ").strip()
 

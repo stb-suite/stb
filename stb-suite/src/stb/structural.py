@@ -15,6 +15,7 @@ import logging
 import warnings
 from datetime import datetime
 import numpy as np
+from scipy.spatial import ConvexHull, QhullError
 from pymatgen.analysis.local_env import (
      JmolNN, MinimumDistanceNN, CrystalNN,
     BrunnerNNRelative, EconNN)
@@ -43,6 +44,54 @@ def _safe_mean(values):
     values = [v for v in values if v is not None]
     return float(np.mean(values)) if values else None
 
+def _bond_length_distortion(distances):
+    """Baur's bond-length distortion index (%): mean absolute deviation of
+    each bond length from this site's own mean bond length. Needs at least
+    2 bonds; returns None otherwise (distortion is undefined for a single
+    bond)."""
+    if len(distances) < 2:
+        return None
+    d_avg = np.mean(distances)
+    if d_avg == 0:
+        return None
+    return float(100.0 * np.mean([abs(d - d_avg) / d_avg for d in distances]))
+
+def _bond_angle_variance(angles):
+    """Bond-angle variance (deg²): variance of this site's L-center-L
+    angles around their own mean. Two deliberate departures from Robinson
+    et al.'s original (octahedron/tetrahedron) formula, both because the
+    coordination number here can be any -- often fractional, "effective"
+    -- value, not just 6 or 4:
+      1. Uses the site's own observed mean angle as the reference instead
+         of a theoretical ideal polyhedral angle (not well-defined for an
+         arbitrary/fractional CN).
+      2. Includes ALL pairwise ligand-center-ligand angles, not just the
+         12 "cis" (~90°) angles Robinson's octahedral formula uses --
+         there's no general way to separate "cis" from "trans" pairs
+         outside an assumed octahedral topology. For a real 6-coordinate
+         site this pulls in the ~180° "trans" angles too, inflating the
+         variance well above textbook octahedral BAV values.
+    Not directly comparable to literature BAV numbers as a result; still
+    a valid, self-consistent distortion metric for comparing sites/species
+    within one report. Needs at least 2 angles (3 neighbors); returns None
+    otherwise."""
+    if len(angles) < 2:
+        return None
+    theta_avg = np.mean(angles)
+    n = len(angles)
+    return float(sum((theta - theta_avg) ** 2 for theta in angles) / (n - 1))
+
+def _polyhedron_volume(neighbor_coords):
+    """Volume (Å³) of the convex hull of a site's neighbor positions --
+    needs at least 4 non-coplanar neighbors to bound a 3D volume; returns
+    None otherwise (too few neighbors, or they're coplanar/collinear)."""
+    if len(neighbor_coords) < 4:
+        return None
+    try:
+        return float(ConvexHull(np.array(neighbor_coords)).volume)
+    except QhullError:
+        return None
+
 def compute_ecn(structure, mode, atoms_position=None):
     """Pure computation -- no printing, no file I/O. Returns a results dict
     that format_report() turns into the console/file report."""
@@ -52,6 +101,8 @@ def compute_ecn(structure, mode, atoms_position=None):
         "lattice": {
             "a": lattice.a, "b": lattice.b, "c": lattice.c,
             "alpha": lattice.alpha, "beta": lattice.beta, "gamma": lattice.gamma,
+            "volume": lattice.volume,
+            "density": float(structure.density),
             "vectors": lattice.matrix,
         },
     }
@@ -137,28 +188,71 @@ def compute_ecn(structure, mode, atoms_position=None):
             })
         results["cn_per_atom"] = cn_per_atom
 
-    # Bond distances via CrystalNN, broken down by species pair -- a
-    # single average lumping e.g. Sn-O with any Sn-Sn/O-O neighbors
-    # found isn't a physically meaningful number on its own. Note a
-    # bond can be counted from both of its atoms' neighbor lists in
-    # "mean" mode (n= makes that visible); this only skews the average
-    # if the neighbor relationship isn't symmetric between the two.
+    # Bond distances/angles/polyhedron shape, all from one CrystalNN
+    # neighbor list per atom -- reused for everything below instead of
+    # adding yet another per-method comparison (the 5-method table above
+    # is specifically about comparing coordination-number *algorithms*;
+    # this geometric analysis just needs one consistent neighbor set, the
+    # common choice in the literature).
+    #
+    # Distances/angles are pooled by species pair/triplet across the
+    # structure (a single average lumping e.g. Sn-O with any Sn-Sn/O-O
+    # found isn't meaningful on its own); a bond or angle can be counted
+    # from more than one of its atoms' neighbor lists in "mean" mode (n=
+    # makes that visible) -- this only skews the pooled average if the
+    # neighbor relationship isn't symmetric between the atoms involved.
+    #
+    # Bond-length distortion (BLD), bond-angle variance (BAV), and
+    # polyhedron volume are inherently per-atom (they characterize one
+    # coordination polyhedron), then averaged per species like ECN.
     cnn = CrystalNN()
     distances_by_pair = {}
     all_distances = []
+    angles_by_triplet = {}
+    all_angles = []
+    bld_by_atom = {}
+    bav_by_atom = {}
+    volume_by_atom = {}
 
     indices = range(len(structure)) if mode == "mean" else [i - 1 for i in atoms_position]
 
     for i in indices:
         try:
             neighbors = cnn.get_nn_info(structure, i)
+            center_coords = structure[i].coords
+
+            site_distances = []
             for neighbor in neighbors:
                 dist = neighbor["site"].distance(structure[i])
+                site_distances.append(dist)
                 all_distances.append(dist)
                 pair = tuple(sorted((pos_atomics[i][1], str(neighbor["site"].specie.symbol))))
                 distances_by_pair.setdefault(pair, []).append(dist)
+            bld = _bond_length_distortion(site_distances)
+            if bld is not None:
+                bld_by_atom[i] = bld
+            volume = _polyhedron_volume([n["site"].coords for n in neighbors])
+            if volume is not None:
+                volume_by_atom[i] = volume
+
+            site_angles = []
+            for a in range(len(neighbors)):
+                for b in range(a + 1, len(neighbors)):
+                    v1 = neighbors[a]["site"].coords - center_coords
+                    v2 = neighbors[b]["site"].coords - center_coords
+                    cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                    angle_deg = float(np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0))))
+                    site_angles.append(angle_deg)
+                    all_angles.append(angle_deg)
+                    ligand_pair = tuple(sorted((str(neighbors[a]["site"].specie.symbol),
+                                                 str(neighbors[b]["site"].specie.symbol))))
+                    triplet = (ligand_pair[0], pos_atomics[i][1], ligand_pair[1])
+                    angles_by_triplet.setdefault(triplet, []).append(angle_deg)
+            bav = _bond_angle_variance(site_angles)
+            if bav is not None:
+                bav_by_atom[i] = bav
         except Exception as e:
-            print(f"[WARNING] Failed to compute distances for atom {i+1}: {e}")
+            print(f"[WARNING] Failed to compute distances/angles for atom {i+1}: {e}")
 
     results["bond_distances_by_pair"] = {
         pair: (float(np.mean(d)), len(d)) for pair, d in distances_by_pair.items()
@@ -166,6 +260,36 @@ def compute_ecn(structure, mode, atoms_position=None):
     results["bond_distances_overall"] = (
         (float(np.mean(all_distances)), len(all_distances)) if all_distances else None
     )
+    results["bond_angles_by_triplet"] = {
+        triplet: (float(np.mean(a)), len(a)) for triplet, a in angles_by_triplet.items()
+    }
+    results["bond_angles_overall"] = (
+        (float(np.mean(all_angles)), len(all_angles)) if all_angles else None
+    )
+
+    if mode == "mean":
+        distortion_per_species = {}
+        for sp in species_list:
+            sp_idx = [i for i, s in enumerate(species_by_index) if s == sp]
+            distortion_per_species[sp] = {
+                "n_atoms": len(sp_idx),
+                "bld": _safe_mean([bld_by_atom.get(i) for i in sp_idx]),
+                "bav": _safe_mean([bav_by_atom.get(i) for i in sp_idx]),
+                "volume": _safe_mean([volume_by_atom.get(i) for i in sp_idx]),
+            }
+        results["distortion_per_species"] = distortion_per_species
+    else:
+        distortion_per_atom = []
+        for atom_index in atoms_position:
+            i = atom_index - 1
+            distortion_per_atom.append({
+                "atom_id": pos_atomics[i][0],
+                "species": pos_atomics[i][1],
+                "bld": bld_by_atom.get(i),
+                "bav": bav_by_atom.get(i),
+                "volume": volume_by_atom.get(i),
+            })
+        results["distortion_per_atom"] = distortion_per_atom
 
     return results
 
@@ -195,6 +319,7 @@ def format_report(results, source_file, fmt):
     lines.append(_rule())
     lines.append(f"a = {lat['a']:.3f} Å   b = {lat['b']:.3f} Å   c = {lat['c']:.3f} Å")
     lines.append(f"alpha = {lat['alpha']:.2f}°   beta = {lat['beta']:.2f}°   gamma = {lat['gamma']:.2f}°")
+    lines.append(f"Volume = {lat['volume']:.3f} Å³   Density = {lat['density']:.3f} g/cm³")
     lines.append("")
     lines.append("Lattice vectors (Å):")
     for i, vec in enumerate(lat["vectors"]):
@@ -241,6 +366,46 @@ def format_report(results, source_file, fmt):
         lines.append("  No distances could be computed.")
 
     lines.append("")
+    lines.append(_rule())
+    lines.append("AVERAGE BOND ANGLE, PER LIGAND-CENTER-LIGAND TRIPLET")
+    lines.append(_rule())
+    if results["bond_angles_overall"] is not None:
+        for triplet in sorted(results["bond_angles_by_triplet"]):
+            avg, n = results["bond_angles_by_triplet"][triplet]
+            label = f"{triplet[0]}-{triplet[1]}-{triplet[2]}"
+            lines.append(f"  {label:<12}: {avg:7.3f}°  (n={n})")
+        overall_avg, overall_n = results["bond_angles_overall"]
+        lines.append(f"  {'Overall':<12}: {overall_avg:7.3f}°  (n={overall_n})")
+    else:
+        lines.append("  No angles could be computed (fewer than 2 neighbors per site).")
+
+    lines.append("")
+    lines.append(_rule())
+    lines.append("COORDINATION POLYHEDRON DISTORTION")
+    lines.append(_rule())
+    lines.append("BLD: bond-length distortion (%, Baur). BAV: bond-angle variance (deg²),")
+    lines.append("from ALL ligand-center-ligand angles (not just Robinson's 12 'cis' angles")
+    lines.append("for an ideal octahedron -- there's no general cis/trans split for an")
+    lines.append("arbitrary/fractional CN), around the site's own mean angle (not a")
+    lines.append("theoretical ideal) -- not directly comparable to textbook BAV values, but")
+    lines.append("self-consistent for comparing sites/species within this report. Volume:")
+    lines.append("convex hull of the neighbor positions (Å³, needs >= 4 non-coplanar neighbors).")
+    lines.append("")
+    if results["mode"] == "mean":
+        for sp, data in results["distortion_per_species"].items():
+            lines.append(f"{sp} ({data['n_atoms']} atoms):")
+            lines.append(f"  BLD   : {_fmt(data['bld'])} %")
+            lines.append(f"  BAV   : {_fmt(data['bav'])} deg²")
+            lines.append(f"  Volume: {_fmt(data['volume'])} Å³")
+            lines.append("")
+    else:
+        for atom in results["distortion_per_atom"]:
+            lines.append(f"Atom {atom['atom_id']} ({atom['species']}):")
+            lines.append(f"  BLD   : {_fmt(atom['bld'])} %")
+            lines.append(f"  BAV   : {_fmt(atom['bav'])} deg²")
+            lines.append(f"  Volume: {_fmt(atom['volume'])} Å³")
+            lines.append("")
+
     lines.append(_rule())
     lines.append("ATOMIC POSITIONS (Cartesian, Å)")
     lines.append(_rule())

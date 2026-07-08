@@ -92,10 +92,11 @@ stb-structural --file structure.fdf --format fdf --mode mean --no-intro > log_fd
 check_exit_code $? 0
 check_success structural_information.dat
 
-echo "Verifying lattice parameters"
+echo "Verifying lattice parameters, cell volume, and density"
 check_contains "a = 4.883 Å" structural_information.dat
 check_contains "b = 5.907 Å" structural_information.dat
 check_contains "c = 8.238 Å" structural_information.dat
+check_contains "Volume = 236.821 Å³   Density = 5.892 g/cm³" structural_information.dat
 
 echo "Verifying the report has a title block and generation timestamp"
 check_contains "STRUCTURAL PROPERTIES REPORT - STB Suite" structural_information.dat
@@ -112,6 +113,20 @@ check_contains "  CrystalNN      :   4.004" structural_information.dat
 echo "Verifying bond distance is broken down per species pair, not a single lumped average"
 check_contains "AVERAGE BOND DISTANCE, PER SPECIES PAIR" structural_information.dat
 check_contains "O-Sn      : 2.1109 Å  (n=48)" structural_information.dat
+
+echo "Verifying bond angles are broken down per ligand-center-ligand triplet"
+check_contains "AVERAGE BOND ANGLE, PER LIGAND-CENTER-LIGAND TRIPLET" structural_information.dat
+check_contains "O-Sn-O      : 102.210°  (n=42)" structural_information.dat
+check_contains "Sn-O-Sn     : 119.808°  (n=24)" structural_information.dat
+
+echo "Verifying coordination polyhedron distortion (BLD, BAV, volume) per species"
+check_contains "COORDINATION POLYHEDRON DISTORTION" structural_information.dat
+check_contains "  BLD   :   0.790 %" structural_information.dat
+check_contains "  BAV   : 239.172 deg²" structural_information.dat
+check_contains "  Volume:  12.053 Å³" structural_information.dat
+
+echo "Verifying a 3-coordinate site (O) correctly reports polyhedron volume as N/A (needs >=4 neighbors for a 3D hull)"
+check_contains "  Volume:     N/A Å³" structural_information.dat
 
 echo "Verifying atomic positions are cleanly formatted (fixed-width columns, not numpy's raw array repr)"
 check_contains "ATOMIC POSITIONS (Cartesian, Å)" structural_information.dat
@@ -147,6 +162,10 @@ check_not_contains "CrystalNN failed" log_list.txt
 echo "Verifying per-atom CN values are formatted to 3 decimals, not printed as raw ~15-digit floats"
 check_contains "  JmolNN         :   8.970" structural_information.dat
 check_not_contains "8.970272100975317" structural_information.dat
+
+echo "Verifying per-atom distortion (BAV independently hand-verified for atom 1: variance of its 15 pairwise angles = 1429.05 deg²)"
+check_contains "Atom 1 (Sn):" structural_information.dat
+check_contains "  BAV   : 1429.050 deg²" structural_information.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

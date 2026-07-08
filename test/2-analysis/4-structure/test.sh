@@ -97,16 +97,26 @@ check_contains "a = 4.883 Å" structural_information.dat
 check_contains "b = 5.907 Å" structural_information.dat
 check_contains "c = 8.238 Å" structural_information.dat
 
+echo "Verifying the report has a title block and generation timestamp"
+check_contains "STRUCTURAL PROPERTIES REPORT - STB Suite" structural_information.dat
+check_contains "Generated        :" structural_information.dat
+check_contains "Source file      : structure.fdf  (format: fdf)" structural_information.dat
+
 echo "Verifying effective (weighted) CN is broken down per species, not lumped into one"
-check_contains "Effective Coordination Number (weighted), per species:" structural_information.dat
-check_contains " O (8 atoms):" structural_information.dat
-check_contains " Sn (6 atoms):" structural_information.dat
-check_contains "CrystalNN      : 2.956" structural_information.dat
-check_contains "CrystalNN      : 4.004" structural_information.dat
+check_contains "EFFECTIVE COORDINATION NUMBER (weighted), PER SPECIES" structural_information.dat
+check_contains "O (8 atoms):" structural_information.dat
+check_contains "Sn (6 atoms):" structural_information.dat
+check_contains "  CrystalNN      :   2.956" structural_information.dat
+check_contains "  CrystalNN      :   4.004" structural_information.dat
 
 echo "Verifying bond distance is broken down per species pair, not a single lumped average"
-check_contains "Average bond distance, per species pair:" structural_information.dat
+check_contains "AVERAGE BOND DISTANCE, PER SPECIES PAIR" structural_information.dat
 check_contains "O-Sn      : 2.1109 Å  (n=48)" structural_information.dat
+
+echo "Verifying atomic positions are cleanly formatted (fixed-width columns, not numpy's raw array repr)"
+check_contains "ATOMIC POSITIONS (Cartesian, Å)" structural_information.dat
+check_contains "   1  Sn       4.574068      3.168518      4.142994" structural_information.dat
+check_not_contains "\[4.57406764" structural_information.dat
 
 
 # --- 3. --format struct_out, mode mean -- same physical structure (post-
@@ -118,7 +128,7 @@ rm -f structural_information.dat warnings.log
 stb-structural --file siesta.STRUCT_OUT --format struct_out --mode mean --no-intro > log_struct_mean.txt 2>&1
 check_exit_code $? 0
 check_contains "a = 4.883 Å" structural_information.dat
-check_contains "CrystalNN      : 2.956" structural_information.dat
+check_contains "  CrystalNN      :   2.956" structural_information.dat
 check_contains "O-Sn      : 2.1109 Å  (n=48)" structural_information.dat
 
 
@@ -127,15 +137,15 @@ echo -e "\n--- Testing --mode list ---"
 rm -f structural_information.dat warnings.log
 stb-structural --file structure.fdf --format fdf --mode list --list 1,7 --no-intro > log_list.txt 2>&1
 check_exit_code $? 0
-check_contains "Effective Coordination Number (weighted) for specified atoms" structural_information.dat
-check_contains "Element: Sn     Cartesian Position:" structural_information.dat
-check_contains "Element: O     Cartesian Position:" structural_information.dat
+check_contains "EFFECTIVE COORDINATION NUMBER (weighted), SPECIFIED ATOMS" structural_information.dat
+check_contains "Atom 1 (Sn), position: 4.574068  3.168518  4.142994" structural_information.dat
+check_contains "Atom 7 (O), position:" structural_information.dat
 
 echo "Verifying CrystalNN no longer errors under use_weights=True (needs weighted_cn=True at construction)"
 check_not_contains "CrystalNN failed" log_list.txt
 
 echo "Verifying per-atom CN values are formatted to 3 decimals, not printed as raw ~15-digit floats"
-check_contains "JmolNN         : 8.970" structural_information.dat
+check_contains "  JmolNN         :   8.970" structural_information.dat
 check_not_contains "8.970272100975317" structural_information.dat
 
 

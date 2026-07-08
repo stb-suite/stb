@@ -13,8 +13,13 @@ import sys
 import argparse
 from datetime import datetime
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from stb.core import structure_io
+from stb.core import kspace, structure_io
 from stb.core.cli import color_text, show_intro
+
+# Same default as stb-kgrid/stb-mlrelax/etc. (core/kspace.py's other
+# callers): minimum empty span along an axis, wrapped periodically, to
+# treat it as vacuum-padded rather than genuinely periodic.
+VACUUM_GAP_ANG = 10.0
 
 def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     """Pure computation -- no printing, no file I/O. Returns a results dict
@@ -65,7 +70,11 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     for site in sites:
         site["distortion"] = distortion[site["atom_id"] - 1]
 
+    reduced_formula, z = structure.composition.get_reduced_formula_and_factor()
+    vacuum_axes = kspace.detect_vacuum_axes(structure.frac_coords, lattice.matrix, VACUUM_GAP_ANG)
+
     return {
+        "vacuum_axes": vacuum_axes,
         "space_group_symbol": sga.get_space_group_symbol(),
         "space_group_number": sga.get_space_group_number(),
         "hall_symbol": sga.get_hall(),
@@ -82,6 +91,8 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
             "alpha": lattice.alpha, "beta": lattice.beta, "gamma": lattice.gamma,
             "volume": lattice.volume,
             "vectors": lattice.matrix,
+            "reduced_formula": reduced_formula,
+            "z": z,
         },
         "sites": sites,
         "n_distinct_sites": len(ss.equivalent_indices),
@@ -207,6 +218,15 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     lines.append(f"Symmetry precision: symprec={results['symprec']:g}, "
                  f"angle_tolerance={results['angle_tolerance']:g}°")
 
+    if any(results["vacuum_axes"]):
+        axis_names = [name for name, is_vacuum in zip("abc", results["vacuum_axes"]) if is_vacuum]
+        lines.append("")
+        lines.append(f"WARNING: vacuum gap (>= {VACUUM_GAP_ANG:g} Å) detected along axis/axes "
+                     f"{', '.join(axis_names)} (e.g. a slab or wire). 3D space-group detection")
+        lines.append("isn't physically meaningful for a vacuum-padded structure -- spglib treats")
+        lines.append("the vacuum as ordinary empty space, not a broken periodicity, so what")
+        lines.append("follows describes the padded supercell, not the real layer/rod symmetry.")
+
     lines.append("")
     lines.append(_rule())
     lines.append("SPACE GROUP")
@@ -228,6 +248,7 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     lines.append(f"a = {lat['a']:.3f} Å   b = {lat['b']:.3f} Å   c = {lat['c']:.3f} Å")
     lines.append(f"alpha = {lat['alpha']:.2f}°   beta = {lat['beta']:.2f}°   gamma = {lat['gamma']:.2f}°")
     lines.append(f"Volume = {lat['volume']:.3f} Å³")
+    lines.append(f"Formula          : {lat['reduced_formula']} (Z = {lat['z']:g} formula units in this cell)")
     lines.append("")
     lines.append("Lattice vectors (Å):")
     for i, vec in enumerate(lat["vectors"]):

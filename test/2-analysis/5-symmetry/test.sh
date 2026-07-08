@@ -70,6 +70,7 @@ cp "$FIXTURE_DIR/siesta.STRUCT_OUT" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl_noisy.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/rhombo.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/graphene_slab.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -133,6 +134,12 @@ check_contains "Lattice type     : cubic" symmetry.dat
 check_contains "Pearson symbol   : cF8" symmetry.dat
 check_contains "Symmetry operations: 192" symmetry.dat
 check_not_contains "Setting choice" symmetry.dat
+
+echo "Verifying the reduced formula and Z (formula units in this cell)"
+check_contains "Formula          : NaCl (Z = 4 formula units in this cell)" symmetry.dat
+
+echo "Verifying no vacuum warning for a genuinely 3D bulk structure"
+check_not_contains "WARNING: vacuum gap" symmetry.dat
 
 echo "Verifying the two Wyckoff orbits (4a for Na, 4b for Cl), not 8 separate 1-atom sites, with site symmetry m-3m"
 check_contains "SYMMETRICALLY DISTINCT SITES: 2" symmetry.dat
@@ -256,6 +263,18 @@ stb-symmetry --file rhombo.fdf --format fdf --no-intro > log_rhombo.txt 2>&1
 check_exit_code $? 0
 check_contains "Space group      : R3 (No. 146)" symmetry.dat
 check_contains "Setting choice   : H" symmetry.dat
+
+
+# --- 4h. Vacuum-axis warning: a graphene-like slab with 20 Ang vacuum along
+#     c should trigger the warning (3D space-group detection isn't
+#     meaningful for a vacuum-padded structure); the fixtures above (all
+#     genuinely 3D bulk) must not. ---
+echo -e "\n--- Testing the vacuum-axis warning on a graphene slab (20 Ang vacuum along c) ---"
+rm -f symmetry.dat
+stb-symmetry --file graphene_slab.fdf --format fdf --no-intro > log_slab.txt 2>&1
+check_exit_code $? 0
+check_contains "WARNING: vacuum gap (>= 10 Å) detected along axis/axes c" symmetry.dat
+check_contains "isn't physically meaningful for a vacuum-padded structure" symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

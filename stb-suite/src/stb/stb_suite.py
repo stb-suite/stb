@@ -1833,6 +1833,15 @@ def run_symmetry_analyzer() -> None:
     output_dir = get_input("Output directory [default: current directory]: ").strip() or "."
 
     args = ["--file", input_file, "--format", format_type, "--output-dir", output_dir, "--no-intro"]
+
+    scan_choice = get_input("Scan a range of symprec tolerances to check for hidden symmetry? (y/N): ").strip().lower()
+    if scan_choice in ['y', 'yes']:
+        args.append("--scan-symprec")
+
+    ops_choice = get_input("Include the full symmetry-operations list in the report? (Y/n): ").strip().lower()
+    if ops_choice in ['n', 'no']:
+        args.append("--no-operations")
+
     run_tool("stb-symmetry", args)
 
 def run_wantibexos_interface() -> None:

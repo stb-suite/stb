@@ -68,6 +68,7 @@ mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta.STRUCT_OUT" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/nacl_noisy.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -87,11 +88,14 @@ check_contains "Source file      : structure.fdf  (format: fdf)" symmetry.dat
 
 echo "Verifying space group / point group / crystal system for a P1 (no symmetry) structure"
 check_contains "Space group      : P1 (No. 1)" symmetry.dat
-check_contains "Hall symbol      : P 1" symmetry.dat
+check_contains "Hall symbol      : P 1 (Hall No. 1)" symmetry.dat
 check_contains "Point group      : 1" symmetry.dat
 check_contains "Crystal system   : triclinic" symmetry.dat
 check_contains "Pearson symbol   : aP14" symmetry.dat
 check_contains "Symmetry operations: 1" symmetry.dat
+
+echo "Verifying site symmetry column shows trivial '1' symmetry for a P1 structure"
+check_contains "1a        Sn        1         1               1" symmetry.dat
 
 echo "Verifying lattice parameters and volume"
 check_contains "a = 4.883 Å   b = 5.907 Å   c = 8.238 Å" symmetry.dat
@@ -121,17 +125,17 @@ check_exit_code $? 0
 
 echo "Verifying space group / Pearson symbol / lattice type for a textbook Fm-3m structure"
 check_contains "Space group      : Fm-3m (No. 225)" symmetry.dat
-check_contains "Hall symbol      : -F 4 2 3" symmetry.dat
+check_contains "Hall symbol      : -F 4 2 3 (Hall No. 523)" symmetry.dat
 check_contains "Point group      : m-3m" symmetry.dat
 check_contains "Crystal system   : cubic" symmetry.dat
 check_contains "Lattice type     : cubic" symmetry.dat
 check_contains "Pearson symbol   : cF8" symmetry.dat
 check_contains "Symmetry operations: 192" symmetry.dat
 
-echo "Verifying the two Wyckoff orbits (4a for Na, 4b for Cl), not 8 separate 1-atom sites"
+echo "Verifying the two Wyckoff orbits (4a for Na, 4b for Cl), not 8 separate 1-atom sites, with site symmetry m-3m"
 check_contains "SYMMETRICALLY DISTINCT SITES: 2" symmetry.dat
-check_contains "4a        Na        4         1" symmetry.dat
-check_contains "4b        Cl        4         5" symmetry.dat
+check_contains "4a        Na        4         m-3m            1" symmetry.dat
+check_contains "4b        Cl        4         m-3m            5" symmetry.dat
 check_contains "   1  Na   4a  " symmetry.dat
 check_contains "   5  Cl   4b  " symmetry.dat
 
@@ -149,6 +153,37 @@ else
     echo -e "   -> ${RED}Failed:${NC} found $n_op_lines operation lines, expected 192"
     FAIL=$((FAIL+1))
 fi
+
+
+# --- 4b. --no-operations: skips the operations list entirely ---
+echo -e "\n--- Testing --no-operations ---"
+rm -f symmetry.dat
+stb-symmetry --file nacl.fdf --format fdf --no-operations --no-intro > log_noops.txt 2>&1
+check_exit_code $? 0
+check_not_contains "SYMMETRY OPERATIONS" symmetry.dat
+check_contains "SYMMETRICALLY DISTINCT SITES: 2" symmetry.dat
+
+
+# --- 4c. --scan-symprec: sweeps a range of tolerances and reports where
+#     the space group changes -- verified on a deliberately noisy NaCl
+#     (small random displacement, simulating post-relaxation numerical
+#     drift) that P1 is detected at tight tolerances and a higher symmetry
+#     appears once symprec is loose enough. ---
+echo -e "\n--- Testing --scan-symprec ---"
+rm -f symmetry.dat
+stb-symmetry --file nacl.fdf --format fdf --scan-symprec --no-intro > log_scan.txt 2>&1
+check_exit_code $? 0
+check_contains "SYMPREC SENSITIVITY SCAN" symmetry.dat
+check_contains "1e-05       Fm-3m (No. 225)" symmetry.dat
+check_contains "No change in detected space group across the scanned tolerance range." symmetry.dat
+
+echo "Testing --scan-symprec on a deliberately noisy NaCl (small random displacement): P1 at tight tolerance, symmetry recovered at a looser one"
+rm -f symmetry.dat
+stb-symmetry --file nacl_noisy.fdf --format fdf --scan-symprec --no-intro > log_scan_noisy.txt 2>&1
+check_exit_code $? 0
+check_contains "1e-05       P1 (No. 1)" symmetry.dat
+check_contains "0.1         Cm (No. 8)" symmetry.dat
+check_contains "Symmetry increases at symprec >= 0.1: P1 (No. 1) -> Cm (No. 8)." symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
@@ -199,12 +234,14 @@ check_contains "stb-symmetry" log_version.txt
 # --- 8. Interactive path (stb-suite, shortcut 2.5) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.5) ---"
 
-echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir"
+echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir -> scan=y -> operations=n"
 rm -f symmetry.dat
-printf '2.5\nnacl.fdf\n1\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '2.5\nnacl.fdf\n1\n\ny\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success symmetry.dat
 check_contains "Select input file format:" log_menu.txt
 check_contains "Fm-3m" symmetry.dat
+check_contains "SYMPREC SENSITIVITY SCAN" symmetry.dat
+check_not_contains "SYMMETRY OPERATIONS" symmetry.dat
 
 
 popd > /dev/null

@@ -14,11 +14,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from stb.core.cli import color_text, show_intro
 
+# FWHM = 2*sqrt(2*ln2) * sigma, for a Gaussian.
+FWHM_TO_SIGMA = 2 * np.sqrt(2 * np.log(2))
+
 
 def gaussian_kernel_1d(size, sigma):
     """Creates a normalized 1D Gaussian kernel of the given odd size.
-    `sigma` is in samples (grid points), not eV -- see energy_grid_spacing()
-    for the eV -> samples conversion callers are expected to do first."""
+    `sigma` is in samples (grid points), not a physical energy unit -- see
+    energy_grid_spacing() for the eV -> samples conversion callers are
+    expected to do first (main() additionally takes --sigma/--fwhm in meV,
+    converted to eV before that)."""
     kernel_1d = np.arange(size) - (size - 1) / 2.0
     kernel_1d = np.exp(-(kernel_1d**2) / (2 * sigma**2))
     kernel_1d /= np.sum(kernel_1d)  # Normalize the kernel
@@ -26,11 +31,12 @@ def gaussian_kernel_1d(size, sigma):
 
 
 def energy_grid_spacing(energy):
-    """Median spacing (eV) between consecutive energy points, so --sigma can
-    be given in physically meaningful eV instead of grid samples -- whose
-    count depends on how densely the input file happens to be sampled.
-    Raises ValueError if the energy column isn't increasing (spacing would
-    be zero or negative, meaning sigma-in-samples can't be computed)."""
+    """Median spacing (eV) between consecutive energy points, so --sigma/
+    --fwhm can be given in physically meaningful units instead of grid
+    samples -- whose count depends on how densely the input file happens to
+    be sampled. Raises ValueError if the energy column isn't increasing
+    (spacing would be zero or negative, meaning sigma-in-samples can't be
+    computed)."""
     d_energy = float(np.median(np.diff(energy)))
     if d_energy <= 0:
         raise ValueError("Energy column must be sorted in strictly increasing order.")
@@ -107,11 +113,16 @@ def plot_all(energy, original, filtered, dos_labels):
     plt.close(fig)
 
 
-def write_output(path, energy, filtered, energy_label, dos_labels):
-    """Writes energy + all filtered DOS columns, with a header that lists
-    every actual column instead of a fixed 'Energy DOS_filtered' regardless
-    of how many DOS columns there really are."""
-    header = energy_label + " " + " ".join(f"{label}_filtered" for label in dos_labels)
+def write_output(path, energy, filtered, energy_label, dos_labels, sigma_mev, sigma_samples, size):
+    """Writes energy + all filtered DOS columns. Header line 1 lists every
+    actual column (instead of a fixed 'Energy DOS_filtered' regardless of
+    how many DOS columns there really are); line 2 records the broadening
+    parameters actually used, so the file is self-describing even without
+    the run's console log. Column labels stay on line 1 so a re-filtered
+    file can still have its columns picked up by read_column_labels()."""
+    columns_line = energy_label + " " + " ".join(f"{label}_filtered" for label in dos_labels)
+    params_line = f"Gaussian broadening: sigma = {sigma_mev:.3f} meV ({sigma_samples:.3f} samples), kernel size = {size}"
+    header = columns_line + "\n" + params_line
     out_array = np.column_stack([energy, filtered])
     np.savetxt(path, out_array, fmt='%.6f', header=header)
 
@@ -120,23 +131,28 @@ def main():
     parser = argparse.ArgumentParser(
         description="Apply Gaussian convolution to broaden a DOS file's columns.",
         epilog="Example usage:\n"
-               "  stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat\n"
-               "  stb-convdos --file dos_total.dat --sigma 50 --size 41 --out dos_filtered.dat --no-plot",
+               "  stb-convdos --file dos_total.dat --sigma 50 --out dos_filtered.dat\n"
+               "  stb-convdos --file dos_total.dat --fwhm 100 --size 41 --out dos_filtered.dat --no-plot",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--file", dest="input_file", required=True,
                         help="Input DOS file: whitespace-separated columns, energy first.")
-    parser.add_argument("--sigma", type=float, required=True,
+    broadening = parser.add_mutually_exclusive_group(required=True)
+    broadening.add_argument("--sigma", type=float, default=None,
                         help="Gaussian broadening standard deviation, in meV. Converted internally "
                              "to grid samples using the input file's own energy spacing, so the "
                              "same --sigma gives the same physical broadening regardless of how "
-                             "densely the file is sampled. Must be positive.")
+                             "densely the file is sampled. Must be positive. Alternative to --fwhm.")
+    broadening.add_argument("--fwhm", type=float, default=None,
+                        help="Gaussian broadening full width at half maximum, in meV "
+                             "(FWHM = 2.3548 * sigma) -- the width more commonly quoted in "
+                             "spectroscopy/DOS literature. Must be positive. Alternative to --sigma.")
     parser.add_argument("--size", type=int, default=None,
                         help="Gaussian kernel width, in samples. Optional -- by default sized "
-                             "automatically from --sigma to cover about 3 standard deviations on "
-                             "each side. Must be a positive odd number if given explicitly (an "
-                             "even size shifts the filtered curve by half a bin, since it has no "
-                             "single center sample).")
+                             "automatically from --sigma/--fwhm to cover about 3 standard "
+                             "deviations on each side. Must be a positive odd number if given "
+                             "explicitly (an even size shifts the filtered curve by half a bin, "
+                             "since it has no single center sample).")
     parser.add_argument("--out", required=True, dest="outfile",
                         help="Output file for the filtered data.")
     parser.add_argument("--no-plot", dest="plot", action="store_false",
@@ -146,8 +162,14 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
 
-    if args.sigma <= 0:
-        parser.error("--sigma must be positive.")
+    if args.sigma is not None:
+        if args.sigma <= 0:
+            parser.error("--sigma must be positive.")
+        sigma_mev = args.sigma
+    else:
+        if args.fwhm <= 0:
+            parser.error("--fwhm must be positive.")
+        sigma_mev = args.fwhm / FWHM_TO_SIGMA
     if args.size is not None and (args.size <= 0 or args.size % 2 == 0):
         parser.error("--size must be a positive odd number.")
 
@@ -180,11 +202,17 @@ def main():
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
-    sigma_ev = args.sigma / 1000.0
+    sigma_ev = sigma_mev / 1000.0
     sigma_samples = sigma_ev / d_energy
     size = args.size if args.size is not None else kernel_size_for_sigma(sigma_samples)
-    print(f"[INFO] Energy grid spacing: {d_energy:.6f} eV -> sigma = {args.sigma:.3f} meV "
+    print(f"[INFO] Energy grid spacing: {d_energy:.6f} eV -> sigma = {sigma_mev:.3f} meV "
           f"= {sigma_samples:.3f} samples, kernel size = {size}")
+    if size > inp_file.shape[0]:
+        print(color_text(f"[ERROR] Kernel size ({size}) is larger than the number of energy "
+                          f"points ({inp_file.shape[0]}) in the file -- double-check "
+                          "--sigma/--fwhm and the file's energy units (a much bigger value "
+                          "than intended, e.g. eV instead of meV, is the usual cause).", 'red'))
+        sys.exit(1)
 
     kernel = gaussian_kernel_1d(size, sigma_samples)
     print("[INFO] Applying Gaussian convolution ...")
@@ -193,7 +221,7 @@ def main():
     # Write the actual deliverable before plotting, so a display/backend
     # problem (e.g. no X11 and MPLBACKEND unset) can't cost the already-done
     # convolution work -- the result file is saved either way.
-    write_output(args.outfile, energy, filtered, energy_label, dos_labels)
+    write_output(args.outfile, energy, filtered, energy_label, dos_labels, sigma_mev, sigma_samples, size)
     print(f"\n[OK] Filtered data written to {args.outfile}")
 
     if args.plot:

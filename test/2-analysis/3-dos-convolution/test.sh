@@ -42,6 +42,17 @@ check_contains() {
     fi
 }
 
+# Checks that $2 does NOT contain (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' (should not be there)"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent from '$2'"
+        PASS=$((PASS+1))
+    fi
+}
+
 # Checks that $1 (actual exit code) equals $2 (expected exit code)
 check_exit_code() {
     if [ "$1" -eq "$2" ]; then
@@ -85,13 +96,16 @@ rm -f filtered.dat
 stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success filtered.dat
-check_line_count filtered.dat 6001
+check_line_count filtered.dat 6002
 
 echo "Verifying --sigma (meV) is converted using the file's own energy spacing, and --size is auto-sized"
 check_contains "Energy grid spacing: 0.010000 eV -> sigma = 50.000 meV = 5.000 samples, kernel size = 31" log_default.txt
 
 echo "Verifying the header lists every actual DOS column (used to be hardcoded 'Energy DOS_filtered' regardless of column count)"
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" filtered.dat
+
+echo "Verifying the header's 2nd line records the broadening parameters actually used"
+check_contains "# Gaussian broadening: sigma = 50.000 meV (5.000 samples), kernel size = 31" filtered.dat
 
 echo "Verifying a known filtered data point (sigma=50 meV -> 5 samples, auto size=31)"
 check_contains "13.188850 0.010066 0.788188 1.782186 0.000000" filtered.dat
@@ -103,6 +117,34 @@ rm -f filtered_explicit.dat
 stb-convdos --file dos_total.dat --sigma 50 --size 41 --out filtered_explicit.dat --no-plot --no-intro > log_explicit_size.txt 2>&1
 check_exit_code $? 0
 check_contains "kernel size = 41" log_explicit_size.txt
+
+
+# --- 2c. --fwhm is an alternative to --sigma (FWHM = 2.3548 * sigma) ---
+echo -e "\n--- Testing --fwhm as an alternative to --sigma ---"
+rm -f filtered_fwhm.dat
+stb-convdos --file dos_total.dat --fwhm 117.741 --out filtered_fwhm.dat --no-plot --no-intro > log_fwhm.txt 2>&1
+check_exit_code $? 0
+check_contains "sigma = 50.000 meV" log_fwhm.txt
+
+echo "Testing: --sigma and --fwhm together are rejected"
+stb-convdos --file dos_total.dat --sigma 50 --fwhm 100 --out f.dat --no-intro > log_both.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: neither --sigma nor --fwhm is rejected"
+stb-convdos --file dos_total.dat --out f.dat --no-intro > log_neither.txt 2>&1
+check_exit_code $? 2
+
+
+# --- 2d. Kernel wider than the data errors out cleanly instead of crashing
+#     with a raw traceback -- np.convolve(mode='same') returns a
+#     max(M,N)-length array, not one matching the data, once the kernel
+#     outgrows it, which used to reach the array-assignment line and raise
+#     an uncaught ValueError. ---
+echo -e "\n--- Testing the oversized-kernel error ---"
+stb-convdos --file dos_total.dat --sigma 30000 --out f.dat --no-plot --no-intro > log_oversized.txt 2>&1
+check_exit_code $? 1
+check_contains "larger than the number of energy points" log_oversized.txt
+check_not_contains "Traceback" log_oversized.txt
 
 
 # --- 3. Kernel/energy-conservation sanity: total DOS is approximately
@@ -220,9 +262,15 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
 
 echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\ndos_total.dat\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
+printf '2.3\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
+
+echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> FWHM 117.741 meV -> auto size -> no plot"
+rm -f dos_filtered.dat
+printf '2.3\ndos_total.dat\n\n2\n117.741\n\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
+check_success dos_filtered.dat
+check_contains "sigma = 50.000 meV" log_menu_fwhm.txt
 
 
 popd > /dev/null

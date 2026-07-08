@@ -1579,18 +1579,27 @@ def run_dos_convolution() -> None:
     # Esta linha agora terá Tab-completion!
     out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
 
-    sigma = get_float_input("Gaussian broadening sigma, in meV (default: 50): ", 50.0)
-    while sigma <= 0:
-        print(color_text("Sigma must be positive!", 'red'))
-        sigma = get_float_input("Sigma in meV (default: 50): ", 50.0)
+    broadening_choice = get_input("Specify broadening as (1) sigma or (2) FWHM, in meV [default: 1]: ").strip()
+    if broadening_choice == '2':
+        fwhm = get_float_input("FWHM, in meV (default: 118): ", 118.0)
+        while fwhm <= 0:
+            print(color_text("FWHM must be positive!", 'red'))
+            fwhm = get_float_input("FWHM in meV (default: 118): ", 118.0)
+        broadening_flag, broadening_value = "--fwhm", fwhm
+    else:
+        sigma = get_float_input("Sigma, in meV (default: 50): ", 50.0)
+        while sigma <= 0:
+            print(color_text("Sigma must be positive!", 'red'))
+            sigma = get_float_input("Sigma in meV (default: 50): ", 50.0)
+        broadening_flag, broadening_value = "--sigma", sigma
 
-    size_str = get_input("Kernel size in samples (optional, blank = auto-sized from sigma): ").strip()
+    size_str = get_input("Kernel size in samples (optional, blank = auto-sized from broadening): ").strip()
 
     plot_choice = get_input("Show before/after plot? (Y/n): ").strip().lower()
 
     args = [
         "--file", input_file,
-        "--sigma", str(sigma),
+        broadening_flag, str(broadening_value),
         "--out", out_file,
         "--no-intro"
     ]

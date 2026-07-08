@@ -67,14 +67,20 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
         for i, vector in enumerate(lattice_vectors):
             f.write(f"   a_{i+1}: {vector[0]}   {vector[1]}   {vector[2]}\n")
 
-        # Coordination-number methods. use_weights=True makes every method
-        # return a genuinely "effective" (continuous, neighbor-weighted)
-        # coordination number -- pymatgen's NearNeighbors.get_cn() defaults
-        # to use_weights=False, which returns a plain integer neighbor
-        # count for all of these except EconNN (whose formula, Hoppe's
-        # ECoN, is inherently weighted/continuous regardless of this flag).
-        # Without it, calling everything "ECN" was misleading for the other
-        # four methods.
+        # Coordination-number methods. use_weights=True makes every one of
+        # them -- EconNN included, its get_cn() respects the flag exactly
+        # like the rest even though its formula (Hoppe's ECoN) is defined
+        # as a continuous quantity: verified this atom-by-atom, e.g.
+        # use_weights=False gives a plain integer count (6) where
+        # use_weights=True gives the real ECoN value (5.98) -- return a
+        # genuinely "effective" (continuous, neighbor-weighted) coordination
+        # number. pymatgen's NearNeighbors.get_cn() defaults to
+        # use_weights=False (a plain integer neighbor count) for all five.
+        #
+        # JmolNN's weights are on a different scale than the other four: its
+        # reference distance is a fixed Jmol bonding-radius lookup table, not
+        # this atom's own closest-neighbor distance, so its weight can exceed
+        # 1.0 and its resulting CN is typically the outlier among the five.
         methods = {
             "JmolNN": JmolNN(),
             "MinDistNN": MinimumDistanceNN(),
@@ -140,8 +146,13 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
                 f.write(f" Atom {pos_atomics[atom_index-1][0]}:\n")
                 f.write(f"   Element: {pos_atomics[atom_index-1][1]}     Cartesian Position: {pos_atomics[atom_index-1][2]}\n")
                 for method, values in ecn_results.items():
-                    print(f"      {method:15}: {values[i]}")
-                    f.write(f"      {method:15}: {values[i]}\n")
+                    # values[i] is a raw float (~15 significant digits) or
+                    # None (that method failed for this atom) -- format it
+                    # instead of printing it raw, matching "mean" mode's
+                    # .3f, and guard None since f"{None:.3f}" raises.
+                    value_str = f"{values[i]:.3f}" if values[i] is not None else "N/A"
+                    print(f"      {method:15}: {value_str}")
+                    f.write(f"      {method:15}: {value_str}\n")
 
         # Bond distances via CrystalNN, broken down by species pair -- a
         # single average lumping e.g. Sn-O with any Sn-Sn/O-O neighbors

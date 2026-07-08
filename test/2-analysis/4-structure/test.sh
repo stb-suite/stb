@@ -134,6 +134,10 @@ check_contains "Element: O     Cartesian Position:" structural_information.dat
 echo "Verifying CrystalNN no longer errors under use_weights=True (needs weighted_cn=True at construction)"
 check_not_contains "CrystalNN failed" log_list.txt
 
+echo "Verifying per-atom CN values are formatted to 3 decimals, not printed as raw ~15-digit floats"
+check_contains "JmolNN         : 8.970" structural_information.dat
+check_not_contains "8.970272100975317" structural_information.dat
+
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
 echo -e "\n--- Testing --output-dir ---"

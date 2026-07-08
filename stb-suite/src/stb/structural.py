@@ -67,11 +67,22 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
         for i, vector in enumerate(lattice_vectors):
             f.write(f"   a_{i+1}: {vector[0]}   {vector[1]}   {vector[2]}\n")
 
-        # ECN Methods
+        # Coordination-number methods. use_weights=True makes every method
+        # return a genuinely "effective" (continuous, neighbor-weighted)
+        # coordination number -- pymatgen's NearNeighbors.get_cn() defaults
+        # to use_weights=False, which returns a plain integer neighbor
+        # count for all of these except EconNN (whose formula, Hoppe's
+        # ECoN, is inherently weighted/continuous regardless of this flag).
+        # Without it, calling everything "ECN" was misleading for the other
+        # four methods.
         methods = {
             "JmolNN": JmolNN(),
             "MinDistNN": MinimumDistanceNN(),
-            "CrystalNN": CrystalNN(),
+            # weighted_cn=True must match the use_weights=True passed to
+            # get_cn() below -- CrystalNN raises ValueError otherwise,
+            # unlike the other methods (which don't require a matching
+            # constructor flag).
+            "CrystalNN": CrystalNN(weighted_cn=True),
             "BrunnerNN": BrunnerNNRelative(),
             "EconNN": EconNN()
         }
@@ -84,28 +95,47 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
             for i in range(len(structure)):
                 for method_name, method in methods.items():
                     try:
-                        ecn_results[method_name].append(method.get_cn(structure, i))
+                        ecn_results[method_name].append(method.get_cn(structure, i, use_weights=True))
                     except Exception as e:
                         ecn_results[method_name].append(None)
                         print(f"[WARNING] {method_name} failed for atom {i+1}: {e}")
 
-            ecn_avg = {method: np.nanmean([v for v in values if v is not None]) for method, values in ecn_results.items()}
-            print("\n[INFO] Calculating the average ECN.")
-            f.write("\nAverage ECN:\n")
-            for method, value in ecn_avg.items():
-                f.write(f"{method:15}: {value:.2f}\n")
+            # Per-species averages -- a single structure-wide average mixes
+            # chemically distinct sites (e.g. a cation's coordination with
+            # an anion's) into one physically meaningless number. Reported
+            # per species, plus an overall figure for reference.
+            species_by_index = [pos_atomics[i][1] for i in range(len(structure))]
+            species_list = sorted(set(species_by_index))
+
+            print("\n[INFO] Calculating effective (weighted) CN per species.")
+            f.write("\nEffective Coordination Number (weighted), per species:\n")
+            for sp in species_list:
+                sp_idx = [i for i, s in enumerate(species_by_index) if s == sp]
+                print(f"   {sp} ({len(sp_idx)} atoms):")
+                f.write(f" {sp} ({len(sp_idx)} atoms):\n")
+                for method_name, values in ecn_results.items():
+                    sp_values = [values[i] for i in sp_idx if values[i] is not None]
+                    avg = np.mean(sp_values) if sp_values else float('nan')
+                    print(f"      {method_name:15}: {avg:.3f}")
+                    f.write(f"      {method_name:15}: {avg:.3f}\n")
+
+            f.write("\nEffective Coordination Number (weighted), overall average:\n")
+            for method_name, values in ecn_results.items():
+                valid = [v for v in values if v is not None]
+                avg = np.mean(valid) if valid else float('nan')
+                f.write(f" {method_name:15}: {avg:.3f}\n")
 
         elif mode == "list" and atoms_position:
             for i in atoms_position:
                 for method_name, method in methods.items():
                     try:
-                        ecn_results[method_name].append(method.get_cn(structure, i-1))
+                        ecn_results[method_name].append(method.get_cn(structure, i-1, use_weights=True))
                     except Exception as e:
                         ecn_results[method_name].append(None)
                         print(f"[WARNING] {method_name} failed for atom {i}: {e}")
 
-            print("\n[INFO] Calculating the ECN for specified atoms.")
-            f.write("\nECN for specified atoms:\n")
+            print("\n[INFO] Calculating the effective (weighted) CN for specified atoms.")
+            f.write("\nEffective Coordination Number (weighted) for specified atoms:\n")
             for i, atom_index in enumerate(atoms_position):
                 f.write(f" Atom {pos_atomics[atom_index-1][0]}:\n")
                 f.write(f"   Element: {pos_atomics[atom_index-1][1]}     Cartesian Position: {pos_atomics[atom_index-1][2]}\n")
@@ -113,12 +143,18 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
                     print(f"      {method:15}: {values[i]}")
                     f.write(f"      {method:15}: {values[i]}\n")
 
-        # Average bond distance calculation using CrystalNN
-        print("\n[INFO] Calculating average bond distance...")
-        f.write("\n[INFO] Average bond distance:\n")
+        # Bond distances via CrystalNN, broken down by species pair -- a
+        # single average lumping e.g. Sn-O with any Sn-Sn/O-O neighbors
+        # found isn't a physically meaningful number on its own. Note a
+        # bond can be counted from both of its atoms' neighbor lists in
+        # "mean" mode (n= makes that visible); this only skews the average
+        # if the neighbor relationship isn't symmetric between the two.
+        print("\n[INFO] Calculating average bond distance per species pair...")
+        f.write("\nAverage bond distance, per species pair:\n")
 
         cnn = CrystalNN()
-        distances = []
+        distances_by_pair = {}
+        all_distances = []
 
         indices = range(len(structure)) if mode == "mean" else [i - 1 for i in atoms_position]
 
@@ -127,14 +163,22 @@ def compute_ecn(structure, mode, output_dir, atoms_position=None):
                 neighbors = cnn.get_nn_info(structure, i)
                 for neighbor in neighbors:
                     dist = neighbor['site'].distance(structure[i])
-                    distances.append(dist)
+                    all_distances.append(dist)
+                    pair = tuple(sorted((pos_atomics[i][1], str(neighbor['site'].specie.symbol))))
+                    distances_by_pair.setdefault(pair, []).append(dist)
             except Exception as e:
                 print(f"[WARNING] Failed to compute distances for atom {i+1}: {e}")
 
-        if distances:
-            avg_distance = np.mean(distances)
-            print(f"   Average bond distance: {avg_distance:.4f} Å")
-            f.write(f"   Average bond distance: {avg_distance:.4f} Å\n")
+        if all_distances:
+            for pair in sorted(distances_by_pair):
+                pair_distances = distances_by_pair[pair]
+                avg = np.mean(pair_distances)
+                label = f"{pair[0]}-{pair[1]}"
+                print(f"   {label:10}: {avg:.4f} Å  (n={len(pair_distances)})")
+                f.write(f"   {label:10}: {avg:.4f} Å  (n={len(pair_distances)})\n")
+            overall = np.mean(all_distances)
+            print(f"   {'Overall':10}: {overall:.4f} Å  (n={len(all_distances)})")
+            f.write(f"   {'Overall':10}: {overall:.4f} Å  (n={len(all_distances)})\n")
         else:
             print("[WARNING] No distances could be computed.")
             f.write("   No distances could be computed.\n")

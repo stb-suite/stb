@@ -38,6 +38,17 @@ check_contains() {
     fi
 }
 
+# Checks that $2 does NOT contain (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' (should not be there)"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent from '$2'"
+        PASS=$((PASS+1))
+    fi
+}
+
 # Checks that $1 (actual exit code) equals $2 (expected exit code)
 check_exit_code() {
     if [ "$1" -eq "$2" ]; then
@@ -81,16 +92,25 @@ stb-structural --file structure.fdf --format fdf --mode mean --no-intro > log_fd
 check_exit_code $? 0
 check_success structural_information.dat
 
-echo "Verifying lattice parameters and average ECN/bond distance"
+echo "Verifying lattice parameters"
 check_contains "a = 4.883 Å" structural_information.dat
 check_contains "b = 5.907 Å" structural_information.dat
 check_contains "c = 8.238 Å" structural_information.dat
-check_contains "JmolNN         : 4.00" structural_information.dat
-check_contains "Average bond distance: 2.1109 Å" structural_information.dat
+
+echo "Verifying effective (weighted) CN is broken down per species, not lumped into one"
+check_contains "Effective Coordination Number (weighted), per species:" structural_information.dat
+check_contains " O (8 atoms):" structural_information.dat
+check_contains " Sn (6 atoms):" structural_information.dat
+check_contains "CrystalNN      : 2.956" structural_information.dat
+check_contains "CrystalNN      : 4.004" structural_information.dat
+
+echo "Verifying bond distance is broken down per species pair, not a single lumped average"
+check_contains "Average bond distance, per species pair:" structural_information.dat
+check_contains "O-Sn      : 2.1109 Å  (n=48)" structural_information.dat
 
 
 # --- 3. --format struct_out, mode mean -- same physical structure (post-
-#     relaxation), so lattice/ECN/bond-distance summaries should match the
+#     relaxation), so lattice/CN/bond-distance summaries should match the
 #     .fdf run to the precision printed (atomic positions differ in the
 #     last digit or two, which isn't checked here). ---
 echo -e "\n--- Testing --format struct_out --mode mean (same structure, different source format) ---"
@@ -98,18 +118,21 @@ rm -f structural_information.dat warnings.log
 stb-structural --file siesta.STRUCT_OUT --format struct_out --mode mean --no-intro > log_struct_mean.txt 2>&1
 check_exit_code $? 0
 check_contains "a = 4.883 Å" structural_information.dat
-check_contains "JmolNN         : 4.00" structural_information.dat
-check_contains "Average bond distance: 2.1109 Å" structural_information.dat
+check_contains "CrystalNN      : 2.956" structural_information.dat
+check_contains "O-Sn      : 2.1109 Å  (n=48)" structural_information.dat
 
 
-# --- 4. --mode list: per-atom ECN for specific 1-based indices ---
+# --- 4. --mode list: per-atom effective CN for specific 1-based indices ---
 echo -e "\n--- Testing --mode list ---"
 rm -f structural_information.dat warnings.log
 stb-structural --file structure.fdf --format fdf --mode list --list 1,7 --no-intro > log_list.txt 2>&1
 check_exit_code $? 0
-check_contains "ECN for specified atoms" structural_information.dat
+check_contains "Effective Coordination Number (weighted) for specified atoms" structural_information.dat
 check_contains "Element: Sn     Cartesian Position:" structural_information.dat
 check_contains "Element: O     Cartesian Position:" structural_information.dat
+
+echo "Verifying CrystalNN no longer errors under use_weights=True (needs weighted_cn=True at construction)"
+check_not_contains "CrystalNN failed" log_list.txt
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

@@ -27,6 +27,17 @@ check_success() {
     fi
 }
 
+# Checks that file $1 exists, regardless of whether it's empty
+check_exists() {
+    if [ -e "$1" ]; then
+        echo -e " ... ${GREEN}OK${NC} (file '$1' exists)"
+        PASS=$((PASS+1))
+    else
+        echo -e " ... ${RED}FAIL${NC} (file '$1' does not exist)"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 # Checks that file $2 contains (grep -q) pattern $1
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
@@ -91,6 +102,17 @@ rm -f structural_information.dat warnings.log
 stb-structural --file structure.fdf --format fdf --mode mean --no-intro > log_fdf_mean.txt 2>&1
 check_exit_code $? 0
 check_success structural_information.dat
+
+echo "Verifying CrystalNN's expected, non-actionable 'no oxidation states' warnings are suppressed (not logged, not printed) without changing any computed values"
+check_exists warnings.log
+if [ -s warnings.log ]; then
+    echo -e "   -> ${RED}Failed:${NC} warnings.log is non-empty (oxidation-state noise leaked through)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} warnings.log is empty (no oxidation-state noise)"
+    PASS=$((PASS+1))
+fi
+check_not_contains "\[WARNING\]" log_fdf_mean.txt
 
 echo "Verifying lattice parameters, cell volume, and density"
 check_contains "a = 4.883 Å" structural_information.dat
@@ -205,7 +227,7 @@ rm -rf out_dir
 stb-structural --file structure.fdf --format fdf --mode mean --output-dir out_dir --no-intro > log_outdir.txt 2>&1
 check_exit_code $? 0
 check_success out_dir/structural_information.dat
-check_success out_dir/warnings.log
+check_exists out_dir/warnings.log
 
 
 # --- 5b. --no-rdf: skips rdf.dat, and cleans up a stale one from a

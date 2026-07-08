@@ -192,6 +192,30 @@ def _first_peak(r_centers, g):
 def compute_ecn(structure, mode, atoms_position=None):
     """Pure computation -- no printing, no file I/O. Returns a results dict
     that format_report() turns into the console/file report."""
+    with warnings.catch_warnings():
+        # CrystalNN (used throughout this function) unconditionally warns
+        # twice per neighbor pair that "no oxidation states specified",
+        # then again that it's falling back to covalent/atomic radii --
+        # pure noise here: SIESTA structures never carry oxidation states
+        # (guessing them reliably isn't possible for the covalent/metallic/
+        # mixed systems this suite supports -- the same reasoning behind
+        # not implementing bond-valence-sum-based metrics), and the
+        # covalent/atomic-radius fallback CrystalNN uses instead is exactly
+        # the radius data every other coordination-number method here
+        # already uses. So this is an expected, permanent, non-actionable
+        # warning, not a defect -- filtered by exact message so it's scoped
+        # to only these two, and restored on return via catch_warnings().
+        # CrystalNN's separate distance_cutoffs refinement (which also
+        # consults this same radius lookup) is deliberately left fully
+        # enabled: disabling it outright to dodge the warning changes
+        # computed coordination numbers by up to ~0.9, a real accuracy
+        # loss, not a cosmetic one -- verified by hand before choosing this
+        # approach over passing distance_cutoffs=None.
+        warnings.filterwarnings("ignore", message="No oxidation states specified.*")
+        warnings.filterwarnings("ignore", message="CrystalNN: cannot locate.*")
+        return _compute_ecn_impl(structure, mode, atoms_position)
+
+def _compute_ecn_impl(structure, mode, atoms_position=None):
     lattice = structure.lattice
     results = {
         "mode": mode,

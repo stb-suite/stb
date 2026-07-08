@@ -286,10 +286,26 @@ check_contains "stb-structural" log_version.txt
 # --- 8. Interactive path (stb-suite, shortcut 2.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.4) ---"
 
-echo "Testing: navigate 2.4 -> structure.fdf -> fdf -> mean -> default output dir"
-rm -f structural_information.dat warnings.log
-printf '2.4\nstructure.fdf\nfdf\nmean\n\n' | stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 2.4 -> structure.fdf -> format=1(fdf) -> mode=1(mean) -> default output dir -> default RDF"
+rm -f structural_information.dat warnings.log rdf.dat
+printf '2.4\nstructure.fdf\n1\n1\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success structural_information.dat
+check_success rdf.dat
+check_contains "Select input file format:" log_menu.txt
+check_contains "Select analysis mode:" log_menu.txt
+
+echo "Testing: navigate 2.4 -> siesta.STRUCT_OUT -> format=2(struct_out) -> mode=2(list) -> atoms 1,7 -> RDF=n"
+rm -f structural_information.dat warnings.log rdf.dat
+printf '2.4\nsiesta.STRUCT_OUT\n2\n2\n\n1,7\nn\n' | stb-suite > log_menu_list.txt 2>&1
+check_success structural_information.dat
+if [ -e rdf.dat ]; then
+    echo -e "   -> ${RED}Failed:${NC} rdf.dat was created despite answering 'n' to the RDF prompt"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} rdf.dat absent (RDF prompt answered 'n')"
+    PASS=$((PASS+1))
+fi
+check_contains "EFFECTIVE COORDINATION NUMBER (weighted), SPECIFIED ATOMS" structural_information.dat
 
 
 popd > /dev/null

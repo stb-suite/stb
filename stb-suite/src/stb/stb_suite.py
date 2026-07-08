@@ -1622,15 +1622,29 @@ def run_structure_analyzer() -> None:
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
-    format_type = get_input("Format file (fdf/struct_out): ").lower()
-    while format_type not in ['fdf', 'struct_out']:
-        print(color_text("File type is not available!", 'red'))
-        format_type = get_input("Format file (fdf/struct_out): ").lower()
 
-    mode = get_input("Analysis mode (list/mean): ").lower()
-    while mode not in ['list', 'mean']:
-        print(color_text("Invalid mode! Choose 'list' or 'mean'", 'red'))
-        mode = get_input("Analysis mode (list/mean): ").lower()
+    formats = ['fdf', 'struct_out']
+    print(f"\n{color_text('Select input file format:', 'yellow')}")
+    for i, fmt in enumerate(formats, 1):
+        print(f"  {color_text(str(i)+'.', 'yellow')} {fmt}")
+    choice = 0
+    while not (1 <= choice <= len(formats)):
+        choice = get_int_input(f"\nSelect format (1-{len(formats)}): ")
+        if not (1 <= choice <= len(formats)):
+            print(color_text(f"Invalid choice! Please select between 1 and {len(formats)}.", 'red'))
+    format_type = formats[choice - 1]
+    print(f"Selected format: {color_text(format_type, 'cyan')}")
+
+    modes = ['mean', 'list']
+    print(f"\n{color_text('Select analysis mode:', 'yellow')}")
+    for i, m in enumerate(modes, 1):
+        print(f"  {color_text(str(i)+'.', 'yellow')} {m}")
+    choice = 0
+    while not (1 <= choice <= len(modes)):
+        choice = get_int_input(f"\nSelect mode (1-{len(modes)}): ")
+        if not (1 <= choice <= len(modes)):
+            print(color_text(f"Invalid choice! Please select between 1 and {len(modes)}.", 'red'))
+    mode = modes[choice - 1]
 
     output_dir = get_input("Output directory [default: current directory]: ").strip() or "."
 
@@ -1639,6 +1653,16 @@ def run_structure_analyzer() -> None:
     if mode == "list":
         atom_list = get_input("Enter atom indices (comma-separated, e.g. 1,4,5): ")
         args.extend(["--list", atom_list])
+
+    rdf_choice = get_input("Compute radial distribution function g(r)? (Y/n): ").strip().lower()
+    if rdf_choice in ['n', 'no']:
+        args.append("--no-rdf")
+    else:
+        rdf_rmax = get_float_input("RDF cutoff radius in Ang (default: 10.0): ", 10.0)
+        while rdf_rmax <= 0:
+            print(color_text("Cutoff radius must be a positive number!", 'red'))
+            rdf_rmax = get_float_input("RDF cutoff radius in Ang (default: 10.0): ", 10.0)
+        args.extend(["--rdf-rmax", str(rdf_rmax)])
 
     run_tool("stb-structural", args)
 

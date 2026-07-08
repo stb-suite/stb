@@ -26,7 +26,7 @@ requirements:
   pip:
     - ase
     - pymatgen
-    - spglib
+    - spglib>=2.2.0
     - sisl
     - pybader
     - phonopy

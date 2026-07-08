@@ -13,7 +13,7 @@ dependencies = [
     "ase",
     "matplotlib",
     "pymatgen",
-    "spglib",
+    "spglib>=2.2.0",  # >=2.1.0 for get_layergroup(), >=2.2.0 for its Hall-number fixes (stb-symmetry)
     "sisl",
     "pybader",
     "setuptools",

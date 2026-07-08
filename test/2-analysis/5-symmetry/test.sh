@@ -265,16 +265,55 @@ check_contains "Space group      : R3 (No. 146)" symmetry.dat
 check_contains "Setting choice   : H" symmetry.dat
 
 
-# --- 4h. Vacuum-axis warning: a graphene-like slab with 20 Ang vacuum along
-#     c should trigger the warning (3D space-group detection isn't
-#     meaningful for a vacuum-padded structure); the fixtures above (all
-#     genuinely 3D bulk) must not. ---
-echo -e "\n--- Testing the vacuum-axis warning on a graphene slab (20 Ang vacuum along c) ---"
+# --- 4h. Vacuum-axis note + real layer-group detection (spglib
+#     get_layergroup(), added in spglib 2.1.0): a graphene-like slab with
+#     20 Ang vacuum along c should get both the note pointing at LAYER
+#     GROUP and a correct layer-group analysis (verified against known
+#     graphene crystallography: layer group 80, p6/mmm, Wyckoff 2b, site
+#     symmetry -6m2, 24 operations -- note the 3D SPACE GROUP section
+#     above it independently labels the same 2 atoms "2d", since it's a
+#     different group classification (space group 191) with its own
+#     Wyckoff lettering, not the layer group's); the fixtures above (all
+#     genuinely 3D bulk) must get neither section. ---
+echo -e "\n--- Testing the vacuum-axis note and layer-group detection on a graphene slab (20 Ang vacuum along c) ---"
 rm -f symmetry.dat
 stb-symmetry --file graphene_slab.fdf --format fdf --no-intro > log_slab.txt 2>&1
 check_exit_code $? 0
-check_contains "WARNING: vacuum gap (>= 10 Å) detected along axis/axes c" symmetry.dat
-check_contains "isn't physically meaningful for a vacuum-padded structure" symmetry.dat
+check_contains "NOTE: vacuum gap (>= 10 Å) detected along axis/axes c" symmetry.dat
+check_contains "LAYER GROUP for that (spglib's dedicated 2D detection, not a heuristic)." symmetry.dat
+
+echo "Verifying the layer-group section itself: correct group, Hall symbol, point group, site symmetry"
+check_contains "LAYER GROUP (aperiodic axis: c)" symmetry.dat
+check_contains "Layer group      : p6/mmm (No. 80)" symmetry.dat
+check_contains "Hall symbol      : -p 6 2 (Hall No. -116)" symmetry.dat
+check_contains "Point group      : 6/mmm" symmetry.dat
+check_contains "Symmetrically distinct sites: 1" symmetry.dat
+check_contains "2b        C         2         -6m2            1" symmetry.dat
+check_contains "   1  C    2b        -6m2            1" symmetry.dat
+
+echo "Verifying all 24 layer-group symmetry operations are listed, in the same compact x,y,z notation as the 3D section"
+n_lg_ops=$(grep -c "^ *[0-9]*: " symmetry.dat)
+if [ "$n_lg_ops" -eq 48 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 48 total operation lines (24 layer-group + 24 space-group)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} found $n_lg_ops operation lines, expected 48 (24+24)"
+    FAIL=$((FAIL+1))
+fi
+
+echo "Verifying a genuinely 3D bulk structure gets neither the vacuum note nor a layer-group section"
+rm -f symmetry.dat
+stb-symmetry --file nacl.fdf --format fdf --no-intro > log_nacl_novacuum.txt 2>&1
+check_not_contains "NOTE: vacuum gap" symmetry.dat
+check_not_contains "LAYER GROUP" symmetry.dat
+
+echo "Verifying --no-operations suppresses both the space-group and layer-group operation lists, but keeps the layer-group site table"
+rm -f symmetry.dat
+stb-symmetry --file graphene_slab.fdf --format fdf --no-operations --no-intro > log_slab_noops.txt 2>&1
+check_exit_code $? 0
+check_contains "LAYER GROUP (aperiodic axis: c)" symmetry.dat
+check_contains "Symmetrically distinct sites: 1" symmetry.dat
+check_not_contains "in x,y,z notation" symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

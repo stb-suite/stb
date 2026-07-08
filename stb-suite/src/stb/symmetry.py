@@ -12,6 +12,9 @@ import os
 import sys
 import argparse
 from datetime import datetime
+import numpy as np
+import spglib
+from pymatgen.core.operations import SymmOp
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from stb.core import kspace, structure_io
 from stb.core.cli import color_text, show_intro
@@ -20,6 +23,78 @@ from stb.core.cli import color_text, show_intro
 # callers): minimum empty span along an axis, wrapped periodically, to
 # treat it as vacuum-padded rather than genuinely periodic.
 VACUUM_GAP_ANG = 10.0
+
+def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
+    """Layer-group analysis for a genuinely 2D-periodic structure (periodic
+    along the 2 axes other than `aperiodic_dir`, vacuum-padded along it) --
+    the physically correct symmetry classification for a slab, unlike the
+    ordinary 3D space group SPACE GROUP reports (which treats the vacuum as
+    just an unusually tall periodic cell and can report a group that
+    depends on the arbitrary vacuum thickness, not the real 2D symmetry).
+
+    Uses spglib.get_layergroup() directly (needs spglib >= 2.1.0, its
+    Python interface for the 80 layer groups; >= 2.2.0 for a Hall-number
+    bugfix -- see pyproject.toml's spglib pin) since pymatgen's
+    SpacegroupAnalyzer doesn't wrap this yet. Returns None if spglib
+    can't determine a layer group (e.g. not genuinely 2D-periodic within
+    symprec) or if the installed spglib predates this function.
+    """
+    if not hasattr(spglib, "get_layergroup"):
+        return None
+
+    cell = (structure.lattice.matrix, structure.frac_coords,
+            [site.specie.Z for site in structure])
+    ds = spglib.get_layergroup(cell, aperiodic_dir=aperiodic_dir, symprec=symprec)
+    if ds is None:
+        return None
+
+    # ds.equivalent_atoms[i] is the representative atom index of atom i's
+    # orbit (0-based, same convention as compute_symmetry's 3D path, but
+    # spglib returns it flat here rather than pre-grouped into lists like
+    # pymatgen's ss.equivalent_indices).
+    orbit_members = {}
+    for i, rep in enumerate(ds.equivalent_atoms):
+        orbit_members.setdefault(rep, []).append(i)
+
+    sites = []
+    for i, site in enumerate(structure):
+        rep = ds.equivalent_atoms[i]
+        wyckoff = f"{len(orbit_members[rep])}{ds.wyckoffs[i]}"
+        sites.append({
+            "atom_id": i + 1,
+            "species": str(site.specie.symbol),
+            "wyckoff": wyckoff,
+            "site_symmetry": ds.site_symmetry_symbols[i],
+            "orbit": rep + 1,
+        })
+
+    orbits = [
+        {"wyckoff": f"{len(indices)}{ds.wyckoffs[rep]}",
+         "species": str(structure[rep].specie.symbol), "n_atoms": len(indices),
+         "example_atom_id": indices[0] + 1, "site_symmetry": ds.site_symmetry_symbols[rep]}
+        for rep, indices in orbit_members.items()
+    ]
+
+    # Translation components come back as noisy near-integers/near-zeros
+    # (e.g. 9.99999980e-01) rather than exact 0/1 -- round before %1 so
+    # as_xyz_str() doesn't render spurious "+1"/"+0" terms.
+    ops = [
+        SymmOp.from_rotation_and_translation(rot, np.round(trans, 6) % 1.0).as_xyz_str()
+        for rot, trans in zip(ds.rotations, ds.translations)
+    ]
+
+    return {
+        "symbol": ds.international,
+        "number": ds.number,
+        "hall_symbol": ds.hall,
+        "hall_number": ds.hall_number,
+        "point_group": ds.pointgroup,
+        "aperiodic_axis": "abc"[aperiodic_dir],
+        "n_distinct_sites": len(orbit_members),
+        "sites": sites,
+        "orbits": orbits,
+        "symmetry_operations": ops,
+    }
 
 def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     """Pure computation -- no printing, no file I/O. Returns a results dict
@@ -73,8 +148,17 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     reduced_formula, z = structure.composition.get_reduced_formula_and_factor()
     vacuum_axes = kspace.detect_vacuum_axes(structure.frac_coords, lattice.matrix, VACUUM_GAP_ANG)
 
+    # Layer-group detection only makes sense for a genuinely 2D-periodic
+    # structure -- exactly one aperiodic (vacuum) axis. Two or more vacuum
+    # axes (a wire or an isolated molecule) has no layer-group analogue;
+    # zero means it's not vacuum-padded at all.
+    layer_group = None
+    if sum(vacuum_axes) == 1:
+        layer_group = compute_layer_group(structure, vacuum_axes.index(True), symprec)
+
     return {
         "vacuum_axes": vacuum_axes,
+        "layer_group": layer_group,
         "space_group_symbol": sga.get_space_group_symbol(),
         "space_group_number": sga.get_space_group_number(),
         "hall_symbol": sga.get_hall(),
@@ -218,14 +302,27 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     lines.append(f"Symmetry precision: symprec={results['symprec']:g}, "
                  f"angle_tolerance={results['angle_tolerance']:g}°")
 
-    if any(results["vacuum_axes"]):
+    n_vacuum = sum(results["vacuum_axes"])
+    if n_vacuum:
         axis_names = [name for name, is_vacuum in zip("abc", results["vacuum_axes"]) if is_vacuum]
         lines.append("")
-        lines.append(f"WARNING: vacuum gap (>= {VACUUM_GAP_ANG:g} Å) detected along axis/axes "
+        lines.append(f"NOTE: vacuum gap (>= {VACUUM_GAP_ANG:g} Å) detected along axis/axes "
                      f"{', '.join(axis_names)} (e.g. a slab or wire). 3D space-group detection")
         lines.append("isn't physically meaningful for a vacuum-padded structure -- spglib treats")
-        lines.append("the vacuum as ordinary empty space, not a broken periodicity, so what")
-        lines.append("follows describes the padded supercell, not the real layer/rod symmetry.")
+        lines.append("the vacuum as ordinary empty space, not a broken periodicity, so SPACE GROUP")
+        if results["layer_group"] is not None:
+            lines.append("below describes the padded supercell, not the real 2D symmetry -- see")
+            lines.append("LAYER GROUP for that (spglib's dedicated 2D detection, not a heuristic).")
+        elif n_vacuum == 1:
+            lines.append("below describes the padded supercell, not the real layer symmetry.")
+            lines.append("Dedicated layer-group detection was attempted (exactly one vacuum axis)")
+            lines.append("but failed -- the structure may not be genuinely 2D-periodic within")
+            lines.append("--symprec, or the installed spglib predates get_layergroup() (>= 2.1.0).")
+        else:
+            lines.append("below describes the padded supercell, not the real rod/point symmetry.")
+            lines.append("Dedicated layer-group detection needs exactly one vacuum axis (this")
+            lines.append(f"structure has {n_vacuum}, e.g. a wire or an isolated molecule) so it")
+            lines.append("wasn't attempted -- no equivalent rod/point-group detection is available.")
 
     lines.append("")
     lines.append(_rule())
@@ -240,6 +337,35 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     if results["setting_choice"]:
         lines.append(f"Setting choice   : {results['setting_choice']}")
     lines.append(f"Symmetry operations: {len(results['symmetry_operations'])}")
+
+    if results["layer_group"] is not None:
+        lg = results["layer_group"]
+        lines.append("")
+        lines.append(_rule())
+        lines.append(f"LAYER GROUP (aperiodic axis: {lg['aperiodic_axis']}) -- the physically correct")
+        lines.append("symmetry for this vacuum-padded structure (spglib's dedicated layer-group")
+        lines.append("detection, not a heuristic filter of the SPACE GROUP above)")
+        lines.append(_rule())
+        lines.append(f"Layer group      : {lg['symbol']} (No. {lg['number']})")
+        lines.append(f"Hall symbol      : {lg['hall_symbol']} (Hall No. {lg['hall_number']})")
+        lines.append(f"Point group      : {lg['point_group']}")
+        lines.append(f"Symmetry operations: {len(lg['symmetry_operations'])}")
+        lines.append("")
+        lines.append(f"Symmetrically distinct sites: {lg['n_distinct_sites']}")
+        lines.append(f"{'Wyckoff':<10}{'Species':<10}{'n atoms':<10}{'Site symmetry':<16}{'Example atom'}")
+        for orbit in lg["orbits"]:
+            lines.append(f"{orbit['wyckoff']:<10}{orbit['species']:<10}{orbit['n_atoms']:<10}"
+                         f"{orbit['site_symmetry']:<16}{orbit['example_atom_id']}")
+        lines.append("")
+        lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Site symmetry':<16}Orbit")
+        for site in lg["sites"]:
+            lines.append(f"{site['atom_id']:>4}  {site['species']:<3}  {site['wyckoff']:<8}  "
+                         f"{site['site_symmetry']:<16}{site['orbit']}")
+        if show_operations:
+            lines.append("")
+            lines.append(f"Symmetry operations ({len(lg['symmetry_operations'])}), in x,y,z notation:")
+            for i, op_str in enumerate(lg["symmetry_operations"]):
+                lines.append(f"{i+1:>4}: {op_str}")
 
     lines.append("")
     lines.append(_rule())

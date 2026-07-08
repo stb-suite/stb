@@ -13,10 +13,9 @@ import sys
 import re
 import shutil
 import argparse
-from time import sleep
 import numpy as np
 from stb.core import structure_io, kspace
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import color_text, show_intro
 
 # Base Template
 CALC_TEMPLATE = """
@@ -88,28 +87,33 @@ def parse_structure_fdf(filename):
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
-def generate_isolated_atom_fdf(symbol, z_num, out_path):
-    """Creates a structure.fdf for a single isolated atom in a large box"""
+def generate_isolated_atom_fdf(symbol, z_num, out_path, vacuum):
+    """Creates a structure.fdf for a single isolated atom in a large box.
+
+    `vacuum` is the cubic box side, in Ang -- the atom sits at the
+    fractional center (0.5, 0.5, 0.5), so it stays centered regardless of
+    the box size substituted here.
+    """
     content = f"""# Isolated {symbol} atom for cohesive energy
 NumberOfSpecies    1
 NumberofAtoms      1
 
 %block ChemicalSpeciesLabel
  1   {z_num}   {symbol}
-%endblock ChemicalSpeciesLabel 
+%endblock ChemicalSpeciesLabel
 
-LatticeConstant 1.00 Ang 
+LatticeConstant 1.00 Ang
 
-AtomicCoordinatesFormat  Fractional 
+AtomicCoordinatesFormat  Fractional
 
 %block LatticeVectors
- 20.000000   0.000000   0.000000 
-  0.000000  20.000000   0.000000 
-  0.000000   0.000000  20.000000 
+ {vacuum:.6f}   0.000000   0.000000
+  0.000000  {vacuum:.6f}   0.000000
+  0.000000   0.000000  {vacuum:.6f}
 %endblock LatticeVectors
 
 %block AtomicCoordinatesAndAtomicSpecies
-  0.500000000   0.500000000   0.500000000   1  
+  0.500000000   0.500000000   0.500000000   1
 %endblock AtomicCoordinatesAndAtomicSpecies
 """
     with open(out_path, 'w') as f:
@@ -117,20 +121,23 @@ AtomicCoordinatesFormat  Fractional
     return
 
 def link_pseudo(pp_path, symbol, target_dir):
-    """Symlinks the pseudopotential if the directory is provided"""
+    """Symlinks the pseudopotential (.psml preferred, .psf fallback) if the
+    directory is provided -- same priority order as
+    inputfile.py::copy_pseudopotentials, the other consumer of a pp_path
+    folder in this suite."""
     if not pp_path:
         return
-    psml_file = f"{symbol}.psml"
-    src = os.path.join(os.path.abspath(pp_path), psml_file)
-    dst = os.path.join(target_dir, psml_file)
-    
-    if os.path.exists(src):
-        try:
-            os.symlink(src, dst)
-        except FileExistsError:
-            pass
-    else:
-        print(f"[WARNING] Pseudopotential '{psml_file}' not found in {pp_path}")
+    pp_path_abs = os.path.abspath(pp_path)
+    for pseudo_file in (f"{symbol}.psml", f"{symbol}.psf"):
+        src = os.path.join(pp_path_abs, pseudo_file)
+        if os.path.exists(src):
+            dst = os.path.join(target_dir, pseudo_file)
+            try:
+                os.symlink(src, dst)
+            except FileExistsError:
+                pass
+            return
+    print(f"[WARNING] Pseudopotential '{symbol}.psml' or '{symbol}.psf' not found in {pp_path}")
     return
 
 def main():
@@ -151,15 +158,23 @@ def main():
     parser.add_argument("-k", "--k-density", dest="k_density", type=float, default=0.2, 
                         help="K-point density in 1/Angstrom (default: 0.2)")
     
-    parser.add_argument("--spin", dest="spin", action="store_true", 
+    parser.add_argument("--spin", dest="spin", action="store_true",
                         help="Set the full structure calculation to spin polarized")
-    
+
+    parser.add_argument("--vacuum", dest="vacuum", type=float, default=20.0,
+                        help="Cubic box side (Ang) for each isolated-atom calculation "
+                             "(default: 20.0). Increase for elements with unusually "
+                             "diffuse basis orbitals.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-cohesive {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
                         help="Do not show the introduction")
 
     args = parser.parse_args()
+
+    if args.vacuum <= 0:
+        parser.error("--vacuum must be positive.")
 
     if args.intro == True:
         show_intro([
@@ -221,7 +236,7 @@ def main():
         os.makedirs(atom_dir, exist_ok=True)
         
         # Isolated atom structure
-        generate_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"))
+        generate_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"), args.vacuum)
         
         # Calc file for isolated atom (Always polarized + Gamma point only)
         atom_calc = CALC_TEMPLATE.replace("Spin                non-polarized", "Spin                polarized")

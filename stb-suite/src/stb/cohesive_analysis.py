@@ -11,56 +11,30 @@ VERSION = "1.9.1"
 import os
 import sys
 import argparse
-from time import sleep
-from stb.core import siesta_log
-from stb.core.cli import COLORS, color_text, show_intro
+from collections import Counter
+from stb.core import siesta_log, structure_io
+from stb.core.cli import color_text, show_intro
 
 def get_atom_counts(fdf_path):
-    """Parses structure.fdf to count the number of atoms for each chemical species"""
-    species_map = {}
-    counts = {}
-    
-    in_species_block = False
-    in_coords_block = False
-    
+    """Number of atoms per chemical species, via the shared .fdf parser
+    (core/structure_io.py) -- keeps this in sync with cohesive_energy.py,
+    the prep half of this same workflow, which already reads structure.fdf
+    through it instead of a second hand-rolled parser."""
     try:
-        with open(fdf_path, 'r') as f:
-            for line in f:
-                cleaned_line = line.split('#', 1)[0].strip()
-                if not cleaned_line: continue
-                
-                lower_line = cleaned_line.lower()
-                
-                # Block toggles
-                if lower_line == '%block chemicalspecieslabel':
-                    in_species_block = True; continue
-                if lower_line == '%endblock chemicalspecieslabel':
-                    in_species_block = False; continue
-                if lower_line == '%block atomiccoordinatesandatomicspecies':
-                    in_coords_block = True; continue
-                if lower_line == '%endblock atomiccoordinatesandatomicspecies':
-                    in_coords_block = False; continue
-
-                # Parse species mapping (ID -> Symbol)
-                if in_species_block:
-                    parts = cleaned_line.split()
-                    if len(parts) >= 3:
-                        species_map[parts[0]] = parts[2]
-                        counts[parts[2]] = 0 # Initialize count
-
-                # Parse coordinates to count atoms
-                if in_coords_block:
-                    parts = cleaned_line.split()
-                    if len(parts) >= 4:
-                        specie_id = parts[3]
-                        if specie_id in species_map:
-                            symbol = species_map[specie_id]
-                            counts[symbol] += 1
-                            
-        return counts
+        structure = structure_io.read_fdf(fdf_path)
     except FileNotFoundError:
         print(color_text(f"[ERROR] Structure file '{fdf_path}' not found.", 'red'))
         sys.exit(1)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
+
+    counts = Counter(symbol for symbol, _ in structure.atoms)
+    # Species declared in ChemicalSpeciesLabel but never placed in the
+    # coordinates block still show up, with a count of 0 -- same as before.
+    for symbol in structure.species:
+        counts.setdefault(symbol, 0)
+    return dict(counts)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -114,6 +88,9 @@ def main():
         sys.exit(1)
 
     total_atoms = sum(atom_counts.values())
+    if total_atoms == 0:
+        print(color_text("[ERROR] Structure file declares species but has zero atoms. Check your structure.fdf", 'red'))
+        sys.exit(1)
     print(f"[INFO] Total atoms in cell: {total_atoms}")
     for sym, count in atom_counts.items():
         print(f"       -> {sym}: {count} atoms")
@@ -190,6 +167,7 @@ def main():
         print(f"[INFO] Results saved to: {out_file_path}")
     except Exception as e:
         print(color_text(f"[ERROR] Failed to save results to file: {e}", 'red'))
+        sys.exit(1)
 
     print("\n[INFO] Complete job!") 
     print("\n"+"-"*60)

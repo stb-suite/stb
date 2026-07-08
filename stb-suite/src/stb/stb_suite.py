@@ -199,18 +199,25 @@ def run_cohesive_setup() -> None:
     
     # 4. Spin polarization
     spin_choice = get_input("Enable spin polarization for full structure? (y/N): ").strip().lower()
-    
+
+    # 5. Isolated-atom vacuum box size
+    vacuum = get_float_input("Isolated-atom vacuum box side in Ang (default: 20.0): ", 20.0)
+    while vacuum <= 0:
+        print(color_text("Vacuum box side must be a positive number!", 'red'))
+        vacuum = get_float_input("Isolated-atom vacuum box side in Ang (default: 20.0): ", 20.0)
+
     args = [
         "-s", struct_file,
         "-k", str(k_density),
+        "--vacuum", str(vacuum),
         "--no-intro"
     ]
-    
+
     if pp_path:
         args.extend(["-p", pp_path])
     if spin_choice in ['y', 'yes']:
         args.append("--spin")
-        
+
     # Executa o script. Se não tiver os atalhos globais configurados,
     # pode alterar "stb_cohesive" para "python cohesive_energy.py" 
     run_tool("stb-cohesive", args)

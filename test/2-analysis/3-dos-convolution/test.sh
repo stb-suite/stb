@@ -110,6 +110,13 @@ check_contains "# Gaussian broadening: sigma = 50.000 meV (5.000 samples), kerne
 echo "Verifying a known filtered data point (sigma=50 meV -> 5 samples, auto size=31)"
 check_contains "13.188850 0.010066 0.788188 1.782186 0.000000" filtered.dat
 
+echo "Verifying the runtime DOS conservation check is printed"
+check_contains "DOS conservation check (integral before -> after broadening)" log_default.txt
+check_contains "s           :" log_default.txt
+
+echo "Verifying no non-uniform-grid warning on the real (uniformly sampled) fixture"
+check_not_contains "energy grid spacing varies" log_default.txt
+
 
 # --- 2b. Explicit --size overrides the auto-computed default ---
 echo -e "\n--- Testing an explicit --size override ---"
@@ -247,6 +254,18 @@ printf "1.0 1.0\n1.0 2.0\n0.5 3.0\n" > unsorted.dat
 stb-convdos --file unsorted.dat --sigma 50 --out f.dat --no-intro > log_unsorted.txt 2>&1
 check_exit_code $? 1
 check_contains "strictly increasing order" log_unsorted.txt
+
+echo "Testing: non-uniform energy grid warns (dense near 0, sparse elsewhere) but still runs"
+python3 - << 'EOF'
+import numpy as np
+energy = np.concatenate([np.linspace(-10, -1, 20), np.linspace(-1, 1, 100), np.linspace(1, 10, 20)])
+data = np.column_stack([energy, np.random.rand(len(energy))])
+np.savetxt("nonuniform.dat", data, header="Energy(eV) dos1")
+EOF
+stb-convdos --file nonuniform.dat --sigma 50 --out nonuniform_filtered.dat --no-plot --no-intro > log_nonuniform.txt 2>&1
+check_exit_code $? 0
+check_contains "energy grid spacing varies" log_nonuniform.txt
+check_success nonuniform_filtered.dat
 
 echo "Testing: missing required arguments"
 stb-convdos --file dos_total.dat --no-intro > log_missing_args.txt 2>&1

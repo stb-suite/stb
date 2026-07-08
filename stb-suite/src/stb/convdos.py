@@ -43,6 +43,21 @@ def energy_grid_spacing(energy):
     return d_energy
 
 
+def grid_uniformity_warning(energy, d_energy, rel_tol=0.01):
+    """The convolution advances one grid sample at a time, so --sigma/--fwhm
+    (converted to samples via a single scalar spacing) only means what it
+    says if the grid is uniformly spaced -- true by construction for
+    stb-dos's own output (a linspace), but not guaranteed for a DOS file
+    from elsewhere. Returns a message if consecutive spacings vary by more
+    than `rel_tol` of the median spacing, else None."""
+    spread = float(np.std(np.diff(energy)))
+    if spread > rel_tol * abs(d_energy):
+        return (f"energy grid spacing varies by ~{spread:.6f} eV (std) around the "
+                f"median {d_energy:.6f} eV -- --sigma/--fwhm's physical broadening "
+                "width will drift across the spectrum on a non-uniform grid.")
+    return None
+
+
 def kernel_size_for_sigma(sigma_samples):
     """Smallest odd kernel width covering about 3 standard deviations on
     each side of center (>99% of a Gaussian's mass), used when --size isn't
@@ -86,6 +101,19 @@ def filter_columns(data, kernel):
     for i in range(1, data.shape[1]):
         filtered[:, i - 1] = np.convolve(data[:, i], kernel, mode='same')
     return energy, filtered
+
+
+def print_conservation_check(energy, original, filtered, dos_labels):
+    """Prints each column's integrated DOS (trapezoidal) before vs. after
+    broadening -- a normalized kernel should barely change it, so this is a
+    quick runtime sanity check that nothing went wrong (a large drift here
+    usually means the energy window is too narrow for the requested
+    --sigma/--fwhm, losing weight off the zero-padded edges)."""
+    print("[INFO] DOS conservation check (integral before -> after broadening):")
+    for i, label in enumerate(dos_labels):
+        before = np.trapz(original[:, i + 1], energy)
+        after = np.trapz(filtered[:, i], energy)
+        print(f"       {label:<12}: {before:12.4f} -> {after:12.4f}")
 
 
 def plot_all(energy, original, filtered, dos_labels):
@@ -202,6 +230,10 @@ def main():
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
+    uniformity_warning = grid_uniformity_warning(inp_file[:, 0], d_energy)
+    if uniformity_warning:
+        print(color_text(f"[WARNING] {uniformity_warning}", 'yellow'))
+
     sigma_ev = sigma_mev / 1000.0
     sigma_samples = sigma_ev / d_energy
     size = args.size if args.size is not None else kernel_size_for_sigma(sigma_samples)
@@ -217,6 +249,7 @@ def main():
     kernel = gaussian_kernel_1d(size, sigma_samples)
     print("[INFO] Applying Gaussian convolution ...")
     energy, filtered = filter_columns(inp_file, kernel)
+    print_conservation_check(energy, inp_file, filtered, dos_labels)
 
     # Write the actual deliverable before plotting, so a display/backend
     # problem (e.g. no X11 and MPLBACKEND unset) can't cost the already-done

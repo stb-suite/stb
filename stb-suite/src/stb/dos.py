@@ -5,11 +5,8 @@
 # Developed by Dr. Carlos M. O. Bastos          #
 #      bastoscmo.github.io                      #
 #################################################
-#  Modified by "Parceiro de Programacao" (Gemini) #
-#  to include (l,m) orbital projection support    #
-#################################################
 
-VERSION = "1.9.1" # Updated version
+VERSION = "1.9.1"
 
 import xml.etree.ElementTree as ET
 import numpy as np
@@ -17,12 +14,9 @@ import os
 import pandas as pd
 import argparse
 import sys
-from time import sleep
 
+from stb.core.cli import color_text, show_intro
 
-from stb.core.cli import COLORS, color_text, show_intro
-
-# --- NEW: Map for (l,m) detailed projections ---
 # This defines the standard SIESTA order for real spherical harmonics
 ORBITAL_MAP = {
     0: {0: 's'},
@@ -31,7 +25,6 @@ ORBITAL_MAP = {
     3: {-3: 'f-3', -2: 'f-2', -1: 'f-1', 0: 'f0', 1: 'f1', 2: 'f2', 3: 'f3'} # Using simple f names
 }
 
-# --- NEW: Sort order for output columns ---
 ORBITAL_ORDER = [
     's', 
     'py', 'pz', 'px',
@@ -62,25 +55,17 @@ def get_orbital_name(l_val):
     l_map = {0: 's', 1: 'p', 2: 'd', 3: 'f'}
     return l_map.get(l_val, None) # Return None if not s,p,d,f
 
-# --- NEW: Function to get detailed (l,m) orbital names ---
 def get_detailed_orbital_name(l_val, m_val):
     """Maps (l, m) to orbital name (s, px, py, pz, dxy, ...)."""
     if l_val in ORBITAL_MAP:
         return ORBITAL_MAP[l_val].get(m_val, None) # Return None if m is invalid
     return None # Return None if l is invalid
 
-# --- MODIFIED: Added 'projection_mode' argument ---
 def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_dir='.'):
     """
     Main function to parse the PDOS.xml file and generate output files.
     """
     try:
-        try:
-            os.makedirs(output_dir, exist_ok=True)
-        except OSError as e:
-            print(f"Error: Could not create output directory '{output_dir}': {e}", file=sys.stderr)
-            sys.exit(1)
-
         tree = ET.parse(input_file)
         root = tree.getroot()
 
@@ -168,19 +153,22 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
         skipped_lm_orbitals = 0
         skipped_l_values = set()
 
-        # --- MODIFIED: This loop is updated for dynamic orbital handling ---
         for orbital in all_orbital_tags:
             try:
                 atom_index = int(orbital.attrib.get('atom_index', -1))
                 atom_species = orbital.attrib.get('species', 'Unknown')
-                l_val = int(orbital.attrib.get('l', -1))
+                l_attr = orbital.attrib.get('l')
                 m_val = int(orbital.attrib.get('m', 999)) # Get m value, 999 as invalid flag
 
                 if atom_index == -1:
                     print(f"Warning: Orbital found with no 'atom_index' attribute. Skipping.", file=sys.stderr)
                     continue
 
-                # --- MODIFIED: Choose orbital name based on projection mode ---
+                if l_attr is None:
+                    print(f"Warning: Orbital found with no 'l' attribute. Skipping.", file=sys.stderr)
+                    continue
+                l_val = int(l_attr)
+
                 orbital_name = None
                 if projection_mode == 'l':
                     orbital_name = get_orbital_name(l_val)
@@ -198,7 +186,6 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
                     skipped_l_values.add(l_val)
                     continue
 
-                # --- MODIFIED: Initialize atom data dynamically ---
                 if atom_index not in atom_data:
                     atom_data[atom_index] = {'species': atom_species}
                     all_species.add(atom_species)
@@ -241,9 +228,17 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
                   "excluded from all output DOS.", file=sys.stderr)
 
         # --- 5. Prepare and Write Output Data ---
-        
-        # --- MODIFIED: Output headers and columns are now DYNAMIC ---
-        
+
+        # Only create --output-dir once we know there is valid data to write
+        # -- creating it eagerly at the top of the function left an empty
+        # directory behind on any early failure (bad input file, malformed
+        # XML, no orbitals, ...).
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Error: Could not create output directory '{output_dir}': {e}", file=sys.stderr)
+            sys.exit(1)
+
         # 5a. Find all unique orbital columns that were processed
         all_orbital_names = set()
         for idx in atom_data:
@@ -275,7 +270,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
 
         # 5c. Create dynamic header and column list for pandas
         header_parts = [f"#{'Energy(eV)':<14}"]
-        header_parts.extend([f'{col:<12}' for col in spin_columns])
+        header_parts.extend([f'{col:<14}' for col in spin_columns])
         header_str = "\t".join(header_parts) + "\n"
 
         all_df_columns = ['Energy(eV)'] + spin_columns
@@ -306,8 +301,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
         # --- Mode 2: DOS per Atom ---
         if 'atom' in dos_types:
             output_dir_atoms = os.path.join(output_dir, "dos_per_atom")
-            if not os.path.exists(output_dir_atoms):
-                os.makedirs(output_dir_atoms)
+            os.makedirs(output_dir_atoms, exist_ok=True)
 
             for atom_index in sorted(atom_data.keys()):
                 species = atom_data[atom_index]['species']
@@ -333,8 +327,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
         # --- Mode 3: DOS per Species ---
         if 'species' in dos_types:
             output_dir_species = os.path.join(output_dir, "dos_per_species")
-            if not os.path.exists(output_dir_species):
-                os.makedirs(output_dir_species)
+            os.makedirs(output_dir_species, exist_ok=True)
 
             species_dos = {}
             for species_name in sorted(list(all_species)):
@@ -382,13 +375,17 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Parse a PDOS.xml file and generate Gnuplot-ready .dat files.",
+        epilog="Example usage:\n"
+               "  stb-dos siesta.PDOS.xml --type total species --projection ml\n"
+               "Put the filename first: --type takes one or more values, so anything\n"
+               "written after it (including the filename) is consumed as another type.",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    
+
     parser.add_argument(
         "filename",
         type=str,
-        help="The input .PDOS.xml file to process."
+        help="The input .PDOS.xml file to process. Give this before --type (see epilog)."
     )
     
     parser.add_argument(
@@ -413,7 +410,6 @@ def main():
              "  '-1.23': Apply a manual shift of -1.23 eV."
     )
 
-    # --- NEW: Added --projection argument ---
     parser.add_argument(
         "--projection",
         type=str,
@@ -447,7 +443,6 @@ def main():
     print("\n" + color_text("Density of States:", 'bold'))
     print("-"*60)
 
-    # --- MODIFIED: Pass args.projection to the processing function ---
     process_pdos_xml(args.filename, args.type, args.shift, args.projection, args.output_dir)
     
 if __name__ == "__main__":

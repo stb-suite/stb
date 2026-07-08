@@ -27,17 +27,6 @@ check_success() {
     fi
 }
 
-# Checks that file $1 exists, regardless of whether it's empty
-check_exists() {
-    if [ -e "$1" ]; then
-        echo -e " ... ${GREEN}OK${NC} (file '$1' exists)"
-        PASS=$((PASS+1))
-    else
-        echo -e " ... ${RED}FAIL${NC} (file '$1' does not exist)"
-        FAIL=$((FAIL+1))
-    fi
-}
-
 # Checks that file $2 contains (grep -q) pattern $1
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
@@ -103,13 +92,12 @@ stb-structural --file structure.fdf --format fdf --mode mean --no-intro > log_fd
 check_exit_code $? 0
 check_success structural_information.dat
 
-echo "Verifying CrystalNN's expected, non-actionable 'no oxidation states' warnings are suppressed (not logged, not printed) without changing any computed values"
-check_exists warnings.log
-if [ -s warnings.log ]; then
-    echo -e "   -> ${RED}Failed:${NC} warnings.log is non-empty (oxidation-state noise leaked through)"
+echo "Verifying no warnings.log is written, and CrystalNN's expected, non-actionable 'no oxidation states' warnings don't print either"
+if [ -e warnings.log ]; then
+    echo -e "   -> ${RED}Failed:${NC} warnings.log was written (should not be -- warnings print to console only)"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} warnings.log is empty (no oxidation-state noise)"
+    echo -e "   -> ${GREEN}Verified:${NC} warnings.log absent"
     PASS=$((PASS+1))
 fi
 check_not_contains "\[WARNING\]" log_fdf_mean.txt
@@ -230,7 +218,13 @@ rm -rf out_dir
 stb-structural --file structure.fdf --format fdf --mode mean --output-dir out_dir --no-intro > log_outdir.txt 2>&1
 check_exit_code $? 0
 check_success out_dir/structural_information.dat
-check_exists out_dir/warnings.log
+if [ -e out_dir/warnings.log ]; then
+    echo -e "   -> ${RED}Failed:${NC} out_dir/warnings.log was written (should not be)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} out_dir/warnings.log absent"
+    PASS=$((PASS+1))
+fi
 
 
 # --- 5b. --no-rdf: skips rdf.dat, and cleans up a stale one from a
@@ -260,21 +254,17 @@ stb-structural --file structure.fdf --format fdf --mode mean --rdf-rmax 0 --no-i
 check_exit_code $? 2
 
 
-# --- 6. warnings.log doesn't grow across repeated runs (logging.basicConfig
-#     defaults to append mode, which used to let it accumulate stale
-#     warnings from unrelated previous runs forever) ---
-echo -e "\n--- Testing warnings.log is reset each run, not appended to ---"
-rm -f warnings.log
+# --- 6. A stale warnings.log from an older version of this tool (which
+#     always wrote one) is cleaned up rather than left to linger. ---
+echo -e "\n--- Testing a stale warnings.log from a previous run is removed ---"
+echo "stale content from an older run" > warnings.log
 stb-structural --file structure.fdf --format fdf --mode mean --no-intro > /dev/null 2>&1
-lines_first=$(wc -l < warnings.log)
-stb-structural --file structure.fdf --format fdf --mode mean --no-intro > /dev/null 2>&1
-lines_second=$(wc -l < warnings.log)
-if [ "$lines_first" -eq "$lines_second" ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} warnings.log stayed at $lines_first lines across two runs (not appended)"
-    PASS=$((PASS+1))
-else
-    echo -e "   -> ${RED}Failed:${NC} warnings.log grew from $lines_first to $lines_second lines across two runs"
+if [ -e warnings.log ]; then
+    echo -e "   -> ${RED}Failed:${NC} stale warnings.log was not cleaned up"
     FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} stale warnings.log was removed"
+    PASS=$((PASS+1))
 fi
 
 

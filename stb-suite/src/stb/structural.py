@@ -11,7 +11,6 @@ VERSION = "1.9.1"
 import os
 import sys
 import argparse
-import logging
 import warnings
 from datetime import datetime
 import numpy as np
@@ -24,9 +23,11 @@ from stb.core import structure_io
 from stb.core.cli import color_text, show_intro
 
 def warn_handler(message, category, filename, lineno, file=None, line=None):
-    log_message = f"{category.__name__}: {message} (File: {filename}, Line: {lineno})"
-    logging.warning(log_message)
-    print("[WARNING] Warning detected! Check warnings.log for details.")
+    """Prints any warning that reaches here directly to the console -- no
+    warnings.log; the two expected, non-actionable CrystalNN oxidation-state
+    warnings are filtered out before this ever runs (see compute_ecn), so
+    anything that does reach here is unexpected and worth surfacing."""
+    print(color_text(f"[WARNING] {category.__name__}: {message}", 'yellow'))
 
 def read_structure(path, fmt):
     """Returns a pymatgen Structure for one of this suite's own SIESTA
@@ -635,8 +636,8 @@ def main():
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write structural_information.dat, warnings.log, and "
-                             "rdf.dat into (default: current directory). Created if it doesn't exist.")
+                        help="Directory to write structural_information.dat and rdf.dat into "
+                             "(default: current directory). Created if it doesn't exist.")
     parser.add_argument("--no-rdf", dest="rdf", action="store_false",
                         help="Skip the radial distribution function g(r) (rdf.dat is not written).")
     parser.add_argument("--rdf-rmax", type=float, default=10.0,
@@ -654,13 +655,15 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Configure logger for warnings (done here, not at module level, so importing
-    # stb.structural has no side effect of creating warnings.log on disk).
-    # filemode='w' so stale warnings from a previous run in the same directory
-    # don't linger forever (logging.basicConfig defaults to append mode).
-    logging.basicConfig(filename=os.path.join(args.output_dir, "warnings.log"),
-                         level=logging.WARNING, format="%(message)s", filemode='w')
+    # No warnings.log: warnings print straight to the console via
+    # warn_handler instead of being written to disk.
     warnings.showwarning = warn_handler
+
+    # Remove a stale warnings.log from a previous version of this tool (it
+    # used to always write one) so it can't be mistaken for output of this run.
+    stale_log = os.path.join(args.output_dir, "warnings.log")
+    if os.path.exists(stale_log):
+        os.remove(stale_log)
 
     if args.intro:
         show_intro([

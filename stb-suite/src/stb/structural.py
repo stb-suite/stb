@@ -92,6 +92,103 @@ def _polyhedron_volume(neighbor_coords):
     except QhullError:
         return None
 
+def _classify_connectivity(shared_ligand_count):
+    """How two same-species coordination polyhedra are linked, by how many
+    ligand atoms they have in common: 0 = not connected (not reported),
+    1 = corner-sharing, 2 = edge-sharing, 3+ = face-sharing."""
+    if shared_ligand_count <= 0:
+        return None
+    if shared_ligand_count == 1:
+        return "corner-sharing"
+    if shared_ligand_count == 2:
+        return "edge-sharing"
+    return "face-sharing"
+
+def compute_rdf(structure, r_max=10.0, dr=0.05):
+    """Partial (per species pair, canonical order spA <= spB) and total
+    radial distribution functions g(r) out to r_max, via a periodic-aware
+    neighbor search (Structure.get_all_neighbors -- correctly includes
+    contributions from periodic images beyond the first unit cell).
+
+    Standard number-density normalization:
+        g_AB(r) = <n_AB(r, r+dr)> / (4*pi*r^2*dr*rho_B)
+    averaged over all A-type reference atoms; for a heteronuclear pair
+    (A != B) only A-as-reference is accumulated (B-as-reference for the
+    same physical pair is skipped) to avoid double counting the same
+    proximity event with mismatched normalization -- by construction
+    g_AB(r) computed from A's side and g_BA(r) computed from B's side
+    describe the same physical distribution, so only one is needed. For a
+    homonuclear pair (A == A), both (i,j) and (j,i) orderings legitimately
+    contribute (each A atom's own neighbor count), which this naturally
+    includes. Total g(r) uses every atom as both reference and target.
+
+    Returns (r_centers, g_total, g_by_pair) where g_by_pair is
+    {(spA, spB): array} for spA <= spB.
+    """
+    n_bins = max(1, int(np.ceil(r_max / dr)))
+    bin_edges = np.linspace(0, n_bins * dr, n_bins + 1)
+    r_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    volume = structure.lattice.volume
+
+    species_of = [str(site.specie.symbol) for site in structure]
+    species_list = sorted(set(species_of))
+    species_count = {sp: species_of.count(sp) for sp in species_list}
+
+    all_neighbors = structure.get_all_neighbors(r_max)
+
+    total_hist = np.zeros(n_bins)
+    directional_hist = {}
+
+    for i in range(len(structure)):
+        sp_i = species_of[i]
+        for nbr in all_neighbors[i]:
+            d = nbr.nn_distance
+            if d <= 0 or d >= r_max:
+                continue
+            b = min(int(d / dr), n_bins - 1)
+            total_hist[b] += 1
+            sp_j = str(nbr.specie.symbol)
+            ref_species = sp_i if sp_i <= sp_j else sp_j
+            if sp_i != ref_species:
+                continue
+            key = (sp_i, sp_j) if sp_i <= sp_j else (sp_j, sp_i)
+            directional_hist.setdefault(key, np.zeros(n_bins))
+            directional_hist[key][b] += 1
+
+    shell_volumes = 4.0 * np.pi * r_centers ** 2 * dr
+    n_total = len(structure)
+    rho_total = n_total / volume
+    g_total = total_hist / (shell_volumes * rho_total * n_total)
+
+    g_by_pair = {}
+    for (sp_a, sp_b), hist in directional_hist.items():
+        n_a = species_count[sp_a]
+        rho_b = species_count[sp_b] / volume
+        g_by_pair[(sp_a, sp_b)] = hist / (shell_volumes * rho_b * n_a)
+
+    return r_centers, g_total, g_by_pair
+
+def write_rdf_file(path, r_centers, g_total, g_by_pair):
+    """Writes the full g(r) curve (total + every species pair) as columns,
+    for external plotting -- the main report only quotes each curve's
+    first peak."""
+    pairs = sorted(g_by_pair)
+    header_cols = ["r(Ang)", "g_total(r)"] + [f"g_{a}-{b}(r)" for a, b in pairs]
+    header = "  ".join(f"{c:>14}" for c in header_cols)
+    with open(path, "w") as f:
+        f.write("# " + header + "\n")
+        for k, r in enumerate(r_centers):
+            row = [r, g_total[k]] + [g_by_pair[pair][k] for pair in pairs]
+            f.write("  ".join(f"{v:14.6f}" for v in row) + "\n")
+
+def _first_peak(r_centers, g):
+    """(r, g(r)) at the highest point of the curve, or (None, None) if it's
+    all zero (no pair found within r_max)."""
+    if len(g) == 0 or not np.any(g):
+        return None, None
+    idx = int(np.argmax(g))
+    return float(r_centers[idx]), float(g[idx])
+
 def compute_ecn(structure, mode, atoms_position=None):
     """Pure computation -- no printing, no file I/O. Returns a results dict
     that format_report() turns into the console/file report."""
@@ -136,6 +233,50 @@ def compute_ecn(structure, mode, atoms_position=None):
 
     pos_atomics = [(i+1, str(site.specie.symbol), site.coords) for i, site in enumerate(structure)]
     results["atomic_positions"] = pos_atomics
+    species_of_all = [p[1] for p in pos_atomics]
+    all_species_list = sorted(set(species_of_all))
+
+    # Whole-structure, --mode-independent analysis: minimum same-species
+    # distance and coordination-polyhedron connectivity both describe the
+    # extended network, not just whichever atoms --list happens to name,
+    # so they always use every atom regardless of --mode/--list. This
+    # means a second, separate CrystalNN pass over all atoms even in
+    # "list" mode's small subset -- deliberately not fused with the
+    # --mode-scoped neighbor loop further down, to avoid changing what
+    # that loop's pooled distance/angle statistics mean per mode.
+    same_species_min_distance = {}
+    for sp in all_species_list:
+        idx = [i for i, s in enumerate(species_of_all) if s == sp]
+        if len(idx) < 2:
+            continue
+        min_d = min(structure.get_distance(idx[a], idx[b])
+                     for a in range(len(idx)) for b in range(a + 1, len(idx)))
+        same_species_min_distance[sp] = float(min_d)
+    results["same_species_min_distance"] = same_species_min_distance
+
+    connectivity_cnn = CrystalNN()
+    connectivity_by_species = {}
+    try:
+        full_neighbor_ids = {}
+        for i in range(len(structure)):
+            nbrs = connectivity_cnn.get_nn_info(structure, i)
+            full_neighbor_ids[i] = {
+                (n["site_index"], tuple(round(x) for x in n.get("image", (0, 0, 0))))
+                for n in nbrs
+            }
+        for sp in all_species_list:
+            idx = [i for i, s in enumerate(species_of_all) if s == sp]
+            counts = {"corner-sharing": 0, "edge-sharing": 0, "face-sharing": 0}
+            for a in range(len(idx)):
+                for b in range(a + 1, len(idx)):
+                    shared = len(full_neighbor_ids[idx[a]] & full_neighbor_ids[idx[b]])
+                    label = _classify_connectivity(shared)
+                    if label is not None:
+                        counts[label] += 1
+            connectivity_by_species[sp] = counts
+    except Exception as e:
+        print(f"[WARNING] Failed to compute polyhedron connectivity: {e}")
+    results["connectivity_by_species"] = connectivity_by_species
 
     if mode == "mean":
         for i in range(len(structure)):
@@ -302,7 +443,7 @@ def _rule(char="-"):
 def _fmt(value, width=7, prec=3):
     return f"{value:{width}.{prec}f}" if value is not None else "N/A".rjust(width)
 
-def format_report(results, source_file, fmt):
+def format_report(results, source_file, fmt, rdf_summary=None):
     lat = results["lattice"]
     lines = []
     lines.append(_rule("="))
@@ -407,6 +548,46 @@ def format_report(results, source_file, fmt):
             lines.append("")
 
     lines.append(_rule())
+    lines.append("SAME-SPECIES MINIMUM DISTANCE (whole structure, independent of --mode)")
+    lines.append(_rule())
+    if results["same_species_min_distance"]:
+        for sp in sorted(results["same_species_min_distance"]):
+            label = f"{sp}-{sp}"
+            lines.append(f"  {label:<10}: {results['same_species_min_distance'][sp]:.4f} Å")
+    else:
+        lines.append("  Fewer than 2 atoms of any single species -- nothing to compare.")
+
+    lines.append("")
+    lines.append(_rule())
+    lines.append("COORDINATION POLYHEDRON CONNECTIVITY (shared ligands between same-")
+    lines.append("species centers; whole structure, independent of --mode)")
+    lines.append(_rule())
+    if results["connectivity_by_species"]:
+        for sp, counts in results["connectivity_by_species"].items():
+            lines.append(f"{sp}-{sp}:")
+            lines.append(f"  corner-sharing: {counts['corner-sharing']} pair(s)")
+            lines.append(f"  edge-sharing  : {counts['edge-sharing']} pair(s)")
+            lines.append(f"  face-sharing  : {counts['face-sharing']} pair(s)")
+            lines.append("")
+    else:
+        lines.append("  Not available.")
+        lines.append("")
+
+    if rdf_summary is not None:
+        lines.append(_rule())
+        lines.append("RADIAL DISTRIBUTION FUNCTION g(r)")
+        lines.append(_rule())
+        lines.append(f"Full curve written to {rdf_summary['rdf_file']} "
+                     f"(r_max = {rdf_summary['r_max']:.1f} Å, bin width = {rdf_summary['dr']:.2f} Å).")
+        lines.append("First peak (highest g(r) in this range):")
+        for label, (r, g) in rdf_summary["peaks"].items():
+            if r is None:
+                lines.append(f"  {label:<10}: no pair found within r_max")
+            else:
+                lines.append(f"  {label:<10}: r = {r:6.3f} Å   g(r) = {g:8.3f}")
+        lines.append("")
+
+    lines.append(_rule())
     lines.append("ATOMIC POSITIONS (Cartesian, Å)")
     lines.append(_rule())
     for atom_id, species, coords in results["atomic_positions"]:
@@ -431,8 +612,13 @@ def main():
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write structural_information.dat and warnings.log into "
-                             "(default: current directory). Created if it doesn't exist.")
+                        help="Directory to write structural_information.dat, warnings.log, and "
+                             "rdf.dat into (default: current directory). Created if it doesn't exist.")
+    parser.add_argument("--no-rdf", dest="rdf", action="store_false",
+                        help="Skip the radial distribution function g(r) (rdf.dat is not written).")
+    parser.add_argument("--rdf-rmax", type=float, default=10.0,
+                        help="Cutoff radius for g(r), in Å (default: 10.0). Larger values capture "
+                             "more coordination shells but take longer for large structures.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -440,6 +626,8 @@ def main():
 
     if args.mode == "list" and not args.list:
         parser.error("--list is required when --mode is 'list'")
+    if args.rdf_rmax <= 0:
+        parser.error("--rdf-rmax must be positive.")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -484,7 +672,24 @@ def main():
     print("[INFO] Computing coordination numbers and bond distances...")
     results = compute_ecn(structure, args.mode, atoms_position)
 
-    report = format_report(results, args.file, args.format)
+    rdf_summary = None
+    if args.rdf:
+        print(f"[INFO] Computing radial distribution function g(r) (r_max = {args.rdf_rmax:.1f} Å)...")
+        r_centers, g_total, g_by_pair = compute_rdf(structure, r_max=args.rdf_rmax)
+        rdf_path = os.path.join(args.output_dir, "rdf.dat")
+        write_rdf_file(rdf_path, r_centers, g_total, g_by_pair)
+        peaks = {"Total": _first_peak(r_centers, g_total)}
+        for pair in sorted(g_by_pair):
+            peaks[f"{pair[0]}-{pair[1]}"] = _first_peak(r_centers, g_by_pair[pair])
+        rdf_summary = {"rdf_file": rdf_path, "r_max": args.rdf_rmax, "dr": 0.05, "peaks": peaks}
+    else:
+        # Remove a stale rdf.dat from a previous (non-"--no-rdf") run in
+        # this same directory, so it can't be mistaken for output of this run.
+        stale_rdf = os.path.join(args.output_dir, "rdf.dat")
+        if os.path.exists(stale_rdf):
+            os.remove(stale_rdf)
+
+    report = format_report(results, args.file, args.format, rdf_summary)
     print("\n" + report)
 
     out_path = os.path.join(args.output_dir, "structural_information.dat")

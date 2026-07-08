@@ -128,6 +128,37 @@ check_contains "  Volume:  12.053 Å³" structural_information.dat
 echo "Verifying a 3-coordinate site (O) correctly reports polyhedron volume as N/A (needs >=4 neighbors for a 3D hull)"
 check_contains "  Volume:     N/A Å³" structural_information.dat
 
+echo "Verifying same-species minimum distance (whole structure, both species aligned to the same field width)"
+check_contains "SAME-SPECIES MINIMUM DISTANCE" structural_information.dat
+check_contains "  O-O       : 2.6218 Å" structural_information.dat
+check_contains "  Sn-Sn     : 3.2799 Å" structural_information.dat
+
+echo "Verifying coordination polyhedron connectivity (corner/edge/face-sharing) per species"
+check_contains "COORDINATION POLYHEDRON CONNECTIVITY" structural_information.dat
+check_contains "corner-sharing: 16 pair(s)" structural_information.dat
+check_contains "edge-sharing  : 1 pair(s)" structural_information.dat
+check_contains "corner-sharing: 6 pair(s)" structural_information.dat
+check_contains "edge-sharing  : 2 pair(s)" structural_information.dat
+
+echo "Verifying the radial distribution function g(r) is written and integrates to the known O-Sn coordination number"
+check_success rdf.dat
+check_contains "RADIAL DISTRIBUTION FUNCTION g(r)" structural_information.dat
+check_contains "Full curve written to ./rdf.dat" structural_information.dat
+check_contains "g_O-Sn(r)" rdf.dat
+python3 -c "
+import numpy as np
+data = np.loadtxt('rdf.dat')
+r, g_osn = data[:,0], data[:,3]
+dr = r[1]-r[0]
+shell = 4*np.pi*r**2*dr
+rho_Sn = 6/236.82072939038554
+mask = r < 2.6
+n = np.sum(g_osn[mask]*shell[mask]*rho_Sn)
+assert abs(n - 3.0) < 0.01, f'integrated O-Sn coordination {n} != 3.0'
+print('OK')
+" > rdf_check.txt 2>&1
+check_contains "OK" rdf_check.txt
+
 echo "Verifying atomic positions are cleanly formatted (fixed-width columns, not numpy's raw array repr)"
 check_contains "ATOMIC POSITIONS (Cartesian, Å)" structural_information.dat
 check_contains "   1  Sn       4.574068      3.168518      4.142994" structural_information.dat
@@ -175,6 +206,33 @@ stb-structural --file structure.fdf --format fdf --mode mean --output-dir out_di
 check_exit_code $? 0
 check_success out_dir/structural_information.dat
 check_success out_dir/warnings.log
+
+
+# --- 5b. --no-rdf: skips rdf.dat, and cleans up a stale one from a
+#     previous run in the same directory ---
+echo -e "\n--- Testing --no-rdf ---"
+rm -f rdf.dat
+stb-structural --file structure.fdf --format fdf --mode mean --no-intro > /dev/null 2>&1
+check_success rdf.dat
+stb-structural --file structure.fdf --format fdf --mode mean --no-rdf --no-intro > log_nordf.txt 2>&1
+check_exit_code $? 0
+if [ -e rdf.dat ]; then
+    echo -e "   -> ${RED}Failed:${NC} rdf.dat still exists after --no-rdf (stale file not cleaned up)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} rdf.dat absent after --no-rdf (and stale one removed)"
+    PASS=$((PASS+1))
+fi
+check_not_contains "RADIAL DISTRIBUTION FUNCTION" structural_information.dat
+
+echo "Testing: --rdf-rmax changes the cutoff used"
+stb-structural --file structure.fdf --format fdf --mode mean --rdf-rmax 5 --no-intro > log_rmax.txt 2>&1
+check_exit_code $? 0
+check_contains "r_max = 5.0 Å" structural_information.dat
+
+echo "Testing: --rdf-rmax 0 is rejected"
+stb-structural --file structure.fdf --format fdf --mode mean --rdf-rmax 0 --no-intro > log_rmax_zero.txt 2>&1
+check_exit_code $? 2
 
 
 # --- 6. warnings.log doesn't grow across repeated runs (logging.basicConfig

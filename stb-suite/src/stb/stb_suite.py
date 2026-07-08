@@ -1618,26 +1618,28 @@ def run_structure_analyzer() -> None:
     print("="*60 + "\n")
     
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input structure file (CIF/POSCAR/SIESTA): ")
+    input_file = get_input("Input structure file (SIESTA .fdf or .STRUCT_OUT): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
-    format_type = get_input("Format file (cif/poscar/siesta): ")
-    while format_type not in ['cif','poscar','siesta'] :
+    format_type = get_input("Format file (fdf/struct_out): ").lower()
+    while format_type not in ['fdf', 'struct_out']:
         print(color_text("File type is not available!", 'red'))
-        format_type = get_input("Format file (cif/poscar/siesta): ")
-    
+        format_type = get_input("Format file (fdf/struct_out): ").lower()
+
     mode = get_input("Analysis mode (list/mean): ").lower()
     while mode not in ['list', 'mean']:
         print(color_text("Invalid mode! Choose 'list' or 'mean'", 'red'))
         mode = get_input("Analysis mode (list/mean): ").lower()
-    
-    args = ["--file", input_file, "--mode", mode,"--format",format_type,"--no-intro"]
-    
+
+    output_dir = get_input("Output directory [default: current directory]: ").strip() or "."
+
+    args = ["--file", input_file, "--mode", mode, "--format", format_type, "--output-dir", output_dir, "--no-intro"]
+
     if mode == "list":
         atom_list = get_input("Enter atom indices (comma-separated, e.g. 1,4,5): ")
-        args.extend(["--list", f"[{atom_list}]"])
-    
+        args.extend(["--list", atom_list])
+
     run_tool("stb-structural", args)
 
 def run_file_translator() -> None:

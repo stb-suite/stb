@@ -5,39 +5,42 @@
 # Developed by Dr. Carlos M. O. Bastos          #
 #      bastoscmo.github.io                      #
 #################################################
-    
-VERSION = "1.9.1"  
 
+VERSION = "1.9.1"
 
 import os
 import sys
+import argparse
+import logging
 import warnings
-import subprocess
-from time import sleep
-import argparse
-import textwrap
-from typing import List, Dict
-import argparse
 import numpy as np
-from pymatgen.core import Structure
 from pymatgen.analysis.local_env import (
      JmolNN, MinimumDistanceNN, CrystalNN,
     BrunnerNNRelative, EconNN)
-import warnings
-import logging
 from ase.io import read as ase_read
 from pymatgen.io.ase import AseAtomsAdaptor
-
-# ANSI colors for terminal output
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core import structure_io
+from stb.core.cli import color_text, show_intro
 
 def warn_handler(message, category, filename, lineno, file=None, line=None):
     log_message = f"{category.__name__}: {message} (File: {filename}, Line: {lineno})"
     logging.warning(log_message)
     print("[WARNING] Warning detected! Check warnings.log for details.")
 
-def compute_ecn(structure, mode, atoms_position=None):
-    with open("structural_information.dat", "w") as f:
+def read_structure(path, fmt):
+    """Returns a pymatgen Structure for one of this suite's own SIESTA
+    formats: .fdf (structure input, via the shared core/structure_io.py
+    parser) or .STRUCT_OUT (post-relaxation output, via ASE -- there's no
+    shared reader for that format elsewhere in the suite)."""
+    if fmt == "fdf":
+        fdf_structure = structure_io.read_fdf(path)
+        return structure_io.to_pymatgen(fdf_structure)
+    atoms = ase_read(path, format="struct_out")
+    return AseAtomsAdaptor.get_structure(atoms)
+
+def compute_ecn(structure, mode, output_dir, atoms_position=None):
+    out_path = os.path.join(output_dir, "structural_information.dat")
+    with open(out_path, "w") as f:
 
         # Lattice parameters
         lattice = structure.lattice
@@ -82,8 +85,9 @@ def compute_ecn(structure, mode, atoms_position=None):
                 for method_name, method in methods.items():
                     try:
                         ecn_results[method_name].append(method.get_cn(structure, i))
-                    except:
+                    except Exception as e:
                         ecn_results[method_name].append(None)
+                        print(f"[WARNING] {method_name} failed for atom {i+1}: {e}")
 
             ecn_avg = {method: np.nanmean([v for v in values if v is not None]) for method, values in ecn_results.items()}
             print("\n[INFO] Calculating the average ECN.")
@@ -96,8 +100,9 @@ def compute_ecn(structure, mode, atoms_position=None):
                 for method_name, method in methods.items():
                     try:
                         ecn_results[method_name].append(method.get_cn(structure, i-1))
-                    except:
+                    except Exception as e:
                         ecn_results[method_name].append(None)
+                        print(f"[WARNING] {method_name} failed for atom {i}: {e}")
 
             print("\n[INFO] Calculating the ECN for specified atoms.")
             f.write("\nECN for specified atoms:\n")
@@ -139,21 +144,43 @@ def compute_ecn(structure, mode, atoms_position=None):
         for atom_id, symbol, coords in pos_atomics:
             f.write(f"{atom_id}  {symbol} cartesian position: {coords}\n")
 
-def main():
-    # Configure logger for warnings (done here, not at module level, so importing
-    # stb.structural has no side effect of creating warnings.log on disk)
-    logging.basicConfig(filename="warnings.log", level=logging.WARNING, format="%(message)s")
-    warnings.showwarning = warn_handler
+    return out_path
 
-    parser = argparse.ArgumentParser(description="Compute ECN from structure file.")
+def main():
+    parser = argparse.ArgumentParser(
+        description="Compute ECN and structural properties from a SIESTA structure file.",
+        epilog="Example usage:\n"
+               "  stb-structural --file structure.fdf --format fdf --mode mean\n"
+               "  stb-structural --file siesta.STRUCT_OUT --format struct_out --mode list --list 1,4,5",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument("--file", required=True, help="Path to structure file.")
-    parser.add_argument("--format", required=True, choices=["poscar", "cif", "siesta"], help="Input file format: poscar, cif, or siesta")
+    parser.add_argument("--format", required=True, choices=["fdf", "struct_out"],
+                        help="Input file format:\n"
+                             "  fdf:        SIESTA structure input (%%block LatticeVectors etc.)\n"
+                             "  struct_out: SIESTA post-relaxation output (.STRUCT_OUT)")
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
-    parser.add_argument("--list", type=str, help="List of atom indices (comma-separated). Example: [1,4,5,7] - Required for 'list' mode")
+    parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write structural_information.dat and warnings.log into "
+                             "(default: current directory). Created if it doesn't exist.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
+
+    if args.mode == "list" and not args.list:
+        parser.error("--list is required when --mode is 'list'")
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Configure logger for warnings (done here, not at module level, so importing
+    # stb.structural has no side effect of creating warnings.log on disk).
+    # filemode='w' so stale warnings from a previous run in the same directory
+    # don't linger forever (logging.basicConfig defaults to append mode).
+    logging.basicConfig(filename=os.path.join(args.output_dir, "warnings.log"),
+                         level=logging.WARNING, format="%(message)s", filemode='w')
+    warnings.showwarning = warn_handler
 
     if args.intro:
         show_intro([
@@ -166,25 +193,29 @@ def main():
     print("\n" + color_text("STRUCTURAL PROPERTIES:", 'bold'))
     print("-"*60)
 
-    if args.mode == "list" and not args.list:
-        parser.error("--list is required when --mode is 'list'")
-
     print("\n[INFO] Reading structure file...")
     atoms_position = list(map(int, args.list.strip('[]').split(','))) if args.list else None
 
-    if args.format in ["poscar", "cif"]:
-        structure = Structure.from_file(args.file)
-    elif args.format == "siesta":
-        atoms = ase_read(args.file, format="struct_out")
-        structure = AseAtomsAdaptor.get_structure(atoms)
-    else:
-        raise ValueError("Unsupported file format. Use --format poscar, cif, or siesta.")
+    try:
+        structure = read_structure(args.file, args.format)
+    except FileNotFoundError:
+        print(color_text(f"[ERROR] Structure file '{args.file}' not found.", 'red'))
+        sys.exit(1)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
 
-    compute_ecn(structure, args.mode, atoms_position)
+    if atoms_position:
+        invalid = [i for i in atoms_position if i < 1 or i > len(structure)]
+        if invalid:
+            print(color_text(f"[ERROR] Atom index/indices {invalid} out of range "
+                              f"(structure has {len(structure)} atoms, 1-based).", 'red'))
+            sys.exit(1)
 
-    print("\n[INFO] Job complete!")
+    out_path = compute_ecn(structure, args.mode, args.output_dir, atoms_position)
+
+    print(f"\n[INFO] Job complete! Results saved to {out_path}")
     print("\n"+"-"*60)
 
 if __name__ == "__main__":
     main()
-

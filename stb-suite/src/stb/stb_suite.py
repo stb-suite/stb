@@ -1578,9 +1578,16 @@ def run_dos_convolution() -> None:
     
     # Esta linha agora terá Tab-completion!
     out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
-    size = get_int_input("Gaussian mask size (default: 11): ", 11)
+    size = get_int_input("Gaussian mask size, must be a positive odd number (default: 11): ", 11)
+    while size <= 0 or size % 2 == 0:
+        print(color_text("Size must be a positive odd number!", 'red'))
+        size = get_int_input("Gaussian mask size (default: 11): ", 11)
     sigma = get_float_input("Standard deviation (default: 1.0): ", 1.0)
-    
+    while sigma <= 0:
+        print(color_text("Standard deviation must be positive!", 'red'))
+        sigma = get_float_input("Standard deviation (default: 1.0): ", 1.0)
+    plot_choice = get_input("Show before/after plot? (Y/n): ").strip().lower()
+
     args = [
         "--file", input_file,
         "--size", str(size),
@@ -1588,7 +1595,10 @@ def run_dos_convolution() -> None:
         "--out", out_file,
         "--no-intro"
     ]
-    
+
+    if plot_choice in ['n', 'no']:
+        args.append("--no-plot")
+
     run_tool("stb-convdos", args)
 
 def run_structure_analyzer() -> None:

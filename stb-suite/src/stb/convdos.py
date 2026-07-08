@@ -8,132 +8,121 @@
 
 VERSION = "1.9.1"
 
-import os
 import sys
-import warnings
-import subprocess
-from time import sleep
 import argparse
-import textwrap
-from typing import List, Dict
 import numpy as np
-import argparse
 import matplotlib.pyplot as plt
-from stb.core.cli import COLORS, color_text, show_intro
-
+from stb.core.cli import color_text, show_intro
 
 
 def gaussian_kernel_1d(size, sigma):
-    """Creates a 1D Gaussian kernel."""
+    """Creates a normalized 1D Gaussian kernel of the given odd size."""
     kernel_1d = np.arange(size) - (size - 1) / 2.0
     kernel_1d = np.exp(-(kernel_1d**2) / (2 * sigma**2))
     kernel_1d /= np.sum(kernel_1d)  # Normalize the kernel
     return kernel_1d
 
-def convolve1d(data, kernel):
-    """Performs 1D convolution of a vector with a kernel."""
-    kernel_size = kernel.shape[0]
-    data_size = data.shape[0]
-    pad_size = kernel_size // 2
-    padded_data = np.pad(data, (pad_size, pad_size), mode='constant')
-    output = np.zeros_like(data)
-    for i in range(data_size):
-        region = padded_data[i:i + kernel_size]
-        output[i] = np.sum(region * kernel)
-    return output
 
-# --- CORRECTED PLOT FUNCTION ---
-def plot(energy_data, original_dos_data, filtered_dos_data, col_index):
-    """
-    Documentation:
-    Plots the original and filtered data for a specific DOS column.
-    
-    Arguments:
-    energy_data (np.array): Vector with energy values (X-axis).
-    original_dos_data (np.array): Vector with original DOS data (Y-axis of 1st plot).
-    filtered_dos_data (np.array): Vector with filtered DOS data (Y-axis of 2nd plot).
-    col_index (int): The index of the column being plotted (for the title).
-    """
-    plt.figure(figsize=(10, 5))
-    
-    # Subplot 1: Original Data
-    plt.subplot(1, 2, 1)
-    # Documentation: The title now shows which column (by index) is being displayed.
-    plt.title(f"Original")
-    # Documentation: Plots energy vs. the specific original DOS column.
-    plt.plot(energy_data, original_dos_data)
-    plt.xlabel("Energy")
-    plt.ylabel("DOS")
+def read_column_labels(path, n_columns):
+    """Best-effort column labels from the input file's leading '#' header
+    (e.g. stb-dos writes '#Energy(eV)    s           p           ...').
+    Returns None if there's no header line or its label count doesn't match
+    the data, so callers can fall back to generic names instead of
+    mislabeling columns."""
+    try:
+        with open(path) as f:
+            first_line = f.readline()
+    except OSError:
+        return None
+    if not first_line.lstrip().startswith('#'):
+        return None
+    labels = first_line.lstrip('#').split()
+    if len(labels) != n_columns:
+        return None
+    return labels
 
-    # Subplot 2: Filtered Data
-    plt.subplot(1, 2, 2)
-    # Documentation: Corresponding title for the filtered data.
-    plt.title(f"Filtered")
-    # Documentation: Plots energy vs. the specific filtered DOS column.
-    plt.plot(energy_data, filtered_dos_data)
-    plt.xlabel("Energy")
-    plt.ylabel("DOS")
-    
-    # Documentation: Shows the plot.
+
+def filter_columns(data, kernel):
+    """Gaussian-convolves every column except column 0 (energy).
+
+    Uses numpy's own (vectorized, well-tested) convolution rather than a
+    hand-rolled loop. mode='same' zero-pads at the boundaries -- the
+    physically sensible choice here, since a DOS is genuinely ~0 outside
+    the computed energy window.
+
+    Returns (energy, filtered) where filtered has shape
+    (n_energy_points, n_columns - 1).
+    """
+    energy = data[:, 0]
+    filtered = np.empty((data.shape[0], data.shape[1] - 1))
+    for i in range(1, data.shape[1]):
+        filtered[:, i - 1] = np.convolve(data[:, i], kernel, mode='same')
+    return energy, filtered
+
+
+def plot_all(energy, original, filtered, dos_labels):
+    """One figure, one row of (original, filtered) subplots per DOS column
+    -- a single window to close instead of one blocking plt.show() per
+    column, and each subplot is titled with its actual DOS column label
+    instead of a generic "Original"/"Filtered" that doesn't say which
+    column it is."""
+    n_cols = filtered.shape[1]
+    fig, axes = plt.subplots(n_cols, 2, figsize=(10, 3 * n_cols), squeeze=False)
+    for i in range(n_cols):
+        label = dos_labels[i]
+        axes[i, 0].plot(energy, original[:, i + 1])
+        axes[i, 0].set_title(f"Original: {label}")
+        axes[i, 0].set_xlabel("Energy")
+        axes[i, 0].set_ylabel("DOS")
+
+        axes[i, 1].plot(energy, filtered[:, i])
+        axes[i, 1].set_title(f"Filtered: {label}")
+        axes[i, 1].set_xlabel("Energy")
+        axes[i, 1].set_ylabel("DOS")
+
+    fig.tight_layout()
     plt.show()
+    plt.close(fig)
 
-# --- CORRECTED FILTER_DATA FUNCTION ---
-def filter_data(inp_file, kernel):
-    """
-    Documentation:
-    Applies convolution to all data columns of the input file
-    and plots each step.
-    
-    Arguments:
-    inp_file (np.array): The complete array read from the file.
-    kernel (np.array): The Gaussian kernel for convolution.
-    
-    Returns:
-    np.array: A new array containing the energy column and all
-              filtered DOS columns.
-    """
-    
-    # Documentation: Separates the energy column (assuming it's column 0).
-    energy_data = inp_file[:, 0]
-    
-    # Documentation: Initializes the filtered data array ONLY with the energy column.
-    # We will build this array column by column.
-    # We use reshape to ensure it is a column vector
-    filtered_data_final = energy_data.reshape(-1, 1)
-    
-    # Documentation: Iterates over the data columns, starting from column 1
-    # (since column 0 is energy).
-    # We use inp_file.shape[1] to get the total number of columns.
-    for i in range(1, inp_file.shape[1]):
-        
-        # Documentation: Selects the current original DOS column (e.g., column 1, then 2, etc.)
-        original_dos_data = inp_file[:, i]
-        
-        # Documentation: Applies convolution ONLY to this specific column.
-        filtered_dos_data = convolve1d(original_dos_data, kernel)
-        
-        # Documentation: Adds (stacks) the new filtered column to our final array.
-        # We use reshape to ensure the vector is a column before stacking.
-        filtered_data_final = np.column_stack((filtered_data_final, filtered_dos_data.reshape(-1, 1)))
-        
-        # Documentation: Calls the UPDATED plot function.
-        # We pass (energy, current_original_dos, current_filtered_dos, column_index)
-        plot(energy_data, original_dos_data, filtered_dos_data, i)
-        
-    # Documentation: Returns the complete array with the energy and all filtered columns.
-    return filtered_data_final
-# --- END OF CORRECTIONS ---
+
+def write_output(path, energy, filtered, energy_label, dos_labels):
+    """Writes energy + all filtered DOS columns, with a header that lists
+    every actual column instead of a fixed 'Energy DOS_filtered' regardless
+    of how many DOS columns there really are."""
+    header = energy_label + " " + " ".join(f"{label}_filtered" for label in dos_labels)
+    out_array = np.column_stack([energy, filtered])
+    np.savetxt(path, out_array, fmt='%.6f', header=header)
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Apply the Gaussian Convolution in DOS.")
-    parser.add_argument("--file", dest="input_file",required=True, help="Input file with  DOS.")
-    parser.add_argument("--size", type=int, required=True, help="Size of Gaussian mask.")
-    parser.add_argument("--sigma", type=float, required=True, help="Standard deviation of the Gaussian function.")
-    parser.add_argument("--out", required=True,dest="outfile", help="Output file with filtered data.")
+    parser = argparse.ArgumentParser(
+        description="Apply Gaussian convolution to broaden a DOS file's columns.",
+        epilog="Example usage:\n"
+               "  stb-convdos --file dos_total.dat --size 11 --sigma 1.0 --out dos_filtered.dat\n"
+               "  stb-convdos --file dos_total.dat --size 21 --sigma 2.0 --out dos_filtered.dat --no-plot",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument("--file", dest="input_file", required=True,
+                        help="Input DOS file: whitespace-separated columns, energy first.")
+    parser.add_argument("--size", type=int, required=True,
+                        help="Gaussian kernel size, in samples. Must be a positive odd number "
+                             "-- an even size shifts the filtered curve by half a bin, since it "
+                             "has no single center sample.")
+    parser.add_argument("--sigma", type=float, required=True,
+                        help="Standard deviation of the Gaussian kernel, in samples. Must be positive.")
+    parser.add_argument("--out", required=True, dest="outfile",
+                        help="Output file for the filtered data.")
+    parser.add_argument("--no-plot", dest="plot", action="store_false",
+                        help="Skip the before/after plot (all columns are still filtered and written).")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-convdos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
+
+    if args.size <= 0 or args.size % 2 == 0:
+        parser.error("--size must be a positive odd number.")
+    if args.sigma <= 0:
+        parser.error("--sigma must be positive.")
 
     if args.intro == True:
         show_intro([
@@ -145,15 +134,27 @@ def main():
     print("\n" + color_text("DOS Convolution Tool:", 'bold'))
     print("-"*60)
 
-    kernel = gaussian_kernel_1d(args.size, args.sigma)
+    print("\n[INFO] Reading file ...")
     inp_file = np.loadtxt(args.input_file)
-    print("\n[INFO] Read File") 
-    print("[INFO] Applied DOS convolution and plotting...") 
-    print("[WARNING] \n") 
-    filtered_data = filter_data(inp_file, kernel)
-    np.savetxt(args.outfile, filtered_data, fmt='%.6f', header="Energy DOS_filtered") 
-    print(f"\n[OK] Filtered data write in {args.outfile}")
-    print("[INFO] Complete job!") 
+    if inp_file.ndim != 2 or inp_file.shape[1] < 2:
+        print(color_text("[ERROR] Input file needs at least 2 columns (energy + at least one DOS column).", 'red'))
+        sys.exit(1)
+
+    labels = read_column_labels(args.input_file, inp_file.shape[1])
+    energy_label = labels[0] if labels else "Energy"
+    dos_labels = labels[1:] if labels else [f"DOS_{i}" for i in range(1, inp_file.shape[1])]
+
+    kernel = gaussian_kernel_1d(args.size, args.sigma)
+    print("[INFO] Applying Gaussian convolution ...")
+    energy, filtered = filter_columns(inp_file, kernel)
+
+    if args.plot:
+        print("[INFO] Plotting original vs. filtered ...")
+        plot_all(energy, inp_file, filtered, dos_labels)
+
+    write_output(args.outfile, energy, filtered, energy_label, dos_labels)
+    print(f"\n[OK] Filtered data written to {args.outfile}")
+    print("[INFO] Complete job!")
     print("\n"+"-"*60)
     print(color_text("We’ve convoluted everything… including the soul of the electron.\n\n", 'bold'))
 

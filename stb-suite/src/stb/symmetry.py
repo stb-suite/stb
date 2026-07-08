@@ -33,7 +33,8 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     # site (e.g. "m-3m" for a rock-salt ion sitting on a high-symmetry
     # position) -- same original atom order as ss.wyckoff_letters, verified
     # against ds.wyckoffs (which matches ss.wyckoff_letters exactly).
-    site_symmetry = sga.get_symmetry_dataset().site_symmetry_symbols
+    dataset = sga.get_symmetry_dataset()
+    site_symmetry = dataset.site_symmetry_symbols
 
     # ss.wyckoff_symbols is per ORBIT (e.g. "4a" for a 4-atom equivalence
     # class), not per atom -- ss.equivalent_indices maps each orbit to its
@@ -60,16 +61,20 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
 
     lattice = structure.lattice
     ops = sga.get_symmetry_operations()
+    distortion = _wyckoff_distortion(structure, ops)
+    for site in sites:
+        site["distortion"] = distortion[site["atom_id"] - 1]
 
     return {
         "space_group_symbol": sga.get_space_group_symbol(),
         "space_group_number": sga.get_space_group_number(),
         "hall_symbol": sga.get_hall(),
-        "hall_number": sga.get_symmetry_dataset().hall_number,
+        "hall_number": dataset.hall_number,
         "point_group": sga.get_point_group_symbol(),
         "crystal_system": sga.get_crystal_system(),
         "lattice_type": sga.get_lattice_type(),
         "pearson_symbol": sga.get_pearson_symbol(),
+        "setting_choice": dataset.choice,
         "symprec": symprec,
         "angle_tolerance": angle_tolerance,
         "lattice": {
@@ -88,6 +93,49 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
         ],
         "symmetry_operations": [op.as_xyz_str() for op in ops],
     }
+
+def _wyckoff_distortion(structure, ops):
+    """Per-atom distortion (Å) from exact symmetry: applies every DETECTED
+    symmetry operation to each atom's position and measures the distance to
+    the nearest same-species atom that operation should map it onto exactly
+    if the structure had perfect symmetry; an atom's distortion is the
+    largest such distance over all non-identity operations.
+
+    This is bounded by construction to roughly <= the symprec that produced
+    `ops` (that's the definition of symprec: the tolerance within which
+    spglib accepted this operation set as valid), so it gives a finer,
+    per-atom breakdown *within* that tolerance budget rather than just the
+    pass/fail group determination.
+
+    (An earlier, simpler attempt used SpacegroupAnalyzer.get_refined_structure()
+    -- its docstring claims "atoms moved to the expected symmetry positions"
+    -- but empirically it returns the input positions essentially unchanged
+    (verified: every atom's distance to its refined counterpart came out
+    exactly 0.0 even for a deliberately noisy test structure), so it
+    couldn't be used for this. Recomputing the residuals directly from the
+    operations themselves, as done here, does produce the expected
+    non-zero, noise-correlated values -- verified against a structure with
+    known injected per-atom noise.)
+    """
+    lattice = structure.lattice
+    species_of = [str(s.specie.symbol) for s in structure]
+    indices_by_species = {}
+    for i, sp in enumerate(species_of):
+        indices_by_species.setdefault(sp, []).append(i)
+
+    distortion = []
+    for i, site in enumerate(structure):
+        candidates = indices_by_species[species_of[i]]
+        max_dist = 0.0
+        for op in ops:
+            p2 = op.operate(site.frac_coords) % 1.0
+            best = min(
+                lattice.get_distance_and_image(p2, structure[j].frac_coords)[0]
+                for j in candidates
+            )
+            max_dist = max(max_dist, best)
+        distortion.append(max_dist)
+    return distortion
 
 # Default tolerance sweep for --scan-symprec: log-spaced from tight (typical
 # DFT-relaxation numerical noise) to loose enough to reveal near-symmetry a
@@ -118,13 +166,36 @@ def _describe_symprec_scan(scan_results):
                     f"{first_symbol} (No. {first_number}) -> {symbol} (No. {number}).")
     return "No change in detected space group across the scanned tolerance range."
 
+def compare_symmetry(results_a, results_b, label_a, label_b):
+    """Compares two compute_symmetry() results (e.g. a structure before and
+    after a SIESTA relaxation) -- same space group or not, and how their
+    symmetry-operation counts differ. Both must have been computed with the
+    same symprec/angle_tolerance for the comparison to mean anything."""
+    return {
+        "label_a": label_a, "label_b": label_b,
+        "symbol_a": results_a["space_group_symbol"], "number_a": results_a["space_group_number"],
+        "symbol_b": results_b["space_group_symbol"], "number_b": results_b["space_group_number"],
+        "n_ops_a": len(results_a["symmetry_operations"]), "n_ops_b": len(results_b["symmetry_operations"]),
+        "same_space_group": results_a["space_group_number"] == results_b["space_group_number"],
+    }
+
+def _describe_comparison(cmp):
+    if cmp["same_space_group"]:
+        return (f"Symmetry PRESERVED between the two structures: both "
+                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops).")
+    direction = "gained" if cmp["n_ops_b"] > cmp["n_ops_a"] else "lost"
+    return (f"Symmetry CHANGED between the two structures: "
+            f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops) -> "
+            f"{cmp['symbol_b']} (No. {cmp['number_b']}, {cmp['n_ops_b']} ops) -- "
+            f"{direction} symmetry operations.")
+
 # --- Report formatting --------------------------------------------------
 _WIDTH = 74
 
 def _rule(char="-"):
     return char * _WIDTH
 
-def format_report(results, source_file, fmt, show_operations=True, symprec_scan=None):
+def format_report(results, source_file, fmt, show_operations=True, symprec_scan=None, comparison=None):
     lat = results["lattice"]
     lines = []
     lines.append(_rule("="))
@@ -146,6 +217,8 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
     lines.append(f"Crystal system   : {results['crystal_system']}")
     lines.append(f"Lattice type     : {results['lattice_type']}")
     lines.append(f"Pearson symbol   : {results['pearson_symbol']}")
+    if results["setting_choice"]:
+        lines.append(f"Setting choice   : {results['setting_choice']}")
     lines.append(f"Symmetry operations: {len(results['symmetry_operations'])}")
 
     lines.append("")
@@ -182,13 +255,17 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
 
     lines.append("")
     lines.append(_rule())
-    lines.append("ATOMIC SITES (fractional coordinates)")
+    lines.append("ATOMIC SITES (fractional coordinates; Distortion = how far this atom sits")
+    lines.append("from where the detected symmetry operations would exactly place it --")
+    lines.append("bounded by roughly symprec, 0 means the operations map it exactly)")
     lines.append(_rule())
-    lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Frac. x':>10}  {'Frac. y':>10}  {'Frac. z':>10}  Orbit")
+    lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Frac. x':>10}  {'Frac. y':>10}  "
+                 f"{'Frac. z':>10}  {'Orbit':<6}Distortion(Å)")
     for site in results["sites"]:
         fc = site["frac_coords"]
         lines.append(f"{site['atom_id']:>4}  {site['species']:<3}  {site['wyckoff']:<8}  "
-                     f"{fc[0]:10.6f}  {fc[1]:10.6f}  {fc[2]:10.6f}  {site['orbit']}")
+                     f"{fc[0]:10.6f}  {fc[1]:10.6f}  {fc[2]:10.6f}  {site['orbit']:<6}"
+                     f"{site['distortion']:.4f}")
 
     if show_operations:
         lines.append("")
@@ -197,6 +274,19 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         lines.append(_rule())
         for i, op_str in enumerate(results["symmetry_operations"]):
             lines.append(f"{i+1:>4}: {op_str}")
+
+    if comparison is not None:
+        lines.append("")
+        lines.append(_rule())
+        lines.append("SYMMETRY COMPARISON")
+        lines.append(_rule())
+        sg_a = f"{comparison['symbol_a']} (No. {comparison['number_a']})"
+        sg_b = f"{comparison['symbol_b']} (No. {comparison['number_b']})"
+        lines.append(f"{'':<20}{comparison['label_a']:<28}{comparison['label_b']}")
+        lines.append(f"{'Space group':<20}{sg_a:<28}{sg_b}")
+        lines.append(f"{'Symmetry operations':<20}{comparison['n_ops_a']:<28}{comparison['n_ops_b']}")
+        lines.append("")
+        lines.append(_describe_comparison(comparison))
 
     lines.append(_rule("="))
     return "\n".join(lines) + "\n"
@@ -229,6 +319,18 @@ def main():
                              "where the space group changes -- reveals symmetry that's present "
                              "but hidden by small numerical noise (e.g. from a DFT relaxation) "
                              "at the --symprec you asked for.")
+    parser.add_argument("--compare-to", type=str, metavar="PATH",
+                        help="Also analyze a second structure file and report whether it "
+                             "shares the same space group -- e.g. compare a pre-relaxation "
+                             ".fdf against its post-relaxation .STRUCT_OUT to check whether "
+                             "symmetry survived. Analyzed with the same --symprec/"
+                             "--angle-tolerance as --file.")
+    parser.add_argument("--compare-format", choices=["fdf", "struct_out"],
+                        help="File format of --compare-to (required if --compare-to is given).")
+    parser.add_argument("--write-refined", type=str, metavar="PATH",
+                        help="Also write the symmetry-refined structure (conventional cell, "
+                             "positions snapped to the detected symmetry) to this .fdf path "
+                             "-- the same reduction stb-unitcell --mode refined uses.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write symmetry.dat into (default: current "
                              "directory). Created if it doesn't exist.")
@@ -241,6 +343,8 @@ def main():
         parser.error("--symprec must be positive.")
     if args.angle_tolerance <= 0:
         parser.error("--angle-tolerance must be positive.")
+    if args.compare_to and not args.compare_format:
+        parser.error("--compare-format is required when --compare-to is given.")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -280,8 +384,38 @@ def main():
         except Exception as e:
             print(color_text(f"[WARNING] --scan-symprec failed: {e}", 'yellow'))
 
-    report = format_report(results, args.file, args.format,
-                           show_operations=args.show_operations, symprec_scan=symprec_scan)
+    comparison = None
+    if args.compare_to:
+        print("\n[INFO] Reading comparison structure file...")
+        try:
+            structure2 = structure_io.read_siesta_structure(args.compare_to, args.compare_format)
+        except FileNotFoundError:
+            print(color_text(f"[ERROR] Comparison structure file '{args.compare_to}' not found.", 'red'))
+            sys.exit(1)
+        except ValueError as e:
+            print(color_text(f"[ERROR] {e}", 'red'))
+            sys.exit(1)
+
+        print("[INFO] Detecting symmetry of comparison structure...")
+        try:
+            results2 = compute_symmetry(structure2, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+        except Exception as e:
+            print(color_text(f"[ERROR] Symmetry detection failed for comparison structure: {e}", 'red'))
+            sys.exit(1)
+        comparison = compare_symmetry(results, results2, args.file, args.compare_to)
+
+    if args.write_refined:
+        print(f"\n[INFO] Writing symmetry-refined structure to {args.write_refined}...")
+        try:
+            from stb.core.symmetry import reduce_to_unitcell
+            refined_structure, _ = reduce_to_unitcell(
+                structure, "refined", symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+            structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
+        except Exception as e:
+            print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+
+    report = format_report(results, args.file, args.format, show_operations=args.show_operations,
+                           symprec_scan=symprec_scan, comparison=comparison)
     print("\n" + report)
 
     out_path = os.path.join(args.output_dir, "symmetry.dat")

@@ -69,6 +69,7 @@ cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/siesta.STRUCT_OUT" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl_noisy.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/rhombo.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -131,6 +132,7 @@ check_contains "Crystal system   : cubic" symmetry.dat
 check_contains "Lattice type     : cubic" symmetry.dat
 check_contains "Pearson symbol   : cF8" symmetry.dat
 check_contains "Symmetry operations: 192" symmetry.dat
+check_not_contains "Setting choice" symmetry.dat
 
 echo "Verifying the two Wyckoff orbits (4a for Na, 4b for Cl), not 8 separate 1-atom sites, with site symmetry m-3m"
 check_contains "SYMMETRICALLY DISTINCT SITES: 2" symmetry.dat
@@ -139,9 +141,19 @@ check_contains "4b        Cl        4         m-3m            5" symmetry.dat
 check_contains "   1  Na   4a  " symmetry.dat
 check_contains "   5  Cl   4b  " symmetry.dat
 
-echo "Verifying the ATOMIC SITES header's 'Orbit' column lines up with the actual orbit digit in the data rows"
-check_contains "Atom  Sp.  Wyckoff      Frac. x     Frac. y     Frac. z  Orbit" symmetry.dat
-check_contains "   1  Na   4a          0.000000    0.000000    0.000000  1" symmetry.dat
+echo "Verifying the ATOMIC SITES header's 'Orbit'/'Distortion' columns line up with the data rows"
+check_contains "Atom  Sp.  Wyckoff      Frac. x     Frac. y     Frac. z  Orbit Distortion(Å)" symmetry.dat
+check_contains "   1  Na   4a          0.000000    0.000000    0.000000  1     0.0000" symmetry.dat
+
+echo "Verifying every atom has zero distortion for a perfectly symmetric NaCl (each atom's position is exactly reproduced by the detected symmetry operations)"
+n_zero_distortion=$(grep -cE "  [12]     0\.0000$" symmetry.dat)
+if [ "$n_zero_distortion" -eq 8 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} all 8 atoms show 0.0000 distortion"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} only $n_zero_distortion/8 atoms show 0.0000 distortion"
+    FAIL=$((FAIL+1))
+fi
 
 echo "Verifying all 192 symmetry operations are listed, in compact x,y,z notation"
 check_contains "SYMMETRY OPERATIONS (192), in x,y,z notation" symmetry.dat
@@ -188,6 +200,62 @@ check_exit_code $? 0
 check_contains "1e-05       P1 (No. 1)" symmetry.dat
 check_contains "0.1         Cm (No. 8)" symmetry.dat
 check_contains "Symmetry increases at symprec >= 0.1: P1 (No. 1) -> Cm (No. 8)." symmetry.dat
+
+
+# --- 4d. Per-atom Wyckoff distortion on the noisy NaCl: nonzero, matching
+#     the values independently verified by hand (a direct residual of
+#     applying each detected symmetry operation and measuring distance to
+#     the nearest same-species atom -- not from
+#     SpacegroupAnalyzer.get_refined_structure(), which was tried first and
+#     empirically returns positions unchanged). ---
+echo -e "\n--- Testing per-atom Wyckoff position distortion on noisy NaCl ---"
+rm -f symmetry.dat
+stb-symmetry --file nacl_noisy.fdf --format fdf --symprec 0.1 --no-intro > log_distortion.txt 2>&1
+check_exit_code $? 0
+check_contains "0.002765    0.006573    0.002644  1     0.0000" symmetry.dat
+check_contains "0.489575    0.507243    0.003571  2     0.0382" symmetry.dat
+check_contains "0.004791    0.000318    0.497660  5     0.0688" symmetry.dat
+
+
+# --- 4e. --write-refined: writes the symmetry-refined structure as .fdf ---
+echo -e "\n--- Testing --write-refined ---"
+rm -f refined.fdf
+stb-symmetry --file nacl.fdf --format fdf --write-refined refined.fdf --no-intro > log_refined.txt 2>&1
+check_exit_code $? 0
+check_success refined.fdf
+check_contains "%block LatticeVectors" refined.fdf
+check_contains "NumberofAtoms      8" refined.fdf
+
+
+# --- 4f. --compare-to: same physical structure in two formats -> PRESERVED;
+#     a clean vs. a deliberately displaced NaCl -> CHANGED. ---
+echo -e "\n--- Testing --compare-to ---"
+rm -f symmetry.dat
+stb-symmetry --file structure.fdf --format fdf --compare-to siesta.STRUCT_OUT --compare-format struct_out --no-intro > log_compare_same.txt 2>&1
+check_exit_code $? 0
+check_contains "SYMMETRY COMPARISON" symmetry.dat
+check_contains "Symmetry PRESERVED between the two structures: both P1 (No. 1, 1 ops)." symmetry.dat
+
+rm -f symmetry.dat
+stb-symmetry --file nacl.fdf --format fdf --compare-to nacl_noisy.fdf --compare-format fdf --no-intro > log_compare_diff.txt 2>&1
+check_exit_code $? 0
+check_contains "Space group         Fm-3m (No. 225)             P1 (No. 1)" symmetry.dat
+check_contains "Symmetry CHANGED between the two structures: Fm-3m (No. 225, 192 ops) -> P1 (No. 1, 1 ops) -- lost symmetry operations." symmetry.dat
+
+echo "Testing: --compare-to without --compare-format is rejected"
+stb-symmetry --file nacl.fdf --format fdf --compare-to nacl_noisy.fdf --no-intro > log_compare_noformat.txt 2>&1
+check_exit_code $? 2
+
+
+# --- 4g. Setting choice (e.g. hexagonal vs rhombohedral axes for a trigonal
+#     space group) is reported when spglib returns one, absent otherwise
+#     (already implicitly covered: no fixture so far has triggered it). ---
+echo -e "\n--- Testing setting choice on a rhombohedral structure (space group R3, No. 146) ---"
+rm -f symmetry.dat
+stb-symmetry --file rhombo.fdf --format fdf --no-intro > log_rhombo.txt 2>&1
+check_exit_code $? 0
+check_contains "Space group      : R3 (No. 146)" symmetry.dat
+check_contains "Setting choice   : H" symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
@@ -238,14 +306,22 @@ check_contains "stb-symmetry" log_version.txt
 # --- 8. Interactive path (stb-suite, shortcut 2.5) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.5) ---"
 
-echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir -> scan=y -> operations=n"
+echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir -> scan=y -> operations=n -> compare=skip -> write-refined=skip"
 rm -f symmetry.dat
-printf '2.5\nnacl.fdf\n1\n\ny\nn\n' | stb-suite > log_menu.txt 2>&1
+printf '2.5\nnacl.fdf\n1\n\ny\nn\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success symmetry.dat
 check_contains "Select input file format:" log_menu.txt
 check_contains "Fm-3m" symmetry.dat
 check_contains "SYMPREC SENSITIVITY SCAN" symmetry.dat
 check_not_contains "SYMMETRY OPERATIONS" symmetry.dat
+
+echo "Testing: navigate 2.5 -> structure.fdf -> format=1(fdf) -> default output dir -> scan=n -> operations=y -> compare=siesta.STRUCT_OUT(format 2) -> write-refined=refined_menu.fdf"
+rm -f symmetry.dat refined_menu.fdf
+printf '2.5\nstructure.fdf\n1\n\nn\ny\nsiesta.STRUCT_OUT\n2\nrefined_menu.fdf\n' | stb-suite > log_menu_compare.txt 2>&1
+check_success symmetry.dat
+check_contains "SYMMETRY COMPARISON" symmetry.dat
+check_contains "Symmetry PRESERVED between the two structures: both P1 (No. 1, 1 ops)." symmetry.dat
+check_success refined_menu.fdf
 
 
 popd > /dev/null

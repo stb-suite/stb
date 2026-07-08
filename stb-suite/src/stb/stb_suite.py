@@ -1842,6 +1842,27 @@ def run_symmetry_analyzer() -> None:
     if ops_choice in ['n', 'no']:
         args.append("--no-operations")
 
+    compare_file = get_input("Compare to a second structure file (e.g. pre/post-relaxation)? "
+                              "[optional, press Enter to skip]: ").strip()
+    if compare_file:
+        if not os.path.isfile(compare_file):
+            print(color_text("File not found -- skipping comparison.", 'red'))
+        else:
+            print(f"\n{color_text('Select format of the comparison file:', 'yellow')}")
+            for i, fmt in enumerate(formats, 1):
+                print(f"  {color_text(str(i)+'.', 'yellow')} {fmt}")
+            choice = 0
+            while not (1 <= choice <= len(formats)):
+                choice = get_int_input(f"\nSelect format (1-{len(formats)}): ")
+                if not (1 <= choice <= len(formats)):
+                    print(color_text(f"Invalid choice! Please select between 1 and {len(formats)}.", 'red'))
+            args.extend(["--compare-to", compare_file, "--compare-format", formats[choice - 1]])
+
+    write_refined_path = get_input("Write the symmetry-refined structure to a file? "
+                                    "[optional, press Enter to skip]: ").strip()
+    if write_refined_path:
+        args.extend(["--write-refined", write_refined_path])
+
     run_tool("stb-symmetry", args)
 
 def run_wantibexos_interface() -> None:

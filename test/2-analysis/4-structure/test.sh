@@ -213,8 +213,11 @@ echo "Verifying CrystalNN no longer errors under use_weights=True (needs weighte
 check_not_contains "CrystalNN failed" log_list.txt
 
 echo "Verifying per-atom CN values are formatted to 3 decimals, not printed as raw ~15-digit floats"
-check_contains "  JmolNN         :   8.970" structural_information.dat
-check_not_contains "8.970272100975317" structural_information.dat
+check_contains "  MinDistNN      :   5.936" structural_information.dat
+check_not_contains "5.935876979917421" structural_information.dat
+
+echo "Verifying JmolNN was dropped (consistently the worst-agreement outlier of the five methods)"
+check_not_contains "JmolNN" structural_information.dat
 
 echo "Verifying per-atom distortion (BAV independently hand-verified for atom 1: variance of its 15 pairwise angles = 1429.05 deg²)"
 check_contains "Atom 1 (Sn):" structural_information.dat

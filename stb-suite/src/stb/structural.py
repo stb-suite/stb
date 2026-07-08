@@ -17,8 +17,7 @@ from datetime import datetime
 import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from pymatgen.analysis.local_env import (
-     JmolNN, MinimumDistanceNN, CrystalNN,
-    BrunnerNNRelative, EconNN)
+    MinimumDistanceNN, CrystalNN, BrunnerNNRelative, EconNN)
 from ase.io import read as ase_read
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
@@ -236,14 +235,14 @@ def _compute_ecn_impl(structure, mode, atoms_position=None):
     # use_weights=True gives the real ECoN value (5.98) -- return a
     # genuinely "effective" (continuous, neighbor-weighted) coordination
     # number. pymatgen's NearNeighbors.get_cn() defaults to
-    # use_weights=False (a plain integer neighbor count) for all five.
+    # use_weights=False (a plain integer neighbor count) for all four.
     #
-    # JmolNN's weights are on a different scale than the other four: its
-    # reference distance is a fixed Jmol bonding-radius lookup table, not
-    # this atom's own closest-neighbor distance, so its weight can exceed
-    # 1.0 and its resulting CN is typically the outlier among the five.
+    # JmolNN was dropped: its reference distance is a fixed Jmol
+    # bonding-radius lookup table, not this atom's own closest-neighbor
+    # distance, so its weight isn't on the same scale as the other four
+    # and it was consistently the outlier of the five -- worst agreement
+    # with the actual local geometry, not just "different."
     methods = {
-        "JmolNN": JmolNN(),
         "MinDistNN": MinimumDistanceNN(),
         # weighted_cn=True must match the use_weights=True passed to
         # get_cn() below -- CrystalNN raises ValueError otherwise,

@@ -204,6 +204,22 @@ def to_pymatgen(structure: FdfStructure) -> Structure:
     return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
 
 
+def read_siesta_structure(path: str, fmt: str) -> Structure:
+    """Returns a pymatgen Structure for one of this suite's own SIESTA
+    formats: "fdf" (structure input, via read_fdf()/to_pymatgen() above) or
+    "struct_out" (post-relaxation output, via ASE -- there's no shared .fdf
+    -style reader for that format, it's ASE's own `struct_out` parser).
+    Shared by stb-structural and stb-symmetry, the two tools whose analysis
+    is meaningful on either a pre- or post-relaxation structure.
+    """
+    if fmt == "fdf":
+        return to_pymatgen(read_fdf(path))
+    from ase.io import read as ase_read
+    from pymatgen.io.ase import AseAtomsAdaptor
+    atoms = ase_read(path, format="struct_out")
+    return AseAtomsAdaptor.get_structure(atoms)
+
+
 def ensure_species_id(species_meta: dict[str, dict], symbol: str) -> dict[str, dict]:
     """Returns a copy of species_meta with `symbol` added, if not already present.
 

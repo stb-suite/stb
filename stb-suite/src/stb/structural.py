@@ -17,8 +17,6 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from pymatgen.analysis.local_env import (
     MinimumDistanceNN, CrystalNN, BrunnerNNRelative, EconNN)
-from ase.io import read as ase_read
-from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro
 
@@ -28,17 +26,6 @@ def warn_handler(message, category, filename, lineno, file=None, line=None):
     warnings are filtered out before this ever runs (see compute_ecn), so
     anything that does reach here is unexpected and worth surfacing."""
     print(color_text(f"[WARNING] {category.__name__}: {message}", 'yellow'))
-
-def read_structure(path, fmt):
-    """Returns a pymatgen Structure for one of this suite's own SIESTA
-    formats: .fdf (structure input, via the shared core/structure_io.py
-    parser) or .STRUCT_OUT (post-relaxation output, via ASE -- there's no
-    shared reader for that format elsewhere in the suite)."""
-    if fmt == "fdf":
-        fdf_structure = structure_io.read_fdf(path)
-        return structure_io.to_pymatgen(fdf_structure)
-    atoms = ase_read(path, format="struct_out")
-    return AseAtomsAdaptor.get_structure(atoms)
 
 def _safe_mean(values):
     values = [v for v in values if v is not None]
@@ -680,7 +667,7 @@ def main():
     atoms_position = list(map(int, args.list.strip('[]').split(','))) if args.list else None
 
     try:
-        structure = read_structure(args.file, args.format)
+        structure = structure_io.read_siesta_structure(args.file, args.format)
     except FileNotFoundError:
         print(color_text(f"[ERROR] Structure file '{args.file}' not found.", 'red'))
         sys.exit(1)

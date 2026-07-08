@@ -1813,17 +1813,26 @@ def run_symmetry_analyzer() -> None:
     print("="*60 + "\n")
     
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input structure file (CIF/POSCAR/SIESTA): ")
+    input_file = get_input("Input structure file (SIESTA .fdf or .STRUCT_OUT): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
-    
-    file_type = get_input("File type (poscar/cif/siesta): ").lower()
-    while file_type not in ['poscar', 'cif', 'siesta']:
-        print(color_text("Invalid file type! Use poscar/cif/siesta", 'red'))
-        file_type = get_input("File type: ").lower()
-    
-    args = ["--input", input_file, "--filetype", file_type, "--no-intro"]
+
+    formats = ['fdf', 'struct_out']
+    print(f"\n{color_text('Select input file format:', 'yellow')}")
+    for i, fmt in enumerate(formats, 1):
+        print(f"  {color_text(str(i)+'.', 'yellow')} {fmt}")
+    choice = 0
+    while not (1 <= choice <= len(formats)):
+        choice = get_int_input(f"\nSelect format (1-{len(formats)}): ")
+        if not (1 <= choice <= len(formats)):
+            print(color_text(f"Invalid choice! Please select between 1 and {len(formats)}.", 'red'))
+    format_type = formats[choice - 1]
+    print(f"Selected format: {color_text(format_type, 'cyan')}")
+
+    output_dir = get_input("Output directory [default: current directory]: ").strip() or "."
+
+    args = ["--file", input_file, "--format", format_type, "--output-dir", output_dir, "--no-intro"]
     run_tool("stb-symmetry", args)
 
 def run_wantibexos_interface() -> None:

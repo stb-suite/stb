@@ -126,6 +126,23 @@ check_exit_code $? 1
 check_contains "Invalid shift value" log_shift_bad.txt
 
 
+# --- 4b. --output-dir: writes into (and creates) a nested directory ---
+echo -e "\n--- Testing --output-dir (nested, auto-created) ---"
+rm -rf my_out dos_total.dat dos_per_atom dos_per_species
+stb-dos siesta.PDOS.xml --type total --output-dir my_out/nested --no-intro > log_outdir.txt 2>&1
+check_exit_code $? 0
+check_success my_out/nested/dos_total.dat
+check_contains "Saved Total DOS to my_out/nested/dos_total.dat" log_outdir.txt
+if [ -e dos_total.dat ]; then
+    echo -e "   -> ${RED}Failed:${NC} dos_total.dat was also written to CWD instead of only --output-dir"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} nothing was written to CWD, only to --output-dir"
+    PASS=$((PASS+1))
+fi
+rm -rf my_out
+
+
 # --- 5. --projection ml (detailed m-resolved columns) ---
 echo -e "\n--- Testing --projection ml ---"
 rm -rf dos_total.dat dos_per_atom dos_per_species
@@ -207,12 +224,17 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.2) ---"
 
 echo "Testing: navigate 2.2 -> siesta.PDOS.xml -> defaults"
 rm -rf dos_total.dat dos_per_atom dos_per_species
-printf '2.2\nsiesta.PDOS.xml\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '2.2\nsiesta.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_total.dat
 
 echo "Testing: interactive path surfaces a tool failure (malformed XML -> non-zero exit -> run_tool reports it)"
-printf '2.2\nmalformed.PDOS.xml\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
+printf '2.2\nmalformed.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
 check_contains "Error running stb-dos" log_menu_fail.txt
+
+echo "Testing: interactive path forwards a custom output directory"
+rm -rf menu_out
+printf '2.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n' | stb-suite > log_menu_outdir.txt 2>&1
+check_success menu_out/dos_total.dat
 
 
 popd > /dev/null

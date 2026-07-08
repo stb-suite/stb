@@ -70,11 +70,17 @@ def get_detailed_orbital_name(l_val, m_val):
     return None # Return None if l is invalid
 
 # --- MODIFIED: Added 'projection_mode' argument ---
-def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
+def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_dir='.'):
     """
     Main function to parse the PDOS.xml file and generate output files.
     """
     try:
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Error: Could not create output directory '{output_dir}': {e}", file=sys.stderr)
+            sys.exit(1)
+
         tree = ET.parse(input_file)
         root = tree.getroot()
 
@@ -289,7 +295,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
             total_dos['Energy(eV)'] = energies_shifted
             df_total = pd.DataFrame(total_dos)
 
-            output_file_total = "dos_total.dat"
+            output_file_total = os.path.join(output_dir, "dos_total.dat")
             with open(output_file_total, 'w') as f:
                 f.write(header_str)
             df_total.to_csv(output_file_total, sep='\t', index=False, header=False, mode='a',
@@ -299,7 +305,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
 
         # --- Mode 2: DOS per Atom ---
         if 'atom' in dos_types:
-            output_dir_atoms = "dos_per_atom"
+            output_dir_atoms = os.path.join(output_dir, "dos_per_atom")
             if not os.path.exists(output_dir_atoms):
                 os.makedirs(output_dir_atoms)
 
@@ -326,7 +332,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode):
 
         # --- Mode 3: DOS per Species ---
         if 'species' in dos_types:
-            output_dir_species = "dos_per_species"
+            output_dir_species = os.path.join(output_dir, "dos_per_species")
             if not os.path.exists(output_dir_species):
                 os.makedirs(output_dir_species)
 
@@ -418,6 +424,11 @@ def main():
              "  ml: Project by magnetic quantum number (s, px, py, pz, dxy, etc.)."
     )
 
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write dos_total.dat, dos_per_atom/, and "
+                             "dos_per_species/ into (default: current directory). "
+                             "Created if it doesn't exist.")
+
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-dos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -435,9 +446,9 @@ def main():
 
     print("\n" + color_text("Density of States:", 'bold'))
     print("-"*60)
-    
+
     # --- MODIFIED: Pass args.projection to the processing function ---
-    process_pdos_xml(args.filename, args.type, args.shift, args.projection)
+    process_pdos_xml(args.filename, args.type, args.shift, args.projection, args.output_dir)
     
 if __name__ == "__main__":
     main()

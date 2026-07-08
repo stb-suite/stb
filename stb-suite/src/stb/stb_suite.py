@@ -1426,18 +1426,22 @@ def run_dos_parser() -> None:
             
     projection_mode = 'l' if choice == 1 else 'ml'
     print(f"Selected mode: {color_text(projection_mode, 'cyan')}")
-    
-    
+
+    output_dir = get_input("\nOutput directory [default: current directory]: ").strip()
+    if not output_dir:
+        output_dir = "."
+
     args = [
         input_file, # Positional argument
         "--shift", shift,
         "--type"
     ]
-   
+
     args.extend(dos_types)
     args.extend(["--projection", projection_mode])
+    args.extend(["--output-dir", output_dir])
     args.append("--no-intro")
-    
+
     run_tool("stb-dos", args)
 
 def run_strain_generator() -> None:

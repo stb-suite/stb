@@ -542,19 +542,26 @@ def main():
                              f"({', '.join(f'{v:g}' for v in DEFAULT_SYMPREC_SCAN)}) and report "
                              "where the space group changes -- reveals symmetry that's present "
                              "but hidden by small numerical noise (e.g. from a DFT relaxation) "
-                             "at the --symprec you asked for.")
+                             "at the --symprec you asked for. For a structure with exactly one "
+                             "vacuum axis, also scans the layer group (the physically meaningful "
+                             "one there) in its own report section.")
     parser.add_argument("--compare-to", type=str, metavar="PATH",
                         help="Also analyze a second structure file and report whether it "
                              "shares the same space group -- e.g. compare a pre-relaxation "
                              ".fdf against its post-relaxation .STRUCT_OUT to check whether "
                              "symmetry survived. Analyzed with the same --symprec/"
-                             "--angle-tolerance as --file.")
+                             "--angle-tolerance as --file. If both structures have a detected "
+                             "layer group (e.g. comparing a 2D slab), that's compared too.")
     parser.add_argument("--compare-format", choices=["fdf", "struct_out"],
                         help="File format of --compare-to (required if --compare-to is given).")
     parser.add_argument("--write-refined", type=str, metavar="PATH",
                         help="Also write the symmetry-refined structure (conventional cell, "
                              "positions snapped to the detected symmetry) to this .fdf path "
-                             "-- the same reduction stb-unitcell --mode refined uses.")
+                             "-- the same reduction stb-unitcell --mode refined uses. For a "
+                             "structure with exactly one vacuum axis, refines against the layer "
+                             "group instead (the physically meaningful one there); skipped with "
+                             "an error for 2+ vacuum axes or if layer-group detection failed, "
+                             "since there's nothing physically correct to refine against then.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write symmetry.dat into (default: current "
                              "directory). Created if it doesn't exist.")

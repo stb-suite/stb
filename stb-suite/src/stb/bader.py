@@ -140,6 +140,14 @@ def get_zval_from_output(label, override_path=None):
 
     return dynamic_valence if dynamic_valence else None
 
+# Below this raw Bader population (electrons), an atom is flagged as suspicious rather
+# than reported at face value. A real atom essentially never integrates to exactly/near
+# zero in a normal calculation -- it usually means PyBader found no density feature of
+# its own to anchor a basin on (e.g. a pseudopotential with deep semicore states frozen
+# into the core, leaving too little valence density near that nucleus to resolve), and
+# the atom's whole region got folded into a neighbor's basin instead.
+ZERO_POPULATION_TOL = 0.01
+
 # ================= HELPERS =================
 
 def get_speed_kwargs(speed_mode):
@@ -369,6 +377,7 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
             total_raw_known = 0.0
             atoms_data = []
             unknown_syms = set()
+            suspicious_zero_ids = []
 
             n_atoms = min(len(physical_idx), len(raw_populations))
             if len(physical_idx) != len(raw_populations):
@@ -398,6 +407,19 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
 
                 atoms_data.append({'id': orig_i + 1, 'sym': sym, 'z_val': z_val,
                                     'pop_raw': raw_populations[pos], 'spin': spin_val})
+                if raw_populations[pos] < ZERO_POPULATION_TOL:
+                    suspicious_zero_ids.append(orig_i + 1)
+
+            if suspicious_zero_ids:
+                ids_str = ', '.join(str(i) for i in suspicious_zero_ids)
+                print(color_text(
+                    f"   [WARN] Atom(s) {ids_str} got essentially zero Bader population "
+                    f"(< {ZERO_POPULATION_TOL} e-) -- PyBader found almost no density of its "
+                    "own to assign there. This is rarely a trustworthy result; common causes "
+                    "are a pseudopotential with no resolvable density near the nucleus (e.g. "
+                    "deep semicore states frozen into the core) or the atom's whole region "
+                    "being folded into a neighboring basin. Treat this atom's charge with real "
+                    "suspicion, not as a precise result.", 'red'))
 
             if unknown_syms:
                 print(color_text(
@@ -475,6 +497,14 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
             ]
             out_lines.extend(footer)
             for l in footer: print(l)
+
+            if suspicious_zero_ids:
+                ids_str = ', '.join(str(i) for i in suspicious_zero_ids)
+                out_lines.append(
+                    f"WARN: Atom(s) {ids_str} got essentially zero Bader population (< "
+                    f"{ZERO_POPULATION_TOL} e-) -- treat with suspicion, see console output "
+                    "for likely causes."
+                )
 
             limitations_note = (
                 "Note: Bader analysis has known limitations this tool cannot detect or correct "

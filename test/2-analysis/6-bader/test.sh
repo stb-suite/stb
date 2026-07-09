@@ -82,6 +82,10 @@ check_contains "PyBader: method=neargrid, refine_method=neargrid" bader.txt
 check_contains "Total Integrated:" bader.txt
 check_success Sn3O4.cube
 
+echo "Testing: essentially-zero-population atoms are flagged (this fixture genuinely has some)"
+check_contains "WARN\] Atom(s).*essentially zero Bader population" log_basic.txt
+check_contains "WARN: Atom(s).*essentially zero Bader population" bader.txt
+
 
 # --- 3. --speed fast uses PyBader's own on-grid profile ---
 echo -e "\n--- Testing --speed fast ---"

@@ -1096,8 +1096,9 @@ def run_crystalcast_generator() -> None:
     print(color_text("RANDOM CRYSTAL GENERATOR (stb-crystalcast)", 'bold').center(60))
     print("="*60 + "\n")
 
-    mode = get_input("Generate a random structure, or analyze an existing one? (generate/analyze) "
-                      "[default: generate]: ").strip().lower()
+    mode = get_input(
+        "Mode: generate / analyze / substitute / subgroup / supergroup "
+        "[default: generate]: ").strip().lower()
 
     if mode == "analyze":
         input_file = get_input("Structure file to analyze (.fdf): ").strip()
@@ -1105,6 +1106,67 @@ def run_crystalcast_generator() -> None:
             print(color_text("No file given -- aborting.", 'red'))
             return
         run_tool("stb-crystalcast", ["--analyze", "-f", input_file, "--no-intro"])
+        return
+
+    if mode == "substitute":
+        input_file = get_input("Structure file to modify (.fdf): ").strip()
+        if not input_file:
+            print(color_text("No file given -- aborting.", 'red'))
+            return
+        print(f"\n{color_text('Enter substitutions:', 'yellow')}")
+        print("  (OLD:NEW element pairs, e.g. 'Cl:F'; blank line to finish)")
+        subs = []
+        while True:
+            entry = get_input("Substitution (blank to finish): ").strip()
+            if not entry:
+                break
+            subs.append(entry)
+        if not subs:
+            print(color_text("No substitutions given -- aborting.", 'red'))
+            return
+        output_file = get_input("Output file name [default: crystalcast.fdf]: ").strip() or "crystalcast.fdf"
+        run_tool("stb-crystalcast", ["--substitute", *subs, "-f", input_file,
+                                      "-o", output_file, "--no-intro"])
+        return
+
+    if mode in ("subgroup", "supergroup"):
+        input_file = get_input("Structure file to transform (.fdf): ").strip()
+        if not input_file:
+            print(color_text("No file given -- aborting.", 'red'))
+            return
+        args = [f"--{mode}", "-f", input_file]
+        if mode == "supergroup":
+            while True:
+                target = get_input("Target space group number (required): ").strip()
+                if not target:
+                    print(color_text("--supergroup requires a target space group -- aborting.", 'red'))
+                    return
+                try:
+                    int(target)
+                    break
+                except ValueError:
+                    print(color_text("Please enter a valid space group number.", 'red'))
+            args.extend(["--target-group", target])
+            d_tol = get_float_input("Max displacement tolerance --d-tol [default: 1.0]: ", 1.0)
+            args.extend(["--d-tol", str(d_tol)])
+        else:
+            while True:
+                target = get_input("Target space group number [default: auto-search]: ").strip()
+                if not target:
+                    break
+                try:
+                    int(target)
+                    args.extend(["--target-group", target])
+                    break
+                except ValueError:
+                    print(color_text("Please enter a valid space group number, or leave blank.", 'red'))
+            eps = get_float_input("Perturbation --eps [default: 0.05]: ", 0.05)
+            args.extend(["--eps", str(eps)])
+        count = get_int_input("Number of candidates to keep [default: 1]: ", 1)
+        args.extend(["--count", str(count)])
+        output_file = get_input("Output file name [default: crystalcast.fdf]: ").strip() or "crystalcast.fdf"
+        args.extend(["--output", output_file, "--no-intro"])
+        run_tool("stb-crystalcast", args)
         return
 
     dim_str = get_input("Dimension: 3=bulk, 2=layer, 1=rod/wire, 0=cluster [default: 3]: ").strip()
@@ -1167,6 +1229,31 @@ def run_crystalcast_generator() -> None:
         vacuum = get_float_input("Vacuum padding in Ang [default: 10.0]: ", 10.0)
         args.extend(["--vacuum", str(vacuum)])
 
+    if dim != "0":
+        while True:
+            lattice_str = get_input(
+                "Fix the cell? 'A B C ALPHA BETA GAMMA' [default: estimate from volume factor]: "
+            ).strip()
+            if not lattice_str:
+                break
+            tokens = lattice_str.split()
+            try:
+                if len(tokens) != 6:
+                    raise ValueError
+                [float(t) for t in tokens]
+            except ValueError:
+                print(color_text(
+                    "Expected exactly 6 numbers: A B C ALPHA BETA GAMMA (or leave blank).", 'red'))
+                continue
+            args.extend(["--lattice", *tokens])
+            break
+
+    sites_str = get_input(
+        "Pre-assign Wyckoff sites? One per species, e.g. '4a 4b,4c' [default: fully random]: "
+    ).strip()
+    if sites_str:
+        args.extend(["--sites", *sites_str.split()])
+
     volume_factor = get_float_input("\nVolume factor [default: 1.1]: ", 1.1)
     args.extend(["--volume-factor", str(volume_factor)])
 
@@ -1176,6 +1263,12 @@ def run_crystalcast_generator() -> None:
     seed_str = get_input("Random seed [default: none]: ").strip()
     if seed_str:
         args.extend(["--seed", seed_str])
+
+    ml_rank_str = get_input(
+        "Rank candidates by MACE-MP-0 relaxed energy? Needs the optional 'ml' extra (y/n) "
+        "[default: n]: ").strip().lower()
+    if ml_rank_str == "y":
+        args.append("--ml-rank")
 
     output_file = get_input("\nOutput file name [default: crystalcast.fdf]: ").strip()
     if not output_file:
@@ -2045,9 +2138,9 @@ INPUT_TOOLS = {
          'description': "Melt-quench MD with MACE-MP-0 to build an amorphous starting guess (needs the optional 'ml' extra).",
          'func': run_amorphize_generator},
     17: {'title': "Random Crystal Generator (stb-crystalcast)",
-         'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular) from "
-                         "a symmetry group and composition, or analyze an existing structure's "
-                         "Wyckoff decomposition.",
+         'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular, "
+                         "optionally ML-ranked) from a symmetry group and composition; or "
+                         "analyze/substitute/subgroup/supergroup an existing structure.",
          'func': run_crystalcast_generator},
          }
 

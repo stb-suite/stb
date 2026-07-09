@@ -36,6 +36,18 @@ def require_pyxtal():
     return pyxtal
 
 
+def require_pybader():
+    """Imports and returns pybader.interface, or exits with a clear error if
+    it's missing."""
+    try:
+        import pybader.interface
+    except ImportError:
+        print("\n\033[91m[CRITICAL ERROR] pybader library not found.\033[0m")
+        print("Please install it using: pip install pybader")
+        sys.exit(1)
+    return pybader.interface
+
+
 def require_mace():
     """Imports and returns the mace.calculators module, or exits with a clear
     error if it (or its PyTorch dependency) is missing. This is the suite's

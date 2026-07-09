@@ -501,6 +501,17 @@ def run_bader_calculator() -> None:
     speed_choice = get_input("Choice (1-2, default: 1): ", 'green')
     speed_mode = 'fast' if speed_choice == '2' else 'normal'
 
+    # 4. Vácuo (slabs/fios/moléculas)
+    vacuum_tol = get_input(
+        "Vacuum tolerance in e/Ang^3, for slabs/wires/isolated molecules (blank to disable): "
+    ).strip()
+
+    # 5. Threads
+    threads_str = get_input("Worker threads (blank for auto -- $SLURM_CPUS_PER_TASK or all cores): ").strip()
+
+    # 6. Arquivo .cube intermediário
+    keep_cube_choice = get_input("Keep the intermediate .cube file(s) after the run? (Y/n): ", 'green').strip().lower()
+
     # Argumentos básicos
     args = ["--label", label, "--speed", speed_mode, "--no-intro"]
 
@@ -511,6 +522,13 @@ def run_bader_calculator() -> None:
     # --- NOVO: Adiciona a flag --ref se o usuário digitou algo ---
     if ref_file:
         args.extend(["--ref", ref_file])
+
+    if vacuum_tol:
+        args.extend(["--vacuum-tol", vacuum_tol])
+    if threads_str:
+        args.extend(["--threads", threads_str])
+    if keep_cube_choice == 'n':
+        args.append("--no-cube")
 
     run_tool("stb-bader", args)
     

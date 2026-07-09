@@ -362,6 +362,36 @@ def _describe_symprec_scan(scan_results, label="space group"):
             return f"Symmetry changes at symprec >= {symprec:g}: {first_str} -> {cur_str}."
     return f"No change in detected {label} across the scanned tolerance range."
 
+# Default tolerance sweep for --scan-symprec's point-group scan: molecular
+# point-group tolerance is in Å with different, generally larger, typical
+# values than --symprec (crystallographic, DEFAULT_SYMPREC_SCAN's scale) --
+# see compute_point_group()'s docstring for why these aren't tied together.
+DEFAULT_POINT_GROUP_TOLERANCE_SCAN = (0.01, 0.05, 0.1, 0.3, 0.5, 1.0)
+
+def scan_point_group_tolerance(structure, tolerance_values=DEFAULT_POINT_GROUP_TOLERANCE_SCAN):
+    """Point-group analogue of scan_symprec(): runs compute_point_group()
+    at each tolerance, for an isolated molecule where the point group (not
+    the 3D space group) is the physically meaningful one to watch for
+    tolerance sensitivity. An entry's symbol is None if
+    compute_point_group() couldn't determine one at that tolerance."""
+    results = []
+    for tol in tolerance_values:
+        pg = compute_point_group(structure, tolerance=tol)
+        results.append((tol, pg["symbol"] if pg else None))
+    return results
+
+def _describe_point_group_scan(scan_results):
+    """One-line summary of a point-group tolerance scan: the first
+    tolerance (if any) at which the symbol changes from the
+    tightest-tolerance result. Only reports the first transition."""
+    first_symbol = scan_results[0][1]
+    for tol, symbol in scan_results[1:]:
+        if symbol != first_symbol:
+            a = first_symbol if first_symbol is not None else "not determined"
+            b = symbol if symbol is not None else "not determined"
+            return f"Point group changes at tolerance >= {tol:g} Å: {a} -> {b}."
+    return "No change in detected point group across the scanned tolerance range."
+
 def compare_symmetry(results_a, results_b, label_a, label_b):
     """Compares two compute_symmetry() results (e.g. a structure before and
     after a SIESTA relaxation) -- same space group or not, and how their
@@ -439,7 +469,7 @@ def _rule(char="-"):
     return char * _WIDTH
 
 def format_report(results, source_file, fmt, show_operations=True, symprec_scan=None,
-                  layer_symprec_scan=None, comparison=None):
+                  layer_symprec_scan=None, point_group_scan=None, comparison=None):
     lat = results["lattice"]
     lines = []
     lines.append(_rule("="))
@@ -580,6 +610,17 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         lines.append("")
         lines.append(_describe_symprec_scan(layer_symprec_scan, label="layer group"))
 
+    if point_group_scan is not None:
+        lines.append("")
+        lines.append(_rule())
+        lines.append("POINT GROUP TOLERANCE SENSITIVITY SCAN")
+        lines.append(_rule())
+        lines.append(f"{'tolerance(Å)':<14}{'point group'}")
+        for tol, symbol in point_group_scan:
+            lines.append(f"{tol:<14g}{symbol if symbol is not None else 'not determined'}")
+        lines.append("")
+        lines.append(_describe_point_group_scan(point_group_scan))
+
     lines.append("")
     lines.append(_rule())
     lines.append(f"SYMMETRICALLY DISTINCT SITES: {results['n_distinct_sites']}")
@@ -667,8 +708,10 @@ def main():
                              "where the space group changes -- reveals symmetry that's present "
                              "but hidden by small numerical noise (e.g. from a DFT relaxation) "
                              "at the --symprec you asked for. For a structure with exactly one "
-                             "vacuum axis, also scans the layer group (the physically meaningful "
-                             "one there) in its own report section.")
+                             "vacuum axis, also scans the layer group; for one with all 3 axes "
+                             "vacuum-padded (an isolated molecule), scans the point group's own "
+                             "tolerance instead (both physically meaningful there, in their own "
+                             "report sections).")
     parser.add_argument("--compare-to", type=str, metavar="PATH",
                         help="Also analyze a second structure file and report whether it "
                              "shares the same space group -- e.g. compare a pre-relaxation "
@@ -735,18 +778,26 @@ def main():
 
     symprec_scan = None
     layer_symprec_scan = None
+    point_group_scan = None
     if args.scan_symprec:
         print("[INFO] Scanning symprec sensitivity...")
         try:
             symprec_scan = scan_symprec(structure, angle_tolerance=args.angle_tolerance)
         except Exception as e:
             print(color_text(f"[WARNING] --scan-symprec failed: {e}", 'yellow'))
-        if sum(results["vacuum_axes"]) == 1:
+        n_vacuum_scan = sum(results["vacuum_axes"])
+        if n_vacuum_scan == 1:
             print("[INFO] Scanning layer-group symprec sensitivity...")
             try:
                 layer_symprec_scan = scan_symprec_layer(structure, results["vacuum_axes"].index(True))
             except Exception as e:
                 print(color_text(f"[WARNING] --scan-symprec (layer group) failed: {e}", 'yellow'))
+        elif n_vacuum_scan == 3:
+            print("[INFO] Scanning point-group tolerance sensitivity...")
+            try:
+                point_group_scan = scan_point_group_tolerance(structure)
+            except Exception as e:
+                print(color_text(f"[WARNING] --scan-symprec (point group) failed: {e}", 'yellow'))
 
     comparison = None
     if args.compare_to:
@@ -827,7 +878,7 @@ def main():
 
     report = format_report(results, args.file, args.format, show_operations=args.show_operations,
                            symprec_scan=symprec_scan, layer_symprec_scan=layer_symprec_scan,
-                           comparison=comparison)
+                           point_group_scan=point_group_scan, comparison=comparison)
     print("\n" + report)
 
     out_path = os.path.join(args.output_dir, "symmetry.dat")

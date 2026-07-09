@@ -455,6 +455,22 @@ check_contains "Point group ops     4                           4" symmetry.dat
 check_contains "Point group PRESERVED: both C2v (4 ops)." symmetry.dat
 
 
+# --- 4n. --scan-symprec on an isolated molecule scans the point group's
+#     own tolerance (not the crystallographic --symprec, a different
+#     scale) instead of the layer group -- verified on water: stable C2v
+#     across tight tolerances, breaking down to C1 once the tolerance (1
+#     Å) is comparable to the O-H bond length itself. ---
+echo -e "\n--- Testing --scan-symprec's point-group awareness ---"
+rm -f symmetry.dat
+stb-symmetry --file molecule.fdf --format fdf --scan-symprec --no-intro > log_scan_mol.txt 2>&1
+check_exit_code $? 0
+check_contains "POINT GROUP TOLERANCE SENSITIVITY SCAN" symmetry.dat
+check_contains "0.01          C2v" symmetry.dat
+check_contains "1             C1" symmetry.dat
+check_contains "Point group changes at tolerance >= 1 Å: C2v -> C1." symmetry.dat
+check_not_contains "LAYER GROUP SYMPREC SENSITIVITY SCAN" symmetry.dat
+
+
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
 echo -e "\n--- Testing --output-dir ---"
 rm -rf out_dir

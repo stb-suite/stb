@@ -349,6 +349,13 @@ check_contains "Layer group         p6/mmm (No. 80)             c2/m11 (No. 18)"
 check_contains "Layer group ops     24                          4" symmetry.dat
 check_contains "Layer group CHANGED: p6/mmm (No. 80, 24 ops) -> c2/m11 (No. 18, 4 ops) -- lost symmetry operations." symmetry.dat
 
+echo "Verifying the LAYER GROUP section reports its own setting choice (was silently dropped -- ds.choice was never even read), distinct from SPACE GROUP's"
+rm -f symmetry.dat
+stb-symmetry --file graphene_distorted.fdf --format fdf --no-intro > log_distorted_choice.txt 2>&1
+check_exit_code $? 0
+check_contains "Setting choice   : b1" symmetry.dat
+check_contains "Setting choice   : a" symmetry.dat
+
 
 # --- 4j. --write-refined on a vacuum-padded structure with exactly one
 #     vacuum axis now refines against the LAYER group (std_lattice/

@@ -93,6 +93,7 @@ def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
         "hall_symbol": ds.hall,
         "hall_number": ds.hall_number,
         "point_group": ds.pointgroup,
+        "setting_choice": ds.choice,
         "aperiodic_axis": "abc"[aperiodic_dir],
         "n_distinct_sites": len(orbit_members),
         "sites": sites,
@@ -576,6 +577,8 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         lines.append(f"Layer group      : {lg['symbol']} (No. {lg['number']})")
         lines.append(f"Hall symbol      : {lg['hall_symbol']} (Hall No. {lg['hall_number']})")
         lines.append(f"Point group      : {lg['point_group']}")
+        if lg["setting_choice"]:
+            lines.append(f"Setting choice   : {lg['setting_choice']}")
         lines.append(f"Symmetry operations: {len(lg['symmetry_operations'])}")
         lines.append("")
         lines.append(f"Symmetrically distinct sites: {lg['n_distinct_sites']}")

@@ -164,12 +164,20 @@ def compute_point_group(structure, tolerance=0.3):
         # the input to ~1e-15.
         symmetrized_coords = pga.symmetrize_molecule()["sym_mol"].cart_coords + mol.center_of_mass
 
+        ops = pga.get_symmetry_operations()
+        distortion = _point_group_distortion(orig_coords, species, ops, mol.center_of_mass)
+        atoms = [
+            {"atom_id": i + 1, "species": species[i], "distortion": distortion[i]}
+            for i in range(len(species))
+        ]
+
         return {
             "symbol": str(pga.get_pointgroup()),
             "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
-            "symmetry_operations": len(pga.get_symmetry_operations()),
+            "symmetry_operations": len(ops),
             "n_distinct_atoms": len(groups),
             "groups": groups,
+            "atoms": atoms,
             "tolerance": tolerance,
             "symmetrized_cart_coords": symmetrized_coords,
         }
@@ -314,6 +322,39 @@ def _wyckoff_distortion(structure, ops):
                 lattice.get_distance_and_image(p2, structure[j].frac_coords)[0]
                 for j in candidates
             )
+            max_dist = max(max_dist, best)
+        distortion.append(max_dist)
+    return distortion
+
+def _point_group_distortion(cart_coords, species_of, ops, centroid):
+    """Cartesian-space analogue of _wyckoff_distortion() for a molecular
+    point group: PointGroupAnalyzer's SymmOp objects already operate
+    directly in Cartesian coordinates (no periodic lattice/wrapping
+    involved, unlike the crystallographic case) -- but relative to the
+    molecule's own CENTERED frame (centroid at the origin), the convention
+    point-group operations are defined in, not the original coordinates
+    (which are wherever the molecule happens to sit in the vacuum box).
+    Operating directly on uncentered coordinates gives nonsense (caught by
+    testing: every distortion came out ~equal to the box size itself,
+    since the operations were rotating points ~12 Å from the *box*
+    origin, not ~0.04 Å from the *molecule's* centroid). Centering first
+    (both the operated point and the atoms it's compared against, so the
+    shared offset cancels in the distance) fixes this -- same recentering
+    already used correctly for --write-refined's symmetrize_molecule()
+    call, just missed here initially.
+    """
+    centered = cart_coords - centroid
+    indices_by_species = {}
+    for i, sp in enumerate(species_of):
+        indices_by_species.setdefault(sp, []).append(i)
+
+    distortion = []
+    for i in range(len(centered)):
+        candidates = indices_by_species[species_of[i]]
+        max_dist = 0.0
+        for op in ops:
+            p2 = op.operate(centered[i])
+            best = min(np.linalg.norm(p2 - centered[j]) for j in candidates)
             max_dist = max(max_dist, best)
         distortion.append(max_dist)
     return distortion
@@ -572,6 +613,12 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         for group in pg["groups"]:
             atom_ids_str = ", ".join(str(a) for a in group["atom_ids"])
             lines.append(f"{group['species']:<10}{group['n_atoms']:<10}{atom_ids_str}")
+        lines.append("")
+        lines.append("Distortion = how far this atom sits from where the point-group")
+        lines.append("operations (Cartesian, no periodic lattice) would exactly place it:")
+        lines.append(f"{'Atom':>4}  {'Sp.':<3}  Distortion(Å)")
+        for atom in pg["atoms"]:
+            lines.append(f"{atom['atom_id']:>4}  {atom['species']:<3}  {atom['distortion']:.4f}")
 
     lines.append("")
     lines.append(_rule())

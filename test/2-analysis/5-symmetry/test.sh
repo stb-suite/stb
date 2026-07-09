@@ -75,6 +75,7 @@ cp "$FIXTURE_DIR/graphene_distorted.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/molecule.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/wire.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/single_atom.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/water_distorted.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -415,6 +416,20 @@ check_contains "Symmetry operations: 4" symmetry.dat
 check_contains "Symmetrically distinct atoms: 2" symmetry.dat
 check_contains "O         1         1" symmetry.dat
 check_contains "H         2         2, 3" symmetry.dat
+
+echo "Verifying zero distortion for perfectly symmetric water (regression check: an earlier version operated point-group symmetry ops on uncentered Cartesian coordinates and got ~box-size-magnitude nonsense instead of ~0)"
+check_contains "   1  O    0.0000" symmetry.dat
+check_contains "   2  H    0.0000" symmetry.dat
+check_contains "   3  H    0.0000" symmetry.dat
+
+echo "Verifying nonzero, non-trivial distortion on a deliberately asymmetric water (one H displaced, breaking the C2 axis -> detected as Cs, not C2v)"
+rm -f symmetry.dat
+stb-symmetry --file water_distorted.fdf --format fdf --no-intro > log_water_distorted.txt 2>&1
+check_exit_code $? 0
+check_contains "Point group      : Cs" symmetry.dat
+check_contains "   1  O    0.0079" symmetry.dat
+check_contains "   2  H    0.0628" symmetry.dat
+check_contains "   3  H    0.0628" symmetry.dat
 
 echo "Verifying a wire (2 vacuum axes) gets neither LAYER GROUP nor POINT GROUP (no rod-group equivalent exists)"
 rm -f symmetry.dat

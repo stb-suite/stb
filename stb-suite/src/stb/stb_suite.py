@@ -1854,6 +1854,61 @@ def run_structure_analyzer() -> None:
 
     run_tool("stb-structural", args)
 
+def run_xrd_analyzer() -> None:
+    """Interface for the Powder XRD Simulator (stb-xrd)"""
+    print("\n" + "="*60)
+    print(color_text("POWDER XRD SIMULATOR (stb-xrd)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_file = get_input("Input structure file (SIESTA .fdf or .STRUCT_OUT): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file: ")
+
+    formats = ['fdf', 'struct_out']
+    print(f"\n{color_text('Select input file format:', 'yellow')}")
+    for i, fmt in enumerate(formats, 1):
+        print(f"  {color_text(str(i)+'.', 'yellow')} {fmt}")
+    choice = 0
+    while not (1 <= choice <= len(formats)):
+        choice = get_int_input(f"\nSelect format (1-{len(formats)}): ")
+        if not (1 <= choice <= len(formats)):
+            print(color_text(f"Invalid choice! Please select between 1 and {len(formats)}.", 'red'))
+    format_type = formats[choice - 1]
+
+    wavelength = get_input("X-ray source name (CuKa, MoKa, ...) or wavelength in Ang [default: CuKa]: ").strip()
+    if not wavelength:
+        wavelength = "CuKa"
+
+    two_theta_min = get_float_input("2-theta range minimum in deg [default: 0]: ", 0.0)
+    two_theta_max = get_float_input("2-theta range maximum in deg [default: 90]: ", 90.0)
+
+    top_str = get_input("Show only the N strongest peaks [default: show all]: ").strip()
+
+    compare_to = get_input(
+        "Compare to an experimental pattern file (2theta, intensity columns) [default: skip]: "
+    ).strip()
+    while compare_to and not os.path.isfile(compare_to):
+        print(color_text("File not found!", 'red'))
+        compare_to = get_input(
+            "Compare to an experimental pattern file [default: skip]: ").strip()
+
+    plot_choice = get_input("Show an interactive plot? (y/N): ").strip().lower()
+
+    output_file = get_input("Output data file name [default: xrd_pattern.dat]: ").strip() or "xrd_pattern.dat"
+
+    args = ["--file", input_file, "--format", format_type, "--wavelength", wavelength,
+            "--two-theta-range", str(two_theta_min), str(two_theta_max),
+            "--output", output_file, "--no-intro"]
+    if top_str:
+        args.extend(["--top", top_str])
+    if compare_to:
+        args.extend(["--compare-to", compare_to])
+    if plot_choice == "y":
+        args.append("--plot")
+
+    run_tool("stb-xrd", args)
+
 def run_file_translator() -> None:
     """Interface for the File Translator (stb-translate)"""
     print("\n" + "="*60)
@@ -2168,6 +2223,10 @@ ANALYSIS_TOOLS = {
         'func': run_workfunction_calculator},
     8: {'title': "Density Plotter (RHO)", 'description': "Export 2D Charge Density Maps or 3D Clouds.",
         'func': run_density_plotter},
+    9: {'title': "Powder XRD Simulator (stb-xrd)",
+        'description': "Simulate a powder XRD pattern (peak table + optional plot) from a "
+                        "structure, optionally compared against an experimental pattern.",
+        'func': run_xrd_analyzer},
        }
 
 

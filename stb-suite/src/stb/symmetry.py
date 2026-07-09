@@ -78,10 +78,14 @@ def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
     # Translation components come back as noisy near-integers/near-zeros
     # (e.g. 9.99999980e-01) rather than exact 0/1 -- round before %1 so
     # as_xyz_str() doesn't render spurious "+1"/"+0" terms.
-    ops = [
-        SymmOp.from_rotation_and_translation(rot, np.round(trans, 6) % 1.0).as_xyz_str()
+    op_objects = [
+        SymmOp.from_rotation_and_translation(rot, np.round(trans, 6) % 1.0)
         for rot, trans in zip(ds.rotations, ds.translations)
     ]
+
+    distortion = _wyckoff_distortion(structure, op_objects)
+    for site in sites:
+        site["distortion"] = distortion[site["atom_id"] - 1]
 
     return {
         "symbol": ds.international,
@@ -93,7 +97,16 @@ def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
         "n_distinct_sites": len(orbit_members),
         "sites": sites,
         "orbits": orbits,
-        "symmetry_operations": ops,
+        "symmetry_operations": [op.as_xyz_str() for op in op_objects],
+        # For --write-refined: the standardized (layer-group-consistent)
+        # cell spglib derived internally -- same fields/convention as the
+        # ordinary 3D SpglibDataset's std_lattice/std_positions/std_types,
+        # but standardized against the layer group instead of the (for a
+        # vacuum-padded structure, not physically meaningful) 3D space
+        # group core/symmetry.py::reduce_to_unitcell() would otherwise use.
+        "std_lattice": ds.std_lattice,
+        "std_positions": ds.std_positions,
+        "std_types": ds.std_types,
     }
 
 def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
@@ -249,17 +262,32 @@ def scan_symprec(structure, symprec_values=DEFAULT_SYMPREC_SCAN, angle_tolerance
         results.append((sp, sga.get_space_group_symbol(), sga.get_space_group_number()))
     return results
 
-def _describe_symprec_scan(scan_results):
+def scan_symprec_layer(structure, aperiodic_dir, symprec_values=DEFAULT_SYMPREC_SCAN):
+    """Layer-group analogue of scan_symprec(): runs spglib.get_layergroup()
+    at each symprec, for a vacuum-padded structure where the layer group
+    (not the 3D space group) is the physically meaningful one to watch for
+    tolerance sensitivity. An entry's symbol/number is None if
+    get_layergroup() couldn't determine one at that tolerance."""
+    results = []
+    for sp in symprec_values:
+        lg = compute_layer_group(structure, aperiodic_dir, sp)
+        results.append((sp, lg["symbol"] if lg else None, lg["number"] if lg else None))
+    return results
+
+def _describe_symprec_scan(scan_results, label="space group"):
     """One-line summary of the scan: the first tolerance (if any) at which
-    the space group changes from the tightest-tolerance result. Only
-    reports the first transition, not every subsequent one, if the space
-    group changes more than once across the scanned range."""
+    the group changes from the tightest-tolerance result. Only reports the
+    first transition, not every subsequent one, if it changes more than
+    once across the scanned range. A None symbol/number (detection failed
+    at that tolerance, only possible for the layer-group scan) counts as
+    its own distinct state, same as any other change."""
     first_symbol, first_number = scan_results[0][1], scan_results[0][2]
     for symprec, symbol, number in scan_results[1:]:
         if number != first_number:
-            return (f"Symmetry increases at symprec >= {symprec:g}: "
-                    f"{first_symbol} (No. {first_number}) -> {symbol} (No. {number}).")
-    return "No change in detected space group across the scanned tolerance range."
+            first_str = f"{first_symbol} (No. {first_number})" if first_number is not None else "not determined"
+            cur_str = f"{symbol} (No. {number})" if number is not None else "not determined"
+            return f"Symmetry changes at symprec >= {symprec:g}: {first_str} -> {cur_str}."
+    return f"No change in detected {label} across the scanned tolerance range."
 
 def compare_symmetry(results_a, results_b, label_a, label_b):
     """Compares two compute_symmetry() results (e.g. a structure before and
@@ -318,7 +346,8 @@ _WIDTH = 74
 def _rule(char="-"):
     return char * _WIDTH
 
-def format_report(results, source_file, fmt, show_operations=True, symprec_scan=None, comparison=None):
+def format_report(results, source_file, fmt, show_operations=True, symprec_scan=None,
+                  layer_symprec_scan=None, comparison=None):
     lat = results["lattice"]
     lines = []
     lines.append(_rule("="))
@@ -385,10 +414,10 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
             lines.append(f"{orbit['wyckoff']:<10}{orbit['species']:<10}{orbit['n_atoms']:<10}"
                          f"{orbit['site_symmetry']:<16}{orbit['example_atom_id']}")
         lines.append("")
-        lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Site symmetry':<16}Orbit")
+        lines.append(f"{'Atom':>4}  {'Sp.':<3}  {'Wyckoff':<8}  {'Site symmetry':<16}{'Orbit':<6}Distortion(Å)")
         for site in lg["sites"]:
             lines.append(f"{site['atom_id']:>4}  {site['species']:<3}  {site['wyckoff']:<8}  "
-                         f"{site['site_symmetry']:<16}{site['orbit']}")
+                         f"{site['site_symmetry']:<16}{site['orbit']:<6}{site['distortion']:.4f}")
         if show_operations:
             lines.append("")
             lines.append(f"Symmetry operations ({len(lg['symmetry_operations'])}), in x,y,z notation:")
@@ -415,9 +444,22 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         lines.append(_rule())
         lines.append(f"{'symprec':<12}{'space group'}")
         for symprec, symbol, number in symprec_scan:
-            lines.append(f"{symprec:<12g}{symbol} (No. {number})")
+            group_str = f"{symbol} (No. {number})" if number is not None else "not determined"
+            lines.append(f"{symprec:<12g}{group_str}")
         lines.append("")
         lines.append(_describe_symprec_scan(symprec_scan))
+
+    if layer_symprec_scan is not None:
+        lines.append("")
+        lines.append(_rule())
+        lines.append("LAYER GROUP SYMPREC SENSITIVITY SCAN")
+        lines.append(_rule())
+        lines.append(f"{'symprec':<12}{'layer group'}")
+        for symprec, symbol, number in layer_symprec_scan:
+            group_str = f"{symbol} (No. {number})" if number is not None else "not determined"
+            lines.append(f"{symprec:<12g}{group_str}")
+        lines.append("")
+        lines.append(_describe_symprec_scan(layer_symprec_scan, label="layer group"))
 
     lines.append("")
     lines.append(_rule())
@@ -559,12 +601,19 @@ def main():
         sys.exit(1)
 
     symprec_scan = None
+    layer_symprec_scan = None
     if args.scan_symprec:
         print("[INFO] Scanning symprec sensitivity...")
         try:
             symprec_scan = scan_symprec(structure, angle_tolerance=args.angle_tolerance)
         except Exception as e:
             print(color_text(f"[WARNING] --scan-symprec failed: {e}", 'yellow'))
+        if sum(results["vacuum_axes"]) == 1:
+            print("[INFO] Scanning layer-group symprec sensitivity...")
+            try:
+                layer_symprec_scan = scan_symprec_layer(structure, results["vacuum_axes"].index(True))
+            except Exception as e:
+                print(color_text(f"[WARNING] --scan-symprec (layer group) failed: {e}", 'yellow'))
 
     comparison = None
     if args.compare_to:
@@ -587,13 +636,32 @@ def main():
         comparison = compare_symmetry(results, results2, args.file, args.compare_to)
 
     if args.write_refined:
-        if any(results["vacuum_axes"]):
+        n_vacuum = sum(results["vacuum_axes"])
+        if n_vacuum == 1 and results["layer_group"] is not None:
+            # Refine against the layer group instead of the (for a
+            # vacuum-padded structure, not physically meaningful) 3D space
+            # group -- uses the same std_lattice/std_positions/std_types
+            # convention as an ordinary SpglibDataset, just standardized
+            # against the 2D symmetry instead.
+            print(f"\n[INFO] Writing layer-group-refined structure to {args.write_refined}...")
+            try:
+                from pymatgen.core import Element, Lattice, Structure
+                lg = results["layer_group"]
+                species = [Element.from_Z(int(z)).symbol for z in lg["std_types"]]
+                refined_structure = Structure(Lattice(lg["std_lattice"]), species, lg["std_positions"])
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+        elif n_vacuum > 0:
             print(color_text(
-                "\n[ERROR] --write-refined skipped: it refines using the 3D space group (see the "
-                "NOTE near the top of the report), not the layer group, and for a vacuum-padded "
-                "structure that group isn't physically meaningful -- refining against it could "
-                "reshape the cell/vacuum axis into something that no longer represents the slab. "
-                "Not available for structures with a vacuum axis.", 'red'))
+                "\n[ERROR] --write-refined skipped: refining needs either a genuinely 3D bulk "
+                "structure (0 vacuum axes) or a successfully-detected layer group (exactly 1 "
+                "vacuum axis) to standardize against -- this structure has "
+                f"{n_vacuum} vacuum axis/axes and " +
+                ("no layer group was determined" if n_vacuum == 1 else
+                 "no equivalent rod/point-group refinement is available") +
+                ". Refining against the 3D space group instead could reshape the cell/vacuum "
+                "axis into something that no longer represents the intended structure.", 'red'))
         else:
             print(f"\n[INFO] Writing symmetry-refined structure to {args.write_refined}...")
             try:
@@ -605,7 +673,8 @@ def main():
                 print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
 
     report = format_report(results, args.file, args.format, show_operations=args.show_operations,
-                           symprec_scan=symprec_scan, comparison=comparison)
+                           symprec_scan=symprec_scan, layer_symprec_scan=layer_symprec_scan,
+                           comparison=comparison)
     print("\n" + report)
 
     out_path = os.path.join(args.output_dir, "symmetry.dat")

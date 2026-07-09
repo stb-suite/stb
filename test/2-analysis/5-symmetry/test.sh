@@ -72,6 +72,7 @@ cp "$FIXTURE_DIR/nacl_noisy.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/rhombo.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_slab.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_distorted.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/molecule.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -207,7 +208,7 @@ stb-symmetry --file nacl_noisy.fdf --format fdf --scan-symprec --no-intro > log_
 check_exit_code $? 0
 check_contains "1e-05       P1 (No. 1)" symmetry.dat
 check_contains "0.1         Cm (No. 8)" symmetry.dat
-check_contains "Symmetry increases at symprec >= 0.1: P1 (No. 1) -> Cm (No. 8)." symmetry.dat
+check_contains "Symmetry changes at symprec >= 0.1: P1 (No. 1) -> Cm (No. 8)." symmetry.dat
 
 
 # --- 4d. Per-atom Wyckoff distortion on the noisy NaCl: nonzero, matching
@@ -290,7 +291,18 @@ check_contains "Hall symbol      : -p 6 2 (Hall No. -116)" symmetry.dat
 check_contains "Point group      : 6/mmm" symmetry.dat
 check_contains "Symmetrically distinct sites: 1" symmetry.dat
 check_contains "2b        C         2         -6m2            1" symmetry.dat
-check_contains "   1  C    2b        -6m2            1" symmetry.dat
+
+echo "Verifying the layer-group atomic-sites table has its own Wyckoff distortion column (0.0000 for perfectly symmetric graphene)"
+check_contains "Atom  Sp.  Wyckoff   Site symmetry   Orbit Distortion(Å)" symmetry.dat
+check_contains "   1  C    2b        -6m2            1     0.0000" symmetry.dat
+
+echo "Verifying --scan-symprec on a slab also scans the layer group (not just the 3D space group)"
+rm -f symmetry.dat
+stb-symmetry --file graphene_slab.fdf --format fdf --scan-symprec --no-intro > log_slab_scan.txt 2>&1
+check_exit_code $? 0
+check_contains "LAYER GROUP SYMPREC SENSITIVITY SCAN" symmetry.dat
+check_contains "1e-05       p6/mmm (No. 80)" symmetry.dat
+check_contains "No change in detected layer group across the scanned tolerance range." symmetry.dat
 
 echo "Verifying all 24 layer-group symmetry operations are listed, in the same compact x,y,z notation as the 3D section"
 n_lg_ops=$(grep -c "^ *[0-9]*: " symmetry.dat)
@@ -335,30 +347,42 @@ check_contains "Layer group ops     24                          4" symmetry.dat
 check_contains "Layer group CHANGED: p6/mmm (No. 80, 24 ops) -> c2/m11 (No. 18, 4 ops) -- lost symmetry operations." symmetry.dat
 
 
-# --- 4j. --write-refined is blocked (not just warned) for a vacuum-padded
-#     structure: it refines using the 3D space group, not the layer group,
-#     which isn't physically meaningful there and could reshape the
-#     cell/vacuum axis into something that no longer represents the slab. ---
-echo -e "\n--- Testing --write-refined is blocked on a vacuum-padded structure ---"
+# --- 4j. --write-refined on a vacuum-padded structure with exactly one
+#     vacuum axis now refines against the LAYER group (std_lattice/
+#     std_positions from spglib.get_layergroup()) instead of the
+#     non-physical 3D space group -- verified the vacuum thickness (c=20
+#     Ang) survives unchanged. A structure with 2+ vacuum axes (no
+#     rod/point-group refinement available) is still blocked outright,
+#     same reasoning as before. ---
+echo -e "\n--- Testing --write-refined on a vacuum-padded structure uses the layer group ---"
 rm -f refined_slab.fdf
 stb-symmetry --file graphene_slab.fdf --format fdf --write-refined refined_slab.fdf --no-intro > log_refined_slab.txt 2>&1
 check_exit_code $? 0
-check_contains "\[ERROR\] --write-refined skipped" log_refined_slab.txt
-check_contains "Not available for structures with a vacuum axis." log_refined_slab.txt
-if [ -e refined_slab.fdf ]; then
-    echo -e "   -> ${RED}Failed:${NC} refined_slab.fdf was written despite the vacuum axis"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} refined_slab.fdf was NOT written"
-    PASS=$((PASS+1))
-fi
+check_contains "\[INFO\] Writing layer-group-refined structure to refined_slab.fdf" log_refined_slab.txt
+check_success refined_slab.fdf
+check_contains " 0.00000000   0.00000000   20.00000000" refined_slab.fdf
+check_contains "NumberofAtoms      2" refined_slab.fdf
 
 echo "Verifying --write-refined still works normally for a genuinely 3D bulk structure"
 rm -f refined_bulk.fdf
 stb-symmetry --file nacl.fdf --format fdf --write-refined refined_bulk.fdf --no-intro > log_refined_bulk.txt 2>&1
 check_exit_code $? 0
+check_contains "\[INFO\] Writing symmetry-refined structure to refined_bulk.fdf" log_refined_bulk.txt
 check_not_contains "ERROR" log_refined_bulk.txt
 check_success refined_bulk.fdf
+
+echo "Verifying --write-refined is still blocked for a structure with 2+ vacuum axes (isolated molecule)"
+rm -f refined_mol.fdf
+stb-symmetry --file molecule.fdf --format fdf --write-refined refined_mol.fdf --no-intro > log_refined_mol.txt 2>&1
+check_exit_code $? 0
+check_contains "\[ERROR\] --write-refined skipped" log_refined_mol.txt
+if [ -e refined_mol.fdf ]; then
+    echo -e "   -> ${RED}Failed:${NC} refined_mol.fdf was written despite 3 vacuum axes"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} refined_mol.fdf was NOT written"
+    PASS=$((PASS+1))
+fi
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

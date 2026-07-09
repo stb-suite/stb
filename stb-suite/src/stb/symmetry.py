@@ -265,24 +265,52 @@ def compare_symmetry(results_a, results_b, label_a, label_b):
     """Compares two compute_symmetry() results (e.g. a structure before and
     after a SIESTA relaxation) -- same space group or not, and how their
     symmetry-operation counts differ. Both must have been computed with the
-    same symprec/angle_tolerance for the comparison to mean anything."""
+    same symprec/angle_tolerance for the comparison to mean anything.
+
+    If both structures have a detected layer group (e.g. comparing a 2D
+    slab before/after relaxation), that's compared too -- the 3D space
+    group comparison alone would only describe the padded supercells,
+    the same limitation SPACE GROUP has for a single structure.
+    """
+    layer_comparison = None
+    lg_a, lg_b = results_a["layer_group"], results_b["layer_group"]
+    if lg_a is not None and lg_b is not None:
+        layer_comparison = {
+            "symbol_a": lg_a["symbol"], "number_a": lg_a["number"],
+            "symbol_b": lg_b["symbol"], "number_b": lg_b["number"],
+            "n_ops_a": len(lg_a["symmetry_operations"]), "n_ops_b": len(lg_b["symmetry_operations"]),
+            "same": lg_a["number"] == lg_b["number"],
+        }
     return {
         "label_a": label_a, "label_b": label_b,
         "symbol_a": results_a["space_group_symbol"], "number_a": results_a["space_group_number"],
         "symbol_b": results_b["space_group_symbol"], "number_b": results_b["space_group_number"],
         "n_ops_a": len(results_a["symmetry_operations"]), "n_ops_b": len(results_b["symmetry_operations"]),
         "same_space_group": results_a["space_group_number"] == results_b["space_group_number"],
+        "layer_comparison": layer_comparison,
     }
 
 def _describe_comparison(cmp):
     if cmp["same_space_group"]:
-        return (f"Symmetry PRESERVED between the two structures: both "
-                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops).")
-    direction = "gained" if cmp["n_ops_b"] > cmp["n_ops_a"] else "lost"
-    return (f"Symmetry CHANGED between the two structures: "
-            f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops) -> "
-            f"{cmp['symbol_b']} (No. {cmp['number_b']}, {cmp['n_ops_b']} ops) -- "
-            f"{direction} symmetry operations.")
+        lines = [f"Symmetry PRESERVED between the two structures: both "
+                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops)."]
+    else:
+        direction = "gained" if cmp["n_ops_b"] > cmp["n_ops_a"] else "lost"
+        lines = [f"Symmetry CHANGED between the two structures: "
+                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops) -> "
+                f"{cmp['symbol_b']} (No. {cmp['number_b']}, {cmp['n_ops_b']} ops) -- "
+                f"{direction} symmetry operations."]
+    lc = cmp["layer_comparison"]
+    if lc is not None:
+        if lc["same"]:
+            lines.append(f"Layer group PRESERVED: both {lc['symbol_a']} "
+                         f"(No. {lc['number_a']}, {lc['n_ops_a']} ops).")
+        else:
+            direction = "gained" if lc["n_ops_b"] > lc["n_ops_a"] else "lost"
+            lines.append(f"Layer group CHANGED: {lc['symbol_a']} (No. {lc['number_a']}, "
+                         f"{lc['n_ops_a']} ops) -> {lc['symbol_b']} (No. {lc['number_b']}, "
+                         f"{lc['n_ops_b']} ops) -- {direction} symmetry operations.")
+    return "\n".join(lines)
 
 # --- Report formatting --------------------------------------------------
 _WIDTH = 74
@@ -432,6 +460,13 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
         lines.append(f"{'':<20}{comparison['label_a']:<28}{comparison['label_b']}")
         lines.append(f"{'Space group':<20}{sg_a:<28}{sg_b}")
         lines.append(f"{'Symmetry operations':<20}{comparison['n_ops_a']:<28}{comparison['n_ops_b']}")
+        lc = comparison["layer_comparison"]
+        if lc is not None:
+            lg_a = f"{lc['symbol_a']} (No. {lc['number_a']})"
+            lg_b = f"{lc['symbol_b']} (No. {lc['number_b']})"
+            lines.append("")
+            lines.append(f"{'Layer group':<20}{lg_a:<28}{lg_b}")
+            lines.append(f"{'Layer group ops':<20}{lc['n_ops_a']:<28}{lc['n_ops_b']}")
         lines.append("")
         lines.append(_describe_comparison(comparison))
 
@@ -552,6 +587,12 @@ def main():
         comparison = compare_symmetry(results, results2, args.file, args.compare_to)
 
     if args.write_refined:
+        if any(results["vacuum_axes"]):
+            print(color_text(
+                "\n[WARNING] --write-refined uses the 3D space group (see the NOTE near the top "
+                "of the report), not the layer group, for a vacuum-padded structure -- it may "
+                "reshape the cell/vacuum axis in a way that doesn't preserve the slab's intended "
+                "geometry. Inspect the output before using it.", 'yellow'))
         print(f"\n[INFO] Writing symmetry-refined structure to {args.write_refined}...")
         try:
             from stb.core.symmetry import reduce_to_unitcell

@@ -71,6 +71,7 @@ cp "$FIXTURE_DIR/nacl.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/nacl_noisy.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/rhombo.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_slab.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/graphene_distorted.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -314,6 +315,40 @@ check_exit_code $? 0
 check_contains "LAYER GROUP (aperiodic axis: c)" symmetry.dat
 check_contains "Symmetrically distinct sites: 1" symmetry.dat
 check_not_contains "in x,y,z notation" symmetry.dat
+
+
+# --- 4i. --compare-to accounts for layer groups too when both structures
+#     have one: preserved (two runs of the same slab) and changed
+#     (graphene vs. a deliberately displaced-atom variant, p6/mmm No. 80
+#     -> c2/m11 No. 18). ---
+echo -e "\n--- Testing --compare-to's layer-group awareness ---"
+rm -f symmetry.dat
+stb-symmetry --file graphene_slab.fdf --format fdf --compare-to graphene_slab.fdf --compare-format fdf --no-intro > log_compare_slab_same.txt 2>&1
+check_exit_code $? 0
+check_contains "Layer group PRESERVED: both p6/mmm (No. 80, 24 ops)." symmetry.dat
+
+rm -f symmetry.dat
+stb-symmetry --file graphene_slab.fdf --format fdf --compare-to graphene_distorted.fdf --compare-format fdf --no-intro > log_compare_slab_diff.txt 2>&1
+check_exit_code $? 0
+check_contains "Layer group         p6/mmm (No. 80)             c2/m11 (No. 18)" symmetry.dat
+check_contains "Layer group ops     24                          4" symmetry.dat
+check_contains "Layer group CHANGED: p6/mmm (No. 80, 24 ops) -> c2/m11 (No. 18, 4 ops) -- lost symmetry operations." symmetry.dat
+
+
+# --- 4j. --write-refined warns when the structure is vacuum-padded (the
+#     refinement it calls uses the 3D space group, not the layer group). ---
+echo -e "\n--- Testing --write-refined warns on a vacuum-padded structure ---"
+rm -f refined_slab.fdf
+stb-symmetry --file graphene_slab.fdf --format fdf --write-refined refined_slab.fdf --no-intro > log_refined_slab.txt 2>&1
+check_exit_code $? 0
+check_contains "\[WARNING\] --write-refined uses the 3D space group" log_refined_slab.txt
+check_success refined_slab.fdf
+
+echo "Verifying --write-refined does NOT warn for a genuinely 3D bulk structure"
+rm -f refined_bulk.fdf
+stb-symmetry --file nacl.fdf --format fdf --write-refined refined_bulk.fdf --no-intro > log_refined_bulk.txt 2>&1
+check_exit_code $? 0
+check_not_contains "WARNING" log_refined_bulk.txt
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

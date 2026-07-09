@@ -109,6 +109,67 @@ def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
         "std_types": ds.std_types,
     }
 
+def compute_point_group(structure, tolerance=0.3):
+    """Molecular point-group analysis for a genuinely isolated (0D) system
+    -- vacuum-padded on all 3 axes. Neither spglib nor SpacegroupAnalyzer
+    handle this case (both are fundamentally periodic-lattice tools; a rod
+    group -- the periodic analogue for a 1D wire, 2 vacuum axes -- doesn't
+    even exist in spglib to fall back on). pymatgen's PointGroupAnalyzer is
+    a separate, non-periodic detector built for exactly this: it treats the
+    input as a plain pymatgen Molecule (Cartesian coordinates only, no
+    lattice), the same way a quantum chemistry package would.
+
+    `tolerance` is in Å (molecular point-group convention) and is
+    deliberately NOT tied to --symprec, which is a much tighter,
+    crystallographic tolerance (1e-3 Å default) unsuited to typical
+    molecular bond-length variation -- pymatgen's own default (0.3 Å) is
+    used unless the caller overrides it.
+
+    Returns None if PointGroupAnalyzer itself fails (e.g. a single atom).
+    """
+    from pymatgen.core import Molecule
+    from pymatgen.symmetry.analyzer import PointGroupAnalyzer
+
+    species = [str(site.specie.symbol) for site in structure]
+    orig_coords = structure.cart_coords
+    mol = Molecule(species, orig_coords)
+    try:
+        pga = PointGroupAnalyzer(mol, tolerance=tolerance)
+    except Exception:
+        return None
+
+    eq_sets = pga.get_equivalent_atoms()["eq_sets"]
+    seen = set()
+    groups = []
+    for i in sorted(eq_sets):
+        if i in seen:
+            continue
+        members = sorted(eq_sets[i])
+        seen.update(members)
+        groups.append({
+            "species": species[members[0]],
+            "n_atoms": len(members),
+            "atom_ids": [m + 1 for m in members],
+        })
+
+    # symmetrize_molecule() re-centers on the molecule's own centroid (the
+    # convention point-group operations are defined relative to) -- shift
+    # back by the ORIGINAL centroid so --write-refined can place the
+    # symmetrized molecule back where it was in the original vacuum box,
+    # not at the origin. Verified round-trip on an already-symmetric
+    # structure: shifted-back coordinates matched the input to ~1e-15.
+    symmetrized_coords = pga.symmetrize_molecule()["sym_mol"].cart_coords + mol.center_of_mass
+
+    return {
+        "symbol": str(pga.get_pointgroup()),
+        "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
+        "symmetry_operations": len(pga.get_symmetry_operations()),
+        "n_distinct_atoms": len(groups),
+        "groups": groups,
+        "tolerance": tolerance,
+        "symmetrized_cart_coords": symmetrized_coords,
+    }
+
 def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     """Pure computation -- no printing, no file I/O. Returns a results dict
     that format_report() turns into the console/file report.
@@ -162,16 +223,22 @@ def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     vacuum_axes = kspace.detect_vacuum_axes(structure.frac_coords, lattice.matrix, VACUUM_GAP_ANG)
 
     # Layer-group detection only makes sense for a genuinely 2D-periodic
-    # structure -- exactly one aperiodic (vacuum) axis. Two or more vacuum
-    # axes (a wire or an isolated molecule) has no layer-group analogue;
-    # zero means it's not vacuum-padded at all.
+    # structure -- exactly one aperiodic (vacuum) axis. A wire (2 vacuum
+    # axes) has no analogue available -- spglib doesn't implement rod
+    # groups -- but a genuinely isolated molecule (vacuum on all 3 axes,
+    # i.e. 0D) can fall back to pymatgen's separate, non-periodic
+    # PointGroupAnalyzer instead.
     layer_group = None
+    point_group = None
     if sum(vacuum_axes) == 1:
         layer_group = compute_layer_group(structure, vacuum_axes.index(True), symprec)
+    elif sum(vacuum_axes) == 3:
+        point_group = compute_point_group(structure)
 
     return {
         "vacuum_axes": vacuum_axes,
         "layer_group": layer_group,
+        "point_group_analysis": point_group,
         "space_group_symbol": sga.get_space_group_symbol(),
         "space_group_number": sga.get_space_group_number(),
         "hall_symbol": sga.get_hall(),
@@ -375,11 +442,18 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
             lines.append("Dedicated layer-group detection was attempted (exactly one vacuum axis)")
             lines.append("but failed -- the structure may not be genuinely 2D-periodic within")
             lines.append("--symprec, or the installed spglib predates get_layergroup() (>= 2.1.0).")
+        elif results["point_group_analysis"] is not None:
+            lines.append("below describes the padded supercell, not the real molecular symmetry --")
+            lines.append("see POINT GROUP for that (pymatgen's separate, non-periodic detector;")
+            lines.append("spglib has no rod-group equivalent for the 2-vacuum-axis/wire case).")
+        elif n_vacuum == 3:
+            lines.append("below describes the padded supercell, not the real molecular symmetry.")
+            lines.append("Molecular point-group detection was attempted (all 3 axes vacuum-padded,")
+            lines.append("i.e. an isolated molecule) but failed (pymatgen's PointGroupAnalyzer).")
         else:
-            lines.append("below describes the padded supercell, not the real rod/point symmetry.")
-            lines.append("Dedicated layer-group detection needs exactly one vacuum axis (this")
-            lines.append(f"structure has {n_vacuum}, e.g. a wire or an isolated molecule) so it")
-            lines.append("wasn't attempted -- no equivalent rod/point-group detection is available.")
+            lines.append("below describes the padded supercell, not the real rod symmetry. This")
+            lines.append("structure has 2 vacuum axes (a wire) -- spglib has no rod-group detection")
+            lines.append("(the periodic analogue for a 1D system) to fall back on.")
 
     lines.append("")
     lines.append(_rule())
@@ -423,6 +497,26 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
             lines.append(f"Symmetry operations ({len(lg['symmetry_operations'])}), in x,y,z notation:")
             for i, op_str in enumerate(lg["symmetry_operations"]):
                 lines.append(f"{i+1:>4}: {op_str}")
+
+    if results["point_group_analysis"] is not None:
+        pg = results["point_group_analysis"]
+        lines.append("")
+        lines.append(_rule())
+        lines.append("POINT GROUP (isolated molecule -- all 3 axes vacuum-padded) --")
+        lines.append("pymatgen's PointGroupAnalyzer, a separate non-periodic detector (spglib")
+        lines.append("has no equivalent for a finite/0D structure)")
+        lines.append(_rule())
+        lines.append(f"Point group      : {pg['symbol']}")
+        lines.append(f"Rotational symmetry number: {pg['rotational_symmetry_number']}")
+        lines.append(f"Symmetry operations: {pg['symmetry_operations']}")
+        lines.append(f"Detection tolerance: {pg['tolerance']:g} Å (molecular convention, "
+                     "independent of --symprec)")
+        lines.append("")
+        lines.append(f"Symmetrically distinct atoms: {pg['n_distinct_atoms']}")
+        lines.append(f"{'Species':<10}{'n atoms':<10}{'Atom IDs'}")
+        for group in pg["groups"]:
+            atom_ids_str = ", ".join(str(a) for a in group["atom_ids"])
+            lines.append(f"{group['species']:<10}{group['n_atoms']:<10}{atom_ids_str}")
 
     lines.append("")
     lines.append(_rule())
@@ -559,9 +653,11 @@ def main():
                              "positions snapped to the detected symmetry) to this .fdf path "
                              "-- the same reduction stb-unitcell --mode refined uses. For a "
                              "structure with exactly one vacuum axis, refines against the layer "
-                             "group instead (the physically meaningful one there); skipped with "
-                             "an error for 2+ vacuum axes or if layer-group detection failed, "
-                             "since there's nothing physically correct to refine against then.")
+                             "group instead; for one with all 3 axes vacuum-padded (an isolated "
+                             "molecule), symmetrizes it as a molecule instead (both physically "
+                             "meaningful there, unlike the 3D space group) -- skipped with an "
+                             "error for a wire (2 vacuum axes, no rod-group equivalent exists) "
+                             "or if the applicable detection failed.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write symmetry.dat into (default: current "
                              "directory). Created if it doesn't exist.")
@@ -659,14 +755,34 @@ def main():
                 structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
             except Exception as e:
                 print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+        elif n_vacuum == 3 and results["point_group_analysis"] is not None:
+            # Symmetrize the molecule (pymatgen's own symmetrize_molecule(),
+            # Cartesian, re-centered on its own centroid by convention) and
+            # shift it back into the original vacuum box using the
+            # ORIGINAL centroid -- the box/lattice itself is untouched,
+            # only the atom positions within it are cleaned up. Verified
+            # round-trip: shifted-back coordinates matched input to ~1e-15
+            # for an already-symmetric structure.
+            print(f"\n[INFO] Writing point-group-refined structure to {args.write_refined}...")
+            try:
+                from pymatgen.core import Structure
+                pg = results["point_group_analysis"]
+                species = [str(site.specie.symbol) for site in structure]
+                refined_structure = Structure(
+                    structure.lattice, species, pg["symmetrized_cart_coords"], coords_are_cartesian=True)
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
         elif n_vacuum > 0:
             print(color_text(
                 "\n[ERROR] --write-refined skipped: refining needs either a genuinely 3D bulk "
-                "structure (0 vacuum axes) or a successfully-detected layer group (exactly 1 "
-                "vacuum axis) to standardize against -- this structure has "
+                "structure (0 vacuum axes), a successfully-detected layer group (exactly 1 "
+                "vacuum axis), or a successfully-detected point group (exactly 3 vacuum axes, "
+                "an isolated molecule) to standardize against -- this structure has "
                 f"{n_vacuum} vacuum axis/axes and " +
                 ("no layer group was determined" if n_vacuum == 1 else
-                 "no equivalent rod/point-group refinement is available") +
+                 "no point group was determined" if n_vacuum == 3 else
+                 "no rod-group equivalent is available (spglib doesn't implement rod groups)") +
                 ". Refining against the 3D space group instead could reshape the cell/vacuum "
                 "axis into something that no longer represents the intended structure.", 'red'))
         else:

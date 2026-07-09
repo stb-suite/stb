@@ -73,6 +73,7 @@ cp "$FIXTURE_DIR/rhombo.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_slab.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_distorted.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/molecule.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/wire.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -371,18 +372,57 @@ check_contains "\[INFO\] Writing symmetry-refined structure to refined_bulk.fdf"
 check_not_contains "ERROR" log_refined_bulk.txt
 check_success refined_bulk.fdf
 
-echo "Verifying --write-refined is still blocked for a structure with 2+ vacuum axes (isolated molecule)"
+echo "Verifying --write-refined works for an isolated molecule (3 vacuum axes) via the point group, molecule re-centered back in the original box"
 rm -f refined_mol.fdf
 stb-symmetry --file molecule.fdf --format fdf --write-refined refined_mol.fdf --no-intro > log_refined_mol.txt 2>&1
 check_exit_code $? 0
-check_contains "\[ERROR\] --write-refined skipped" log_refined_mol.txt
-if [ -e refined_mol.fdf ]; then
-    echo -e "   -> ${RED}Failed:${NC} refined_mol.fdf was written despite 3 vacuum axes"
+check_contains "\[INFO\] Writing point-group-refined structure to refined_mol.fdf" log_refined_mol.txt
+check_success refined_mol.fdf
+check_contains "0.50000000   0.50000000   0.50000000   1" refined_mol.fdf
+
+echo "Verifying --write-refined is still blocked for a wire (2 vacuum axes -- no rod-group equivalent exists)"
+rm -f refined_wire.fdf
+stb-symmetry --file wire.fdf --format fdf --write-refined refined_wire.fdf --no-intro > log_refined_wire.txt 2>&1
+check_exit_code $? 0
+check_contains "\[ERROR\] --write-refined skipped" log_refined_wire.txt
+check_contains "no rod-group equivalent is available" log_refined_wire.txt
+if [ -e refined_wire.fdf ]; then
+    echo -e "   -> ${RED}Failed:${NC} refined_wire.fdf was written despite 2 vacuum axes"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} refined_mol.fdf was NOT written"
+    echo -e "   -> ${GREEN}Verified:${NC} refined_wire.fdf was NOT written"
     PASS=$((PASS+1))
 fi
+
+
+# --- 4k. POINT GROUP report section for an isolated molecule (3 vacuum
+#     axes): pymatgen's PointGroupAnalyzer, a separate non-periodic
+#     detector from spglib. Verified against textbook water: C2v, the two
+#     H atoms correctly identified as symmetry-equivalent. A wire (2
+#     vacuum axes) must get neither this section nor a working detection
+#     (spglib has no rod-group equivalent to fall back on). ---
+echo -e "\n--- Testing the POINT GROUP section on an isolated water molecule (point group C2v) ---"
+rm -f symmetry.dat
+stb-symmetry --file molecule.fdf --format fdf --no-intro > log_molecule.txt 2>&1
+check_exit_code $? 0
+check_contains "NOTE: vacuum gap (>= 10 Å) detected along axis/axes a, b, c" symmetry.dat
+check_contains "see POINT GROUP for that" symmetry.dat
+check_contains "POINT GROUP (isolated molecule -- all 3 axes vacuum-padded)" symmetry.dat
+check_contains "Point group      : C2v" symmetry.dat
+check_contains "Rotational symmetry number: 2" symmetry.dat
+check_contains "Symmetry operations: 4" symmetry.dat
+check_contains "Symmetrically distinct atoms: 2" symmetry.dat
+check_contains "O         1         1" symmetry.dat
+check_contains "H         2         2, 3" symmetry.dat
+
+echo "Verifying a wire (2 vacuum axes) gets neither LAYER GROUP nor POINT GROUP (no rod-group equivalent exists)"
+rm -f symmetry.dat
+stb-symmetry --file wire.fdf --format fdf --no-intro > log_wire.txt 2>&1
+check_exit_code $? 0
+check_contains "NOTE: vacuum gap (>= 10 Å) detected along axis/axes a, b" symmetry.dat
+check_contains "no rod-group detection" symmetry.dat
+check_not_contains "LAYER GROUP" symmetry.dat
+check_not_contains "POINT GROUP" symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

@@ -718,7 +718,8 @@ def main():
                              ".fdf against its post-relaxation .STRUCT_OUT to check whether "
                              "symmetry survived. Analyzed with the same --symprec/"
                              "--angle-tolerance as --file. If both structures have a detected "
-                             "layer group (e.g. comparing a 2D slab), that's compared too.")
+                             "layer group (e.g. comparing a 2D slab) or point group (e.g. "
+                             "comparing an isolated molecule), that's compared too.")
     parser.add_argument("--compare-format", choices=["fdf", "struct_out"],
                         help="File format of --compare-to (required if --compare-to is given).")
     parser.add_argument("--write-refined", type=str, metavar="PATH",

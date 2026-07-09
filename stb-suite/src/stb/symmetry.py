@@ -125,7 +125,12 @@ def compute_point_group(structure, tolerance=0.3):
     molecular bond-length variation -- pymatgen's own default (0.3 Å) is
     used unless the caller overrides it.
 
-    Returns None if PointGroupAnalyzer itself fails (e.g. a single atom).
+    Returns None if PointGroupAnalyzer (construction or any of the calls
+    below) fails for any reason -- e.g. a single-atom "molecule" (a
+    perfectly normal case in this suite: stb-cohesive's isolated-atom
+    reference structures are exactly this) raises deep inside pymatgen
+    with an unrelated AttributeError, not a clean exception; verified this
+    is caught rather than aborting the whole symmetry run.
     """
     from pymatgen.core import Molecule
     from pymatgen.symmetry.analyzer import PointGroupAnalyzer
@@ -135,40 +140,41 @@ def compute_point_group(structure, tolerance=0.3):
     mol = Molecule(species, orig_coords)
     try:
         pga = PointGroupAnalyzer(mol, tolerance=tolerance)
+
+        eq_sets = pga.get_equivalent_atoms()["eq_sets"]
+        seen = set()
+        groups = []
+        for i in sorted(eq_sets):
+            if i in seen:
+                continue
+            members = sorted(eq_sets[i])
+            seen.update(members)
+            groups.append({
+                "species": species[members[0]],
+                "n_atoms": len(members),
+                "atom_ids": [m + 1 for m in members],
+            })
+
+        # symmetrize_molecule() re-centers on the molecule's own centroid
+        # (the convention point-group operations are defined relative to)
+        # -- shift back by the ORIGINAL centroid so --write-refined can
+        # place the symmetrized molecule back where it was in the original
+        # vacuum box, not at the origin. Verified round-trip on an
+        # already-symmetric structure: shifted-back coordinates matched
+        # the input to ~1e-15.
+        symmetrized_coords = pga.symmetrize_molecule()["sym_mol"].cart_coords + mol.center_of_mass
+
+        return {
+            "symbol": str(pga.get_pointgroup()),
+            "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
+            "symmetry_operations": len(pga.get_symmetry_operations()),
+            "n_distinct_atoms": len(groups),
+            "groups": groups,
+            "tolerance": tolerance,
+            "symmetrized_cart_coords": symmetrized_coords,
+        }
     except Exception:
         return None
-
-    eq_sets = pga.get_equivalent_atoms()["eq_sets"]
-    seen = set()
-    groups = []
-    for i in sorted(eq_sets):
-        if i in seen:
-            continue
-        members = sorted(eq_sets[i])
-        seen.update(members)
-        groups.append({
-            "species": species[members[0]],
-            "n_atoms": len(members),
-            "atom_ids": [m + 1 for m in members],
-        })
-
-    # symmetrize_molecule() re-centers on the molecule's own centroid (the
-    # convention point-group operations are defined relative to) -- shift
-    # back by the ORIGINAL centroid so --write-refined can place the
-    # symmetrized molecule back where it was in the original vacuum box,
-    # not at the origin. Verified round-trip on an already-symmetric
-    # structure: shifted-back coordinates matched the input to ~1e-15.
-    symmetrized_coords = pga.symmetrize_molecule()["sym_mol"].cart_coords + mol.center_of_mass
-
-    return {
-        "symbol": str(pga.get_pointgroup()),
-        "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
-        "symmetry_operations": len(pga.get_symmetry_operations()),
-        "n_distinct_atoms": len(groups),
-        "groups": groups,
-        "tolerance": tolerance,
-        "symmetrized_cart_coords": symmetrized_coords,
-    }
 
 def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
     """Pure computation -- no printing, no file I/O. Returns a results dict
@@ -363,9 +369,11 @@ def compare_symmetry(results_a, results_b, label_a, label_b):
     same symprec/angle_tolerance for the comparison to mean anything.
 
     If both structures have a detected layer group (e.g. comparing a 2D
-    slab before/after relaxation), that's compared too -- the 3D space
-    group comparison alone would only describe the padded supercells,
-    the same limitation SPACE GROUP has for a single structure.
+    slab before/after relaxation) or point group (e.g. comparing an
+    isolated molecule's geometry before/after relaxation), that's compared
+    too -- the 3D space group comparison alone would only describe the
+    padded supercells, the same limitation SPACE GROUP has for a single
+    structure.
     """
     layer_comparison = None
     lg_a, lg_b = results_a["layer_group"], results_b["layer_group"]
@@ -376,6 +384,14 @@ def compare_symmetry(results_a, results_b, label_a, label_b):
             "n_ops_a": len(lg_a["symmetry_operations"]), "n_ops_b": len(lg_b["symmetry_operations"]),
             "same": lg_a["number"] == lg_b["number"],
         }
+    point_comparison = None
+    pg_a, pg_b = results_a["point_group_analysis"], results_b["point_group_analysis"]
+    if pg_a is not None and pg_b is not None:
+        point_comparison = {
+            "symbol_a": pg_a["symbol"], "symbol_b": pg_b["symbol"],
+            "n_ops_a": pg_a["symmetry_operations"], "n_ops_b": pg_b["symmetry_operations"],
+            "same": pg_a["symbol"] == pg_b["symbol"],
+        }
     return {
         "label_a": label_a, "label_b": label_b,
         "symbol_a": results_a["space_group_symbol"], "number_a": results_a["space_group_number"],
@@ -383,6 +399,7 @@ def compare_symmetry(results_a, results_b, label_a, label_b):
         "n_ops_a": len(results_a["symmetry_operations"]), "n_ops_b": len(results_b["symmetry_operations"]),
         "same_space_group": results_a["space_group_number"] == results_b["space_group_number"],
         "layer_comparison": layer_comparison,
+        "point_comparison": point_comparison,
     }
 
 def _describe_comparison(cmp):
@@ -405,6 +422,14 @@ def _describe_comparison(cmp):
             lines.append(f"Layer group CHANGED: {lc['symbol_a']} (No. {lc['number_a']}, "
                          f"{lc['n_ops_a']} ops) -> {lc['symbol_b']} (No. {lc['number_b']}, "
                          f"{lc['n_ops_b']} ops) -- {direction} symmetry operations.")
+    pc = cmp["point_comparison"]
+    if pc is not None:
+        if pc["same"]:
+            lines.append(f"Point group PRESERVED: both {pc['symbol_a']} ({pc['n_ops_a']} ops).")
+        else:
+            direction = "gained" if pc["n_ops_b"] > pc["n_ops_a"] else "lost"
+            lines.append(f"Point group CHANGED: {pc['symbol_a']} ({pc['n_ops_a']} ops) -> "
+                         f"{pc['symbol_b']} ({pc['n_ops_b']} ops) -- {direction} symmetry operations.")
     return "\n".join(lines)
 
 # --- Report formatting --------------------------------------------------
@@ -603,6 +628,11 @@ def format_report(results, source_file, fmt, show_operations=True, symprec_scan=
             lines.append("")
             lines.append(f"{'Layer group':<20}{lg_a:<28}{lg_b}")
             lines.append(f"{'Layer group ops':<20}{lc['n_ops_a']:<28}{lc['n_ops_b']}")
+        pc = comparison["point_comparison"]
+        if pc is not None:
+            lines.append("")
+            lines.append(f"{'Point group':<20}{pc['symbol_a']:<28}{pc['symbol_b']}")
+            lines.append(f"{'Point group ops':<20}{pc['n_ops_a']:<28}{pc['n_ops_b']}")
         lines.append("")
         lines.append(_describe_comparison(comparison))
 

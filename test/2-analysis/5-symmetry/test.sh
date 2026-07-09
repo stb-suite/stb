@@ -74,6 +74,7 @@ cp "$FIXTURE_DIR/graphene_slab.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/graphene_distorted.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/molecule.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/wire.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/single_atom.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -423,6 +424,35 @@ check_contains "NOTE: vacuum gap (>= 10 Å) detected along axis/axes a, b" symme
 check_contains "no rod-group detection" symmetry.dat
 check_not_contains "LAYER GROUP" symmetry.dat
 check_not_contains "POINT GROUP" symmetry.dat
+
+
+# --- 4l. A single isolated atom (3 vacuum axes, the same shape of
+#     structure stb-cohesive generates as its isolated-atom reference) used
+#     to crash PointGroupAnalyzer with an unrelated AttributeError deep
+#     inside pymatgen, uncaught -- which aborted the ENTIRE run (exit 1,
+#     "Symmetry detection failed") even though the primary 3D analysis
+#     was fine. Now caught and reported as "detection... failed", same as
+#     any other point-group failure, with everything else unaffected. ---
+echo -e "\n--- Testing a single isolated atom doesn't crash the whole run ---"
+rm -f symmetry.dat
+stb-symmetry --file single_atom.fdf --format fdf --no-intro > log_single_atom.txt 2>&1
+check_exit_code $? 0
+check_not_contains "Traceback" log_single_atom.txt
+check_not_contains "AttributeError" log_single_atom.txt
+check_contains "Molecular point-group detection was attempted" symmetry.dat
+check_not_contains "POINT GROUP (isolated molecule" symmetry.dat
+check_contains "Space group      :" symmetry.dat
+
+
+# --- 4m. --compare-to also compares the point group when both structures
+#     have one (same reasoning as the layer-group comparison fix). ---
+echo -e "\n--- Testing --compare-to's point-group awareness ---"
+rm -f symmetry.dat
+stb-symmetry --file molecule.fdf --format fdf --compare-to molecule.fdf --compare-format fdf --no-intro > log_compare_mol.txt 2>&1
+check_exit_code $? 0
+check_contains "Point group         C2v                         C2v" symmetry.dat
+check_contains "Point group ops     4                           4" symmetry.dat
+check_contains "Point group PRESERVED: both C2v (4 ops)." symmetry.dat
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

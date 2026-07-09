@@ -14,7 +14,7 @@ import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.diffraction.xrd import WAVELENGTHS
 from stb.core import structure_io
-from stb.core.cli import color_text, show_intro
+from stb.core.cli import color_text, show_intro, run_with_spinner
 from stb.core.deps import require_pyxtal
 
 
@@ -195,10 +195,10 @@ already needed by stb-crystalcast covers this too.""",
             print(color_text(f"Error: {e}", 'red'))
             sys.exit(1)
 
-        print(color_text("\n  Computing similarity (can take a while for dense profiles)...", 'yellow'))
-        sim_profile = xrd.get_profile()
-        similarity = Similarity(sim_profile, experimental).value
         print(f"\n  {color_text('Compared to:', 'cyan')} {args.compare_to}")
+        sim_profile = xrd.get_profile()
+        similarity = run_with_spinner(
+            lambda: Similarity(sim_profile, experimental).value, label="Computing similarity")
         print(f"  {color_text('Similarity score:', 'cyan')} {similarity:.4f} "
               "(0-1, cosine-weighted, higher is more similar)")
 

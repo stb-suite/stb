@@ -11,12 +11,10 @@ VERSION = "1.9.5"
 import sys
 import os
 import math
-import time
 import argparse
-import threading
 from fractions import Fraction
 from stb.core import structure_io
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, show_intro, run_with_spinner
 from stb.core.deps import require_icet
 
 require_icet()
@@ -97,54 +95,6 @@ def minimal_scaling(pmg, composition, cluster_size_and_shell):
         "n_primitive": n_primitive,
         "mult_factor": mult_factor,
     }
-
-
-def run_with_spinner(func, *args, **kwargs):
-    """Runs `func(*args, **kwargs)` in a background thread, showing an indeterminate
-    CLI spinner with elapsed time while it blocks. There's no percentage to report:
-    icet's enumeration and monte_carlo searches don't expose a step callback through
-    pymatgen's SQSTransformation, so this is elapsed-time feedback, not a real
-    progress bar. Falls back to periodic plain-text lines when stderr isn't a
-    terminal (e.g. output redirected to a file/log).
-    """
-    done = threading.Event()
-    outcome = {}
-
-    def worker():
-        try:
-            outcome["result"] = func(*args, **kwargs)
-        except BaseException as exc:
-            outcome["error"] = exc
-        finally:
-            done.set()
-
-    thread = threading.Thread(target=worker, daemon=True)
-    start = time.monotonic()
-    thread.start()
-
-    is_tty = sys.stderr.isatty()
-    spinner_frames = "|/-\\"
-    frame = 0
-    last_line_at = 0.0
-    try:
-        while not done.wait(timeout=0.2):
-            elapsed = time.monotonic() - start
-            if is_tty:
-                sys.stderr.write(f"\r  {spinner_frames[frame % len(spinner_frames)]} Searching... {elapsed:6.1f}s elapsed  ")
-                sys.stderr.flush()
-                frame += 1
-            elif elapsed - last_line_at >= 5.0:
-                sys.stderr.write(f"  ... still searching ({elapsed:.0f}s elapsed)\n")
-                sys.stderr.flush()
-                last_line_at = elapsed
-    finally:
-        if is_tty:
-            sys.stderr.write("\r" + " " * 60 + "\r")
-            sys.stderr.flush()
-
-    if "error" in outcome:
-        raise outcome["error"]
-    return outcome["result"]
 
 
 def generate_txt_report(args, input_formula, input_atoms, site_indices, composition,
@@ -335,7 +285,7 @@ ideal random alloy (via icet's Monte Carlo or enumeration SQS search).""",
             cluster_size_and_shell=cluster_size_and_shell,
             icet_sqs_kwargs=icet_sqs_kwargs,
         )
-        return run_with_spinner(transformation.apply_transformation, pmg, return_ranked_list=1)
+        return run_with_spinner(transformation.apply_transformation, pmg, return_ranked_list=1, label="Searching")
 
     used_instances = instances
     instances_fallback_note = None

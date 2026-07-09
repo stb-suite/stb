@@ -13,6 +13,9 @@ mechanics (ASCII logo, colors, borders, line-by-line reveal) are shared.
 from __future__ import annotations
 
 import os
+import sys
+import time
+import threading
 from time import sleep
 
 COLORS = {
@@ -92,3 +95,52 @@ def get_int_input(prompt: str, default: int | None = None) -> int:
             return int(value_str)
         except ValueError:
             print(color_text("Please enter a valid integer", 'red'))
+
+
+def run_with_spinner(func, *args, label: str = "Working", **kwargs):
+    """Runs `func(*args, **kwargs)` in a background thread, showing an indeterminate
+    CLI spinner with elapsed time while it blocks. For a slow call with no step-based
+    progress callback to hook into -- e.g. icet's SQS search via pymatgen's
+    SQSTransformation (stb-sqs), or pyxtal's XRD pattern-similarity calculation
+    (stb-xrd --compare-to) -- this is elapsed-time feedback, not a real progress
+    bar. Falls back to periodic plain-text lines when stderr isn't a terminal
+    (e.g. output redirected to a file/log). Re-raises whatever `func` raised.
+    """
+    done = threading.Event()
+    outcome = {}
+
+    def worker():
+        try:
+            outcome["result"] = func(*args, **kwargs)
+        except BaseException as exc:
+            outcome["error"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=worker, daemon=True)
+    start = time.monotonic()
+    thread.start()
+
+    is_tty = sys.stderr.isatty()
+    spinner_frames = "|/-\\"
+    frame = 0
+    last_line_at = 0.0
+    try:
+        while not done.wait(timeout=0.2):
+            elapsed = time.monotonic() - start
+            if is_tty:
+                sys.stderr.write(f"\r  {spinner_frames[frame % len(spinner_frames)]} {label}... {elapsed:6.1f}s elapsed  ")
+                sys.stderr.flush()
+                frame += 1
+            elif elapsed - last_line_at >= 5.0:
+                sys.stderr.write(f"  ... {label} ({elapsed:.0f}s elapsed)\n")
+                sys.stderr.flush()
+                last_line_at = elapsed
+    finally:
+        if is_tty:
+            sys.stderr.write("\r" + " " * 60 + "\r")
+            sys.stderr.flush()
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]

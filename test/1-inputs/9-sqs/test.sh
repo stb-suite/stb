@@ -91,10 +91,11 @@ stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.3 --scaling 4 --
 check_exit_code $? 1
 check_contains "must sum to 1.0" log_bad_composition.txt
 
-echo "Testing: infeasible composition (library-raised error)"
+echo "Testing: --scaling incompatible with composition (caught by minimal_scaling(), before reaching icet)"
 timeout 30 stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.3,Fe:0.7 --scaling 4 --mc-steps 500 --no-intro > log_infeasible.txt 2>&1
 check_exit_code $? 1
-check_contains "No supercells" log_infeasible.txt
+check_contains "is incompatible with composition" log_infeasible.txt
+check_contains "multiple of 10" log_infeasible.txt
 
 echo "Testing: --scaling 0"
 stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 0 --no-intro > log_zero_scaling.txt 2>&1

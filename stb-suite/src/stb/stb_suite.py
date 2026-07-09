@@ -1909,6 +1909,79 @@ def run_xrd_analyzer() -> None:
 
     run_tool("stb-xrd", args)
 
+def run_xrdsearch_generator() -> None:
+    """Interface for the XRD-Guided Structure Search prep stage (stb-xrdsearch)"""
+    print("\n" + "="*60)
+    print(color_text("XRD STRUCTURE SEARCH -- PREP (stb-xrdsearch)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    print(f"{color_text('Enter the composition:', 'yellow')}")
+    print("  (element symbol + how many atoms of it, e.g. 'Ni 4'; blank line to finish)")
+    species = []
+    num_ions = []
+    while True:
+        entry = get_input("Species (blank to finish): ").strip()
+        if not entry:
+            break
+        parts = entry.split()
+        if len(parts) != 2:
+            print(color_text("Expected 2 values: SYMBOL COUNT.", 'red'))
+            continue
+        species.append(parts[0])
+        num_ions.append(parts[1])
+
+    if not species:
+        print(color_text("No species given -- aborting.", 'red'))
+        return
+
+    groups = get_input("Space groups to try (comma- or space-separated, e.g. '225,227,229'): ").strip()
+    while not groups:
+        print(color_text("At least one space group is required.", 'red'))
+        groups = get_input("Space groups to try: ").strip()
+
+    count_per_group = get_int_input("Candidates per space group [default: 1]: ", 1)
+    output_dir = get_input("Output folder [default: xrd_search]: ").strip() or "xrd_search"
+
+    args = [
+        "--species", *species,
+        "--num-ions", *num_ions,
+        "--groups", groups,
+        "--count-per-group", str(count_per_group),
+        "--output-dir", output_dir,
+        "--no-intro",
+    ]
+    run_tool("stb-xrdsearch", args)
+
+def run_xrdrank_analyzer() -> None:
+    """Interface for the XRD-Guided Structure Search analysis stage (stb-xrdrank)"""
+    print("\n" + "="*60)
+    print(color_text("XRD STRUCTURE SEARCH -- RANK (stb-xrdrank)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    input_dir = get_input("Folder of candidate structures (e.g. from stb-xrdsearch): ").strip()
+    while not os.path.isdir(input_dir):
+        print(color_text("Folder not found!", 'red'))
+        input_dir = get_input("Folder of candidate structures: ").strip()
+
+    experimental = get_input("Experimental XRD pattern file (2theta, intensity columns): ").strip()
+    while not os.path.isfile(experimental):
+        print(color_text("File not found!", 'red'))
+        experimental = get_input("Experimental XRD pattern file: ").strip()
+
+    wavelength = get_input("X-ray source name (CuKa, MoKa, ...) or wavelength in Ang [default: CuKa]: ").strip()
+    if not wavelength:
+        wavelength = "CuKa"
+
+    top_str = get_input("Show only the N best matches [default: show all]: ").strip()
+    output_file = get_input("Output ranking file name [default: xrd_rank.txt]: ").strip() or "xrd_rank.txt"
+
+    args = ["--input-dir", input_dir, "--experimental", experimental,
+            "--wavelength", wavelength, "--output", output_file, "--no-intro"]
+    if top_str:
+        args.extend(["--top", top_str])
+
+    run_tool("stb-xrdrank", args)
+
 def run_file_translator() -> None:
     """Interface for the File Translator (stb-translate)"""
     print("\n" + "="*60)
@@ -2280,6 +2353,17 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-convergenceAnalysis)",
                 'description': "Extract energies from convergence_* folders and report the converged value.",
                 'func': run_convergence_analyzer},
+        }},
+    6: {'title': "Structure Solution (XRD)",
+        'description': "Cast candidate structures across a set of space groups, then rank them by "
+                        "similarity to an experimental powder XRD pattern.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-xrdsearch)",
+                'description': "Cast candidate structures across a set of space groups for a given composition.",
+                'func': run_xrdsearch_generator},
+            2: {'title': "Stage 2 - Analysis (stb-xrdrank)",
+                'description': "Rank candidate structures by similarity to an experimental XRD pattern.",
+                'func': run_xrdrank_analyzer},
         }},
        }
 

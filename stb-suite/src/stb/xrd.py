@@ -10,69 +10,14 @@ VERSION = "1.11.0"
 
 import sys
 import argparse
-import numpy as np
-from pymatgen.io.ase import AseAtomsAdaptor
-from pymatgen.analysis.diffraction.xrd import WAVELENGTHS
 from stb.core import structure_io
+from stb.core import xrd as xrd_core
 from stb.core.cli import color_text, show_intro, run_with_spinner
 from stb.core.deps import require_pyxtal
 
 
-def resolve_wavelength(spec):
-    """Returns (wavelength_in_ang, label): `spec` matched case-insensitively
-    against pymatgen's WAVELENGTHS dict of named X-ray sources (CuKa, MoKa,
-    ...), or else parsed directly as a wavelength in Ang. Raises ValueError
-    with a clear message (listing the known names) if neither works.
-    """
-    for name, value in WAVELENGTHS.items():
-        if name.lower() == spec.lower():
-            return value, name
-    try:
-        value = float(spec)
-    except ValueError:
-        raise ValueError(
-            f"--wavelength '{spec}' is not a known source name and isn't a number. "
-            f"Known names: {', '.join(WAVELENGTHS)}.")
-    return value, f"{value:.5f} Ang"
-
-
-MIN_EXPERIMENTAL_POINTS = 4  # pyxtal.XRD.Similarity cubic-interpolates each pattern (scipy
-                             # interp1d, kind='cubic'), which needs at least 4 points per curve
-                             # -- fewer than that raises a raw, unhandled scipy ValueError deep
-                             # inside Similarity() instead of this tool's own clean error.
-
-
-def read_experimental_pattern(path):
-    """Reads a plain 2-column (2theta, intensity) text file for --compare-to:
-    whitespace- or comma-separated, blank lines and '#' comments skipped.
-    Returns a (2, N) array -- the same shape pyxtal.XRD.Similarity expects
-    for both patterns it compares (it interpolates internally, so this
-    doesn't need to share a grid with the simulated pattern).
-    """
-    two_theta, intensity = [], []
-    with open(path) as f:
-        for lineno, raw_line in enumerate(f, start=1):
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.replace(",", " ").split()
-            if len(parts) < 2:
-                continue
-            try:
-                two_theta.append(float(parts[0]))
-                intensity.append(float(parts[1]))
-            except ValueError:
-                raise ValueError(f"'{path}' line {lineno}: expected two numbers, got '{line}'.")
-    if len(two_theta) < MIN_EXPERIMENTAL_POINTS:
-        raise ValueError(
-            f"'{path}' has only {len(two_theta)} data point(s) -- at least "
-            f"{MIN_EXPERIMENTAL_POINTS} are needed for the similarity comparison.")
-    return np.array([two_theta, intensity])
-
-
 def main():
     require_pyxtal()
-    from pyxtal.XRD import XRD
 
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Simulates a powder XRD pattern from a structure.", 'bold')}
@@ -141,7 +86,7 @@ already needed by stb-crystalcast covers this too.""",
         sys.exit(1)
 
     try:
-        wavelength, wavelength_label = resolve_wavelength(args.wavelength)
+        wavelength, wavelength_label = xrd_core.resolve_wavelength(args.wavelength)
     except ValueError as e:
         print(color_text(f"Error: {e}", 'red'))
         sys.exit(1)
@@ -156,20 +101,10 @@ already needed by stb-crystalcast covers this too.""",
     print(f"  {color_text('Wavelength:', 'cyan')} {wavelength_label} ({wavelength:.5f} Ang)")
     print(f"  {color_text('2-theta range:', 'cyan')} {lo} - {hi} deg")
 
-    atoms = AseAtomsAdaptor.get_atoms(structure)
     try:
-        xrd = XRD(atoms, wavelength=wavelength, thetas=[lo, hi])
-    except ValueError:
-        # pyxtal's own XRD.__init__ calls max() on an empty list when no
-        # reflection falls inside [lo, hi], raising a bare ValueError instead
-        # of returning an empty pattern.
-        print(color_text(
-            "\nError: no peaks found in the given --two-theta-range -- try widening it.", 'red'))
-        sys.exit(1)
-
-    if len(xrd.pxrd) == 0:
-        print(color_text(
-            "\nError: no peaks found in the given --two-theta-range -- try widening it.", 'red'))
+        xrd = xrd_core.compute_pattern(structure, wavelength=wavelength, two_theta_range=(lo, hi))
+    except ValueError as e:
+        print(color_text(f"\nError: {e}", 'red'))
         sys.exit(1)
 
     rows = sorted(xrd.pxrd, key=lambda row: row[5], reverse=True)
@@ -190,7 +125,7 @@ already needed by stb-crystalcast covers this too.""",
         from pyxtal.XRD import Similarity
 
         try:
-            experimental = read_experimental_pattern(args.compare_to)
+            experimental = xrd_core.read_experimental_pattern(args.compare_to)
         except (FileNotFoundError, ValueError) as e:
             print(color_text(f"Error: {e}", 'red'))
             sys.exit(1)

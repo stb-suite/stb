@@ -424,10 +424,14 @@ def run_ml_rank(results):
 
     rankings.sort(key=lambda r: r[1])
     e_min = rankings[0][1]
+    # Width is sized to the longest out_name (which may include a caller-supplied
+    # directory, e.g. from stb-xrdsearch) plus a guaranteed gap -- a fixed <24
+    # would silently glue the file name into the energy column for longer paths.
+    name_width = max(24, max(len(out_name) for out_name, _ in rankings) + 2)
     print(f"\n{color_text('ML-ranked structures (MACE-MP-0, relaxed energy, most stable first):', 'bold')}")
-    print(f"  {'Rank':<5}{'File':<24}{'Energy (eV)':<16}{'dE (eV)':<10}")
+    print(f"  {'Rank':<5}{'File':<{name_width}}{'Energy (eV)':<16}{'dE (eV)':<10}")
     for rank, (out_name, energy) in enumerate(rankings, start=1):
-        print(f"  {rank:<5}{out_name:<24}{energy:<16.4f}{energy - e_min:<10.4f}")
+        print(f"  {rank:<5}{out_name:<{name_width}}{energy:<16.4f}{energy - e_min:<10.4f}")
     print(color_text(
         "\n  Note: a relative comparison from a fast ML potential, not an absolute DFT "
         "formation energy -- use it to prioritize which candidate(s) to relax with SIESTA, "

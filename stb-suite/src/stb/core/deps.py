@@ -25,6 +25,17 @@ def require_icet():
     return icet
 
 
+def require_pyxtal():
+    """Imports and returns pyxtal, or exits with a clear error if it's missing."""
+    try:
+        import pyxtal
+    except ImportError:
+        print("\n\033[91m[CRITICAL ERROR] pyxtal library not found.\033[0m")
+        print("Please install it using: pip install pyxtal")
+        sys.exit(1)
+    return pyxtal
+
+
 def require_mace():
     """Imports and returns the mace.calculators module, or exits with a clear
     error if it (or its PyTorch dependency) is missing. This is the suite's

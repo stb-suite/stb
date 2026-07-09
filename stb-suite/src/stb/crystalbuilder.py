@@ -10,7 +10,6 @@ VERSION = "1.11.0"
 
 import sys
 import argparse
-import numpy as np
 from pymatgen.core import Structure, Lattice
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -124,10 +123,8 @@ pymatgen expands the rest via the space group's own symmetry operations.""",
         print(color_text(f"Error: {e}", 'red'))
         sys.exit(1)
 
-    dm = structure.distance_matrix
-    np.fill_diagonal(dm, np.inf)
-    min_dist = dm.min() if len(structure) > 1 else np.inf
-    if min_dist < 0.5:
+    min_dist = structure_io.min_pairwise_distance(structure)
+    if min_dist is not None and min_dist < 0.5:
         print(color_text(
             f"  Warning: some atoms are unusually close ({min_dist:.3f} Ang) -- "
             "check for overlapping --site coordinates.", 'yellow'))

@@ -204,6 +204,24 @@ def to_pymatgen(structure: FdfStructure) -> Structure:
     return Structure(Lattice(structure.lattice), species, coords, coords_are_cartesian=is_cartesian)
 
 
+def min_pairwise_distance(structure) -> float | None:
+    """Returns the closest distance between any two sites in `structure` (a
+    pymatgen Structure or Molecule), or None if it has fewer than 2 sites.
+
+    `structure.distance_matrix` already does the right thing for either input
+    type: minimum-image (periodic) distance for a Structure, plain Euclidean
+    distance for a Molecule -- so callers don't need to special-case a
+    non-periodic cluster housed in an artificial box (its own `distance_matrix`
+    would otherwise pick up the box's periodic images as false neighbors).
+    Shared by stb-crystalbuilder and stb-crystalcast's post-build overlap check.
+    """
+    if len(structure) < 2:
+        return None
+    dm = structure.distance_matrix
+    np.fill_diagonal(dm, np.inf)
+    return dm.min()
+
+
 def read_siesta_structure(path: str, fmt: str) -> Structure:
     """Returns a pymatgen Structure for one of this suite's own SIESTA
     formats: "fdf" (structure input, via read_fdf()/to_pymatgen() above) or

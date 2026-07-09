@@ -20,7 +20,8 @@ dependencies = [
     "scipy",
     "phonopy",
     "pandas",
-    "icet"
+    "icet",
+    "pyxtal"
 ]
 
 [project.optional-dependencies]
@@ -72,3 +73,4 @@ stb-cohesive="stb.cohesive_energy:main"
 stb-cohesiveAnalysis="stb.cohesive_analysis:main"
 stb-phononsCreate="stb.phonons_create:main"
 stb-phononsPos="stb.phonons_pos:main"
+stb-crystalcast="stb.crystalcast:main"

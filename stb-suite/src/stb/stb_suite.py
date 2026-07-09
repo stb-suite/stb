@@ -1090,6 +1090,101 @@ def run_crystalbuilder_generator() -> None:
     run_tool("stb-crystalbuilder", args)
 
 
+def run_crystalcast_generator() -> None:
+    """Interface for the Random Crystal Generator (stb-crystalcast)"""
+    print("\n" + "="*60)
+    print(color_text("RANDOM CRYSTAL GENERATOR (stb-crystalcast)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    mode = get_input("Generate a random structure, or analyze an existing one? (generate/analyze) "
+                      "[default: generate]: ").strip().lower()
+
+    if mode == "analyze":
+        input_file = get_input("Structure file to analyze (.fdf): ").strip()
+        if not input_file:
+            print(color_text("No file given -- aborting.", 'red'))
+            return
+        run_tool("stb-crystalcast", ["--analyze", "-f", input_file, "--no-intro"])
+        return
+
+    dim_str = get_input("Dimension: 3=bulk, 2=layer, 1=rod/wire, 0=cluster [default: 3]: ").strip()
+    dim = dim_str if dim_str else "3"
+
+    molecular = False
+    if dim != "0":
+        molecular_str = get_input(
+            "Molecular crystal? Packs whole rigid molecules instead of bare atoms (y/n) "
+            "[default: n]: ").strip().lower()
+        molecular = molecular_str == "y"
+
+    dim_labels = {"3": "space group", "2": "layer group", "1": "rod group", "0": "point group"}
+    group_label = dim_labels.get(dim, "symmetry group")
+    group = get_input(f"{group_label.capitalize()} (number, or symbol for dim 3/0): ").strip()
+
+    if molecular:
+        print(f"\n{color_text('Enter the composition:', 'yellow')}")
+        print("  (molecule name from pyxtal's bundled collection, e.g. 'H2O', or a "
+              ".xyz/.gjf/.g03/.json path, + how many of it, e.g. 'H2O 4'; blank line to finish)")
+        print("  Run stb-crystalcast --list-molecules to see all bundled names.")
+    else:
+        print(f"\n{color_text('Enter the composition:', 'yellow')}")
+        print("  (element symbol + how many atoms of it, e.g. 'Ni 4'; blank line to finish)")
+    species = []
+    num_ions = []
+    while True:
+        entry = get_input("Species (blank to finish): ").strip()
+        if not entry:
+            break
+        parts = entry.split()
+        if len(parts) != 2:
+            print(color_text("Expected 2 values: SYMBOL COUNT.", 'red'))
+            continue
+        species.append(parts[0])
+        num_ions.append(parts[1])
+
+    if not species:
+        print(color_text("No species given -- aborting.", 'red'))
+        return
+
+    args = [
+        "--dim", dim,
+        "--group", group,
+        "--species", *species,
+        "--num-ions", *num_ions,
+    ]
+    if molecular:
+        args.append("--molecular")
+
+    if dim == "2":
+        thickness_str = get_input("Layer thickness in Ang [default: automatic]: ").strip()
+        if thickness_str:
+            args.extend(["--thickness", thickness_str])
+    elif dim == "1":
+        area_str = get_input("Rod cross-sectional area in Ang^2 [default: automatic]: ").strip()
+        if area_str:
+            args.extend(["--area", area_str])
+    elif dim == "0":
+        vacuum = get_float_input("Vacuum padding in Ang [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum", str(vacuum)])
+
+    volume_factor = get_float_input("\nVolume factor [default: 1.1]: ", 1.1)
+    args.extend(["--volume-factor", str(volume_factor)])
+
+    count = get_int_input("Number of structures to generate [default: 1]: ", 1)
+    args.extend(["--count", str(count)])
+
+    seed_str = get_input("Random seed [default: none]: ").strip()
+    if seed_str:
+        args.extend(["--seed", seed_str])
+
+    output_file = get_input("\nOutput file name [default: crystalcast.fdf]: ").strip()
+    if not output_file:
+        output_file = "crystalcast.fdf"
+    args.extend(["--output", output_file, "--no-intro"])
+
+    run_tool("stb-crystalcast", args)
+
+
 def run_fetch_generator() -> None:
     """Interface for the Structure Fetcher (stb-fetch)"""
     print("\n" + "="*60)
@@ -1949,6 +2044,11 @@ INPUT_TOOLS = {
     16: {'title': "Amorphous Structure Generator (stb-amorphize)",
          'description': "Melt-quench MD with MACE-MP-0 to build an amorphous starting guess (needs the optional 'ml' extra).",
          'func': run_amorphize_generator},
+    17: {'title': "Random Crystal Generator (stb-crystalcast)",
+         'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular) from "
+                         "a symmetry group and composition, or analyze an existing structure's "
+                         "Wyckoff decomposition.",
+         'func': run_crystalcast_generator},
          }
 
 

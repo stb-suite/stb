@@ -589,18 +589,20 @@ def main():
     if args.write_refined:
         if any(results["vacuum_axes"]):
             print(color_text(
-                "\n[WARNING] --write-refined uses the 3D space group (see the NOTE near the top "
-                "of the report), not the layer group, for a vacuum-padded structure -- it may "
-                "reshape the cell/vacuum axis in a way that doesn't preserve the slab's intended "
-                "geometry. Inspect the output before using it.", 'yellow'))
-        print(f"\n[INFO] Writing symmetry-refined structure to {args.write_refined}...")
-        try:
-            from stb.core.symmetry import reduce_to_unitcell
-            refined_structure, _ = reduce_to_unitcell(
-                structure, "refined", symprec=args.symprec, angle_tolerance=args.angle_tolerance)
-            structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
-        except Exception as e:
-            print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+                "\n[ERROR] --write-refined skipped: it refines using the 3D space group (see the "
+                "NOTE near the top of the report), not the layer group, and for a vacuum-padded "
+                "structure that group isn't physically meaningful -- refining against it could "
+                "reshape the cell/vacuum axis into something that no longer represents the slab. "
+                "Not available for structures with a vacuum axis.", 'red'))
+        else:
+            print(f"\n[INFO] Writing symmetry-refined structure to {args.write_refined}...")
+            try:
+                from stb.core.symmetry import reduce_to_unitcell
+                refined_structure, _ = reduce_to_unitcell(
+                    structure, "refined", symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure), args.write_refined)
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
 
     report = format_report(results, args.file, args.format, show_operations=args.show_operations,
                            symprec_scan=symprec_scan, comparison=comparison)

@@ -335,20 +335,30 @@ check_contains "Layer group ops     24                          4" symmetry.dat
 check_contains "Layer group CHANGED: p6/mmm (No. 80, 24 ops) -> c2/m11 (No. 18, 4 ops) -- lost symmetry operations." symmetry.dat
 
 
-# --- 4j. --write-refined warns when the structure is vacuum-padded (the
-#     refinement it calls uses the 3D space group, not the layer group). ---
-echo -e "\n--- Testing --write-refined warns on a vacuum-padded structure ---"
+# --- 4j. --write-refined is blocked (not just warned) for a vacuum-padded
+#     structure: it refines using the 3D space group, not the layer group,
+#     which isn't physically meaningful there and could reshape the
+#     cell/vacuum axis into something that no longer represents the slab. ---
+echo -e "\n--- Testing --write-refined is blocked on a vacuum-padded structure ---"
 rm -f refined_slab.fdf
 stb-symmetry --file graphene_slab.fdf --format fdf --write-refined refined_slab.fdf --no-intro > log_refined_slab.txt 2>&1
 check_exit_code $? 0
-check_contains "\[WARNING\] --write-refined uses the 3D space group" log_refined_slab.txt
-check_success refined_slab.fdf
+check_contains "\[ERROR\] --write-refined skipped" log_refined_slab.txt
+check_contains "Not available for structures with a vacuum axis." log_refined_slab.txt
+if [ -e refined_slab.fdf ]; then
+    echo -e "   -> ${RED}Failed:${NC} refined_slab.fdf was written despite the vacuum axis"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} refined_slab.fdf was NOT written"
+    PASS=$((PASS+1))
+fi
 
-echo "Verifying --write-refined does NOT warn for a genuinely 3D bulk structure"
+echo "Verifying --write-refined still works normally for a genuinely 3D bulk structure"
 rm -f refined_bulk.fdf
 stb-symmetry --file nacl.fdf --format fdf --write-refined refined_bulk.fdf --no-intro > log_refined_bulk.txt 2>&1
 check_exit_code $? 0
-check_not_contains "WARNING" log_refined_bulk.txt
+check_not_contains "ERROR" log_refined_bulk.txt
+check_success refined_bulk.fdf
 
 
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---

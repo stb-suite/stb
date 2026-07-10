@@ -242,6 +242,12 @@ rm -f calc.fdf C.psf C.psml
 stb-inputfile structure.fdf -t relax -p ./pp_with_both --no-intro > log_pp_both.txt 2>&1
 check_success calc.fdf
 check_success C.psml
+
+echo -n "Testing: -p accepts a bundled bank name (dojo)"
+rm -f calc.fdf C.psf C.psml
+stb-inputfile structure.fdf -t relax -p dojo --no-intro > log_pp_bank.txt 2>&1
+check_success calc.fdf
+check_success C.psml
 if [ ! -s C.psf ]; then
     echo -e "   -> ${GREEN}Verified:${NC} C.psf was not copied (psml took priority)"
     PASS=$((PASS+1))

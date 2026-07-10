@@ -17,6 +17,7 @@ import glob
 from phonopy import Phonopy
 from phonopy.interface.siesta import read_siesta, write_siesta
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
 
 def get_required_pseudos(symbols: list, pseudo_dir: str):
     """
@@ -61,8 +62,9 @@ def main():
     parser.add_argument("-c", "--calc", type=str, default="calc.fdf", 
                         help="Input calculation parameters file (default: calc.fdf)")
     
-    parser.add_argument("-p", "--pseudo-dir", type=str, default=".", 
-                        help="Directory containing the pseudopotentials (.psf or .psml) (default: current directory)")
+    parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
+                        help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                             "folder path (default: current directory).")
     
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
     
@@ -70,6 +72,12 @@ def main():
                         help="Do not show the introduction")
 
     args = parser.parse_args()
+
+    try:
+        args.pseudo_dir = resolve_pseudo_source(args.pseudo_dir)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
 
     # Exibe a introdução se a flag não for acionada
     if args.intro:

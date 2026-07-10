@@ -136,6 +136,66 @@ check_success hubbardu_runs2/scf_alpha_0.2000/calc.fdf
 check_success hubbardu_runs2/frozen_alpha_0.0000/calc.fdf
 
 
+# --- 4b. --frozen-iterations override ---
+echo -e "\n--- Testing --frozen-iterations ---"
+make_reference hubbardu_runs5
+stb-hubbarduAlphas --dir hubbardu_runs5 --alphas 0.1 --frozen-iterations 3 --no-intro > log_frozen_iter.txt 2>&1
+check_exit_code $? 0
+check_contains "MaxSCFIterations 3" hubbardu_runs5/frozen_alpha_0.1000/calc.fdf
+
+echo "Testing: --frozen-iterations below the empirical minimum warns but still runs"
+rm -rf hubbardu_runs6
+make_reference hubbardu_runs6
+stb-hubbarduAlphas --dir hubbardu_runs6 --alphas 0.1 --frozen-iterations 1 --no-intro > log_frozen_iter_low.txt 2>&1
+check_exit_code $? 0
+check_contains "below the empirically-needed minimum" log_frozen_iter_low.txt
+check_contains "MaxSCFIterations 1" hubbardu_runs6/frozen_alpha_0.1000/calc.fdf
+
+echo "Testing: --frozen-iterations 0 is rejected"
+stb-hubbarduAlphas --dir hubbardu_runs6 --alphas 0.1 --frozen-iterations 0 --no-intro > log_frozen_iter_zero.txt 2>&1
+check_exit_code $? 1
+check_contains "must be >= 1" log_frozen_iter_zero.txt
+
+
+# --- 4c. Rounding-collision guard (--alphas 0.00001 rounds to the same folder as the implicit zero point) ---
+echo -e "\n--- Testing the alpha rounding-collision guard ---"
+make_reference hubbardu_runs7
+stb-hubbarduAlphas --dir hubbardu_runs7 --alphas 0.00001 0.1 --no-intro > log_round_zero.txt 2>&1
+check_exit_code $? 1
+check_contains "an alpha rounds to 0.0000 eV" log_round_zero.txt
+
+stb-hubbarduAlphas --dir hubbardu_runs7 --alphas 0.10001 0.1 --no-intro > log_round_collide.txt 2>&1
+check_exit_code $? 1
+check_contains "round to the same folder name" log_round_collide.txt
+
+
+# --- 4d. Pseudopotentials saved by stage 1 are auto-copied into every folder ---
+echo -e "\n--- Testing pseudopotential auto-copy ---"
+mkdir -p pseudos
+echo "fake Mn pseudopotential" > pseudos/Mn.psml
+rm -rf hubbardu_runs8
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir pseudos --output-dir hubbardu_runs8 --no-intro > /dev/null 2>&1
+echo "fake density matrix placeholder" > hubbardu_runs8/reference/siesta.DM
+stb-hubbarduAlphas --dir hubbardu_runs8 --alphas 0.1 --no-intro > log_pseudo.txt 2>&1
+check_exit_code $? 0
+check_success hubbardu_runs8/scf_alpha_0.1000/Mn.psml
+check_success hubbardu_runs8/frozen_alpha_0.0000/Mn.psml
+check_success hubbardu_runs8/frozen_alpha_0.1000/Mn.psml
+
+echo "Testing: no pseudopotentials saved -> a clear reminder note is printed"
+stb-hubbarduAlphas --dir hubbardu_runs2 --alphas 0.05 --no-intro > log_no_pseudo.txt 2>&1
+check_contains "No pseudopotentials saved by stage 1" log_no_pseudo.txt
+
+
+# --- 4e. Stage 2 also rejects a hand-edited template that already has DFT+U set up ---
+echo -e "\n--- Testing the DFT+U guard is also enforced in stage 2 ---"
+make_reference hubbardu_runs9
+cat "hubbardu_runs9/reference/calc.fdf" > "hubbardu_runs9/_template_calc.fdf"
+stb-hubbarduAlphas --dir hubbardu_runs9 --alphas 0.1 --no-intro > log_stage2_guard.txt 2>&1
+check_exit_code $? 1
+check_contains "already contains an LDAU.proj" log_stage2_guard.txt
+
+
 # --- 5. Error and robustness cases ---
 echo -e "\n--- Testing error and robustness cases ---"
 
@@ -154,7 +214,7 @@ echo "Testing: alpha=0.0 is rejected (frozen already gets its own zero point aut
 make_reference hubbardu_runs3
 stb-hubbarduAlphas --dir hubbardu_runs3 --alphas 0.0 0.1 --no-intro > log_zero_alpha.txt 2>&1
 check_exit_code $? 1
-check_contains "is not a valid perturbation strength" log_zero_alpha.txt
+check_contains "an alpha rounds to 0.0000 eV" log_zero_alpha.txt
 
 echo "Testing: duplicate alphas are rejected"
 stb-hubbarduAlphas --dir hubbardu_runs3 --alphas 0.1 0.1 --no-intro > log_dup_alpha.txt 2>&1
@@ -165,10 +225,11 @@ echo "Testing: --version"
 stb-hubbarduAlphas --version > log_version.txt 2>&1
 check_contains "stb-hubbarduAlphas" log_version.txt
 
-echo "Testing: --help documents dir/alphas"
+echo "Testing: --help documents dir/alphas/frozen-iterations"
 stb-hubbarduAlphas --help > log_help.txt 2>&1
 check_contains "dir" log_help.txt
 check_contains "alphas" log_help.txt
+check_contains "frozen-iterations" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.7.2) ---

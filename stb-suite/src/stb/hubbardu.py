@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 import os
 import re
@@ -17,20 +17,34 @@ import argparse
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, ldau_proj_block as _base_ldau_proj_block
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
-_EXISTING_LDAU_RE = re.compile(r'LDAU\.proj|LDAU\.PotentialShift', re.IGNORECASE)
+_EXISTING_LDAU_RE = re.compile(r'LDAU\.proj|LDAU\.PotentialShift|DFTU\.proj|DFTU\.PotentialShift', re.IGNORECASE)
 
 TEMPLATE_STRUCTURE_NAME = "_template_structure.fdf"
 TEMPLATE_CALC_NAME = "_template_calc.fdf"
+PSEUDO_SNAPSHOT_DIRNAME = "_pseudopotentials"
 
 
-def get_system_label(calc_text):
+def get_system_label(calc_text, structure_text=None):
+    """SystemLabel, searched in calc_text first (the common case: it's a
+    plain fdf keyword, not something SIESTA allows only in an %include'd
+    file) and, if not found there, in structure_text too -- some templates
+    put every fdf keyword in structure.fdf and just %include it verbatim.
+    Falls back to "siesta" (SIESTA's own default) only if neither has it.
+    """
     match = _LABEL_RE.search(calc_text)
-    return match.group(1) if match else "siesta"
+    if match:
+        return match.group(1)
+    if structure_text:
+        match = _LABEL_RE.search(structure_text)
+        if match:
+            return match.group(1)
+    return "siesta"
 
 
-def ldau_proj_block(species, n, l, u, j, potential_shift):
+def ldau_perturbation_block(species, n, l, u, j, potential_shift):
     """The %block LDAU.proj stanza plus, when potential_shift, the
     LDAU.PotentialShift flag that makes SIESTA treat `u` as a rigid
     perturbation on the shell (Cococcioni & de Gironcoli, PRB 71, 035105,
@@ -38,6 +52,12 @@ def ldau_proj_block(species, n, l, u, j, potential_shift):
     print the shell's occupation to the .out file (verified against SIESTA's
     own source, Src/dftu.F, where that print statement is gated on this exact
     flag).
+
+    Named differently from core.dftu_data.ldau_proj_block (which this wraps)
+    on purpose: that one takes a list of {species,n,l,u,j} dicts and never
+    adds PotentialShift, so the two are NOT interchangeable despite doing
+    related things -- a same-named pair here previously made it easy to
+    import the wrong one and silently lose the PotentialShift line.
     """
     block = _base_ldau_proj_block([{"species": species, "n": n, "l": l, "u": u, "j": j}])
     if potential_shift:
@@ -49,14 +69,27 @@ def write_run_folder(output_dir, folder_name, calc_template, structure_path, ext
     """Writes structure.fdf + calc.fdf into a new run folder.
 
     `extra_fdf_text` is PREPENDED, not appended: SIESTA's fdf reader uses
-    first-occurrence-wins for duplicate labels (verified empirically -- a
-    template that already sets MaxSCFIterations, as most real production
-    calc.fdf templates do, would otherwise silently keep its own value and
-    ignore stb-hubbardu's override for the frozen-density runs, exactly the
-    single-iteration behavior those runs depend on).
+    first-occurrence-wins for duplicate labels (verified empirically, both
+    via direct source inspection and real SIESTA 5.4.2 runs -- see the
+    duplicate-MaxSCFIterations bulk-Si test -- and matching the official
+    docs: "If the same label is specified several times, the first one
+    takes precedence, since the FDF parser stops looking for a label when
+    it finds it"). A template that already sets MaxSCFIterations, as most
+    real production calc.fdf templates do, would otherwise silently keep
+    its own value and ignore stb-hubbardu's override for the frozen-density
+    runs, exactly the single-iteration behavior those runs depend on.
+
+    If the folder already exists (e.g. re-running stb-hubbarduAlphas with
+    different --alphas/--frozen-iterations on the same --dir), any stale
+    calc.out from a PREVIOUS calc.fdf is removed -- it belongs to input that
+    no longer exists on disk, and leaving it would let stb-hubbarduAnalysis
+    silently parse a result that doesn't match the regenerated input.
     """
     folder = os.path.join(output_dir, folder_name)
     os.makedirs(folder, exist_ok=True)
+    stale_output = os.path.join(folder, "calc.out")
+    if os.path.exists(stale_output):
+        os.remove(stale_output)
     shutil.copy(structure_path, os.path.join(folder, "structure.fdf"))
     with open(os.path.join(folder, "calc.fdf"), 'w') as f:
         f.write("# --- stb-hubbardu ---\n")
@@ -70,15 +103,55 @@ def check_no_existing_ldau(calc_template, calc_path):
     """Errors out (rather than silently doubling up the block) if the user's
     own template already sets up DFT+U -- e.g. re-running stb-hubbardu by
     mistake on a template that was itself generated by a previous run of this
-    same workflow.
+    same workflow. Checks both LDAU.* and the DFTU.* spelling SIESTA accepts
+    as a synonym for the same keywords. Also called from stb-hubbarduAlphas
+    against the saved template snapshot, in case a user hand-edits it (e.g.
+    to fix an SCF convergence problem) and reintroduces one of these blocks.
     """
     if _EXISTING_LDAU_RE.search(calc_template):
         print(color_text(
-            f"Error: '{calc_path}' already contains an LDAU.proj block or "
-            "LDAU.PotentialShift -- this looks like it's already set up for "
-            "DFT+U (possibly a previous stb-hubbardu output). Point --calc at "
+            f"Error: '{calc_path}' already contains an LDAU.proj/DFTU.proj block or "
+            "LDAU.PotentialShift/DFTU.PotentialShift -- this looks like it's already set up "
+            "for DFT+U (possibly a previous stb-hubbardu output). Point --calc at "
             "a plain template without any DFT+U setup.", 'red'))
         sys.exit(1)
+
+
+# Same set recognized elsewhere in the suite (translate.py's readers, clean.py's
+# --keep default, cohesive_energy.py/phonons_create.py's pseudo lookups).
+PSEUDO_EXTENSIONS = (".psf", ".psml")
+
+# Files this workflow writes/manages itself in every run folder -- never let a
+# --pseudo-dir that happens to also contain leftovers from a previous SIESTA
+# run (calc.fdf, structure.fdf, siesta.DM, siesta.out, CLOCK, MESSAGES, ...)
+# silently overwrite the just-generated, alpha-specific versions. Filtering by
+# PSEUDO_EXTENSIONS above already prevents this in practice; this is a second,
+# independent guard so a future extension added to PSEUDO_EXTENSIONS (or a
+# same-named pseudopotential-looking file) still can't clobber them.
+MANAGED_FILENAMES = frozenset({"calc.fdf", "structure.fdf", "run_manifest.json",
+                                TEMPLATE_STRUCTURE_NAME, TEMPLATE_CALC_NAME})
+
+
+def copy_pseudopotentials(src_dir, dest_dir):
+    """Copies only recognized pseudopotential files (PSEUDO_EXTENSIONS,
+    case-insensitive; non-recursive) from src_dir into dest_dir. Silently
+    skips anything else -- src_dir is often the user's working directory
+    rather than a pseudopotentials-only folder, and it must never be allowed
+    to drag along stray copies of calc.fdf/structure.fdf/a .DM/SIESTA output
+    files that would overwrite the ones this workflow just generated (see
+    MANAGED_FILENAMES). Returns the list of filenames copied.
+    """
+    copied = []
+    for name in sorted(os.listdir(src_dir)):
+        if name in MANAGED_FILENAMES or name.endswith(".DM"):
+            continue
+        if not name.lower().endswith(PSEUDO_EXTENSIONS):
+            continue
+        src = os.path.join(src_dir, name)
+        if os.path.isfile(src):
+            shutil.copy(src, os.path.join(dest_dir, name))
+            copied.append(name)
+    return copied
 
 
 def main():
@@ -97,6 +170,8 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
         epilog="Usage example:\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Mn\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Fe --shell 3d --j 0.5\n"
+               "  %(prog)s -s structure.fdf -c calc.fdf --species Mn --pseudo-dir ./pseudos\n"
+               "  %(prog)s -s structure.fdf -c calc.fdf --species Mn --pseudo-dir dojo\n"
     )
 
     parser.add_argument("-s", "--structure", type=str, required=True,
@@ -112,6 +187,12 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
                              "--species (transition metals -> (n)d, lanthanides -> 4f, actinides -> 5f).")
     parser.add_argument("--j", type=float, default=0.0,
                          help="Exchange J (eV), fixed across the whole workflow (default: 0.0).")
+    parser.add_argument("--pseudo-dir", type=str, default=None, metavar="DIR",
+                         help="Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- "
+                              f"a bundled bank ({', '.join(BANKS)}) or a folder path. Copied into "
+                              "'reference/' now, and into every scf_alpha_*/frozen_alpha_* folder "
+                              "later by stb-hubbarduAlphas. If omitted, you must copy them into "
+                              "every run folder yourself.")
     parser.add_argument("-o", "--output-dir", type=str, default="hubbardu_runs",
                         help="Output directory for the run folders (default: hubbardu_runs).")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbardu {VERSION}")
@@ -130,12 +211,27 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
     print("\n" + color_text("Generate the Hubbard U reference calculation (stage 1/3):", 'bold'))
     print("-" * 60)
 
+    # os.path.isdir/exists never expand '~' themselves -- that's a shell-only
+    # behavior, and argv passed through subprocess.run() (as the interactive
+    # stb-suite menu does) never goes through a shell at all, so a path like
+    # '~/pseudos' would otherwise be checked completely literally and always
+    # fail.
+    args.structure = os.path.expanduser(args.structure)
+    args.calc = os.path.expanduser(args.calc)
+    args.output_dir = os.path.expanduser(args.output_dir)
+
     if not os.path.exists(args.structure):
         print(color_text(f"Error: File '{args.structure}' not found.", 'red'))
         sys.exit(1)
     if not os.path.exists(args.calc):
         print(color_text(f"Error: File '{args.calc}' not found.", 'red'))
         sys.exit(1)
+    if args.pseudo_dir is not None:
+        try:
+            args.pseudo_dir = resolve_pseudo_source(args.pseudo_dir)
+        except ValueError as e:
+            print(color_text(f"Error: {e}", 'red'))
+            sys.exit(1)
 
     try:
         structure = structure_io.read_fdf(args.structure)
@@ -160,7 +256,9 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
     with open(args.calc, 'r') as f:
         calc_template = f.read()
     check_no_existing_ldau(calc_template, args.calc)
-    label = get_system_label(calc_template)
+    with open(args.structure, 'r') as f:
+        structure_text = f.read()
+    label = get_system_label(calc_template, structure_text)
 
     print(f"  {color_text('Species / shell:', 'cyan')} {args.species} ({shell_name}: n={n}, l={l})")
     print(f"  {color_text('J (eV):', 'cyan')} {args.j:.3f}")
@@ -183,9 +281,27 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
 
-    ref_extra = ldau_proj_block(args.species, n, l, 0.0, args.j, potential_shift=True)
+    ref_extra = ldau_perturbation_block(args.species, n, l, 0.0, args.j, potential_shift=True)
     ref_folder = write_run_folder(args.output_dir, "reference", calc_template, args.structure, ref_extra)
     print(f"  {color_text('[OK]', 'green')} {ref_folder} (alpha=0, reference)")
+
+    if args.pseudo_dir:
+        pseudo_snapshot = os.path.join(args.output_dir, PSEUDO_SNAPSHOT_DIRNAME)
+        os.makedirs(pseudo_snapshot, exist_ok=True)
+        copy_pseudopotentials(args.pseudo_dir, pseudo_snapshot)
+        copied = copy_pseudopotentials(args.pseudo_dir, ref_folder)
+        if copied:
+            print(f"  {color_text('[OK]', 'green')} Copied {len(copied)} pseudopotential file(s) from "
+                  f"'{args.pseudo_dir}' into '{ref_folder}' (and saved for stb-hubbarduAlphas to reuse)")
+        else:
+            print(color_text(
+                f"  [WARNING] --pseudo-dir '{args.pseudo_dir}' has no recognized pseudopotential "
+                f"files ({'/'.join(PSEUDO_EXTENSIONS)}) -- did you point it at the right folder? "
+                "Nothing was copied.", 'yellow'))
+    else:
+        print(color_text(
+            "  [NOTE] No --pseudo-dir given -- copy your pseudopotential files (.psf/.psml) into "
+            "'reference/' yourself before running SIESTA there.", 'yellow'))
 
     print(f"\n{color_text('Success:', 'green')} Generated 'reference/' in "
           f"'{color_text(args.output_dir, 'bold')}'")

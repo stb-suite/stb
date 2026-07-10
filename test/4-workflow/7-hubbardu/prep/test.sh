@@ -103,6 +103,45 @@ check_contains "0.000    0.500" hubbardu_runs/reference/calc.fdf
 check_contains '"j": 0.5' hubbardu_runs/run_manifest.json
 
 
+# --- 3b. --pseudo-dir, including '~' expansion (argv never goes through a shell
+#     when the interactive menu calls subprocess.run(), so os.path.expanduser
+#     must do this -- 'is not a directory' otherwise even for a real path) ---
+echo -e "\n--- Testing --pseudo-dir (plain path and '~' expansion) ---"
+mkdir -p pseudos
+echo "fake Mn pseudopotential" > pseudos/Mn.psml
+rm -rf hubbardu_runs
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir pseudos --no-intro > log_pseudo.txt 2>&1
+check_exit_code $? 0
+check_contains "Copied 1 pseudopotential file(s)" log_pseudo.txt
+check_success hubbardu_runs/reference/Mn.psml
+check_success hubbardu_runs/_pseudopotentials/Mn.psml
+
+echo "Testing: no --pseudo-dir given -> a reminder is printed"
+rm -rf hubbardu_runs
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --no-intro > log_no_pseudo.txt 2>&1
+check_contains "No --pseudo-dir given" log_no_pseudo.txt
+
+echo "Testing: --pseudo-dir with a literal '~' is expanded to \$HOME"
+mkdir -p ~/stb_hubbardu_pseudo_test
+echo "fake" > ~/stb_hubbardu_pseudo_test/Mn.psml
+rm -rf hubbardu_runs
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir '~/stb_hubbardu_pseudo_test' --no-intro > log_tilde.txt 2>&1
+check_exit_code $? 0
+check_success hubbardu_runs/reference/Mn.psml
+rm -rf ~/stb_hubbardu_pseudo_test
+
+echo "Testing: a --pseudo-dir that isn't a bundled bank or a real directory is a clean error"
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir does_not_exist_dir --no-intro > log_bad_pseudo.txt 2>&1
+check_exit_code $? 1
+check_contains "nor an existing directory" log_bad_pseudo.txt
+
+echo "Testing: --pseudo-dir accepts a bundled bank name (dojo)"
+rm -rf hubbardu_runs
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir dojo --no-intro > log_bank.txt 2>&1
+check_exit_code $? 0
+check_success hubbardu_runs/reference/Mn.psml
+
+
 # --- 4. Error and robustness cases ---
 echo -e "\n--- Testing error and robustness cases ---"
 
@@ -143,7 +182,23 @@ echo "Testing: a template that already has an LDAU.proj block/PotentialShift is 
 cp hubbardu_runs/reference/calc.fdf already_has_ldau.fdf
 stb-hubbardu -s structure.fdf -c already_has_ldau.fdf --species Mn --no-intro > log_guard.txt 2>&1
 check_exit_code $? 1
-check_contains "already contains an LDAU.proj block" log_guard.txt
+check_contains "already contains an LDAU.proj" log_guard.txt
+
+echo "Testing: the DFTU.proj/DFTU.PotentialShift spelling is also rejected (SIESTA accepts both)"
+cat > already_has_dftu.fdf << 'EOF'
+SystemLabel siesta
+%include structure.fdf
+DFTU.PotentialShift T
+%block DFTU.proj
+Mn 1
+n=3 2
+0.000 0.000
+0.000 0.000
+%endblock DFTU.proj
+EOF
+stb-hubbardu -s structure.fdf -c already_has_dftu.fdf --species Mn --no-intro > log_guard_dftu.txt 2>&1
+check_exit_code $? 1
+check_contains "already contains an LDAU.proj" log_guard_dftu.txt
 
 echo "Testing: missing structure file"
 stb-hubbardu -s does_not_exist.fdf -c calc.fdf --species Mn --no-intro > log_missing.txt 2>&1
@@ -172,7 +227,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.7.1) ---"
 
 echo "Testing: navigate 4.7.1 -> invalid file then valid -> calc.fdf -> Mn -> auto shell -> default J -> default output -> quit"
 rm -rf hubbardu_runs
-printf '4.7.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.7.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Generated 'reference/'" log_menu.txt
 check_success hubbardu_runs/run_manifest.json

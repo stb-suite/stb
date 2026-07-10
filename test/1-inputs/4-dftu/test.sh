@@ -166,16 +166,21 @@ check_contains "linear-response" log_help.txt
 # --- 6. Interactive path (stb-suite, shortcut 1.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.4) ---"
 
-echo "Testing: navigate 1.4 -> generate (not list) -> Mn -> U=3.9 -> J default -> auto shell -> finish -> no save -> quit"
-printf '1.4\nn\nMn\n3.9\n0.0\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 1.4 -> generate (option 1) -> Mn -> U=3.9 -> J default -> auto shell -> finish -> no save -> quit"
+printf '1.4\n1\nMn\n3.9\n0.0\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "shell=3d (n=3, l=2)" log_menu.txt
 check_contains "%block LDAU.proj" log_menu.txt
 
-echo "Testing: navigate 1.4 -> list-reference path"
-printf '1.4\ny\n\n0\n' | timeout 20 stb-suite > log_menu_list.txt 2>&1
+echo "Testing: navigate 1.4 -> list-reference path (option 2)"
+printf '1.4\n2\n\n0\n' | timeout 20 stb-suite > log_menu_list.txt 2>&1
 check_exit_code $? 0
 check_contains "Wang/Maxisch/Ceder" log_menu_list.txt
+
+echo "Testing: navigate 1.4 -> --suggest path (option 3)"
+printf '1.4\n3\nNi\n\n0\n' | timeout 20 stb-suite > log_menu_suggest.txt 2>&1
+check_exit_code $? 0
+check_contains "6.20 eV" log_menu_suggest.txt
 
 
 popd > /dev/null

@@ -127,6 +127,14 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} only C.psml was linked, not C.psf"
     PASS=$((PASS+1))
 fi
+
+
+# --- 6. --pp-path accepts a bundled bank name ---
+echo -e "\n--- Testing --pp-path with a bundled bank name (dojo) ---"
+rm -rf structure atoms
+stb-cohesive -s structure.fdf -p dojo --no-intro > log_bank.txt 2>&1
+check_exit_code $? 0
+check_success structure/C.psml
 rm -f pp/C.psml
 
 

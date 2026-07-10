@@ -8,6 +8,7 @@
 
 VERSION = "1.0.0"
 
+import os
 import sys
 import argparse
 from stb.core.cli import COLORS, color_text, show_intro
@@ -54,6 +55,8 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    if args.output:
+        args.output = os.path.expanduser(args.output)
 
     if args.intro:
         show_intro([

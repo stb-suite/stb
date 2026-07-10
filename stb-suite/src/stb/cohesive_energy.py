@@ -16,6 +16,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
 
 # Base Template
 CALC_TEMPLATE = """
@@ -152,8 +153,9 @@ def main():
     parser.add_argument("-s", "--structure", dest="structure", type=str, required=True, 
                         help="Path to the initial structure.fdf file")
     
-    parser.add_argument("-p", "--pp-path", dest="pp_path", type=str, default="", 
-                        help="Path to the pseudopotentials folder (optional)")
+    parser.add_argument("-p", "--pp-path", dest="pp_path", type=str, default="",
+                        help=f"Pseudopotentials source (optional): a bundled bank "
+                             f"({', '.join(BANKS)}) or a folder path.")
     
     parser.add_argument("-k", "--k-density", dest="k_density", type=float, default=0.2, 
                         help="K-point density in 1/Angstrom (default: 0.2)")
@@ -175,6 +177,13 @@ def main():
 
     if args.vacuum <= 0:
         parser.error("--vacuum must be positive.")
+
+    if args.pp_path:
+        try:
+            args.pp_path = resolve_pseudo_source(args.pp_path)
+        except ValueError as e:
+            print(color_text(f"Error: {e}", 'red'))
+            sys.exit(1)
 
     if args.intro == True:
         show_intro([

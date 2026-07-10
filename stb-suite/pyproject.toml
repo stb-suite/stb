@@ -81,3 +81,8 @@ stb-hubbardu="stb.hubbardu:main"
 stb-hubbarduAlphas="stb.hubbardu_alphas:main"
 stb-hubbarduAnalysis="stb.hubbardu_analysis:main"
 stb-dftu="stb.dftu:main"
+
+[tool.setuptools.package-data]
+# Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship
+# inside the wheel/sdist, not just be present on disk during editable dev.
+stb = ["pseudopotentials/*/*"]

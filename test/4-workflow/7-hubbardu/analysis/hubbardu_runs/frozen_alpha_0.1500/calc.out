@@ -1,4 +1,4 @@
 siesta: Some unrelated output line
 hubbard_term: Total projector shell
 Occupations:   2.515000   2.515000   5.030000
-SCF Convergence by DM+H criterion
+SCF_NOT_CONV: SCF did not converge in maximum number of steps (required).

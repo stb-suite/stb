@@ -22,6 +22,36 @@ except ImportError:
     pass
 
 from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
+from stb.core.pseudopotentials import BANKS
+
+def prompt_pseudo_source(optional: bool = True) -> str:
+    """Shared pseudopotential-source prompt for every wrapper below that
+    needs one (phonons, cohesive energy, input file, Hubbard U prep):
+    a bundled bank (see core/pseudopotentials.py) or a custom path. Returns
+    the raw string to pass straight through as the tool's -p/--pp-path/
+    --pseudo-dir value (each tool resolves it itself); empty string only if
+    `optional` and the user skips."""
+    bank_list = list(BANKS.items())
+    print(f"\n{color_text('Pseudopotential source:', 'yellow')}")
+    for i, (name, description) in enumerate(bank_list, 1):
+        print(f"  {color_text(str(i), 'cyan')} = Bundled: {description} ({name})")
+    print(f"  {color_text(str(len(bank_list) + 1), 'cyan')} = Custom path")
+    prompt = f"Select option (1-{len(bank_list) + 1}"
+    prompt += ", or Enter to skip): " if optional else "): "
+    while True:
+        choice = get_input(prompt).strip()
+        if not choice and optional:
+            return ""
+        if choice.isdigit() and 1 <= int(choice) <= len(bank_list):
+            return bank_list[int(choice) - 1][0]
+        if choice == str(len(bank_list) + 1):
+            path = os.path.expanduser(get_input("Custom pseudopotentials folder path: ").strip())
+            if os.path.isdir(path):
+                return path
+            print(color_text(f"Path not found: '{path}'", 'red'))
+            continue
+        print(color_text("Invalid choice.", 'red'))
+
 
 def show_main_menu() -> None:
     """Displays the main category menu"""
@@ -159,7 +189,7 @@ def run_phonon_generator() -> None:
     distance = get_float_input("\nDisplacement distance in Å [default: 0.01]: ", 0.01)
     
     # 5. Diretório dos pseudopotenciais
-    pseudo_dir = get_input("\nPseudopotentials directory [default: .]: ").strip()
+    pseudo_dir = prompt_pseudo_source(optional=True)
     if not pseudo_dir:
         pseudo_dir = "."
         
@@ -196,7 +226,7 @@ def run_cohesive_setup() -> None:
         k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
 
     # 3. Obter caminho do PP
-    pp_path = get_input("Pseudopotentials folder path (-p) [optional, press Enter to skip]: ").strip()
+    pp_path = prompt_pseudo_source(optional=True)
     
     # 4. Spin polarization
     spin_choice = get_input("Enable spin polarization for full structure? (y/N): ").strip().lower()
@@ -732,24 +762,12 @@ def run_input_generator() -> None:
         "--no-intro"
     ]
     
-    while True:
-        # Esta linha agora terá Tab-completion!
-        pp_path_input = get_input("\nPseudopotentials path (optional, press Enter to skip): ")
-        
-        if not pp_path_input.strip():
-            print(color_text("Skipping pseudopotential path.", 'yellow'))
-            break 
-        
-        pp_path = os.path.expanduser(pp_path_input)
-        
-        if os.path.isdir(pp_path):
-            args.extend(["--pp-path", pp_path])
-            print(color_text(f"Using PP path: {pp_path}", 'green'))
-            break
-        else:
-            print(color_text(f"Path not found: '{pp_path}'", 'red'))
-            print(color_text("Please enter a valid path or press Enter to skip.", 'yellow'))
-    
+    pp_path = prompt_pseudo_source(optional=True)
+    if pp_path:
+        args.extend(["--pp-path", pp_path])
+    else:
+        print(color_text("Skipping pseudopotential path.", 'yellow'))
+
     run_tool("stb-inputfile", args)
 
 def run_kgrid_generator() -> None:
@@ -1700,6 +1718,10 @@ def run_hubbardu_prep() -> None:
     j_value = get_float_input("Exchange J (eV) [default: 0.0]: ", 0.0)
     args.extend(["--j", str(j_value)])
 
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if pseudo_dir:
+        args.extend(["--pseudo-dir", pseudo_dir])
+
     output_dir = get_input("\nOutput directory [default: hubbardu_runs]: ").strip()
     if not output_dir:
         output_dir = "hubbardu_runs"
@@ -1727,6 +1749,11 @@ def run_hubbardu_alphas() -> None:
     if alphas_str:
         args.extend(["--alphas"] + alphas_str.split())
 
+    frozen_iter = get_int_input(
+        "MaxSCFIterations for the frozen-density runs [default: 2]: ", 2
+    )
+    args.extend(["--frozen-iterations", str(frozen_iter)])
+
     run_tool("stb-hubbarduAlphas", args)
 
 
@@ -1746,6 +1773,15 @@ def run_hubbardu_analysis() -> None:
 
     args = ["--dir", run_dir, "--file", output_filename, "--no-intro"]
 
+    r2_tolerance = get_float_input("R^2 tolerance for the fit warnings [default: 0.98]: ", 0.98)
+    args.extend(["--r2-tolerance", str(r2_tolerance)])
+
+    output_file = get_input(
+        "Output .fdf snippet filename [optional, press Enter for <species>_LDAU.fdf]: "
+    ).strip()
+    if output_file:
+        args.extend(["--output", output_file])
+
     run_tool("stb-hubbarduAnalysis", args)
 
 
@@ -1755,11 +1791,22 @@ def run_dftu_generator() -> None:
     print(color_text("DFT+U / HUBBARD BLOCK GENERATOR (stb-dftu)", 'bold').center(60))
     print("="*60 + "\n")
 
-    list_choice = get_input(
-        "Just look up literature reference U values instead of generating a block? (y/N): ", 'green'
-    ).strip().lower()
-    if list_choice == 'y':
+    print(f"{color_text('What do you want to do?', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Generate a %block LDAU.proj (default)")
+    print(f"  {color_text('2', 'cyan')} = List all literature reference U values")
+    print(f"  {color_text('3', 'cyan')} = Look up the reference U for one element")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+
+    if mode_choice == '2':
         run_tool("stb-dftu", ["--list-reference", "--no-intro"])
+        return
+
+    if mode_choice == '3':
+        element = get_input("Element (e.g. Ni): ").strip()
+        while not element:
+            print(color_text("Element cannot be empty!", 'red'))
+            element = get_input("Element: ").strip()
+        run_tool("stb-dftu", ["--suggest", element, "--no-intro"])
         return
 
     print(f"\n{color_text('Enter one species at a time (blank species to finish):', 'yellow')}")

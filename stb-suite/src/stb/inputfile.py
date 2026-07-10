@@ -16,6 +16,7 @@ import shutil
 import argparse
 from stb.core import structure_io, kspace
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
 
 # --- Internal Relax Template ---
 CALC_RELAX_TEMPLATE = """
@@ -1080,7 +1081,8 @@ def main():
         type=str,
         default="",
         dest="pp_path",
-        help="Path to the pseudopotentials folder - Only psml format (optional)"
+        help=f"Pseudopotentials source (optional): a bundled bank ({', '.join(BANKS)}) "
+             "or a folder path."
     )
 
     
@@ -1090,6 +1092,12 @@ def main():
 
     args = parser.parse_args()
 
+    if args.pp_path in BANKS:
+        # Only resolve a recognized bank name -- an invalid value is left
+        # as-is so copy_pseudopotentials()'s own os.path.isdir() check
+        # produces its existing (non-fatal) "not a valid directory" warning,
+        # same lenient behavior as before bundled banks existed.
+        args.pp_path = resolve_pseudo_source(args.pp_path)
 
     if args.intro == True:
         show_intro([
@@ -1101,10 +1109,6 @@ def main():
 
     print("\n" + color_text("Create a input file from structure in fdf format (converted by STB):", 'bold'))
     print("-"*60)
-
-
-    # Process the arguments provided on the command line
-    args = parser.parse_args()
 
     # Call the main logic function with the processed arguments
     print("--- Siesta Calculation Preparer ---")

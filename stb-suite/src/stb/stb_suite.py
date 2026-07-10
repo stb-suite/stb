@@ -454,13 +454,24 @@ def run_workfunction_calculator() -> None:
     print(f"  {color_text('0', 'cyan')} = x")
     print(f"  {color_text('1', 'cyan')} = y")
     print(f"  {color_text('2', 'cyan')} = z (standard for slabs)")
-    axis_choice = get_int_input("Select axis (0-2) [default: 2]: ", 2)
-    if axis_choice not in [0, 1, 2]:
-        print(color_text("Invalid axis. Using default (z).", 'red'))
-        axis_choice = 2
+    axis_str = get_input(
+        "Select axis (0-2), blank to auto-detect from label.XV/.fdf if available: "
+    ).strip()
+    axis_choice = None
+    if axis_str:
+        try:
+            axis_choice = int(axis_str)
+            if axis_choice not in (0, 1, 2):
+                print(color_text("Invalid axis. Auto-detecting instead.", 'red'))
+                axis_choice = None
+        except ValueError:
+            print(color_text("Invalid axis. Auto-detecting instead.", 'red'))
+            axis_choice = None
 
     # Montar argumentos
-    args = ["--label", label, "--axis", str(axis_choice), "--no-intro"]
+    args = ["--label", label, "--no-intro"]
+    if axis_choice is not None:
+        args.extend(["--axis", str(axis_choice)])
 
     if grid_file:
         args.extend(["--grid", grid_file])

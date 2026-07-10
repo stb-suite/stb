@@ -132,7 +132,7 @@ MANAGED_FILENAMES = frozenset({"calc.fdf", "structure.fdf", "run_manifest.json",
                                 TEMPLATE_STRUCTURE_NAME, TEMPLATE_CALC_NAME})
 
 
-def copy_pseudopotentials(src_dir, dest_dir):
+def copy_pseudopotentials(src_dir, dest_dir, species=None):
     """Copies only recognized pseudopotential files (PSEUDO_EXTENSIONS,
     case-insensitive; non-recursive) from src_dir into dest_dir. Silently
     skips anything else -- src_dir is often the user's working directory
@@ -140,13 +140,31 @@ def copy_pseudopotentials(src_dir, dest_dir):
     to drag along stray copies of calc.fdf/structure.fdf/a .DM/SIESTA output
     files that would overwrite the ones this workflow just generated (see
     MANAGED_FILENAMES). Returns the list of filenames copied.
+
+    If `species` is given (an iterable of chemical symbols), only files
+    whose base name (before any '-'/'_' suffix, e.g. the "Ga" in
+    "Ga-gga.nosemicore.psf") case-insensitively matches one of them are
+    copied. src_dir is frequently one of the bundled banks (BANKS,
+    ~70-80 elements each) -- without this filter every element in the bank
+    gets copied into the run folder instead of just the ones the structure
+    actually needs.
     """
+    wanted = {s.lower() for s in species} if species is not None else None
     copied = []
     for name in sorted(os.listdir(src_dir)):
         if name in MANAGED_FILENAMES or name.endswith(".DM"):
             continue
         if not name.lower().endswith(PSEUDO_EXTENSIONS):
             continue
+        if wanted is not None:
+            stem = name
+            for ext in PSEUDO_EXTENSIONS:
+                if stem.lower().endswith(ext):
+                    stem = stem[:-len(ext)]
+                    break
+            symbol = re.split(r'[-_]', stem, maxsplit=1)[0]
+            if symbol.lower() not in wanted:
+                continue
         src = os.path.join(src_dir, name)
         if os.path.isfile(src):
             shutil.copy(src, os.path.join(dest_dir, name))
@@ -189,10 +207,11 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
                          help="Exchange J (eV), fixed across the whole workflow (default: 0.0).")
     parser.add_argument("--pseudo-dir", type=str, default=None, metavar="DIR",
                          help="Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- "
-                              f"a bundled bank ({', '.join(BANKS)}) or a folder path. Copied into "
-                              "'reference/' now, and into every scf_alpha_*/frozen_alpha_* folder "
-                              "later by stb-hubbarduAlphas. If omitted, you must copy them into "
-                              "every run folder yourself.")
+                              f"a bundled bank ({', '.join(BANKS)}) or a folder path. Only the "
+                              "species actually present in --structure are copied into 'reference/' "
+                              "now, and into every scf_alpha_*/frozen_alpha_* folder later by "
+                              "stb-hubbarduAlphas. If omitted, you must copy them into every run "
+                              "folder yourself.")
     parser.add_argument("-o", "--output-dir", type=str, default="hubbardu_runs",
                         help="Output directory for the run folders (default: hubbardu_runs).")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbardu {VERSION}")
@@ -288,8 +307,8 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
     if args.pseudo_dir:
         pseudo_snapshot = os.path.join(args.output_dir, PSEUDO_SNAPSHOT_DIRNAME)
         os.makedirs(pseudo_snapshot, exist_ok=True)
-        copy_pseudopotentials(args.pseudo_dir, pseudo_snapshot)
-        copied = copy_pseudopotentials(args.pseudo_dir, ref_folder)
+        copy_pseudopotentials(args.pseudo_dir, pseudo_snapshot, species=structure.species)
+        copied = copy_pseudopotentials(args.pseudo_dir, ref_folder, species=structure.species)
         if copied:
             print(f"  {color_text('[OK]', 'green')} Copied {len(copied)} pseudopotential file(s) from "
                   f"'{args.pseudo_dir}' into '{ref_folder}' (and saved for stb-hubbarduAlphas to reuse)")

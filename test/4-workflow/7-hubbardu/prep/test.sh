@@ -36,6 +36,16 @@ check_contains() {
     fi
 }
 
+check_absent() {
+    if [ ! -e "$1" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent, as expected"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' should not exist"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 check_exit_code() {
     if [ "$1" -eq "$2" ]; then
         echo -e "   -> ${GREEN}Verified:${NC} exit code $1 (expected $2)"
@@ -140,6 +150,18 @@ rm -rf hubbardu_runs
 stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir dojo --no-intro > log_bank.txt 2>&1
 check_exit_code $? 0
 check_success hubbardu_runs/reference/Mn.psml
+
+echo "Testing: a bank has ~70-80 elements, but only the structure's own species get copied"
+PP_COUNT=$(ls hubbardu_runs/reference/*.psml 2>/dev/null | wc -l)
+if [ "$PP_COUNT" -eq 1 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} exactly 1 pseudopotential copied from the bank (found $PP_COUNT)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected exactly 1 pseudopotential copied from the bank, found $PP_COUNT"
+    FAIL=$((FAIL+1))
+fi
+check_absent hubbardu_runs/reference/Fe.psml
+check_absent hubbardu_runs/_pseudopotentials/Fe.psml
 
 
 # --- 4. Error and robustness cases ---

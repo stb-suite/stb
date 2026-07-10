@@ -103,6 +103,21 @@ sisl.Geometry(xyz, atoms=atoms, lattice=lattice).write("symmetric.fdf")
 with open("symmetric.out", "w") as f:
     f.write("siesta:         Fermi energy:    -4.500000 eV\n")
 
+# A geometry file with a totally different cell, paired (same label) with the real
+# symmetric.VT -- used to test the geometry/grid cell cross-check.
+mismatch_lattice = sisl.Lattice([[8.0, 0, 0], [0, 3.0, 0], [0, 0, 3.0]])
+mismatch_atoms = [sisl.Atom(14)] * 3
+mismatch_xyz = np.array([[x, 1.5, 1.5] for x in [1.0, 4.0, 7.0]])
+sisl.Geometry(mismatch_xyz, atoms=mismatch_atoms, lattice=mismatch_lattice).write("mismatch.fdf")
+make_vt("mismatch.VT", lambda zz: 2.0 + 3.0*np.sin(2*np.pi*10*(zz-12.0)/6.0) if 12.0 <= zz <= 18.0 else 5.0)
+
+# Same cell/vacuum as the symmetric case, but with an extra "adsorbate" atom sitting
+# inside the vacuum plateau (z=25) -- used to test the atom-in-vacuum-plateau warning.
+withads_atoms = [sisl.Atom(6)] * 6 + [sisl.Atom(1)]
+withads_xyz = np.array([[2.0, 2.0, zz] for zz in np.linspace(12.5, 17.5, 6)] + [[2.0, 2.0, 25.0]])
+sisl.Geometry(withads_xyz, atoms=withads_atoms, lattice=lattice).write("withads.fdf")
+make_vt("withads.VT", lambda zz: 2.0 + 3.0*np.sin(2*np.pi*10*(zz-12.0)/6.0) if 12.0 <= zz <= 18.0 else 5.0)
+
 print("Fixtures generated.")
 PYEOF
 
@@ -143,6 +158,18 @@ timeout 60 stb-workfunction -l symmetric --grid symmetric.VT --fermi 0.0 --axis 
 check_exit_code $? 0
 check_contains "doesn't look vacuum-padded" log_wrongaxis.txt
 
+echo "Testing: a geometry file with an unrelated cell is ignored, not trusted"
+timeout 60 stb-workfunction -l mismatch --grid mismatch.VT --fermi 0.0 --no-plot --no-intro \
+    > log_mismatch.txt 2>&1
+check_exit_code $? 0
+check_contains "cell doesn't match" log_mismatch.txt
+
+echo "Testing: an atom projecting into the vacuum plateau is flagged"
+timeout 60 stb-workfunction -l withads --grid withads.VT --fermi 0.0 --no-plot --no-intro \
+    > log_withads.txt 2>&1
+check_exit_code $? 0
+check_contains "atom(s) project into the vacuum region" log_withads.txt
+
 
 # --- 5. Asymmetric slab: two distinct work functions ---
 echo -e "\n--- Testing an asymmetric slab (two distinct vacuum levels) ---"
@@ -156,6 +183,17 @@ check_contains "Work Function 1 " log_asym.txt
 check_contains "Vacuum Level 2 (near z=" log_asym.txt
 check_contains "Work Function 2 " log_asym.txt
 check_contains "Average Work Function" log_asym.txt
+
+echo "Testing: --asymmetric-tol wide enough merges the two levels into one"
+timeout 60 stb-workfunction -l asymmetric --grid asymmetric.VT --fermi 0.0 --asymmetric-tol 5.0 \
+    --no-plot --no-intro > log_wide_tol.txt 2>&1
+check_exit_code $? 0
+check_contains "Vacuum Level   =" log_wide_tol.txt
+
+echo "Testing: --asymmetric-tol must be positive"
+stb-workfunction -l asymmetric --asymmetric-tol -1 --no-intro > log_bad_tol.txt 2>&1
+check_exit_code $? 2
+check_contains "must be positive" log_bad_tol.txt
 
 
 # --- 6. Bulk (no vacuum): clean failure instead of a bogus number ---
@@ -192,12 +230,13 @@ echo "Testing: --version"
 stb-workfunction --version > log_version.txt 2>&1
 check_contains "stb-workfunction" log_version.txt
 
-echo "Testing: --help documents --label, --axis, --fermi, --no-plot"
+echo "Testing: --help documents --label, --axis, --fermi, --no-plot, --asymmetric-tol"
 stb-workfunction --help > log_help.txt 2>&1
 check_contains "label" log_help.txt
 check_contains "axis" log_help.txt
 check_contains "fermi" log_help.txt
 check_contains "no-plot" log_help.txt
+check_contains "asymmetric-tol" log_help.txt
 
 
 # --- 8. Interactive path (stb-suite, shortcut 2.7) ---

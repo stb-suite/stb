@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pybader")
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # --- Library Imports ---
-from stb.core.deps import require_sisl, require_pybader
+from stb.core.deps import require_sisl, require_pybader, read_sisl_geometry_xv_or_fdf
 sisl = require_sisl()
 PyBaderCalc = require_pybader().Bader
 from pybader.io import cube as cube_io
@@ -243,8 +243,6 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                  threads=None, vacuum_tol=None, keep_cube=True, export_volumes=False):
 
     file_rho = f"{label}.RHO"
-    file_xv = f"{label}.XV"
-    file_fdf = f"{label}.fdf"
     file_cube = f"{label}.cube"
     file_spin_cube = f"{label}_spin.cube"
 
@@ -299,11 +297,8 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
         try:
             print(f"1. [SISL] Reading geometry and charge density...")
 
-            if os.path.exists(file_xv):
-                geometry = sisl.get_sile(file_xv).read_geometry()
-            elif os.path.exists(file_fdf):
-                geometry = sisl.get_sile(file_fdf).read_geometry()
-            else:
+            geometry, _ = read_sisl_geometry_xv_or_fdf(label)
+            if geometry is None:
                 print(color_text("[ERROR] No geometry file (.XV or .fdf) found.", 'red'))
                 sys.exit(1)
 

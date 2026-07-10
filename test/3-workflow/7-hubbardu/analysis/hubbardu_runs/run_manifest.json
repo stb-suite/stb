@@ -1,0 +1,60 @@
+{
+  "species": "Mn",
+  "n": 3,
+  "l": 2,
+  "label": "siesta",
+  "runs": {
+    "reference": {
+      "kind": "reference",
+      "alpha": 0.0
+    },
+    "scf_alpha_-0.1500": {
+      "kind": "scf",
+      "alpha": -0.15
+    },
+    "frozen_alpha_-0.1500": {
+      "kind": "frozen",
+      "alpha": -0.15
+    },
+    "scf_alpha_-0.1000": {
+      "kind": "scf",
+      "alpha": -0.1
+    },
+    "frozen_alpha_-0.1000": {
+      "kind": "frozen",
+      "alpha": -0.1
+    },
+    "scf_alpha_-0.0500": {
+      "kind": "scf",
+      "alpha": -0.05
+    },
+    "frozen_alpha_-0.0500": {
+      "kind": "frozen",
+      "alpha": -0.05
+    },
+    "scf_alpha_0.0500": {
+      "kind": "scf",
+      "alpha": 0.05
+    },
+    "frozen_alpha_0.0500": {
+      "kind": "frozen",
+      "alpha": 0.05
+    },
+    "scf_alpha_0.1000": {
+      "kind": "scf",
+      "alpha": 0.1
+    },
+    "frozen_alpha_0.1000": {
+      "kind": "frozen",
+      "alpha": 0.1
+    },
+    "scf_alpha_0.1500": {
+      "kind": "scf",
+      "alpha": 0.15
+    },
+    "frozen_alpha_0.1500": {
+      "kind": "frozen",
+      "alpha": 0.15
+    }
+  }
+}

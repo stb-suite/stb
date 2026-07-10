@@ -1669,6 +1669,68 @@ def run_convergence_analyzer() -> None:
     run_tool("stb-convergenceAnalysis", args)
 
 
+def run_hubbardu_prep() -> None:
+    """Interface for the Hubbard U Linear-Response Prep (stb-hubbardu)"""
+    print("\n" + "="*60)
+    print(color_text("HUBBARD U (LINEAR RESPONSE) - PREP", 'bold').center(60))
+    print("="*60 + "\n")
+
+    struct_file = get_input("Input structure file (-s): ")
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Input structure file (-s): ")
+
+    calc_file = get_input("Calc.fdf template file (-c): ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ")
+
+    species = get_input("Species to correct (e.g. Mn): ").strip()
+    while not species:
+        print(color_text("Species cannot be empty!", 'red'))
+        species = get_input("Species to correct (e.g. Mn): ").strip()
+
+    args = ["--structure", struct_file, "--calc", calc_file, "--species", species, "--no-intro"]
+
+    print(f"\n{color_text('Correlated shell:', 'yellow')} (blank = auto-detect from species)")
+    shell = get_input("  Shell (3d/4d/5d/4f/5f): ").strip()
+    if shell:
+        args.extend(["--shell", shell])
+
+    alphas_str = get_input(
+        "\nPerturbation strengths in eV, space-separated "
+        "[default: -0.15 -0.10 -0.05 0.05 0.10 0.15]: "
+    ).strip()
+    if alphas_str:
+        args.extend(["--alphas"] + alphas_str.split())
+
+    output_dir = get_input("\nOutput directory [default: hubbardu_runs]: ").strip()
+    if not output_dir:
+        output_dir = "hubbardu_runs"
+    args.extend(["--output-dir", output_dir])
+
+    run_tool("stb-hubbardu", args)
+
+
+def run_hubbardu_analysis() -> None:
+    """Interface for the Hubbard U Linear-Response Analysis (stb-hubbarduAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("HUBBARD U (LINEAR RESPONSE) - ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with the stb-hubbardu run folders [default: hubbardu_runs]: ").strip()
+    if not run_dir:
+        run_dir = "hubbardu_runs"
+
+    output_filename = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    args = ["--dir", run_dir, "--file", output_filename, "--no-intro"]
+
+    run_tool("stb-hubbarduAnalysis", args)
+
+
 def run_dos_parser() -> None:
     """Interface for the PDOS XML Parser (stb-dos)"""
     print("\n" + "="*60)
@@ -2459,6 +2521,17 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-xrdrank)",
                 'description': "Rank candidate structures by similarity to an experimental XRD pattern.",
                 'func': run_xrdrank_analyzer},
+        }},
+    7: {'title': "Hubbard U (Linear Response)",
+        'description': "Compute a first-principles Hubbard U via Cococcioni & de Gironcoli's "
+                        "linear-response method, ending in a ready-to-use DFT+U fdf block.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-hubbardu)",
+                'description': "Generate the reference/scf/frozen run folders for the perturbation sweep.",
+                'func': run_hubbardu_prep},
+            2: {'title': "Stage 2 - Analysis (stb-hubbarduAnalysis)",
+                'description': "Fit the occupation responses, compute U, and write the DFT+U block.",
+                'func': run_hubbardu_analysis},
         }},
        }
 

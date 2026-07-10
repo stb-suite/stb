@@ -1,0 +1,23 @@
+# Example fixture: bulk bcc Mn (1 atom/cell), just for exercising the
+# stb-hubbardu tool's mechanics -- not a physically converged calculation.
+
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   25   Mn
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 2.8900000000   0.0000000000   0.0000000000
+ 0.0000000000   2.8900000000   0.0000000000
+ 0.0000000000   0.0000000000   2.8900000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

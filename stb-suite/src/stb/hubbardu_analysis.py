@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 import os
 import re
@@ -15,18 +15,7 @@ import json
 import argparse
 import numpy as np
 from stb.core.cli import COLORS, color_text, show_intro
-
-# Reference GGA+U values (eV), for comparison ONLY -- never substituted for
-# the linear-response result computed by this tool. Materials Project's
-# oxide calibration (docs.materialsproject.org/methodology/materials-methodology/
-# calculation-details/gga+u-calculations/hubbard-u-values), itself derived
-# from Wang, Maxisch & Ceder, Phys. Rev. B 73, 195107 (2006). Calibrated for
-# VASP GGA+U on oxides -- a starting-point sanity check, not a validation:
-# the actual U depends on functional, pseudopotential, and basis set.
-REFERENCE_U = {
-    "V": 3.25, "Cr": 3.7, "Mn": 3.9, "Fe": 5.3,
-    "Co": 3.32, "Ni": 6.2, "Mo": 4.38, "W": 6.2,
-}
+from stb.core.dftu_data import REFERENCE_U, ldau_proj_block
 
 _OCC_RE = re.compile(r'Occupations:\s*([0-9eE+.\-\s]+)')
 
@@ -55,6 +44,25 @@ def parse_occupation(out_path):
     except Exception:
         return None
     return last
+
+
+def check_scf_converged(out_path):
+    """True if the run reports 'SCF Convergence by ...', False if it reports
+    'SCF_NOT_CONV', None if neither marker is found. A not-converged run can
+    still have a usable occupation value (SIESTA prints it before aborting),
+    but the caller should be able to tell converged points from not-quite-
+    converged ones instead of only finding out indirectly via a poor R^2.
+    """
+    try:
+        with open(out_path, 'r', encoding='utf-8', errors='ignore') as f:
+            text = f.read()
+    except Exception:
+        return None
+    if "SCF_NOT_CONV" in text:
+        return False
+    if "SCF Convergence by" in text:
+        return True
+    return None
 
 
 def linear_fit_r2(alphas, occs):
@@ -121,7 +129,7 @@ computed U.""",
 
     with open(manifest_path, 'r') as f:
         manifest = json.load(f)
-    species, n, l = manifest["species"], manifest["n"], manifest["l"]
+    species, n, l, j = manifest["species"], manifest["n"], manifest["l"], manifest["j"]
 
     scf_points, frozen_points = [], []
     print(f"\n{color_text('READING RUNS:', 'bold')}")
@@ -135,14 +143,20 @@ computed U.""",
         kind, alpha = info["kind"], info["alpha"]
         if kind in ("scf", "reference"):
             scf_points.append((alpha, occ))
-        if kind in ("frozen", "reference"):
+        if kind == "frozen":
             frozen_points.append((alpha, occ))
-        print(f"   -> {folder:<24} : {color_text('OK', 'green')} (occupation={occ:.6f})")
+
+        converged = check_scf_converged(out_path)
+        conv_str = {True: "SCF: converged", False: "SCF: NOT CONVERGED, used anyway",
+                    None: "SCF: status unknown"}[converged]
+        conv_color = {True: 'green', False: 'yellow', None: 'yellow'}[converged]
+        print(f"   -> {folder:<24} : {color_text('OK', 'green')} (occupation={occ:.6f}, "
+              f"{color_text(conv_str, conv_color)})")
 
     if len(scf_points) < 2 or len(frozen_points) < 2:
         print(color_text(
-            "\nError: Not enough valid runs to fit a response (need at least 2 scf and "
-            "2 frozen points, including the reference).", 'red'))
+            "\nError: Not enough valid runs to fit a response (need at least 2 scf points, "
+            "including the reference, and 2 frozen points).", 'red'))
         sys.exit(1)
 
     scf_points.sort()
@@ -160,7 +174,7 @@ computed U.""",
             print(color_text(
                 f"[WARNING] The {name} response fit has R^2={r2:.4f}, below the "
                 f"{args.r2_tolerance} tolerance -- the perturbation range may be too wide "
-                "for the linear regime. Consider narrower --alphas in stb-hubbardu.", 'yellow'))
+                "for the linear regime. Consider narrower --alphas in stb-hubbarduAlphas.", 'yellow'))
 
     if chi == 0 or chi0 == 0:
         print(color_text(
@@ -179,13 +193,9 @@ computed U.""",
             "only, not a validation (functional/pseudopotential/basis-dependent).", 'cyan'))
 
     output = args.output or f"{species}_LDAU.fdf"
+    block = ldau_proj_block([{"species": species, "n": n, "l": l, "u": U, "j": j}])
     with open(output, 'w') as f:
-        f.write("%block LDAU.proj\n")
-        f.write(f"{species}   1\n")
-        f.write(f"n={n}    {l}\n")
-        f.write(f"{U:.3f}    0.000\n")
-        f.write("0.000    0.000\n")
-        f.write("%endblock LDAU.proj\n")
+        f.write(block)
 
     print(f"\n{color_text('[Saved]', 'cyan')} Ready-to-use DFT+U block -> {output}")
 

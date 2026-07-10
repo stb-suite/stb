@@ -21,11 +21,13 @@ whose source lives under `stb-suite/src/stb/`.
 - `stb-suite/pyproject.toml` — package metadata and the `[project.scripts]` table that
   maps each `stb-*` shell command to a module's `main()`.
 - `stb-suite/meta.yaml` — conda-forge recipe (mirrors `pyproject.toml` dependencies).
-- `test/` — example input files and manual smoke scripts organized by category
-  (`1-inputs`, `2-analysis`, `3-workflow`, `4-utils`), each mirroring one or more
-  tools. `3-workflow/<property>/` has `prep/` + `analysis/` subfolders for the 4
-  paired prep+analysis tools (strain, elastic, cohesive, phonons). This is **not**
-  an automated test suite (no pytest/unittest, no CI config exists).
+- `test/` — example input files and manual smoke scripts organized by category,
+  mirroring the `stb-suite` main menu 1:1 (`1-inputs`, `2-structures`,
+  `3-analysis`, `4-workflow`, `5-utils`), each mirroring one or more tools.
+  `4-workflow/<property>/` has `prep/` + `analysis/` subfolders for the 7
+  paired prep+analysis properties (strain, elastic, cohesive, phonons,
+  convergence, XRD structure solution, Hubbard U linear response). This is
+  **not** an automated test suite (no pytest/unittest, no CI config exists).
   `test/test_translate/test.sh` is representative: it generates sample structure
   files in every supported format, runs the built CLI against them, and greps the
   output for expected content.
@@ -114,7 +116,7 @@ When adding a new tool, mirror this pattern: a new standalone `stb/<name>.py` th
 imports what it needs from `stb.core`, plus a new entry in `[project.scripts]` in
 `pyproject.toml` (and update `test/` with a fixture if practical).
 
-Newer `1-inputs` tools worth knowing about specifically:
+Newer `2-structures` tools worth knowing about specifically:
 - `stb-unitcell` — reduces a structure to its primitive/conventional cell, or refines
   noisy positions to exact symmetry (`--mode primitive|conventional|refined`).
 - `stb-crystalbuilder` — the inverse: builds a full structure from a space group +

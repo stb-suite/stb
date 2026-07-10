@@ -1670,9 +1670,9 @@ def run_convergence_analyzer() -> None:
 
 
 def run_hubbardu_prep() -> None:
-    """Interface for the Hubbard U Linear-Response Prep (stb-hubbardu)"""
+    """Interface for the Hubbard U Linear-Response Reference Prep (stb-hubbardu)"""
     print("\n" + "="*60)
-    print(color_text("HUBBARD U (LINEAR RESPONSE) - PREP", 'bold').center(60))
+    print(color_text("HUBBARD U (LINEAR RESPONSE) - STAGE 1: REFERENCE PREP", 'bold').center(60))
     print("="*60 + "\n")
 
     struct_file = get_input("Input structure file (-s): ")
@@ -1697,12 +1697,8 @@ def run_hubbardu_prep() -> None:
     if shell:
         args.extend(["--shell", shell])
 
-    alphas_str = get_input(
-        "\nPerturbation strengths in eV, space-separated "
-        "[default: -0.15 -0.10 -0.05 0.05 0.10 0.15]: "
-    ).strip()
-    if alphas_str:
-        args.extend(["--alphas"] + alphas_str.split())
+    j_value = get_float_input("Exchange J (eV) [default: 0.0]: ", 0.0)
+    args.extend(["--j", str(j_value)])
 
     output_dir = get_input("\nOutput directory [default: hubbardu_runs]: ").strip()
     if not output_dir:
@@ -1710,6 +1706,28 @@ def run_hubbardu_prep() -> None:
     args.extend(["--output-dir", output_dir])
 
     run_tool("stb-hubbardu", args)
+
+
+def run_hubbardu_alphas() -> None:
+    """Interface for the Hubbard U Linear-Response Perturbation Prep (stb-hubbarduAlphas)"""
+    print("\n" + "="*60)
+    print(color_text("HUBBARD U (LINEAR RESPONSE) - STAGE 2: PERTURBATION PREP", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with stage 1's 'reference/' folder [default: hubbardu_runs]: ").strip()
+    if not run_dir:
+        run_dir = "hubbardu_runs"
+
+    args = ["--dir", run_dir, "--no-intro"]
+
+    alphas_str = get_input(
+        "Perturbation strengths in eV, space-separated "
+        "[default: -0.15 -0.10 -0.05 0.05 0.10 0.15]: "
+    ).strip()
+    if alphas_str:
+        args.extend(["--alphas"] + alphas_str.split())
+
+    run_tool("stb-hubbarduAlphas", args)
 
 
 def run_hubbardu_analysis() -> None:
@@ -1729,6 +1747,55 @@ def run_hubbardu_analysis() -> None:
     args = ["--dir", run_dir, "--file", output_filename, "--no-intro"]
 
     run_tool("stb-hubbarduAnalysis", args)
+
+
+def run_dftu_generator() -> None:
+    """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
+    print("\n" + "="*60)
+    print(color_text("DFT+U / HUBBARD BLOCK GENERATOR (stb-dftu)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    list_choice = get_input(
+        "Just look up literature reference U values instead of generating a block? (y/N): ", 'green'
+    ).strip().lower()
+    if list_choice == 'y':
+        run_tool("stb-dftu", ["--list-reference", "--no-intro"])
+        return
+
+    print(f"\n{color_text('Enter one species at a time (blank species to finish):', 'yellow')}")
+    species, u_values, j_values, shells = [], [], [], []
+    while True:
+        sp = get_input("Species (blank to finish): ").strip()
+        if not sp:
+            break
+        u = get_float_input(f"  U (eV) for {sp}: ")
+        j = get_float_input(f"  J (eV) for {sp} [default: 0.0]: ", 0.0)
+        shell = get_input(f"  Shell for {sp} (3d/4d/5d/4f/5f) [blank = auto-detect]: ").strip()
+
+        species.append(sp)
+        u_values.append(str(u))
+        j_values.append(str(j))
+        if shell:
+            shells.append(shell)
+
+    if not species:
+        print(color_text("No species given -- aborting.", 'red'))
+        return
+
+    args = ["--species", *species, "--u", *u_values, "--j", *j_values, "--no-intro"]
+    if shells:
+        if len(shells) != len(species):
+            print(color_text(
+                "Shell given for some but not all species -- skipping --shell "
+                "(auto-detecting for every species instead).", 'yellow'))
+        else:
+            args.extend(["--shell", *shells])
+
+    output = get_input("\nAlso save to a file? [optional, press Enter to skip]: ").strip()
+    if output:
+        args.extend(["--output", output])
+
+    run_tool("stb-dftu", args)
 
 
 def run_dos_parser() -> None:
@@ -2376,6 +2443,9 @@ INPUT_TOOLS = {
     3: {'title': "K-Path Generator (stb-kpath)",
         'description': "Generate a high-symmetry k-path for band structure calculations.",
         'func': run_kpath_generator},
+    4: {'title': "DFT+U / Hubbard Block Generator (stb-dftu)",
+        'description': "Generate a ready-to-use %block LDAU.proj snippet from a user-supplied U (and J).",
+        'func': run_dftu_generator},
        }
 
 
@@ -2526,10 +2596,13 @@ WORKFLOW_TOOLS = {
         'description': "Compute a first-principles Hubbard U via Cococcioni & de Gironcoli's "
                         "linear-response method, ending in a ready-to-use DFT+U fdf block.",
         'stages': {
-            1: {'title': "Stage 1 - Prep (stb-hubbardu)",
-                'description': "Generate the reference/scf/frozen run folders for the perturbation sweep.",
+            1: {'title': "Stage 1 - Reference Prep (stb-hubbardu)",
+                'description': "Generate the 'reference' folder -- run SIESTA in it before stage 2.",
                 'func': run_hubbardu_prep},
-            2: {'title': "Stage 2 - Analysis (stb-hubbarduAnalysis)",
+            2: {'title': "Stage 2 - Perturbation Prep (stb-hubbarduAlphas)",
+                'description': "Generate the scf/frozen run folders, auto-copying the reference DM.",
+                'func': run_hubbardu_alphas},
+            3: {'title': "Stage 3 - Analysis (stb-hubbarduAnalysis)",
                 'description': "Fit the occupation responses, compute U, and write the DFT+U block.",
                 'func': run_hubbardu_analysis},
         }},

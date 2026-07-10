@@ -118,6 +118,17 @@ withads_xyz = np.array([[2.0, 2.0, zz] for zz in np.linspace(12.5, 17.5, 6)] + [
 sisl.Geometry(withads_xyz, atoms=withads_atoms, lattice=lattice).write("withads.fdf")
 make_vt("withads.VT", lambda zz: 2.0 + 3.0*np.sin(2*np.pi*10*(zz-12.0)/6.0) if 12.0 <= zz <= 18.0 else 5.0)
 
+# Asymmetric slab with a gentle residual slope across each vacuum side (~10 meV/Ang)
+# instead of being flat -- simulates the uncancelled periodic-image field from a
+# missing dipole correction, to test the slope-detection warning.
+def sloped(zz):
+    if 13.0 <= zz <= 17.0:
+        return 2.0 + 3.0*np.sin(2*np.pi*10*(zz-13.0)/4.0)
+    if zz < 13.0:
+        return 5.0 + 0.01*(13.0 - zz)
+    return 6.5 - 0.01*(zz - 17.0)
+make_vt("sloped.VT", sloped)
+
 print("Fixtures generated.")
 PYEOF
 
@@ -129,6 +140,8 @@ timeout 60 stb-workfunction -l symmetric --grid symmetric.VT --fermi 0.0 --no-pl
     > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Vacuum Level   =   5.0000 eV" log_basic.txt
+check_contains "Vacuum size (axis 2)" log_basic.txt
+check_contains "Slab thickness ~" log_basic.txt
 check_contains "Work Function  =   5.0000 eV" log_basic.txt
 check_success workfunction_data.dat
 check_success workfunction.gplot
@@ -183,6 +196,20 @@ check_contains "Work Function 1 " log_asym.txt
 check_contains "Vacuum Level 2 (near z=" log_asym.txt
 check_contains "Work Function 2 " log_asym.txt
 check_contains "Average Work Function" log_asym.txt
+check_contains "Vacuum level difference (dV)" log_asym.txt
+check_contains "surface dipole moment" log_asym.txt
+
+echo "Testing: no slope warning for a genuinely flat (non-sloped) asymmetric slab"
+grep -qi "systematic slope" log_asym.txt && \
+    { echo -e "   -> ${RED}Failed:${NC} unexpected slope warning for a flat plateau"; FAIL=$((FAIL+1)); } || \
+    { echo -e "   -> ${GREEN}Verified:${NC} no slope warning found, as expected"; PASS=$((PASS+1)); }
+
+echo -e "\n--- Testing a sloped vacuum (missing dipole correction symptom) ---"
+timeout 60 stb-workfunction -l sloped --grid sloped.VT --fermi 0.0 --no-plot --no-intro \
+    > log_sloped.txt 2>&1
+check_exit_code $? 0
+check_contains "systematic slope" log_sloped.txt
+check_contains "missing dipole correction" log_sloped.txt
 
 echo "Testing: --asymmetric-tol wide enough merges the two levels into one"
 timeout 60 stb-workfunction -l asymmetric --grid asymmetric.VT --fermi 0.0 --asymmetric-tol 5.0 \

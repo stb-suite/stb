@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.19.0"
+VERSION = "1.20.0"
 
 import os
 import sys
@@ -56,6 +56,16 @@ MERGE_LEVEL_TOL = 0.05
 # one decides whether two regions are the same physical plateau, the other just flags
 # how much a single already-accepted plateau's potential wobbles internally.
 NOISY_PLATEAU_STD_TOL = 0.05
+
+# A plateau whose potential varies (in a systematic, monotonic sense -- not just
+# scatter) by more than this across its own width is flagged as sloped rather than
+# flat. A slope like this on an asymmetric slab is the classic symptom of a missing
+# dipole correction (SIESTA's SlabDipoleCorrection): without it, the artificial
+# periodic-image field shows up as a ramp across the vacuum instead of a plateau.
+# Detected from the potential profile itself (a physical symptom) rather than by
+# parsing the .out for whether the flag was set, since that keeps working regardless
+# of exactly how a given SIESTA version logs it.
+SLOPE_WARN_TOL = 0.05
 
 
 def read_grid_data(grid_file):
@@ -200,6 +210,80 @@ def _circular_mean_index(indices, n):
     angles = 2 * np.pi * np.asarray(indices) / n
     mean_angle = np.arctan2(np.mean(np.sin(angles)), np.mean(np.cos(angles)))
     return (mean_angle / (2 * np.pi)) % 1.0 * n
+
+
+def _unwrap_plateau_positions(indices, n):
+    """Returns (original_indices, unwrapped_positions) for a plateau's index
+    set, in a continuous monotonically-increasing order -- needed for any
+    per-point analysis (line-fitting a slope, drawing a shaded z-range) that
+    a wraparound plateau's indices would otherwise break. A wraparound
+    plateau's indices, sorted numerically (e.g. [0,1,...,20,280,...,299] on
+    a 300-point grid), have one large gap where they jump across the array
+    boundary; positions before that gap are shifted up by `n` so the whole
+    sequence becomes continuous (representing the true circular order:
+    280,281,...,299,300(=0),301(=1),...,320(=20)), leaving positions
+    possibly >= n -- callers convert to physical z via `position * point_width`
+    and wrap back into [0, cell_length) themselves if needed.
+    """
+    idx = np.sort(np.asarray(indices))
+    if len(idx) < 2:
+        return idx, idx.astype(float)
+    gaps = np.diff(idx)
+    max_gap_pos = int(np.argmax(gaps))
+    if gaps[max_gap_pos] <= 1:
+        return idx, idx.astype(float)  # already contiguous, no wraparound
+    unwrapped = idx.astype(float).copy()
+    unwrapped[:max_gap_pos + 1] += n
+    order = np.argsort(unwrapped)
+    return idx[order], unwrapped[order]
+
+
+def detect_plateau_slope(plateau, v_planar, n_points, point_width):
+    """Fits a line to a plateau's potential vs. position (wraparound-aware
+    via _unwrap_plateau_positions) and returns (slope_ev_per_ang,
+    total_variation_ev) -- the latter being the fitted line's value change
+    across the plateau's own width, which is what actually matters for
+    deciding whether this looks like a real systematic ramp (see
+    SLOPE_WARN_TOL) rather than random noise around a flat mean. Returns
+    None if the plateau has too few points to fit meaningfully.
+    """
+    orig_idx, pos = _unwrap_plateau_positions(plateau['indices'], n_points)
+    if len(orig_idx) < 3:
+        return None
+    z_pos = pos * point_width
+    values = v_planar[orig_idx]
+    slope, _intercept = np.polyfit(z_pos, values, 1)
+    variation = float(slope * (z_pos[-1] - z_pos[0]))
+    return float(slope), variation
+
+
+def plateau_z_ranges(plateau, n_points, point_width, cell_length):
+    """Returns a list of (z_start, z_end) tuples spanning a plateau's actual
+    extent along the axis -- 2 tuples for a plateau that wraps around the
+    cell boundary, 1 otherwise. For shading the detected region in a plot.
+    """
+    _orig_idx, pos = _unwrap_plateau_positions(plateau['indices'], n_points)
+    z_start = pos[0] * point_width
+    z_end = pos[-1] * point_width
+    if z_end <= cell_length:
+        return [(z_start, z_end)]
+    return [(z_start, cell_length), (0.0, z_end - cell_length)]
+
+
+def slab_and_vacuum_extent(geometry, axis, cell_length, plateaus, point_width):
+    """Returns (slab_thickness_ang, vacuum_size_ang) along `axis` --
+    vacuum_size is just the total length of every detected plateau (no
+    geometry needed for that); slab_thickness is the span between the
+    extreme atom positions along the axis, or None if no geometry is
+    available. A quick sanity-check number for "is my vacuum gap actually
+    generous:" one glance, not a substitute for checking the real structure.
+    """
+    vacuum_size = sum(p['size'] for p in plateaus) * point_width
+    slab_thickness = None
+    if geometry is not None:
+        cart = (geometry.fxyz[:, axis] % 1.0) * cell_length
+        slab_thickness = float(cart.max() - cart.min())
+    return slab_thickness, vacuum_size
 
 
 def _close_small_gaps(is_flat, v_planar, max_gap_points, level_tol):
@@ -372,9 +456,12 @@ def write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, label):
     print(f"[INFO] Data saved to '{data_filename}'")
 
 
-def plot_matplotlib(z_vals, v_planar, E_f, plateaus, label, axis):
+def plot_matplotlib(z_vals, v_planar, E_f, plateaus, label, axis, cell_length):
     """Generates the Matplotlib preview."""
     try:
+        n_points = len(z_vals)
+        point_width = cell_length / n_points
+
         plt.figure(figsize=(8, 6))
         plt.plot(z_vals, v_planar, label='Planar Avg Potential', color='navy', linewidth=2)
         plt.axhline(y=E_f, color='forestgreen', linestyle='--', label=f'$E_F$ = {E_f:.2f}')
@@ -385,6 +472,8 @@ def plot_matplotlib(z_vals, v_planar, E_f, plateaus, label, axis):
                         label=rf"$E_{{vac,{i+1}}}$ = {p['mean']:.2f} ($\Phi_{{{i+1}}}$={p['wf']:.2f})")
             plt.annotate('', xy=(p['z'], E_f), xytext=(p['z'], p['mean']),
                          arrowprops=dict(arrowstyle='<->', color=color, lw=1.5))
+            for z0, z1 in plateau_z_ranges(p, n_points, point_width, cell_length):
+                plt.axvspan(z0, z1, color=color, alpha=0.12, lw=0)
 
         plt.xlabel(rf"Position along Axis {axis} ($\AA$)", fontsize=14)
         plt.ylabel("Potential (eV)", fontsize=14)
@@ -409,7 +498,11 @@ If <label>.XV or <label>.fdf is present (and its cell matches <label>.VT's),
 otherwise it defaults to z (2). An asymmetric slab (different terminations
 on each side) genuinely has two different vacuum levels -- this is detected
 automatically and reported as two separate work functions rather than one
-physically meaningless average.""",
+physically meaningless average, along with the vacuum-level difference
+(proportional to the surface dipole moment). Also reports the slab
+thickness/vacuum size along the axis (when geometry is available), and
+warns if a "vacuum" plateau has a systematic slope (a common symptom of a
+missing dipole correction) rather than being genuinely flat.""",
         epilog="Example usage:\n"
                "  stb-workfunction -l graphene\n"
                "  stb-workfunction -l slab --axis 2\n"
@@ -511,6 +604,7 @@ physically meaningless average.""",
         sys.exit(1)
     annotate_plateaus(plateaus, z_vals, E_f)
 
+    point_width = cell_length / len(z_vals)
     for p in plateaus:
         n_atoms_in = atoms_in_plateau(p, geometry, axis, len(z_vals))
         if n_atoms_in:
@@ -519,10 +613,30 @@ physically meaningless average.""",
                 f"z={p['z']:.2f} Ang -- this may not be genuine vacuum (e.g. an adsorbate) "
                 "rather than a real, empty plateau.", 'yellow'))
 
+        slope_result = detect_plateau_slope(p, v_planar, len(z_vals), point_width)
+        if slope_result is not None:
+            slope, variation = slope_result
+            if abs(variation) > SLOPE_WARN_TOL:
+                print(color_text(
+                    f"   [WARNING] Vacuum region near z={p['z']:.2f} Ang shows a systematic "
+                    f"slope (~{variation:+.3f} eV across the plateau, {slope*1000:+.2f} meV/Ang) "
+                    "instead of a flat plateau -- a common symptom of a missing dipole "
+                    "correction on an asymmetric slab (SIESTA's SlabDipoleCorrection) or a "
+                    "real applied field. Treat this region's vacuum level as approximate.",
+                    'yellow'))
+
     # --- 6. Reporting ---
     print("-" * 40)
     print(color_text(f"RESULTS for {args.label}:", 'cyan'))
     print(f"  Fermi Level    = {E_f:8.4f} eV")
+
+    slab_thickness, vacuum_size = slab_and_vacuum_extent(geometry, axis, cell_length, plateaus, point_width)
+    print(f"  Vacuum size (axis {axis}) ~ {vacuum_size:6.2f} Ang", end="")
+    if slab_thickness is not None:
+        print(f"   |  Slab thickness ~ {slab_thickness:6.2f} Ang")
+    else:
+        print()
+
     if len(plateaus) == 1:
         print(f"  Vacuum Level   = {plateaus[0]['mean']:8.4f} eV")
         print(color_text(f"  Work Function  = {plateaus[0]['wf']:8.4f} eV", 'green'))
@@ -542,6 +656,15 @@ physically meaningless average.""",
                 print(f"{COLORS['yellow']}[WARNING] Vacuum region {i} is noisy (std={p['std']:.3f} "
                       f"eV). Results might be inaccurate.{COLORS['reset']}")
         print(f"  Average Work Function              = {np.mean([p['wf'] for p in plateaus]):8.4f} eV")
+        if len(plateaus) == 2:
+            delta_v = plateaus[1]['mean'] - plateaus[0]['mean']
+            print(color_text(
+                f"  Vacuum level difference (dV)        = {delta_v:+8.4f} eV  "
+                "(proportional to the surface dipole moment, dV ~ 4*pi*mu/A -- this tool "
+                "reports dV directly rather than converting to an absolute dipole moment "
+                "in e*Ang, since that needs a convention-specific prefactor; see e.g. "
+                "Bengtsson, PRB 59, 12301 (1999))",
+                'cyan'))
     print("-" * 40)
 
     # --- 7. Output Files & Plotting ---
@@ -549,7 +672,7 @@ physically meaningless average.""",
     write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, args.label)
 
     if not args.no_plot:
-        plot_matplotlib(z_vals, v_planar, E_f, plateaus, args.label, axis)
+        plot_matplotlib(z_vals, v_planar, E_f, plateaus, args.label, axis, cell_length)
 
     print("\n[INFO] Complete job!")
     print("\n"+"-"*60)

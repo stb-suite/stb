@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-cohesiveAnalysis (Cohesive Energy Analysis, item 3.3.2)
+# Smoke test for stb-cohesiveAnalysis (Cohesive Energy Analysis, item 4.3.2)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -62,7 +62,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-CohesiveAnalysis (item 3.3.2) ---"
+echo "--- Starting tester for STB-CohesiveAnalysis (item 4.3.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp -r "$FIXTURE_DIR/structure" "$TEST_DIR/"
@@ -153,7 +153,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.3.2) ---"
 
 echo "Testing: navigate 3.3.2 -> calc.out -> default dir"
 rm -f cohesive_results.dat
-printf '3.3.2\ncalc.out\n\n' | stb-suite > log_menu.txt 2>&1
+printf '4.3.2\ncalc.out\n\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Total Cohesive Energy:      -450.1111 eV" log_menu.txt
 check_success cohesive_results.dat
 

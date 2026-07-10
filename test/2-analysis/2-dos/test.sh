@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-dos (PDOS XML Parser, item 2.2)
+# Smoke test for stb-dos (PDOS XML Parser, item 3.2)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -62,7 +62,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-DOS (item 2.2) ---"
+echo "--- Starting tester for STB-DOS (item 3.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/siesta.PDOS.xml" "$TEST_DIR/"
@@ -224,16 +224,16 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.2) ---"
 
 echo "Testing: navigate 2.2 -> siesta.PDOS.xml -> defaults"
 rm -rf dos_total.dat dos_per_atom dos_per_species
-printf '2.2\nsiesta.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_total.dat
 
 echo "Testing: interactive path surfaces a tool failure (malformed XML -> non-zero exit -> run_tool reports it)"
-printf '2.2\nmalformed.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
+printf '3.2\nmalformed.PDOS.xml\n\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
 check_contains "Error running stb-dos" log_menu_fail.txt
 
 echo "Testing: interactive path forwards a custom output directory"
 rm -rf menu_out
-printf '2.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n' | stb-suite > log_menu_outdir.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n' | stb-suite > log_menu_outdir.txt 2>&1
 check_success menu_out/dos_total.dat
 
 

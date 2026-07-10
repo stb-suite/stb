@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-2Dstacking (2D Monolayer Stacker, item 1.4)
+# Smoke test for stb-2Dstacking (2D Monolayer Stacker, item 2.1)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-2Dstacking (item 1.4) ---"
+echo "--- Starting tester for STB-2Dstacking (item 2.1) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/graphene.fdf" "$TEST_DIR/"
@@ -260,7 +260,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.4) ---"
 # builds/launches the command correctly -- not the nested prompt itself.
 
 echo "Testing: navigate 1.4 -> invalid layer1 then valid -> valid layer2 -> defaults -> subprocess launches"
-printf '1.4\ndoes_not_exist.fdf\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n0\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '2.1\ndoes_not_exist.fdf\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n0\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
 check_contains "Searching for commensurate supercells" log_interactive.txt
 rm -f stacked_structure.fdf symmetry_report.txt

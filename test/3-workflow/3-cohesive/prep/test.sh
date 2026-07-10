@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-cohesive (Cohesive Energy Prep, item 3.3.1)
+# Smoke test for stb-cohesive (Cohesive Energy Prep, item 4.3.1)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Cohesive prep (item 3.3.1) ---"
+echo "--- Starting tester for STB-Cohesive prep (item 4.3.1) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR/pp"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -164,7 +164,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.3.1) ---"
 
 echo "Testing: navigate 3.3.1 -> structure.fdf -> defaults -> no pp -> no spin -> default vacuum"
 rm -rf structure atoms
-printf '3.3.1\nstructure.fdf\n\n\nn\n\n' | stb-suite > log_menu.txt 2>&1
+printf '4.3.1\nstructure.fdf\n\n\nn\n\n' | stb-suite > log_menu.txt 2>&1
 check_success structure/calc.fdf
 check_success atoms/C/calc.fdf
 

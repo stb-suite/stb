@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-amorphize (Amorphous Structure Generator, item 1.16)
+# Smoke test for stb-amorphize (Amorphous Structure Generator, item 2.13)
 #
 # Needs the optional 'ml' extra (pip install stb_suite[ml] -- PyTorch +
 # mace-torch). The whole file is skipped with a clear message if `mace`
@@ -61,7 +61,7 @@ check_exit_code() {
 }
 
 
-echo "--- Starting tester for STB-Amorphize (item 1.16) ---"
+echo "--- Starting tester for STB-Amorphize (item 2.13) ---"
 
 if ! python3 -c "import mace" 2>/dev/null; then
     echo -e "${YELLOW}Skipped entirely:${NC} the optional 'ml' extra is not installed."
@@ -132,7 +132,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.16) ---"
 
 echo "Testing: navigate 1.16 -> invalid file then valid -> tiny steps -> final relax yes -> default output -> quit"
 rm -f amorphous.fdf
-printf '1.16\ndoes_not_exist.fdf\nsi8.fdf\n3000\n15\n300\n20\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.13\ndoes_not_exist.fdf\nsi8.fdf\n3000\n15\n300\n20\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Post-quench bond-angle mean/std" log_menu.txt
 check_success amorphous.fdf

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-slab (Slab Builder, item 1.6)
+# Smoke test for stb-slab (Slab Builder, item 2.3)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Slab (item 1.6) ---"
+echo "--- Starting tester for STB-Slab (item 2.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -180,7 +180,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
 
 echo "Testing: navigate 1.6 -> invalid file then valid -> hkl '1 0 0' -> defaults -> mode 1 -> default output -> quit"
 rm -f slab.fdf
-printf '1.6\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.3\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Slab Summary" log_menu.txt
 check_success slab.fdf

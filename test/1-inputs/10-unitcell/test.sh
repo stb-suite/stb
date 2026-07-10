@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-unitcell (Unit Cell Finder, item 1.10)
+# Smoke test for stb-unitcell (Unit Cell Finder, item 2.7)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Unitcell (item 1.10) ---"
+echo "--- Starting tester for STB-Unitcell (item 2.7) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/fcc_ni.fdf" "$TEST_DIR/"
@@ -214,7 +214,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.10) ---"
 
 echo "Testing: navigate 1.10 -> invalid file then valid -> default mode -> default symprec -> default output -> quit"
 rm -f unitcell.fdf unitcell_report.txt
-printf '1.10\ndoes_not_exist.fdf\nfcc_ni.fdf\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '2.7\ndoes_not_exist.fdf\nfcc_ni.fdf\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
 check_contains "Output atoms:.*1" log_interactive.txt
 check_success unitcell.fdf

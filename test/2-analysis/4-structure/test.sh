@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-structural (Structure Analyzer / ECN, item 2.4)
+# Smoke test for stb-structural (Structure Analyzer / ECN, item 3.4)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -75,7 +75,7 @@ check_line_count() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Structural (item 2.4) ---"
+echo "--- Starting tester for STB-Structural (item 3.4) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/siesta.STRUCT_OUT" "$TEST_DIR/"
@@ -303,7 +303,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.4) ---"
 
 echo "Testing: navigate 2.4 -> structure.fdf -> format=1(fdf) -> mode=1(mean) -> default output dir -> default RDF"
 rm -f structural_information.dat warnings.log rdf.dat
-printf '2.4\nstructure.fdf\n1\n1\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '3.4\nstructure.fdf\n1\n1\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success structural_information.dat
 check_success rdf.dat
 check_contains "Select input file format:" log_menu.txt
@@ -311,7 +311,7 @@ check_contains "Select analysis mode:" log_menu.txt
 
 echo "Testing: navigate 2.4 -> siesta.STRUCT_OUT -> format=2(struct_out) -> mode=2(list) -> atoms 1,7 -> RDF=n"
 rm -f structural_information.dat warnings.log rdf.dat
-printf '2.4\nsiesta.STRUCT_OUT\n2\n2\n\n1,7\nn\n' | stb-suite > log_menu_list.txt 2>&1
+printf '3.4\nsiesta.STRUCT_OUT\n2\n2\n\n1,7\nn\n' | stb-suite > log_menu_list.txt 2>&1
 check_success structural_information.dat
 if [ -e rdf.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} rdf.dat was created despite answering 'n' to the RDF prompt"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-supercell (Supercell Builder, item 1.5)
+# Smoke test for stb-supercell (Supercell Builder, item 2.2)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Supercell (item 1.5) ---"
+echo "--- Starting tester for STB-Supercell (item 2.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -179,7 +179,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.5) ---"
 
 echo "Testing: navigate 1.5 -> invalid file then valid -> dims '2 2 2' -> default output -> quit"
 rm -f supercell.fdf
-printf '1.5\ndoes_not_exist.fdf\nstructure.fdf\n2 2 2\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '2.2\ndoes_not_exist.fdf\nstructure.fdf\n2 2 2\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
 check_contains "Output atoms:.*16" log_interactive.txt
 check_success supercell.fdf

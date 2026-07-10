@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-workfunction (Work Function Calculator, item 2.7)
+# Smoke test for stb-workfunction (Work Function Calculator, item 3.7)
 # NOTE: no real SIESTA .VT/.XV/.out fixtures exist for this tool, so this test
 # generates small synthetic-but-realistic ones itself (same approach
 # test_translate/test.sh uses for structure files) instead of committing
@@ -56,7 +56,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-WorkFunction (item 2.7) ---"
+echo "--- Starting tester for STB-WorkFunction (item 3.7) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 echo "Test directory '$TEST_DIR' prepared."
@@ -270,7 +270,7 @@ check_contains "asymmetric-tol" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.7) ---"
 
 echo "Testing: navigate 2.7 -> label symmetric -> default grid -> default fermi file -> blank axis (auto) -> quit"
-printf '2.7\nsymmetric\n\n\n\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+printf '3.7\nsymmetric\n\n\n\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Auto-detected vacuum axis: 2" log_menu.txt
 

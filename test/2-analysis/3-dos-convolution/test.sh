@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-convdos (DOS Convolution, item 2.3)
+# Smoke test for stb-convdos (DOS Convolution, item 3.3)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -79,7 +79,7 @@ check_line_count() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-ConvDOS (item 2.3) ---"
+echo "--- Starting tester for STB-ConvDOS (item 3.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/dos_total.dat" "$TEST_DIR/"
@@ -281,13 +281,13 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
 
 echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
+printf '3.3\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
 
 echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> FWHM 117.741 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\ndos_total.dat\n\n2\n117.741\n\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
+printf '3.3\ndos_total.dat\n\n2\n117.741\n\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
 check_success dos_filtered.dat
 check_contains "sigma = 50.000 meV" log_menu_fwhm.txt
 

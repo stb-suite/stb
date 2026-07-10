@@ -175,18 +175,24 @@ Newer `1-inputs` tools worth knowing about specifically:
   matching real amorphous-Si physics.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
-shows a menu and organizes tools into four dicts — `INPUT_TOOLS`, `ANALYSIS_TOOLS`,
-`WORKFLOW_TOOLS`, `UTILITY_TOOLS` — each keyed by menu number to
-`{'title', 'description', 'func'}`. `WORKFLOW_TOOLS` is one level deeper (the 4
-paired prep+analysis properties — strain, elastic, cohesive, phonons — each with a
-`'stages'` dict of 2 entries instead of a `'func'`); `run_sub_menu()` recurses into
-`entry['stages']` automatically whenever it finds one instead of a `'func'`, so no
-separate menu function was needed for the extra level. `_flatten_tool_codes()`
-builds a flat `{"1.1": func, ..., "3.1.2": func, ..., "4.4": func}` lookup from
-these same dicts at import time (`TOOL_CODES`), letting the main menu's prompt
-accept a dotted code (e.g. `3.1.2`) to jump straight to a tool instead of
+shows a menu with 5 categories, in this order: **1 Inputs, 2 Structures, 3 Analysis,
+4 Workflow, 5 Utils** — backed by five dicts, `INPUT_TOOLS`, `STRUCTURE_TOOLS`,
+`ANALYSIS_TOOLS`, `WORKFLOW_TOOLS`, `UTILITY_TOOLS`, each keyed by menu number to
+`{'title', 'description', 'func'}`. `INPUT_TOOLS` (category 1) holds only the 3
+tools that configure an actual SIESTA run (input file, k-grid, k-path);
+`STRUCTURE_TOOLS` (category 2, e.g. `stb-slab`, `stb-supercell`, `stb-defect`,
+`stb-crystalcast`) holds everything that builds/generates/transforms a structure
+file, split out once `INPUT_TOOLS` grew to 17 entries mixing the two concerns.
+`WORKFLOW_TOOLS` is one level deeper (the 4 paired prep+analysis properties —
+strain, elastic, cohesive, phonons — each with a `'stages'` dict of 2 entries
+instead of a `'func'`); `run_sub_menu()` recurses into `entry['stages']`
+automatically whenever it finds one instead of a `'func'`, so no separate menu
+function was needed for the extra level. `_flatten_tool_codes()` builds a flat
+`{"1.1": func, ..., "2.1": func, ..., "4.1.2": func, ..., "5.4": func}` lookup
+from these same dicts at import time (`TOOL_CODES`), letting the main menu's
+prompt accept a dotted code (e.g. `4.1.2`) to jump straight to a tool instead of
 navigating level by level — regenerate nothing by hand here, it derives entirely
-from the 4 dicts above. Every `run_*` function builds an `args: List[str]`
+from the 5 dicts above. Every `run_*` function builds an `args: List[str]`
 from interactive prompts (`get_input`/`get_float_input`/`get_int_input`) and dispatches
 via `run_tool(tool_name, args)`, which shells out to the **installed** console command
 by name (`subprocess.run`, must be on `PATH`) and centralizes error handling plus the

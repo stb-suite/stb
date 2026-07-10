@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-sqs (Special Quasirandom Structure Generator, item 1.9)
+# Smoke test for stb-sqs (Special Quasirandom Structure Generator, item 2.6)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-SQS (item 1.9) ---"
+echo "--- Starting tester for STB-SQS (item 2.6) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/fcc_ni.fdf" "$TEST_DIR/"
@@ -130,7 +130,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.9) ---"
 
 echo "Testing: navigate 1.9 -> invalid file then valid -> Ni -> Ni:0.5,Fe:0.5 -> scaling 2 -> defaults -> quit"
 rm -f sqs.fdf
-printf '1.9\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n2\n1\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.6\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n2\n1\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Success" log_menu.txt
 check_success sqs.fdf

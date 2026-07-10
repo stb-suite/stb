@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-crystalbuilder (Crystal Builder, item 1.11)
+# Smoke test for stb-crystalbuilder (Crystal Builder, item 2.8)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Crystalbuilder (item 1.11) ---"
+echo "--- Starting tester for STB-Crystalbuilder (item 2.8) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 echo "Test directory '$TEST_DIR' prepared."
@@ -169,7 +169,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.11) ---"
 
 echo "Testing: navigate 1.11 -> Fm-3m -> a=3.52, defaults for b/c/angles -> site 'Ni 0 0 0' -> blank to finish -> default output -> quit"
 rm -f crystal.fdf
-printf '1.11\nFm-3m\n3.52\n\n\n\n\n\nNi 0 0 0\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.8\nFm-3m\n3.52\n\n\n\n\n\nNi 0 0 0\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Output atoms:.*4" log_menu.txt
 check_success crystal.fdf
 

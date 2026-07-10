@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-bader (Bader Charge Analysis, item 2.6)
+# Smoke test for stb-bader (Bader Charge Analysis, item 3.6)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -62,7 +62,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Bader (item 2.6) ---"
+echo "--- Starting tester for STB-Bader (item 3.6) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/Sn3O4.out" "$FIXTURE_DIR/Sn3O4.RHO" "$FIXTURE_DIR/Sn3O4.XV" "$TEST_DIR/"
@@ -188,7 +188,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.6) ---"
 
 echo "Testing: navigate 2.6 -> label Sn3O4 -> default output -> default ref -> speed 1 -> no vacuum-tol -> no threads -> keep cube -> no export -> quit"
 rm -f Sn3O4_BADER.txt
-printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '3.6\nSn3O4\n\n\n1\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success Sn3O4_BADER.txt
 

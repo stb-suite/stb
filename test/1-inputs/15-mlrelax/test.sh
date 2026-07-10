@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-mlrelax (ML Pre-Relaxation, item 1.15)
+# Smoke test for stb-mlrelax (ML Pre-Relaxation, item 2.12)
 #
 # Needs the optional 'ml' extra (pip install stb_suite[ml] -- PyTorch +
 # mace-torch). The whole file is skipped with a clear message if `mace`
@@ -57,7 +57,7 @@ check_exit_code() {
 }
 
 
-echo "--- Starting tester for STB-Mlrelax (item 1.15) ---"
+echo "--- Starting tester for STB-Mlrelax (item 2.12) ---"
 
 if ! python3 -c "import mace" 2>/dev/null; then
     echo -e "${YELLOW}Skipped entirely:${NC} the optional 'ml' extra is not installed."
@@ -173,7 +173,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.15) ---"
 
 echo "Testing: navigate 1.15 -> invalid file then valid -> no cell relax -> defaults -> default output -> quit"
 rm -f relaxed.fdf
-printf '1.15\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.12\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Max atomic displacement" log_menu.txt
 check_success relaxed.fdf

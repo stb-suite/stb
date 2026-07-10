@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-symmetry (Crystal Symmetry Analyzer, item 2.5)
+# Smoke test for stb-symmetry (Crystal Symmetry Analyzer, item 3.5)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -62,7 +62,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Symmetry (item 2.5) ---"
+echo "--- Starting tester for STB-Symmetry (item 3.5) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -543,7 +543,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.5) ---"
 
 echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir -> scan=y -> operations=n -> compare=skip -> write-refined=skip"
 rm -f symmetry.dat
-printf '2.5\nnacl.fdf\n1\n\ny\nn\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '3.5\nnacl.fdf\n1\n\ny\nn\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success symmetry.dat
 check_contains "Select input file format:" log_menu.txt
 check_contains "Fm-3m" symmetry.dat
@@ -552,7 +552,7 @@ check_not_contains "SYMMETRY OPERATIONS" symmetry.dat
 
 echo "Testing: navigate 2.5 -> structure.fdf -> format=1(fdf) -> default output dir -> scan=n -> operations=y -> compare=siesta.STRUCT_OUT(format 2) -> write-refined=refined_menu.fdf"
 rm -f symmetry.dat refined_menu.fdf
-printf '2.5\nstructure.fdf\n1\n\nn\ny\nsiesta.STRUCT_OUT\n2\nrefined_menu.fdf\n' | stb-suite > log_menu_compare.txt 2>&1
+printf '3.5\nstructure.fdf\n1\n\nn\ny\nsiesta.STRUCT_OUT\n2\nrefined_menu.fdf\n' | stb-suite > log_menu_compare.txt 2>&1
 check_success symmetry.dat
 check_contains "SYMMETRY COMPARISON" symmetry.dat
 check_contains "Symmetry PRESERVED between the two structures: both P1 (No. 1, 1 ops)." symmetry.dat

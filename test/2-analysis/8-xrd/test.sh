@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-xrd (Powder XRD Simulator, item 2.9)
+# Smoke test for stb-xrd (Powder XRD Simulator, item 3.9)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-XRD (item 2.9) ---"
+echo "--- Starting tester for STB-XRD (item 3.9) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/siesta.STRUCT_OUT" "$TEST_DIR/"
@@ -208,7 +208,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.9) ---"
 
 echo "Testing: navigate 2.9 -> nacl.fdf -> format fdf (1) -> default wavelength -> default range -> no top -> no compare-to -> no plot -> output -> quit"
 rm -f menu_xrd.dat
-printf '2.9\nnacl.fdf\n1\n\n\n\n\n\nn\nmenu_xrd.dat\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '3.9\nnacl.fdf\n1\n\n\n\n\n\nn\nmenu_xrd.dat\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Formula:.*NaCl" log_menu.txt
 check_success menu_xrd.dat

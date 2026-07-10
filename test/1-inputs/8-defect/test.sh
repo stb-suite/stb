@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-defect (Point Defect Generator, item 1.8)
+# Smoke test for stb-defect (Point Defect Generator, item 2.5)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Defect (item 1.8) ---"
+echo "--- Starting tester for STB-Defect (item 2.5) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -228,14 +228,14 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.8) ---"
 
 echo "Testing: navigate 1.8 -> invalid file then valid -> vacancy -> by index '1' -> default output -> quit"
 rm -f defect.fdf
-printf '1.8\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.5\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Success" log_menu.txt
 check_success defect.fdf
 
 echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> no ml-rank -> default output -> quit"
 rm -f defect_site1.fdf defect_site5.fdf
-printf '1.8\nmagnetite.fdf\n1\n3\nFe\nn\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
+printf '2.5\nmagnetite.fdf\n1\n3\nFe\nn\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
 check_contains "Symmetrically distinct sites found:.*2" log_menu_all_sites.txt
 check_success defect_site1.fdf
 check_success defect_site5.fdf
@@ -243,7 +243,7 @@ check_success defect_site5.fdf
 if python3 -c "import mace" 2>/dev/null; then
     echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> ml-rank yes -> default output -> quit"
     rm -f defect_site1.fdf defect_site5.fdf
-    printf '1.8\nmagnetite.fdf\n1\n3\nFe\ny\n\n0\n' | stb-suite > log_menu_ml_rank.txt 2>&1
+    printf '2.5\nmagnetite.fdf\n1\n3\nFe\ny\n\n0\n' | stb-suite > log_menu_ml_rank.txt 2>&1
     check_contains "ML-ranked sites" log_menu_ml_rank.txt
     check_success defect_site1.fdf
     check_success defect_site5.fdf

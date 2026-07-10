@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-xrdrank (Structure Solution XRD, Analysis, item 3.6.2)
+# Smoke test for stb-xrdrank (Structure Solution XRD, Analysis, item 4.6.2)
 # NOTE: pyxtal's Similarity() has no fast mode (~10-30s per candidate), so this
 # test intentionally uses only 2-3 tiny candidates per --input-dir to keep the
 # total runtime reasonable. Generous timeouts below (not a hang, just slow).
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-XRDRank (item 3.6.2) ---"
+echo "--- Starting tester for STB-XRDRank (item 4.6.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/experimental.dat" "$TEST_DIR/"
@@ -163,7 +163,7 @@ check_contains "top" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.6.2) (slow: real Similarity() calls) ---"
 
 echo "Testing: navigate 3.6.2 -> candidates dir -> experimental.dat -> default wavelength -> no top -> output -> quit"
-printf '3.6.2\ncandidates\nexperimental.dat\n\n\nmenu_rank.txt\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '4.6.2\ncandidates\nexperimental.dat\n\n\nmenu_rank.txt\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Ranking (2 of 2 shown, best match first):" log_menu.txt
 check_success menu_rank.txt

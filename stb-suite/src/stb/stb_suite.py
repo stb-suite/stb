@@ -27,13 +27,14 @@ def show_main_menu() -> None:
     """Displays the main category menu"""
     print("\n" + color_text("STB-SUITE Main Menu:", 'bold'))
     print("-"*60)
-    print(f"{color_text('1.', 'yellow')} {color_text('Inputs', 'blue')}\n    Tools to set up new calculations (inputs, k-grids, stacking, etc.)\n")
-    print(f"{color_text('2.', 'yellow')} {color_text('Analysis', 'blue')}\n    Tools to analyze simulation results (bands, DOS, structures, charge density, etc.)\n")
-    print(f"{color_text('3.', 'yellow')} {color_text('Workflow', 'blue')}\n    Complete prep + analysis pipelines for a specific property (strain, elastic constants, cohesive energy, phonons)\n")
-    print(f"{color_text('4.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
+    print(f"{color_text('1.', 'yellow')} {color_text('Inputs', 'blue')}\n    Tools to set up a SIESTA run (input file, k-grid, k-path)\n")
+    print(f"{color_text('2.', 'yellow')} {color_text('Structures', 'blue')}\n    Tools to build, generate, or transform structure files (stacking, supercells, slabs, defects, SQS, etc.)\n")
+    print(f"{color_text('3.', 'yellow')} {color_text('Analysis', 'blue')}\n    Tools to analyze simulation results (bands, DOS, structures, charge density, etc.)\n")
+    print(f"{color_text('4.', 'yellow')} {color_text('Workflow', 'blue')}\n    Complete prep + analysis pipelines for a specific property (strain, elastic constants, cohesive energy, phonons)\n")
+    print(f"{color_text('5.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
     print(f"{color_text('0.', 'yellow')} {color_text('Exit', 'red')}")
     print("-"*60)
-    print(color_text("Tip: you can also type a tool code directly (e.g. 3.1.2) to jump straight to it.", 'yellow'))
+    print(color_text("Tip: you can also type a tool code directly (e.g. 4.1.2) to jump straight to it.", 'yellow'))
 
 def show_sub_menu(title: str, tools_dict: Dict) -> None:
     """Displays a sub-menu for a specific tool category"""
@@ -391,24 +392,47 @@ def run_density_plotter() -> None:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
 
-    # 2. Escolher Modo (2D ou 3D)
+    # 2. Escolher Modo (2D, 3D ou Perfil)
     print(f"\n{color_text('Plot Mode:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = 2D Slice (Planar Cut)")
     print(f"  {color_text('2', 'cyan')} = 3D Volume (Point Cloud)")
-    mode_choice = get_input("Select mode (1-2) [default: 1]: ").strip()
-    
+    print(f"  {color_text('3', 'cyan')} = Planar-Averaged 1D Profile")
+    mode_choice = get_input("Select mode (1-3) [default: 1]: ").strip()
+
     # Argumentos base
     args = ["--label", label, "--no-intro"]
 
-    # Lógica para 3D vs 2D
+    # Lógica para 3D vs 2D vs Perfil
     if mode_choice == '2':
         # Modo 3D
         args.append("--3d")
         print(color_text("\nSelected: Full 3D Volume export.", 'cyan'))
+
+        iso_min_str = get_input(
+            "Minimum |density| (e/Ang^3) to keep, for a manageable point cloud (blank = no filter): "
+        ).strip()
+        if iso_min_str:
+            args.extend(["--iso-min", iso_min_str])
+
+        cube_choice = get_input("Also write a Gaussian .cube file for VESTA/VMD/Avogadro? (y/N): ", 'green').strip().lower()
+        if cube_choice == 'y':
+            args.append("--cube")
+    elif mode_choice == '3':
+        # Modo Perfil
+        args.append("--profile")
+        print(color_text("\nSelected: Planar-Averaged 1D Profile.", 'cyan'))
+
+        print(f"Choose the axis the profile varies {color_text('ALONG', 'bold')}:")
+        print(f"  {color_text('0', 'cyan')} = X")
+        print(f"  {color_text('1', 'cyan')} = Y")
+        print(f"  {color_text('2', 'cyan')} = Z")
+        axis = get_int_input("Select axis (0-2) [default: 2]: ", 2)
+        if axis not in [0, 1, 2]: axis = 2
+        args.extend(["--axis", str(axis)])
     else:
         # Modo 2D (Default)
         print(color_text("\nSelected: 2D Slice Configuration", 'cyan'))
-        
+
         # Escolher Eixo Normal
         print(f"Choose the axis {color_text('NORMAL', 'bold')} to the cut plane:")
         print(f"  {color_text('0', 'cyan')} = X (Cut YZ plane)")
@@ -422,6 +446,34 @@ def run_density_plotter() -> None:
         pos_str = get_input("Position in Angstrom (Press Enter for center): ").strip()
         if pos_str:
             args.extend(["--pos", pos_str])
+
+        contour_choice = get_input("Overlay contour lines on the map? (y/N): ", 'green').strip().lower()
+        if contour_choice == 'y':
+            args.append("--contour")
+
+    # Densidade de spin ou diferença de densidade (mutuamente com o modo acima)
+    spin_choice = get_input("Plot the spin density instead of total charge? (y/N): ", 'green').strip().lower()
+    if spin_choice == 'y':
+        args.append("--spin")
+
+    rho2 = get_input(
+        "Second .RHO file to subtract (Delta rho = rho1 - rho2), blank to skip: "
+    ).strip()
+    if rho2:
+        args.extend(["--rho2", rho2])
+
+    # Escala de cor manual (apenas relevante para os modos 2D/3D, não para o perfil)
+    if mode_choice != '3':
+        vrange_choice = get_input(
+            "Fix the colorbar range manually instead of auto? (y/N): ", 'green'
+        ).strip().lower()
+        if vrange_choice == 'y':
+            vmin_str = get_input("Colorbar minimum (e/Ang^3), blank to leave auto: ").strip()
+            if vmin_str:
+                args.extend(["--vmin", vmin_str])
+            vmax_str = get_input("Colorbar maximum (e/Ang^3), blank to leave auto: ").strip()
+            if vmax_str:
+                args.extend(["--vmax", vmax_str])
 
     print(color_text("\nProcessing Density...", 'green'))
     run_tool("stb-density", args)
@@ -2262,51 +2314,58 @@ INPUT_TOOLS = {
     3: {'title': "K-Path Generator (stb-kpath)",
         'description': "Generate a high-symmetry k-path for band structure calculations.",
         'func': run_kpath_generator},
-    4: {'title': "2D Monolayer Stacker (stb-2Dstacking)",
+       }
+
+
+# Tools that build, generate, or transform a structure file, independent of any
+# SIESTA-specific input setup -- split out from INPUT_TOOLS once it grew to 17
+# entries mixing the two concerns.
+STRUCTURE_TOOLS = {
+    1: {'title': "2D Monolayer Stacker (stb-2Dstacking)",
         'description': "Stacks two monolayers into a heterostructure using the ZSL algorithm.",
         'func': run_2d_stacker},
-    5: {'title': "Supercell Builder (stb-supercell)",
+    2: {'title': "Supercell Builder (stb-supercell)",
         'description': "Build a supercell from a structure file using a user-defined transformation matrix.",
         'func': run_supercell_generator},
-    6: {'title': "Slab Builder (stb-slab)",
+    3: {'title': "Slab Builder (stb-slab)",
         'description': "Cut a Miller-index slab from a bulk structure, with vacuum.",
         'func': run_slab_generator},
-    7: {'title': "Nanotube/Nanoribbon Builder (stb-nanotube)",
+    4: {'title': "Nanotube/Nanoribbon Builder (stb-nanotube)",
         'description': "Roll a 2D monolayer into a nanotube or nanoribbon, given (n, m) chirality.",
         'func': run_nanotube_generator},
-    8: {'title': "Point Defect Generator (stb-defect)",
+    5: {'title': "Point Defect Generator (stb-defect)",
         'description': "Introduce a vacancy, substitution, or interstitial defect.",
         'func': run_defect_generator},
-    9: {'title': "SQS Generator (stb-sqs)",
+    6: {'title': "SQS Generator (stb-sqs)",
         'description': "Generate a Special Quasirandom Structure for a substitutional alloy.",
         'func': run_sqs_generator},
-    10: {'title': "Unit Cell Finder (stb-unitcell)",
-         'description': "Find the primitive or conventional unit cell of a structure.",
-         'func': run_unitcell_generator},
-    11: {'title': "Crystal Builder (stb-crystalbuilder)",
-         'description': "Build a structure from a space group and Wyckoff positions.",
-         'func': run_crystalbuilder_generator},
-    12: {'title': "Structure Fetcher (stb-fetch)",
-         'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
-         'func': run_fetch_generator},
-    13: {'title': "Surface Passivator (stb-passivate)",
+    7: {'title': "Unit Cell Finder (stb-unitcell)",
+        'description': "Find the primitive or conventional unit cell of a structure.",
+        'func': run_unitcell_generator},
+    8: {'title': "Crystal Builder (stb-crystalbuilder)",
+        'description': "Build a structure from a space group and Wyckoff positions.",
+        'func': run_crystalbuilder_generator},
+    9: {'title': "Structure Fetcher (stb-fetch)",
+        'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
+        'func': run_fetch_generator},
+    10: {'title': "Surface Passivator (stb-passivate)",
          'description': "Cap dangling bonds on a cut surface with a passivating atom (e.g. H).",
          'func': run_passivate_generator},
-    14: {'title': "Reference Molecule Builder (stb-molecule)",
+    11: {'title': "Reference Molecule Builder (stb-molecule)",
          'description': "Build a reference molecule (e.g. H2O, CO2) from ASE's G2 database.",
          'func': run_molecule_generator},
-    15: {'title': "ML Pre-Relaxation (stb-mlrelax)",
+    12: {'title': "ML Pre-Relaxation (stb-mlrelax)",
          'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
          'func': run_mlrelax_generator},
-    16: {'title': "Amorphous Structure Generator (stb-amorphize)",
+    13: {'title': "Amorphous Structure Generator (stb-amorphize)",
          'description': "Melt-quench MD with MACE-MP-0 to build an amorphous starting guess (needs the optional 'ml' extra).",
          'func': run_amorphize_generator},
-    17: {'title': "Random Crystal Generator (stb-crystalcast)",
+    14: {'title': "Random Crystal Generator (stb-crystalcast)",
          'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular, "
                          "optionally ML-ranked) from a symmetry group and composition; or "
                          "analyze/substitute/subgroup/supergroup an existing structure.",
          'func': run_crystalcast_generator},
-         }
+        }
 
 
 ANALYSIS_TOOLS = {
@@ -2419,20 +2478,23 @@ UTILITY_TOOLS = {
 
 
 def _flatten_tool_codes() -> Dict[str, Callable]:
-    """Builds a flat {"1.1": func, ..., "3.1.2": func, ..., "4.4": func} lookup
-    across all 4 categories, from the dicts above -- lets the main menu jump
-    straight to a tool via a dotted code instead of navigating level by level.
+    """Builds a flat {"1.1": func, ..., "2.1": func, ..., "4.1.2": func, ...,
+    "5.4": func} lookup across all 5 categories, from the dicts above -- lets
+    the main menu jump straight to a tool via a dotted code instead of
+    navigating level by level.
     """
     codes: Dict[str, Callable] = {}
     for key, info in INPUT_TOOLS.items():
         codes[f"1.{key}"] = info['func']
-    for key, info in ANALYSIS_TOOLS.items():
+    for key, info in STRUCTURE_TOOLS.items():
         codes[f"2.{key}"] = info['func']
+    for key, info in ANALYSIS_TOOLS.items():
+        codes[f"3.{key}"] = info['func']
     for prop_key, prop_info in WORKFLOW_TOOLS.items():
         for stage_key, stage_info in prop_info['stages'].items():
-            codes[f"3.{prop_key}.{stage_key}"] = stage_info['func']
+            codes[f"4.{prop_key}.{stage_key}"] = stage_info['func']
     for key, info in UTILITY_TOOLS.items():
-        codes[f"4.{key}"] = info['func']
+        codes[f"5.{key}"] = info['func']
     return codes
 
 
@@ -2492,23 +2554,25 @@ def main():
         show_main_menu()
         
         try:
-            choice = get_input("\nSelect an option (0-4, or a tool code like 3.1.2): ")
+            choice = get_input("\nSelect an option (0-5, or a tool code like 4.1.2): ")
 
             if choice in TOOL_CODES:
                 TOOL_CODES[choice]()
             elif choice == '1':
                 run_sub_menu("Inputs", INPUT_TOOLS)
             elif choice == '2':
-                run_sub_menu("Analysis", ANALYSIS_TOOLS)
+                run_sub_menu("Structures", STRUCTURE_TOOLS)
             elif choice == '3':
-                run_sub_menu("Workflow", WORKFLOW_TOOLS)
+                run_sub_menu("Analysis", ANALYSIS_TOOLS)
             elif choice == '4':
+                run_sub_menu("Workflow", WORKFLOW_TOOLS)
+            elif choice == '5':
                 run_sub_menu("Utils", UTILITY_TOOLS)
             elif choice == '0':
                 print(color_text("\nThank you for using STB-SUITE!", 'cyan'))
                 break
             else:
-                print(color_text("\nInvalid choice! Please select between 0 and 4, or a valid tool code.", 'red'))
+                print(color_text("\nInvalid choice! Please select between 0 and 5, or a valid tool code.", 'red'))
                 sleep(1)
                 
         except ValueError:

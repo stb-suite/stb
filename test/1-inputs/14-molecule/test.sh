@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-molecule (Reference Molecule Builder, item 1.14)
+# Smoke test for stb-molecule (Reference Molecule Builder, item 2.11)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Molecule (item 1.14) ---"
+echo "--- Starting tester for STB-Molecule (item 2.11) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 echo "Test directory '$TEST_DIR' prepared."
@@ -139,7 +139,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.14) ---"
 
 echo "Testing: navigate 1.14 -> H2O -> default vacuum -> default output -> quit"
 rm -f molecule.fdf
-printf '1.14\nH2O\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.11\nH2O\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Formula:.*H2O" log_menu.txt
 check_success molecule.fdf
 

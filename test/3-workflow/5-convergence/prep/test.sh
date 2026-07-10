@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-convergence (Convergence Test Prep, item 3.5.1)
+# Smoke test for stb-convergence (Convergence Test Prep, item 4.5.1)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Convergence prep (item 3.5.1) ---"
+echo "--- Starting tester for STB-Convergence prep (item 4.5.1) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
@@ -134,7 +134,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.5.1) ---"
 
 echo "Testing: navigate 3.5.1 -> invalid file then valid -> calc.fdf -> meshcutoff -> 150/300/50 -> default output -> quit"
 rm -rf convergence_runs
-printf '3.5.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\n1\n150\n300\n50\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.5.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\n1\n150\n300\n50\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Generated 4 run(s)" log_menu.txt
 check_success convergence_runs/convergence_meshcutoff_250.0000/calc.fdf

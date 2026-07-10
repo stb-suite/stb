@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-convergenceAnalysis (Convergence Test Analysis, item 3.5.2)
+# Smoke test for stb-convergenceAnalysis (Convergence Test Analysis, item 4.5.2)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-ConvergenceAnalysis (item 3.5.2) ---"
+echo "--- Starting tester for STB-ConvergenceAnalysis (item 4.5.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR/convergence_runs"
 for d in 150.0000 200.0000 250.0000 300.0000; do
@@ -117,7 +117,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.5.2) ---"
 
 echo "Testing: navigate 3.5.2 -> defaults -> quit"
 rm -f convergence_curve.dat convergence_report.txt
-printf '3.5.2\nconvergence_runs\n\n0.001\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.5.2\nconvergence_runs\n\n0.001\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Converged at:.*meshcutoff = 300.0000" log_menu.txt
 check_success convergence_curve.dat
 

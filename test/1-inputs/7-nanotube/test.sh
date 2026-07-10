@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-nanotube (Nanotube/Nanoribbon Builder, item 1.7)
+# Smoke test for stb-nanotube (Nanotube/Nanoribbon Builder, item 2.4)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Nanotube (item 1.7) ---"
+echo "--- Starting tester for STB-Nanotube (item 2.4) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/graphene.fdf" "$TEST_DIR/"
@@ -139,7 +139,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.7) ---"
 
 echo "Testing: navigate 1.7 -> invalid file then valid -> chirality '6 0' -> mode 1 (tube) -> defaults -> quit"
 rm -f nanotube.fdf
-printf '1.7\ndoes_not_exist.fdf\ngraphene.fdf\n6 0\n1\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.4\ndoes_not_exist.fdf\ngraphene.fdf\n6 0\n1\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Success" log_menu.txt
 check_success nanotube.fdf

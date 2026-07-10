@@ -512,6 +512,11 @@ def run_bader_calculator() -> None:
     # 6. Arquivo .cube intermediário
     keep_cube_choice = get_input("Keep the intermediate .cube file(s) after the run? (Y/n): ", 'green').strip().lower()
 
+    # 7. Exportar volumes de Bader
+    export_volumes_choice = get_input(
+        "Export each atom's Bader volume as its own .cube file, for VESTA/VMD? (y/N): ", 'green'
+    ).strip().lower()
+
     # Argumentos básicos
     args = ["--label", label, "--speed", speed_mode, "--no-intro"]
 
@@ -529,6 +534,8 @@ def run_bader_calculator() -> None:
         args.extend(["--threads", threads_str])
     if keep_cube_choice == 'n':
         args.append("--no-cube")
+    if export_volumes_choice == 'y':
+        args.append("--export-volumes")
 
     run_tool("stb-bader", args)
     

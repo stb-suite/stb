@@ -86,6 +86,13 @@ echo "Testing: essentially-zero-population atoms are flagged (this fixture genui
 check_contains "WARN\] Atom(s).*essentially zero Bader population" log_basic.txt
 check_contains "WARN: Atom(s).*essentially zero Bader population" bader.txt
 
+echo "Testing: Volume/SurfDist columns and per-species summary are reported"
+check_contains "Vol(A^3)" log_basic.txt
+check_contains "SurfD(A)" log_basic.txt
+check_contains "Vol(A^3)" bader.txt
+check_contains "Per-species net charge summary:" log_basic.txt
+check_contains "Per-species net charge summary:" bader.txt
+
 
 # --- 3. --speed fast uses PyBader's own on-grid profile ---
 echo -e "\n--- Testing --speed fast ---"
@@ -126,6 +133,18 @@ check_exit_code $? 0
 check_absent Sn3O4.cube
 
 
+# --- 6b. --export-volumes writes one .cube per atom, and never leaks PyBader's own bader.p ---
+echo -e "\n--- Testing --export-volumes ---"
+
+rm -f Sn3O4.cube Bader-atoms-*.cube
+timeout 120 stb-bader --label Sn3O4 --no-intro --export-volumes -o export.txt > log_export.txt 2>&1
+check_exit_code $? 0
+check_contains "Exported 14 per-atom Bader volume" log_export.txt
+check_success Bader-atoms-0.cube
+check_success Bader-atoms-13.cube
+check_absent bader.p
+
+
 # --- 7. --ref pointing at a missing file falls back to hardcoded defaults ---
 echo -e "\n--- Testing --ref with a missing file (falls back, doesn't abort) ---"
 
@@ -154,21 +173,22 @@ echo "Testing: --version"
 stb-bader --version > log_version.txt 2>&1
 check_contains "stb-bader" log_version.txt
 
-echo "Testing: --help documents --label, --speed, --threads, --vacuum-tol, --no-cube"
+echo "Testing: --help documents --label, --speed, --threads, --vacuum-tol, --no-cube, --export-volumes"
 stb-bader --help > log_help.txt 2>&1
 check_contains "label" log_help.txt
 check_contains "speed" log_help.txt
 check_contains "threads" log_help.txt
 check_contains "vacuum-tol" log_help.txt
 check_contains "no-cube" log_help.txt
+check_contains "export-volumes" log_help.txt
 
 
 # --- 10. Interactive path (stb-suite, shortcut 2.6) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.6) ---"
 
-echo "Testing: navigate 2.6 -> label Sn3O4 -> default output -> default ref -> speed 1 -> no vacuum-tol -> no threads -> keep cube -> quit"
+echo "Testing: navigate 2.6 -> label Sn3O4 -> default output -> default ref -> speed 1 -> no vacuum-tol -> no threads -> keep cube -> no export -> quit"
 rm -f Sn3O4_BADER.txt
-printf '2.6\nSn3O4\n\n\n1\n\n\ny\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success Sn3O4_BADER.txt
 

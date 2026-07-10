@@ -12,8 +12,11 @@ import os
 import sys
 import argparse
 import warnings
+import statistics
 import multiprocessing
 import numpy as np
+from pymatgen.core import Lattice, Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 # --- Warnings Configuration ---
 warnings.filterwarnings("ignore", category=UserWarning, module="pybader")
@@ -148,6 +151,13 @@ def get_zval_from_output(label, override_path=None):
 # the atom's whole region got folded into a neighbor's basin instead.
 ZERO_POPULATION_TOL = 0.01
 
+# Symmetrically-equivalent atoms (same Wyckoff site) are physically required to carry
+# the same charge; a spread larger than this across one such group -- while everything
+# else about the calculation looks normal -- is a red flag for numerical noise, a
+# resolution problem localized to part of the cell, or a mis-set-up structure, rather
+# than a real electronic-structure effect.
+SYMMETRY_CHARGE_TOL = 0.1
+
 # ================= HELPERS =================
 
 def get_speed_kwargs(speed_mode):
@@ -206,10 +216,31 @@ def read_spin_density(file_rho, geometry, cube_path):
             os.remove(cube_path)
         return None
 
+
+def find_symmetry_groups(geometry, physical_idx, symprec=1e-3, angle_tolerance=5.0):
+    """Returns a list of groups of positions into `physical_idx` (i.e. into
+    atoms_data, which is built in the same order) that the detected space
+    group treats as symmetrically equivalent -- singleton "groups" (no
+    equivalent partner) are dropped, since there's nothing to cross-check.
+    Returns an empty list if symmetry detection fails for any reason (e.g. a
+    relaxed structure with no exact symmetry left at this tolerance) -- this
+    is an optional cross-check, not something worth aborting the run over.
+    """
+    try:
+        lattice = Lattice(geometry.cell)
+        species = [geometry.atoms[i].symbol for i in physical_idx]
+        coords = [geometry.xyz[i] for i in physical_idx]
+        pmg = Structure(lattice, species, coords, coords_are_cartesian=True)
+        sga = SpacegroupAnalyzer(pmg, symprec=symprec, angle_tolerance=angle_tolerance)
+        sym_struct = sga.get_symmetrized_structure()
+        return [list(g) for g in sym_struct.equivalent_indices if len(g) > 1]
+    except Exception:
+        return []
+
 # ================= MAIN LOGIC =================
 
 def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
-                 threads=None, vacuum_tol=None, keep_cube=True):
+                 threads=None, vacuum_tol=None, keep_cube=True, export_volumes=False):
 
     file_rho = f"{label}.RHO"
     file_xv = f"{label}.XV"
@@ -355,19 +386,34 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
         n_threads = resolve_threads(threads)
         print(f"2. [PyBader] Starting calculation on {n_threads} threads...")
 
-        extra_kwargs = {'threads': n_threads, 'vacuum_tol': vacuum_tol}
+        # 'output': None stops PyBader's own __call__ from silently pickling the whole
+        # calculation to a 'bader.p' file in the working directory -- this tool builds
+        # its own report, so that file would just be unexplained clutter.
+        extra_kwargs = {'threads': n_threads, 'vacuum_tol': vacuum_tol, 'output': None}
         extra_kwargs.update(get_speed_kwargs(speed_mode))
         if 'spin' in density:
             extra_kwargs['spin_flag'] = True
+        if export_volumes:
+            # 'atoms' (not 'volumes') so this stays valid even under --speed fast, which
+            # deletes bader_volumes but keeps atoms_volumes (see PyBader's own __call__).
+            # [-2] is PyBader's own sentinel for "every atom, plus the vacuum bucket if
+            # vacuum_tol is set".
+            extra_kwargs['export_mode'] = ('atoms', [-2])
 
         try:
             bader_job = PyBaderCalc(density, lattice, cube_atoms, file_info, **extra_kwargs)
             bader_job()
             raw_populations = bader_job.atoms_charge
             raw_spins = bader_job.atoms_spin if bader_job.spin_bool else None
+            raw_volumes = bader_job.atoms_volume
+            raw_surf_dist = bader_job.atoms_surface_distance
         except Exception as e:
             print(color_text(f"[ERROR] PyBader calculation failed: {e}", 'red'))
             sys.exit(1)
+
+        if export_volumes:
+            print(f"   {color_text('[INFO]', 'cyan')} Exported {len(cube_atoms)} per-atom "
+                  f"Bader volume(s) as 'Bader-atoms-<N>.cube' in the current directory.")
 
         # --- STEP 3 & 4: Analysis and Output ---
         try:
@@ -391,6 +437,11 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                     "   [WARN] PyBader returned a different number of spin values than charge "
                     "values -- disabling the spin column for this run.", 'yellow'))
                 raw_spins = None
+            if len(raw_volumes) != len(raw_populations) or len(raw_surf_dist) != len(raw_populations):
+                print(color_text(
+                    "   [WARN] PyBader returned a different number of volume/surface-distance "
+                    "values than charge values -- disabling those columns for this run.", 'yellow'))
+                raw_volumes = raw_surf_dist = None
 
             for pos in range(n_atoms):
                 orig_i = physical_idx[pos]
@@ -398,6 +449,8 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                 sym = atom.symbol
                 z_val = valence_source.get(sym)
                 spin_val = raw_spins[pos] if raw_spins is not None else None
+                volume_val = raw_volumes[pos] if raw_volumes is not None else None
+                surf_dist_val = raw_surf_dist[pos] if raw_surf_dist is not None else None
 
                 if z_val is None:
                     unknown_syms.add(sym)
@@ -406,7 +459,8 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                     total_raw_known += raw_populations[pos]
 
                 atoms_data.append({'id': orig_i + 1, 'sym': sym, 'z_val': z_val,
-                                    'pop_raw': raw_populations[pos], 'spin': spin_val})
+                                    'pop_raw': raw_populations[pos], 'spin': spin_val,
+                                    'volume': volume_val, 'surf_dist': surf_dist_val})
                 if raw_populations[pos] < ZERO_POPULATION_TOL:
                     suspicious_zero_ids.append(orig_i + 1)
 
@@ -444,8 +498,32 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                     "(applied uniformly to every atom -- assumes a global cause; see the "
                     "note at the end of the report).", 'cyan'))
 
+            # Symmetry cross-check -- atoms the detected space group treats as equivalent
+            # should carry the same charge; a run-time deviation here is a red flag that's
+            # invisible from looking at any atom's own row in isolation.
+            inconsistent_groups = []
+            for group in find_symmetry_groups(geometry, physical_idx):
+                group = [p for p in group if p < n_atoms and atoms_data[p]['z_val'] is not None]
+                if len(group) < 2:
+                    continue
+                charges = [atoms_data[p]['z_val'] - atoms_data[p]['pop_raw'] * correction_factor
+                           for p in group]
+                if max(charges) - min(charges) > SYMMETRY_CHARGE_TOL:
+                    ids = [atoms_data[p]['id'] for p in group]
+                    inconsistent_groups.append((ids, charges))
+
+            if inconsistent_groups:
+                for ids, charges in inconsistent_groups:
+                    pairs = ', '.join(f"#{i}={c:+.3f}" for i, c in zip(ids, charges))
+                    print(color_text(
+                        f"   [WARN] Symmetry-equivalent atoms disagree on net charge: {pairs} "
+                        f"(spread > {SYMMETRY_CHARGE_TOL} e-) -- these sites should be identical "
+                        "by symmetry; investigate before trusting either value.", 'red'))
+
             # --- STEP 4: Output ---
             has_spin = raw_spins is not None
+
+            has_volume = raw_volumes is not None
 
             out_lines = []
             out_lines.append(f"BADER CHARGE ANALYSIS REPORT - STB Suite v{VERSION}")
@@ -453,15 +531,20 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
             out_lines.append(f"Z_val Source: {source_name}")
             out_lines.append(f"PyBader: method={bader_job.method}, refine_method={bader_job.refine_method}, "
                               f"threads={bader_job.threads}, vacuum_tol={bader_job.vacuum_tol}")
-            out_lines.append("=" * 75)
 
+            vol_header = f" {'Vol(A^3)':<10} {'SurfD(A)':<10}" if has_volume else ""
             spin_header = f" {'Spin (µB)':<10}" if has_spin else ""
-            header = f"{'Idx':<4} {'Elem':<5} {'Pop(e-)':<12} {'Z_val':<8} {'Net Charge':<12} {'State':<15}{spin_header}"
+            header = (f"{'Idx':<4} {'Elem':<5} {'Pop(e-)':<12} {'Z_val':<8} {'Net Charge':<12} "
+                      f"{'State':<15}{vol_header}{spin_header}")
+            sep = "-" * len(header)
+            eq = "=" * len(header)
+
+            out_lines.append(eq)
             out_lines.append(header)
-            out_lines.append("-" * 75)
+            out_lines.append(sep)
 
             print("\n" + header)
-            print("-" * 75)
+            print(sep)
 
             total_final = 0.0
 
@@ -481,30 +564,63 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                     elif net < -0.05: state, color = "Acceptor (-)", 'blue'
                     else: state, color = "Neutral", 'reset'
 
+                vol_str = f" {data['volume']:<10.4f} {data['surf_dist']:<10.4f}" if has_volume else ""
                 spin_str = f" {data['spin']:<+10.4f}" if has_spin else ""
 
-                line = f"{data['id']:<4} {data['sym']:<5} {pop:<12.4f} {z_str} {net_str} {state:<15}{spin_str}"
+                line = (f"{data['id']:<4} {data['sym']:<5} {pop:<12.4f} {z_str} {net_str} "
+                        f"{state:<15}{vol_str}{spin_str}")
                 out_lines.append(line)
                 print(f"{data['id']:<4} {data['sym']:<5} {pop:<12.4f} {z_str} "
-                      f"{color_text(net_str, 'bold')} {color_text(state, color)}{spin_str}")
+                      f"{color_text(net_str, 'bold')} {color_text(state, color)}{vol_str}{spin_str}")
 
             theory_note = "" if not unknown_syms else \
                 f" (excludes {len(unknown_syms)} unknown element(s): {', '.join(sorted(unknown_syms))})"
             footer = [
-                "-" * 75,
+                sep,
                 f"Total Integrated: {total_final:.4f} (Target: {total_theory:.2f}{theory_note})",
-                "=" * 75,
+                eq,
             ]
             out_lines.extend(footer)
             for l in footer: print(l)
 
+            # Per-species summary -- a quick way to spot a species whose charge is wildly
+            # inconsistent across the cell without reading every row (population standard
+            # deviation only, since a single outlier atom is exactly what this is meant to
+            # surface -- a full statistical treatment isn't the point here).
+            by_species = {}
+            for data in atoms_data:
+                if data['z_val'] is None:
+                    continue
+                net = data['z_val'] - data['pop_raw'] * correction_factor
+                by_species.setdefault(data['sym'], []).append(net)
+
+            if by_species:
+                species_header = f"{'Elem':<5} {'N':<4} {'Mean(e-)':<12} {'Std(e-)':<10}"
+                species_sep = "-" * len(species_header)
+                species_lines = ["", "Per-species net charge summary:", species_header, species_sep]
+                for sym in sorted(by_species):
+                    values = by_species[sym]
+                    mean = statistics.mean(values)
+                    std = statistics.pstdev(values) if len(values) > 1 else 0.0
+                    species_lines.append(f"{sym:<5} {len(values):<4} {mean:<+12.4f} {std:<10.4f}")
+                out_lines.extend(species_lines)
+                print("\n" + "\n".join(species_lines))
+
             if suspicious_zero_ids:
                 ids_str = ', '.join(str(i) for i in suspicious_zero_ids)
                 out_lines.append(
-                    f"WARN: Atom(s) {ids_str} got essentially zero Bader population (< "
+                    f"\nWARN: Atom(s) {ids_str} got essentially zero Bader population (< "
                     f"{ZERO_POPULATION_TOL} e-) -- treat with suspicion, see console output "
                     "for likely causes."
                 )
+
+            if inconsistent_groups:
+                for ids, charges in inconsistent_groups:
+                    pairs = ', '.join(f"#{i}={c:+.3f}" for i, c in zip(ids, charges))
+                    out_lines.append(
+                        f"WARN: Symmetry-equivalent atoms disagree on net charge: {pairs} "
+                        f"(spread > {SYMMETRY_CHARGE_TOL} e-)."
+                    )
 
             limitations_note = (
                 "Note: Bader analysis has known limitations this tool cannot detect or correct "
@@ -548,13 +664,18 @@ output); species it doesn't mention fall back to a hardcoded periodic-table
 guess, per species, with a warning. If the .RHO file is spin-polarized, a
 per-atom net spin (magnetic moment) is reported alongside the charge
 automatically. Dummy/no-element sites (Z<=0) are excluded to match
-PyBader's own handling; SIESTA's own ghost/BSSE atoms are unaffected.""",
+PyBader's own handling; SIESTA's own ghost/BSSE atoms are unaffected.
+Also reports each atom's Bader volume and minimum surface distance, a
+per-species mean/std summary, and cross-checks symmetry-equivalent atoms
+against each other -- on top of the per-atom warnings for a suspiciously
+low (near-zero) population.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --label siesta\n"
                "  %(prog)s --label siesta --ref relax/siesta.out -o siesta_bader.txt\n"
                "  %(prog)s --label siesta --speed fast --threads 8\n"
                "  %(prog)s --label slab --vacuum-tol 1e-3\n"
+               "  %(prog)s --label siesta --export-volumes\n"
     )
     parser.add_argument("-l", "--label", required=True, help="SystemLabel used in Siesta")
     parser.add_argument("-o", "--output", required=False, help="Output filename (default: <label>_BADER.txt)")
@@ -576,6 +697,11 @@ PyBader's own handling; SIESTA's own ghost/BSSE atoms are unaffected.""",
     parser.add_argument("--no-cube", dest="keep_cube", action="store_false", default=True,
                          help="Delete the intermediate .cube file(s) after the calculation "
                               "(kept by default -- they can be large for dense grids)")
+    parser.add_argument("--export-volumes", action="store_true",
+                         help="Also write each atom's individual Bader volume as its own "
+                              "'Bader-atoms-<N>.cube' file (plus a vacuum one if --vacuum-tol "
+                              "is set), for visual inspection in VESTA/VMD -- one file per atom, "
+                              "each as large as the main grid, so this is opt-in (default: off)")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-bader {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -589,7 +715,8 @@ PyBader's own handling; SIESTA's own ghost/BSSE atoms are unaffected.""",
         show_intro(["Siesta ToolBox Suite - Bader Analysis", f"Version {VERSION} | University of Brasilia"])
 
     solve_bader(args.label, args.output, args.speed, args.ref,
-                threads=args.threads, vacuum_tol=args.vacuum_tol, keep_cube=args.keep_cube)
+                threads=args.threads, vacuum_tol=args.vacuum_tol, keep_cube=args.keep_cube,
+                export_volumes=args.export_volumes)
 
     print("\n" + "-" * 60)
     print(color_text("Electron counting is like accounting, but the currency is negative.\n", 'bold'))

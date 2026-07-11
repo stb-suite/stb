@@ -91,6 +91,78 @@ else
 fi
 
 
+# --- 3b. --fdf (verify a structure and use tabulated Materials Project U values) ---
+echo -e "\n--- Testing --fdf + --use-reference (auto species detection + tabulated U) ---"
+# Sc: metal, no tabulated value (-> skipped with a warning). Fe: metal, tabulated
+# (-> included). O: non-metal (-> skipped silently, no warning).
+cat > sc_fe_o.fdf <<'EOF'
+NumberOfSpecies    3
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   21   Sc
+ 2   26   Fe
+ 3    8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 4.0000000000   0.0000000000   0.0000000000
+ 0.0000000000   4.0000000000   0.0000000000
+ 0.0000000000   0.0000000000   4.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.000000000   0.000000000   0.000000000   1
+  0.500000000   0.500000000   0.500000000   2
+  0.250000000   0.250000000   0.250000000   3
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+
+echo "Testing: --fdf detects species; --species Fe restricts to it; --use-reference fills U"
+stb-dftu --fdf sc_fe_o.fdf --species Fe --use-reference --no-intro > log_fdf_fe.txt 2>&1
+check_exit_code $? 0
+check_contains "Species found in 'sc_fe_o.fdf': Sc, Fe, O" log_fdf_fe.txt
+check_contains "Using tabulated Materials Project reference U values" log_fdf_fe.txt
+check_contains "Fe   1" log_fdf_fe.txt
+check_contains "5.300    0.000" log_fdf_fe.txt
+
+echo "Testing: --fdf + --use-reference over all species -- untabulated metal (Sc) warns and is"
+echo "  skipped, non-metal (O) is silently skipped, tabulated metal (Fe) is used"
+stb-dftu --fdf sc_fe_o.fdf --use-reference --no-intro > log_fdf_mixed.txt 2>&1
+check_exit_code $? 0
+check_contains "No tabulated reference U for metal species" log_fdf_mixed.txt
+check_contains "Sc" log_fdf_mixed.txt
+check_contains "Fe   1" log_fdf_mixed.txt
+
+echo "Testing: O (non-metal) never appears in the generated block"
+if grep -q "^O   1" log_fdf_mixed.txt; then
+    echo -e "   -> ${RED}Failed:${NC} non-metal species O should never appear in the block"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} non-metal species O is absent from the block"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --fdf + --use-reference where nothing qualifies is a clean error"
+stb-dftu --fdf sc_fe_o.fdf --species Sc --use-reference --no-intro > log_fdf_none.txt 2>&1
+check_exit_code $? 1
+check_contains "nothing to generate" log_fdf_none.txt
+
+echo "Testing: --fdf + --species not present in the file is a clean error"
+stb-dftu --fdf sc_fe_o.fdf --species Mn --use-reference --no-intro > log_fdf_unknown.txt 2>&1
+check_exit_code $? 1
+check_contains "not found in 'sc_fe_o.fdf'" log_fdf_unknown.txt
+
+echo "Testing: --fdf on a nonexistent file is a clean error"
+stb-dftu --fdf does_not_exist.fdf --use-reference --no-intro > log_fdf_notfound.txt 2>&1
+check_exit_code $? 1
+check_contains "Error reading 'does_not_exist.fdf'" log_fdf_notfound.txt
+
+
 # --- 4. --list-reference and --suggest ---
 echo -e "\n--- Testing --list-reference ---"
 stb-dftu --list-reference --no-intro > log_list.txt 2>&1
@@ -166,21 +238,47 @@ check_contains "linear-response" log_help.txt
 # --- 6. Interactive path (stb-suite, shortcut 1.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.4) ---"
 
-echo "Testing: navigate 1.4 -> generate (option 1) -> Mn -> U=3.9 -> J default -> auto shell -> finish -> no save -> quit"
-printf '1.4\n1\nMn\n3.9\n0.0\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+cat > fe_only.fdf <<'EOF'
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   26   Fe
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 4.0000000000   0.0000000000   0.0000000000
+ 0.0000000000   4.0000000000   0.0000000000
+ 0.0000000000   0.0000000000   4.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.000000000   0.000000000   0.000000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+
+echo "Testing: navigate 1.4 -> verify .fdf + tabulated U path (option 1)"
+printf '1.4\n1\nfe_only.fdf\n\n\n0\n' | timeout 20 stb-suite > log_menu_fdf.txt 2>&1
+check_exit_code $? 0
+check_contains "Species found in 'fe_only.fdf': Fe" log_menu_fdf.txt
+check_contains "Using tabulated Materials Project reference U values" log_menu_fdf.txt
+check_contains "Fe   1" log_menu_fdf.txt
+
+echo "Testing: navigate 1.4 -> blank mode choice defaults to option 1 (Materials Project table)"
+printf '1.4\n\nfe_only.fdf\n\n\n0\n' | timeout 20 stb-suite > log_menu_default.txt 2>&1
+check_exit_code $? 0
+check_contains "Species found in 'fe_only.fdf': Fe" log_menu_default.txt
+check_contains "Using tabulated Materials Project reference U values" log_menu_default.txt
+
+echo "Testing: navigate 1.4 -> generate by hand (option 2) -> Mn -> U=3.9 -> J default -> auto shell -> finish -> no save -> quit"
+printf '1.4\n2\nMn\n3.9\n0.0\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "shell=3d (n=3, l=2)" log_menu.txt
 check_contains "%block LDAU.proj" log_menu.txt
-
-echo "Testing: navigate 1.4 -> list-reference path (option 2)"
-printf '1.4\n2\n\n0\n' | timeout 20 stb-suite > log_menu_list.txt 2>&1
-check_exit_code $? 0
-check_contains "Wang/Maxisch/Ceder" log_menu_list.txt
-
-echo "Testing: navigate 1.4 -> --suggest path (option 3)"
-printf '1.4\n3\nNi\n\n0\n' | timeout 20 stb-suite > log_menu_suggest.txt 2>&1
-check_exit_code $? 0
-check_contains "6.20 eV" log_menu_suggest.txt
 
 
 popd > /dev/null

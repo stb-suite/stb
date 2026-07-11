@@ -13,6 +13,7 @@ import sys
 import argparse
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, REFERENCE_U, ldau_proj_block
+from stb.core.structure_io import read_fdf, species_list
 
 
 def main():
@@ -22,7 +23,13 @@ You supply U (and optionally J) explicitly -- this tool never guesses or
 estimates U for you. --list-reference prints a small table of literature GGA+U
 values (citation included) as a convenience starting point; --suggest prints
 that value for one element with a clear disclaimer. Neither is ever used
-automatically -- --u must always be given to produce a block. For a
+automatically -- --u must always be given to produce a block, unless you pass
+--use-reference to explicitly opt in to auto-filling U from that same table.
+--fdf reads the species list off an existing structure file instead of typing
+--species by hand -- combine it with --use-reference to build a block straight
+from a structure: only metal species with a tabulated value go into the block,
+with a loud warning; non-metals are skipped silently and untabulated metals
+are skipped with a warning. For a
 first-principles U computed from your own system via the Cococcioni & de
 Gironcoli linear-response method, see the Workflow menu's "Hubbard U (Linear
 Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
@@ -30,14 +37,29 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
         epilog="Usage examples:\n"
                "  %(prog)s --species Mn --u 3.9\n"
                "  %(prog)s --species Fe Co --u 5.3 3.32 --shell 3d 3d\n"
+               "  %(prog)s --fdf calc.fdf --use-reference\n"
+               "  %(prog)s --fdf calc.fdf --species Mn --u 3.9\n"
                "  %(prog)s --list-reference\n"
                "  %(prog)s --suggest Ni\n"
     )
 
+    parser.add_argument("--fdf", type=str, metavar="PATH",
+                         help="Read the species list off this .fdf structure file instead of "
+                              "typing --species by hand. If --species is also given, it filters "
+                              "down to that subset (each one must be present in the file).")
     parser.add_argument("--species", type=str, nargs='+',
-                         help="Species label(s) to add a DFT+U correction to.")
+                         help="Species label(s) to add a DFT+U correction to. Required unless --fdf "
+                              "is given.")
     parser.add_argument("--u", type=float, nargs='+',
-                         help="Hubbard U (eV), one per --species, in the same order.")
+                         help="Hubbard U (eV), one per species, in the same order. Required unless "
+                              "--use-reference is given (and every species has a tabulated value).")
+    parser.add_argument("--use-reference", action="store_true",
+                         help="For any species without an explicit --u, auto-fill U from the "
+                              "tabulated Materials Project reference table (see --list-reference). "
+                              "A non-metal species (no default correlated shell, e.g. O, Si) is "
+                              "silently skipped -- DFT+U doesn't apply to it. A metal species with "
+                              "no tabulated value is skipped too, but with a warning. The block is "
+                              "built from whatever is left; errors out only if nothing qualifies.")
     parser.add_argument("--j", type=float, nargs='+', default=None,
                          help="Exchange J (eV), one per --species (default: 0.0 for each).")
     parser.add_argument("--shell", type=str, nargs='+', default=None, choices=sorted(SHELL_NAMES),
@@ -92,31 +114,78 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
             "own value explicitly.", 'cyan'))
         return
 
-    if not args.species or not args.u:
-        parser.error("--species and --u are required (unless using --list-reference or --suggest).")
+    if args.fdf:
+        fdf_path = os.path.expanduser(args.fdf)
+        try:
+            fdf_structure = read_fdf(fdf_path)
+        except (FileNotFoundError, ValueError) as e:
+            print(color_text(f"Error reading '{fdf_path}': {e}", 'red'))
+            sys.exit(1)
+        fdf_species = species_list(fdf_structure)
+        print(color_text(f"[INFO] Species found in '{fdf_path}': {', '.join(fdf_species)}", 'cyan'))
+        if args.species:
+            unknown = [s for s in args.species if s not in fdf_species]
+            if unknown:
+                print(color_text(
+                    f"Error: species {unknown} passed via --species not found in '{fdf_path}' "
+                    f"(found: {fdf_species}).", 'red'))
+                sys.exit(1)
+            resolved_species = args.species
+        else:
+            resolved_species = fdf_species
+    elif args.species:
+        resolved_species = args.species
+    else:
+        parser.error("--species or --fdf is required (unless using --list-reference or --suggest).")
 
-    if len(args.u) != len(args.species):
+    if args.u is not None:
+        if len(args.u) != len(resolved_species):
+            print(color_text(
+                f"Error: --u has {len(args.u)} value(s) but {len(resolved_species)} species are "
+                "being processed -- must match one-to-one.", 'red'))
+            sys.exit(1)
+        u_values = list(args.u)
+    elif args.use_reference:
+        untabulated_metals = [s for s in resolved_species if s in DEFAULT_SHELL and s not in REFERENCE_U]
+        if untabulated_metals:
+            print(color_text(
+                f"[WARNING] No tabulated reference U for metal species {untabulated_metals} -- "
+                "skipped (pass --u explicitly for these if you need a DFT+U correction on them).",
+                'yellow'))
+        tabulated_species = [s for s in resolved_species if s in REFERENCE_U]
+        if not tabulated_species:
+            print(color_text(
+                "Error: none of the requested species have a tabulated reference U value -- "
+                "nothing to generate. Pass --u explicitly, or restrict to species with a "
+                f"tabulated value ({', '.join(sorted(REFERENCE_U))}).", 'red'))
+            sys.exit(1)
+        resolved_species = tabulated_species
+        u_values = [REFERENCE_U[s] for s in resolved_species]
         print(color_text(
-            f"Error: --u has {len(args.u)} value(s) but --species has {len(args.species)} -- "
-            "must match one-to-one.", 'red'))
+            f"[WARNING] Using tabulated Materials Project reference U values (GGA+U, oxides, "
+            f"Wang/Maxisch/Ceder PRB 73, 195107 (2006)) for {resolved_species} -- a starting-point "
+            "sanity check, not a validation. Verify against your own functional/pseudopotential/"
+            "basis before production runs.", 'yellow'))
+    else:
+        parser.error("--u is required unless --use-reference is given (with every species having "
+                      "a tabulated reference value).")
+
+    j_values = args.j if args.j is not None else [0.0] * len(resolved_species)
+    if len(j_values) != len(resolved_species):
+        print(color_text(
+            f"Error: --j has {len(j_values)} value(s) but {len(resolved_species)} species are "
+            "being processed -- must match one-to-one.", 'red'))
         sys.exit(1)
 
-    j_values = args.j if args.j is not None else [0.0] * len(args.species)
-    if len(j_values) != len(args.species):
+    shell_values = args.shell if args.shell is not None else [None] * len(resolved_species)
+    if len(shell_values) != len(resolved_species):
         print(color_text(
-            f"Error: --j has {len(j_values)} value(s) but --species has {len(args.species)} -- "
-            "must match one-to-one.", 'red'))
-        sys.exit(1)
-
-    shell_values = args.shell if args.shell is not None else [None] * len(args.species)
-    if len(shell_values) != len(args.species):
-        print(color_text(
-            f"Error: --shell has {len(shell_values)} value(s) but --species has "
-            f"{len(args.species)} -- must match one-to-one.", 'red'))
+            f"Error: --shell has {len(shell_values)} value(s) but {len(resolved_species)} species "
+            "are being processed -- must match one-to-one.", 'red'))
         sys.exit(1)
 
     entries = []
-    for species, u, j, shell in zip(args.species, args.u, j_values, shell_values):
+    for species, u, j, shell in zip(resolved_species, u_values, j_values, shell_values):
         shell_name = shell or DEFAULT_SHELL.get(species)
         if shell_name is None:
             print(color_text(

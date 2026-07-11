@@ -1792,21 +1792,21 @@ def run_dftu_generator() -> None:
     print("="*60 + "\n")
 
     print(f"{color_text('What do you want to do?', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = Generate a %block LDAU.proj (default)")
-    print(f"  {color_text('2', 'cyan')} = List all literature reference U values")
-    print(f"  {color_text('3', 'cyan')} = Look up the reference U for one element")
-    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    print(f"  {color_text('1', 'cyan')} = Generate a %block from the Materials Project table (verify a .fdf) (default)")
+    print(f"  {color_text('2', 'cyan')} = Generate a %block LDAU.proj by hand (type each species' U yourself)")
+    mode_choice = get_input("Select option (1-2) [default: 1]: ").strip() or '1'
 
-    if mode_choice == '2':
-        run_tool("stb-dftu", ["--list-reference", "--no-intro"])
-        return
+    if mode_choice == '1':
+        fdf_path = get_input(".fdf file to read species from: ").strip()
+        while not os.path.isfile(fdf_path):
+            print(color_text("File not found!", 'red'))
+            fdf_path = get_input(".fdf file to read species from: ").strip()
 
-    if mode_choice == '3':
-        element = get_input("Element (e.g. Ni): ").strip()
-        while not element:
-            print(color_text("Element cannot be empty!", 'red'))
-            element = get_input("Element: ").strip()
-        run_tool("stb-dftu", ["--suggest", element, "--no-intro"])
+        args = ["--fdf", fdf_path, "--use-reference", "--no-intro"]
+        output = get_input("\nAlso save to a file? [optional, press Enter to skip]: ").strip()
+        if output:
+            args.extend(["--output", output])
+        run_tool("stb-dftu", args)
         return
 
     print(f"\n{color_text('Enter one species at a time (blank species to finish):', 'yellow')}")
@@ -2493,6 +2493,12 @@ INPUT_TOOLS = {
     4: {'title': "DFT+U / Hubbard Block Generator (stb-dftu)",
         'description': "Generate a ready-to-use %block LDAU.proj snippet from a user-supplied U (and J).",
         'func': run_dftu_generator},
+    5: {'title': "Structure Fetcher (stb-fetch)",
+        'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
+        'func': run_fetch_generator},
+    6: {'title': "ML Pre-Relaxation (stb-mlrelax)",
+        'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
+        'func': run_mlrelax_generator},
        }
 
 
@@ -2524,22 +2530,16 @@ STRUCTURE_TOOLS = {
     8: {'title': "Crystal Builder (stb-crystalbuilder)",
         'description': "Build a structure from a space group and Wyckoff positions.",
         'func': run_crystalbuilder_generator},
-    9: {'title': "Structure Fetcher (stb-fetch)",
-        'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
-        'func': run_fetch_generator},
-    10: {'title': "Surface Passivator (stb-passivate)",
-         'description': "Cap dangling bonds on a cut surface with a passivating atom (e.g. H).",
-         'func': run_passivate_generator},
-    11: {'title': "Reference Molecule Builder (stb-molecule)",
+    9: {'title': "Surface Passivator (stb-passivate)",
+        'description': "Cap dangling bonds on a cut surface with a passivating atom (e.g. H).",
+        'func': run_passivate_generator},
+    10: {'title': "Reference Molecule Builder (stb-molecule)",
          'description': "Build a reference molecule (e.g. H2O, CO2) from ASE's G2 database.",
          'func': run_molecule_generator},
-    12: {'title': "ML Pre-Relaxation (stb-mlrelax)",
-         'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
-         'func': run_mlrelax_generator},
-    13: {'title': "Amorphous Structure Generator (stb-amorphize)",
+    11: {'title': "Amorphous Structure Generator (stb-amorphize)",
          'description': "Melt-quench MD with MACE-MP-0 to build an amorphous starting guess (needs the optional 'ml' extra).",
          'func': run_amorphize_generator},
-    14: {'title': "Random Crystal Generator (stb-crystalcast)",
+    12: {'title': "Random Crystal Generator (stb-crystalcast)",
          'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular, "
                          "optionally ML-ranked) from a symmetry group and composition; or "
                          "analyze/substitute/subgroup/supergroup an existing structure.",

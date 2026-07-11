@@ -9,6 +9,38 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 UNITCELL_MODES = ("primitive", "conventional", "refined")
 
 
+def find_inequivalent_sites(pmg_structure, symprec, filter_species=None):
+    """Returns (sites, space_group_label) where `sites` is a list of
+    (index, wyckoff_letter, multiplicity) -- one representative atom (0-based
+    index) per symmetrically distinct site, via spglib's equivalent-atoms
+    mapping. If filter_species is given, only representatives of that
+    species are returned (their multiplicity still counts all symmetry
+    -equivalent atoms of that site, filtered species or not, since
+    spglib never groups atoms of different species together).
+
+    Moved here once stb-hubbardu became a second consumer (alongside
+    stb-defect --all-inequivalent-sites) -- both need the same "which sites
+    are physically distinct vs. just symmetry copies of each other"
+    classification.
+    """
+    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec)
+    dataset = sga.get_symmetry_dataset()
+
+    groups = {}
+    for i, rep in enumerate(dataset.equivalent_atoms):
+        groups.setdefault(rep, []).append(i)
+
+    sites = []
+    for rep in sorted(groups):
+        symbol = pmg_structure[rep].specie.symbol
+        if filter_species is not None and symbol != filter_species:
+            continue
+        sites.append((rep, dataset.wyckoffs[rep], len(groups[rep])))
+
+    space_group = f"{dataset.international} (No. {dataset.number})"
+    return sites, space_group
+
+
 def reduce_to_unitcell(structure, mode, symprec=1e-3, angle_tolerance=5.0):
     """Returns (new_structure, sga) for the requested `mode`:
       - primitive: smallest possible cell.

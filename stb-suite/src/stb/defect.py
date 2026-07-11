@@ -14,12 +14,12 @@ import argparse
 import numpy as np
 from pymatgen.core.sites import PeriodicSite
 from pymatgen.core.periodic_table import Element
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import mace_relax
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.deps import require_mace
+from stb.core.symmetry import find_inequivalent_sites
 
 
 def parse_index_list(spec, n_atoms):
@@ -78,33 +78,6 @@ def resolve_nearest(structure, position, given_format, filter_species=None):
     distances = [(dummy.distance(pmg_structure[i]), i) for i in candidate_indices]
     distances.sort(key=lambda d: d[0])
     return distances[0][1]
-
-
-def find_inequivalent_sites(pmg_structure, symprec, filter_species=None):
-    """Returns (sites, space_group_label) where `sites` is a list of
-    (index, wyckoff_letter, multiplicity) -- one representative atom (0-based
-    index) per symmetrically distinct site, via spglib's equivalent-atoms
-    mapping. If filter_species is given, only representatives of that
-    species are returned (their multiplicity still counts all symmetry
-    -equivalent atoms of that site, filtered species or not, since
-    spglib never groups atoms of different species together).
-    """
-    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec)
-    dataset = sga.get_symmetry_dataset()
-
-    groups = {}
-    for i, rep in enumerate(dataset.equivalent_atoms):
-        groups.setdefault(rep, []).append(i)
-
-    sites = []
-    for rep in sorted(groups):
-        symbol = pmg_structure[rep].specie.symbol
-        if filter_species is not None and symbol != filter_species:
-            continue
-        sites.append((rep, dataset.wyckoffs[rep], len(groups[rep])))
-
-    space_group = f"{dataset.international} (No. {dataset.number})"
-    return sites, space_group
 
 
 def apply_vacancy_or_substitution(atoms, species_list, species_meta, indices_set, defect_type, new_species=None):

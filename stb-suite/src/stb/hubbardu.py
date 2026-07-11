@@ -18,6 +18,7 @@ from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, ldau_proj_block as _base_ldau_proj_block
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.symmetry import find_inequivalent_sites
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 _EXISTING_LDAU_RE = re.compile(r'LDAU\.proj|LDAU\.PotentialShift|DFTU\.proj|DFTU\.PotentialShift', re.IGNORECASE)
@@ -172,6 +173,31 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
     return copied
 
 
+def alias_pseudopotential_files(dest_dir, species, alias_label):
+    """Duplicates every already-copied pseudopotential file for `species` in
+    `dest_dir` under `alias_label` instead (e.g. 'Mn.psml' -> 'Mn_pert.psml',
+    'Mn-gga.nosemicore.psf' -> 'Mn_pert-gga.nosemicore.psf') -- SIESTA looks
+    up a species' pseudopotential by its exact species label, so the aliased
+    species (same Z, different label -- see structure_io.alias_single_atom_
+    species) needs its own copy under the new name, not just the original
+    element's. Returns the list of new filenames written.
+    """
+    written = []
+    for name in sorted(os.listdir(dest_dir)):
+        if not name.lower().endswith(PSEUDO_EXTENSIONS):
+            continue
+        ext = next(e for e in PSEUDO_EXTENSIONS if name.lower().endswith(e))
+        stem = name[: len(name) - len(ext)]
+        symbol = re.split(r'[-_]', stem, maxsplit=1)[0]
+        if symbol.lower() != species.lower():
+            continue
+        suffix = stem[len(symbol):]
+        new_name = f"{alias_label}{suffix}{name[len(stem):]}"
+        shutil.copy(os.path.join(dest_dir, name), os.path.join(dest_dir, new_name))
+        written.append(new_name)
+    return written
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 1 of 3: generates the 'reference' folder for a Hubbard U linear-response calculation (Cococcioni & de Gironcoli, Phys. Rev. B 71, 035105, 2005).", 'bold')}
@@ -183,13 +209,25 @@ you); (3) run SIESTA in those, then stb-hubbarduAnalysis to compute U.
 If 'reference/' doesn't converge: DFT+U SCF on correlated oxides is often
 slow/oscillatory with default settings. Things worth trying in your own
 calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
-(~6), and a looser SCF.H.Tolerance (~0.01 eV).""",
+(~6), and a looser SCF.H.Tolerance (~0.01 eV).
+
+If --species appears more than once in --structure, --atom-index is required:
+SIESTA's %%block LDAU.proj perturbs an entire species label at once, so with
+no --atom-index every atom of that species would be perturbed simultaneously
+-- measuring a collective response instead of the single isolated-atom
+response the Cococcioni-de Gironcoli supercell method requires. When needed,
+the chosen atom is isolated onto its own species label (same Z, own
+pseudopotential file) behind the scenes; --species stays the real chemical
+species everywhere else (the final recommended %%block LDAU.proj, the
+REFERENCE_U sanity check, ...).""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Mn\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Fe --shell 3d --j 0.5\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Mn --pseudo-dir ./pseudos\n"
                "  %(prog)s -s structure.fdf -c calc.fdf --species Mn --pseudo-dir dojo\n"
+               "  %(prog)s -s structure.fdf -c calc.fdf --species Mn --atom-index 1  "
+               "# Mn appears twice in structure.fdf\n"
     )
 
     parser.add_argument("-s", "--structure", type=str, required=True,
@@ -200,6 +238,11 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
     parser.add_argument("--species", type=str, required=True,
                         help="Species label to apply the Hubbard U correction to (must be present in "
                              "--structure).")
+    parser.add_argument("--atom-index", type=int, default=None, metavar="N",
+                        help="1-based index (counting ALL atoms in --structure's coordinate block, in "
+                             "file order -- same convention as stb-defect --index) of the specific atom "
+                             "to perturb. Required only if --species appears more than once in "
+                             "--structure; omit it when --species matches a single atom.")
     parser.add_argument("--shell", type=str, default=None, choices=sorted(SHELL_NAMES),
                         help="Correlated shell (3d/4d/5d/4f/5f). Default: the standard shell for "
                              "--species (transition metals -> (n)d, lanthanides -> 4f, actinides -> 5f).")
@@ -264,6 +307,56 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
             f"(available: {', '.join(structure.species)}).", 'red'))
         sys.exit(1)
 
+    n_atoms = len(structure.atoms)
+    species_atom_indices = [i for i, (symbol, _) in enumerate(structure.atoms) if symbol == args.species]
+    alias_label = None
+
+    if len(species_atom_indices) > 1:
+        if args.atom_index is None:
+            print(color_text(
+                f"Error: --species '{args.species}' appears {len(species_atom_indices)} times in "
+                f"'{args.structure}' -- the linear-response perturbation must be isolated to a single "
+                "atom (perturbing every atom of the species at once measures a collective response, "
+                "not the isolated single-site response the method requires). Pass --atom-index to pick "
+                "one:", 'red'))
+            try:
+                pmg_structure = structure_io.to_pymatgen(structure)
+                sites, space_group = find_inequivalent_sites(pmg_structure, symprec=1e-3,
+                                                               filter_species=args.species)
+                print(f"  {color_text('Space group:', 'cyan')} {space_group}")
+                for rep, wyckoff, multiplicity in sites:
+                    note = (f"{multiplicity} symmetry-equivalent atom(s) -- any one of them gives the "
+                            "same result" if multiplicity > 1 else "symmetrically distinct site")
+                    print(f"    --atom-index {rep + 1}   (Wyckoff {wyckoff}, {note})")
+            except ValueError:
+                for i in species_atom_indices:
+                    print(f"    --atom-index {i + 1}   (position {structure.atoms[i][1]})")
+            sys.exit(1)
+
+        if not (1 <= args.atom_index <= n_atoms):
+            print(color_text(f"Error: --atom-index {args.atom_index} is out of range (1 to {n_atoms}).", 'red'))
+            sys.exit(1)
+        if structure.atoms[args.atom_index - 1][0] != args.species:
+            print(color_text(
+                f"Error: atom {args.atom_index} in '{args.structure}' is species "
+                f"'{structure.atoms[args.atom_index - 1][0]}', not '{args.species}'.", 'red'))
+            sys.exit(1)
+
+        alias_label = f"{args.species}_pert"
+        if alias_label in structure.species:
+            print(color_text(
+                f"Error: alias species '{alias_label}' already exists in '{args.structure}' -- rename "
+                "it before running stb-hubbardu on a multi-atom species.", 'red'))
+            sys.exit(1)
+    elif args.atom_index is not None:
+        if not (1 <= args.atom_index <= n_atoms) or structure.atoms[args.atom_index - 1][0] != args.species:
+            print(color_text(
+                f"Error: --atom-index {args.atom_index} does not refer to species '{args.species}' "
+                f"in '{args.structure}'.", 'red'))
+            sys.exit(1)
+
+    perturbed_species = alias_label or args.species
+
     shell_name = args.shell or DEFAULT_SHELL.get(args.species)
     if shell_name is None:
         print(color_text(
@@ -281,27 +374,44 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
 
     print(f"  {color_text('Species / shell:', 'cyan')} {args.species} ({shell_name}: n={n}, l={l})")
     print(f"  {color_text('J (eV):', 'cyan')} {args.j:.3f}")
+    if alias_label:
+        print(f"  {color_text('Perturbed atom:', 'cyan')} atom #{args.atom_index} of '{args.species}', "
+              f"isolated via alias species '{alias_label}' (same Z, own pseudopotential) -- the other "
+              f"atom(s) of '{args.species}' are left unperturbed.")
+        print(color_text(
+            f"  [NOTE] If your calc.fdf template configures a custom %block PAO.Basis/PAO.Basis.Sizes "
+            f"for '{args.species}', it is NOT automatically applied to '{alias_label}' -- SIESTA will "
+            "auto-generate a basis for it instead. Check convergence/consistency if you rely on "
+            "non-default basis parameters.", 'yellow'))
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Snapshot the exact template stage 2 must regenerate perturbed folders
     # from -- stage 2 is a separate invocation and must not risk using a
     # different (possibly since-edited) calc.fdf/structure.fdf than the one
-    # 'reference/' was actually converged with.
-    shutil.copy(args.structure, os.path.join(args.output_dir, TEMPLATE_STRUCTURE_NAME))
+    # 'reference/' was actually converged with. When an alias is in play,
+    # this snapshot IS the aliased structure, so stage 2 propagates it to
+    # every scf_alpha_*/frozen_alpha_* folder for free.
+    template_structure_path = os.path.join(args.output_dir, TEMPLATE_STRUCTURE_NAME)
+    if alias_label:
+        structure_io.alias_single_atom_species(
+            args.structure, template_structure_path, args.species, args.atom_index, alias_label)
+    else:
+        shutil.copy(args.structure, template_structure_path)
     with open(os.path.join(args.output_dir, TEMPLATE_CALC_NAME), 'w') as f:
         f.write(calc_template)
 
     manifest = {
         "species": args.species, "n": n, "l": l, "j": args.j, "label": label,
+        "perturbed_species": perturbed_species, "atom_index": args.atom_index,
         "runs": {"reference": {"kind": "reference", "alpha": 0.0}},
     }
     manifest_path = os.path.join(args.output_dir, "run_manifest.json")
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
 
-    ref_extra = ldau_perturbation_block(args.species, n, l, 0.0, args.j, potential_shift=True)
-    ref_folder = write_run_folder(args.output_dir, "reference", calc_template, args.structure, ref_extra)
+    ref_extra = ldau_perturbation_block(perturbed_species, n, l, 0.0, args.j, potential_shift=True)
+    ref_folder = write_run_folder(args.output_dir, "reference", calc_template, template_structure_path, ref_extra)
     print(f"  {color_text('[OK]', 'green')} {ref_folder} (alpha=0, reference)")
 
     if args.pseudo_dir:
@@ -309,6 +419,9 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
         os.makedirs(pseudo_snapshot, exist_ok=True)
         copy_pseudopotentials(args.pseudo_dir, pseudo_snapshot, species=structure.species)
         copied = copy_pseudopotentials(args.pseudo_dir, ref_folder, species=structure.species)
+        if alias_label:
+            alias_pseudopotential_files(pseudo_snapshot, args.species, alias_label)
+            copied = copied + alias_pseudopotential_files(ref_folder, args.species, alias_label)
         if copied:
             print(f"  {color_text('[OK]', 'green')} Copied {len(copied)} pseudopotential file(s) from "
                   f"'{args.pseudo_dir}' into '{ref_folder}' (and saved for stb-hubbarduAlphas to reuse)")
@@ -317,6 +430,12 @@ calc.fdf template: a lower DM.MixingWeight (~0.05), a higher DM.NumberPulay
                 f"  [WARNING] --pseudo-dir '{args.pseudo_dir}' has no recognized pseudopotential "
                 f"files ({'/'.join(PSEUDO_EXTENSIONS)}) -- did you point it at the right folder? "
                 "Nothing was copied.", 'yellow'))
+    elif alias_label:
+        print(color_text(
+            f"  [NOTE] No --pseudo-dir given -- copy your pseudopotential files (.psf/.psml) into "
+            "'reference/' yourself before running SIESTA there, including a copy renamed to "
+            f"'{alias_label}.<ext>' for the perturbed atom (and again into every scf_alpha_*/"
+            "frozen_alpha_* folder stb-hubbarduAlphas generates).", 'yellow'))
     else:
         print(color_text(
             "  [NOTE] No --pseudo-dir given -- copy your pseudopotential files (.psf/.psml) into "

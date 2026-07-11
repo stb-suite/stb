@@ -62,6 +62,7 @@ echo "--- Starting tester for STB-Hubbardu stage 1: reference prep (item 4.7.1) 
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/structure_2mn.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/calc.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
@@ -164,6 +165,104 @@ check_absent hubbardu_runs/reference/Fe.psml
 check_absent hubbardu_runs/_pseudopotentials/Fe.psml
 
 
+# --- 3c. Multi-atom species -- perturbation must be isolated to one atom ---
+echo -e "\n--- Testing --atom-index (species appearing more than once) ---"
+
+echo "Testing: --species matching 2 atoms, no --atom-index -> clean error listing candidates"
+stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --no-intro > log_multi_no_index.txt 2>&1
+check_exit_code $? 1
+check_contains "appears 2 times" log_multi_no_index.txt
+check_contains "Pass --atom-index" log_multi_no_index.txt
+check_contains "atom-index 1" log_multi_no_index.txt
+check_contains "symmetry-equivalent atom(s) -- any one of them gives the same result" log_multi_no_index.txt
+
+echo "Testing: --species matching 1 atom (existing fixture) needs no --atom-index -- unaffected"
+rm -rf hubbardu_runs
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --no-intro > log_single_unaffected.txt 2>&1
+check_exit_code $? 0
+check_contains "Mn   1" hubbardu_runs/reference/calc.fdf
+if grep -q "Mn_pert" hubbardu_runs/reference/calc.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} single-atom species should never be aliased"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no aliasing for a single-atom species"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --atom-index pointing at the wrong species is a clean error"
+stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --atom-index 3 --no-intro > log_multi_wrong_species.txt 2>&1
+check_exit_code $? 1
+check_contains "is species 'O', not 'Mn'" log_multi_wrong_species.txt
+
+echo "Testing: --atom-index out of range is a clean error"
+stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --atom-index 99 --no-intro > log_multi_out_of_range.txt 2>&1
+check_exit_code $? 1
+check_contains "out of range (1 to 4)" log_multi_out_of_range.txt
+
+echo "Testing: valid --atom-index isolates the perturbation via an aliased species"
+rm -rf hubbardu_runs
+stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --atom-index 1 --no-intro > log_multi_ok.txt 2>&1
+check_exit_code $? 0
+check_contains "Perturbed atom:" log_multi_ok.txt
+check_contains "Mn_pert" log_multi_ok.txt
+check_contains "Mn_pert   1" hubbardu_runs/reference/calc.fdf
+check_contains "perturbed_species" hubbardu_runs/run_manifest.json
+check_contains "Mn_pert" hubbardu_runs/run_manifest.json
+check_contains "\"atom_index\": 1" hubbardu_runs/run_manifest.json
+
+echo "Testing: aliased structure.fdf has 3 species (Mn, O, Mn_pert) and NumberOfSpecies bumped to 3"
+check_contains "NumberOfSpecies    3" hubbardu_runs/reference/structure.fdf
+check_contains "Mn_pert" hubbardu_runs/reference/structure.fdf
+check_contains "Mn_pert" hubbardu_runs/_template_structure.fdf
+
+echo "Testing: only ONE atom's species index was changed -- the other Mn line still points at species 1"
+MN_LINE_COUNT=$(grep -c "   1$" hubbardu_runs/reference/structure.fdf)
+if [ "$MN_LINE_COUNT" -ge 1 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} the other Mn atom still uses the original species index"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected the unperturbed Mn atom to keep species index 1"
+    FAIL=$((FAIL+1))
+fi
+
+echo "Testing: alias species collision is a clean error"
+cat > structure_2mn_collision.fdf << 'EOF'
+NumberOfSpecies    3
+NumberofAtoms      5
+%block ChemicalSpeciesLabel
+ 1   25   Mn
+ 2   8   O
+ 3   25   Mn_pert
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+AtomicCoordinatesFormat  Fractional
+%block LatticeVectors
+ 0.00000000   4.40800000   4.40800000
+ 2.20400000   0.00000000   2.20400000
+ 2.20400000   2.20400000   0.00000000
+%endblock LatticeVectors
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.00000000   1
+  0.50000000   0.00000000   0.00000000   1
+  0.25000000   0.50000000   0.50000000   2
+  0.75000000   0.50000000   0.50000000   2
+  0.10000000   0.10000000   0.10000000   3
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-hubbardu -s structure_2mn_collision.fdf -c calc.fdf --species Mn --atom-index 1 --no-intro > log_alias_collision.txt 2>&1
+check_exit_code $? 1
+check_contains "already exists" log_alias_collision.txt
+
+echo "Testing: --pseudo-dir also copies an aliased pseudopotential file"
+mkdir -p pseudos_2mn
+echo "fake Mn pseudopotential" > pseudos_2mn/Mn.psml
+rm -rf hubbardu_runs
+stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --atom-index 1 --pseudo-dir pseudos_2mn --no-intro > log_multi_pseudo.txt 2>&1
+check_exit_code $? 0
+check_success hubbardu_runs/reference/Mn_pert.psml
+check_success hubbardu_runs/_pseudopotentials/Mn_pert.psml
+
+
 # --- 4. Error and robustness cases ---
 echo -e "\n--- Testing error and robustness cases ---"
 
@@ -247,12 +346,19 @@ check_contains "SCF.H.Tolerance" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 4.7.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.7.1) ---"
 
-echo "Testing: navigate 4.7.1 -> invalid file then valid -> calc.fdf -> Mn -> auto shell -> default J -> default output -> quit"
+echo "Testing: navigate 4.7.1 -> invalid file then valid -> calc.fdf -> Mn -> no atom-index -> auto shell -> default J -> default output -> quit"
 rm -rf hubbardu_runs
-printf '4.7.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.7.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Generated 'reference/'" log_menu.txt
 check_success hubbardu_runs/run_manifest.json
+
+echo "Testing: navigate 4.7.1 -> structure_2mn.fdf -> calc.fdf -> Mn -> atom-index 1 -> auto shell -> default J -> default output -> quit"
+rm -rf hubbardu_runs
+printf '4.7.1\nstructure_2mn.fdf\ncalc.fdf\nMn\n1\n\n\n\n\n\n0\n' | stb-suite > log_menu_atom_index.txt 2>&1
+check_contains "Perturbed atom:" log_menu_atom_index.txt
+check_contains "Generated 'reference/'" log_menu_atom_index.txt
+check_contains "Mn_pert   1" hubbardu_runs/reference/calc.fdf
 
 
 popd > /dev/null

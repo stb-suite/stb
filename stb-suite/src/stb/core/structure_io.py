@@ -390,3 +390,126 @@ def rewrite_fdf_lattice(source_path: str, new_lattice: np.ndarray, out_path: str
 
     with open(out_path, "w") as f:
         f.writelines(out_lines)
+
+
+def alias_single_atom_species(source_path: str, out_path: str, species: str,
+                               atom_index: int, alias_label: str) -> None:
+    """Writes out_path as a copy of source_path with exactly one atom
+    relabeled from `species` to a new species entry `alias_label` (same Z,
+    a fresh species index), appended to %block ChemicalSpeciesLabel.
+    Everything else -- lattice, every other atom, comments, basis blocks --
+    is preserved verbatim, mirroring rewrite_fdf_lattice()'s approach.
+
+    `atom_index` is 1-based and counts ALL atoms in %block
+    AtomicCoordinatesAndAtomicSpecies in file order (the same convention
+    stb-defect's --index already uses, see defect.py's parse_index_list) --
+    not just atoms of `species`.
+
+    Used by stb-hubbardu to isolate the Cococcioni-de Gironcoli perturbation
+    onto a single atom when --species matches more than one atom: SIESTA's
+    %block LDAU.proj perturbs an entire species label at once, so with no
+    aliasing every atom of a multi-atom species would be perturbed
+    simultaneously, measuring a collective response instead of the isolated
+    single-site response the supercell method requires.
+
+    Raises ValueError if `species` isn't declared, if `alias_label` already
+    exists, if `atom_index` is out of range, or if the atom at `atom_index`
+    isn't actually `species`.
+    """
+    with open(source_path, "r") as f:
+        lines = f.readlines()
+
+    species_ids: dict[str, str] = {}
+    max_id = 0
+    species_z: str | None = None
+    in_species_block = False
+    for line in lines:
+        cleaned = _strip_comment(line)
+        lower = cleaned.lower()
+        if lower == "%block chemicalspecieslabel":
+            in_species_block = True
+            continue
+        if in_species_block and lower.startswith("%endblock"):
+            in_species_block = False
+            continue
+        if in_species_block and cleaned:
+            parts = cleaned.split()
+            if len(parts) >= 3:
+                idx, z, symbol = parts[0], parts[1], parts[2]
+                species_ids[symbol] = idx
+                max_id = max(max_id, int(idx))
+                if symbol == species:
+                    species_z = z
+
+    if species_z is None:
+        raise ValueError(f"Species '{species}' not declared in %block ChemicalSpeciesLabel in {source_path}.")
+    if alias_label in species_ids:
+        raise ValueError(f"Alias species '{alias_label}' already exists in {source_path}; pick a different label.")
+
+    alias_id = str(max_id + 1)
+    target_species_id = species_ids[species]
+
+    out_lines: list[str] = []
+    in_species_block = False
+    in_coords_block = False
+    atom_counter = 0
+    aliased = False
+    for line in lines:
+        cleaned = _strip_comment(line)
+        lower = cleaned.lower()
+
+        # NumberOfSpecies must match the (now one-longer) %block
+        # ChemicalSpeciesLabel -- SIESTA uses it to size the species array
+        # when reading that block, so a stale count would silently truncate
+        # or misread the block instead of picking up the new alias species.
+        if lower.startswith("numberofspecies"):
+            parts = cleaned.split()
+            try:
+                count = int(parts[1])
+                out_lines.append(line.replace(parts[1], str(count + 1), 1))
+                continue
+            except (IndexError, ValueError):
+                pass
+
+        if lower == "%block chemicalspecieslabel":
+            in_species_block = True
+            out_lines.append(line)
+            continue
+        if in_species_block and lower.startswith("%endblock"):
+            out_lines.append(f" {alias_id}   {species_z}   {alias_label}\n")
+            in_species_block = False
+            out_lines.append(line)
+            continue
+
+        if lower == "%block atomiccoordinatesandatomicspecies":
+            in_coords_block = True
+            out_lines.append(line)
+            continue
+        if in_coords_block and lower.startswith("%endblock"):
+            in_coords_block = False
+            out_lines.append(line)
+            continue
+        if in_coords_block and cleaned:
+            atom_counter += 1
+            if atom_counter == atom_index:
+                parts = cleaned.split()
+                if len(parts) < 4 or parts[3] != target_species_id:
+                    raise ValueError(
+                        f"Atom {atom_index} in {source_path} is not species '{species}' "
+                        f"(expected species index {target_species_id})."
+                    )
+                parts[3] = alias_id
+                out_lines.append("  " + "   ".join(parts) + "\n")
+                aliased = True
+                continue
+
+        out_lines.append(line)
+
+    if not aliased:
+        raise ValueError(
+            f"Atom index {atom_index} is out of range in {source_path} "
+            f"(found {atom_counter} atom(s))."
+        )
+
+    with open(out_path, "w") as f:
+        f.writelines(out_lines)

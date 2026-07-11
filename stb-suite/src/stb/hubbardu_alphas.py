@@ -20,10 +20,15 @@ from stb.hubbardu import (
     TEMPLATE_STRUCTURE_NAME, TEMPLATE_CALC_NAME, PSEUDO_SNAPSHOT_DIRNAME,
 )
 
-# Default perturbation strengths (eV) for the linear-response fit -- small
-# enough to stay in the linear regime, symmetric around zero so the fit isn't
-# skewed by an accidental asymmetry in the response.
-DEFAULT_ALPHAS = [-0.15, -0.10, -0.05, 0.05, 0.10, 0.15]
+# Default perturbation strengths (eV) for the linear-response fit -- symmetric
+# around zero so the fit isn't skewed by an accidental asymmetry in the
+# response. Narrowed from +-0.15 to +-0.10: on a real MnO run, including the
+# +-0.15 points pulled the fitted U from ~4.4 eV (using only up to +-0.10) to
+# ~9 eV -- a sign the response is no longer linear that far out. +-0.10 was
+# the widest range that stayed consistent there. Still just a default --
+# widen via --alphas for a system with a weak response (signal near numerical
+# noise at +-0.10), and check stage 3's R^2/intercept warnings either way.
+DEFAULT_ALPHAS = [-0.10, -0.05, 0.05, 0.10]
 
 # With DM.UseSaveDM T seeding a converged reference .DM, a single SCF
 # iteration is enough: SIESTA still prints the DFT+U occupation diagnostic
@@ -129,6 +134,10 @@ stb-hubbarduAnalysis.""",
         sys.exit(1)
 
     species, n, l, j, label = manifest["species"], manifest["n"], manifest["l"], manifest["j"], manifest["label"]
+    # Falls back to `species` for manifests written before stage 1 supported
+    # --atom-index (no aliasing then, so the species itself was always the
+    # one actually carrying the LDAU.proj perturbation).
+    perturbed_species = manifest.get("perturbed_species", species)
 
     ref_dm = os.path.join(args.dir, "reference", f"{label}.DM")
     if not os.path.isfile(ref_dm):
@@ -153,6 +162,9 @@ stb-hubbarduAnalysis.""",
     check_no_existing_ldau(calc_template, calc_path)
 
     print(f"  {color_text('Species / shell:', 'cyan')} {species} (n={n}, l={l}), J={j:.3f} eV")
+    if perturbed_species != species:
+        print(f"  {color_text('Perturbed atom:', 'cyan')} isolated via alias species "
+              f"'{perturbed_species}' (see stage 1's --atom-index)")
     print(f"  {color_text('Perturbations (eV):', 'cyan')} {args.alphas}")
 
     pseudo_snapshot = os.path.join(args.dir, PSEUDO_SNAPSHOT_DIRNAME)
@@ -165,7 +177,7 @@ stb-hubbarduAnalysis.""",
 
     for alpha in args.alphas:
         scf_name = f"scf_alpha_{alpha:.4f}"
-        scf_extra = (ldau_perturbation_block(species, n, l, alpha, j, potential_shift=True)
+        scf_extra = (ldau_perturbation_block(perturbed_species, n, l, alpha, j, potential_shift=True)
                      + "DM.UseSaveDM T\n")
         scf_folder = write_run_folder(args.dir, scf_name, calc_template, structure_path, scf_extra)
         shutil.copy(ref_dm, os.path.join(scf_folder, f"{label}.DM"))
@@ -176,7 +188,7 @@ stb-hubbarduAnalysis.""",
 
     for alpha in [0.0] + list(args.alphas):
         frozen_name = f"frozen_alpha_{alpha:.4f}"
-        frozen_extra = (ldau_perturbation_block(species, n, l, alpha, j, potential_shift=True)
+        frozen_extra = (ldau_perturbation_block(perturbed_species, n, l, alpha, j, potential_shift=True)
                         + f"MaxSCFIterations {args.frozen_iterations}\n" + "DM.UseSaveDM T\n")
         frozen_folder = write_run_folder(args.dir, frozen_name, calc_template, structure_path, frozen_extra)
         shutil.copy(ref_dm, os.path.join(frozen_folder, f"{label}.DM"))

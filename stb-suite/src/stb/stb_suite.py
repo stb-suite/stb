@@ -1710,6 +1710,13 @@ def run_hubbardu_prep() -> None:
 
     args = ["--structure", struct_file, "--calc", calc_file, "--species", species, "--no-intro"]
 
+    atom_index = get_input(
+        "Atom index to perturb (1-based, counting all atoms in the structure) "
+        "[optional -- only needed if the species appears more than once]: "
+    ).strip()
+    if atom_index:
+        args.extend(["--atom-index", atom_index])
+
     print(f"\n{color_text('Correlated shell:', 'yellow')} (blank = auto-detect from species)")
     shell = get_input("  Shell (3d/4d/5d/4f/5f): ").strip()
     if shell:
@@ -1744,7 +1751,7 @@ def run_hubbardu_alphas() -> None:
 
     alphas_str = get_input(
         "Perturbation strengths in eV, space-separated "
-        "[default: -0.15 -0.10 -0.05 0.05 0.10 0.15]: "
+        "[default: -0.10 -0.05 0.05 0.10]: "
     ).strip()
     if alphas_str:
         args.extend(["--alphas"] + alphas_str.split())

@@ -33,8 +33,8 @@ def prompt_pseudo_source(optional: bool = True) -> str:
     `optional` and the user skips."""
     bank_list = list(BANKS.items())
     print(f"\n{color_text('Pseudopotential source:', 'yellow')}")
-    for i, (name, description) in enumerate(bank_list, 1):
-        print(f"  {color_text(str(i), 'cyan')} = Bundled: {description} ({name})")
+    for i, (name, info) in enumerate(bank_list, 1):
+        print(f"  {color_text(str(i), 'cyan')} = Bundled: {info['description']} ({name})")
     print(f"  {color_text(str(len(bank_list) + 1), 'cyan')} = Custom path")
     prompt = f"Select option (1-{len(bank_list) + 1}"
     prompt += ", or Enter to skip): " if optional else "): "

@@ -137,6 +137,10 @@ check_exit_code $? 0
 check_success structure/C.psml
 rm -f pp/C.psml
 
+echo "Testing: using a bundled bank prints its citation/origin"
+check_contains "van Setten" log_bank.txt
+check_contains "pseudo-dojo.org" log_bank.txt
+
 
 # --- 6. --vacuum: isolated-atom box size is configurable ---
 echo -e "\n--- Testing --vacuum ---"

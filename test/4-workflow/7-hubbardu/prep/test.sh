@@ -152,6 +152,31 @@ stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir dojo --no-in
 check_exit_code $? 0
 check_success hubbardu_runs/reference/Mn.psml
 
+echo "Testing: using a bundled bank prints its citation/origin"
+check_contains "van Setten" log_bank.txt
+check_contains "pseudo-dojo.org" log_bank.txt
+
+echo "Testing: using a custom --pseudo-dir folder (not a bundled bank) prints NO citation"
+rm -rf hubbardu_runs_custom_pp
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir pseudos \
+    --output-dir hubbardu_runs_custom_pp --no-intro > log_custom_pp.txt 2>&1
+check_exit_code $? 0
+if grep -q "\[INFO\] Using bundled pseudopotential bank" log_custom_pp.txt; then
+    echo -e "   -> ${RED}Failed:${NC} a custom folder should never print a bundled-bank citation"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no citation printed for a custom folder"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --pseudo-dir accepts the other bundled bank (virtual_vault) with its own citation"
+rm -rf hubbardu_runs_vv
+stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --pseudo-dir virtual_vault \
+    --output-dir hubbardu_runs_vv --no-intro > log_bank_vv.txt 2>&1
+check_exit_code $? 0
+check_contains "NNIN/C" log_bank_vv.txt
+check_contains "nninc.cnf.cornell.edu" log_bank_vv.txt
+
 echo "Testing: a bank has ~70-80 elements, but only the structure's own species get copied"
 PP_COUNT=$(ls hubbardu_runs/reference/*.psml 2>/dev/null | wc -l)
 if [ "$PP_COUNT" -eq 1 ]; then

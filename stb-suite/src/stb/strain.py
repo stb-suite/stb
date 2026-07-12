@@ -19,7 +19,7 @@ from typing import List, Dict
 import os
 import argparse
 import numpy as np
-from stb.core import structure_io, kspace
+from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import COLORS, color_text, show_intro
 
 def determine_strain_type(direction):
@@ -107,6 +107,13 @@ def main():
                             "periodic vs. vacuum-padded (default: 10.0), same convention as "
                             "stb-kgrid/stb-kpath. Straining a vacuum-padded axis is physically "
                             "meaningless and is refused.")
+    parser.add_argument("--symprec", type=float, default=1e-3,
+                       help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own default), "
+                            "used only for the informational note about symmetry-equivalent "
+                            "directions (uniaxial only) -- never blocks the run.")
+    parser.add_argument("--angle-tolerance", type=float, default=5.0,
+                       help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
+                            "default), same use as --symprec.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-strain {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -150,6 +157,34 @@ def main():
         frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
         vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, args.vacuum_gap)
         print(f"[INFO] Detected dimensionality: {kspace.dimensionality_label(vacuum_axes)}")
+
+        # Advisory only (never blocks the run): if the requested uniaxial
+        # direction is symmetry-equivalent to another periodic axis, straining
+        # that axis instead/too would just repeat the same DFT calculation.
+        # Biaxial directions are out of scope for this check -- see
+        # core/symmetry.py::equivalent_cartesian_axes docstring.
+        if strain_type == 'uniaxial' and norm_dir in ('x', 'y', 'z'):
+            try:
+                axis_letters = ['x', 'y', 'z']
+                axis_lookup = {'x': 0, 'y': 1, 'z': 2}
+                pmg_structure = structure_io.to_pymatgen(structure)
+                groups, point_group = symmetry.equivalent_cartesian_axes(
+                    pmg_structure, args.symprec, args.angle_tolerance)
+                requested_axis = axis_lookup[norm_dir]
+                group = next(g for g in groups if requested_axis in g)
+                equivalent = sorted(
+                    i for i in group
+                    if i != requested_axis and not vacuum_axes[i]
+                )
+                if equivalent:
+                    letters = ', '.join(axis_letters[i] for i in equivalent)
+                    verb = "is" if len(equivalent) == 1 else "are"
+                    print(f"{color_text('[INFO]', 'cyan')} Direction(s) {letters} {verb} "
+                          f"equivalent to '{norm_dir}' by symmetry (point group {point_group}) -- "
+                          f"straining {'it' if len(equivalent) == 1 else 'them'} should give the "
+                          "same mechanical response; you may not need to compute both.")
+            except Exception:
+                pass  # symmetry detection is advisory only, never blocks the tool
 
         # Only check letters that are actually valid axes here -- an invalid
         # direction (e.g. 'w') is still caught later by apply_cartesian_strain's

@@ -56,6 +56,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR/subdir"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/subdir/"
+cp "$FIXTURE_DIR/si_cubic.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -95,7 +96,48 @@ check_exit_code $? 1
 check_contains "vacuum-padded axis" log_vacuum_xz.txt
 
 
-# --- 5. Bug fix: --file with a directory component ---
+# --- 5. Symmetry advisory (uniaxial only, informational, never blocks) ---
+echo -e "\n--- Testing the symmetry-equivalence advisory ---"
+
+echo "Testing: cubic structure (m-3m) -- x/y/z are truly equivalent, advisory must fire"
+rm -rf strain_runs
+stb-strain --file si_cubic.fdf --stdir x --stmin 0 --stmax 1 --no-intro > log_sym_cubic.txt 2>&1
+check_exit_code $? 0
+check_contains "Direction(s) y, z are equivalent to 'x' by symmetry" log_sym_cubic.txt
+check_contains "point group m-3m" log_sym_cubic.txt
+
+echo "Testing: hexagonal 2D fixture -- x and y are NOT equivalent (known zigzag/armchair"
+echo "         asymmetry), advisory must NOT fire"
+rm -rf strain_runs
+stb-strain --file structure.fdf --stdir x --stmin 0 --stmax 1 --no-intro > log_sym_hex.txt 2>&1
+check_exit_code $? 0
+if grep -q "equivalent to 'x' by symmetry" log_sym_hex.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected symmetry advisory for the hexagonal 2D fixture"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no symmetry advisory for x/y on the hexagonal 2D fixture"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: biaxial direction -- out of scope for v1, advisory must NOT fire"
+rm -rf strain_runs
+stb-strain --file si_cubic.fdf --stdir xy --stmin 0 --stmax 1 --no-intro > log_sym_biaxial.txt 2>&1
+check_exit_code $? 0
+if grep -q "equivalent to" log_sym_biaxial.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected symmetry advisory for a biaxial direction"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no symmetry advisory for biaxial directions (v1 scope)"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --help documents --symprec/--angle-tolerance"
+stb-strain --help > log_help_sym.txt 2>&1
+check_contains "symprec" log_help_sym.txt
+check_contains "angle-tolerance" log_help_sym.txt
+
+
+# --- 6. Bug fix: --file with a directory component ---
 echo -e "\n--- Testing --file with a subdirectory in the path ---"
 rm -rf strain_runs
 stb-strain --file subdir/structure.fdf --stdir x --stmin 0 --stmax 2 --step 2 --no-intro > log_subdir.txt 2>&1
@@ -103,7 +145,7 @@ check_exit_code $? 0
 check_success strain_runs/strain_x_2.00/structure.fdf
 
 
-# --- 6. Error and robustness cases ---
+# --- 7. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: --stmin > --stmax"
@@ -136,7 +178,7 @@ check_contains "output-dir" log_help.txt
 check_contains "vacuum-gap" log_help.txt
 
 
-# --- 7. Interactive path (stb-suite, shortcut 4.1.1) ---
+# --- 8. Interactive path (stb-suite, shortcut 4.1.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.1.1) ---"
 
 echo "Testing: navigate 4.1.1 -> invalid file then valid -> x -> 0/2/2 -> quit"
@@ -148,7 +190,7 @@ check_success strain_runs/strain_x_2.00/structure.fdf
 
 popd > /dev/null
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

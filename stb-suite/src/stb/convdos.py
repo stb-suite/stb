@@ -11,6 +11,9 @@ VERSION = "1.9.1"
 import sys
 import argparse
 import numpy as np
+# np.trapz was removed in NumPy 2.0; use scipy's trapezoid for compatibility
+# with both old and new NumPy (same fix already applied in strain_analysis.py).
+from scipy.integrate import trapezoid
 import matplotlib.pyplot as plt
 from stb.core.cli import color_text, show_intro
 
@@ -111,8 +114,8 @@ def print_conservation_check(energy, original, filtered, dos_labels):
     --sigma/--fwhm, losing weight off the zero-padded edges)."""
     print("[INFO] DOS conservation check (integral before -> after broadening):")
     for i, label in enumerate(dos_labels):
-        before = np.trapz(original[:, i + 1], energy)
-        after = np.trapz(filtered[:, i], energy)
+        before = trapezoid(original[:, i + 1], energy)
+        after = trapezoid(filtered[:, i], energy)
         print(f"       {label:<12}: {before:12.4f} -> {after:12.4f}")
 
 

@@ -11,17 +11,12 @@ VERSION = "1.9.1"
 import argparse
 import os
 from datetime import datetime
-import numpy as np
-import re
 import matplotlib.pyplot as plt
 from stb.core.cli import color_text, show_intro
 from stb.core.deps import require_sisl
+from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm
 
-def _is_gamma(label):
-    clean_text = re.sub(r'[^a-zA-Z\s]', '', label).lower()
-    return "gamma" in clean_text.split()
-
-def plot_gnuplot(high_sym, nspin):
+def plot_gnuplot(high_sym, nspin, output_dir="."):
 ######################### PDF Plot
     # Build gnuplot-formatted labels (Gamma -> {/Symbol G}) in a local list
     # instead of mutating the caller's high_sym. xticsl below already wraps
@@ -90,58 +85,9 @@ def plot_gnuplot(high_sym, nspin):
                         '"" using 1:3 with lines ls 2 title "Spin Down"\n')
     else:
         fileout.append(f'plot "bands_gnuplot.dat" using 1:2 with lines ls 1 title "" \n')
-    with open('bands.gplot', 'w') as file:
+    with open(os.path.join(output_dir, 'bands.gplot'), 'w') as file:
         file.writelines(fileout)
     return
-
-def read_data(file_path = "siesta.bands"):
-    # SIESTA .bands format:
-    #   line 0: Fermi energy
-    #   line 1: kmin kmax
-    #   line 2: emin emax
-    #   line 3: nbands nspin nk
-    #   body:   nk k-blocks (first line has the k value, then as many
-    #           continuation lines as needed to reach nbands*nspin values)
-    #   footer: a line with the count of high-symmetry points, followed by
-    #           that many "position 'LABEL'" lines
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-
-    fermi_energy = float(lines[0].split()[0])
-    nbands, nspin, nk = (int(x) for x in lines[3].split())
-    values_per_k = nbands * nspin
-
-    dic_bands = {}
-    idx = 4
-    for _ in range(nk):
-        tokens = lines[idx].split()
-        key = float(tokens[0])
-        values = tokens[1:]
-        idx += 1
-        while len(values) < values_per_k:
-            values.extend(lines[idx].split())
-            idx += 1
-        # First nbands values are the spin-up channel, the next nbands (if
-        # any) are spin-down -- confirmed against sisl's own bandsSileSiesta
-        # ("eb[ik, :, :] = l.reshape(ns, no)"), not interleaved per band.
-        dic_bands[key] = np.array(values, dtype=float).reshape(nspin, nbands)
-
-    # Whatever remains is deterministically the high-symmetry footer: we
-    # already consumed exactly nk k-blocks by token count, so there is no
-    # ambiguity left between a continuation line and the count line.
-    while idx < len(lines) and not lines[idx].split():
-        idx += 1
-    n_high_sym = int(lines[idx].split()[0])
-    idx += 1
-
-    high_sym = []
-    for _ in range(n_high_sym):
-        parts = lines[idx].split()
-        label = " ".join(parts[1:]).strip("'\"")
-        high_sym.append([parts[0], label])
-        idx += 1
-
-    return fermi_energy, high_sym, dic_bands, nspin
 
 def read_eig_mesh(eig_file, kp_file=None):
     # A SIESTA .EIG file holds the eigenvalues at every k-point of the SCF
@@ -173,12 +119,12 @@ def read_eig_mesh(eig_file, kp_file=None):
             )
     return fermi_energy, dic_mesh, nspin, kpoints
 
-def write_gnuplot_bands(dic_bands, nspin):
+def write_gnuplot_bands(dic_bands, nspin, output_dir="."):
     # define initial key
     key_init = next(iter(dic_bands))
     nbands = dic_bands[key_init].shape[1]
     # write the file
-    file_name="bands_gnuplot.dat"
+    file_name = os.path.join(output_dir, "bands_gnuplot.dat")
     with open(file_name, 'w') as file:
         for i in range(nbands):
             for key in dic_bands.keys():
@@ -186,55 +132,6 @@ def write_gnuplot_bands(dic_bands, nspin):
                 file.write(f"{key}     {cols}\n")
             file.write("\n")
     return
-
-def _band_extrema(values_by_k, fermi_energy, gap_tol):
-    # Start value as infinity
-    vbm = -np.inf
-    cbm = np.inf
-    vbm_k = None
-    cbm_k = None
-    # Direct gap: the smallest CBM(k) - VBM(k) at one and the same k --
-    # tracked alongside the (possibly different-k) global VBM/CBM below.
-    direct_gap = np.inf
-    direct_k = None
-    for k, band in values_by_k.items():
-        below = band[band <= fermi_energy]
-        above = band[band > fermi_energy]
-        if below.size > 0:
-            local_vbm = np.nanmax(below)
-            if local_vbm > vbm:
-                vbm = local_vbm
-                vbm_k = k
-        if above.size > 0:
-            local_cbm = np.nanmin(above)
-            if local_cbm < cbm:
-                cbm = local_cbm
-                cbm_k = k
-            if below.size > 0:
-                local_gap = local_cbm - local_vbm
-                if local_gap < direct_gap:
-                    direct_gap = local_gap
-                    direct_k = k
-    if vbm_k is None or cbm_k is None:
-        raise ValueError(
-            f"No occupied/empty states found on {'both sides' if vbm_k is None and cbm_k is None else ('the occupied side' if vbm_k is None else 'the empty side')} "
-            f"of Fermi energy {fermi_energy:.6f} eV -- check that this Fermi energy actually matches the eigenvalue file."
-        )
-    # Indirect (= fundamental) gap: CBM - VBM regardless of whether they sit
-    # at the same k. Always <= direct_gap, since direct_gap is the same
-    # quantity restricted to matching k. When they coincide (within
-    # gap_tol) the fundamental gap is itself direct.
-    indirect_gap = cbm - vbm if cbm > vbm else 0.0  # Avoid negative values
-    if indirect_gap < gap_tol:
-        gap_type = "Metallic"
-    elif direct_k is not None and (direct_gap - indirect_gap) < gap_tol:
-        gap_type = "Direct"
-    else:
-        gap_type = "Indirect"
-    return vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k
-
-def _default_k_format(k):
-    return f"{k:.6f}"
 
 def mesh_k_formatter(kpoints):
     # kpoints is None (plain mesh index) or an (nk, 3) array of Cartesian
@@ -246,26 +143,6 @@ def mesh_k_formatter(kpoints):
         kx, ky, kz = kpoints[k]
         return f"kx={kx:.6f}, ky={ky:.6f}, kz={kz:.6f} 1/Ang (index {k})"
     return fmt
-
-def cbm_vbm(fermi_energy, dic_bands, nspin, gap_tol=0.01, k_format=None):
-    # Pure computation, no printing -- callers render the result (console
-    # and/or bands_analysis.txt) via write_analysis_report(), so the same
-    # numbers are never formatted two different ways in two places.
-    k_format = k_format or _default_k_format
-    combined = _band_extrema(
-        {k: arr.reshape(-1) for k, arr in dic_bands.items()}, fermi_energy, gap_tol
-    )
-    result = {"combined": combined, "spins": [], "half_metallic": False, "k_format": k_format}
-    if nspin == 2:
-        for s in range(nspin):
-            spin_result = _band_extrema(
-                {k: arr[s] for k, arr in dic_bands.items()}, fermi_energy, gap_tol
-            )
-            result["spins"].append(spin_result)
-        gaps = [spin_result[4] for spin_result in result["spins"]]  # indirect gap
-        result["half_metallic"] = min(gaps) < gap_tol and max(gaps) >= gap_tol
-
-    return result
 
 # --- Report formatting -----------------------------------------------
 # Plain-text report, but laid out like a short write-up: a title block,
@@ -303,7 +180,8 @@ def _spin_block(result, k_format):
     return lines
 
 def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01,
-                           mesh_warnings=None, input_file=None, eig_file=None, kp_file=None):
+                           mesh_warnings=None, input_file=None, eig_file=None, kp_file=None,
+                           output_dir="."):
     combined = result["combined"]
     k_format = result["k_format"]
     indirect_gap, gap_type = combined[4], combined[5]
@@ -392,17 +270,9 @@ def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol
     lines.append(_rule("="))
 
     content = "\n".join(lines) + "\n"
-    with open("bands_analysis.txt", "w") as f:
+    with open(os.path.join(output_dir, "bands_analysis.txt"), "w") as f:
         f.write(content)
     return content
-
-    content = "\n".join(lines) + "\n"
-    with open("bands_analysis.txt", "w") as f:
-        f.write(content)
-    return content
-
-def shift_bands(dic, val):
-    return {k: arr - val for k, arr in dic.items()}
 
 def plot(dic, custom_ticks, nspin):
     # Organize the data
@@ -483,8 +353,13 @@ def main():
                              "kx,ky,kz in 1/Ang). When given, mesh VBM/CBM/direct-gap k-points are "
                              "reported as (kx, ky, kz) instead of a bare mesh index. Requires --eig-file.")
 
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write bands_analysis.txt, bands_gnuplot.dat, and "
+                             "bands.gplot into (default: current directory). Created if it "
+                             "doesn't exist.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
-    
+
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
@@ -550,10 +425,16 @@ def main():
         mesh_result = cbm_vbm(fermi_mesh, dic_mesh, nspin_mesh, args.gap_tol,
                                k_format=mesh_k_formatter(mesh_kpoints))
 
+    # Only create --output-dir once there's valid data to write, so a bad
+    # input file doesn't leave an empty directory behind (same fix as
+    # dos.py's -o).
+    os.makedirs(args.output_dir, exist_ok=True)
+
     report = write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol, mesh_warnings,
-                                    input_file=args.input_file, eig_file=args.eig_file, kp_file=args.kp_file)
+                                    input_file=args.input_file, eig_file=args.eig_file, kp_file=args.kp_file,
+                                    output_dir=args.output_dir)
     print("\n" + report)
-    print("[INFO] Full report saved to bands_analysis.txt")
+    print(f"[INFO] Full report saved to {os.path.join(args.output_dir, 'bands_analysis.txt')}")
     vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k = result["combined"]
 
     if args.shift == "vbm":
@@ -568,9 +449,9 @@ def main():
     print("[WARNING] \n")
 
     shifted_bands = shift_bands(dic_bands, rshift)
-    write_gnuplot_bands(shifted_bands, nspin)
+    write_gnuplot_bands(shifted_bands, nspin, args.output_dir)
     plot(shifted_bands, high_sym, nspin)
-    plot_gnuplot(high_sym, nspin)
+    plot_gnuplot(high_sym, nspin, args.output_dir)
 
     print("\n[INFO] Complete job!") 
     print("\n"+"-"*60)

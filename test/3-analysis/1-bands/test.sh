@@ -328,7 +328,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.1) ---"
 
 echo "Testing: navigate 2.1 -> label 'siesta' -> shift by Fermi level"
 rm -f bands_gnuplot.dat bands.gplot bands_analysis.txt
-printf '3.1\nsiesta\n3\n' | stb-suite > log_menu.txt 2>&1
+printf '3.1\nsiesta\n3\n\n' | stb-suite > log_menu.txt 2>&1
 check_success bands_gnuplot.dat
 check_success bands_analysis.txt
 

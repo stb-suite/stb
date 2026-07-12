@@ -1,8 +1,10 @@
 ========================================
-      MECHANICAL PROPERTIES REPORT      
+      MECHANICAL STRESS REPORT      
 ========================================
-Direction: xx
-Young's Modulus: 1000.0000 GPa
-UTS:             20.0000 GPa
-Yield (0.2%):    0.0000 GPa
-Toughness:       0.1500
+Direction: x
+Initial Slope (dσ/dε): 1000.0000 GPa
+Peak Stress: 20.0000 GPa
+Critical Strain: 2.0000 %
+WARNING: Peak occurred at the edge of the tested strain range -- the true peak may lie beyond --stmin/--stmax; treat it as a lower bound.
+Toughness: 0.1500 GJ/m^3
+Transverse Stress @ peak (diagnostic): yy=0.00 GPa, zz=0.00 GPa

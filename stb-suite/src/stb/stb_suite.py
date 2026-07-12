@@ -1954,29 +1954,46 @@ def run_strain_post_processor() -> None:
     print("\n" + "="*60)
     print(color_text("STRAIN POST-PROCESSING ANALYZER", 'bold').center(60))
     print("="*60 + "\n")
-    print(color_text("This tool analyzes 'strain_*' folders in the current directory.", 'yellow'))
-    
+    print(color_text("This tool analyzes 'strain_*' folders inside a run directory.", 'yellow'))
+
     args = []
 
-    # 1. Pergunta qual o nome do ficheiro de output
+    # 1. Diretório com as pastas strain_*
+    run_dir = get_input("Directory with 'strain_*' folders [default: strain_runs]: ").strip()
+    if not run_dir:
+        run_dir = "strain_runs"
+    args.extend(["--dir", run_dir])
+
+    # 2. Nome do ficheiro de output dentro de cada pasta
     print(color_text("Enter the Siesta output filename located inside strain folders.", 'yellow'))
     siesta_out = get_input("Filename (e.g., calc.out): ").strip()
     while not siesta_out:
         print(color_text("Filename is required!", 'red'))
         siesta_out = get_input("Filename (e.g., calc.out): ").strip()
-        
-    
-    # Adiciona argumentos obrigatórios
+
     args.extend(["--file", siesta_out, "--no-intro"])
-    
-     
-    # 3. --- NOVO: Opção 2D ---
-    print(f"\nIs this a {color_text('2D material', 'cyan')}? (Calculates units in N/m)")
-    is_2d = get_input("Enable 2D analysis? (y/N): ").lower()
-    if is_2d == 'y' or is_2d == 'yes':
+
+    # 3. Dimensionalidade: 3D (default) / 2D / 1D
+    print(f"\nDimensionality: {color_text('1', 'cyan')}=3D bulk (default), "
+          f"{color_text('2', 'cyan')}=2D sheet (N/m), {color_text('3', 'cyan')}=1D wire/tube (nN)")
+    dim_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    if dim_choice == '2':
         args.append("--2d")
         print(color_text("-> 2D Mode Enabled (N/m)", 'green'))
-    # -------------------------
+    elif dim_choice == '3':
+        args.append("--1d")
+        print(color_text("-> 1D Mode Enabled (nN)", 'green'))
+        cross_section = get_input(
+            "Physical cross-section area in Ang^2 for a conventional GPa reading "
+            "(blank = skip, Force in nN only): ").strip()
+        if cross_section:
+            args.extend(["--cross-section", cross_section])
+
+    # 4. Yield strength (opt-in -- borrowed metallurgy concept, off by default)
+    show_yield = get_input(
+        "Also report the 0.2% offset Yield strength? (y/N): ").lower()
+    if show_yield in ('y', 'yes'):
+        args.append("--yield")
 
     print(color_text("\nRunning analysis...", 'yellow'))
     run_tool("stb-strainAnalysis", args)

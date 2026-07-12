@@ -89,3 +89,39 @@ def detect_vacuum_axes(frac_coords, lattice, vacuum_gap: float) -> list[bool]:
         gap_ang = gap_frac * np.linalg.norm(lattice[i])
         axes_vacuum.append(gap_ang >= vacuum_gap)
     return axes_vacuum
+
+
+def dimensionality_label(vacuum_axes) -> str:
+    """Classifies a system as 0D/1D/2D/3D from which axes were flagged as
+    vacuum-padded by detect_vacuum_axes (not from k-grid divisions
+    themselves -- a genuinely periodic but large-celled axis can also round
+    down to a single division, and shouldn't be mislabeled as vacuum).
+    Shared by stb-kgrid and stb-strain (moved here once the second real
+    consumer needed it, same extract-on-second-use policy as the rest of
+    core/).
+    """
+    vacuum_count = sum(vacuum_axes)
+    if vacuum_count == 3:
+        return "0D (e.g., a molecule)"
+    elif vacuum_count == 2:
+        return "1D (e.g., a nanotube or polymer)"
+    elif vacuum_count == 1:
+        return "2D (e.g., a slab or surface)"
+    return "3D (bulk material)"
+
+
+def analyze_dimensionality(vacuum_axes) -> None:
+    """Prints the system's dimensionality plus stb-kgrid-specific guidance
+    about what the vacuum-padded axes mean for the k-grid divisions.
+    """
+    vacuum_count = sum(vacuum_axes)
+
+    print("--- Dimensionality Analysis ---")
+    print(f"System appears to be {dimensionality_label(vacuum_axes)}.")
+    if vacuum_count == 3:
+        print("A 1x1x1 grid (Gamma point) is typically sufficient.")
+    elif vacuum_count == 2:
+        print("The '1's in the grid correspond to the vacuum-padded directions.")
+    elif vacuum_count == 1:
+        print("The '1' in the grid corresponds to the vacuum-padded direction.")
+    print("---------------------------------\n")

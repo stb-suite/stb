@@ -133,27 +133,6 @@ def print_density_recommendation():
     print("     generally accurate enough while keeping cost reasonable.")
     print("="*65 + "\n")
 
-def analyze_dimensionality(vacuum_axes):
-    """Prints the system's dimensionality, derived from which axes were
-    flagged as vacuum-padded by detect_vacuum_axes (not from the divisions
-    themselves -- a genuinely periodic but large-celled axis can also round
-    down to a single division, and shouldn't be mislabeled as vacuum)."""
-    vacuum_count = sum(vacuum_axes)
-
-    print("--- Dimensionality Analysis ---")
-    if vacuum_count == 3:
-        print("System appears to be 0D (e.g., a molecule).")
-        print("A 1x1x1 grid (Gamma point) is typically sufficient.")
-    elif vacuum_count == 2:
-        print("System appears to be 1D (e.g., a nanotube or polymer).")
-        print("The '1's in the grid correspond to the vacuum-padded directions.")
-    elif vacuum_count == 1:
-        print("System appears to be 2D (e.g., a slab or surface).")
-        print("The '1' in the grid corresponds to the vacuum-padded direction.")
-    else:
-        print("System appears to be 3D (bulk material).")
-    print("---------------------------------\n")
-
 def main():
     parser = argparse.ArgumentParser(
         description="Compute the Monkhorst-Pack grid based on desired k-point density and a structure file."
@@ -248,10 +227,8 @@ def main():
     # Print the suggested grid
     print(f"✅ Suggested Monkhorst-Pack grid: {divisions[0]} {divisions[1]} {divisions[2]}\n")
 
-    # --- New feature ---
     # Analyze and print dimensionality
-    analyze_dimensionality(vacuum_axes)
-    # --- End of new feature ---
+    kspace.analyze_dimensionality(vacuum_axes)
 
 if __name__ == "__main__":
     main()

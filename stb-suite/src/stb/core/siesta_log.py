@@ -111,7 +111,7 @@ def get_cell_height(path: str) -> float:
     try:
         with open(path, 'r', errors='ignore') as f:
             lines = f.readlines()
-        for i in range(len(lines) - 1, 0, -1):
+        for i in range(len(lines) - 1, -1, -1):
             if "outcell: Unit cell vectors" in lines[i]:
                 nums = _parse_float_line(lines[i + 3])
                 if nums:
@@ -120,6 +120,27 @@ def get_cell_height(path: str) -> float:
     except Exception:
         pass
     return z_len
+
+
+def get_outcell(path: str) -> np.ndarray | None:
+    """Full 3x3 cell matrix (Angstrom, rows a/b/c), from the LAST
+    'outcell:' block in the file -- same block and same last-occurrence
+    convention as get_cell_height, generalized to all 3 rows instead of
+    just the norm of c. Returns None if the block isn't found or fails to
+    parse.
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+        for i in range(len(lines) - 1, -1, -1):
+            if "outcell: Unit cell vectors" in lines[i]:
+                rows = [_parse_float_line(lines[i + offset]) for offset in (1, 2, 3)]
+                if all(rows):
+                    return np.array(rows, dtype=float)
+                return None
+    except Exception:
+        return None
+    return None
 
 
 def get_stress_tensor(path: str) -> np.ndarray | None:

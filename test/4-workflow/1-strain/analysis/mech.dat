@@ -1,5 +1,10 @@
-# Strain-Stress Curve | Dir: xx | Unit: GPa
-# 1:Strain(%) 2:Strain(Frac) 3:Stress_Axial(GPa)
+# Stress-Strain Curve | Dir: x | Unit: GPa
+# 1:Strain(%) 2:Strain(Frac) 3:Stress(GPa)
    -1.000000    -0.010000   -10.000000
     1.000000     0.010000    10.000000
     2.000000     0.020000    20.000000
+
+
+# index 1: peak point
+# Strain(%) Strain(Frac) Stress
+    2.000000      0.020000     20.000000

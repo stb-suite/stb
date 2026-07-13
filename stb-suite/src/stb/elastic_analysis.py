@@ -15,7 +15,7 @@ import re
 import numpy as np
 from time import sleep
 from scipy.stats import linregress
-from stb.core import siesta_log
+from stb.core import siesta_log, structure_io, symmetry
 from stb.core.cli import COLORS, color_text, show_intro
 
 # ==========================================
@@ -25,6 +25,24 @@ from stb.core.cli import COLORS, color_text, show_intro
 CONV_EVA3_TO_GPA = 160.21766
 CONV_EVA2_TO_NM = 16.021766
 REPORT_FILE = "mechanical_properties.txt"
+
+# Voigt index (0-based, 1..6 in the usual 1-based convention) -> Cartesian
+# stress-tensor (row, col). Matches this module's existing convention
+# (4=yz, 5=xz, 6=xy). Single source of truth in core/symmetry.py, shared
+# with its "full" (tensor-invariance) symmetry method.
+VOIGT_TO_TENSOR = symmetry.VOIGT_TO_TENSOR
+# Which Voigt *column* each strain_inputs.py direction populates -- applying
+# a single-component strain e_k (the k-th canonical Voigt unit strain) gives
+# the k-th column of C directly, via sigma = C . epsilon (Hooke's law).
+DIRECTION_TO_COLUMN = {'xx': 0, 'yy': 1, 'zz': 2, 'yz': 3, 'xz': 4, 'xy': 5}
+DIRECTION_LABELS = {0: 'xx', 1: 'yy', 2: 'zz', 3: 'yz', 4: 'xz', 5: 'xy'}
+# Shear directions are generated as *tensor* strain (eps_yz=delta), which is
+# HALF the Voigt engineering strain (gamma_yz=2*delta) -- any constant read
+# out of a shear column needs this correction, not just the diagonal C44/
+# C55/C66 (verified by hand-derivation and a synthetic-matrix numerical
+# check before implementing: max error 3e-14 recovering a known 21-constant
+# triclinic tensor, including the off-diagonal coupling terms).
+SHEAR_DIRECTIONS = {'yz', 'xz', 'xy'}
 
 def print_dual(text, file_handle=None):
     """Prints to stdout with color, writes to file without color."""
@@ -38,10 +56,471 @@ def print_dual(text, file_handle=None):
 #           DATA MINING LOGIC
 # ==========================================
 
+def linear_fit_diagnostics(x, y, factor):
+    """Full linregress result for one stress-vs-strain series, scaled by
+    `factor` (same convention as calculate_slope): (slope, intercept,
+    r_squared). `intercept` is the fit's predicted stress at zero strain --
+    should be ~0 for a well-relaxed reference structure, the stress-side
+    analogue of _fit_energy_pattern's linear-energy-term check. `r_squared`
+    flags a noisy or non-linear (too-large-strain) series. Both come for
+    free out of the same linregress call calculate_slope already made and
+    used to discard -- see direction_fit_diagnostics below, the first
+    caller that actually uses them.
+    """
+    if len(x) < 2: return 0.0, 0.0, 0.0
+    slope, intercept, r_value, _p_value, _std_err = linregress(x, y)
+    return slope * factor, intercept * factor, r_value ** 2
+
+
 def calculate_slope(x, y, factor):
-    if len(x) < 2: return 0.0
-    slope, _, _, _, _ = linregress(x, y)
-    return slope * factor
+    slope, _intercept, _r_squared = linear_fit_diagnostics(x, y, factor)
+    return slope
+
+
+def _canonical_elastic_direction(direction):
+    """Folds every alternate spelling of the same physical strain mode onto
+    one canonical key ('x'->'xx', 'zy'->'yz', 'zx'->'xz', ...), so folders
+    using different naming conventions (e.g. hand-made vs. stb-elasticInputs'
+    own 'xx'/'yy'/'zz'/'xy'/'xz'/'yz') merge into the same data series
+    instead of one silently shadowing/discarding the other.
+    """
+    d = direction.lower()
+    aliases = {
+        'x': 'xx', 'y': 'yy', 'z': 'zz',
+        'zy': 'yz', 'zx': 'xz', 'yx': 'xy',
+    }
+    return aliases.get(d, d)
+
+def _fit_column(eps_list, stress_list, conv_factor, is_shear):
+    """Fits one full Voigt column (all 6 stress components against the same
+    strain series) -- a single-component strain e_k gives sigma = C[:,k]
+    directly (Hooke's law), so this recovers the whole column from one
+    strain series' full 3x3 stress response, not just the "obvious" entry.
+    """
+    factor = conv_factor / 2.0 if is_shear else conv_factor
+    S = np.array(stress_list)
+    col = np.zeros(6)
+    for row, (i, j) in enumerate(VOIGT_TO_TENSOR):
+        col[row] = calculate_slope(eps_list, S[:, i, j], factor)
+    return col
+
+
+def compute_stiffness_matrix(data, conv_factor, symmetry_info, unit_label, f_out):
+    """Builds the (unsymmetrized) 6x6 stiffness matrix from `data`
+    ({direction: {'eps': [...], 'stress': [3x3 arrays]}}).
+
+    Without symmetry_info (or wherever it doesn't apply), behaves exactly
+    like the original per-direction independent fit. With symmetry_info
+    ((groups, point_group, ops) from core/symmetry.py::equivalent_strain_modes),
+    every mode m in a group is fit from the POOLED contribution of every
+    *present* mode p in that same group, each rotated into m's frame via
+    core/symmetry.py::find_mapping_operation (p==m uses the identity) --
+    this uniformly covers all 3 cases:
+      - only 1 mode in the group present: the others are reconstructed
+        purely from that one (the DFT-cost reduction stb-elasticInputs'
+        'all' default now performs).
+      - 2+ modes present: each gets a MORE PRECISE pooled fit incorporating
+        every equivalent measurement, not just its own -- a diagnostic
+        comparing the independent (pre-pooling) values is printed first.
+      - 0 modes present: genuinely missing, left as 0.
+
+    Returns (C, filled_by_symmetry, missing_directions): `filled_by_symmetry`
+    lists directions whose column came only from a symmetry-equivalent
+    sibling (no direct DFT data of their own); `missing_directions` lists
+    directions with no data at all, even after pooling.
+    """
+    C = np.zeros((6, 6))
+    filled_by_symmetry = []
+    missing_directions = []
+
+    if symmetry_info is not None:
+        groups, point_group, ops = symmetry_info
+    else:
+        groups, point_group, ops = [[m] for m in DIRECTION_TO_COLUMN], None, []
+
+    for group in groups:
+        present = [m for m in group if m in data]
+        if not present:
+            missing_directions.extend(group)
+            continue
+
+        if len(present) > 1:
+            print_dual(f"{color_text('[DIAGNOSTIC]', 'cyan')} {present} are symmetry-equivalent "
+                       f"(point group {point_group}) -- independent fits before combining:", f_out)
+            for m in present:
+                own_col = _fit_column(data[m]['eps'], data[m]['stress'], conv_factor,
+                                       m in SHEAR_DIRECTIONS)
+                print_dual(f"      {m}: {own_col[DIRECTION_TO_COLUMN[m]]:.2f} {unit_label} "
+                           "(independent, pre-pooling)", f_out)
+
+        for m in group:
+            pooled_eps, pooled_stress = [], []
+            for p in present:
+                if p == m:
+                    R, sign = np.eye(3), 1
+                else:
+                    R, sign = symmetry.find_mapping_operation(ops, p, m)
+                if R is None:
+                    continue
+                pooled_eps.extend(data[p]['eps'])
+                pooled_stress.extend(symmetry.transform_stress(R, sign, S) for S in data[p]['stress'])
+            if not pooled_eps:
+                missing_directions.append(m)
+                continue
+            C[:, DIRECTION_TO_COLUMN[m]] = _fit_column(
+                pooled_eps, pooled_stress, conv_factor, m in SHEAR_DIRECTIONS)
+            if m not in present:
+                filled_by_symmetry.append(m)
+            elif len(present) > 1:
+                print_dual(f"{color_text('[DIAGNOSTIC]', 'cyan')}   -> {m} combined "
+                           f"({len(pooled_eps)} pooled points): "
+                           f"{C[DIRECTION_TO_COLUMN[m], DIRECTION_TO_COLUMN[m]]:.2f} {unit_label}", f_out)
+
+    return C, filled_by_symmetry, missing_directions
+
+
+def compute_stiffness_matrix_full(data, conv_factor, pmg_structure, symprec, angle_tolerance,
+                                   unit_label, f_out):
+    """The "full" symmetry method: constrains C a priori to the subspace
+    allowed by the structure's point group (core/symmetry.py::
+    symmetry_allowed_basis), then fits every basis coefficient in one
+    least-squares solve over every measured (strain, stress) point from
+    every direction actually run (core/symmetry.py::fit_stiffness_matrix).
+
+    Unlike compute_stiffness_matrix (the "basic" method) above, this
+    catches reductions like hexagonal's C11=C22 that a pairwise
+    strain-TENSOR correspondence can never see (see the module docstring
+    in core/symmetry.py) -- verified to reproduce the same cubic-fixture
+    result as the basic method, and to additionally reduce/reconstruct
+    correctly for the hexagonal 2D fixture, where the basic method finds no
+    equivalence at all.
+
+    'bi'/'hydro' data (stb-elasticInputs' 2 convenience modes outside the 6
+    canonical Voigt modes) can't be expressed as one of core/symmetry.py's
+    strain_tensor modes and are silently skipped here -- the same
+    limitation the basic method already has (DIRECTION_TO_COLUMN has no
+    entry for them either).
+
+    Returns (C, point_group, num_independent, directions_used,
+    reconstructed_directions, achieved_rank): `reconstructed_directions`
+    lists directions with no data at all (mirrors "filled_by_symmetry" in
+    the basic path); `achieved_rank` is how many of the `num_independent`
+    constants the directions actually run determine (< num_independent
+    means the fit below is underdetermined for at least some constants --
+    left to the caller to decide whether that matters, since e.g. in 2D
+    mode the undetermined constants are typically the out-of-plane ones
+    the report never shows anyway).
+    """
+    basis, point_group = symmetry.symmetry_allowed_basis(pmg_structure, symprec, angle_tolerance)
+
+    points = []
+    directions_used = []
+    for mode in symmetry.VOIGT_MODES:
+        if mode not in data:
+            continue
+        directions_used.append(mode)
+        for delta, S in zip(data[mode]['eps'], data[mode]['stress']):
+            points.append((symmetry.strain_tensor(mode, delta), S))
+
+    if not points:
+        return np.zeros((6, 6)), point_group, len(basis), [], list(symmetry.VOIGT_MODES), 0
+
+    # Rank check: do the directions actually run even span the symmetry
+    # -allowed subspace? If not, the least-squares solve below is genuinely
+    # underdetermined for some constants (numpy silently returns the
+    # minimum-norm solution, which would otherwise look like a normal
+    # result) -- the caller decides whether/how to warn about this.
+    blocks = [np.array([Bk @ symmetry.voigt_strain_engineering(symmetry.strain_tensor(mode))
+                         for Bk in basis]).T
+              for mode in directions_used]
+    achieved_rank = np.linalg.matrix_rank(np.vstack(blocks), tol=1e-8) if blocks else 0
+
+    C = symmetry.fit_stiffness_matrix(basis, points, conv_factor)
+    reconstructed = [m for m in symmetry.VOIGT_MODES if m not in data]
+    return C, point_group, len(basis), directions_used, reconstructed, achieved_rank
+
+
+def _parse_energy_folder_name(folder):
+    """Parses strain_<pattern>_<magnitude> folder names written by
+    stb-elasticInputs --method energy, where <pattern> is a pure Voigt mode
+    ('xx') or a combined one ('xx+yy'). Returns (pattern, strain_percent),
+    or (None, None) if the folder doesn't match this convention.
+    """
+    m = re.match(r"^strain_([a-z]+(?:\+[a-z]+)*)_(m?)(\d+\.\d+)$", folder)
+    if not m:
+        return None, None
+    pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
+    return pattern, (-val if sign == 'm' else val)
+
+
+def pattern_strain_tensor(pattern):
+    """Unit (delta=1) strain tensor for a pure or combined ('xx+yy') Voigt
+    pattern name -- same convention as
+    core/symmetry.py::energy_pattern_candidates.
+    """
+    return sum((symmetry.strain_tensor(part) for part in pattern.split('+')), np.zeros((3, 3)))
+
+
+def _fit_energy_pattern(pattern, deltas, energies, f_out):
+    """Fits a quadratic (np.polyfit) to one pattern's energy-vs-strain
+    series, warning (but not blocking) about the two failure modes any
+    caller needs to handle the same way: too few points, or a non
+    -negligible linear term (see compute_stiffness_matrix_energy's
+    docstring on both). Shared by compute_stiffness_matrix_energy and
+    eggbox_cross_check below, so the two never drift on this logic.
+
+    Returns (a, b) -- the quadratic and linear polyfit coefficients -- or
+    None if there weren't enough points to fit.
+    """
+    if len(deltas) < 3:
+        print_dual(color_text(
+            f"[WARNING] Pattern '{pattern}' has fewer than 3 points -- skipped (a quadratic "
+            "fit needs at least 3).", 'yellow'), f_out)
+        return None
+
+    a, b, _c = np.polyfit(deltas, energies, 2)
+    # Linear term should be ~0 at a well-relaxed equilibrium reference; a
+    # large one signals residual internal stress/forces in
+    # reference_structure.fdf. Compares the two terms' actual CONTRIBUTION
+    # at the largest strain magnitude run, not the raw coefficients (b
+    # eV/strain vs a eV/strain^2 aren't on the same scale to begin with --
+    # comparing them directly would flag every pattern, or none, regardless
+    # of whether the linear term is actually significant at the strains
+    # used).
+    delta_scale = max(abs(d) for d in deltas)
+    if abs(a) > 1e-8 and abs(b) > 0.1 * abs(a) * delta_scale:
+        print_dual(color_text(
+            f"[WARNING] Pattern '{pattern}': linear energy term ({b:.2e} eV) is not "
+            f"negligible next to the quadratic term ({a:.2e} eV) at the strains used -- the "
+            "reference structure may not be fully relaxed.", 'yellow'), f_out)
+    return a, b
+
+
+def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, angle_tolerance,
+                                     is2d, conv_factor, unit_label, f_out):
+    """The energy-strain ("parabolic fit") method: fits a quadratic to
+    total energy vs. strain magnitude for every strain_<pattern>_* series
+    found (pure and/or combined Voigt patterns -- combined patterns are
+    physically required for off-diagonal constants, see
+    core/symmetry.py's energy-method module note), then solves for the
+    elastic tensor in one least-squares pass constrained to the point
+    group's symmetry-allowed subspace (core/symmetry.py::
+    fit_stiffness_matrix_energy) -- the energy-method equivalent of
+    compute_stiffness_matrix_full above.
+
+    `conv_factor` must already be the right eV/Ang^n -> GPa or N/m factor
+    for the volume/area normalization already folded into `target` below
+    (CONV_EVA3_TO_GPA for 3D, plain CONV_EVA2_TO_NM for 2D -- no Lz
+    correction: unlike stress, which SIESTA reports as a volumetric
+    quantity diluted by the vacuum gap, total energy is already extensive
+    and needs no such correction, just the in-plane area).
+
+    Returns (C, point_group, num_independent, directions_used, achieved_rank).
+    """
+    basis, point_group = symmetry.symmetry_allowed_basis(pmg_structure, symprec, angle_tolerance)
+    if is2d:
+        lat = pmg_structure.lattice.matrix
+        norm_factor = np.linalg.norm(np.cross(lat[0], lat[1]))  # in-plane area (Ang^2)
+    else:
+        norm_factor = pmg_structure.volume  # Ang^3
+
+    series = {}
+    for folder in folders:
+        pattern, strain_pct = _parse_energy_folder_name(folder)
+        if pattern is None:
+            continue
+        energy = siesta_log.get_free_energy(os.path.join(folder, file_name))
+        if energy is None:
+            continue
+        series.setdefault(pattern, {'delta': [], 'energy': []})
+        series[pattern]['delta'].append(strain_pct / 100.0)
+        series[pattern]['energy'].append(energy)
+
+    pattern_targets = []
+    directions_used = []
+    gammas = []
+    for pattern, s in series.items():
+        fit = _fit_energy_pattern(pattern, s['delta'], s['energy'], f_out)
+        if fit is None:
+            continue
+        a, _b = fit
+        eps_unit = pattern_strain_tensor(pattern)
+        gamma = symmetry.voigt_strain_engineering(eps_unit)
+        target = 2 * a / norm_factor
+        pattern_targets.append((eps_unit, target))
+        directions_used.append(pattern)
+        gammas.append(gamma)
+
+    if not pattern_targets:
+        return np.zeros((6, 6)), point_group, len(basis), [], 0
+
+    blocks = [[gamma @ Bk @ gamma for Bk in basis] for gamma in gammas]
+    achieved_rank = np.linalg.matrix_rank(np.array(blocks), tol=1e-8)
+
+    C = symmetry.fit_stiffness_matrix_energy(basis, pattern_targets, conv_factor)
+    return C, point_group, len(basis), directions_used, achieved_rank
+
+
+def eggbox_cross_check(data, folders, file_name, pmg_structure, is2d, conv_factor, tolerance, f_out):
+    """Cross-checks each diagonal elastic constant C_mm two independent
+    ways from the SAME strain_<mode>_* folders stb-elasticInputs --method
+    stress already generated -- no new DFT calculations: the stress-linear
+    fit already in `data` (see main()), and a parabolic fit of total energy
+    vs. strain re-read from the same calc.out files. In the exact continuum
+    limit sigma(delta) = dE/d(delta)/V0, so for a perfectly converged
+    calculation the two must agree EXACTLY -- any real disagreement signals
+    numerical contamination, and SIESTA's real-space-grid "eggbox effect"
+    is a prime suspect: it typically disturbs stress/forces (derivative
+    -like quantities, evaluated on the discretized grid) more than total
+    energy (comparatively smooth), so a discrepancy concentrated on the
+    stress side is exactly the expected fingerprint.
+
+    Limited to DIAGONAL constants (C_mm): a pure single-Voigt-component
+    strain's energy curvature is structurally blind to off-diagonal terms
+    (see core/symmetry.py's energy-method module note) -- getting those
+    from energy would need combined patterns, i.e. new DFT runs, exactly
+    what this check must avoid.
+
+    Compares against the DIRECTION'S OWN stress fit (core/symmetry.py::
+    fit_stiffness_matrix's pooling/reconstruction across symmetry
+    -equivalent directions is deliberately bypassed here via _fit_column
+    directly), not the final (possibly pooled/reconstructed) C_sym entry
+    -- otherwise a disagreement could just mean "this direction's data
+    differs from its symmetry-equivalent siblings", not "stress vs. energy
+    disagree on the same data".
+
+    Returns a list of dicts, one per direction with both stress and energy
+    data available: {'mode', 'stress_value', 'energy_value', 'diff_pct',
+    'flagged'}.
+    """
+    if is2d:
+        lat = pmg_structure.lattice.matrix
+        norm_factor = np.linalg.norm(np.cross(lat[0], lat[1]))  # in-plane area (Ang^2)
+    else:
+        norm_factor = pmg_structure.volume  # Ang^3
+
+    energy_series = {}
+    for folder in folders:
+        direction, val = siesta_log.parse_strain_folder_name(folder)
+        if direction is None:
+            continue
+        direction = _canonical_elastic_direction(direction)
+        if direction not in data:
+            continue  # only cross-check directions actually used by the stress fit
+        energy = siesta_log.get_free_energy(os.path.join(folder, file_name))
+        if energy is None:
+            continue
+        energy_series.setdefault(direction, {'delta': [], 'energy': []})
+        energy_series[direction]['delta'].append(val / 100.0)
+        energy_series[direction]['energy'].append(energy)
+
+    results = []
+    for mode in symmetry.VOIGT_MODES:
+        if mode not in data or mode not in energy_series:
+            continue
+        fit = _fit_energy_pattern(mode, energy_series[mode]['delta'], energy_series[mode]['energy'], f_out)
+        if fit is None:
+            continue
+        a, _b = fit
+        # E(delta) = (V0/2) * gamma(delta)^T C gamma(delta); for a PURE
+        # mode gamma has one nonzero entry, gamma_unit_m = 2 for shear
+        # (engineering strain doubles tensor shear strain, same convention
+        # as SHEAR_DIRECTIONS/_fit_column elsewhere in this file) or 1 for
+        # normal -- so a (the delta^2 polyfit coefficient) = (V0/2) *
+        # gamma_unit_m^2 * C_mm, and C_mm = 2*a / (V0 * gamma_unit_m^2).
+        # Squaring the shear factor (not just doubling it, like the stress
+        # method's SHEAR_DIRECTIONS correction) is the one place this
+        # differs from the stress side -- missing it here silently
+        # inflated shear constants by 4x in initial testing.
+        gamma_unit_m = 2.0 if mode in SHEAR_DIRECTIONS else 1.0
+        energy_value = (2 * a / (norm_factor * gamma_unit_m ** 2)) * conv_factor
+
+        own_col = _fit_column(data[mode]['eps'], data[mode]['stress'], conv_factor, mode in SHEAR_DIRECTIONS)
+        stress_value = own_col[DIRECTION_TO_COLUMN[mode]]
+
+        if abs(stress_value) > 1e-6:
+            diff_pct = 100.0 * abs(stress_value - energy_value) / abs(stress_value)
+        else:
+            diff_pct = 0.0 if abs(energy_value) < 1e-6 else float('inf')
+
+        results.append({
+            'mode': mode,
+            'stress_value': stress_value,
+            'energy_value': energy_value,
+            'diff_pct': diff_pct,
+            'flagged': diff_pct > tolerance,
+        })
+    return results
+
+
+def direction_fit_diagnostics(data, conv_factor, r_squared_tolerance):
+    """Per-direction quality diagnostics for the stress-linear fit, using
+    ONLY the direction's own diagonal stress component (e.g. 'xx' -> the
+    (0,0) stress component) -- the physically relevant quantity to judge;
+    the other 5 components of the same column are often ~0 by symmetry, so
+    R^2/intercept there would be dominated by noise around zero rather than
+    signal. Reuses linear_fit_diagnostics, whose intercept/r_squared were
+    already being computed and thrown away by every _fit_column call before
+    this function existed (see linear_fit_diagnostics's docstring).
+
+    Returns a list of dicts, one per direction in `data`: {'mode',
+    'r_squared', 'residual_stress', 'flagged'}. `flagged` is set for either
+    a non-negligible residual stress (same relative-contribution-at-max
+    -strain criterion as _fit_energy_pattern's linear-term check, applied
+    here to the stress-fit's intercept instead) or R^2 below
+    `r_squared_tolerance`.
+    """
+    results = []
+    for mode, series in data.items():
+        if mode not in symmetry.VOIGT_MODES:
+            continue  # 'bi'/'hydro' aren't single Voigt components -- no single diagonal to check
+        i, j = VOIGT_TO_TENSOR[DIRECTION_TO_COLUMN[mode]]
+        S = np.array(series['stress'])
+        y = S[:, i, j]
+        factor = conv_factor / 2.0 if mode in SHEAR_DIRECTIONS else conv_factor
+        slope, intercept, r_squared = linear_fit_diagnostics(series['eps'], y, factor)
+        if len(series['eps']) < 2:
+            continue
+
+        delta_scale = max(abs(d) for d in series['eps'])
+        residual_flagged = abs(slope) > 1e-8 and abs(intercept) > 0.1 * abs(slope) * delta_scale
+        r2_flagged = r_squared < r_squared_tolerance
+        results.append({
+            'mode': mode,
+            'r_squared': r_squared,
+            'residual_stress': intercept,
+            'flagged': residual_flagged or r2_flagged,
+        })
+    return results
+
+
+def tensor_symmetry_check(C):
+    """C_ij == C_ji is a thermodynamic identity (not a numerical
+    convenience) -- for --symmetry-method basic, C[i,j] and C[j,i] can come
+    from two DIFFERENT DFT directions' independent fits, so a large
+    discrepancy is a real inconsistency signal (different residual state
+    between the two reference structures, incomplete relaxation, etc.),
+    otherwise silently averaged away by the C_sym = 0.5*(C+C.T)
+    symmetrization every caller does anyway. Only meaningful there: --full
+    (core/symmetry.py::fit_stiffness_matrix/fit_stiffness_matrix_energy)
+    builds C as a linear combination of symmetry_allowed_basis matrices,
+    which are already exactly symmetric by construction, so max|C-C.T|
+    would always read ~0 there regardless of data quality -- callers should
+    only invoke this for the basic method (see main()).
+
+    Returns (max_diff, i, j, flagged) -- the largest |C[i,j] - C[j,i]|, its
+    (0-based) position, and whether it exceeds 1% of the matrix's own
+    largest entry. A relative (not absolute) threshold, since C's raw scale
+    depends on the unit (~100s GPa in 3D, ~10-100s N/m in 2D) -- a fixed
+    absolute cutoff would be arbitrary across the two.
+    """
+    diff = np.abs(C - C.T)
+    idx = np.unravel_index(np.argmax(diff), diff.shape)
+    max_diff = diff[idx]
+    scale = np.max(np.abs(C))
+    flagged = scale > 1e-6 and max_diff > 0.01 * scale
+    return max_diff, idx[0], idx[1], flagged
+
 
 # ==========================================
 #           REPORTING LOGIC
@@ -62,13 +541,18 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
         Ex_2d = denom / c22 if c22 > 0 else 0
         Ey_2d = denom / c11 if c11 > 0 else 0
         
-        # Poisson's Ratio
-        v12 = c12 / c22 if c22 > 0 else 0 # Strain in x due to stress in y
-        v21 = c12 / c11 if c11 > 0 else 0 # Strain in y due to stress in x
-        
+        # Poisson's Ratio -- derived from 2D Hooke's law under uniaxial stress
+        # (sigma_2=0 => eps_2=-(C12/C22)*eps_1, so nu_yx=-eps_2/eps_1=C12/C22;
+        # by symmetry nu_xy=C12/C11). Cross-checked against the reciprocal
+        # (Maxwell-Betti) relation nu_yx/Ex == nu_xy/Ey, which only holds
+        # with this pairing, not the swapped one.
+        nu_yx = c12 / c22 if c22 > 0 else 0  # strain in y per strain in x, stress along x (pairs with Ex)
+        nu_xy = c12 / c11 if c11 > 0 else 0  # strain in x per strain in y, stress along y (pairs with Ey)
+
         print_dual(f"In-Plane Stiffness (Layer Modulus - Ex): {color_text(f'{Ex_2d:.2f}', 'bold')} {unit_label}", f_out)
         print_dual(f"In-Plane Stiffness (Layer Modulus - Ey): {color_text(f'{Ey_2d:.2f}', 'bold')} {unit_label}", f_out)
-        print_dual(f"Poisson's Ratio (v_21)                 : {color_text(f'{v21:.3f}', 'bold')}", f_out)
+        print_dual(f"Poisson's Ratio (v_yx)                 : {color_text(f'{nu_yx:.3f}', 'bold')}", f_out)
+        print_dual(f"Poisson's Ratio (v_xy)                 : {color_text(f'{nu_xy:.3f}', 'bold')}", f_out)
         print_dual(f"Shear Modulus (G_xy = C66)             : {color_text(f'{c66:.2f}', 'bold')} {unit_label}", f_out)
         print_dual("", f_out)
 
@@ -105,6 +589,22 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
         print_dual(f"Young's Modulus (E)  : {color_text(f'{E_h:.2f}', 'bold')} {unit_label}", f_out)
         print_dual(f"Bulk Modulus    (B)  : {color_text(f'{B_h:.2f}', 'bold')} {unit_label}", f_out)
         print_dual(f"Poisson's Ratio (v)  : {color_text(f'{nu_h:.3f}', 'bold')}", f_out)
+
+        # Universal anisotropy index (Ranganathan & Ostoja-Starzewski,
+        # PRL 2008) -- 0 for a perfectly isotropic elastic tensor, larger
+        # for more anisotropic ones. B_v/G_v/B_r/G_r are already computed
+        # above just to average into B_h/G_h; this is the same 4 numbers,
+        # no new calculation, and it's the one number in this report that
+        # actually says how anisotropic the material is (the Hill average
+        # above is an isotropic APPROXIMATION that hides that entirely).
+        if G_r > 1e-9 and B_r > 1e-9:
+            A_U = 5.0 * (G_v / G_r) + (B_v / B_r) - 6.0
+            print_dual(f"Universal Anisotropy Index (A^U): {color_text(f'{A_U:.3f}', 'bold')} "
+                       "(0 = isotropic; larger = more anisotropic)", f_out)
+        else:
+            print_dual(color_text(
+                "[WARNING] Could not compute the universal anisotropy index (non-positive Reuss "
+                "bulk/shear modulus).", 'yellow'), f_out)
         print_dual("", f_out)
 
         eigenvals = np.linalg.eigvals(C)
@@ -115,6 +615,209 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
     else:
         print_dual(f"\n{color_text('VERDICT:', 'bold')} {color_text('UNSTABLE', 'red')}", f_out)
 
+
+def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+                          eggbox_results=None, fit_diagnostics=None, symmetry_check=None):
+    """Prints/writes the stiffness-matrix + constants + stability sections
+    shared by every method (--method stress's basic/full paths and --method
+    energy) -- extracted once --method energy needed to reach this same
+    reporting tail from its own, separate data-mining branch in main().
+
+    `eggbox_results` (see eggbox_cross_check), `fit_diagnostics` (see
+    direction_fit_diagnostics) and `symmetry_check` (see
+    tensor_symmetry_check) together make up section [3] NUMERICAL QUALITY
+    DIAGNOSTICS -- each is independently optional (None omits that block;
+    all None omits the whole section). Only ever populated for --method
+    stress -- None for --method energy (not applicable) or, per block,
+    when its own prerequisite wasn't available (a [WARNING] about the skip
+    was already printed by the caller before reaching here) -- either way,
+    never blocks the rest of the report.
+    """
+    if args.is2d:
+        # 2D REPORT
+        print_dual(f"\n{color_text('[1] 2D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
+        print_dual("      xx       yy       xy", f_out)
+
+        indices_2d = [0, 1, 5]
+        labels_2d = ["xx", "yy", "xy"]
+
+        for r, label_r in zip(indices_2d, labels_2d):
+            row_str = f"{label_r} | "
+            for c in indices_2d:
+                val = C_sym[r, c]
+                if abs(val) < 0.01: val = 0.0
+                row_str += f"{val:8.2f} "
+            print_dual(row_str, f_out)
+
+        # Compliance matrix (S = C^-1) -- just the in-plane 3x3 block
+        # (xx/yy/xy), matching the 2D stiffness matrix above; gamma = S .
+        # sigma is what a 2D orthotropic material's strain response to an
+        # applied stress actually looks like, the inverse question from the
+        # stiffness matrix.
+        try:
+            C_2d = C_sym[np.ix_(indices_2d, indices_2d)]
+            S_2d = np.linalg.inv(C_2d)
+            print_dual(f"\n{color_text('[1b] 2D COMPLIANCE MATRIX (m/N)', 'magenta')}", f_out)
+            print_dual("      xx         yy         xy", f_out)
+            for r, label_r in zip(range(3), labels_2d):
+                row_str = f"{label_r} | "
+                for c in range(3):
+                    row_str += f"{S_2d[r, c]:10.3e} "
+                print_dual(row_str, f_out)
+        except np.linalg.LinAlgError:
+            print_dual(color_text(
+                "[WARNING] Could not invert the 2D stiffness matrix for the compliance matrix "
+                "(singular).", 'yellow'), f_out)
+
+        print_dual(f"\n{color_text('[2] RELEVANT CONSTANTS (2D)', 'magenta')}", f_out)
+        labels_show = ["C11", "C22", "C12", "C66"]
+        idx_show = [(0,0), (1,1), (0,1), (5,5)]
+
+        buf = ""
+        for l, (r, c) in zip(labels_show, idx_show):
+            buf += f"{color_text(l, 'cyan')}: {color_text(f'{C_sym[r,c]:6.2f}', 'bold')} {unit_label}   "
+        print_dual(buf, f_out)
+
+    else:
+        # 3D REPORT
+        if abs(C_sym[2,2]) < 0.1 * abs(C_sym[0,0]) and abs(C_sym[0,0]) > 10.0:
+            print_dual(f"\n{color_text('[WARNING] Material seems to be 2D (C33 << C11). Consider using --2d', 'yellow')}", f_out)
+
+        print_dual(f"\n{color_text('[1] 3D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
+        header = "      " + "".join([f"{f'j={j+1}':<9}" for j in range(6)])
+        print_dual(f"{header}", f_out)
+        for i in range(6):
+            print_dual(f"i={i+1} | " + "".join([f"{C_sym[i,j]:9.2f}" for j in range(6)]), f_out)
+
+        # Compliance matrix (S = C^-1) -- the inverse question from the
+        # stiffness matrix above (eps = S . sigma); same matrix
+        # check_stability_and_report already inverts internally just to
+        # get the Reuss bounds, never shown to the user until now.
+        try:
+            S_3d = np.linalg.inv(C_sym)
+            print_dual(f"\n{color_text('[1b] 3D COMPLIANCE MATRIX (1/' + unit_label + ')', 'magenta')}", f_out)
+            header = "      " + "".join([f"{f'j={j+1}':<11}" for j in range(6)])
+            print_dual(f"{header}", f_out)
+            for i in range(6):
+                print_dual(f"i={i+1} | " + "".join([f"{S_3d[i,j]:10.3e} " for j in range(6)]), f_out)
+        except np.linalg.LinAlgError:
+            print_dual(color_text(
+                "[WARNING] Could not invert the 3D stiffness matrix for the compliance matrix "
+                "(singular).", 'yellow'), f_out)
+
+        print_dual(f"\n{color_text('[2] MAIN CONSTANTS', 'magenta')}", f_out)
+        labels = ["C11", "C22", "C33", "C44", "C55", "C66", "C12", "C13", "C23"]
+        idx = [(0,0), (1,1), (2,2), (3,3), (4,4), (5,5), (0,1), (0,2), (1,2)]
+        buf = ""
+        for k, (l, (r, c)) in enumerate(zip(labels, idx)):
+            buf += f"{l}: {C_sym[r,c]:7.1f} {unit_label}  "
+            if (k+1)%3==0:
+                print_dual(buf, f_out); buf=""
+        if buf: print_dual(buf, f_out)
+
+        # Normal-shear coupling constants -- only ever nonzero for
+        # crystals below orthorhombic symmetry (triclinic, monoclinic,
+        # some low-symmetry trigonal/tetragonal classes); shown whenever
+        # any of them is numerically significant, since for higher-
+        # symmetry materials they're correctly ~0 and not worth the
+        # clutter.
+        coupling_labels = ["C14", "C15", "C16", "C24", "C25", "C26",
+                            "C34", "C35", "C36", "C45", "C46", "C56"]
+        coupling_idx = [(0,3), (0,4), (0,5), (1,3), (1,4), (1,5),
+                         (2,3), (2,4), (2,5), (3,4), (3,5), (4,5)]
+        if any(abs(C_sym[r, c]) > 0.1 for r, c in coupling_idx):
+            print_dual(f"\n{color_text('[2b] COUPLING CONSTANTS (normal-shear)', 'magenta')}", f_out)
+            buf = ""
+            for k, (l, (r, c)) in enumerate(zip(coupling_labels, coupling_idx)):
+                buf += f"{l}: {C_sym[r,c]:7.1f} {unit_label}  "
+                if (k+1)%3==0:
+                    print_dual(buf, f_out); buf=""
+            if buf: print_dual(buf, f_out)
+
+    if filled_by_symmetry and args.method == "stress" and args.symmetry_method == "full":
+        print_dual(color_text(
+            f"[INFO] Direction(s) {', '.join(filled_by_symmetry)} were never run directly -- "
+            "their contribution to the stiffness matrix came entirely from the point group's "
+            "symmetry-allowed subspace (--symmetry-method full), fit jointly with every "
+            "direction actually run.",
+            'cyan'), f_out)
+    elif filled_by_symmetry:
+        print_dual(color_text(
+            f"[INFO] Column(s) {', '.join(filled_by_symmetry)} were not computed directly -- "
+            "reconstructed from a symmetry-equivalent direction (see [INFO]/[DIAGNOSTIC] lines "
+            "above) via the actual point-group operation, same convention stb-elasticInputs "
+            "used to skip generating them.",
+            'cyan'), f_out)
+
+    if missing_directions:
+        print_dual(color_text(
+            f"[INFO] No data for direction(s) {', '.join(missing_directions)} -- the "
+            "stiffness-matrix column(s) they would populate (including any normal-shear "
+            "coupling terms read from them) are 0 by missing data, not by symmetry. Run "
+            "stb-elasticInputs with all 6 default directions (--dirs all) for a complete "
+            "tensor.",
+            'cyan'), f_out)
+
+    if eggbox_results is not None or fit_diagnostics is not None or symmetry_check is not None:
+        print_dual(f"\n{color_text('[3] NUMERICAL QUALITY DIAGNOSTICS', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+
+    if symmetry_check is not None:
+        max_diff, i, j, sym_flagged = symmetry_check
+        status = color_text('WARNING', 'yellow') if sym_flagged else color_text('OK', 'green')
+        print_dual(f"Tensor symmetry (C vs C^T): max |C_ij - C_ji| = {max_diff:.3f} {unit_label} "
+                   f"(i={i+1}, j={j+1})  [{status}]", f_out)
+        if sym_flagged:
+            print_dual(color_text(
+                "[WARNING] C is not close to symmetric before averaging -- C_ij and C_ji came "
+                "from two independently-measured directions that disagree; the reported matrix "
+                "is 0.5*(C+C^T), which silently hides this. Possible causes: the two directions' "
+                "reference structures aren't equally relaxed, or one has poor SCF/force "
+                "convergence.", 'yellow'), f_out)
+
+    if fit_diagnostics is not None:
+        print_dual("Direction fit quality (stress vs. strain):", f_out)
+        if not fit_diagnostics:
+            print_dual("  (no direction had enough points to check)", f_out)
+        else:
+            for r in fit_diagnostics:
+                status = color_text('WARNING', 'yellow') if r['flagged'] else color_text('OK', 'green')
+                print_dual(f"  {r['mode']}: R^2 = {r['r_squared']:.6f} | residual stress = "
+                           f"{r['residual_stress']:7.2f} {unit_label}  [{status}]", f_out)
+            if any(r['flagged'] for r in fit_diagnostics):
+                print_dual(color_text(
+                    f"[WARNING] Direction(s) above have R^2 below --fit-quality-tolerance "
+                    f"({args.fit_quality_tolerance}) and/or a non-negligible residual stress at "
+                    "zero strain -- possible noisy data, too-large --max strain (anharmonic "
+                    "regime), or an incompletely relaxed reference structure.", 'yellow'), f_out)
+
+    if eggbox_results is not None:
+        print_dual("Eggbox cross-check (stress vs. energy, same data):", f_out)
+        if not eggbox_results:
+            print_dual("  (no direction had both stress and energy data available to compare)", f_out)
+        else:
+            any_flagged = False
+            for r in eggbox_results:
+                status = color_text('WARNING', 'yellow') if r['flagged'] else color_text('OK', 'green')
+                print_dual(f"  {r['mode']}: stress = {r['stress_value']:8.2f} {unit_label} | "
+                           f"energy = {r['energy_value']:8.2f} {unit_label} | "
+                           f"diff = {r['diff_pct']:5.2f}%  [{status}]", f_out)
+                any_flagged = any_flagged or r['flagged']
+            if any_flagged:
+                print_dual(color_text(
+                    f"[WARNING] Direction(s) above disagree by more than {args.eggbox_tolerance:.1f}% "
+                    "between the stress-linear-fit and energy-parabolic-fit of the SAME calc.out "
+                    "files -- possible eggbox (real-space grid) contamination in the stress data; "
+                    "consider a finer MeshCutoff or checking SCF/force convergence.", 'yellow'), f_out)
+            else:
+                print_dual(color_text(
+                    "[INFO] All checked direction(s) agree within tolerance -- no indication of "
+                    "eggbox contamination in the stress data.", 'cyan'), f_out)
+
+    # Stability and Properties Check
+    check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
+
+
 # ==========================================
 #                  MAIN
 # ==========================================
@@ -123,10 +826,66 @@ def main():
     parser = argparse.ArgumentParser(description="Siesta Elastic Properties Analyzer (STB Suite)")
     
     # --- CHANGED: Explicit flag for filename ---
-    parser.add_argument("-f", "--file", type=str, default="calc.out", 
+    parser.add_argument("-f", "--file", type=str, default="calc.out",
                         help="Siesta log/output filename inside strain folders (default: calc.out)")
-    
+
+    parser.add_argument("--method", choices=["stress", "energy"], default="stress",
+                        help="Which physical quantity to fit (default: stress). 'stress': the "
+                             "existing stress-strain linear fit (sigma = C . epsilon), see "
+                             "--symmetry-method. 'energy': an energy-strain (parabolic) fit "
+                             "(E = E0 + (V0/2) gamma^T C gamma) over the pure+combined patterns "
+                             "written by stb-elasticInputs --method energy -- a physically "
+                             "independent cross-check (total energy vs. the stress tensor), "
+                             "since a code's total energy and stress can have different sources "
+                             "of numerical error. Always uses the general symmetry-allowed-"
+                             "subspace fit (--symmetry-method doesn't apply); requires "
+                             "--reference-structure.")
     parser.add_argument("--2d", dest="is2d", action="store_true", help="Enable 2D mode (N/m)")
+    parser.add_argument("--symmetry-method", choices=["basic", "full"], default="basic",
+                        help="How to use detected symmetry (default: basic). 'basic': exact "
+                             "reconstruction/pooling only when a single point-group operation "
+                             "maps one canonical strain direction exactly onto another (misses "
+                             "reductions like hexagonal's C11=C22, which come from the FULL "
+                             "elastic tensor's invariance, not a pairwise direction match). "
+                             "'full': fits the whole stiffness matrix at once, constrained a "
+                             "priori to the point group's symmetry-allowed subspace -- catches "
+                             "every crystal system's correct independent-constant count "
+                             "uniformly (cubic, hexagonal, trigonal, ...), at the cost of being "
+                             "a global least-squares fit rather than an exact per-column one. "
+                             "Requires --reference-structure to be available.")
+    parser.add_argument("--reference-structure", default="reference_structure.fdf",
+                        help="UNDEFORMED structure file (default: reference_structure.fdf, written "
+                             "automatically by stb-elasticInputs next to the strain_*/ folders), used "
+                             "only to detect symmetry for the diagnostic/pooling/reconstruction across "
+                             "equivalent directions. Must be the undeformed structure, not one from "
+                             "inside a strain folder -- a single-axis strain genuinely lowers the "
+                             "symmetry (e.g. cubic strained along x alone is exactly tetragonal, not "
+                             "'cubic with noise'), so reading symmetry from a strained structure would "
+                             "silently misdetect it. Never required -- falls back to independent "
+                             "per-direction fitting if unavailable.")
+    parser.add_argument("--symprec", type=float, default=1e-3,
+                        help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own default).")
+    parser.add_argument("--angle-tolerance", type=float, default=5.0,
+                        help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
+                             "default), same use as --symprec.")
+    parser.add_argument("--eggbox-tolerance", type=float, default=5.0,
+                        help="Relative difference (%%, default: 5.0) above which the mandatory "
+                             "eggbox cross-check (--method stress only, see section [3] of the "
+                             "report) flags a direction. Every diagonal constant actually run is "
+                             "computed two independent ways from the SAME calc.out files -- a "
+                             "stress-linear fit and an energy-parabolic fit -- with no new DFT "
+                             "calculations; a disagreement beyond this tolerance is a hint of "
+                             "eggbox (or other numerical) contamination in the stress data. "
+                             "Needs --reference-structure; skipped with a warning (not an error) "
+                             "if it isn't available.")
+    parser.add_argument("--fit-quality-tolerance", type=float, default=0.995,
+                        help="R^2 (default: 0.995) below which the mandatory per-direction "
+                             "stress-vs-strain fit-quality check (--method stress only, section "
+                             "[3] of the report) flags a direction -- a clean linear elastic fit "
+                             "should sit well above this. Also flags a non-negligible residual "
+                             "stress at zero strain (same relative-contribution criterion as the "
+                             "energy method's linear-term check). No new DFT calculations: reuses "
+                             "the same stress-strain fit each direction's column already needed.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -161,35 +920,113 @@ def main():
     Lz = 1.0
     found_lz = False
 
-    # Pre-scan for Lz (Unit Cell Height) if 2D
-    for folder in folders:
-        path = os.path.join(folder, args.file)
-        if os.path.exists(path):
-            val = siesta_log.get_cell_height(path)
-            if val > 1.0:
-                Lz = val
-                found_lz = True
-                break
-    
-    if args.is2d and found_lz:
-        print(f"[INFO] Normalization by Cell Height (Lz): {Lz:.2f} Ang")
-    
-    CONV_FACTOR = Lz * CONV_EVA2_TO_NM if args.is2d else CONV_EVA3_TO_GPA
+    if args.method == "stress":
+        # Pre-scan for Lz (Unit Cell Height) if 2D -- SIESTA's stress is a
+        # volumetric quantity, diluted by however much vacuum the cell has;
+        # multiplying by the cell height undoes that dilution. Not needed
+        # for --method energy: total energy is already extensive (see
+        # compute_stiffness_matrix_energy's docstring).
+        for folder in folders:
+            path = os.path.join(folder, args.file)
+            if os.path.exists(path):
+                val = siesta_log.get_cell_height(path)
+                if val > 1.0:
+                    Lz = val
+                    found_lz = True
+                    break
+
+        if args.is2d and found_lz:
+            print(f"[INFO] Normalization by Cell Height (Lz): {Lz:.2f} Ang")
+
+        CONV_FACTOR = Lz * CONV_EVA2_TO_NM if args.is2d else CONV_EVA3_TO_GPA
+    else:
+        CONV_FACTOR = CONV_EVA2_TO_NM if args.is2d else CONV_EVA3_TO_GPA
+
+    # Symmetry detection (optional): reads the UNDEFORMED reference
+    # structure (see --reference-structure) to find which strain directions
+    # are symmetry-equivalent -- enables compute_stiffness_matrix's
+    # pooling/reconstruction across them. Purely advisory/best-effort: any
+    # failure (most commonly, the file just isn't there) falls back to the
+    # original independent per-direction fit.
+    symmetry_info = None
+    pmg_structure = None
+    if os.path.exists(args.reference_structure):
+        try:
+            structure = structure_io.read_fdf(args.reference_structure)
+            pmg_structure = structure_io.to_pymatgen(structure)
+            if args.method == "stress" and args.symmetry_method == "basic":
+                groups, point_group, ops = symmetry.equivalent_strain_modes(
+                    pmg_structure, args.symprec, args.angle_tolerance)
+                symmetry_info = (groups, point_group, ops)
+                print(f"{color_text('[INFO]', 'cyan')} Detected point group {point_group} -- "
+                      "symmetry-equivalent directions will be pooled/reconstructed.")
+        except Exception:
+            pmg_structure = None
+
+    if args.method == "stress" and args.symmetry_method == "full" and pmg_structure is None:
+        print(f"{color_text('[FAIL]', 'red')} --symmetry-method full requires a readable "
+              f"{args.reference_structure} (see --reference-structure) to detect the point "
+              "group -- none was found.")
+        sys.exit(1)
+
+    if args.method == "energy" and pmg_structure is None:
+        print(f"{color_text('[FAIL]', 'red')} --method energy requires a readable "
+              f"{args.reference_structure} (see --reference-structure) to detect the point "
+              "group and reference volume/area -- none was found.")
+        sys.exit(1)
 
     with open(REPORT_FILE, "w") as f_out:
         print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)
-    
+
+        if args.method == "energy":
+            # --- Energy-strain (parabolic fit) path: its own folder
+            # scanning/parsing (pure+combined pattern names, total energy
+            # instead of stress), entirely inside compute_stiffness_matrix_energy.
+            print(f"\n{color_text('READING FOLDERS (energy-strain patterns):', 'bold')}")
+            C, point_group, num_independent, directions_used, achieved_rank = \
+                compute_stiffness_matrix_energy(folders, args.file, pmg_structure, args.symprec,
+                                                 args.angle_tolerance, args.is2d, CONV_FACTOR,
+                                                 unit_label, f_out)
+            filled_by_symmetry = []
+            missing_directions = []
+
+            if not directions_used:
+                print(f"{color_text('[FAIL]', 'red')} No valid strain_<pattern>_* data found "
+                      f"(--method energy). Check if '{args.file}' exists and has a 'siesta: "
+                      "FreeEng' line, and that folder names match stb-elasticInputs --method "
+                      "energy's convention.")
+                sys.exit(1)
+
+            print_dual(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
+                       f"{num_independent} independent elastic constant(s); fit used "
+                       f"{len(directions_used)} strain pattern(s): {directions_used}.", f_out)
+            if achieved_rank < num_independent and not args.is2d:
+                print_dual(color_text(
+                    f"[WARNING] Pattern(s) run ({directions_used}) only determine "
+                    f"{achieved_rank} of {num_independent} independent elastic constants for "
+                    f"point group {point_group} -- the fit is underdetermined; run more "
+                    "patterns from stb-elasticInputs --method energy for a fully determined "
+                    "tensor.", 'yellow'), f_out)
+
+            C_sym = 0.5 * (C + C.T)
+            _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out)
+            print("-" * 60)
+            print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")
+            print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))
+            return
+
         loaded_count = 0
         print(f"\n{color_text('READING FOLDERS:', 'bold')}")
-    
+
         for folder in folders:
             direction, val = siesta_log.parse_strain_folder_name(folder)
             if direction is None: continue
+            direction = _canonical_elastic_direction(direction)
             strain = val / 100.0
 
             # Read the specified file
             S = siesta_log.get_stress_tensor(os.path.join(folder, args.file))
-        
+
             # --- MODIFICAÇÃO: Imprimir status da pasta ---
             msg = f"   -> {folder:<25} : "
             if S is not None:
@@ -200,10 +1037,10 @@ def main():
                 msg += color_text("OK", 'green')
             else:
                 msg += color_text("FAIL", 'red') + " (No stress data found)"
-        
+
             print(msg)
             # ---------------------------------------------
-            
+
         print(f"\n[OK] Loaded {loaded_count} calculations from {len(folders)} folders.")
 
         if not data:
@@ -213,98 +1050,74 @@ def main():
 
 
         # --- C_ij Calculation ---
-        C = np.zeros((6, 6))
-
-        # Eixo X (C11, C21, C31) - Tenta 'xx' ou 'x'
-        if 'xx' in data:
-            e, S = data['xx']['eps'], np.array(data['xx']['stress'])
-            for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-        elif 'x' in data:
-            e, S = data['x']['eps'], np.array(data['x']['stress'])
-            for i in range(3): C[i, 0] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-        # Eixo Y (C12, C22, C32) - Tenta 'yy' ou 'y'
-        if 'yy' in data:
-            e, S = data['yy']['eps'], np.array(data['yy']['stress'])
-            for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-        elif 'y' in data:
-            e, S = data['y']['eps'], np.array(data['y']['stress'])
-            for i in range(3): C[i, 1] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-        # Eixo Z (C13, C23, C33) - Tenta 'zz' ou 'z'
-        if 'zz' in data:
-            e, S = data['zz']['eps'], np.array(data['zz']['stress'])
-            for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-        elif 'z' in data:
-            e, S = data['z']['eps'], np.array(data['z']['stress'])
-            for i in range(3): C[i, 2] = calculate_slope(e, S[:, i, i], CONV_FACTOR)
-
-        # C44 (Shear YZ)
-        if 'yz' in data: 
-            C[3, 3] = calculate_slope(data['yz']['eps'], np.array(data['yz']['stress'])[:, 1, 2], CONV_FACTOR) / 2.0
-
-        # C55 (Shear XZ ou ZX) - Suas pastas usam 'zx'
-        if 'zx' in data: 
-            C[4, 4] = calculate_slope(data['zx']['eps'], np.array(data['zx']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
-        elif 'xz' in data:
-            C[4, 4] = calculate_slope(data['xz']['eps'], np.array(data['xz']['stress'])[:, 0, 2], CONV_FACTOR) / 2.0
-
-        # C66 (Shear XY)
-        if 'xy' in data: 
-            C[5, 5] = calculate_slope(data['xy']['eps'], np.array(data['xy']['stress'])[:, 0, 1], CONV_FACTOR) / 2.0
+        # Each single-component strain series already gives a FULL column of
+        # C (sigma = C . epsilon, so a pure e_k strain gives sigma = C[:,k]),
+        # so reading all 6 stress-Voigt components per series (not just the
+        # 1-3 "obvious" ones) recovers the full 6x6 tensor -- including the
+        # normal-shear coupling terms (C14-C16/C24-C26/C34-C36/C45/C46/C56)
+        # -- from data already collected, no new strain series needed. When
+        # symmetry_info is available, symmetry-equivalent directions are
+        # additionally pooled (2+ measured) or reconstructed (only 1
+        # measured, matching stb-elasticInputs' 'all' DFT-cost reduction).
+        if args.symmetry_method == "full":
+            C, point_group, num_independent, directions_used, filled_by_symmetry, achieved_rank = \
+                compute_stiffness_matrix_full(data, CONV_FACTOR, pmg_structure, args.symprec,
+                                               args.angle_tolerance, unit_label, f_out)
+            missing_directions = []
+            print_dual(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
+                       f"{num_independent} independent elastic constant(s); fit used "
+                       f"{len(directions_used)} of 6 canonical direction(s): "
+                       f"{', '.join(directions_used) if directions_used else '(none)'}.", f_out)
+            # In 2D mode the report only ever shows the in-plane constants
+            # (C11/C22/C12/C66); an underdetermined out-of-plane constant
+            # (C33/C44/C13, typically inaccessible anyway on a vacuum-padded
+            # axis) isn't something the user can or needs to act on, so only
+            # warn about it in 3D mode, where every constant is reported.
+            if achieved_rank < num_independent and not args.is2d:
+                print_dual(color_text(
+                    f"[WARNING] Direction(s) run ({', '.join(directions_used) if directions_used else '(none)'}) "
+                    f"only determine {achieved_rank} of {num_independent} independent elastic "
+                    f"constants for point group {point_group} -- the fit is underdetermined; run "
+                    "more of the 6 canonical directions for a fully determined tensor.", 'yellow'), f_out)
+        else:
+            C, filled_by_symmetry, missing_directions = compute_stiffness_matrix(
+                data, CONV_FACTOR, symmetry_info, unit_label, f_out)
 
         C_sym = 0.5 * (C + C.T)
 
-        # --- CONDITIONAL OUTPUT ---
-        if args.is2d:
-            # 2D REPORT
-            print_dual(f"\n{color_text('[1] 2D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
-            print_dual("      xx       yy       xy", f_out)
-        
-            indices_2d = [0, 1, 5]
-            labels_2d = ["xx", "yy", "xy"]
-        
-            for r, label_r in zip(indices_2d, labels_2d):
-                row_str = f"{label_r} | "
-                for c in indices_2d:
-                    val = C_sym[r, c]
-                    if abs(val) < 0.01: val = 0.0
-                    row_str += f"{val:8.2f} "
-                print_dual(row_str, f_out)
-            
-            print_dual(f"\n{color_text('[2] RELEVANT CONSTANTS (2D)', 'magenta')}", f_out)
-            labels_show = ["C11", "C22", "C12", "C66"]
-            idx_show = [(0,0), (1,1), (0,1), (5,5)]
-        
-            buf = ""
-            for l, (r, c) in zip(labels_show, idx_show):
-                buf += f"{color_text(l, 'cyan')}: {color_text(f'{C_sym[r,c]:6.2f}', 'bold')} {unit_label}   "
-            print_dual(buf, f_out)
-
+        # Eggbox cross-check: mandatory for --method stress (not gated
+        # behind a flag -- see core/symmetry.py's energy-method module note
+        # and eggbox_cross_check's own docstring for the physics). Only
+        # ever skipped, with a warning, if there's no reference structure
+        # to get the volume/area from -- never blocks the rest of the
+        # report, same "best-effort" spirit as --symmetry-method basic's
+        # symmetry detection.
+        eggbox_results = None
+        if pmg_structure is not None:
+            eggbox_results = eggbox_cross_check(data, folders, args.file, pmg_structure, args.is2d,
+                                                 CONV_FACTOR, args.eggbox_tolerance, f_out)
         else:
-            # 3D REPORT
-            if abs(C_sym[2,2]) < 0.1 * abs(C_sym[0,0]) and abs(C_sym[0,0]) > 10.0:
-                print_dual(f"\n{color_text('[WARNING] Material seems to be 2D (C33 << C11). Consider using --2d', 'yellow')}", f_out)
-            
-            print_dual(f"\n{color_text('[1] 3D STIFFNESS MATRIX (' + unit_label + ')', 'magenta')}", f_out)
-            header = "      " + "".join([f"{f'j={j+1}':<9}" for j in range(6)])
-            print_dual(f"{header}", f_out)
-            for i in range(6):
-                print_dual(f"i={i+1} | " + "".join([f"{C_sym[i,j]:9.2f}" for j in range(6)]), f_out)
-            
-            print_dual(f"\n{color_text('[2] MAIN CONSTANTS', 'magenta')}", f_out)
-            labels = ["C11", "C22", "C33", "C44", "C55", "C66", "C12", "C13", "C23"]
-            idx = [(0,0), (1,1), (2,2), (3,3), (4,4), (5,5), (0,1), (0,2), (1,2)]
-            buf = ""
-            for k, (l, (r, c)) in enumerate(zip(labels, idx)):
-                buf += f"{l}: {C_sym[r,c]:7.1f} {unit_label}  "
-                if (k+1)%3==0: 
-                    print_dual(buf, f_out); buf=""
-            if buf: print_dual(buf, f_out)
+            print_dual(color_text(
+                "[WARNING] Eggbox cross-check skipped: no readable "
+                f"{args.reference_structure} (see --reference-structure) to get the reference "
+                "volume/area from.", 'yellow'), f_out)
 
-        # Stability and Properties Check
-        check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
-    
+        # Per-direction fit quality (R^2 / residual stress at zero strain):
+        # mandatory alongside the eggbox check, same "free diagnostic from
+        # data already collected" spirit -- see direction_fit_diagnostics.
+        fit_diagnostics = direction_fit_diagnostics(data, CONV_FACTOR, args.fit_quality_tolerance)
+
+        # Tensor symmetry (C vs C^T): only meaningful for the basic method,
+        # where C[i,j]/C[j,i] can come from two independently-run
+        # directions -- see tensor_symmetry_check's docstring for why
+        # --symmetry-method full and --method energy are always exactly
+        # symmetric by construction and would give an uninformative ~0.
+        symmetry_check = tensor_symmetry_check(C) if args.symmetry_method == "basic" else None
+
+        _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+                             eggbox_results=eggbox_results, fit_diagnostics=fit_diagnostics,
+                             symmetry_check=symmetry_check)
+
     print("-" * 60)
     print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")
     print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))

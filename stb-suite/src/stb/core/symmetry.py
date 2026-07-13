@@ -95,6 +95,447 @@ def equivalent_cartesian_axes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
     return list(groups.values()), point_group
 
 
+VOIGT_MODES = ('xx', 'yy', 'zz', 'yz', 'xz', 'xy')
+
+# Voigt index (0-based, 1..6 in the usual 1-based convention) -> Cartesian
+# stress/strain-tensor (row, col). Matches VOIGT_MODES order (4=yz, 5=xz,
+# 6=xy). Single source of truth, shared with elastic_analysis.py.
+VOIGT_TO_TENSOR = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)]
+
+
+def strain_tensor(mode, delta=1.0):
+    """Builds the symmetric 3x3 strain tensor for one of the 6 canonical
+    Voigt strain modes. Single source of truth for "what does mode X mean
+    as a strain tensor", shared by equivalent_strain_modes below and
+    stb-elasticInputs' own deformation-matrix builder, so the two can never
+    drift apart. Only the 6 Voigt modes are covered here -- 'bi'/'hydro'
+    (stb-elasticInputs' 2 extra convenience modes) aren't part of the Voigt
+    basis and stay defined locally in that tool.
+    """
+    eps = np.zeros((3, 3))
+    if mode == 'xx': eps[0, 0] = delta
+    elif mode == 'yy': eps[1, 1] = delta
+    elif mode == 'zz': eps[2, 2] = delta
+    elif mode == 'yz': eps[1, 2] = eps[2, 1] = delta
+    elif mode == 'xz': eps[0, 2] = eps[2, 0] = delta
+    elif mode == 'xy': eps[0, 1] = eps[1, 0] = delta
+    return eps
+
+
+def equivalent_strain_modes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+    """Groups the 6 canonical Voigt strain modes ('xx','yy','zz','yz','xz',
+    'xy') by point-group symmetry: modes in the same group are related by a
+    rotation/reflection of the structure's point group (R . eps_i . R^T ==
+    +/-eps_j for some point-group operation R), so straining along one gives
+    a stress response fully determined by the other's (see
+    find_mapping_operation) -- only one representative per group needs to
+    actually be run through DFT.
+
+    Returns (groups, point_group_symbol, ops): `groups` is a list of lists
+    of mode names partitioning VOIGT_MODES; `ops` is the raw list of
+    point-group operations (Cartesian rotation matrices), returned so
+    find_mapping_operation can locate the specific operation between any
+    two modes without re-running symmetry detection.
+
+    Same deliberately-conservative exact-tensor-match criterion as
+    equivalent_cartesian_axes (not "the elastic tensor happens to be
+    isotropic here") -- verified live: a synthetic cubic structure groups
+    into {xx,yy,zz} and {xy,xz,yz} (matching the textbook result: only 2
+    independent strain series needed for the 3 independent cubic constants
+    C11/C12/C44), while the suite's hexagonal 2D fixture and a synthetic
+    triclinic structure both come back with 6 singleton groups -- hexagonal
+    materials really do have C11=C22, but that comes from continuous 6-fold
+    averaging, not a discrete operation mapping eps_xx exactly onto eps_yy,
+    so this method correctly does NOT claim it (would need a full
+    irreducible-representation projection to capture, out of scope here).
+    """
+    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec, angle_tolerance=angle_tolerance)
+    point_group = sga.get_point_group_symbol()
+    ops = sga.get_point_group_operations(cartesian=True)
+
+    tensors = [strain_tensor(m) for m in VOIGT_MODES]
+    parent = list(range(6))
+
+    def find(i):
+        while parent[i] != i:
+            i = parent[i]
+        return i
+
+    def union(i, j):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+
+    for op in ops:
+        R = op.rotation_matrix
+        for i in range(6):
+            transformed = R @ tensors[i] @ R.T
+            for j in range(6):
+                if i != j and (np.allclose(transformed, tensors[j], atol=1e-3)
+                                or np.allclose(transformed, -tensors[j], atol=1e-3)):
+                    union(i, j)
+
+    groups = {}
+    for i in range(6):
+        groups.setdefault(find(i), []).append(VOIGT_MODES[i])
+    return list(groups.values()), point_group, ops
+
+
+def find_mapping_operation(ops, src_mode, dst_mode, atol=1e-3):
+    """Returns (R, sign) such that sign * (R . strain_tensor(src_mode) . R^T)
+    equals strain_tensor(dst_mode), for some rotation R in `ops` (as
+    produced by equivalent_strain_modes) and sign in {+1, -1} -- or
+    (None, None) if no operation in `ops` relates the two modes.
+
+    `sign` is returned SEPARATELY from R, not folded into it, because R only
+    ever appears bilinearly (R . X . R^T): negating R does NOT negate that
+    product (the two minus signs cancel), so a version of this function that
+    tried returning -R for the sign-flip case was a real, caught-by-testing
+    bug -- it silently left the reconstructed stress unflipped whenever the
+    matching operation happened to need a sign flip (verified live: m-3m's
+    yz->xy mapping is exactly such a case, R.eps_yz.R^T == -eps_xy, not
+    +eps_xy; a pooled fit across {xy,xz,yz} for a synthetic cubic crystal
+    came back at exactly 1/3 of the true C66 before this fix, exactly 80.0
+    GPa after applying sign to the transformed stress via transform_stress).
+
+    Since stress is linear in strain and transforms the same way as strain
+    under a symmetry operation of the crystal (Neumann's principle -- the
+    elastic tensor itself must be invariant under every point-group
+    operation), the same (R, sign) also maps the measured stress response
+    sigma(src_mode) onto what sigma(dst_mode) would have been, letting a
+    mode that was never computed be reconstructed exactly from a
+    symmetry-equivalent one that was -- see transform_stress.
+    """
+    src_t, dst_t = strain_tensor(src_mode), strain_tensor(dst_mode)
+    for op in ops:
+        R = op.rotation_matrix
+        transformed = R @ src_t @ R.T
+        if np.allclose(transformed, dst_t, atol=atol):
+            return R, 1
+        if np.allclose(transformed, -dst_t, atol=atol):
+            return R, -1
+    return None, None
+
+
+def transform_stress(R, sign, sigma):
+    """Applies the (R, sign) mapping from find_mapping_operation to a
+    measured stress tensor, recovering the stress response a
+    symmetry-equivalent strain mode would have had: sign * (R . sigma . R^T).
+    """
+    return sign * (R @ sigma @ R.T)
+
+
+# ==========================================================================
+# General symmetry-allowed elastic tensor ("full" method)
+#
+# equivalent_strain_modes/find_mapping_operation above (the "basic" method)
+# only ever detect an equivalence when a single point-group operation maps
+# one canonical strain TENSOR (rank-2) exactly onto another -- this is
+# exact and cheap, but structurally blind to reductions like hexagonal's
+# C11=C22, which is a property of the full elastic TENSOR (rank-4), not of
+# any pairwise strain-tensor correspondence: a 60-degree rotation maps
+# eps_xx onto a mixed tensor (cos^2, sin*cos, sin^2 entries), never onto
+# eps_yy itself, even though that same rotation, applied to the *entire* C
+# via the Bond transformation, forces C11=C22 (the textbook "direct
+# inspection method" for deriving each crystal system's independent-constant
+# pattern). The functions below implement that general criterion instead,
+# via the null space of "C must be invariant under every point-group
+# operation" rather than hand-derived per-crystal-system tables -- verified
+# against known results for the suite's own fixtures (m-3m/cubic: 3
+# independent constants; -6m2/hexagonal 2D fixture: 5; -1/triclinic: 21,
+# matching every textbook count) and against a synthetic round-trip
+# (hexagonal-consistent C, only xx/zz/xz ever "measured": reconstructed the
+# full matrix, including C22 and C66 which were never run directly, to
+# 3.6e-9 max error).
+# ==========================================================================
+
+# All 21 independent (row, col) pairs of a symmetric 6x6 Voigt matrix.
+VOIGT_INDEPENDENT_PAIRS = [(m, n) for m in range(6) for n in range(m, 6)]
+
+
+def voigt_to_full_tensor(C):
+    """Expands a 6x6 Voigt stiffness matrix into the full 3x3x3x3 elastic
+    tensor C_ijkl. No extra factors needed anywhere (unlike the
+    strain/stress Voigt vectors, which double shear/normal components
+    differently) -- this Voigt convention was designed so that C_mn ==
+    C_ijkl directly for every m, n; verified by hand-derivation from
+    sigma_ij = C_ijkl eps_kl before implementing.
+    """
+    T = np.zeros((3, 3, 3, 3))
+    for m in range(6):
+        i, j = VOIGT_TO_TENSOR[m]
+        for n in range(6):
+            k, l = VOIGT_TO_TENSOR[n]
+            val = C[m, n]
+            for (ii, jj) in {(i, j), (j, i)}:
+                for (kk, ll) in {(k, l), (l, k)}:
+                    T[ii, jj, kk, ll] = val
+    return T
+
+
+def full_tensor_to_voigt(T):
+    """Inverse of voigt_to_full_tensor: reads the 6x6 Voigt matrix back out
+    of a full 3x3x3x3 elastic tensor (just index lookups, see there)."""
+    C = np.zeros((6, 6))
+    for m in range(6):
+        i, j = VOIGT_TO_TENSOR[m]
+        for n in range(6):
+            k, l = VOIGT_TO_TENSOR[n]
+            C[m, n] = T[i, j, k, l]
+    return C
+
+
+def rotate_elastic_tensor(C, R):
+    """Rotates a 6x6 Voigt elastic tensor by a Cartesian rotation matrix R,
+    i.e. C'_ijkl = R_ia R_jb R_kc R_ld C_abcd. Deliberately computed via the
+    generic rank-4 tensor transformation (round-tripping through the full
+    3x3x3x3 form) instead of a hand-typed 6x6 Bond matrix -- the Bond
+    matrix's off-diagonal blocks carry factor-of-2 placements that are easy
+    to transcribe backwards; this has no such risk since it only relies on
+    the rank-4 transformation law itself.
+    """
+    T = voigt_to_full_tensor(C)
+    T_rot = np.einsum('ia,jb,kc,ld,abcd->ijkl', R, R, R, R, T)
+    return full_tensor_to_voigt(T_rot)
+
+
+def symmetry_allowed_basis(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+    """Returns (basis, point_group_symbol): `basis` is a list of 6x6 Voigt
+    matrices spanning the subspace of elastic tensors invariant under every
+    operation of the structure's point group -- i.e. every physically
+    allowed C for this crystal system is some linear combination of these
+    matrices, and `len(basis)` is exactly the number of independent elastic
+    constants for that point group (3 for cubic, 5 for hexagonal, 21 for
+    triclinic, etc. -- matches the standard textbook counts, verified
+    against this suite's own cubic/hexagonal/triclinic fixtures).
+
+    Computed as the null space of "C must equal its own rotated image"
+    stacked over every point-group operation: for each of the 21
+    independent Voigt entries taken as a unit matrix, rotate it (via
+    rotate_elastic_tensor) and re-express the result in the same 21-entry
+    basis to get one column of the operation's 21x21 linear map L_R; stack
+    (L_R - I) over all operations and take the SVD null space. This is the
+    general "direct inspection method" used to derive elastic-constant
+    tables per crystal system, applied numerically instead of by hand so it
+    covers any of the 32 point groups uniformly (no per-crystal-system
+    special-casing, unlike equivalent_strain_modes above).
+    """
+    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec, angle_tolerance=angle_tolerance)
+    point_group = sga.get_point_group_symbol()
+    ops = sga.get_point_group_operations(cartesian=True)
+
+    n = len(VOIGT_INDEPENDENT_PAIRS)
+    constraints = []
+    for op in ops:
+        R = op.rotation_matrix
+        L = np.zeros((n, n))
+        for p, (m, nn) in enumerate(VOIGT_INDEPENDENT_PAIRS):
+            unit = np.zeros((6, 6))
+            unit[m, nn] = 1.0
+            unit[nn, m] = 1.0
+            rotated = rotate_elastic_tensor(unit, R)
+            L[:, p] = [rotated[mm, nn2] for (mm, nn2) in VOIGT_INDEPENDENT_PAIRS]
+        constraints.append(L - np.eye(n))
+
+    M = np.vstack(constraints)
+    _, s, vt = np.linalg.svd(M, full_matrices=True)
+    tol = 1e-8 * max(M.shape)
+    rank = int(np.sum(s > tol))
+
+    basis = []
+    for vec in vt[rank:]:
+        C = np.zeros((6, 6))
+        for val, (m, nn) in zip(vec, VOIGT_INDEPENDENT_PAIRS):
+            C[m, nn] = val
+            C[nn, m] = val
+        basis.append(C)
+    return basis, point_group
+
+
+def voigt_strain_engineering(eps_tensor):
+    """Converts a symmetric 3x3 (tensor) strain into the 6-component
+    engineering-strain Voigt vector (shear entries doubled: gamma=2*eps) --
+    the vector Hooke's law sigma_voigt = C . eps_voigt_engineering actually
+    expects. Companion to strain_tensor above (which returns the un-doubled
+    tensor form).
+    """
+    return np.array([
+        eps_tensor[0, 0], eps_tensor[1, 1], eps_tensor[2, 2],
+        2 * eps_tensor[1, 2], 2 * eps_tensor[0, 2], 2 * eps_tensor[0, 1],
+    ])
+
+
+def select_directions_by_rank(basis, order=VOIGT_MODES):
+    """Greedily picks the minimal subset of canonical Voigt strain modes
+    (in `order`) whose data would fully determine every coefficient in
+    `basis` (from symmetry_allowed_basis): keeps a mode only if it increases
+    the rank of the accumulated design matrix, stopping once the rank
+    reaches len(basis) -- verified to reproduce the expected reduction on
+    this suite's fixtures (2 of 6 for the cubic fixture, 3 of 6 for the
+    hexagonal 2D fixture, all 6 for the triclinic fixture).
+    """
+    kept = []
+    blocks = []
+    target_rank = len(basis)
+    for mode in order:
+        eps_v = voigt_strain_engineering(strain_tensor(mode))
+        block = np.array([Bk @ eps_v for Bk in basis]).T  # shape (6, len(basis))
+        trial = blocks + [block]
+        rank = np.linalg.matrix_rank(np.vstack(trial), tol=1e-8)
+        prev_rank = np.linalg.matrix_rank(np.vstack(blocks), tol=1e-8) if blocks else 0
+        if rank > prev_rank:
+            blocks = trial
+            kept.append(mode)
+        if rank >= target_rank:
+            break
+    return kept
+
+
+def fit_stiffness_matrix(basis, points, conv_factor):
+    """Least-squares fit of the elastic tensor, constrained a priori to the
+    symmetry-allowed subspace `basis` (from symmetry_allowed_basis).
+    `points` is a list of (strain_tensor_3x3, stress_tensor_3x3) pairs
+    (raw, unconverted units, tensor strain -- not engineering). Each point
+    contributes 6 equations (one per Voigt stress component) linear in the
+    basis coefficients; stacking every point from every direction actually
+    run and solving once with np.linalg.lstsq naturally pools redundant
+    directions and reconstructs columns for directions never run, in a
+    single fit -- verified in a synthetic round-trip (hexagonal-consistent
+    C, only 3 of 6 directions "measured") to 3.6e-9 max error against the
+    true matrix, including the two independent constants (C22, C66) that
+    were never measured directly.
+
+    Returns C (6x6, already scaled by conv_factor).
+    """
+    K = len(basis)
+    rows, targets = [], []
+    for eps_t, sigma_t in points:
+        eps_v = voigt_strain_engineering(eps_t)
+        sigma_v = np.array([
+            sigma_t[0, 0], sigma_t[1, 1], sigma_t[2, 2],
+            sigma_t[1, 2], sigma_t[0, 2], sigma_t[0, 1],
+        ])
+        block = np.array([Bk @ eps_v for Bk in basis]).T  # (6, K)
+        rows.append(block)
+        targets.append(sigma_v)
+
+    A = np.vstack(rows)
+    b = np.concatenate(targets)
+    x, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
+    C = sum(xk * Bk for xk, Bk in zip(x, basis))
+    return C * conv_factor
+
+
+# ==========================================================================
+# Energy-strain ("parabolic fit") method
+#
+# E(eps) = E0 + (V0/2) gamma^T C gamma (gamma = engineering Voigt strain) --
+# a PURE single-Voigt-component strain only ever probes the diagonal term
+# C_mm (gamma has one nonzero entry, so gamma^T C gamma = C_mm * gamma_m^2,
+# structurally blind to any off-diagonal C_mn): unlike the stress method
+# above, which gets a full column (6 numbers) from one direction, an energy
+# curvature gives exactly ONE number per pattern. Off-diagonal constants
+# need a genuinely COMBINED pattern (two Voigt components strained at once,
+# e.g. eps_xx=eps_yy=delta), whose curvature mixes C_11+C_22+2*C_12. Reuses
+# symmetry_allowed_basis/strain_tensor/voigt_strain_engineering above --
+# verified in a synthetic round-trip against the suite's cubic fixture (3
+# patterns: 'xx', 'yz', 'xx+yy', reconstruction error 1.1e-13) and hexagonal
+# 2D fixture restricted to in-plane candidates (2 patterns: 'xx', 'xy',
+# recovering C11=C22 and C66=(C11-C12)/2 exactly even though neither was
+# ever measured as its own diagonal pattern).
+# ==========================================================================
+
+def energy_pattern_candidates():
+    """Returns the full pool of 21 candidate deformation patterns for the
+    energy method: the 6 pure canonical Voigt modes (diagonal terms only)
+    plus all 15 pairwise combinations (needed for off-diagonal terms) -- 21
+    total, matching triclinic's 21 independent constants (the worst case,
+    where every candidate ends up needed). Each entry is (name, tensor),
+    name being e.g. 'xx' or 'xx+yy' (used verbatim in strain_*/ folder
+    names), tensor the unit-magnitude (delta=1) 3x3 strain tensor.
+    """
+    candidates = [(m, strain_tensor(m)) for m in VOIGT_MODES]
+    for i in range(6):
+        for j in range(i + 1, 6):
+            name = f"{VOIGT_MODES[i]}+{VOIGT_MODES[j]}"
+            candidates.append((name, strain_tensor(VOIGT_MODES[i]) + strain_tensor(VOIGT_MODES[j])))
+    return candidates
+
+
+def select_energy_patterns_by_rank(basis, candidates):
+    """Greedily picks the minimal subset of `candidates` (from
+    energy_pattern_candidates, already filtered to physically valid ones --
+    see the vacuum-axis filtering in elastic_inputs.py) whose curvatures
+    would fully determine every coefficient in `basis`. Same greedy
+    rank-growing idea as select_directions_by_rank above, but each
+    candidate contributes a single SCALAR row (gamma^T Bk gamma, one number
+    per basis element) instead of a 6-row block, matching the "one equation
+    per pattern" structure of the energy method (see module note above).
+    """
+    kept = []
+    rows = []
+    target_rank = len(basis)
+    for name, eps_t in candidates:
+        gamma = voigt_strain_engineering(eps_t)
+        row = [gamma @ Bk @ gamma for Bk in basis]
+        trial = rows + [row]
+        rank = np.linalg.matrix_rank(np.array(trial), tol=1e-8)
+        prev_rank = np.linalg.matrix_rank(np.array(rows), tol=1e-8) if rows else 0
+        if rank > prev_rank:
+            rows = trial
+            kept.append((name, eps_t))
+        if rank >= target_rank:
+            break
+    return kept
+
+
+def fit_stiffness_matrix_energy(basis, pattern_targets, conv_factor):
+    """Least-squares fit of the elastic tensor from energy-curvature data,
+    constrained a priori to the symmetry-allowed subspace `basis` (from
+    symmetry_allowed_basis). `pattern_targets` is a list of
+    (strain_tensor_unit_3x3, target) pairs, where `target` is the raw
+    (unconverted) volume/area-normalized curvature `2*a/V0` -- `a` being
+    the quadratic coefficient of a polyfit of energy vs. strain magnitude
+    for that pattern (see elastic_analysis.py), so that `target == gamma^T
+    C_raw gamma` for that pattern's unit strain gamma. Each pattern
+    contributes exactly one equation (unlike fit_stiffness_matrix's 6 per
+    point) -- solving needs at least len(basis) patterns, which is exactly
+    what select_energy_patterns_by_rank guarantees.
+
+    Returns C (6x6, already scaled by conv_factor).
+    """
+    rows, targets = [], []
+    for eps_t, target in pattern_targets:
+        gamma = voigt_strain_engineering(eps_t)
+        rows.append([gamma @ Bk @ gamma for Bk in basis])
+        targets.append(target)
+
+    A = np.array(rows)
+    b = np.array(targets)
+    x, _, _, _ = np.linalg.lstsq(A, b, rcond=None)
+    C = sum(xk * Bk for xk, Bk in zip(x, basis))
+    return C * conv_factor
+
+
+def crystal_system(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+    """Returns (crystal_system, point_group_symbol), e.g. ("triclinic", "-1").
+
+    Used by stb-elasticInputs to flag when the "vary one strain component at
+    a time" elastic-constant method can't be exact: that method never solves
+    for the normal-shear coupling constants (C14-C16/C24-C26/C34-C36/C45/
+    C46/C56), implicitly assuming they're zero. That's only unconditionally
+    true for triclinic and monoclinic's *complement* -- triclinic (21
+    independent constants) and monoclinic (13) always have some of these
+    terms nonzero, in every subclass, so those two systems are flagged
+    specifically. Higher symmetry systems are NOT all safe in every subclass
+    (e.g. some low-symmetry tetragonal/trigonal point groups still have C16/
+    C14 nonzero) -- deliberately not attempting that finer classification
+    here, since misclassifying it would be worse than not trying.
+    """
+    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec, angle_tolerance=angle_tolerance)
+    return sga.get_crystal_system(), sga.get_point_group_symbol()
+
+
 def reduce_to_unitcell(structure, mode, symprec=1e-3, angle_tolerance=5.0):
     """Returns (new_structure, sga) for the requested `mode`:
       - primitive: smallest possible cell.

@@ -15,6 +15,7 @@ i=6 |      0.00     0.00     0.00     0.00     0.00     0.00
 C11:    16.0 GPa  C22:     0.0 GPa  C33:     0.0 GPa  
 C44:     0.0 GPa  C55:     0.0 GPa  C66:     0.0 GPa  
 C12:     0.0 GPa  C13:     0.0 GPa  C23:     0.0 GPa  
+[INFO] No data for direction(s) yy, zz, yz, xz, xy -- the stiffness-matrix column(s) they would populate (including any normal-shear coupling terms read from them) are 0 by missing data, not by symmetry. Run stb-elasticInputs with all 6 default directions (--dirs all) for a complete tensor.
 
 [4] STABILITY AND PROPERTIES
 ------------------------------------------------------------

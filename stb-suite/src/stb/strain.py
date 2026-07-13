@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "1.10.0" # pretty axis-symmetry table (point group + operations + equivalence) replaces the one-line advisory
 
 import os
 import sys
@@ -36,6 +36,63 @@ def normalize_direction(direction):
     if len(direction) == 2:
         return ''.join(sorted(direction.lower()))
     return direction.lower()
+
+def print_axis_symmetry_table(requested_axis, groups, point_group, ops, vacuum_axes):
+    """Pretty table of the 3 Cartesian axes' symmetry-equivalence groups,
+    for a uniaxial strain request -- same visual convention as
+    stb-elasticInputs' deformation-direction table (see elastic_inputs.py::
+    _print_symmetry_table), reusing core/symmetry.py::operations_summary for
+    the reduced point-group/operations line. Always shown (even if nothing
+    is equivalent), same "give full information regardless" philosophy.
+
+    Public (not underscore-prefixed): stb_suite.py's interactive wrapper
+    imports this directly to build its own pre-run "generate the equivalent
+    axis/axes too?" prompt, since stb-strain's CLI only ever strains one
+    direction per invocation and the wrapper needs the same table before
+    deciding whether to loop over extra directions.
+
+    Returns the list of axis letters equivalent to `requested_axis` (periodic
+    ones only -- vacuum-padded axes are excluded even if symmetry-equivalent,
+    since they can't physically be strained).
+    """
+    axis_letters = ['x', 'y', 'z']
+    requested_idx = axis_letters.index(requested_axis)
+    group = next(g for g in groups if requested_idx in g)
+
+    print()
+    print("-" * 60)
+    print(color_text(f"AXIS SYMMETRY (uniaxial direction '{requested_axis}')", 'cyan').center(60))
+    print("-" * 60)
+    print(f"  Detected symmetry : point group {point_group} -- {symmetry.operations_summary(ops)}")
+    print("-" * 60)
+    print(f"  {'Axis':<8}{'Status':<14}Equivalent to")
+    print(f"  {'-' * 52}")
+    equivalent = []
+    for i, letter in enumerate(axis_letters):
+        if i == requested_idx:
+            status = color_text("REQUESTED".ljust(14), 'green')
+            print(f"  {letter:<8}{status}--")
+        elif vacuum_axes[i]:
+            status = color_text("VACUUM".ljust(14), 'yellow')
+            print(f"  {letter:<8}{status}(not periodic -- can't be strained)")
+        elif i in group:
+            status = color_text("EQUIVALENT".ljust(14), 'cyan')
+            print(f"  {letter:<8}{status}{requested_axis}")
+            equivalent.append(letter)
+        else:
+            print(f"  {letter:<8}{'INDEPENDENT':<14}--")
+    print(f"  {'-' * 52}")
+    if equivalent:
+        letters = ', '.join(equivalent)
+        verb = "is" if len(equivalent) == 1 else "are"
+        print(f"  {letters} {verb} equivalent to '{requested_axis}' by symmetry -- straining "
+              f"{'it' if len(equivalent) == 1 else 'them'} should give the same mechanical "
+              "response; you may not need to compute both.")
+    else:
+        print(f"  No other periodic axis is equivalent to '{requested_axis}' for this point group.")
+    print("-" * 60)
+    return equivalent
+
 
 def apply_cartesian_strain(lattice_vectors, strain, direction):
     """
@@ -165,24 +222,12 @@ def main():
         # core/symmetry.py::equivalent_cartesian_axes docstring.
         if strain_type == 'uniaxial' and norm_dir in ('x', 'y', 'z'):
             try:
-                axis_letters = ['x', 'y', 'z']
-                axis_lookup = {'x': 0, 'y': 1, 'z': 2}
                 pmg_structure = structure_io.to_pymatgen(structure)
                 groups, point_group = symmetry.equivalent_cartesian_axes(
                     pmg_structure, args.symprec, args.angle_tolerance)
-                requested_axis = axis_lookup[norm_dir]
-                group = next(g for g in groups if requested_axis in g)
-                equivalent = sorted(
-                    i for i in group
-                    if i != requested_axis and not vacuum_axes[i]
-                )
-                if equivalent:
-                    letters = ', '.join(axis_letters[i] for i in equivalent)
-                    verb = "is" if len(equivalent) == 1 else "are"
-                    print(f"{color_text('[INFO]', 'cyan')} Direction(s) {letters} {verb} "
-                          f"equivalent to '{norm_dir}' by symmetry (point group {point_group}) -- "
-                          f"straining {'it' if len(equivalent) == 1 else 'them'} should give the "
-                          "same mechanical response; you may not need to compute both.")
+                _, ops = symmetry.get_point_group_operations(
+                    pmg_structure, args.symprec, args.angle_tolerance)
+                print_axis_symmetry_table(norm_dir, groups, point_group, ops, vacuum_axes)
             except Exception:
                 pass  # symmetry detection is advisory only, never blocks the tool
 

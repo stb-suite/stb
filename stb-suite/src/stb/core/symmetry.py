@@ -181,6 +181,36 @@ def equivalent_strain_modes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
     return list(groups.values()), point_group, ops
 
 
+def operations_summary(ops) -> str:
+    """Reduced (not a full per-operation dump) description of a point group's
+    symmetry operations: just the total count, split into proper rotations
+    (rotation matrix determinant +1) vs. improper operations (determinant -1
+    -- mirrors, inversion, rotoreflections). Enough to sanity-check "does
+    this look like the point group I expect" without printing every 3x3
+    matrix (a cubic m-3m point group alone has 48 of them). Shared by
+    stb-elasticInputs' and stb-strain's symmetry tables (moved here once
+    stb-strain became a second consumer).
+    """
+    proper = sum(1 for op in ops if np.linalg.det(op.rotation_matrix) > 0)
+    improper = len(ops) - proper
+    return f"{len(ops)} operation(s) ({proper} proper rotation(s), {improper} improper (mirror/inversion/rotoreflection))"
+
+
+def get_point_group_operations(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+    """Returns (point_group_symbol, ops): the structure's point group and its
+    Cartesian symmetry operations (pymatgen SymmOp list), with none of the
+    strain-mode/elastic-tensor machinery above. A thin, standalone accessor
+    for callers that only need to REPORT the detected symmetry (e.g.
+    stb-elasticInputs' deformation-direction table) -- so they don't have to
+    duplicate the SpacegroupAnalyzer call inline or import pymatgen directly.
+    equivalent_strain_modes already returns `ops` as a side effect of its own
+    reduction (reuse that where available); this exists for callers like the
+    "full" method that don't otherwise compute `ops` at all.
+    """
+    sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec, angle_tolerance=angle_tolerance)
+    return sga.get_point_group_symbol(), sga.get_point_group_operations(cartesian=True)
+
+
 def find_mapping_operation(ops, src_mode, dst_mode, atol=1e-3):
     """Returns (R, sign) such that sign * (R . strain_tensor(src_mode) . R^T)
     equals strain_tensor(dst_mode), for some rotation R in `ops` (as

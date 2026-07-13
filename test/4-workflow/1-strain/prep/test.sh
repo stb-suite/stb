@@ -103,8 +103,12 @@ echo "Testing: cubic structure (m-3m) -- x/y/z are truly equivalent, advisory mu
 rm -rf strain_runs
 stb-strain --file si_cubic.fdf --stdir x --stmin 0 --stmax 1 --no-intro > log_sym_cubic.txt 2>&1
 check_exit_code $? 0
-check_contains "Direction(s) y, z are equivalent to 'x' by symmetry" log_sym_cubic.txt
+check_contains "AXIS SYMMETRY (uniaxial direction 'x')" log_sym_cubic.txt
 check_contains "point group m-3m" log_sym_cubic.txt
+check_contains "48 operation" log_sym_cubic.txt
+check_contains "y.*EQUIVALENT.*x" log_sym_cubic.txt
+check_contains "z.*EQUIVALENT.*x" log_sym_cubic.txt
+check_contains "y, z are equivalent to 'x' by symmetry" log_sym_cubic.txt
 
 echo "Testing: hexagonal 2D fixture -- x and y are NOT equivalent (known zigzag/armchair"
 echo "         asymmetry), advisory must NOT fire"
@@ -181,11 +185,54 @@ check_contains "vacuum-gap" log_help.txt
 # --- 8. Interactive path (stb-suite, shortcut 4.1.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.1.1) ---"
 
-echo "Testing: navigate 4.1.1 -> invalid file then valid -> x -> 0/2/2 -> quit"
+echo "Testing: navigate 4.1.1 -> invalid file then valid -> skip advanced -> x (no equivalent on this 2D fixture) -> 0/2/2 -> quit"
 rm -rf strain_runs
-printf '4.1.1\ndoes_not_exist.fdf\nstructure.fdf\nx\n0\n2\n2\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# Prompts in order: file (retry), advanced settings (n -> skip), direction
+# (x -- no symmetry-equivalent axis on this hexagonal 2D fixture, so no
+# "generate equivalent(s) too?" follow-up), stmin, stmax, step, then the
+# "Press Enter to continue" pause, then quit.
+printf '4.1.1\ndoes_not_exist.fdf\nstructure.fdf\nn\nx\n0\n2\n2\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
+check_contains "Detected dimensionality: 2D" log_menu.txt
+check_contains "AXIS SYMMETRY (uniaxial direction 'x')" log_menu.txt
+check_contains "CONFIGURATION SUMMARY" log_menu.txt
+check_contains "Dimensionality.*2D" log_menu.txt
 check_success strain_runs/strain_x_2.00/structure.fdf
+
+echo "Testing: navigate 4.1.1 -> biaxial direction -> dimensionality still detected/shown, no axis-symmetry table"
+rm -rf strain_runs
+printf '4.1.1\nstructure.fdf\nn\nxy\n0\n2\n2\n\n0\n' | stb-suite > log_menu_biaxial.txt 2>&1
+check_contains "Detected dimensionality: 2D" log_menu_biaxial.txt
+check_contains "Dimensionality.*2D" log_menu_biaxial.txt
+if grep -q "AXIS SYMMETRY" log_menu_biaxial.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} axis-symmetry table shown for a biaxial direction (out of scope)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no axis-symmetry table for a biaxial direction"
+    PASS=$((PASS+1))
+fi
+check_success strain_runs/strain_xy_2.00/structure.fdf
+
+echo "Testing: navigate 4.1.1 -> cubic fixture -> x -> accept generating the equivalent y,z folders too"
+rm -rf strain_runs
+# Prompts in order: file, advanced settings (n), direction (x -- y,z ARE
+# equivalent on this cubic fixture), accept the follow-up (y), stmin, stmax,
+# step, then one "Press Enter to continue" pause (not three -- run_tool's
+# pause is suppressed for every direction but the last), then quit.
+printf '4.1.1\nsi_cubic.fdf\nn\nx\ny\n0\n2\n2\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
+check_contains "y, z are equivalent to 'x' by symmetry" log_menu_multi.txt
+check_contains "Direction(s) to generate.*x, y, z" log_menu_multi.txt
+check_success strain_runs/strain_x_2.00/si_cubic.fdf
+check_success strain_runs/strain_y_2.00/si_cubic.fdf
+check_success strain_runs/strain_z_2.00/si_cubic.fdf
+if [ "$(grep -c "Press Enter to continue" log_menu_multi.txt)" -eq 1 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} only one 'Press Enter to continue' pause for all 3 directions"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected exactly 1 'Press Enter to continue' pause, "\
+"got $(grep -c "Press Enter to continue" log_menu_multi.txt)"
+    FAIL=$((FAIL+1))
+fi
 
 
 popd > /dev/null

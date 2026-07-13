@@ -81,7 +81,7 @@ python3 - <<'PYEOF'
 import os
 CONV = 160.21766
 C11, C22, C12 = 200.0, 100.0, 30.0
-# Lz = 10.0 Ang makes the --2d conversion factor (Lz * 16.021766) equal the
+# Lz = 10.0 Ang makes the --dimensionality 2d conversion factor (Lz * 16.021766) equal the
 # plain 3D one (160.21766), so the numbers below map 1:1 to N/m.
 OUTCELL = ("outcell: Unit cell vectors (Ang):\n"
            "        5.000000    0.000000    0.000000\n"
@@ -110,7 +110,7 @@ for pct, tag in [(1.0, "1.00"), (2.0, "2.00"), (-1.0, "m1.00")]:
         f.write(f"siesta:   0.00000000  {syy:.8f}   0.00000000\n")
         f.write("siesta:   0.00000000   0.00000000   0.00000000\n")
 PYEOF
-stb-elasticAnalysis --2d --no-intro > log_aniso.txt 2>&1
+stb-elasticAnalysis --dimensionality 2d --no-intro > log_aniso.txt 2>&1
 check_exit_code $? 0
 check_contains "C11.*200.00" log_aniso.txt
 check_contains "C22.*100.00" log_aniso.txt
@@ -551,7 +551,7 @@ for folder in os.listdir('.'):
 PYEOF
 # Only 'xx' was ever run, yet the 2D report must show C22=C11 and
 # C66=(C11-C12)/2 exactly -- the hexagonal reduction 'basic' cannot see.
-stb-elasticAnalysis --2d --symmetry-method full --no-intro > log_full_hex.txt 2>&1
+stb-elasticAnalysis --dimensionality 2d --symmetry-method full --no-intro > log_full_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group -6m2 has 5 independent elastic constant" log_full_hex.txt
 check_contains "fit used 1 of 6 canonical direction(s): xx" log_full_hex.txt
@@ -559,7 +559,9 @@ check_contains "C11.*20.00" log_full_hex.txt
 check_contains "C22.*20.00" log_full_hex.txt
 check_contains "C12.*5.00" log_full_hex.txt
 check_contains "C66.*7.50" log_full_hex.txt
-check_contains "Direction(s) yy, zz, yz, xz, xy were never run directly" log_full_hex.txt
+# Only yy/xy are physically relevant directions for 2D (zz/yz/xz always
+# touch the vacuum-padded axis and are filtered out of this advisory).
+check_contains "Direction(s) yy, xy were never run directly" log_full_hex.txt
 popd > /dev/null
 
 echo "Testing: triclinic fixture, full method requires --reference-structure (else a clear error)"
@@ -667,7 +669,7 @@ for folder in os.listdir('.'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --2d --method energy --no-intro > log_energy_hex.txt 2>&1
+stb-elasticAnalysis --dimensionality 2d --method energy --no-intro > log_energy_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group -6m2 has 5 independent elastic constant" log_energy_hex.txt
 check_contains "fit used 2 strain pattern(s): \['xx', 'xy'\]" log_energy_hex.txt
@@ -1149,7 +1151,7 @@ for folder in os.listdir('.'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --2d --symmetry-method full --no-intro > log_compliance_hex.txt 2>&1
+stb-elasticAnalysis --dimensionality 2d --symmetry-method full --no-intro > log_compliance_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "\[1b\] 2D COMPLIANCE MATRIX (m/N)" log_compliance_hex.txt
 check_contains "5.333e-03" log_compliance_hex.txt
@@ -1312,7 +1314,7 @@ echo "Testing: --version"
 stb-elasticAnalysis --version > log_version.txt 2>&1
 check_contains "stb-elasticAnalysis" log_version.txt
 
-echo "Testing: --help documents --2d/--file"
+echo "Testing: --help documents --dimensionality/--file"
 stb-elasticAnalysis --help > log_help.txt 2>&1
 check_contains "2D" log_help.txt
 check_contains "file" log_help.txt
@@ -1326,12 +1328,34 @@ check_contains "plot-dir" log_help.txt
 # --- 15. Interactive path (stb-suite, shortcut 4.2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.2.2) ---"
 
-echo "Testing: navigate 4.2.2 -> calc.out -> not 2D -> quit"
+echo "Testing: navigate 4.2.2 -> calc.out -> all defaults (stress, auto dimensionality, basic symmetry, skip advanced) -> quit"
 rm -f mechanical_properties.txt
-printf '4.2.2\ncalc.out\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# Prompts in order: file, method (blank -> stress), reference-structure
+# (blank -> default), dimensionality choice (blank -> auto), symmetry-method
+# (blank -> basic), advanced settings (n -> skip, CLI defaults apply), then
+# the "Press Enter to continue" pause, then quit.
+printf '4.2.2\ncalc.out\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "STABILITY AND PROPERTIES" log_menu.txt
+check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_success mechanical_properties.txt
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} interactive session exited cleanly"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: navigate 4.2.2 -> manual dimensionality override -> 1D"
+rm -f mechanical_properties.txt
+# Prompts in order: file, method (blank -> stress), reference-structure
+# (blank -> default), dimensionality choice (2 -> manual), manual pick
+# (3 -> 1D), symmetry-method (blank -> basic), advanced settings (n -> skip),
+# then the "Press Enter to continue" pause, then quit.
+printf '4.2.2\ncalc.out\n\n\n2\n3\n\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
+check_contains "Dimensionality forced to 1D" log_1d_menu.txt
+check_contains "1D (manual override)" log_1d_menu.txt
+if grep -q "Traceback" log_1d_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
     FAIL=$((FAIL+1))
 else

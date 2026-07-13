@@ -15,6 +15,8 @@ import argparse
 import textwrap
 from typing import List, Dict, Callable
 
+import numpy as np
+
 try:
     import readline
     readline.parse_and_bind("tab: complete")
@@ -23,6 +25,8 @@ except ImportError:
 
 from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
 from stb.core.pseudopotentials import BANKS
+from stb.core import structure_io, kspace, symmetry
+from stb import strain
 
 def prompt_pseudo_source(optional: bool = True) -> str:
     """Shared pseudopotential-source prompt for every wrapper below that
@@ -80,8 +84,15 @@ def show_sub_menu(title: str, tools_dict: Dict) -> None:
     print(f"{color_text('0.', 'yellow')} {color_text('Back to Main Menu', 'red')}")
     print("-"*60)
 
-def run_tool(tool_name: str, args: List[str]) -> None:
-    """Executes a suite tool as a subprocess"""
+def run_tool(tool_name: str, args: List[str], pause: bool = True) -> None:
+    """Executes a suite tool as a subprocess.
+
+    `pause=False` skips the "Press Enter to continue..." block -- for callers
+    that invoke run_tool() several times in a row (e.g. run_strain_generator
+    looping over multiple symmetry-equivalent directions in one go), so the
+    user isn't interrupted after every individual subprocess call, only once
+    at the very end.
+    """
     try:
         cmd = [f"{tool_name}"] + args
         subprocess.run(cmd, check=True)
@@ -90,7 +101,8 @@ def run_tool(tool_name: str, args: List[str]) -> None:
     except FileNotFoundError:
         print(color_text(f"\nTool {tool_name} not found!", 'red'))
         print(color_text(f"Make sure {tool_name} is in your system's PATH.", 'yellow'))
-    input("\nPress Enter to continue...")
+    if pause:
+        input("\nPress Enter to continue...")
 
 # ==========================================================
 # TOOL FUNCTIONS
@@ -211,46 +223,128 @@ def run_cohesive_setup() -> None:
     """Interface for the Cohesive Energy Setup (cohesive_energy.py)"""
     print("\n" + "="*60)
     print(color_text("COHESIVE ENERGY SETUP", 'bold').center(60))
-    print("="*60 + "\n")
-    
-    # 1. Obter arquivo de estrutura
+    print("="*60)
+    print(color_text(
+        "Sets up a full-structure calculation plus one isolated-atom reference per species. "
+        "By default it also builds a BSSE (counterpoise) -corrected reference per species -- "
+        "LCAO cohesive energies otherwise systematically over-bind, since the isolated atom "
+        "is computed with a smaller effective basis than it has inside the solid.", 'cyan'))
+    print()
+
     struct_file = get_input("Input structure FDF file (-s): ").strip()
     while not os.path.isfile(struct_file):
         print(color_text("File not found!", 'red'))
         struct_file = get_input("Input structure FDF file (-s): ").strip()
-        
-    # 2. Obter densidade K
+
     k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
     while k_density <= 0:
         print(color_text("Density must be a positive number!", 'red'))
         k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
 
-    # 3. Obter caminho do PP
     pp_path = prompt_pseudo_source(optional=True)
-    
-    # 4. Spin polarization
+
     spin_choice = get_input("Enable spin polarization for full structure? (y/N): ").strip().lower()
 
-    # 5. Isolated-atom vacuum box size
-    vacuum = get_float_input("Isolated-atom vacuum box side in Ang (default: 20.0): ", 20.0)
+    dispersion_choice = get_input(
+        "\nEnable DFT-D3 dispersion correction for every calculation? (y/N -- relevant for "
+        "layered/molecular materials, e.g. 2D materials, where van der Waals interactions "
+        "contribute non-negligibly): ").strip().lower()
+    dispersion = dispersion_choice in ('y', 'yes')
+
+    vacuum = get_float_input("\nIsolated-atom vacuum box side in Ang (default: 20.0): ", 20.0)
     while vacuum <= 0:
         print(color_text("Vacuum box side must be a positive number!", 'red'))
         vacuum = get_float_input("Isolated-atom vacuum box side in Ang (default: 20.0): ", 20.0)
+
+    # BSSE correction (default ON, matching the CLI default)
+    bsse_choice = get_input(
+        "\nGenerate BSSE (counterpoise) -corrected references too? (Y/n): ").strip().lower()
+    bsse_correction = bsse_choice not in ('n', 'no')
+
+    bsse_multi_site = True
+    bsse_convergence_check = False
+    if bsse_correction:
+        multi_site_choice = get_input(
+            "  If a species occupies multiple distinct crystallographic sites (e.g. "
+            "octahedral vs. tetrahedral), build one BSSE reference per site, weighted by "
+            "multiplicity? (Y/n): ").strip().lower()
+        bsse_multi_site = multi_site_choice not in ('n', 'no')
+
+        conv_check_choice = get_input(
+            "  Also run a BSSE cutoff convergence check (2nd, larger cutoff -- roughly "
+            "triples the isolated-atom-type calculation count)? (y/N): ").strip().lower()
+        bsse_convergence_check = conv_check_choice in ('y', 'yes')
+
+    # Advanced settings (rarely-touched tolerances -- gated so the essential
+    # flow above stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, output_dir, bsse_cutoff, symprec, bsse_convergence_increment = 10.0, ".", 4.0, 1e-3, 2.0
+    advanced_items = "vacuum-gap, output directory"
+    if bsse_correction:
+        advanced_items += ", BSSE cutoff radius/symmetry tolerance"
+    if bsse_convergence_check:
+        advanced_items += ", convergence-check increment"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
+            "(default: 10.0): ", 10.0)
+        output_dir = get_input("Output root directory (default: current directory): ").strip()
+        if not output_dir:
+            output_dir = "."
+        if bsse_correction:
+            bsse_cutoff = get_float_input(
+                "BSSE ghost-neighbor cutoff radius in Ang (default: 4.0 -- reaches 1 shell "
+                "for longer-bonded solids, several for short-bonded covalent ones like "
+                "graphene/diamond; check the printed ghost-neighbor count): ", 4.0)
+            symprec = get_float_input(
+                "Symmetry-detection tolerance, for multi-site BSSE (default: 0.001): ", 1e-3)
+            if bsse_convergence_check:
+                bsse_convergence_increment = get_float_input(
+                    "BSSE convergence-check cutoff increment in Ang (default: 2.0): ", 2.0)
 
     args = [
         "-s", struct_file,
         "-k", str(k_density),
         "--vacuum", str(vacuum),
-        "--no-intro"
+        "--vacuum-gap", str(vacuum_gap),
+        "--output-dir", output_dir,
+        "--no-intro",
     ]
+    if dispersion:
+        args.append("--dispersion")
+    args.append("--bsse-correction" if bsse_correction else "--no-bsse-correction")
+    if bsse_correction:
+        args.extend(["--bsse-cutoff", str(bsse_cutoff), "--symprec", str(symprec)])
+        args.append("--bsse-multi-site" if bsse_multi_site else "--no-bsse-multi-site")
+        if bsse_convergence_check:
+            args.extend(["--bsse-convergence-check",
+                         "--bsse-convergence-increment", str(bsse_convergence_increment)])
 
     if pp_path:
         args.extend(["-p", pp_path])
     if spin_choice in ['y', 'yes']:
         args.append("--spin")
 
-    # Executa o script. Se não tiver os atalhos globais configurados,
-    # pode alterar "stb_cohesive" para "python cohesive_energy.py" 
+    # Recap -- always shown, no confirmation gate
+    bsse_desc = "OFF"
+    if bsse_correction:
+        bsse_desc = (f"ON (cutoff={bsse_cutoff} Ang, "
+                     f"multi-site={'on' if bsse_multi_site else 'off'})")
+    summary_rows = [
+        ("Structure file", struct_file),
+        ("K-point density", f"{k_density} 1/Ang"),
+        ("Pseudopotentials", pp_path or "(none)"),
+        ("Spin (full structure)", "polarized" if spin_choice in ['y', 'yes'] else "non-polarized"),
+        ("Dispersion (D3)", "ON" if dispersion else "OFF"),
+        ("Isolated-atom vacuum box", f"{vacuum} Ang"),
+        ("BSSE correction", bsse_desc),
+    ]
+    if bsse_correction and bsse_convergence_check:
+        summary_rows.append(("BSSE convergence check", f"ON (+{bsse_convergence_increment} Ang)"))
+    summary_rows.append(("Vacuum-gap threshold", f"{vacuum_gap} Ang"))
+    summary_rows.append(("Output directory", output_dir))
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
     run_tool("stb-cohesive", args)
 
 
@@ -258,26 +352,42 @@ def run_cohesive_analysis() -> None:
     """Interface for the Cohesive Energy Analysis (cohesive_analysis.py)"""
     print("\n" + "="*60)
     print(color_text("COHESIVE ENERGY ANALYSIS", 'bold').center(60))
-    print("="*60 + "\n")
-    
-    # 1. Obter nome do ficheiro de output
+    print("="*60)
+    print(color_text(
+        "Extracts energies from 'structure'/'atoms' (and, if present, 'atoms_bsse') and "
+        "reports the cohesive energy -- auto-detects a BSSE-corrected reference, no flag "
+        "needed.", 'cyan'))
+    print()
+
     out_file = get_input("SIESTA output file name (e.g., calc.out) [-o]: ").strip()
     while not out_file:
         print(color_text("File name cannot be empty!", 'red'))
         out_file = get_input("SIESTA output file name [-o]: ").strip()
-        
-    # 2. Obter o diretório alvo
-    dir_path = get_input("Path to results folder containing 'structure' and 'atoms' (default: current dir) [-d]: ").strip()
-    
+
+    dir_path = get_input(
+        "Path to results folder containing 'structure' and 'atoms' (default: current dir) [-d]: "
+    ).strip()
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is the full structure relaxed' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
     args = [
         "-o", out_file,
-        "--no-intro"
+        "--force-tolerance", str(force_tolerance),
+        "--no-intro",
     ]
-    
     if dir_path:
         args.extend(["-d", dir_path])
-        
-    # Executa o script. Se não tiver atalho configurado, altere para "python cohesive_analysis.py"
+
+    # Recap -- always shown, no confirmation gate
+    summary_rows = [
+        ("SIESTA output filename", out_file),
+        ("Results directory", dir_path or "."),
+        ("Force tolerance", f"{force_tolerance} eV/Ang"),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
     run_tool("stb-cohesiveAnalysis", args)
 
 
@@ -980,59 +1090,129 @@ def run_bader_calculator() -> None:
     run_tool("stb-bader", args)
     
 
+def _print_config_summary(title: str, rows: list) -> None:
+    """Boxed recap of every EFFECTIVE setting (custom or default) right before dispatch --
+    shared by run_elastic_generator/run_elastic_analyzer so the user has full visibility into
+    what's about to run, even for values they never touched (no confirmation gate: purely
+    informational, matches the "show but always proceed" choice for this workflow)."""
+    print("\n" + "-"*60)
+    print(color_text(title, 'cyan').center(60))
+    print("-"*60)
+    for label, value in rows:
+        print(f"  {label:<26}: {color_text(str(value), 'green')}")
+    print("-"*60)
+
+
 def run_elastic_generator() -> None:
     """Interface for the Elastic Constants Generator (elastic_inputs.py)"""
     print("\n" + "="*60)
     print(color_text("ELASTIC CONSTANTS GENERATOR", 'bold').center(60))
-    print("="*60 + "\n")
-    
-    # 1. Obter ficheiro de estrutura
+    print("="*60)
+    print(color_text(
+        "Generates deformed structures for SIESTA calculations. By default it strains only "
+        "the minimal symmetry-distinct set of directions -- stb-elasticAnalysis reconstructs "
+        "the rest EXACTLY from the point group, so this is a real DFT-cost cut, not an "
+        "approximation.", 'cyan'))
+    print()
+
+    # 1. Structure file
     input_file = get_input("Input structure file (fdf/poscar): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
-    
-    # 2. Obter deformação máxima e passos
+
+    # 2. Sampling
     max_strain = get_float_input("\nMax strain % (default: 2.0): ", 2.0)
     steps = get_int_input("Number of steps per direction (default: 4): ", 4)
-    
-    # 3. MENU DE DIREÇÕES
+
+    # 3. Fitting method (stress-strain linear vs. energy-strain parabolic)
     print("\n" + "-"*60)
-    print(color_text("SELECT DEFORMATION MODE", 'cyan').center(60))
+    print(color_text("FITTING METHOD", 'cyan').center(60))
     print("-"*60)
-    print(f"[{color_text('1', 'yellow')}] Full 3D Tensor  (xx, yy, zz, xy, xz, yz) -> Standard 3D")
-    print(f"[{color_text('2', 'yellow')}] Normal Strains  (xx, yy, zz)             -> Bulk Modulus")
-    print(f"[{color_text('3', 'yellow')}] Shear Strains   (xy, xz, yz)             -> Shear Modulus")
-    print(f"[{color_text('4', 'yellow')}] 2D In-Plane     (xx, yy, xy)             -> Graphene/Monolayers")
-    print(f"[{color_text('5', 'yellow')}] Uniaxial Z-Only (xx)                     -> Nanowires/Tubes")
-    print("-" * 60)
-    
-    mode = get_input("Select mode (1-5): ")
-    
-    # Mapeamento da escolha para as strings que o elastic_inputs.py entende
-    dirs_map = {
-        '1': ["xx", "yy", "zz", "xy", "zx", "yz"],
-        '2': ["xx", "yy", "zz"],
-        '3': ["xy", "zx", "yz"],
-        '4': ["xx", "yy", "xy"],
-        '5': ["xx"]
-    }
-    
-    # Se a escolha for inválida, assume o padrão (1)
-    selected_dirs = dirs_map.get(mode, dirs_map['1'])
-    print(f"Selected directions: {color_text(str(selected_dirs), 'green')}\n")
-    
-    # Monta a lista de argumentos base
+    print(f"[{color_text('1', 'yellow')}] Stress-strain (default) -> linear fit, sigma = C . epsilon")
+    print(f"[{color_text('2', 'yellow')}] Energy-strain           -> parabolic fit (independent cross-check)")
+    method_choice = get_input("Select method (1-2, default 1): ").strip()
+    method = "energy" if method_choice == '2' else "stress"
+
+    # 4. Direction/symmetry strategy
+    symmetry_method = None  # only meaningful (and only ever read by elastic_inputs.py) for
+                             # --dirs all + --method stress -- --method energy always uses its
+                             # own point-group rank selection regardless of this flag's value,
+                             # so it's never asked for that method.
+    if method == "energy":
+        print(color_text(
+            "\n--method energy always auto-selects its own pure+combined strain patterns from "
+            "the structure's point group -- no direction menu needed.", 'cyan'))
+        direction_summary = "energy patterns, auto-selected by point group"
+        dirs_args = ["--dirs", "all"]
+    else:
+        # All 6 canonical directions are always requested ("--dirs all") --
+        # stb-elasticInputs auto-detects which ones touch a vacuum-padded
+        # axis (skipped, unrelated to symmetry -- already based on whatever
+        # dimensionality the structure turns out to have) and reconstructs
+        # every symmetry-equivalent one exactly. This choice only controls
+        # HOW that symmetry reduction is done -- there's nothing left for a
+        # manual direction-subset menu to add.
+        print("\n" + "-"*60)
+        print(color_text("SELECT DEFORMATION MODE", 'cyan').center(60))
+        print("-"*60)
+        print(color_text(
+            "All 6 canonical directions are requested; vacuum-padded axes are skipped "
+            "automatically according to the structure's own dimensionality. This choice "
+            "loses no information either way -- stb-elasticAnalysis reconstructs every "
+            "skipped direction's stiffness column exactly.", 'cyan'))
+        print(f"[{color_text('1', 'yellow')}] Basic (default) -> pairwise point-group match "
+              "(misses hexagonal/trigonal-type reductions)")
+        print(f"[{color_text('2', 'yellow')}] Full             -> symmetry-allowed-subspace rank "
+              "selection (catches those too)")
+        print("-" * 60)
+
+        mode = get_input("Select mode (1-2, default 1): ").strip()
+        dirs_args = ["--dirs", "all"]
+        symmetry_method = "full" if mode == '2' else "basic"
+        direction_summary = f"all 6, symmetry-reduced ({symmetry_method})"
+
+    # 5. Advanced settings (rarely-touched tolerances -- gated so the essential
+    # flow above stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, symprec, angle_tolerance, output_file = 10.0, 1e-3, 5.0, "structure.fdf"
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output filename)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
+            "(default: 10.0): ", 10.0)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
+        output_file = get_input("Output filename per strain folder (default: structure.fdf): ").strip()
+        if not output_file:
+            output_file = "structure.fdf"
+
     args = [
         "--file", input_file,
         "--max", str(max_strain),
         "--steps", str(steps),
+        "--method", method,
+        "--vacuum-gap", str(vacuum_gap),
+        "--symprec", str(symprec),
+        "--angle-tolerance", str(angle_tolerance),
+        "--output", output_file,
         "--no-intro",
-        "--dirs" # Adiciona a flag --dirs
-    ]
+    ] + dirs_args
+    if symmetry_method is not None:
+        args.extend(["--symmetry-method", symmetry_method])
 
-    # Adiciona as direções escolhidas à lista de argumentos
-    args.extend(selected_dirs)
+    # 6. Recap -- always shown, no confirmation gate
+    summary_rows = [
+        ("Structure file", input_file),
+        ("Strain range", f"+/-{max_strain}%, {steps} steps"),
+        ("Fitting method", method),
+        ("Direction strategy", direction_summary),
+        ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
+        ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
+        ("Output filename", output_file),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-elasticInputs", args)
 
@@ -1040,28 +1220,121 @@ def run_elastic_analyzer() -> None:
     """Interface for the Elastic Properties Analyzer """
     print("\n" + "="*60)
     print(color_text("ELASTIC PROPERTIES ANALYZER", 'bold').center(60))
-    print("="*60 + "\n")
-    
-    args = []
+    print("="*60)
+    print(color_text(
+        "Fits the stiffness matrix from your strain_*/ results. Numerical-quality "
+        "diagnostics (eggbox cross-check, fit R^2, tensor symmetry) run automatically and "
+        "never block the report -- they only flag suspicious data.", 'cyan'))
+    print()
 
-    # --- NOVO: Solicita o nome do arquivo de output ---
-    print(color_text("Enter the Siesta output filename located inside strain folders.", 'yellow'))
-    output_filename = get_input("Filename (default: calc.out): ").strip()
-    
+    # 1. Output/log filename
+    output_filename = get_input("Siesta output filename inside strain folders (default: calc.out): ").strip()
     if not output_filename:
         output_filename = "calc.out"
-    
-    # Passa o argumento -f/--file para o script elastic_analysis.py
-    args.extend(["--file", output_filename,"--no-intro"])
-    print(f"Targeting file: {color_text(output_filename, 'cyan')}\n")
-    # --------------------------------------------------
-    
-    print(f"Is this a {color_text('2D material', 'cyan')}? (affects stiffness units N/m vs GPa)")
-    is_2d = get_input("Enable 2D analysis? (y/N): ").lower()
-    if is_2d == 'y' or is_2d == 'yes':
-        args.append("--2d")
-        print(color_text("-> 2D Mode Enabled", 'green'))
-    
+
+    # 2. Fitting method
+    print("\n" + "-"*60)
+    print(color_text("FITTING METHOD", 'cyan').center(60))
+    print("-"*60)
+    print(f"[{color_text('1', 'yellow')}] Stress-strain (default) -> linear fit, sigma = C . epsilon")
+    print(f"[{color_text('2', 'yellow')}] Energy-strain           -> parabolic fit (independent cross-check)")
+    method_choice = get_input("Select method (1-2, default 1): ").strip()
+    method = "energy" if method_choice == '2' else "stress"
+
+    # 3. Reference (undeformed) structure -- feeds dimensionality auto-detection,
+    # symmetry detection, and --method energy's reference volume/area/length.
+    ref_structure = get_input(
+        "\nUndeformed reference structure file (default: reference_structure.fdf): ").strip()
+    if not ref_structure:
+        ref_structure = "reference_structure.fdf"
+
+    # 4. Dimensionality: auto-detect (default) or manual override
+    print("\n" + color_text("DIMENSIONALITY", 'cyan'))
+    print(f"[{color_text('1', 'yellow')}] Auto-detect (default) -> from {ref_structure}'s vacuum padding "
+          "(3D/2D/1D)")
+    print(f"[{color_text('2', 'yellow')}] Manual override -> choose 3D / 2D / 1D yourself")
+    dim_choice = get_input("Select (1-2, default 1): ").strip()
+    if dim_choice == '2':
+        print(f"  [{color_text('1', 'yellow')}] 3D Bulk      (GPa)")
+        print(f"  [{color_text('2', 'yellow')}] 2D Material  (N/m)")
+        print(f"  [{color_text('3', 'yellow')}] 1D Wire/Tube (nN)")
+        manual_dim = get_input("  Select (1-3, default 1): ").strip()
+        dim_map = {'1': '3d', '2': '2d', '3': '1d'}
+        dimensionality = dim_map.get(manual_dim, '3d')
+        print(color_text(f"-> Dimensionality forced to {dimensionality.upper()}", 'green'))
+        dimensionality_summary = dimensionality.upper() + " (manual override)"
+    else:
+        dimensionality = "auto"
+        dimensionality_summary = None  # filled in after the advanced-settings gate below (needs vacuum_gap)
+
+    # 5. Symmetry reduction (only meaningful for --method stress; energy always
+    # uses the general symmetry-allowed-subspace fit regardless of this flag)
+    symmetry_method = None
+    if method == "stress":
+        sym_choice = get_input(
+            "\nSymmetry reduction -- [1] basic (default) or [2] full "
+            "(also catches hexagonal/trigonal reductions)? : ").strip()
+        symmetry_method = "full" if sym_choice == '2' else "basic"
+
+    # 6. Advanced settings (rarely-touched tolerances -- gated so the essential
+    # flow above stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, symprec, angle_tolerance = 10.0, 1e-3, 5.0
+    eggbox_tolerance, fit_quality_tolerance, plot_dir = 5.0, 0.995, "elastic_plots"
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap, symmetry/quality tolerances, plot "
+        "directory)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        if dimensionality == "auto":
+            vacuum_gap = get_float_input(
+                "Vacuum gap threshold in Ang, for dimensionality auto-detection "
+                "(default: 10.0): ", 10.0)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
+        if method == "stress":
+            eggbox_tolerance = get_float_input(
+                "Eggbox cross-check tolerance % (default: 5.0): ", 5.0)
+            fit_quality_tolerance = get_float_input(
+                "Fit-quality R^2 tolerance (default: 0.995): ", 0.995)
+        plot_dir = get_input("Plot data directory (default: elastic_plots): ").strip()
+        if not plot_dir:
+            plot_dir = "elastic_plots"
+
+    if dimensionality_summary is None:
+        dimensionality_summary = f"auto-detect (vacuum-gap={vacuum_gap} Ang)"
+
+    args = [
+        "--file", output_filename,
+        "--method", method,
+        "--reference-structure", ref_structure,
+        "--dimensionality", dimensionality,
+        "--vacuum-gap", str(vacuum_gap),
+        "--symprec", str(symprec),
+        "--angle-tolerance", str(angle_tolerance),
+        "--plot-dir", plot_dir,
+        "--no-intro",
+    ]
+    if symmetry_method is not None:
+        args.extend(["--symmetry-method", symmetry_method])
+    if method == "stress":
+        args.extend(["--eggbox-tolerance", str(eggbox_tolerance),
+                     "--fit-quality-tolerance", str(fit_quality_tolerance)])
+
+    # 7. Recap -- always shown, no confirmation gate
+    summary_rows = [
+        ("Log filename", output_filename),
+        ("Fitting method", method),
+        ("Reference structure", ref_structure),
+        ("Dimensionality", dimensionality_summary),
+    ]
+    if symmetry_method is not None:
+        summary_rows.append(("Symmetry reduction", symmetry_method))
+    summary_rows.append(("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"))
+    if method == "stress":
+        summary_rows.append(("Quality diagnostics", f"eggbox={eggbox_tolerance}%, "
+                              f"fit-quality R^2={fit_quality_tolerance}"))
+    summary_rows.append(("Plot data directory", plot_dir))
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
     print(color_text("\nRunning analysis in current directory...", 'yellow'))
     run_tool("stb-elasticAnalysis", args)
 
@@ -2261,40 +2534,127 @@ def run_strain_generator() -> None:
     """Interface for the Strain Generator (stb-strain)"""
     print("\n" + "="*60)
     print(color_text("STRAIN GENERATOR (stb-strain)", 'bold').center(60))
-    print("="*60 + "\n")
-    
-    # Esta linha agora terá Tab-completion!
+    print("="*60)
+    print(color_text(
+        "Generates strained structures along one Cartesian direction. For a uniaxial "
+        "direction, symmetry-equivalent axes are detected automatically -- you can choose "
+        "to also generate their folders, for cross-validation.", 'cyan'))
+    print()
+
     input_file = get_input("Input FDF file: ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input FDF file: ")
-    
-    direction = get_input("Strain direction (x,y,z,xy,xz,yz): ").lower()
+
+    # Advanced settings up front (rarely-touched tolerances -- gated so the
+    # essential flow below stays short) -- collected here, not after the
+    # direction question, because the axis-symmetry preview table below needs
+    # the actual vacuum-gap/symmetry tolerances to be accurate.
+    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 1e-3, 5.0, "strain_runs"
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output directory)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
+            "(default: 10.0): ", 10.0)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
+        output_dir = get_input("Output directory (default: strain_runs): ").strip()
+        if not output_dir:
+            output_dir = "strain_runs"
+
+    # Dimensionality: detected ONCE, upfront -- before the direction question,
+    # so it's known regardless of whether the request turns out to be
+    # uniaxial or biaxial. Feeds the CONFIGURATION SUMMARY recap below and
+    # (for a uniaxial direction) the axis-symmetry table's vacuum-axis
+    # column, so the structure file is only ever read once either way.
+    structure = None
+    vacuum_axes = None
+    dimensionality_label = "unknown (could not detect)"
+    try:
+        structure = structure_io.read_fdf(input_file)
+        positions = np.array([pos for _, pos in structure.atoms])
+        is_cartesian = structure.coord_format == 'cartesian'
+        frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, vacuum_gap)
+        dimensionality_label = kspace.dimensionality_label(vacuum_axes)
+        print(f"\n{color_text('[INFO]', 'green')} Detected dimensionality: {dimensionality_label}")
+    except Exception:
+        print(color_text(
+            "\n[WARNING] Could not detect dimensionality (advisory only) -- "
+            "continuing without it.", 'yellow'))
+
+    direction = get_input("\nStrain direction (x,y,z,xy,xz,yz): ").lower()
     while not all(c in 'xyz' for c in direction) or len(direction) not in (1, 2):
         print(color_text("Invalid direction! Use x,y,z for uniaxial or xy,xz,yz for biaxial", 'red'))
         direction = get_input("Strain direction (x,y,z,xy,xz,yz): ").lower()
-    
-    stmin = get_float_input("Minimum strain % (default 0): ", 0.0)
+
+    directions_to_run = [direction]
+
+    # Uniaxial only (biaxial is out of scope for this check, same as
+    # stb-strain's own CLI advisory -- see core/symmetry.py::
+    # equivalent_cartesian_axes docstring): show the SAME axis-symmetry table
+    # stb-strain itself prints when it runs -- reusing the dimensionality
+    # already detected above (vacuum_axes) -- then offer to also generate the
+    # equivalent axis/axes' folders -- --output-dir already exists precisely
+    # so multiple stb-strain invocations can share one directory without
+    # colliding.
+    if len(direction) == 1 and structure is not None:
+        try:
+            pmg_structure = structure_io.to_pymatgen(structure)
+            groups, point_group = symmetry.equivalent_cartesian_axes(
+                pmg_structure, symprec, angle_tolerance)
+            _, ops = symmetry.get_point_group_operations(pmg_structure, symprec, angle_tolerance)
+            equivalent = strain.print_axis_symmetry_table(direction, groups, point_group, ops, vacuum_axes)
+            if equivalent:
+                extra = get_input(
+                    f"\nAlso generate folder(s) for the equivalent direction(s) "
+                    f"{', '.join(equivalent)}? [y/N]: ").strip().lower()
+                if extra == 'y':
+                    directions_to_run.extend(equivalent)
+        except Exception:
+            print(color_text(
+                "[WARNING] Could not run the symmetry pre-check (advisory only) -- "
+                "continuing with just the requested direction.", 'yellow'))
+
+    stmin = get_float_input("\nMinimum strain % (default 0): ", 0.0)
     stmax = get_float_input("Maximum strain % (default 25): ", 25.0)
     while stmax <= stmin:
         print(color_text("Maximum strain must be greater than minimum strain!", 'red'))
         stmax = get_float_input("Maximum strain % (default 25): ", 25.0)
-    
+
     step = get_float_input("Step % (default 1): ", 1.0)
     while step <= 0:
         print(color_text("Step must be positive!", 'red'))
         step = get_float_input("Step % (default 1): ", 1.0)
-    
-    args = [
-        "--file", input_file,
-        "--stdir", direction,
-        "--stmin", str(stmin),
-        "--stmax", str(stmax),
-        "--step", str(step),
-        "--no-intro"
+
+    # Recap -- always shown, no confirmation gate
+    summary_rows = [
+        ("Structure file", input_file),
+        ("Dimensionality", dimensionality_label),
+        ("Direction(s) to generate", ", ".join(directions_to_run)),
+        ("Strain range", f"{stmin}% to {stmax}%, step {step}%"),
+        ("Output directory", output_dir),
+        ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
+        ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
     ]
-    
-    run_tool("stb-strain", args)
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
+    for d in directions_to_run:
+        args = [
+            "--file", input_file,
+            "--stdir", d,
+            "--stmin", str(stmin),
+            "--stmax", str(stmax),
+            "--step", str(step),
+            "--output-dir", output_dir,
+            "--vacuum-gap", str(vacuum_gap),
+            "--symprec", str(symprec),
+            "--angle-tolerance", str(angle_tolerance),
+            "--no-intro",
+        ]
+        run_tool("stb-strain", args, pause=(d == directions_to_run[-1]))
 
 def run_strain_post_processor() -> None:
     """Interface for the Strain Post-Processing (strain_analysis.py)"""

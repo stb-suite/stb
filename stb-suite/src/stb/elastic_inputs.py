@@ -4,7 +4,7 @@
 #     Siesta Tool Box - Elastic Generator       #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "1.10.0" # pretty symmetry-suppression table (+ detected point group/operations) replaces ad hoc [INFO] lines
 
 import os
 import sys
@@ -66,6 +66,46 @@ def direction_axes(direction):
     if d == 'bi': return {0, 1}
     if d == 'hydro': return {0, 1, 2}
     return set()
+
+
+def _print_symmetry_table(dirs_before, kept, point_group, ops, symmetry_method, mapping=None):
+    """Pretty table of which of the 6 canonical directions were kept vs.
+    suppressed by symmetry reduction, plus a reduced summary of the detected
+    point group and its operations (see core/symmetry.py::operations_summary).
+    Replaces the old per-group/per-branch [INFO] print lines with one
+    consistent table for both --symmetry-method basic and full.
+
+    `mapping` ({suppressed_direction: representative_direction}) is given for
+    'basic' (an exact pairwise point-group-operation correspondence exists --
+    see core/symmetry.py::find_mapping_operation); left None for 'full' (a
+    joint least-squares fit over the symmetry-allowed subspace -- there's no
+    single representative direction a suppressed one maps onto).
+    """
+    suppressed = [d for d in dirs_before if d not in kept]
+    print()
+    print("-" * 60)
+    print(color_text(f"DEFORMATION DIRECTIONS (symmetry-method {symmetry_method})", 'cyan').center(60))
+    print("-" * 60)
+    print(f"  Detected symmetry : point group {point_group} -- {symmetry.operations_summary(ops)}")
+    print("-" * 60)
+    print(f"  {'Direction':<12}{'Status':<14}Reconstructed from")
+    print(f"  {'-' * 56}")
+    for d in dirs_before:
+        if d in kept:
+            status = color_text("RUN".ljust(14), 'green')
+            print(f"  {d:<12}{status}--")
+        else:
+            source = mapping.get(d, "symmetry-allowed fit") if mapping else "symmetry-allowed fit"
+            status = color_text("SUPPRESSED".ljust(14), 'yellow')
+            print(f"  {d:<12}{status}{source}")
+    print(f"  {'-' * 56}")
+    if suppressed:
+        print(f"  {len(kept)} of {len(dirs_before)} run -- {len(suppressed)} suppressed by "
+              "symmetry (exactly reconstructible by stb-elasticAnalysis)")
+    else:
+        print(f"  All {len(dirs_before)} direction(s) run -- no symmetry reduction available "
+              "for this point group.")
+    print("-" * 60)
 
 
 def generate_verify_script():
@@ -246,9 +286,10 @@ def main():
         if used_all and args.symmetry_method == "basic":
             try:
                 pmg_structure = structure_io.to_pymatgen(structure)
-                groups, point_group, _ops = symmetry.equivalent_strain_modes(
+                groups, point_group, ops = symmetry.equivalent_strain_modes(
                     pmg_structure, args.symprec, args.angle_tolerance)
-                kept, seen = [], set()
+                dirs_before = list(dirs_to_run)
+                kept, seen, mapping = [], set(), {}
                 for d in dirs_to_run:
                     if d in seen:
                         continue
@@ -256,14 +297,11 @@ def main():
                     survivors = [m for m in dirs_to_run if m in group]
                     representative = survivors[0]
                     kept.append(representative)
-                    skipped = survivors[1:]
-                    if skipped:
-                        print(f"{color_text('[INFO]', 'cyan')} Skipping {skipped} -- symmetry-equivalent "
-                              f"to '{representative}' (point group {point_group}); stb-elasticAnalysis "
-                              f"will derive their stiffness columns from the '{representative}' "
-                              "calculation instead of running DFT again.")
+                    for skipped_d in survivors[1:]:
+                        mapping[skipped_d] = representative
                     seen.update(group)
                 dirs_to_run = kept
+                _print_symmetry_table(dirs_before, kept, point_group, ops, "basic", mapping=mapping)
             except Exception:
                 pass  # optimization only, never blocks -- falls back to running everything
         elif used_all and args.symmetry_method == "full":
@@ -271,16 +309,15 @@ def main():
                 pmg_structure = structure_io.to_pymatgen(structure)
                 basis, point_group = symmetry.symmetry_allowed_basis(
                     pmg_structure, args.symprec, args.angle_tolerance)
+                _, ops = symmetry.get_point_group_operations(
+                    pmg_structure, args.symprec, args.angle_tolerance)
+                dirs_before = list(dirs_to_run)
                 kept = symmetry.select_directions_by_rank(basis, order=dirs_to_run)
-                skipped = [d for d in dirs_to_run if d not in kept]
-                if skipped:
-                    print(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
-                          f"{len(basis)} independent elastic constant(s); {kept} fully determine "
-                          f"them (--symmetry-method full). Skipping {skipped} -- "
-                          "stb-elasticAnalysis --symmetry-method full will reconstruct the "
-                          "remaining stiffness-matrix entries from the symmetry-allowed fit "
-                          "instead of running DFT again.")
                 dirs_to_run = kept
+                print(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
+                      f"{len(basis)} independent elastic constant(s); {len(kept)} direction(s) "
+                      "fully determine them (--symmetry-method full).")
+                _print_symmetry_table(dirs_before, kept, point_group, ops, "full")
             except Exception:
                 pass  # optimization only, never blocks -- falls back to running everything
 
@@ -336,13 +373,17 @@ def main():
             pmg_structure = structure_io.to_pymatgen(structure)
             basis, point_group = symmetry.symmetry_allowed_basis(
                 pmg_structure, args.symprec, args.angle_tolerance)
+            _, ops = symmetry.get_point_group_operations(
+                pmg_structure, args.symprec, args.angle_tolerance)
             kept = symmetry.select_energy_patterns_by_rank(basis, filtered_candidates)
             dirs_to_run = [name for name, _ in kept]
             achieved = len(kept)
             print(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
                   f"{len(basis)} independent elastic constant(s); {achieved} strain pattern(s) "
                   f"needed to determine {'all of them' if achieved >= len(basis) else 'the ones reachable without leaving the periodic plane/axis'} "
-                  f"(of {len(filtered_candidates)} physically valid candidates, {len(candidates)} in total): {dirs_to_run}.")
+                  f"(of {len(filtered_candidates)} physically valid candidate(s), {len(candidates)} in total).")
+            _print_symmetry_table([name for name, _ in filtered_candidates], dirs_to_run,
+                                  point_group, ops, "energy")
         except Exception as e:
             sys.exit(color_text(
                 f"[ERROR] --method energy requires symmetry detection to pick its strain "

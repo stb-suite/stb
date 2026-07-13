@@ -225,6 +225,55 @@ def get_free_energy(path: str) -> float | None:
     return energy
 
 
+def get_scf_convergence(path: str) -> tuple[bool, int | None]:
+    """Returns (converged, iterations) from the LAST "SCF cycle converged
+    after N iterations" line in a SIESTA .out file. `converged` is False
+    (with `iterations` None) if that line never appears -- a conservative
+    reading: rather than pattern-match SIESTA's various non-convergence
+    messages (which vary by version and this module has never had a
+    verified example of), treat "never confirmed converged" as the signal
+    worth flagging, same spirit as this module's other "None on anything
+    uncertain" functions.
+    """
+    converged = False
+    iterations = None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if "SCF cycle converged after" in line:
+                    try:
+                        iterations = int(line.split("after")[1].split()[0])
+                        converged = True
+                    except (IndexError, ValueError):
+                        pass
+    except Exception:
+        return False, None
+    return converged, iterations
+
+
+def get_max_force(path: str) -> float | None:
+    """Last 'Max' residual atomic force (eV/Ang) from a SIESTA .out file's
+    "siesta: Atomic forces" block -- e.g. "   Max    0.689325" (optionally
+    followed by "constrained" on the same line, when atoms are fixed; the
+    unconstrained and constrained values are numerically identical unless
+    constraints are actually declared). Same "last occurrence = final state"
+    convention as get_free_energy/get_stress_tensor.
+    """
+    max_force = None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "Max":
+                    try:
+                        max_force = float(parts[1])
+                    except ValueError:
+                        pass
+    except Exception:
+        return None
+    return max_force
+
+
 def _parse_float_line(line: str) -> list[float] | None:
     """First 3 numeric tokens on the line, skipping any non-numeric ones.
 

@@ -101,8 +101,13 @@ rm -rf strain_* reference_structure.fdf
 stb-elasticInputs --file si_cubic.fdf --dirs all --no-intro > log_cubic.txt 2>&1
 check_exit_code $? 0
 check_contains "Detected dimensionality: 3D" log_cubic.txt
-check_contains "Skipping \['yy', 'zz'\] -- symmetry-equivalent to 'xx'" log_cubic.txt
-check_contains "Skipping \['xz', 'yz'\] -- symmetry-equivalent to 'xy'" log_cubic.txt
+check_contains "DEFORMATION DIRECTIONS (symmetry-method basic)" log_cubic.txt
+check_contains "point group m-3m" log_cubic.txt
+check_contains "48 operation" log_cubic.txt
+check_contains "yy.*SUPPRESSED.*xx" log_cubic.txt
+check_contains "zz.*SUPPRESSED.*xx" log_cubic.txt
+check_contains "xz.*SUPPRESSED.*xy" log_cubic.txt
+check_contains "yz.*SUPPRESSED.*xy" log_cubic.txt
 check_contains "Modes: \['xx', 'xy'\]" log_cubic.txt
 check_success strain_xx_2.00/structure.fdf
 check_success strain_xy_2.00/structure.fdf
@@ -236,6 +241,9 @@ stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_energy_cu
 check_exit_code $? 0
 check_contains "Point group m-3m has 3 independent elastic constant" log_energy_cubic.txt
 check_contains "Modes: \['xx', 'yz', 'xx+yy'\]" log_energy_cubic.txt
+check_contains "DEFORMATION DIRECTIONS (symmetry-method energy)" log_energy_cubic.txt
+check_contains "yy.*SUPPRESSED.*symmetry-allowed fit" log_energy_cubic.txt
+check_contains "3 of 21 run -- 18 suppressed" log_energy_cubic.txt
 check_success strain_xx_2.00/structure.fdf
 check_success strain_yz_2.00/structure.fdf
 check_success "strain_xx+yy_2.00/structure.fdf"
@@ -246,6 +254,9 @@ stb-elasticInputs --file structure.fdf --method energy --no-intro > log_energy_h
 check_exit_code $? 0
 check_contains "Point group -6m2 has 5 independent elastic constant" log_energy_hex.txt
 check_contains "Modes: \['xx', 'xy'\]" log_energy_hex.txt
+check_contains "DEFORMATION DIRECTIONS (symmetry-method energy)" log_energy_hex.txt
+check_contains "point group -6m2" log_energy_hex.txt
+check_contains "2 of 6 run -- 4 suppressed" log_energy_hex.txt
 check_success strain_xx_2.00/structure.fdf
 check_success strain_xy_2.00/structure.fdf
 if [ -d "strain_zz_2.00" ] || [ -d "strain_xx+zz_2.00" ]; then
@@ -261,6 +272,7 @@ rm -rf strain_* reference_structure.fdf
 stb-elasticInputs --file triclinic.fdf --method energy --no-intro > log_energy_triclinic.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group -1 has 21 independent elastic constant" log_energy_triclinic.txt
+check_contains "All 21 direction(s) run -- no symmetry reduction" log_energy_triclinic.txt
 if [ "$(ls -d strain_*/ 2>/dev/null | wc -l)" -eq 84 ]; then
     echo -e "   -> ${GREEN}Verified:${NC} 21 patterns x 4 strain steps = 84 folders generated"
     PASS=$((PASS+1))
@@ -298,13 +310,43 @@ check_contains "method" log_help.txt
 # --- 8. Interactive path (stb-suite, shortcut 4.2.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.2.1) ---"
 
-echo "Testing: navigate 4.2.1 -> invalid file then valid -> defaults -> mode 4 (2D in-plane) -> quit"
+echo "Testing: navigate 4.2.1 -> invalid file then valid -> defaults -> stress method -> basic symmetry reduction -> skip advanced -> quit"
 rm -rf strain_*
-printf '4.2.1\ndoes_not_exist.fdf\nstructure.fdf\n\n\n4\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# Prompts in order: file (retry), max strain, steps, method (blank -> stress),
+# mode (1 -> basic, the only "which direction subset" question left -- all 6
+# canonical directions are always requested, auto-filtered by dimensionality,
+# and symmetry-reduced), advanced settings (n -> skip), then the "Press Enter
+# to continue" pause, then quit.
+printf '4.2.1\ndoes_not_exist.fdf\nstructure.fdf\n\n\n\n1\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Modes: \['xx', 'yy', 'xy'\]" log_menu.txt
+check_contains "CONFIGURATION SUMMARY" log_menu.txt
+check_contains "DEFORMATION DIRECTIONS (symmetry-method basic)" log_menu.txt
 check_success strain_xx_2.00/structure.fdf
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} interactive session exited cleanly"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: navigate 4.2.1 -> energy method never asks a symmetry-method question (elastic_inputs.py never reads it for --method energy)"
+rm -rf strain_*
+# Prompts in order: file, max strain, steps, method (2 -> energy, no
+# direction/symmetry-method menu at all), advanced settings (n -> skip),
+# then the "Press Enter to continue" pause, then quit.
+printf '4.2.1\nstructure.fdf\n\n\n2\nn\n\n0\n' | stb-suite > log_energy_menu.txt 2>&1
+check_contains "auto-selects its own pure+combined strain patterns" log_energy_menu.txt
+check_contains "CONFIGURATION SUMMARY" log_energy_menu.txt
+if grep -q "Symmetry reduction" log_energy_menu.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} symmetry-method question appeared for --method energy (it's never read there)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no symmetry-method question for --method energy"
+    PASS=$((PASS+1))
+fi
+if grep -q "Traceback" log_energy_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
     FAIL=$((FAIL+1))
 else

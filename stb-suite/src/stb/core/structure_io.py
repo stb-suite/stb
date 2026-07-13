@@ -196,6 +196,29 @@ def species_dict(structure: FdfStructure) -> dict[str, dict]:
     return dict(structure.species_meta)
 
 
+def atom_counts(structure: FdfStructure) -> dict[str, int]:
+    """{symbol: number of atoms actually placed in %block AtomicCoordinatesAndAtomicSpecies}.
+
+    A symbol declared in %block ChemicalSpeciesLabel but never placed in the
+    coordinates block (a legal, if unusual, SIESTA input -- e.g. leftover from
+    editing a template) still shows up here, with a count of 0, rather than
+    being silently omitted -- callers that need to KNOW about such a species
+    (e.g. to display it) can, while callers that must never require data for
+    it (e.g. cohesive_energy.py/cohesive_analysis.py deciding which isolated
+    -atom folders/energies are actually needed) should filter on `count > 0`
+    themselves. Moved here once cohesive_analysis.py's own copy of this exact
+    logic became a second consumer (cohesive_energy.py's prep side needs the
+    identical "which declared species are actually used" answer to avoid
+    generating/requiring a DFT calculation for a species that never appears
+    in the real structure).
+    """
+    from collections import Counter
+    counts = Counter(symbol for symbol, _ in structure.atoms)
+    for symbol in structure.species:
+        counts.setdefault(symbol, 0)
+    return dict(counts)
+
+
 def to_pymatgen(structure: FdfStructure) -> Structure:
     """Builds a pymatgen Structure using the file's own coordinate format and physical lattice."""
     species = [symbol for symbol, _ in structure.atoms]

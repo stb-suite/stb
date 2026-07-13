@@ -14,6 +14,7 @@ import argparse
 import re
 import numpy as np
 from time import sleep
+from datetime import datetime
 from scipy.stats import linregress
 from stb.core import siesta_log, structure_io, symmetry
 from stb.core.cli import COLORS, color_text, show_intro
@@ -269,8 +270,11 @@ def _fit_energy_pattern(pattern, deltas, energies, f_out):
     docstring on both). Shared by compute_stiffness_matrix_energy and
     eggbox_cross_check below, so the two never drift on this logic.
 
-    Returns (a, b) -- the quadratic and linear polyfit coefficients -- or
-    None if there weren't enough points to fit.
+    Returns (a, b, c) -- the quadratic, linear and constant polyfit
+    coefficients (c kept, unlike earlier, so write_energy_plots can draw
+    the exact fitted curve f(x)=a*x^2+b*x+c against the actual absolute
+    energies, not just a relative shape) -- or None if there weren't enough
+    points to fit.
     """
     if len(deltas) < 3:
         print_dual(color_text(
@@ -278,7 +282,7 @@ def _fit_energy_pattern(pattern, deltas, energies, f_out):
             "fit needs at least 3).", 'yellow'), f_out)
         return None
 
-    a, b, _c = np.polyfit(deltas, energies, 2)
+    a, b, c = np.polyfit(deltas, energies, 2)
     # Linear term should be ~0 at a well-relaxed equilibrium reference; a
     # large one signals residual internal stress/forces in
     # reference_structure.fdf. Compares the two terms' actual CONTRIBUTION
@@ -293,7 +297,7 @@ def _fit_energy_pattern(pattern, deltas, energies, f_out):
             f"[WARNING] Pattern '{pattern}': linear energy term ({b:.2e} eV) is not "
             f"negligible next to the quadratic term ({a:.2e} eV) at the strains used -- the "
             "reference structure may not be fully relaxed.", 'yellow'), f_out)
-    return a, b
+    return a, b, c
 
 
 def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, angle_tolerance,
@@ -315,7 +319,13 @@ def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, 
     quantity diluted by the vacuum gap, total energy is already extensive
     and needs no such correction, just the in-plane area).
 
-    Returns (C, point_group, num_independent, directions_used, achieved_rank).
+    Returns (C, point_group, num_independent, directions_used,
+    achieved_rank, series, fit_coeffs). `series` ({pattern: {'delta': [...],
+    'energy': [...]}}) and `fit_coeffs` ({pattern: (a, b, c)}, the raw
+    polyfit coefficients) are the same raw data/fit this function already
+    computed internally to build C -- returned so write_energy_plots can
+    write the gnuplot data+fit files without re-reading calc.out or
+    re-triggering _fit_energy_pattern's warnings a second time.
     """
     basis, point_group = symmetry.symmetry_allowed_basis(pmg_structure, symprec, angle_tolerance)
     if is2d:
@@ -339,11 +349,13 @@ def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, 
     pattern_targets = []
     directions_used = []
     gammas = []
+    fit_coeffs = {}
     for pattern, s in series.items():
         fit = _fit_energy_pattern(pattern, s['delta'], s['energy'], f_out)
         if fit is None:
             continue
-        a, _b = fit
+        a, b, c = fit
+        fit_coeffs[pattern] = (a, b, c)
         eps_unit = pattern_strain_tensor(pattern)
         gamma = symmetry.voigt_strain_engineering(eps_unit)
         target = 2 * a / norm_factor
@@ -352,13 +364,13 @@ def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, 
         gammas.append(gamma)
 
     if not pattern_targets:
-        return np.zeros((6, 6)), point_group, len(basis), [], 0
+        return np.zeros((6, 6)), point_group, len(basis), [], 0, series, fit_coeffs
 
     blocks = [[gamma @ Bk @ gamma for Bk in basis] for gamma in gammas]
     achieved_rank = np.linalg.matrix_rank(np.array(blocks), tol=1e-8)
 
     C = symmetry.fit_stiffness_matrix_energy(basis, pattern_targets, conv_factor)
-    return C, point_group, len(basis), directions_used, achieved_rank
+    return C, point_group, len(basis), directions_used, achieved_rank, series, fit_coeffs
 
 
 def eggbox_cross_check(data, folders, file_name, pmg_structure, is2d, conv_factor, tolerance, f_out):
@@ -421,7 +433,7 @@ def eggbox_cross_check(data, folders, file_name, pmg_structure, is2d, conv_facto
         fit = _fit_energy_pattern(mode, energy_series[mode]['delta'], energy_series[mode]['energy'], f_out)
         if fit is None:
             continue
-        a, _b = fit
+        a, _b, _c = fit
         # E(delta) = (V0/2) * gamma(delta)^T C gamma(delta); for a PURE
         # mode gamma has one nonzero entry, gamma_unit_m = 2 for shear
         # (engineering strain doubles tensor shear strain, same convention
@@ -463,12 +475,14 @@ def direction_fit_diagnostics(data, conv_factor, r_squared_tolerance):
     already being computed and thrown away by every _fit_column call before
     this function existed (see linear_fit_diagnostics's docstring).
 
-    Returns a list of dicts, one per direction in `data`: {'mode',
-    'r_squared', 'residual_stress', 'flagged'}. `flagged` is set for either
-    a non-negligible residual stress (same relative-contribution-at-max
-    -strain criterion as _fit_energy_pattern's linear-term check, applied
-    here to the stress-fit's intercept instead) or R^2 below
-    `r_squared_tolerance`.
+    Returns a list of dicts, one per direction in `data`: {'mode', 'slope',
+    'r_squared', 'residual_stress', 'flagged'}. `slope` is the fitted C_mm
+    itself (already returned elsewhere as part of C, but kept here too so
+    write_stress_plots can draw the exact same fit line without redoing the
+    regression). `flagged` is set for either a non-negligible residual
+    stress (same relative-contribution-at-max-strain criterion as
+    _fit_energy_pattern's linear-term check, applied here to the
+    stress-fit's intercept instead) or R^2 below `r_squared_tolerance`.
     """
     results = []
     for mode, series in data.items():
@@ -487,6 +501,7 @@ def direction_fit_diagnostics(data, conv_factor, r_squared_tolerance):
         r2_flagged = r_squared < r_squared_tolerance
         results.append({
             'mode': mode,
+            'slope': slope,
             'r_squared': r_squared,
             'residual_stress': intercept,
             'flagged': residual_flagged or r2_flagged,
@@ -523,15 +538,243 @@ def tensor_symmetry_check(C):
 
 
 # ==========================================
+#           GNUPLOT EXPORT
+#
+# Same data+.gplot convention used throughout the suite (e.g.
+# strain_analysis.py::write_strain_gplot/write_compare_gplot, the closest
+# sibling tool -- stb-strainAnalysis's own stress-strain curve fit): a
+# commented .dat file (gnuplot 'index' blocks) + a companion .gplot
+# (pdfcairo terminal, the fit drawn as a gnuplot f(x)=... function rather
+# than duplicated as data points). No new DFT calculations or re-fitting --
+# every number here was already computed by the caller.
+# ==========================================
+
+PLOT_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaaa',
+               '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
+
+
+def write_stress_plots(plot_dir, data, fit_diagnostics, conv_factor, unit_label, f_out):
+    """Writes one <mode>_fit.dat + <mode>_fit.gplot per direction actually
+    measured (stress-strain linear fit: sigma = C_mm . gamma), plus a
+    combined all_directions_fit.dat/.gplot overlaying every direction.
+    Reuses fit_diagnostics's already-computed slope/intercept/R^2 (see
+    direction_fit_diagnostics) instead of re-fitting.
+
+    Data columns use ENGINEERING strain (gamma = 2*eps for shear modes,
+    same convention Hooke's law/the reported C_mm itself use) rather than
+    the raw tensor strain stb-elasticInputs applies, so the plotted slope
+    matches the reported C_mm directly -- also all 6 measured stress
+    components are written (not just the direction's own diagonal one),
+    since a single strain series already gives a full column of C (see
+    _fit_column) and someone plotting by hand may want any of them.
+
+    Returns the list of (mode, dat_path, gplot_path) written.
+    """
+    fit_by_mode = {r['mode']: r for r in fit_diagnostics}
+    modes = [m for m in symmetry.VOIGT_MODES if m in data and m in fit_by_mode]
+    written = []
+
+    combined_dat = os.path.join(plot_dir, "all_directions_fit.dat")
+    combined_gplot = os.path.join(plot_dir, "all_directions_fit.gplot")
+    combined_f = open(combined_dat, 'w')
+    combined_lines = [
+        '# --- STB Plot Configuration ---\n',
+        '# Generated by stb-elasticAnalysis (--method stress)\n',
+        'set terminal pdfcairo enhanced color font "Arial,14" size 8,6\n',
+        'set output "all_directions_fit.pdf"\n\n',
+        'set title "Stress-Strain Fits -- All Directions"\n',
+        'set xlabel "Engineering strain (fraction)"\n',
+        f'set ylabel "Stress ({unit_label})"\n',
+        'set grid\n',
+        'set key top left\n',
+    ]
+    combined_plot_parts = []
+
+    for i, mode in enumerate(modes):
+        series = data[mode]
+        fit = fit_by_mode[mode]
+        is_shear = mode in SHEAR_DIRECTIONS
+        eng_factor = 2.0 if is_shear else 1.0
+        S = np.array(series['stress'])
+        diag_col = DIRECTION_TO_COLUMN[mode]
+
+        dat_path = os.path.join(plot_dir, f"{mode}_fit.dat")
+        with open(dat_path, 'w') as f:
+            f.write(f"# stb-elasticAnalysis -- stress-strain data for direction '{mode}'\n")
+            f.write(f"# Fit: C_{mode} = {fit['slope']:.4f} {unit_label}, "
+                    f"R^2 = {fit['r_squared']:.6f}, residual stress = "
+                    f"{fit['residual_stress']:.4f} {unit_label}\n")
+            f.write("# columns: 1=Strain(%) 2=EngineeringStrain(frac) "
+                     f"3=sigma_xx 4=sigma_yy 5=sigma_zz 6=sigma_yz 7=sigma_xz 8=sigma_xy [{unit_label}]\n")
+            for eps, s in zip(series['eps'], S):
+                row = [conv_factor * s[i2, j2] for (i2, j2) in VOIGT_TO_TENSOR]
+                f.write(f"{eps*100:12.6f}  {eps*eng_factor:12.6f}  " +
+                        "  ".join(f"{v:12.6f}" for v in row) + "\n")
+
+        diag_data_col = 3 + diag_col  # gnuplot column number of this direction's own diagonal entry
+        gplot_path = os.path.join(plot_dir, f"{mode}_fit.gplot")
+        lines = [
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-elasticAnalysis (--method stress)\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            f'set output "{mode}_fit.pdf"\n\n',
+            f'set title "Stress-Strain Fit: {mode.upper()} direction (C_{mode} = '
+            f'{fit["slope"]:.2f} {unit_label}, R^2={fit["r_squared"]:.5f})"\n',
+            'set xlabel "Engineering strain (fraction)"\n',
+            f'set ylabel "sigma_{mode} ({unit_label})"\n',
+            'set grid\n',
+            'set key top left\n',
+            f"f(x) = {fit['slope']:.8f}*x + {fit['residual_stress']:.8f}\n",
+            (f'plot "{mode}_fit.dat" using 2:{diag_data_col} with points pt 7 ps 1.3 '
+             f'lc rgb "{PLOT_COLORS[i % len(PLOT_COLORS)]}" title "sigma_{mode} data", \\\n'
+             f'     f(x) with lines lc rgb "{PLOT_COLORS[i % len(PLOT_COLORS)]}" dt 2 '
+             'title "Linear fit"\n'),
+        ]
+        with open(gplot_path, 'w') as f:
+            f.writelines(lines)
+
+        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+        written.append((mode, dat_path, gplot_path))
+
+        # Combined overview: append this direction's own block to the
+        # shared data file and one more overlay to the shared plot.
+        if i > 0:
+            combined_f.write("\n\n")
+        combined_f.write(f"# index {i}: {mode} (own diagonal component)\n")
+        combined_f.write("# Strain(%) EngineeringStrain(frac) sigma\n")
+        for eps, s in zip(series['eps'], S):
+            i2, j2 = VOIGT_TO_TENSOR[diag_col]
+            combined_f.write(f"{eps*100:12.6f}  {eps*eng_factor:12.6f}  "
+                              f"{conv_factor*s[i2, j2]:12.6f}\n")
+        color = PLOT_COLORS[i % len(PLOT_COLORS)]
+        combined_lines.append(f"f_{i}(x) = {fit['slope']:.8f}*x + {fit['residual_stress']:.8f}\n")
+        combined_plot_parts.append(
+            f'"all_directions_fit.dat" index {i} using 2:3 with points pt 7 ps 1.2 '
+            f'lc rgb "{color}" title "{mode.upper()}"')
+        combined_plot_parts.append(f'f_{i}(x) with lines lc rgb "{color}" dt 2 notitle')
+
+    combined_f.close()
+    if modes:
+        combined_lines.append('plot ' + ', \\\n     '.join(combined_plot_parts) + '\n')
+        with open(combined_gplot, 'w') as f:
+            f.writelines(combined_lines)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {combined_dat}, {combined_gplot} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(combined_gplot)})", f_out)
+        written.append(('all', combined_dat, combined_gplot))
+    else:
+        os.remove(combined_dat)
+
+    return written
+
+
+def write_energy_plots(plot_dir, series, fit_coeffs, unit_label, f_out):
+    """Energy-method equivalent of write_stress_plots: one
+    <pattern>_fit.dat + <pattern>_fit.gplot per pattern (pure or combined
+    Voigt strain, e.g. 'xx' or 'xx+yy'), fit overlaid as a gnuplot quadratic
+    function f(x)=a*x^2+b*x+c instead of a line, plus a combined overview.
+    `series`/`fit_coeffs` are exactly what compute_stiffness_matrix_energy
+    already computed internally -- no re-reading calc.out, no re-fitting.
+
+    Returns the list of (pattern, dat_path, gplot_path) written.
+    """
+    patterns = [p for p in series if p in fit_coeffs]
+    written = []
+
+    combined_dat = os.path.join(plot_dir, "all_patterns_fit.dat")
+    combined_gplot = os.path.join(plot_dir, "all_patterns_fit.gplot")
+    combined_f = open(combined_dat, 'w')
+    combined_lines = [
+        '# --- STB Plot Configuration ---\n',
+        '# Generated by stb-elasticAnalysis (--method energy)\n',
+        'set terminal pdfcairo enhanced color font "Arial,14" size 8,6\n',
+        'set output "all_patterns_fit.pdf"\n\n',
+        'set title "Energy-Strain Fits -- All Patterns"\n',
+        'set xlabel "Strain (fraction)"\n',
+        'set ylabel "Total energy (eV)"\n',
+        'set grid\n',
+        'set key top left\n',
+    ]
+    combined_plot_parts = []
+
+    for i, pattern in enumerate(patterns):
+        s = series[pattern]
+        a, b, c = fit_coeffs[pattern]
+
+        dat_path = os.path.join(plot_dir, f"{pattern}_fit.dat")
+        with open(dat_path, 'w') as f:
+            f.write(f"# stb-elasticAnalysis -- energy-strain data for pattern '{pattern}'\n")
+            f.write(f"# Fit: E(x) = {a:.6e}*x^2 + {b:.6e}*x + {c:.6f}  [eV]\n")
+            f.write("# columns: 1=Strain(%) 2=Strain(frac) 3=Energy(eV)\n")
+            for delta, energy in zip(s['delta'], s['energy']):
+                f.write(f"{delta*100:12.6f}  {delta:12.6f}  {energy:14.8f}\n")
+
+        gplot_path = os.path.join(plot_dir, f"{pattern}_fit.gplot")
+        lines = [
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-elasticAnalysis (--method energy)\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            f'set output "{pattern}_fit.pdf"\n\n',
+            f'set title "Energy-Strain Fit: {pattern} pattern"\n',
+            'set xlabel "Strain (fraction)"\n',
+            'set ylabel "Total energy (eV)"\n',
+            'set grid\n',
+            'set key top left\n',
+            f"f(x) = {a:.8e}*x**2 + {b:.8e}*x + {c:.8f}\n",
+            (f'plot "{pattern}_fit.dat" using 2:3 with points pt 7 ps 1.3 '
+             f'lc rgb "{PLOT_COLORS[i % len(PLOT_COLORS)]}" title "{pattern} data", \\\n'
+             f'     f(x) with lines lc rgb "{PLOT_COLORS[i % len(PLOT_COLORS)]}" dt 2 '
+             'title "Parabolic fit"\n'),
+        ]
+        with open(gplot_path, 'w') as f:
+            f.writelines(lines)
+
+        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+        written.append((pattern, dat_path, gplot_path))
+
+        if i > 0:
+            combined_f.write("\n\n")
+        combined_f.write(f"# index {i}: {pattern}\n")
+        combined_f.write("# Strain(%) Strain(frac) Energy(eV)\n")
+        for delta, energy in zip(s['delta'], s['energy']):
+            combined_f.write(f"{delta*100:12.6f}  {delta:12.6f}  {energy:14.8f}\n")
+        color = PLOT_COLORS[i % len(PLOT_COLORS)]
+        combined_lines.append(f"f_{i}(x) = {a:.8e}*x**2 + {b:.8e}*x + {c:.8f}\n")
+        combined_plot_parts.append(
+            f'"all_patterns_fit.dat" index {i} using 2:3 with points pt 7 ps 1.2 '
+            f'lc rgb "{color}" title "{pattern}"')
+        combined_plot_parts.append(f'f_{i}(x) with lines lc rgb "{color}" dt 2 notitle')
+
+    combined_f.close()
+    if patterns:
+        combined_lines.append('plot ' + ', \\\n     '.join(combined_plot_parts) + '\n')
+        with open(combined_gplot, 'w') as f:
+            f.writelines(combined_lines)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {combined_dat}, {combined_gplot} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(combined_gplot)})", f_out)
+        written.append(('all', combined_dat, combined_gplot))
+    else:
+        os.remove(combined_dat)
+
+    return written
+
+
+# ==========================================
 #           REPORTING LOGIC
 # ==========================================
 
 def check_stability_and_report(C, is_2d, unit_label, f_out):
+    """Returns `summary`, a dict of the final derived properties + verdict
+    already printed here -- so callers (see the [5] SUMMARY & FILES section
+    in _emit_elastic_report) can recap them without recomputing.
+    """
     print_dual(f"\n{color_text('[4] STABILITY AND PROPERTIES', 'magenta')}", f_out)
     print_dual("-" * 60, f_out)
-    
+
     passes = False
-    
+    summary = {}
+
     if is_2d:
         # 2D Constants Extraction
         c11, c22, c12, c66 = C[0,0], C[1,1], C[0,1], C[5,5]
@@ -567,6 +810,10 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
         print_dual(f"  C66 > 0         : {color_text('PASS', 'green') if cond2 else color_text('FAIL', 'red')}", f_out)
         print_dual(f"  C11*C22 > C12^2 : {color_text('PASS', 'green') if cond3 else color_text('FAIL', 'red')}", f_out)
 
+        summary = {
+            'Ex': Ex_2d, 'Ey': Ey_2d, 'nu_yx': nu_yx, 'nu_xy': nu_xy, 'G_xy': c66,
+        }
+
     else:
         # 3D Case (Hill Average)
         # Voigt
@@ -597,6 +844,7 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
         # no new calculation, and it's the one number in this report that
         # actually says how anisotropic the material is (the Hill average
         # above is an isotropic APPROXIMATION that hides that entirely).
+        A_U = None
         if G_r > 1e-9 and B_r > 1e-9:
             A_U = 5.0 * (G_v / G_r) + (B_v / B_r) - 6.0
             print_dual(f"Universal Anisotropy Index (A^U): {color_text(f'{A_U:.3f}', 'bold')} "
@@ -610,14 +858,20 @@ def check_stability_and_report(C, is_2d, unit_label, f_out):
         eigenvals = np.linalg.eigvals(C)
         passes = np.all(eigenvals > 0.01)
 
+        summary = {'E': E_h, 'B': B_h, 'nu': nu_h, 'A_U': A_U}
+
+    summary['passes'] = passes
     if passes:
         print_dual(f"\n{color_text('VERDICT:', 'bold')} {color_text('STABLE', 'green')}", f_out)
     else:
         print_dual(f"\n{color_text('VERDICT:', 'bold')} {color_text('UNSTABLE', 'red')}", f_out)
 
+    return summary
+
 
 def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
-                          eggbox_results=None, fit_diagnostics=None, symmetry_check=None):
+                          eggbox_results=None, fit_diagnostics=None, symmetry_check=None,
+                          plot_files=None):
     """Prints/writes the stiffness-matrix + constants + stability sections
     shared by every method (--method stress's basic/full paths and --method
     energy) -- extracted once --method energy needed to reach this same
@@ -632,6 +886,9 @@ def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_di
     when its own prerequisite wasn't available (a [WARNING] about the skip
     was already printed by the caller before reaching here) -- either way,
     never blocks the rest of the report.
+
+    `plot_files` (see write_stress_plots/write_energy_plots) feeds the
+    closing [5] SUMMARY & FILES section.
     """
     if args.is2d:
         # 2D REPORT
@@ -815,7 +1072,37 @@ def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_di
                     "eggbox contamination in the stress data.", 'cyan'), f_out)
 
     # Stability and Properties Check
-    check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
+    summary = check_stability_and_report(C_sym, args.is2d, unit_label, f_out)
+
+    # --- [5] SUMMARY & FILES: a compact recap of the numbers already
+    # printed above (no recomputation -- reuses check_stability_and_report's
+    # own return value) plus where everything ended up on disk, so the
+    # report is self-contained even if someone only reads the last few
+    # lines. ---
+    warning_count = 0
+    if symmetry_check is not None and symmetry_check[3]:
+        warning_count += 1
+    if fit_diagnostics:
+        warning_count += sum(1 for r in fit_diagnostics if r['flagged'])
+    if eggbox_results:
+        warning_count += sum(1 for r in eggbox_results if r['flagged'])
+
+    print_dual(f"\n{color_text('[5] SUMMARY & FILES', 'magenta')}", f_out)
+    print_dual("-" * 60, f_out)
+    if args.is2d:
+        print_dual(f"Ex={summary['Ex']:.2f} {unit_label}  Ey={summary['Ey']:.2f} {unit_label}  "
+                   f"v_yx={summary['nu_yx']:.3f}  v_xy={summary['nu_xy']:.3f}  "
+                   f"G_xy={summary['G_xy']:.2f} {unit_label}", f_out)
+    else:
+        au_str = f"{summary['A_U']:.3f}" if summary['A_U'] is not None else "N/A"
+        print_dual(f"E={summary['E']:.2f} {unit_label}  B={summary['B']:.2f} {unit_label}  "
+                   f"v={summary['nu']:.3f}  A^U={au_str}", f_out)
+    verdict = color_text('STABLE', 'green') if summary['passes'] else color_text('UNSTABLE', 'red')
+    print_dual(f"Verdict: {verdict}  |  Quality warnings raised in [3]: {warning_count}", f_out)
+    print_dual(f"Full report : {REPORT_FILE}", f_out)
+    if plot_files:
+        print_dual(f"Plot data   : {args.plot_dir}/ ({len(plot_files)} file pair(s) -- raw fitting "
+                   "data + gnuplot scripts, see [Saved] lines above)", f_out)
 
 
 # ==========================================
@@ -886,6 +1173,13 @@ def main():
                              "stress at zero strain (same relative-contribution criterion as the "
                              "energy method's linear-term check). No new DFT calculations: reuses "
                              "the same stress-strain fit each direction's column already needed.")
+    parser.add_argument("--plot-dir", default="elastic_plots",
+                        help="Directory (default: elastic_plots, created automatically) to write "
+                             "the raw fitting data + gnuplot scripts into -- one .dat/.gplot pair "
+                             "per direction (--method stress) or pattern (--method energy), plus a "
+                             "combined overview. Same data+.gplot convention as the rest of the "
+                             "suite (e.g. stb-strainAnalysis). Always written, no new DFT "
+                             "calculations: reuses the data/fit already computed for the report.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -978,12 +1272,33 @@ def main():
     with open(REPORT_FILE, "w") as f_out:
         print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)
 
+        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        print_dual(f"Date/time            : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+        print_dual(f"Method               : {args.method}"
+                   + (f" (--symmetry-method {args.symmetry_method})" if args.method == "stress" else ""),
+                   f_out)
+        print_dual(f"Mode                 : {'2D (N/m)' if args.is2d else '3D (GPa)'}", f_out)
+        print_dual(f"Target log file      : {args.file}", f_out)
+        print_dual(f"Reference structure  : {args.reference_structure}"
+                   + (" (found)" if pmg_structure is not None else " (not found -- best-effort features skipped)"),
+                   f_out)
+        print_dual(f"strain_* folders found: {len(folders)}", f_out)
+        if args.method == "stress":
+            print_dual(f"Tolerances           : eggbox={args.eggbox_tolerance:.1f}%, "
+                       f"fit-quality(R^2)={args.fit_quality_tolerance}, symprec={args.symprec}, "
+                       f"angle-tolerance={args.angle_tolerance} deg", f_out)
+        else:
+            print_dual(f"Tolerances           : symprec={args.symprec}, "
+                       f"angle-tolerance={args.angle_tolerance} deg", f_out)
+        print_dual(f"Plot data directory  : {args.plot_dir}/", f_out)
+
         if args.method == "energy":
             # --- Energy-strain (parabolic fit) path: its own folder
             # scanning/parsing (pure+combined pattern names, total energy
             # instead of stress), entirely inside compute_stiffness_matrix_energy.
             print(f"\n{color_text('READING FOLDERS (energy-strain patterns):', 'bold')}")
-            C, point_group, num_independent, directions_used, achieved_rank = \
+            C, point_group, num_independent, directions_used, achieved_rank, energy_series, fit_coeffs = \
                 compute_stiffness_matrix_energy(folders, args.file, pmg_structure, args.symprec,
                                                  args.angle_tolerance, args.is2d, CONV_FACTOR,
                                                  unit_label, f_out)
@@ -1009,7 +1324,12 @@ def main():
                     "tensor.", 'yellow'), f_out)
 
             C_sym = 0.5 * (C + C.T)
-            _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out)
+
+            os.makedirs(args.plot_dir, exist_ok=True)
+            plot_files = write_energy_plots(args.plot_dir, energy_series, fit_coeffs, unit_label, f_out)
+
+            _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+                                 plot_files=plot_files)
             print("-" * 60)
             print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")
             print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))
@@ -1114,9 +1434,13 @@ def main():
         # symmetric by construction and would give an uninformative ~0.
         symmetry_check = tensor_symmetry_check(C) if args.symmetry_method == "basic" else None
 
+        os.makedirs(args.plot_dir, exist_ok=True)
+        plot_files = write_stress_plots(args.plot_dir, data, fit_diagnostics, CONV_FACTOR,
+                                         unit_label, f_out)
+
         _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                              eggbox_results=eggbox_results, fit_diagnostics=fit_diagnostics,
-                             symmetry_check=symmetry_check)
+                             symmetry_check=symmetry_check, plot_files=plot_files)
 
     print("-" * 60)
     print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")

@@ -1168,7 +1168,136 @@ check_contains "Could not invert the 3D stiffness matrix" log_singular.txt
 popd > /dev/null
 
 
-# --- 13. Error and robustness cases ---
+# --- 13. Physics: richer report ([0] RUN METADATA / [5] SUMMARY & FILES)
+#     and the gnuplot data folder (--plot-dir, default elastic_plots/) --
+#     one .dat/.gplot pair per direction/pattern + a combined overview,
+#     written from data/fits already computed for the report (no new DFT
+#     calculations, no re-fitting). If gnuplot itself is installed, actually
+#     render one script to a PDF as an end-to-end sanity check. ---
+echo -e "\n--- Testing report metadata/summary sections and the gnuplot data folder ---"
+
+echo "Testing: --method stress -- elastic_plots/ has per-direction + combined dat/gplot pairs"
+mkdir -p plots_stress_run
+pushd plots_stress_run > /dev/null
+cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
+stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+python3 - <<'PYEOF'
+import os, re
+import numpy as np
+from stb.core import structure_io, symmetry
+
+CONV = 160.21766
+structure = structure_io.read_fdf("reference_structure.fdf")
+pmg = structure_io.to_pymatgen(structure)
+V0 = pmg.volume
+
+C_true = np.zeros((6, 6))
+C_true[0,0] = C_true[1,1] = C_true[2,2] = 166.0
+C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1] = 64.0
+C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
+C_raw = C_true / CONV
+
+def voigt_to_tensor(v):
+    s = np.zeros((3, 3))
+    s[0,0], s[1,1], s[2,2], s[1,2], s[0,2], s[0,1] = v
+    s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
+    return s
+
+for folder in os.listdir('.'):
+    if not folder.startswith('strain_'):
+        continue
+    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+    pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
+    pct = -val if sign == 'm' else val
+    delta = pct / 100.0
+    eps = symmetry.strain_tensor(pattern, delta)
+    gamma = symmetry.voigt_strain_engineering(eps)
+    sigma_t = voigt_to_tensor(C_raw @ gamma)
+    dE = 0.5 * V0 * (gamma @ C_raw @ gamma)
+    with open(f"{folder}/calc.out", "w") as f:
+        f.write("siesta: Stress tensor (static) (eV/Ang**3):\n")
+        for row in range(3):
+            f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
+        f.write(f"siesta: FreeEng = {dE:.10f}\n")
+PYEOF
+stb-elasticAnalysis --no-intro > log_report.txt 2>&1
+check_exit_code $? 0
+check_contains "\[0\] RUN METADATA" log_report.txt
+check_contains "Method               : stress (--symmetry-method basic)" log_report.txt
+check_contains "Tolerances           : eggbox=5.0%" log_report.txt
+check_success elastic_plots/xx_fit.dat
+check_success elastic_plots/xx_fit.gplot
+check_success elastic_plots/xy_fit.dat
+check_success elastic_plots/xy_fit.gplot
+check_success elastic_plots/all_directions_fit.dat
+check_success elastic_plots/all_directions_fit.gplot
+check_contains "C_xx = 166.0000 GPa" elastic_plots/xx_fit.dat
+check_contains "f(x) = 166" elastic_plots/xx_fit.gplot
+check_contains "\[5\] SUMMARY & FILES" log_report.txt
+check_contains "E=163.27 GPa.*A\^U=0.247" log_report.txt
+check_contains "Plot data   : elastic_plots/ (3 file pair(s)" log_report.txt
+if command -v gnuplot > /dev/null 2>&1; then
+    ( cd elastic_plots && gnuplot xx_fit.gplot > /dev/null 2>gnuplot_err.txt )
+    check_success elastic_plots/xx_fit.pdf
+    if [ -s elastic_plots/gnuplot_err.txt ]; then
+        echo -e "   -> ${RED}Failed:${NC} gnuplot reported errors rendering xx_fit.gplot"
+        cat elastic_plots/gnuplot_err.txt
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} gnuplot rendered xx_fit.gplot to a PDF with no errors"
+        PASS=$((PASS+1))
+    fi
+else
+    echo "   (gnuplot not installed -- skipping actual render check)"
+fi
+popd > /dev/null
+
+echo "Testing: --method energy -- elastic_plots/ has pattern-named dat/gplot pairs (incl. combined 'xx+yy')"
+mkdir -p plots_energy_run
+pushd plots_energy_run > /dev/null
+cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
+stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_prep.txt 2>&1
+python3 - <<'PYEOF'
+import os, re
+import numpy as np
+from stb.core import structure_io, symmetry
+
+CONV = 160.21766
+structure = structure_io.read_fdf("reference_structure.fdf")
+pmg = structure_io.to_pymatgen(structure)
+V0 = pmg.volume
+C_true = np.zeros((6, 6))
+C_true[0,0] = C_true[1,1] = C_true[2,2] = 166.0
+C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1] = 64.0
+C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
+C_raw = C_true / CONV
+for folder in os.listdir('.'):
+    if not folder.startswith('strain_'):
+        continue
+    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+    pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
+    pct = -val if sign == 'm' else val
+    delta = pct / 100.0
+    eps = sum((symmetry.strain_tensor(p, delta) for p in pattern.split('+')), np.zeros((3, 3)))
+    gamma = symmetry.voigt_strain_engineering(eps)
+    dE = 0.5 * V0 * (gamma @ C_raw @ gamma)
+    with open(f"{folder}/calc.out", "w") as f:
+        f.write(f"siesta: FreeEng = {dE:.10f}\n")
+PYEOF
+stb-elasticAnalysis --method energy --no-intro > log_report.txt 2>&1
+check_exit_code $? 0
+check_contains "\[0\] RUN METADATA" log_report.txt
+check_contains "Method               : energy" log_report.txt
+check_success "elastic_plots/xx+yy_fit.dat"
+check_success "elastic_plots/xx+yy_fit.gplot"
+check_contains "f(x) = " "elastic_plots/xx+yy_fit.gplot"
+check_contains "x\*\*2" "elastic_plots/xx+yy_fit.gplot"
+check_success elastic_plots/all_patterns_fit.dat
+check_contains "\[5\] SUMMARY & FILES" log_report.txt
+popd > /dev/null
+
+
+# --- 14. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: no strain_* folders"
@@ -1191,9 +1320,10 @@ check_contains "symmetry-method" log_help.txt
 check_contains "method" log_help.txt
 check_contains "eggbox-tolerance" log_help.txt
 check_contains "fit-quality-tolerance" log_help.txt
+check_contains "plot-dir" log_help.txt
 
 
-# --- 14. Interactive path (stb-suite, shortcut 4.2.2) ---
+# --- 15. Interactive path (stb-suite, shortcut 4.2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.2.2) ---"
 
 echo "Testing: navigate 4.2.2 -> calc.out -> not 2D -> quit"
@@ -1212,7 +1342,7 @@ fi
 
 popd > /dev/null
 
-# --- 15. Summary ---
+# --- 16. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

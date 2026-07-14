@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 
 import os
 import re
@@ -22,7 +22,7 @@ from ase.cell import Cell
 from ase.dft.kpoints import parse_path_string
 try:
     import phonopy
-    from phonopy.interface.siesta import get_physical_units
+    from phonopy.interface.siesta import get_physical_units, write_siesta
 except ImportError:
     print("\n[ERROR] Phonopy is not installed. Please install it using: pip install phonopy")
     sys.exit(1)
@@ -441,6 +441,13 @@ def main():
     parser.add_argument("--thermal-displacements", action="store_true",
                         help="Compute per-atom thermal displacement (Debye-Waller) tensors "
                              "and write a tdispmat.cif")
+    parser.add_argument("--freeze-unstable-mode", action="store_true",
+                        help="If the mesh has an imaginary (unstable) mode, export the "
+                             "structure frozen along that mode's displacement pattern as "
+                             "frozen_mode.fdf -- a starting point for a real relaxation")
+    parser.add_argument("--freeze-amplitude", type=float, default=0.05,
+                        help="Target maximum atomic displacement (Ang) for "
+                             "--freeze-unstable-mode (default: 0.05)")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsPos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -499,6 +506,7 @@ def main():
             (args.dos, "total DOS"),
             (args.pdos, "projected DOS"),
             (args.thermal_displacements, "thermal displacements"),
+            (args.freeze_unstable_mode, "mode freeze"),
         ] if flag]
         print_dual(f"Extra analyses    : {', '.join(extra_analyses) if extra_analyses else 'none'}", f_out)
 
@@ -608,6 +616,44 @@ def main():
 
                 band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
                                                         path_connections, f_out)
+
+        frozen_mode_filename = None
+        if args.freeze_unstable_mode:
+            print_dual(f"\n{color_text('[2c] MODE FREEZE', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            if min_freq >= 0:
+                print_dual("No imaginary mode on the sampled mesh -- nothing to freeze.", f_out)
+            else:
+                q_idx, band_idx = np.unravel_index(np.argmin(phonon.mesh.frequencies),
+                                                     phonon.mesh.frequencies.shape)
+                q_point = phonon.mesh.qpoints[q_idx]
+
+                # amplitude here isn't Angstrom (see module notes above) --
+                # calibrate with a unit-amplitude probe first, then rescale
+                # linearly to hit the user's requested Angstrom target.
+                phonon.run_modulations(args.mesh, [[q_point, band_idx, 1.0, 0.0]])
+                mod = phonon.modulation
+                probe_shift = np.linalg.norm(
+                    mod.modulated_supercells[0].positions - mod.supercell.positions,
+                    axis=1).max() * bohr_to_angstrom
+                scale = args.freeze_amplitude / probe_shift
+
+                phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
+                mod = phonon.modulation
+                achieved_shift = np.linalg.norm(
+                    mod.modulated_supercells[0].positions - mod.supercell.positions,
+                    axis=1).max() * bohr_to_angstrom
+
+                frozen_mode_filename = "frozen_mode.fdf"
+                write_siesta(frozen_mode_filename, mod.modulated_supercells[0])
+
+                print_dual(f"Softest mode      : q = {np.array2string(q_point, precision=4)}, "
+                            f"band {band_idx}, {min_freq:.4f} THz", f_out)
+                print_dual(f"Displacement      : requested {args.freeze_amplitude:.4f} Ang, "
+                            f"achieved {achieved_shift:.4f} Ang (max atomic shift)", f_out)
+                print_dual(f"Structure written : {frozen_mode_filename}", f_out)
+                print(color_text(f" -> Saved distorted structure as "
+                                  f"'{os.path.join(phonon_dir, frozen_mode_filename)}'", 'cyan'))
 
         phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
 
@@ -746,6 +792,8 @@ def main():
         if cif_filename is not None:
             extra_files += (f", {os.path.join(phonon_dir, disp_dat_filename)}, "
                              f"{os.path.join(phonon_dir, cif_filename)}")
+        if frozen_mode_filename is not None:
+            extra_files += f", {os.path.join(phonon_dir, frozen_mode_filename)}"
         print_dual(f"Files               : {os.path.join(phonon_dir, plot_filename)}, "
                     f"{os.path.join(phonon_dir, dat_filename)}{extra_files}, "
                     f"{os.path.join(phonon_dir, args.plot_dir)}/ "

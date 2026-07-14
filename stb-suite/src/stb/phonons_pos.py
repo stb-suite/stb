@@ -593,12 +593,26 @@ def main():
         else:
             print_dual(color_text("No imaginary modes found on the sampled mesh.", 'green'), f_out)
 
-        bohr_to_angstrom = get_physical_units().Bohr
+        # phonon's internal cell/positions are in bohr (SIESTA-interface
+        # convention, calculator="siesta") for a stb-phononsCreate-sourced
+        # run, but already in native Angstrom (calculator=None) for an
+        # ML-sourced one (stb-phononsML/stb-phononsQHA -- see
+        # core/mace_phonons.py). true_bohr_to_angstrom is the real physical
+        # constant (only meaningful for the bohr-numeric/SIESTA case);
+        # internal_to_angstrom is what actually converts *this* phonon
+        # object's internal units to real Angstrom, and is 1.0 (no-op) for
+        # the ML case -- using true_bohr_to_angstrom unconditionally here
+        # was a real bug (verified: it silently over-displaced
+        # --freeze-unstable-mode's output by 1/Bohr =~1.8897x for ML-sourced
+        # data, self-masked because the same wrong factor was used to both
+        # calibrate and report the "achieved" displacement).
+        true_bohr_to_angstrom = get_physical_units().Bohr
+        internal_to_angstrom = 1.0 if has_embedded_fc else true_bohr_to_angstrom
         band_min_freq = None
         band_plots_written = []
         if args.bands:
             print(f"[INFO] Building auto-detected high-symmetry q-path for band structure ...")
-            path = build_band_path(phonon.primitive, bohr_to_angstrom, args.vacuum_gap)
+            path = build_band_path(phonon.primitive, internal_to_angstrom, args.vacuum_gap)
 
             print_dual(f"\n{color_text('[2b] BAND STRUCTURE', 'magenta')}", f_out)
             print_dual("-" * 60, f_out)
@@ -656,17 +670,42 @@ def main():
                 mod = phonon.modulation
                 probe_shift = np.linalg.norm(
                     mod.modulated_supercells[0].positions - mod.supercell.positions,
-                    axis=1).max() * bohr_to_angstrom
+                    axis=1).max() * internal_to_angstrom
                 scale = args.freeze_amplitude / probe_shift
 
                 phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
                 mod = phonon.modulation
                 achieved_shift = np.linalg.norm(
                     mod.modulated_supercells[0].positions - mod.supercell.positions,
-                    axis=1).max() * bohr_to_angstrom
+                    axis=1).max() * internal_to_angstrom
 
                 frozen_mode_filename = "frozen_mode.fdf"
-                write_siesta(frozen_mode_filename, mod.modulated_supercells[0])
+                frozen_struct = mod.modulated_supercells[0]
+                if has_embedded_fc:
+                    # write_siesta (phonopy's SIESTA writer) always tags its
+                    # output "LatticeConstant 1.0 Bohr" and writes cell/
+                    # positions verbatim -- correct only if those numbers are
+                    # already in the bohr-numeric SIESTA-interface convention.
+                    # For an ML-sourced phonon (native Angstrom), convert to
+                    # that convention first so the written file's declared
+                    # unit actually matches its numbers (same fix as
+                    # phonons_create.py's --ml-prerelax for the same
+                    # mismatch) -- otherwise every downstream SIESTA-aware
+                    # reader (including read_siesta itself) would shrink the
+                    # whole cell by ~1.8897x on read-back. Reassigning only
+                    # .cell is enough and *correct*: PhonopyAtoms.positions is
+                    # a derived getter (scaled_positions @ cell, verified by
+                    # reading the source), so scaled/fractional positions --
+                    # the real invariant here -- are left untouched and the
+                    # Cartesian getter output rescales for free. Also dividing
+                    # .positions here (an earlier draft of this fix did) would
+                    # read back the *already-rescaled* getter output and
+                    # divide it a second time, silently corrupting the
+                    # fractional coordinates -- caught only by independently
+                    # re-deriving the written file's geometry from scratch.
+                    frozen_struct = frozen_struct.copy()
+                    frozen_struct.cell = np.array(frozen_struct.cell) / true_bohr_to_angstrom
+                write_siesta(frozen_mode_filename, frozen_struct)
 
                 print_dual(f"Softest mode      : q = {np.array2string(q_point, precision=4)}, "
                             f"band {band_idx}, {min_freq:.4f} THz", f_out)
@@ -775,8 +814,24 @@ def main():
                     f.write(f"{t:10.2f} {row}\n")
             print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, disp_dat_filename)}'", 'cyan'))
 
+            # write_cif's cell parameter is written into the CIF's
+            # _cell_length_* header verbatim -- CIF has no unit tag (always
+            # real Ang by spec), so it needs phonon.primitive.cell already
+            # in real Angstrom. That's already true for the ML path
+            # (internal_to_angstrom == 1.0); for the SIESTA-bohr-numeric
+            # path it isn't (verified: writes 9.22662 for a structure whose
+            # real cell length is 4.88252 Ang -- the same bohr-numeric raw
+            # value as everywhere else in this workflow). The ADP tensor
+            # values themselves (U_11 etc.) are unaffected either way --
+            # verified identical with/without this fix -- only the header's
+            # cell size was wrong.
+            cif_cell = phonon.primitive
+            if not has_embedded_fc:
+                cif_cell = cif_cell.copy()
+                cif_cell.cell = np.array(cif_cell.cell) * true_bohr_to_angstrom
+
             cif_filename = "tdispmat.cif"
-            tdm.write_cif(phonon.primitive, len(tdm.temperatures) - 1, filename=cif_filename)
+            tdm.write_cif(cif_cell, len(tdm.temperatures) - 1, filename=cif_filename)
             print(color_text(f" -> Saved ADP CIF (@ {tdm.temperatures[-1]:.1f} K) as "
                               f"'{os.path.join(phonon_dir, cif_filename)}'", 'cyan'))
 

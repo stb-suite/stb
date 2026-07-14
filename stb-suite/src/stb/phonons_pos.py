@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.10.0"
+VERSION = "1.11.0"
 
 import os
 import re
@@ -17,21 +17,31 @@ import subprocess
 import argparse
 from time import sleep
 from datetime import datetime
+import numpy as np
+from ase.cell import Cell
+from ase.dft.kpoints import parse_path_string
 try:
     import phonopy
+    from phonopy.interface.siesta import get_physical_units
 except ImportError:
     print("\n[ERROR] Phonopy is not installed. Please install it using: pip install phonopy")
     sys.exit(1)
 
 # Cores ANSI para terminal
 from stb.core.cli import COLORS, color_text, show_intro
+from stb.core import kspace
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 
 REPORT_FILE = "phonon_properties.txt"
 # Same palette as elastic_analysis.py's PLOT_COLORS (first 3 entries), kept
-# here as its own short list since phonons only ever plots these 3 series.
+# here as its own short list since the thermal-properties plot always has
+# exactly these 3 series.
 PLOT_COLORS = ['#2255cc', '#cc5522', '#22aa55']
+# Full palette (verbatim from elastic_analysis.py::PLOT_COLORS) for plots
+# whose series count isn't fixed (DOS/PDOS/thermal-displacements by species).
+SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaaa',
+                  '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
 
 
 def detect_system_label(phonon_dir):
@@ -140,6 +150,259 @@ def write_thermal_plots(plot_dir, temperatures, free_energy, entropy, heat_capac
     return written
 
 
+def build_band_path(primitive, bohr_to_angstrom, vacuum_gap):
+    """Auto-detects a high-symmetry q-path for the primitive cell using the
+    same ASE Bravais-lattice machinery as stb-kpath (core.kspace +
+    ase.cell.Cell.bandpath -- see kpath.py::get_kpath_from_structure)
+    instead of Phonopy's seekpath-based auto_band_structure, avoiding a new
+    optional dependency (ase is already a core requirement of this suite).
+
+    Returns (kpoints_dict, path_segments, bravais_name) or None if every
+    axis is vacuum-padded (0D -- a q-path isn't physically meaningful).
+    `primitive` is a PhonopyAtoms (its .cell/.scaled_positions are in the
+    same internal bohr convention as everywhere else in this tool, hence
+    bohr_to_angstrom).
+    """
+    lattice_ang = np.array(primitive.cell) * bohr_to_angstrom
+    frac_coords = np.array(primitive.scaled_positions)
+    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, vacuum_gap)
+    if all(vacuum_axes):
+        return None
+
+    pbc = tuple(not v for v in vacuum_axes)
+    cell = Cell(lattice_ang)
+    bravais = cell.get_bravais_lattice(pbc=pbc)
+    bp = cell.bandpath(pbc=pbc, npoints=0)
+
+    kpoints_dict = {('GAMMA' if label == 'G' else label): coords
+                    for label, coords in bp.special_points.items()}
+    path_segments = [[('GAMMA' if label == 'G' else label) for label in segment]
+                      for segment in parse_path_string(bp.path)]
+    return kpoints_dict, path_segments, f"{bravais.longname} ({bravais.name})"
+
+
+def band_path_to_phonopy_format(kpoints_dict, path_segments, npoints):
+    """Converts an ASE-style path (kpoints_dict + list of unbroken label
+    chains) into the (bands, labels, path_connections) triplet
+    Phonopy.run_band_structure expects: one elementary 2-point segment per
+    entry, interpolated with linspace, with labels/path_connections built
+    the same way phonopy.phonon.band_structure._get_labels does internally
+    for get_band_qpoints_by_seekpath/auto_band_structure -- reimplemented
+    locally (rather than importing that private name) since it's ~15 lines:
+    walk the consecutive label pairs, a "jump" (pair's end != next pair's
+    start) contributes both its labels and marks path_connections False,
+    a continuous pair contributes only its start label and marks True.
+    """
+    pairs = []
+    for segment in path_segments:
+        pairs.extend(zip(segment[:-1], segment[1:]))
+
+    bands = []
+    for start, end in pairs:
+        q_s = np.array(kpoints_dict[start])
+        q_e = np.array(kpoints_dict[end])
+        bands.append(np.array([q_s + (q_e - q_s) / (npoints - 1) * i
+                                for i in range(npoints)]))
+
+    path_connections = []
+    labels = []
+    for i, (start, end) in enumerate(pairs[:-1]):
+        if end != pairs[i + 1][0]:
+            path_connections.append(False)
+            labels += [start, end]
+        else:
+            path_connections.append(True)
+            labels.append(start)
+    path_connections.append(False)
+    labels += list(pairs[-1])
+
+    return bands, labels, path_connections
+
+
+def band_tick_positions(distances, labels, path_connections):
+    """(position, label) pairs for gnuplot xtics: walks the same
+    labels/path_connections structure band_path_to_phonopy_format builds,
+    taking each segment's start (always) and end (only when not connected
+    to the next segment, i.e. a jump, or the final segment) -- a connected
+    segment's end is the next segment's start, already covered there.
+    """
+    ticks = []
+    li = 0
+    for i, dist in enumerate(distances):
+        ticks.append((dist[0], labels[li]))
+        li += 1
+        if i == len(distances) - 1 or not path_connections[i]:
+            ticks.append((dist[-1], labels[li]))
+            li += 1
+    return ticks
+
+
+def pretty_label(label):
+    """GAMMA -> the Greek letter, for display in reports/plot tick labels."""
+    return "Γ" if label == "GAMMA" else label
+
+
+def write_band_plots(plot_dir, bs, labels, path_connections, f_out):
+    """bands.dat (distance + one column per band, blank line between
+    disconnected segments so gnuplot doesn't join them) + bands.gplot
+    (all bands overlaid, no per-band legend -- there can be dozens/hundreds
+    -- with xtics at the high-symmetry points). Reuses bs.frequencies/
+    .distances already computed by run_band_structure -- no recomputation.
+    """
+    os.makedirs(plot_dir, exist_ok=True)
+    n_bands = bs.frequencies[0].shape[1]
+
+    dat_path = os.path.join(plot_dir, "bands.dat")
+    with open(dat_path, "w") as f:
+        f.write("# stb-phononsPos -- phonon band structure\n")
+        f.write(f"# columns: 1=distance(1/Ang) 2..{n_bands + 1}=frequency per band (THz)\n")
+        for seg_idx, (dist, freqs) in enumerate(zip(bs.distances, bs.frequencies)):
+            # Only break the gnuplot line on an actual jump (path_connections
+            # False for the *previous* segment) -- a blank line on every
+            # segment boundary would visually disconnect bands that are
+            # physically continuous.
+            if seg_idx > 0 and not path_connections[seg_idx - 1]:
+                f.write("\n\n")
+            for d, row in zip(dist, freqs):
+                f.write(f"{d:12.6f} " + " ".join(f"{v:12.6f}" for v in row) + "\n")
+
+    ticks = band_tick_positions(bs.distances, labels, path_connections)
+    xtics = ", ".join(f'"{pretty_label(l)}" {d:.6f}' for d, l in ticks)
+
+    gplot_path = os.path.join(plot_dir, "bands.gplot")
+    with open(gplot_path, "w") as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-phononsPos\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 8,6\n',
+            'set output "bands.pdf"\n\n',
+            'set title "Phonon Band Structure"\n',
+            'set ylabel "Frequency (THz)"\n',
+            'set grid xtics\n',
+            'unset key\n',
+            f'set xtics ({xtics})\n',
+            'set xrange [*:*]\n',
+            f'plot for [i=2:{n_bands + 1}] "bands.dat" using 1:i with lines '
+            f'lc rgb "{PLOT_COLORS[0]}"\n',
+        ])
+
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    return [("bands", dat_path, gplot_path)]
+
+
+def write_dos_plot(plot_dir, frequency_points, dos, f_out):
+    """dos.dat + dos.gplot for the total phonon DOS (phonon.total_dos, already
+    computed by run_total_dos -- no recomputation)."""
+    os.makedirs(plot_dir, exist_ok=True)
+    dat_path = os.path.join(plot_dir, "dos.dat")
+    with open(dat_path, "w") as f:
+        f.write("# stb-phononsPos -- total phonon density of states\n")
+        f.write("# columns: 1=frequency(THz) 2=DOS(states/THz)\n")
+        for freq, d in zip(frequency_points, dos):
+            f.write(f"{freq:12.6f} {d:14.6f}\n")
+
+    gplot_path = os.path.join(plot_dir, "dos.gplot")
+    with open(gplot_path, "w") as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-phononsPos\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            'set output "dos.pdf"\n\n',
+            'set title "Total Phonon Density of States"\n',
+            'set xlabel "Frequency (THz)"\n',
+            'set ylabel "DOS (states/THz)"\n',
+            'set grid\n',
+            f'plot "dos.dat" using 1:2 with lines lw 2 lc rgb "{PLOT_COLORS[0]}" title "Total DOS"\n',
+        ])
+
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    return [("dos", dat_path, gplot_path)]
+
+
+def write_pdos_plot(plot_dir, frequency_points, species_pdos, f_out):
+    """pdos.dat (one column per species) + pdos.gplot (one curve per species,
+    summed per species rather than per individual atom for readability --
+    an atom-by-atom legend would be unreadable for any cell with more than a
+    handful of atoms)."""
+    os.makedirs(plot_dir, exist_ok=True)
+    species = list(species_pdos.keys())
+
+    dat_path = os.path.join(plot_dir, "pdos.dat")
+    with open(dat_path, "w") as f:
+        f.write("# stb-phononsPos -- phonon DOS projected per chemical species\n")
+        f.write("# columns: 1=frequency(THz) "
+                + " ".join(f"{i + 2}={sp}" for i, sp in enumerate(species)) + "\n")
+        for i, freq in enumerate(frequency_points):
+            row = " ".join(f"{species_pdos[sp][i]:14.6f}" for sp in species)
+            f.write(f"{freq:12.6f} {row}\n")
+
+    gplot_path = os.path.join(plot_dir, "pdos.gplot")
+    plot_lines = ", \\\n     ".join(
+        f'"pdos.dat" using 1:{i + 2} with lines lw 2 '
+        f'lc rgb "{SPECIES_COLORS[i % len(SPECIES_COLORS)]}" title "{sp}"'
+        for i, sp in enumerate(species))
+    with open(gplot_path, "w") as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-phononsPos\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            'set output "pdos.pdf"\n\n',
+            'set title "Phonon DOS by Species"\n',
+            'set xlabel "Frequency (THz)"\n',
+            'set ylabel "DOS (states/THz)"\n',
+            'set grid\n',
+            'set key top right\n',
+            f'plot {plot_lines}\n',
+        ])
+
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    return [("pdos", dat_path, gplot_path)]
+
+
+def write_thermal_displacement_plot(plot_dir, temperatures, species_uiso, f_out):
+    """thermal_displacements.dat + .gplot (in plot_dir): isotropic U_iso vs.
+    T, averaged per species for readability (the phonon_dir-root
+    thermal_displacements.dat written by the caller keeps full per-atom
+    fidelity; this is the plot-friendly aggregate, same asymmetry as PDOS)."""
+    os.makedirs(plot_dir, exist_ok=True)
+    species = list(species_uiso.keys())
+
+    dat_path = os.path.join(plot_dir, "thermal_displacements.dat")
+    with open(dat_path, "w") as f:
+        f.write("# stb-phononsPos -- isotropic mean-square displacement (U_iso) by species\n")
+        f.write("# columns: 1=T(K) "
+                + " ".join(f"{i + 2}={sp}(Ang^2)" for i, sp in enumerate(species)) + "\n")
+        for i, t in enumerate(temperatures):
+            row = " ".join(f"{species_uiso[sp][i]:14.6f}" for sp in species)
+            f.write(f"{t:10.2f} {row}\n")
+
+    gplot_path = os.path.join(plot_dir, "thermal_displacements.gplot")
+    plot_lines = ", \\\n     ".join(
+        f'"thermal_displacements.dat" using 1:{i + 2} with lines lw 2 '
+        f'lc rgb "{SPECIES_COLORS[i % len(SPECIES_COLORS)]}" title "{sp}"'
+        for i, sp in enumerate(species))
+    with open(gplot_path, "w") as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-phononsPos\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            'set output "thermal_displacements.pdf"\n\n',
+            'set title "Isotropic Thermal Displacement (U_iso) by Species"\n',
+            'set xlabel "Temperature (K)"\n',
+            'set ylabel "U_iso (Ang^2)"\n',
+            'set grid\n',
+            'set key top left\n',
+            f'plot {plot_lines}\n',
+        ])
+
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    return [("thermal_displacements", dat_path, gplot_path)]
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Post-processing for SIESTA phonon calculations using Phonopy.",
@@ -162,6 +425,22 @@ def main():
     parser.add_argument("--plot-dir", type=str, default="phonon_plots",
                         help="Directory (inside the phonon directory) for gnuplot .dat/.gplot "
                              "output (default: phonon_plots)")
+    parser.add_argument("--bands", action="store_true",
+                        help="Compute and plot the phonon band structure along an "
+                             "auto-detected high-symmetry path")
+    parser.add_argument("--band-points", type=int, default=101,
+                        help="Number of q-points per band-structure path segment (default: 101)")
+    parser.add_argument("--vacuum-gap", type=float, default=10.0,
+                        help="Minimum gap (Ang) along an axis to consider it vacuum-padded, "
+                             "for --bands' periodicity detection (default: 10.0)")
+    parser.add_argument("--dos", action="store_true",
+                        help="Compute and plot the total phonon density of states")
+    parser.add_argument("--pdos", action="store_true",
+                        help="Compute and plot the phonon density of states projected per "
+                             "chemical species")
+    parser.add_argument("--thermal-displacements", action="store_true",
+                        help="Compute per-atom thermal displacement (Debye-Waller) tensors "
+                             "and write a tdispmat.cif")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsPos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -215,6 +494,13 @@ def main():
         print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
         print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
         print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
+        extra_analyses = [name for flag, name in [
+            (args.bands, "band structure"),
+            (args.dos, "total DOS"),
+            (args.pdos, "projected DOS"),
+            (args.thermal_displacements, "thermal displacements"),
+        ] if flag]
+        print_dual(f"Extra analyses    : {', '.join(extra_analyses) if extra_analyses else 'none'}", f_out)
 
         # 2. Extração de Forças (Criando FORCE_SETS)
         print_dual(f"\n{color_text('[1] FORCE EXTRACTION', 'magenta')}", f_out)
@@ -278,6 +564,51 @@ def main():
         else:
             print_dual(color_text("No imaginary modes found on the sampled mesh.", 'green'), f_out)
 
+        bohr_to_angstrom = get_physical_units().Bohr
+        band_min_freq = None
+        band_plots_written = []
+        if args.bands:
+            print(f"[INFO] Building auto-detected high-symmetry q-path for band structure ...")
+            path = build_band_path(phonon.primitive, bohr_to_angstrom, args.vacuum_gap)
+
+            print_dual(f"\n{color_text('[2b] BAND STRUCTURE', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            if path is None:
+                print_dual(color_text(
+                    "Skipped: every axis is vacuum-padded (0D/isolated system) -- a "
+                    "q-path isn't physically meaningful here.", 'yellow'), f_out)
+            else:
+                kpoints_dict, path_segments, bravais_name = path
+                print_dual(f"Bravais lattice   : {bravais_name}", f_out)
+                path_str = " | ".join("-".join(pretty_label(l) for l in seg) for seg in path_segments)
+                print_dual(f"Path              : {path_str}", f_out)
+
+                bands, band_labels, path_connections = band_path_to_phonopy_format(
+                    kpoints_dict, path_segments, args.band_points)
+                phonon.run_band_structure(bands, with_group_velocities=True,
+                                           path_connections=path_connections,
+                                           labels=band_labels, is_legacy_plot=False)
+                bs = phonon.band_structure
+
+                band_min_freq = np.concatenate(bs.frequencies).min()
+                print_dual(f"Minimum band-path frequency : {band_min_freq:.4f} THz", f_out)
+                if band_min_freq < 0:
+                    print_dual(color_text(
+                        "[WARNING] Negative (imaginary) frequency found along the band path -- "
+                        "this can catch zone-boundary/high-symmetry instabilities the mesh "
+                        "(sampled only at its own grid points) missed.", 'red'), f_out)
+                else:
+                    print_dual(color_text("No imaginary modes found along the band path.", 'green'), f_out)
+
+                band_plot = phonon.plot_band_structure()
+                band_plot.savefig("phonon_bands.png", dpi=300)
+                print(color_text(f" -> Saved plot as '{os.path.join(phonon_dir, 'phonon_bands.png')}'", 'cyan'))
+                phonon.write_yaml_band_structure(filename="band.yaml")
+                print(color_text(f" -> Saved band data as '{os.path.join(phonon_dir, 'band.yaml')}'", 'cyan'))
+
+                band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
+                                                        path_connections, f_out)
+
         phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
 
         # 4. Salvando Gráficos e Dados
@@ -312,18 +643,111 @@ def main():
 
         plots_written = write_thermal_plots(args.plot_dir, temperatures, free_energy,
                                              entropy, heat_capacity, f_out)
+        plots_written += band_plots_written
+
+        if args.dos:
+            print(f"[INFO] Computing total DOS (reusing the thermal-properties mesh) ...")
+            phonon.run_total_dos()
+
+        cif_filename = None
+        disp_dat_filename = None
+        tdm = None
+        if args.pdos or args.thermal_displacements:
+            print(f"[INFO] Re-running a denser, symmetry-unreduced mesh with eigenvectors "
+                  f"for {'PDOS' if args.pdos else ''}"
+                  f"{' + ' if args.pdos and args.thermal_displacements else ''}"
+                  f"{'thermal displacements' if args.thermal_displacements else ''} ...")
+            phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
+            if args.pdos:
+                phonon.run_projected_dos()
+            if args.thermal_displacements:
+                phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+                tdm = phonon.thermal_displacement_matrices
+
+        symbols = phonon.primitive.symbols
+        species = list(dict.fromkeys(symbols))
+
+        if args.dos or args.pdos:
+            print_dual(f"\n{color_text('[3b] DENSITY OF STATES', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            species_pdos = None
+            if args.dos:
+                td = phonon.total_dos
+                peak_idx = int(np.argmax(td.dos))
+                print_dual(f"Total DOS peak    : {td.frequency_points[peak_idx]:.4f} THz", f_out)
+                dos_plots = write_dos_plot(args.plot_dir, td.frequency_points, td.dos, f_out)
+                plots_written += dos_plots
+            if args.pdos:
+                pd = phonon.projected_dos
+                species_pdos = {}
+                for sp in species:
+                    idx = [i for i, s in enumerate(symbols) if s == sp]
+                    species_pdos[sp] = pd.projected_dos[idx].sum(axis=0)
+                for sp in species:
+                    peak_idx = int(np.argmax(species_pdos[sp]))
+                    print_dual(f"  {sp} PDOS peak    : {pd.frequency_points[peak_idx]:.4f} THz", f_out)
+                pdos_plots = write_pdos_plot(args.plot_dir, pd.frequency_points, species_pdos, f_out)
+                plots_written += pdos_plots
+
+        if args.thermal_displacements:
+            matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
+            u_iso = np.trace(matrices, axis1=2, axis2=3) / 3  # (n_temps, n_atoms)
+            atom_labels = []
+            counts = {}
+            for s in symbols:
+                counts[s] = counts.get(s, 0) + 1
+                atom_labels.append(f"{s}{counts[s]}")
+
+            disp_dat_filename = "thermal_displacements.dat"
+            with open(disp_dat_filename, "w") as f:
+                f.write("# stb-phononsPos -- isotropic thermal displacement U_iso = trace(ADP)/3, per atom\n")
+                f.write("# columns: 1=T(K) "
+                        + " ".join(f"{i + 2}={lbl}(Ang^2)" for i, lbl in enumerate(atom_labels)) + "\n")
+                for ti, t in enumerate(tdm.temperatures):
+                    row = " ".join(f"{u_iso[ti, ai]:14.6f}" for ai in range(len(atom_labels)))
+                    f.write(f"{t:10.2f} {row}\n")
+            print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, disp_dat_filename)}'", 'cyan'))
+
+            cif_filename = "tdispmat.cif"
+            tdm.write_cif(phonon.primitive, len(tdm.temperatures) - 1, filename=cif_filename)
+            print(color_text(f" -> Saved ADP CIF (@ {tdm.temperatures[-1]:.1f} K) as "
+                              f"'{os.path.join(phonon_dir, cif_filename)}'", 'cyan'))
+
+            species_uiso = {}
+            for sp in species:
+                idx = [i for i, s in enumerate(symbols) if s == sp]
+                species_uiso[sp] = u_iso[:, idx].mean(axis=1)
+
+            print_dual(f"\n{color_text('[3c] THERMAL DISPLACEMENTS', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            print_dual(f"ADP CIF (@ {tdm.temperatures[-1]:.1f} K) : {cif_filename}", f_out)
+            for sp in species:
+                print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
+
+            thermal_disp_plots = write_thermal_displacement_plot(args.plot_dir, tdm.temperatures,
+                                                                    species_uiso, f_out)
+            plots_written += thermal_disp_plots
 
         # Retorna ao diretório original
         os.chdir(original_dir)
 
         print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
-        stability_verdict = ("UNSTABLE (imaginary modes present)" if min_freq < 0
-                              else "stable on the sampled mesh")
+        overall_min_freq = min(min_freq, band_min_freq) if band_min_freq is not None else min_freq
+        stability_verdict = ("UNSTABLE (imaginary modes present)" if overall_min_freq < 0
+                              else "stable on the sampled mesh"
+                                   + (" and band path" if band_min_freq is not None else ""))
         print_dual(f"Dynamical stability : {stability_verdict}", f_out)
         print_dual(f"Report              : {report_path}", f_out)
+        extra_files = ""
+        if args.bands and band_min_freq is not None:
+            extra_files += (f", {os.path.join(phonon_dir, 'phonon_bands.png')}, "
+                             f"{os.path.join(phonon_dir, 'band.yaml')}")
+        if cif_filename is not None:
+            extra_files += (f", {os.path.join(phonon_dir, disp_dat_filename)}, "
+                             f"{os.path.join(phonon_dir, cif_filename)}")
         print_dual(f"Files               : {os.path.join(phonon_dir, plot_filename)}, "
-                    f"{os.path.join(phonon_dir, dat_filename)}, "
+                    f"{os.path.join(phonon_dir, dat_filename)}{extra_files}, "
                     f"{os.path.join(phonon_dir, args.plot_dir)}/ "
                     f"({len(plots_written)} .dat/.gplot pairs)", f_out)
 

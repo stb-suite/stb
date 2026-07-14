@@ -277,6 +277,67 @@ def run_phonon_ml() -> None:
     run_tool("stb-phononsML", args)
 
 
+def run_phonon_qha() -> None:
+    """Interface for the ML-only QHA tool (phonons_qha.py)"""
+    print("\n" + "="*60)
+    print(color_text("QUASI-HARMONIC APPROXIMATION VIA MACE-MP-0 (NO SIESTA)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Runs the full ML phonon pipeline at several isotropically-scaled volumes and fits "
+        "an equation of state. Heuristic preview, not a DFT replacement.", 'yellow'))
+    print()
+
+    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    dim_input = get_input("\nSupercell dimensions (e.g. '2 2 2') [default: 2 2 2]: ").strip()
+    if not dim_input:
+        dim_x, dim_y, dim_z = 2, 2, 2
+    else:
+        try:
+            dims = [int(x) for x in dim_input.split()]
+            if len(dims) == 3:
+                dim_x, dim_y, dim_z = dims
+            else:
+                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
+                dim_x, dim_y, dim_z = 2, 2, 2
+        except ValueError:
+            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
+            dim_x, dim_y, dim_z = 2, 2, 2
+
+    n_points = get_int_input("\nNumber of volume points, >= 4 [default: 5]: ", 5)
+    while n_points < 4:
+        print(color_text("Need at least 4 points to fit an equation of state.", 'red'))
+        n_points = get_int_input("Number of volume points, >= 4 [default: 5]: ", 5)
+
+    strain_range = get_float_input(
+        "\nVolume range around equilibrium, +/- % [default: 3.0]: ", 3.0)
+
+    model = get_input("\nMACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
+    if model not in ("small", "medium", "large"):
+        model = "small"
+
+    output_dir = get_input("\nOutput directory [default: phonon_qha_runs]: ").strip()
+    if not output_dir:
+        output_dir = "phonon_qha_runs"
+
+    args = [
+        "-s", structure_file,
+        "-dim", str(dim_x), str(dim_y), str(dim_z),
+        "--n-points", str(n_points),
+        "--strain-min", str(-abs(strain_range)),
+        "--strain-max", str(abs(strain_range)),
+        "--model", model,
+        "-o", output_dir,
+        "--no-intro",
+    ]
+
+    print(color_text("\nRunning QHA via MACE-MP-0 (this scans several volumes -- can take a "
+                      "while)...", 'green'))
+    run_tool("stb-phononsQHA", args)
+
+
 def run_cohesive_setup() -> None:
     """Interface for the Cohesive Energy Setup (cohesive_energy.py)"""
     print("\n" + "="*60)
@@ -3510,6 +3571,10 @@ WORKFLOW_TOOLS = {
                 'description': "Fast phonon force constants via MACE-MP-0 -- no SIESTA needed. "
                                 "Feed the output straight into Stage 2's analysis.",
                 'func': run_phonon_ml},
+            4: {'title': "Stage 4 - ML QHA (stb-phononsQHA)",
+                'description': "Quasi-harmonic approximation (thermal expansion, bulk modulus "
+                                "vs. T) via MACE-MP-0 only -- no SIESTA needed.",
+                'func': run_phonon_qha},
         }},
     5: {'title': "Convergence Tests",
         'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",

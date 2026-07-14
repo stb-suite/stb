@@ -12,11 +12,8 @@ import os
 import sys
 import argparse
 import numpy as np
-from ase import Atoms
 from pymatgen.io.ase import AseAtomsAdaptor
-from phonopy import Phonopy
-from phonopy.structure.atoms import PhonopyAtoms
-from stb.core import structure_io, kspace, mace_relax
+from stb.core import structure_io, kspace, mace_relax, mace_phonons
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.deps import require_mace
 
@@ -164,53 +161,38 @@ def main():
 
     f0 = np.abs(atoms.get_forces()).max()
     print(f"[INFO] Residual force on input structure: {f0:.4f} eV/Ang")
-
-    if args.relax:
-        print(f"[INFO] Relaxing positions (fmax={args.fmax}) before generating displacements ...")
-        converged, steps_used = mace_relax.relax(
-            atoms, calc, cell_mask=None, fmax=args.fmax, max_steps=200)
-        f1 = np.abs(atoms.get_forces()).max()
-        print(f"[INFO] After relax: max|F| = {f1:.4f} eV/Ang "
-              f"({'converged' if converged else 'hit step cap, not fully converged'}, "
-              f"{steps_used} steps)")
-    else:
+    if not args.relax:
         print(color_text(
             "[WARNING] --no-relax: generating displacements from the structure as given. "
             "If it isn't already at a MACE-relaxed minimum, expect spurious imaginary "
             "modes downstream.", 'yellow'))
+    else:
+        print(f"[INFO] Relaxing positions (fmax={args.fmax}) before generating displacements ...")
 
-    # 5. Geração dos deslocamentos (Phonopy nativo em Å -- calculator=None é
-    # exatamente a convenção do ASE/MACE, então generate_displacements usa
-    # --distance direto, sem o fator bohr->Å necessário no caminho SIESTA)
+    # 5. Deslocamentos (core.mace_phonons -- reaproveitado também pelo
+    # stb-phononsQHA)
     print(f"\n[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
-    unitcell = PhonopyAtoms(numbers=atoms.numbers, positions=atoms.get_positions(),
-                             cell=atoms.get_cell())
-    supercell_matrix = [
-        [args.dim[0], 0, 0],
-        [0, args.dim[1], 0],
-        [0, 0, args.dim[2]]
-    ]
-    phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix)
-    phonon.generate_displacements(distance=args.distance)
-    supercells = phonon.supercells_with_displacements
+    phonon, _, relax_info = mace_phonons.generate_ml_displacements(
+        atoms, args.dim, args.distance, calc, relax=args.relax, fmax=args.fmax)
+
+    if relax_info is not None:
+        _, f1, converged, steps_used = relax_info
+        print(f"[INFO] After relax: max|F| = {f1:.4f} eV/Ang "
+              f"({'converged' if converged else 'hit step cap, not fully converged'}, "
+              f"{steps_used} steps)")
 
     print_symmetry_table(phonon)
 
-    # 6. Forças via MACE para cada supercélula deslocada
-    n_disp = len(supercells)
+    # 6. Forças via MACE para cada supercélula deslocada + constantes de força
+    n_disp = len(phonon.supercells_with_displacements)
     print(f"[INFO] Computing MACE forces for {n_disp} displaced supercells ...")
-    force_sets = []
     report_every = max(1, n_disp // 10)
-    for i, scell in enumerate(supercells):
-        disp_atoms = Atoms(numbers=scell.numbers, positions=scell.positions,
-                            cell=scell.cell, pbc=True)
-        disp_atoms.calc = calc
-        force_sets.append(disp_atoms.get_forces())
-        if (i + 1) % report_every == 0 or (i + 1) == n_disp:
-            print(f"  ... {i + 1}/{n_disp}")
 
-    phonon.forces = force_sets
-    phonon.produce_force_constants()
+    def _progress(i, n):
+        if i % report_every == 0 or i == n:
+            print(f"  ... {i}/{n}")
+
+    mace_phonons.compute_force_constants(phonon, calc, progress_callback=_progress)
 
     # 7. Salvar phonopy_disp.yaml já com as constantes de força embutidas --
     # stb-phononsPos detecta isso e pula a extração de força via SIESTA.

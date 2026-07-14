@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 
 import os
 import re
@@ -15,6 +15,7 @@ import glob
 import shutil
 import subprocess
 import argparse
+import yaml
 from time import sleep
 from datetime import datetime
 import numpy as np
@@ -477,14 +478,25 @@ def main():
         print(color_text(f"[ERROR] '{yaml_file}' not found. Did you run the displacement generator?", 'red'))
         sys.exit(1)
 
-    if args.label is not None:
-        system_label = args.label
-        label_source = "manual (-l/--label)"
-    else:
-        system_label = detect_system_label(phonon_dir) or "siesta"
-        label_source = "auto-detected from calc.fdf"
-        print(f"[INFO] Auto-detected SystemLabel '{system_label}' from calc.fdf "
-              "(pass -l/--label to override).")
+    # A yaml from stb-phononsML already has force constants embedded
+    # (phonon.save(..., settings={'force_constants': True})) -- no SIESTA
+    # .FA/FORCE_SETS/SystemLabel involved in that case at all. Peeked with a
+    # plain yaml load (not phonopy.load, which needs a chdir first) purely
+    # to decide which branch to take.
+    with open(yaml_file) as f:
+        has_embedded_fc = "force_constants" in (yaml.safe_load(f) or {})
+
+    system_label = None
+    label_source = None
+    if not has_embedded_fc:
+        if args.label is not None:
+            system_label = args.label
+            label_source = "manual (-l/--label)"
+        else:
+            system_label = detect_system_label(phonon_dir) or "siesta"
+            label_source = "auto-detected from calc.fdf"
+            print(f"[INFO] Auto-detected SystemLabel '{system_label}' from calc.fdf "
+                  "(pass -l/--label to override).")
 
     # Everything below is wrapped in the report file -- opened as a plain
     # `with` so it's flushed/closed correctly even on an early sys.exit(1)
@@ -498,7 +510,10 @@ def main():
         print_dual("-" * 60, f_out)
         print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
         print_dual(f"Phonon directory  : {phonon_dir}", f_out)
-        print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
+        if has_embedded_fc:
+            print_dual("SystemLabel       : N/A (ML-computed force constants)", f_out)
+        else:
+            print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
         print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
         print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
         extra_analyses = [name for flag, name in [
@@ -513,31 +528,37 @@ def main():
         # 2. Extração de Forças (Criando FORCE_SETS)
         print_dual(f"\n{color_text('[1] FORCE EXTRACTION', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
-        fa_files_abs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*", f"{system_label}.FA")))
 
-        if not fa_files_abs:
-            print_dual(color_text(f"[ERROR] No {system_label}.FA files found in {phonon_dir}/disp-*", 'red'), f_out)
-            print_dual(color_text("Make sure SIESTA calculations finished successfully.", 'yellow'), f_out)
-            sys.exit(1)
+        if has_embedded_fc:
+            print_dual("Force constants already embedded in phonopy_disp.yaml "
+                        "(ML-computed, e.g. via stb-phononsML) -- skipping SIESTA "
+                        ".FA/FORCE_SETS extraction.", f_out)
+        else:
+            fa_files_abs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*", f"{system_label}.FA")))
 
-        # Pegamos os caminhos relativos ao phonon_dir para rodar o comando lá dentro
-        fa_files_rel = [os.path.relpath(f, phonon_dir) for f in fa_files_abs]
-        print_dual(f"Force files found : {len(fa_files_rel)} (label '{system_label}')", f_out)
+            if not fa_files_abs:
+                print_dual(color_text(f"[ERROR] No {system_label}.FA files found in {phonon_dir}/disp-*", 'red'), f_out)
+                print_dual(color_text("Make sure SIESTA calculations finished successfully.", 'yellow'), f_out)
+                sys.exit(1)
 
-        # phonopy >=4 moved the FORCE_SETS-creation flags ("-f"/"--siesta")
-        # out of the main `phonopy` CLI into a separate `phonopy-init`
-        # command; older installs (<4) only have `phonopy`. Prefer the new
-        # command when present, fall back otherwise.
-        force_sets_bin = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
-        cmd = [force_sets_bin, "--siesta", "-f"] + fa_files_rel
+            # Pegamos os caminhos relativos ao phonon_dir para rodar o comando lá dentro
+            fa_files_rel = [os.path.relpath(f, phonon_dir) for f in fa_files_abs]
+            print_dual(f"Force files found : {len(fa_files_rel)} (label '{system_label}')", f_out)
 
-        try:
-            # Roda o comando de extração de forças DENTRO da pasta phonon_runs
-            subprocess.check_call(cmd, cwd=phonon_dir, stdout=subprocess.DEVNULL)
-            print_dual(color_text("FORCE_SETS       : generated successfully", 'green'), f_out)
-        except subprocess.CalledProcessError as e:
-            print_dual(color_text(f"[ERROR] Failed to generate FORCE_SETS. Phonopy error: {e}", 'red'), f_out)
-            sys.exit(1)
+            # phonopy >=4 moved the FORCE_SETS-creation flags ("-f"/"--siesta")
+            # out of the main `phonopy` CLI into a separate `phonopy-init`
+            # command; older installs (<4) only have `phonopy`. Prefer the new
+            # command when present, fall back otherwise.
+            force_sets_bin = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
+            cmd = [force_sets_bin, "--siesta", "-f"] + fa_files_rel
+
+            try:
+                # Roda o comando de extração de forças DENTRO da pasta phonon_runs
+                subprocess.check_call(cmd, cwd=phonon_dir, stdout=subprocess.DEVNULL)
+                print_dual(color_text("FORCE_SETS       : generated successfully", 'green'), f_out)
+            except subprocess.CalledProcessError as e:
+                print_dual(color_text(f"[ERROR] Failed to generate FORCE_SETS. Phonopy error: {e}", 'red'), f_out)
+                sys.exit(1)
 
         # 3. Propriedades Térmicas usando a API Python do Phonopy
         print(f"\n[INFO] Initializing Phonopy API and loading FORCE_SETS ...")

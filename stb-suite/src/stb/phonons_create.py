@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "1.10.0"
 
 import os
 import sys
@@ -15,11 +15,13 @@ import argparse
 from time import sleep
 import glob
 import numpy as np
+from ase import Atoms
 from phonopy import Phonopy
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
-from stb.core import kspace
+from stb.core import kspace, mace_relax
+from stb.core.deps import require_mace
 
 def get_required_pseudos(symbols: list, pseudo_dir: str):
     """
@@ -98,6 +100,23 @@ def main():
                         help="Minimum gap (Ang) along an axis to consider it vacuum-padded, "
                              "for the supercell-dimension advisory (default: 10.0)")
 
+    parser.add_argument("--ml-prerelax", action="store_true",
+                        help="Optional pre-flight check (opt-in): compute the residual force "
+                             "on the input structure with the MACE-MP-0 foundation potential, "
+                             "and if it's large, run a quick ML relax for reference. An "
+                             "unrelaxed reference structure is a common cause of spurious "
+                             "imaginary phonon modes. Diagnostic only -- this run still "
+                             "generates displacements from the original --structure file "
+                             "unchanged; the ML-relaxed structure is written out separately "
+                             "for you to review/use in a follow-up run.")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
+                        help="MACE-MP-0 model size for --ml-prerelax (default: small).")
+    parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device for --ml-prerelax (default: cpu).")
+    parser.add_argument("--ml-fmax", type=float, default=0.05,
+                        help="Force threshold (eV/Ang) for --ml-prerelax: above this, a "
+                             "warning is shown and a relax is offered (default: 0.05).")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
@@ -158,6 +177,49 @@ def main():
             f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
             "Replicating a supercell across vacuum only multiplies the SIESTA cost "
             "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'))
+
+    if args.ml_prerelax:
+        require_mace()
+        print(f"\n[INFO] Running MACE-MP-0 ({args.ml_model}) pre-flight check on "
+              f"'{args.structure}' ...")
+        atoms = Atoms(numbers=unitcell.numbers,
+                       positions=np.array(unitcell.positions) * bohr_to_angstrom,
+                       cell=lattice_ang, pbc=True)
+        calc = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+        atoms.calc = calc
+        f0 = np.abs(atoms.get_forces()).max()
+        print(f"[INFO] Max residual force on input structure: {f0:.4f} eV/Ang "
+              f"(threshold: {args.ml_fmax} eV/Ang)")
+
+        if f0 <= args.ml_fmax:
+            print(color_text(
+                "Looks relaxed -- a good sign for the finite-difference phonon calculation "
+                "below (which assumes ~zero net force at the reference geometry).", 'green'))
+        else:
+            print(color_text(
+                "[WARNING] Residual force is above threshold -- the reference structure may "
+                "not be at a real energy minimum, a common cause of spurious imaginary "
+                "phonon modes. Running a quick MACE relax (positions only) for reference "
+                "...", 'yellow'))
+            converged, steps_used = mace_relax.relax(
+                atoms, calc, cell_mask=None, fmax=args.ml_fmax, max_steps=200)
+            f1 = np.abs(atoms.get_forces()).max()
+            print(f"[INFO] After ML relax: max|F| = {f1:.4f} eV/Ang "
+                  f"({'converged' if converged else 'hit step cap, not fully converged'}, "
+                  f"{steps_used} steps)")
+
+            relaxed = unitcell.copy()
+            relaxed.positions = atoms.get_positions() / bohr_to_angstrom
+            relaxed_path = f"{os.path.splitext(args.structure)[0]}_mlrelaxed.fdf"
+            write_siesta(relaxed_path, relaxed)
+            max_disp = np.linalg.norm(
+                atoms.get_positions() - np.array(unitcell.positions) * bohr_to_angstrom,
+                axis=1).max()
+            print(color_text(
+                f"Wrote ML-relaxed structure to '{relaxed_path}' (max atomic displacement "
+                f"from '{args.structure}': {max_disp:.4f} Ang) -- for reference only. This "
+                f"run continues using '{args.structure}' unchanged; rerun with "
+                f"-s {relaxed_path} if you want to use it instead.", 'yellow'))
 
     # 3. Extração e validação de Pseudopotenciais
     symbols = unitcell.symbols

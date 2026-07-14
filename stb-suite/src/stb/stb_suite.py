@@ -219,6 +219,64 @@ def run_phonon_generator() -> None:
     run_tool("stb-phononsCreate", args)
 
 
+def run_phonon_ml() -> None:
+    """Interface for the ML phonon force-constant calculator (phonons_ml.py)"""
+    print("\n" + "="*60)
+    print(color_text("PHONON FORCE CONSTANTS VIA MACE-MP-0 (NO SIESTA)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Heuristic preview (dispersion, DOS, thermal properties -- via the same Stage 2 "
+        "analysis), not a DFT replacement -- same caveat as stb-mlrelax.", 'yellow'))
+    print()
+
+    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    dim_input = get_input("\nSupercell dimensions (e.g. '2 2 2') [default: 2 2 2]: ").strip()
+    if not dim_input:
+        dim_x, dim_y, dim_z = 2, 2, 2
+    else:
+        try:
+            dims = [int(x) for x in dim_input.split()]
+            if len(dims) == 3:
+                dim_x, dim_y, dim_z = dims
+            else:
+                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
+                dim_x, dim_y, dim_z = 2, 2, 2
+        except ValueError:
+            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
+            dim_x, dim_y, dim_z = 2, 2, 2
+
+    distance = get_float_input("\nDisplacement distance in Å [default: 0.01]: ", 0.01)
+
+    model = get_input("\nMACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
+    if model not in ("small", "medium", "large"):
+        model = "small"
+
+    relax_choice = get_input(
+        "\nRelax positions with MACE before generating displacements? (Y/n): ").strip().lower()
+    relax = relax_choice not in ('n', 'no')
+
+    output_dir = get_input("\nOutput directory [default: phonon_ml_runs]: ").strip()
+    if not output_dir:
+        output_dir = "phonon_ml_runs"
+
+    args = [
+        "-s", structure_file,
+        "-dim", str(dim_x), str(dim_y), str(dim_z),
+        "-d", str(distance),
+        "--model", model,
+        "-o", output_dir,
+        "--no-intro",
+    ]
+    if not relax:
+        args.append("--no-relax")
+
+    print(color_text("\nComputing phonon force constants via MACE-MP-0...", 'green'))
+    run_tool("stb-phononsML", args)
+
+
 def run_cohesive_setup() -> None:
     """Interface for the Cohesive Energy Setup (cohesive_energy.py)"""
     print("\n" + "="*60)
@@ -3448,6 +3506,10 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-phononsPos)",
                 'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
                 'func': run_phonon_postprocessing},
+            3: {'title': "Stage 3 - ML Preview (stb-phononsML)",
+                'description': "Fast phonon force constants via MACE-MP-0 -- no SIESTA needed. "
+                                "Feed the output straight into Stage 2's analysis.",
+                'func': run_phonon_ml},
         }},
     5: {'title': "Convergence Tests",
         'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",

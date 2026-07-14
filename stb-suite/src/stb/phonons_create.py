@@ -14,10 +14,12 @@ import shutil
 import argparse
 from time import sleep
 import glob
+import numpy as np
 from phonopy import Phonopy
-from phonopy.interface.siesta import read_siesta, write_siesta
+from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core import kspace
 
 def get_required_pseudos(symbols: list, pseudo_dir: str):
     """
@@ -40,6 +42,32 @@ def get_required_pseudos(symbols: list, pseudo_dir: str):
             missing_elements.append(element)
 
     return found_pseudos, missing_elements
+
+def print_symmetry_table(phonon):
+    """Reports the symmetry reduction Phonopy already applied (via spglib)
+    when generating the displacement dataset -- how many finite-difference
+    displacements were actually needed vs. the naive count with no symmetry
+    reduction at all (3 Cartesian directions x 2 signs per supercell atom).
+    Same table-style presentation as elastic_inputs.py/strain.py's symmetry
+    tables, but this is Phonopy's own symmetry analysis, not core/symmetry.py
+    (that module solves a different problem -- strain-tensor equivalence,
+    not atomic-displacement-pattern reduction).
+    """
+    sym = phonon.symmetry
+    space_group = sym.get_international_table() or "unknown"
+    point_group = sym.pointgroup_symbol
+    n_ops = len(sym.symmetry_operations['rotations'])
+    n_used = len(phonon.dataset['first_atoms'])
+    n_naive = phonon.dataset['natom'] * 6
+
+    print("\n" + color_text("--- Symmetry Reduction ---", 'bold'))
+    print(f"Detected symmetry : space group {space_group}, point group {point_group} "
+          f"-- {n_ops} operation(s)")
+    print(f"Displacements needed : {color_text(str(n_used), 'green')} "
+          f"(vs. {n_naive} without symmetry reduction)")
+    if n_naive > 0:
+        print(f"Reduction : {100 * (1 - n_used / n_naive):.1f}% fewer SIESTA runs")
+    print("-" * 60)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -65,7 +93,11 @@ def main():
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
                         help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
                              "folder path (default: current directory).")
-    
+
+    parser.add_argument("--vacuum-gap", type=float, default=10.0,
+                        help="Minimum gap (Ang) along an axis to consider it vacuum-padded, "
+                             "for the supercell-dimension advisory (default: 10.0)")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
     
     parser.add_argument("--no-intro", dest="intro", action="store_false", 
@@ -108,6 +140,25 @@ def main():
         print(color_text(f"[ERROR] Failed to read {args.structure}. Make sure it's properly formatted.\nDetails: {e}", 'red'))
         sys.exit(1)
 
+    # phonopy's SIESTA interface keeps cell/positions internally in bohr (see
+    # the distance-unit note near generate_displacements below) -- convert to
+    # Angstrom before handing off to the suite's shared, Angstrom-based
+    # vacuum-axis detector.
+    bohr_to_angstrom = get_physical_units().Bohr
+    lattice_ang = np.array(unitcell.cell) * bohr_to_angstrom
+    frac_coords = np.array(unitcell.scaled_positions)
+    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
+    print(f"[INFO] Detected dimensionality: {kspace.dimensionality_label(vacuum_axes)}")
+
+    vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
+                              if is_vac and args.dim['abc'.index(axis)] > 1]
+    if vacuum_dims_requested:
+        print(color_text(
+            f"[WARNING] --dim requests more than 1 repetition along vacuum-padded "
+            f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
+            "Replicating a supercell across vacuum only multiplies the SIESTA cost "
+            "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'))
+
     # 3. Extração e validação de Pseudopotenciais
     symbols = unitcell.symbols
     unique_elements = list(set(symbols))
@@ -126,14 +177,22 @@ def main():
     # 4. Inicialização do Phonopy
     print(f"[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
     supercell_matrix = [
-        [args.dim[0], 0, 0], 
-        [0, args.dim[1], 0], 
+        [args.dim[0], 0, 0],
+        [0, args.dim[1], 0],
         [0, 0, args.dim[2]]
     ]
-    
+
     phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, calculator="siesta")
-    phonon.generate_displacements(distance=args.distance)
+    # phonopy's SIESTA interface keeps the structure internally in bohr (not
+    # Angstrom, unlike every other calculator interface) -- distance has to be
+    # converted to that same unit, or the real Cartesian displacement ends up
+    # ~1.89x smaller than requested (0.01 Ang asked -> 0.00529 Ang actually
+    # applied), verified numerically against this tool's own output.
+    # (bohr_to_angstrom computed above, right after reading the structure.)
+    phonon.generate_displacements(distance=args.distance / bohr_to_angstrom)
     supercells = phonon.supercells_with_displacements
+
+    print_symmetry_table(phonon)
 
     # 5. Criação dos diretórios e cópia
     output_root = "phonon_runs"

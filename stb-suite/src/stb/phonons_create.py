@@ -131,14 +131,25 @@ def main():
         [0, 0, args.dim[2]]
     ]
     
-    phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix)
+    phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, calculator="siesta")
     phonon.generate_displacements(distance=args.distance)
     supercells = phonon.supercells_with_displacements
 
     # 5. Criação dos diretórios e cópia
     output_root = "phonon_runs"
+    existing_disps = sorted(glob.glob(os.path.join(output_root, "disp-*")))
+    if existing_disps:
+        print(color_text(
+            f"\n[CRITICAL ERROR] '{output_root}' already contains {len(existing_disps)} "
+            "displacement folder(s) from a previous run.", 'red'))
+        print(color_text(
+            "Regenerating on top of them can leave stale disp-* folders (from a "
+            "different --dim/--distance/structure) mixed in with the new ones, "
+            "silently corrupting FORCE_SETS during post-processing. Remove or move "
+            f"aside '{output_root}' and rerun.", 'yellow'))
+        sys.exit(1)
     os.makedirs(output_root, exist_ok=True)
-    
+
     print(f"[INFO] Building {len(supercells)} displacement folders in '{output_root}' ...")
 
     for i, scell in enumerate(supercells):
@@ -165,7 +176,13 @@ def main():
     phonon.save(yaml_path)
     print(f"[INFO] Saved Phonopy metadata to '{yaml_path}'")
     
-    print("\n[INFO] Complete job!") 
+    print("\n[INFO] Complete job!")
+    print(color_text(
+        f"\n[NOTE] '{os.path.basename(args.calc)}' was copied as-is into every disp-* "
+        f"folder. Its k-grid was tuned for the {args.dim[0]}x{args.dim[1]}x{args.dim[2]} "
+        "times smaller unit cell -- review it for the generated supercell (roughly "
+        "kgrid_unitcell / dim per direction gives the same sampling density at much "
+        "lower cost).", 'yellow'))
     print("\n"+"-"*60)
     print(color_text("Phonon folders ready! Let the atoms shake, rattle and roll.\n\n", 'bold'))
 

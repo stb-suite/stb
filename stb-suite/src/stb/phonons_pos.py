@@ -9,6 +9,7 @@
 VERSION = "1.9.1"
 
 import os
+import re
 import sys
 import glob
 import subprocess
@@ -23,6 +24,30 @@ except ImportError:
 # Cores ANSI para terminal
 from stb.core.cli import COLORS, color_text, show_intro
 
+_LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
+
+
+def detect_system_label(phonon_dir):
+    """Auto-detect SystemLabel from the calc.fdf/structure.fdf copied into the
+    first disp-* folder, same regex-based approach as
+    hubbardu.get_system_label/wantibexos.get_system_label. Returns None (not
+    "siesta") when nothing is found, so callers can tell "not detected" apart
+    from a genuine label of "siesta".
+    """
+    disp_dirs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*")))
+    if not disp_dirs:
+        return None
+    for fdf_path in glob.glob(os.path.join(disp_dirs[0], "*.fdf")):
+        try:
+            with open(fdf_path) as f:
+                match = _LABEL_RE.search(f.read())
+        except OSError:
+            continue
+        if match:
+            return match.group(1)
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Post-processing for SIESTA phonon calculations using Phonopy.",
@@ -34,8 +59,9 @@ def main():
 
     parser.add_argument("-dir", "--directory", type=str, default="phonon_runs", 
                         help="Directory containing the displacement folders (default: phonon_runs)")
-    parser.add_argument("-l", "--label", type=str, default="siesta", 
-                        help="SystemLabel used in calc.fdf (default: siesta)")
+    parser.add_argument("-l", "--label", type=str, default=None,
+                        help="SystemLabel used in calc.fdf (default: auto-detected from "
+                             "the copied calc.fdf/structure.fdf, falling back to 'siesta')")
     parser.add_argument("-m", "--mesh", type=int, nargs=3, default=[20, 20, 20], 
                         help="Q-point mesh for thermal properties (default: 20 20 20)")
     parser.add_argument("--tmin", type=float, default=0.0, help="Minimum temperature in K (default: 0)")
@@ -58,7 +84,6 @@ def main():
     print("-" * 60)
 
     phonon_dir = args.directory
-    system_label = args.label
 
     # 1. Validação do Diretório
     print(f"\n[INFO] Validating phonon directory '{phonon_dir}' ...")
@@ -70,6 +95,13 @@ def main():
     if not os.path.exists(yaml_file):
         print(color_text(f"[ERROR] '{yaml_file}' not found. Did you run the displacement generator?", 'red'))
         sys.exit(1)
+
+    if args.label is not None:
+        system_label = args.label
+    else:
+        system_label = detect_system_label(phonon_dir) or "siesta"
+        print(f"[INFO] Auto-detected SystemLabel '{system_label}' from calc.fdf "
+              "(pass -l/--label to override).")
 
     # 2. Extração de Forças (Criando FORCE_SETS)
     print(f"[INFO] Extracting forces from .FA files with label '{system_label}' ...")
@@ -110,6 +142,17 @@ def main():
     print(f"       -> Temperature Range: {args.tmin} K to {args.tmax} K (step: {args.tstep} K)")
 
     phonon.run_mesh(args.mesh)
+    min_freq = phonon.get_mesh_dict()['frequencies'].min()
+    print(f"       -> Minimum mesh frequency: {min_freq:.4f} THz")
+    if min_freq < 0:
+        print(color_text(
+            "[WARNING] Negative (imaginary) phonon frequencies found -- the "
+            "structure/supercell is dynamically unstable at some q-point (soft mode, "
+            "unrelaxed geometry, or a numerical-quality issue). Phonopy silently drops "
+            "these modes from the thermal-property sums below (cutoff_frequency=0), so "
+            "the resulting free energy/entropy/heat capacity are not physically "
+            "meaningful as-is.", 'red'))
+
     phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
 
     # 4. Salvando Gráficos e Dados

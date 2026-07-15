@@ -150,16 +150,49 @@ def run_phonon_postprocessing() -> None:
     tmax = get_float_input("Maximum temperature (K) [default: 1000]: ", 1000.0)
     tstep = get_float_input("Temperature step (K) [default: 10]: ", 10.0)
 
-    # 5. Análises extra (Tiers 2-3) -- um prompt multi-escolha em vez de 5
-    # perguntas y/n em sequência.
-    extras_input = get_input(
-        "\nAdditional analyses -- space-separated (bands dos pdos thermal freeze), "
-        "or blank for none: ").strip().lower().split()
-    want_bands = 'bands' in extras_input
-    want_dos = 'dos' in extras_input
-    want_pdos = 'pdos' in extras_input
-    want_thermal = 'thermal' in extras_input
-    want_freeze = 'freeze' in extras_input
+    # 5. Análises extra (Tiers 2-3) -- lista numerada em vez de exigir digitar
+    # as palavras-chave de cabeça (um "y" de hábito antigo, ou um typo, batia
+    # em nenhuma keyword e era descartado em silêncio -- nenhum erro, nenhum
+    # aviso, --bands nunca chegava a ser passado. Reproduzido manualmente:
+    # digitar "y" aqui rodava o resto normalmente e só faltava band structure
+    # no resumo final, sem nada que apontasse a causa).
+    EXTRA_ANALYSIS_OPTIONS = [
+        ("bands", "Band structure (--bands)"),
+        ("dos", "Total DOS (--dos)"),
+        ("pdos", "Projected DOS (--pdos)"),
+        ("thermal", "Thermal displacements (--thermal-displacements)"),
+        ("freeze", "Freeze unstable mode, if one was found (--freeze-unstable-mode)"),
+    ]
+    print(f"\n{color_text('Additional analyses (Tiers 2-3) -- select any that apply:', 'yellow')}")
+    for i, (_key, desc) in enumerate(EXTRA_ANALYSIS_OPTIONS, start=1):
+        print(f"  {color_text(str(i), 'cyan')} = {desc}")
+    raw_choice = get_input(
+        f"Select by number (1-{len(EXTRA_ANALYSIS_OPTIONS)}), space/comma-separated, "
+        "or blank for none: ").strip().lower()
+
+    selected = set()
+    unrecognized = []
+    option_keys = {key for key, _ in EXTRA_ANALYSIS_OPTIONS}
+    for tok in raw_choice.replace(',', ' ').split():
+        if tok.isdigit() and 1 <= int(tok) <= len(EXTRA_ANALYSIS_OPTIONS):
+            selected.add(EXTRA_ANALYSIS_OPTIONS[int(tok) - 1][0])
+        elif tok in option_keys:  # old-style keyword still accepted
+            selected.add(tok)
+        else:
+            unrecognized.append(tok)
+
+    if unrecognized:
+        print(color_text(
+            f"[WARNING] Ignored unrecognized option(s): {', '.join(unrecognized)} "
+            f"(expected a number 1-{len(EXTRA_ANALYSIS_OPTIONS)}).", 'yellow'))
+    if selected:
+        print(color_text(f"Selected: {', '.join(sorted(selected))}", 'green'))
+
+    want_bands = 'bands' in selected
+    want_dos = 'dos' in selected
+    want_pdos = 'pdos' in selected
+    want_thermal = 'thermal' in selected
+    want_freeze = 'freeze' in selected
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).

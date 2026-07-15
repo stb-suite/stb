@@ -15,6 +15,7 @@ import shutil
 import argparse
 from datetime import datetime
 from stb.core import siesta_log
+from stb.core.siesta_log import check_scf_and_force, report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual
 
 REPORT_FILE = "adsorption_report.txt"
@@ -75,41 +76,6 @@ def read_bsse_energy(site_dir, file_name):
     if e_slab is None or e_ads is None:
         return None, None
     return e_slab, e_ads
-
-
-def check_scf_and_force(out_path):
-    """Returns (scf_converged, max_force) for one SIESTA .out file --
-    core/siesta_log.py's get_scf_convergence/get_max_force, the same
-    numerical-quality diagnostics stb-cohesiveAnalysis already runs on its
-    own full-structure reference. Neither call is expensive (single
-    sequential file read each), so it's fine to run per folder even for a
-    large --all-sites/--height-sweep/--adsorbate sweep.
-    """
-    scf_ok, _iterations = siesta_log.get_scf_convergence(out_path)
-    max_force = siesta_log.get_max_force(out_path)
-    return scf_ok, max_force
-
-
-def report_quality_diagnostics(label, out_path, force_tolerance, f_out):
-    """Prints (and persists) a numerical-quality warning for one reference
-    folder (clean_slab or an isolated-adsorbate) if its SCF cycle never
-    confirmed convergence, or its residual force exceeds force_tolerance --
-    silent when both are fine, matching this suite's "advisory only, don't
-    clutter a clean run" convention (e.g. convergence_analysis.py's SCF
-    gating, cohesive_analysis.py's --force-tolerance check). Site-level
-    diagnostics are folded into the [2] SITE RESULTS table instead, since
-    there can be many of them.
-    """
-    scf_ok, max_force = check_scf_and_force(out_path)
-    if not scf_ok:
-        print_dual(color_text(
-            f"  [WARNING] Could not confirm SCF convergence for {label} ('{out_path}') -- "
-            "this energy may be unreliable.", 'yellow'), f_out)
-    if max_force is not None and max_force > force_tolerance:
-        print_dual(color_text(
-            f"  [WARNING] Residual force on {label} ({max_force:.4f} eV/Ang) exceeds "
-            f"--force-tolerance ({force_tolerance} eV/Ang) -- this geometry may not be "
-            "relaxed.", 'yellow'), f_out)
 
 
 def write_curve_plot(dat_path, rows):

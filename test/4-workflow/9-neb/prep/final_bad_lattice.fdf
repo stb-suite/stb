@@ -1,0 +1,32 @@
+# NEB test fixture: same lattice/composition as initial.fdf, H moved to a
+# different in-plane position (toy H-diffusion "final" endpoint).
+
+NumberOfSpecies    2
+NumberofAtoms      9
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  4.9200000000   0.0000000000   0.0000000000
+ -2.4600000000   4.2608448780   0.0000000000
+  0.0000000000   0.0000000000  21.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.500000000   0.500000000   1
+ 0.166666667   0.333333333   0.500000000   1
+ 0.666666667   0.333333333   0.500000000   1
+ 0.166666667   0.833333333   0.500000000   1
+ 0.666666667   0.833333333   0.500000000   1
+ 0.750000000   0.650000000   0.600000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

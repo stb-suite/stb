@@ -1,9 +1,13 @@
 """Shared MACE-MP-0 relaxation helpers, used by stb-mlrelax, stb-defect's
---ml-rank, and stb-amorphize. Callers must call core.deps.require_mace()
-themselves first -- this module assumes mace/torch are already available,
-and only imports them lazily inside each function (not at module level),
-so merely importing this module never forces the heavy PyTorch/mace
-dependency chain to load.
+--ml-rank, stb-amorphize, stb-adsorb's --ml-rank/--ml-prerelax, and
+stb-neb's --ml-neb/--ml-prerelax-endpoints (relax_neb() below is the only
+function of the four that operates on a whole band of images at once
+instead of a single Atoms object -- everything else here, including
+--ml-prerelax-endpoints' single-endpoint relax, reuses relax()). Callers
+must call core.deps.require_mace() themselves first -- this module assumes
+mace/torch are already available, and only imports them lazily inside each
+function (not at module level), so merely importing this module never
+forces the heavy PyTorch/mace dependency chain to load.
 """
 
 # ASE/Voigt strain order: [xx, yy, zz, yz, xz, xy]. Maps each shear component
@@ -57,3 +61,64 @@ def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=20
     opt = optimizers[optimizer](target, logfile=None)
     converged = opt.run(fmax=fmax, steps=max_steps)
     return converged, opt.nsteps
+
+
+def relax_neb(images, calc, k=0.1, fmax=0.05, max_steps=200, optimizer="FIRE", climb=True):
+    """Runs a climbing-image NEB in place on `images` (a list of ASE Atoms
+    -- both endpoints plus already-guessed interior images, e.g. from
+    linear or IDPP interpolation). All images must share one exact cell --
+    ase.mep.neb.NEB raises NotImplementedError otherwise (no variable-cell
+    NEB support in ASE). One `calc` is shared across every image
+    (allow_shared_calculator=True -- a MACE ASE calculator holds no
+    cross-call mutable state that a second concurrent Atoms object sharing
+    it would corrupt; building one calculator per image would just reload
+    the same model N times for no benefit).
+
+    Two-stage strategy, standard climbing-image NEB practice: running with
+    climb=True from step 0 lets a still badly-shaped band pick the wrong
+    interior image as the climbing image (whichever happens to be
+    highest-energy before the band has relaxed into its true
+    saddle-adjacent shape), which can then converge onto a spurious
+    stationary point instead of the real transition state. So stage 1
+    (climb=False, a loosened fmax, half the step budget) lets the band
+    find its overall shape first; stage 2 sets neb.climb = True (a plain
+    mutable attribute on the NEB object) and tightens to the caller's real
+    fmax for the remaining step budget, refining only the climbing image
+    onto the true saddle while the rest of the band keeps relaxing
+    normally.
+
+    Endpoints (images[0]/images[-1]) are never moved by either stage
+    (ase.mep.neb.BaseNEB.get_positions/set_positions only touch
+    images[1:-1]) -- they're taken as given, the same "already relaxed,
+    not this tool's job to move" convention as every other WORKFLOW_TOOLS
+    pair in this suite.
+
+    Returns (converged, steps_stage1, steps_stage2, energies) where
+    energies is each image's potential energy (eV) after the final stage,
+    in image order.
+    """
+    from ase.optimize import FIRE, BFGS, LBFGS
+    from ase.mep.neb import NEB
+    optimizers = {"FIRE": FIRE, "BFGS": BFGS, "LBFGS": LBFGS}
+
+    for image in images:
+        image.calc = calc
+
+    # method="improvedtangent" pinned explicitly only to silence ASE's
+    # UserWarning about the aseneb -> improvedtangent default change in
+    # recent versions -- it's already the new default, so this changes no
+    # behavior, just avoids spurious warning noise in the persistent report.
+    neb = NEB(images, k=k, climb=False, allow_shared_calculator=True,
+              method="improvedtangent")
+    opt1 = optimizers[optimizer](neb, logfile=None)
+    stage1_fmax = max(2 * fmax, 0.1)
+    stage1_steps = max(max_steps // 2, 1)
+    opt1.run(fmax=stage1_fmax, steps=stage1_steps)
+
+    neb.climb = climb
+    opt2 = optimizers[optimizer](neb, logfile=None)
+    stage2_steps = max(max_steps - opt1.nsteps, 1)
+    converged = opt2.run(fmax=fmax, steps=stage2_steps)
+
+    energies = [image.get_potential_energy() for image in images]
+    return converged, opt1.nsteps, opt2.nsteps, energies

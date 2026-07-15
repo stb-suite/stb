@@ -20,6 +20,16 @@ kBar) are deliberately NOT unified into one function. Their two callers
 strain/stress math expecting a specific shape and unit; forcing one
 representation would mean rewriting that math too, which is out of scope for
 a parser consolidation.
+
+Note on check_scf_and_force()/report_quality_diagnostics(): the "returns
+None instead of raising" contract above describes the pure PARSING
+functions (get_fermi_energy, get_free_energy, get_scf_convergence,
+get_max_force, ...). These two are reporting helpers built on top of those
+parsers -- report_quality_diagnostics in particular has real side effects
+(printing to stdout, writing to a report file handle) and is not itself a
+parser. Moved here from adsorb_analysis.py once stb-nebAnalysis needed the
+identical SCF-convergence/residual-force diagnostic, the same
+extract-on-second-use policy as structure_io.py/core/symmetry.py.
 """
 
 from __future__ import annotations
@@ -27,6 +37,8 @@ from __future__ import annotations
 import re
 
 import numpy as np
+
+from stb.core.cli import color_text, print_dual
 
 _STRAIN_FOLDER_RE = re.compile(r"strain_([a-zA-Z0-9]+)_(m?)(\d+\.\d+)")
 _EV_A3_TO_GPA = 160.21766  # 1 eV/Angstrom^3 in GPa
@@ -272,6 +284,38 @@ def get_max_force(path: str) -> float | None:
     except Exception:
         return None
     return max_force
+
+
+def check_scf_and_force(out_path: str) -> tuple[bool, float | None]:
+    """Returns (scf_converged, max_force) for one SIESTA .out file -- a
+    thin wrapper over get_scf_convergence/get_max_force above. Neither
+    call is expensive (single sequential file read each), so it's fine to
+    run per folder even for a large sweep.
+    """
+    scf_ok, _iterations = get_scf_convergence(out_path)
+    max_force = get_max_force(out_path)
+    return scf_ok, max_force
+
+
+def report_quality_diagnostics(label: str, out_path: str, force_tolerance: float, f_out) -> None:
+    """Prints (and persists, via core.cli.print_dual) an advisory
+    numerical-quality warning for one folder if its SCF cycle never
+    confirmed convergence, or its residual force exceeds
+    force_tolerance -- silent when both are fine, matching this suite's
+    "advisory only, don't clutter a clean run" convention (e.g.
+    convergence_analysis.py's SCF gating, cohesive_analysis.py's
+    --force-tolerance check).
+    """
+    scf_ok, max_force = check_scf_and_force(out_path)
+    if not scf_ok:
+        print_dual(color_text(
+            f"  [WARNING] Could not confirm SCF convergence for {label} ('{out_path}') -- "
+            "this energy may be unreliable.", 'yellow'), f_out)
+    if max_force is not None and max_force > force_tolerance:
+        print_dual(color_text(
+            f"  [WARNING] Residual force on {label} ({max_force:.4f} eV/Ang) exceeds "
+            f"--force-tolerance ({force_tolerance} eV/Ang) -- this geometry may not be "
+            "relaxed.", 'yellow'), f_out)
 
 
 def _parse_float_line(line: str) -> list[float] | None:

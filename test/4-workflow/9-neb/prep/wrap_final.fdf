@@ -1,0 +1,25 @@
+# ...and -0.05 here -- the SAME physical position (1.0 apart nominally,
+# but literally identical once both are wrapped into [0, 1)). Before
+# wrap_into_cell(), interpolating between these directly (pbc=False)
+# produced a spurious ~10 Ang round trip through z=0.7/0.45/0.2 instead of
+# a near-static path.
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 10.0000000000   0.0000000000   0.0000000000
+  0.0000000000  10.0000000000   0.0000000000
+  0.0000000000   0.0000000000  10.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.500000000   0.500000000  -0.050000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

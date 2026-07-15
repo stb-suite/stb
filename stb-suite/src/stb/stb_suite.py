@@ -881,6 +881,152 @@ def run_adsorb_analysis() -> None:
     run_tool("stb-adsorbAnalysis", args)
 
 
+def run_neb_setup() -> None:
+    """Interface for the NEB Prep (neb.py)"""
+    print("\n" + "="*60)
+    print(color_text("NEB SETUP", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Interpolates a reaction-path band between two already-relaxed endpoint structures "
+        "and writes one single-point SIESTA folder per image -- run SIESTA in each, then use "
+        "Stage 2 (Analysis) for the DFT-level energy profile.", 'cyan'))
+    print()
+
+    initial_file = get_input("Initial (already-relaxed) endpoint structure FDF file (-i): ").strip()
+    while not os.path.isfile(initial_file):
+        print(color_text("File not found!", 'red'))
+        initial_file = get_input("Initial endpoint structure FDF file (-i): ").strip()
+
+    final_file = get_input("Final (already-relaxed) endpoint structure FDF file (-f): ").strip()
+    while not os.path.isfile(final_file):
+        print(color_text("File not found!", 'red'))
+        final_file = get_input("Final endpoint structure FDF file (-f): ").strip()
+
+    calc_file = get_input("Calc.fdf template (-c): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ").strip()
+
+    pp_path = prompt_pseudo_source(optional=True)
+
+    n_images = get_int_input("\nTotal images along the band, endpoints included [default: 7]: ", 7)
+
+    idpp_choice = get_input(
+        "\nRefine the interpolated path with ASE's IDPP method (better initial guess, no "
+        "MACE needed)? (y/N): ").strip().lower()
+    idpp = idpp_choice in ('y', 'yes')
+
+    ml_neb_choice = get_input(
+        "\nRun a real climbing-image NEB on MACE-MP-0 before writing SIESTA folders? Needs "
+        "the optional 'ml' extra (y/N): ").strip().lower()
+    ml_neb = ml_neb_choice in ('y', 'yes')
+    ml_k = 0.1
+    ml_max_steps = 200
+    ml_freeze_substrate = True
+    ml_freeze_threshold = 0.3
+    if ml_neb:
+        ml_k = get_float_input("  NEB spring constant, eV/Ang^2 [default: 0.1]: ", 0.1)
+        ml_max_steps = get_int_input("  Max optimizer steps [default: 200]: ", 200)
+        freeze_choice = get_input(
+            "  Freeze atoms that barely move between endpoints (faster, avoids spurious "
+            "drift)? [Y/n]: ").strip().lower()
+        ml_freeze_substrate = freeze_choice not in ('n', 'no')
+        if ml_freeze_substrate:
+            ml_freeze_threshold = get_float_input(
+                "    Displacement threshold below which an atom is frozen, Ang [default: 0.3]: ", 0.3)
+
+    ml_prerelax_choice = get_input(
+        "\nPre-relax both endpoints with MACE-MP-0 before interpolating? Independent of the "
+        "ML-NEB choice above -- needs the optional 'ml' extra (y/N): ").strip().lower()
+    ml_prerelax_endpoints = ml_prerelax_choice in ('y', 'yes')
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    autosort_tol, output_dir = 0.5, "."
+    show_advanced = get_input(
+        "\nConfigure advanced settings (atom-correspondence tolerance, output directory)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        autosort_tol = get_float_input(
+            "Atom-correspondence tolerance for interpolation, Ang [default: 0.5]: ", 0.5)
+        output_dir = get_input("Output root directory [default: current directory]: ").strip()
+        if not output_dir:
+            output_dir = "."
+
+    args = [
+        "-i", initial_file,
+        "-f", final_file,
+        "-c", calc_file,
+        "-n", str(n_images),
+        "--autosort-tol", str(autosort_tol),
+        "--output-dir", output_dir,
+        "--no-intro",
+    ]
+    if pp_path:
+        args.extend(["-p", pp_path])
+    if idpp:
+        args.append("--idpp")
+    if ml_neb:
+        args.extend(["--ml-neb", "--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps)])
+        if ml_freeze_substrate:
+            args.extend(["--ml-freeze-substrate", "--ml-freeze-threshold", str(ml_freeze_threshold)])
+        else:
+            args.append("--no-ml-freeze-substrate")
+    if ml_prerelax_endpoints:
+        args.append("--ml-prerelax-endpoints")
+
+    summary_rows = [
+        ("Initial structure", initial_file),
+        ("Final structure", final_file),
+        ("Calc template", calc_file),
+        ("Pseudopotentials", pp_path or "(none)"),
+        ("N images", n_images),
+        ("IDPP refinement", "ON" if idpp else "OFF"),
+        ("ML-NEB (MACE-MP-0)", f"ON (k={ml_k}, max steps={ml_max_steps})" if ml_neb else "OFF"),
+        ("ML-NEB freeze substrate", (f"ON (threshold {ml_freeze_threshold} Ang)" if ml_freeze_substrate else "OFF")
+                                     if ml_neb else "n/a"),
+        ("ML pre-relax endpoints", "ON" if ml_prerelax_endpoints else "OFF"),
+        ("Output directory", output_dir),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
+    run_tool("stb-neb", args)
+
+
+def run_neb_analysis() -> None:
+    """Interface for the NEB Analysis (neb_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("NEB ANALYSIS", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads every 'image_NN/' folder and reports the DFT energy profile along the band, "
+        "with an approximate reaction-barrier estimate from the highest-energy image.", 'cyan'))
+    print()
+
+    dir_path = get_input("Root directory with every 'image_NN/' [default: .]: ").strip()
+    if not dir_path:
+        dir_path = "."
+
+    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this image single-point-converged' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--dir", dir_path, "--file", out_file,
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    apply_target = get_input(
+        "\nCopy the highest-energy image's structure.fdf (transition-state guess) to a "
+        "production file? Path to write, or leave blank to skip: ").strip()
+    if apply_target:
+        args.extend(["--apply", apply_target])
+
+    run_tool("stb-nebAnalysis", args)
+
+
 def run_2d_stacker() -> None:
     """Interface for the Monolayer Stacker (stb.stacking2D:main)"""
     print("\n" + "="*60)
@@ -4006,6 +4152,18 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-adsorbAnalysis)",
                 'description': "Compute E_ads = E_site - E_clean_slab - E_adsorbate per site.",
                 'func': run_adsorb_analysis},
+        }},
+    9: {'title': "NEB / Reaction Path",
+        'description': "Interpolate a reaction-path band between two relaxed endpoints "
+                        "(optionally refined with MACE-MP-0), then compute the DFT-level "
+                        "energy profile and an approximate barrier.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-neb)",
+                'description': "Generate one single-point image_NN/ folder per band image.",
+                'func': run_neb_setup},
+            2: {'title': "Stage 2 - Analysis (stb-nebAnalysis)",
+                'description': "Compute the energy profile and forward/backward barrier.",
+                'func': run_neb_analysis},
         }},
        }
 

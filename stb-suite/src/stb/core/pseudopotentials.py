@@ -3,7 +3,7 @@ stb-suite/src/stb/pseudopotentials/), plus resolution of a user-supplied
 --pseudo-dir/--pp-path/-p value into an actual directory: either one of the
 bundled bank names below, or a literal filesystem path. Shared by every tool
 that needs pseudopotentials copied/symlinked into a run folder
-(hubbardu.py, cohesive_energy.py, inputfile.py, phonons_create.py).
+(hubbardu.py, cohesive_energy.py, inputfile.py, phonons_create.py, adsorb.py).
 """
 
 import os
@@ -64,3 +64,35 @@ def resolve_pseudo_source(value):
             f"({', '.join(BANKS)}) nor an existing directory."
         )
     return path
+
+
+def link_pseudo(pp_path, symbol, target_dir, dest_label=None):
+    """Symlinks the pseudopotential (.psml preferred, .psf fallback) for
+    `symbol`, found under `pp_path` (already resolved via
+    resolve_pseudo_source), into `target_dir` -- no-op if `pp_path` is falsy.
+
+    `dest_label` (default: `symbol`) is the species LABEL the destination
+    filename must match -- SIESTA resolves a species' pseudopotential file by
+    its declared ChemicalSpeciesLabel label, not its Z. Used by
+    cohesive_energy.py for BSSE ghost species (e.g. real pseudopotential
+    'C.psf' symlinked as 'C_ghost.psf' so the ghost label 'C_ghost' -- Z=-6,
+    no valence charge, same basis as real carbon -- resolves to the same real
+    pseudopotential file); every other caller leaves it at the default.
+    Moved here once adsorb.py became a second consumer of the exact same
+    symbol -> symlinked-file logic cohesive_energy.py already had.
+    """
+    if not pp_path:
+        return
+    dest_label = dest_label or symbol
+    pp_path_abs = os.path.abspath(pp_path)
+    for ext in ("psml", "psf"):
+        src = os.path.join(pp_path_abs, f"{symbol}.{ext}")
+        if os.path.exists(src):
+            dst = os.path.join(target_dir, f"{dest_label}.{ext}")
+            try:
+                os.symlink(src, dst)
+            except FileExistsError:
+                pass
+            return
+    print(color_text(f"[WARNING] Pseudopotential '{symbol}.psml' or '{symbol}.psf' not found in {pp_path}", 'yellow'))
+    return

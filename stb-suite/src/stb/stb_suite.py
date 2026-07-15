@@ -691,6 +691,196 @@ def run_cohesive_analysis() -> None:
     run_tool("stb-cohesiveAnalysis", args)
 
 
+def run_adsorb_setup() -> None:
+    """Interface for the Adsorption Prep (adsorb.py)"""
+    print("\n" + "="*60)
+    print(color_text("ADSORPTION SETUP", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Sets up a clean-slab reference, an isolated-adsorbate reference, and one folder "
+        "per candidate adsorption site -- run SIESTA in each, then use Stage 2 (Analysis) "
+        "for the real DFT adsorption energy.", 'cyan'))
+    print()
+
+    struct_file = get_input("Input slab/2D structure FDF file, vacuum along c (-s): ").strip()
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Input slab/2D structure FDF file (-s): ").strip()
+
+    calc_file = get_input("Calc.fdf template already configured for this slab (-c): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ").strip()
+
+    pp_path = prompt_pseudo_source(optional=True)
+
+    print("\nAdsorbate: an element symbol (e.g. 'O') or an ASE G2 molecule name (e.g. 'H2O'). "
+          "Comma-separated for more than one (e.g. 'O,N,C') to compare several species at the "
+          "same site(s). Type 'list' to see all G2 names.")
+    adsorbate = get_input("Adsorbate(s): ").strip()
+    while adsorbate.lower() == "list" or not adsorbate:
+        run_tool("stb-adsorb", ["--list", "--no-intro"])
+        adsorbate = get_input("Adsorbate(s): ").strip()
+
+    ml_prerelax_choice = get_input(
+        "\nPre-relax the isolated adsorbate(s) with MACE-MP-0 before generating their reference? "
+        "Needs the optional 'ml' extra (y/N): ").strip().lower()
+    ml_prerelax = ml_prerelax_choice in ('y', 'yes')
+
+    print(f"\n{color_text('Site type:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = ontop")
+    print(f"  {color_text('2', 'cyan')} = bridge")
+    print(f"  {color_text('3', 'cyan')} = hollow")
+    print(f"  {color_text('4', 'cyan')} = all")
+    site_choice = get_input("Select option (1-4) [default: 1]: ").strip()
+    site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
+    site_type = site_map.get(site_choice, 'ontop')
+
+    height_sweep = None
+    height_sweep_choice = get_input(
+        "\nSweep across multiple heights (approach curve), instead of one fixed height? "
+        "(y/N): ").strip().lower()
+    if height_sweep_choice in ('y', 'yes'):
+        h_min = get_float_input("  Minimum height, Ang [default: 1.5]: ", 1.5)
+        h_max = get_float_input("  Maximum height, Ang [default: 3.0]: ", 3.0)
+        h_step = get_float_input("  Step, Ang [default: 0.5]: ", 0.5)
+        height_sweep = (h_min, h_max, h_step)
+        height = h_min  # unused when height_sweep is set, kept for the summary/args fallback
+    else:
+        height = get_float_input("\nAdsorption height above the surface, Ang [default: 2.0]: ", 2.0)
+
+    all_sites_choice = get_input(
+        "\nWrite a folder for every symmetrically distinct site (Y), or just one (n)? [Y/n]: "
+    ).strip().lower()
+    all_sites = all_sites_choice not in ('n', 'no')
+
+    ml_rank = False
+    top_k = None
+    if all_sites:
+        ml_rank_choice = get_input(
+            "\nPre-screen sites with a MACE-MP-0 relax before writing SIESTA folders? Needs "
+            "the optional 'ml' extra (y/N): ").strip().lower()
+        ml_rank = ml_rank_choice in ('y', 'yes')
+        if ml_rank:
+            top_k_str = get_input(
+                "  Only keep the N best-ranked sites (blank = keep all): ").strip()
+            top_k = int(top_k_str) if top_k_str.isdigit() else None
+    else:
+        site_index = get_int_input("Which site (0-based index) [default: 0]: ", 0)
+
+    both_sides = False
+    if site_type != 'all' and not ml_rank and height_sweep is None:
+        both_sides_choice = get_input(
+            "\nAdsorb on both faces (free-standing 2D material)? (y/N): ").strip().lower()
+        both_sides = both_sides_choice in ('y', 'yes')
+
+    bsse_choice = get_input(
+        "\nGenerate BSSE (counterpoise) -corrected references per site too? (Y/n -- doubles "
+        "each site's SIESTA folder count; LCAO adsorption energies are otherwise "
+        "systematically over-bound): ").strip().lower()
+    bsse_correction = bsse_choice not in ('n', 'no')
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    symprec, vacuum_gap, vacuum_box, output_dir = 0.01, 10.0, 20.0, "."
+    show_advanced = get_input(
+        "\nConfigure advanced settings (symmetry tolerance, vacuum-gap, vacuum box, "
+        "output directory)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        symprec = get_float_input("Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        vacuum_box = get_float_input(
+            "Isolated-adsorbate vacuum box side in Ang [default: 20.0]: ", 20.0)
+        output_dir = get_input("Output root directory [default: current directory]: ").strip()
+        if not output_dir:
+            output_dir = "."
+
+    args = [
+        "-s", struct_file,
+        "-c", calc_file,
+        "--adsorbate", adsorbate,
+        "--site-type", site_type,
+        "--symprec", str(symprec),
+        "--vacuum-gap", str(vacuum_gap),
+        "--vacuum-box", str(vacuum_box),
+        "--output-dir", output_dir,
+        "--no-intro",
+    ]
+    if height_sweep is not None:
+        args.extend(["--height-sweep", str(height_sweep[0]), str(height_sweep[1]), str(height_sweep[2])])
+    else:
+        args.extend(["--height", str(height)])
+    if pp_path:
+        args.extend(["-p", pp_path])
+    if ml_prerelax:
+        args.append("--ml-prerelax")
+    if all_sites:
+        args.append("--all-sites")
+        if ml_rank:
+            args.append("--ml-rank")
+            if top_k is not None:
+                args.extend(["--top-k", str(top_k)])
+    else:
+        args.extend(["--site-index", str(site_index)])
+    if both_sides:
+        args.append("--both-sides")
+    args.append("--bsse-correction" if bsse_correction else "--no-bsse-correction")
+
+    summary_rows = [
+        ("Structure file", struct_file),
+        ("Calc template", calc_file),
+        ("Pseudopotentials", pp_path or "(none)"),
+        ("Adsorbate(s)", adsorbate),
+        ("ML pre-relax adsorbate", "ON" if ml_prerelax else "OFF"),
+        ("Site type", site_type),
+        ("Sites", "all symmetrically distinct" if all_sites else f"index {site_index}"),
+        ("ML pre-screen", f"ON (top {top_k or 'all'})" if ml_rank else "OFF"),
+        ("Both faces", "yes" if both_sides else "no"),
+        ("BSSE correction", "ON" if bsse_correction else "OFF"),
+        ("Height", f"sweep {height_sweep[0]}-{height_sweep[1]} step {height_sweep[2]} Ang"
+                   if height_sweep is not None else f"{height} Ang"),
+        ("Output directory", output_dir),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
+    run_tool("stb-adsorb", args)
+
+
+def run_adsorb_analysis() -> None:
+    """Interface for the Adsorption Analysis (adsorb_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("ADSORPTION ANALYSIS", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads 'clean_slab/', 'adsorbate/' and every 'sites/site_*/' folder and reports "
+        "E_ads = E_site - E_clean_slab - E_adsorbate, ranked most stable first.", 'cyan'))
+    print()
+
+    dir_path = get_input("Root directory with 'clean_slab'/'adsorbate'/'sites' [default: .]: ").strip()
+    if not dir_path:
+        dir_path = "."
+
+    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this site relaxed' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--dir", dir_path, "--file", out_file,
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    apply_target = get_input(
+        "\nCopy the most stable site's structure.fdf to a production file? "
+        "Path to write, or leave blank to skip: ").strip()
+    if apply_target:
+        args.extend(["--apply", apply_target])
+
+    run_tool("stb-adsorbAnalysis", args)
+
+
 def run_2d_stacker() -> None:
     """Interface for the Monolayer Stacker (stb.stacking2D:main)"""
     print("\n" + "="*60)
@@ -3805,6 +3995,17 @@ WORKFLOW_TOOLS = {
             3: {'title': "Stage 3 - Analysis (stb-hubbarduAnalysis)",
                 'description': "Fit the occupation responses, compute U, and write the DFT+U block.",
                 'func': run_hubbardu_analysis},
+        }},
+    8: {'title': "Adsorption",
+        'description': "Prepare a clean slab, an isolated adsorbate, and candidate adsorption "
+                        "sites, then compute the real DFT adsorption energy per site.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-adsorb)",
+                'description': "Generate clean-slab/adsorbate/site folders ready for SIESTA.",
+                'func': run_adsorb_setup},
+            2: {'title': "Stage 2 - Analysis (stb-adsorbAnalysis)",
+                'description': "Compute E_ads = E_site - E_clean_slab - E_adsorbate per site.",
+                'func': run_adsorb_analysis},
         }},
        }
 

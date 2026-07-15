@@ -16,7 +16,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, link_pseudo
 
 # Base Template
 CALC_TEMPLATE = """
@@ -125,35 +125,6 @@ AtomicCoordinatesFormat  Fractional
 """
     with open(out_path, 'w') as f:
         f.write(content)
-    return
-
-def link_pseudo(pp_path, symbol, target_dir, dest_label=None):
-    """Symlinks the pseudopotential (.psml preferred, .psf fallback) if the
-    directory is provided -- same priority order as
-    inputfile.py::copy_pseudopotentials, the other consumer of a pp_path
-    folder in this suite.
-
-    `dest_label` (default: `symbol`) is the species LABEL the destination
-    filename must match -- SIESTA resolves a species' pseudopotential file by
-    its declared ChemicalSpeciesLabel label, not its Z. Used for BSSE ghost
-    species (e.g. real pseudopotential 'C.psf' symlinked as 'C_ghost.psf' so
-    the ghost label 'C_ghost' -- Z=-6, no valence charge, same basis as real
-    carbon -- resolves to the same real pseudopotential file.
-    """
-    if not pp_path:
-        return
-    dest_label = dest_label or symbol
-    pp_path_abs = os.path.abspath(pp_path)
-    for ext in ("psml", "psf"):
-        src = os.path.join(pp_path_abs, f"{symbol}.{ext}")
-        if os.path.exists(src):
-            dst = os.path.join(target_dir, f"{dest_label}.{ext}")
-            try:
-                os.symlink(src, dst)
-            except FileExistsError:
-                pass
-            return
-    print(f"[WARNING] Pseudopotential '{symbol}.psml' or '{symbol}.psf' not found in {pp_path}")
     return
 
 def find_ghost_neighbors(pmg_structure, anchor_index, cutoff):

@@ -6,25 +6,40 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 import os
+import re
 import sys
 import argparse
+from datetime import datetime
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io, kspace, mace_relax, mace_phonons
 from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.deps import require_mace
 
+REPORT_FILE = "phonon_prep_properties.txt"
 
-def print_symmetry_table(phonon):
+
+def print_dual(text, file_handle=None):
+    """Prints to stdout with color, writes to file without color. Same
+    helper as phonons_create.py/phonons_pos.py/phonons_qha.py -- duplicated
+    per tool, not factored into core/ (presentational, not computational
+    logic)."""
+    print(text)
+    if file_handle:
+        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+        file_handle.write(clean_text + "\n")
+
+
+def print_symmetry_table(phonon, f_out=None):
     """Reports the symmetry reduction Phonopy applied (via spglib) when
     generating the displacement dataset. Same content/style as
     phonons_create.py's print_symmetry_table -- duplicated rather than
-    imported across sibling CLI modules, same precedent as phonons_pos.py's
-    print_dual (a presentational helper, not core computational logic, kept
-    bespoke per tool in this workflow).
+    imported across sibling CLI modules, same precedent as print_dual (a
+    presentational helper, not core computational logic, kept bespoke per
+    tool in this workflow).
     """
     sym = phonon.symmetry
     space_group = sym.get_international_table() or "unknown"
@@ -33,14 +48,14 @@ def print_symmetry_table(phonon):
     n_used = len(phonon.dataset['first_atoms'])
     n_naive = phonon.dataset['natom'] * 6
 
-    print("\n" + color_text("--- Symmetry Reduction ---", 'bold'))
-    print(f"Detected symmetry : space group {space_group}, point group {point_group} "
-          f"-- {n_ops} operation(s)")
-    print(f"Displacements needed : {color_text(str(n_used), 'green')} "
-          f"(vs. {n_naive} without symmetry reduction)")
+    print_dual("\n" + color_text("--- Symmetry Reduction ---", 'bold'), f_out)
+    print_dual(f"Detected symmetry : space group {space_group}, point group {point_group} "
+               f"-- {n_ops} operation(s)", f_out)
+    print_dual(f"Displacements needed : {color_text(str(n_used), 'green')} "
+               f"(vs. {n_naive} without symmetry reduction)", f_out)
     if n_naive > 0:
-        print(f"Reduction : {100 * (1 - n_used / n_naive):.1f}% fewer MACE evaluations")
-    print("-" * 60)
+        print_dual(f"Reduction : {100 * (1 - n_used / n_naive):.1f}% fewer MACE evaluations", f_out)
+    print_dual("-" * 60, f_out)
 
 
 def main():
@@ -123,25 +138,10 @@ def main():
 
     pmg = structure_io.to_pymatgen(structure)
     atoms = AseAtomsAdaptor.get_atoms(pmg)
-    print(f"[INFO] Elements found in unit cell: {', '.join(sorted(set(atoms.get_chemical_symbols())))}")
 
-    # 2. Dimensionalidade / vácuo -- já nativamente em Å (sem conversão bohr,
-    # ao contrário do caminho SIESTA deste workflow).
-    lattice_ang = np.array(atoms.get_cell())
-    frac_coords = atoms.get_scaled_positions()
-    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
-    print(f"[INFO] Detected dimensionality: {kspace.dimensionality_label(vacuum_axes)}")
-
-    vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
-                              if is_vac and args.dim['abc'.index(axis)] > 1]
-    if vacuum_dims_requested:
-        print(color_text(
-            f"[WARNING] --dim requests more than 1 repetition along vacuum-padded "
-            f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
-            "Replicating a supercell across vacuum only multiplies the MACE cost "
-            "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'))
-
-    # 3. Diretório de saída
+    # Diretório de saída + guarda contra re-execução em cima de dados antigos
+    # -- feito cedo pra abrir o relatório persistente antes de qualquer
+    # trabalho pesado (mesmo padrão de phonons_create.py).
     output_root = args.output_dir
     existing_yaml = os.path.join(output_root, "phonopy_disp.yaml")
     if os.path.exists(existing_yaml):
@@ -151,55 +151,96 @@ def main():
             f"Remove or move aside '{output_root}' and rerun, to avoid silently mixing "
             "data from a different --dim/--distance/structure.", 'yellow'))
         sys.exit(1)
-
-    # 4. Calculadora MACE + relaxação opcional (só posições -- a célula já
-    # define a supercélula abaixo; relaxá-la mudaria a periodicidade que os
-    # deslocamentos vão assumir)
-    print(f"\n[INFO] Loading MACE-MP-0 ({args.model}) on {args.device} ...")
-    calc = mace_relax.get_calculator(model=args.model, device=args.device)
-    atoms.calc = calc
-
-    f0 = np.abs(atoms.get_forces()).max()
-    print(f"[INFO] Residual force on input structure: {f0:.4f} eV/Ang")
-    if not args.relax:
-        print(color_text(
-            "[WARNING] --no-relax: generating displacements from the structure as given. "
-            "If it isn't already at a MACE-relaxed minimum, expect spurious imaginary "
-            "modes downstream.", 'yellow'))
-    else:
-        print(f"[INFO] Relaxing positions (fmax={args.fmax}) before generating displacements ...")
-
-    # 5. Deslocamentos (core.mace_phonons -- reaproveitado também pelo
-    # stb-phononsQHA)
-    print(f"\n[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
-    phonon, _, relax_info = mace_phonons.generate_ml_displacements(
-        atoms, args.dim, args.distance, calc, relax=args.relax, fmax=args.fmax)
-
-    if relax_info is not None:
-        _, f1, converged, steps_used = relax_info
-        print(f"[INFO] After relax: max|F| = {f1:.4f} eV/Ang "
-              f"({'converged' if converged else 'hit step cap, not fully converged'}, "
-              f"{steps_used} steps)")
-
-    print_symmetry_table(phonon)
-
-    # 6. Forças via MACE para cada supercélula deslocada + constantes de força
-    n_disp = len(phonon.supercells_with_displacements)
-    print(f"[INFO] Computing MACE forces for {n_disp} displaced supercells ...")
-    report_every = max(1, n_disp // 10)
-
-    def _progress(i, n):
-        if i % report_every == 0 or i == n:
-            print(f"  ... {i}/{n}")
-
-    mace_phonons.compute_force_constants(phonon, calc, progress_callback=_progress)
-
-    # 7. Salvar phonopy_disp.yaml já com as constantes de força embutidas --
-    # stb-phononsPos detecta isso e pula a extração de força via SIESTA.
     os.makedirs(output_root, exist_ok=True)
-    yaml_path = os.path.join(output_root, "phonopy_disp.yaml")
-    phonon.save(yaml_path, settings={'force_constants': True})
-    print(f"\n[INFO] Saved force constants to '{yaml_path}'")
+
+    report_path = os.path.join(output_root, REPORT_FILE)
+    with open(report_path, "w") as f_out:
+        print_dual(f"{color_text('===== PHONON PREP REPORT (MACE-MP-0) =====', 'magenta')}", f_out)
+
+        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+        print_dual(f"Structure file    : {args.structure}", f_out)
+        print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
+        print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
+        print_dual(f"MACE-MP-0 model   : {args.model} ({args.device})", f_out)
+        print_dual(f"Elements in unit cell : {', '.join(sorted(set(atoms.get_chemical_symbols())))}", f_out)
+
+        # Dimensionalidade / vácuo -- já nativamente em Å (sem conversão bohr,
+        # ao contrário do caminho SIESTA deste workflow).
+        lattice_ang = np.array(atoms.get_cell())
+        frac_coords = atoms.get_scaled_positions()
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
+        print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+
+        vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
+                                  if is_vac and args.dim['abc'.index(axis)] > 1]
+        if vacuum_dims_requested:
+            print_dual(color_text(
+                f"[WARNING] --dim requests more than 1 repetition along vacuum-padded "
+                f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
+                "Replicating a supercell across vacuum only multiplies the MACE cost "
+                "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'), f_out)
+
+        # 4. Calculadora MACE + relaxação opcional (só posições -- a célula já
+        # define a supercélula abaixo; relaxá-la mudaria a periodicidade que os
+        # deslocamentos vão assumir)
+        print_dual(f"\n{color_text('[0b] ML PRE-RELAX', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        print(f"[INFO] Loading MACE-MP-0 ({args.model}) on {args.device} ...")
+        calc = mace_relax.get_calculator(model=args.model, device=args.device)
+        atoms.calc = calc
+
+        f0 = np.abs(atoms.get_forces()).max()
+        print_dual(f"Residual force on input structure: {f0:.4f} eV/Ang", f_out)
+        if not args.relax:
+            print_dual(color_text(
+                "[WARNING] --no-relax: generating displacements from the structure as given. "
+                "If it isn't already at a MACE-relaxed minimum, expect spurious imaginary "
+                "modes downstream.", 'yellow'), f_out)
+        else:
+            print(f"[INFO] Relaxing positions (fmax={args.fmax}) before generating displacements ...")
+
+        # 5. Deslocamentos (core.mace_phonons -- reaproveitado também pelo
+        # stb-phononsQHA)
+        print(f"\n[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
+        phonon, _, relax_info = mace_phonons.generate_ml_displacements(
+            atoms, args.dim, args.distance, calc, relax=args.relax, fmax=args.fmax)
+
+        if relax_info is not None:
+            _, f1, converged, steps_used = relax_info
+            print_dual(f"After relax: max|F| = {f1:.4f} eV/Ang "
+                       f"({'converged' if converged else 'hit step cap, not fully converged'}, "
+                       f"{steps_used} steps)", f_out)
+
+        print_dual(f"\n{color_text('[1] SYMMETRY REDUCTION', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        print_symmetry_table(phonon, f_out)
+
+        # 6. Forças via MACE para cada supercélula deslocada + constantes de força
+        print_dual(f"\n{color_text('[2] FORCE CONSTANTS', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        n_disp = len(phonon.supercells_with_displacements)
+        print_dual(f"Computing MACE forces for {n_disp} displaced supercells ...", f_out)
+        report_every = max(1, n_disp // 10)
+
+        def _progress(i, n):
+            if i % report_every == 0 or i == n:
+                print(f"  ... {i}/{n}")
+
+        mace_phonons.compute_force_constants(phonon, calc, progress_callback=_progress)
+
+        # 7. Salvar phonopy_disp.yaml já com as constantes de força embutidas --
+        # stb-phononsPos detecta isso e pula a extração de força via SIESTA.
+        yaml_path = os.path.join(output_root, "phonopy_disp.yaml")
+        phonon.save(yaml_path, settings={'force_constants': True})
+        print_dual(f"Saved force constants to '{yaml_path}'", f_out)
+
+        print_dual(f"\n{color_text('[3] SUMMARY & FILES', 'magenta')}", f_out)
+        print_dual("-" * 60, f_out)
+        print_dual(f"Displacements computed : {n_disp}", f_out)
+        print_dual(f"Report                 : {report_path}", f_out)
+        print_dual(f"Files                  : {yaml_path}", f_out)
 
     print("\n" + "-" * 60)
     print(color_text("Phonon force constants ready (MACE-MP-0, no SIESTA)!", 'bold'))

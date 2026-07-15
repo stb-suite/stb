@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 import os
 import re
@@ -205,12 +205,15 @@ def main():
         print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
         print_dual(f"Structure         : {args.structure}", f_out)
         print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
+        print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
         print_dual(f"Volume range      : {args.strain_min}% to {args.strain_max}% "
                     f"({args.n_points} points, V0={v0_input:.4f} Ang^3)", f_out)
         print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
         print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
         print_dual(f"Equation of state : {args.eos}", f_out)
         print_dual(f"MACE-MP-0 model   : {args.model} ({args.device})", f_out)
+        relax_desc = f"on (fmax={args.fmax} eV/Ang)" if args.relax else "off"
+        print_dual(f"Per-volume relax  : {relax_desc}", f_out)
 
         print_dual(f"\n{color_text('[1] VOLUME SCAN', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)

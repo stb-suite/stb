@@ -110,21 +110,24 @@ def run_tool(tool_name: str, args: List[str], pause: bool = True) -> None:
 
 
 def run_phonon_postprocessing() -> None:
-    """Interface for the Phonon Post-Processing (phonons_post.py)"""
+    """Interface for the Phonon Post-Processing (phonons_pos.py)"""
     print("\n" + "="*60)
     print(color_text("PHONON POST-PROCESSING", 'bold').center(60))
     print("="*60 + "\n")
-    
+
     # 1. Diretório
     phonon_dir = get_input("Phonon runs directory [default: phonon_runs]: ").strip()
     if not phonon_dir:
         phonon_dir = "phonon_runs"
-        
-    # 2. System Label
-    sys_label = get_input("SystemLabel used in calculations [default: siesta]: ").strip()
-    if not sys_label:
-        sys_label = "siesta"
-        
+
+    # 2. System Label -- left blank means "auto-detect from calc.fdf" (the
+    # CLI's own default); NOT the same as forcing "siesta" -- an ML-sourced
+    # directory (stb-phononsML/stb-phononsQHA) has no SystemLabel at all and
+    # must never get -l passed.
+    sys_label = get_input(
+        "SystemLabel used in calculations [blank = auto-detect from calc.fdf, "
+        "or N/A for an ML-sourced directory]: ").strip()
+
     # 3. Malha Q (Mesh)
     mesh_input = get_input("\nQ-point mesh (e.g. '20 20 20') [default: 20 20 20]: ").strip()
     if not mesh_input:
@@ -146,22 +149,66 @@ def run_phonon_postprocessing() -> None:
     tmin = get_float_input("Minimum temperature (K) [default: 0]: ", 0.0)
     tmax = get_float_input("Maximum temperature (K) [default: 1000]: ", 1000.0)
     tstep = get_float_input("Temperature step (K) [default: 10]: ", 10.0)
-        
+
+    # 5. Análises extra (Tiers 2-3) -- um prompt multi-escolha em vez de 5
+    # perguntas y/n em sequência.
+    extras_input = get_input(
+        "\nAdditional analyses -- space-separated (bands dos pdos thermal freeze), "
+        "or blank for none: ").strip().lower().split()
+    want_bands = 'bands' in extras_input
+    want_dos = 'dos' in extras_input
+    want_pdos = 'pdos' in extras_input
+    want_thermal = 'thermal' in extras_input
+    want_freeze = 'freeze' in extras_input
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    plot_dir, band_points, vacuum_gap, freeze_amplitude = "phonon_plots", 101, 10.0, 0.05
+    advanced_items = "plot directory"
+    if want_bands:
+        advanced_items += ", band-path resolution, vacuum-gap"
+    if want_freeze:
+        advanced_items += ", freeze amplitude"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        plot_dir = get_input("Gnuplot .dat/.gplot output directory (default: phonon_plots): ").strip()
+        if not plot_dir:
+            plot_dir = "phonon_plots"
+        if want_bands:
+            band_points = get_int_input(
+                "Q-points per band-structure path segment (default: 101): ", 101)
+            vacuum_gap = get_float_input(
+                "Vacuum gap threshold in Ang, for --bands' periodicity detection "
+                "(default: 10.0): ", 10.0)
+        if want_freeze:
+            freeze_amplitude = get_float_input(
+                "Target max atomic displacement for the frozen mode, Ang "
+                "(default: 0.05): ", 0.05)
 
     args = [
         "-dir", phonon_dir,
-        "-l", sys_label,
         "-m", str(m_x), str(m_y), str(m_z),
         "--tmin", str(tmin),
         "--tmax", str(tmax),
         "--tstep", str(tstep),
+        "--plot-dir", plot_dir,
         "--no-intro"
     ]
+    if sys_label and sys_label.upper() != "N/A":
+        args += ["-l", sys_label]
+    if want_bands:
+        args += ["--bands", "--band-points", str(band_points), "--vacuum-gap", str(vacuum_gap)]
+    if want_dos:
+        args.append("--dos")
+    if want_pdos:
+        args.append("--pdos")
+    if want_thermal:
+        args.append("--thermal-displacements")
+    if want_freeze:
+        args += ["--freeze-unstable-mode", "--freeze-amplitude", str(freeze_amplitude)]
 
     print(color_text("\nStarting Phonon post-processing...", 'green'))
     run_tool("stb-phononsPos", args)
-    
-    
 
 
 def run_phonon_generator() -> None:
@@ -169,20 +216,20 @@ def run_phonon_generator() -> None:
     print("\n" + "="*60)
     print(color_text("PHONON DISPLACEMENT GENERATOR", 'bold').center(60))
     print("="*60 + "\n")
-    
+
     # 1. Obter arquivo de estrutura
     structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
     if not structure_file:
         structure_file = "structure.fdf"
-        
+
     # 2. Obter arquivo de cálculo
     calc_file = get_input("Calculation parameters file [default: calc.fdf]: ").strip()
     if not calc_file:
         calc_file = "calc.fdf"
-        
+
     # 3. Definir dimensões da supercélula (entrada única separada por espaços)
     dim_input = get_input("\nSupercell dimensions (e.g. '2 2 2') [default: 2 2 2]: ").strip()
-    
+
     if not dim_input:
         dim_x, dim_y, dim_z = 2, 2, 2
     else:
@@ -196,24 +243,60 @@ def run_phonon_generator() -> None:
         except ValueError:
             print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
             dim_x, dim_y, dim_z = 2, 2, 2
-    
+
     # 4. Definir distância de deslocamento
     distance = get_float_input("\nDisplacement distance in Å [default: 0.01]: ", 0.01)
-    
+
     # 5. Diretório dos pseudopotenciais
     pseudo_dir = prompt_pseudo_source(optional=True)
     if not pseudo_dir:
         pseudo_dir = "."
-        
-    # 6. Preparar e executar o script
+
+    # 6. Checagem MACE opcional (Tier "ML") -- pergunta direto, não atrás do
+    # gate avançado, já que é um recurso com valor próprio, não uma
+    # tolerância rara de mexer.
+    ml_choice = get_input(
+        "\nRun a MACE-MP-0 pre-flight check before generating displacements? "
+        "Catches an unrelaxed reference structure (a common cause of spurious "
+        "imaginary modes) before spending SIESTA time on it (y/N): ").strip().lower()
+    ml_prerelax = ml_choice in ('y', 'yes')
+    ml_model, ml_fmax = "small", 0.05
+    if ml_prerelax:
+        ml_model = get_input(
+            "  MACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
+        if ml_model not in ("small", "medium", "large"):
+            ml_model = "small"
+        ml_fmax = get_float_input(
+            "  Force threshold above which a relax is offered, eV/Ang [default: 0.05]: ", 0.05)
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, ml_device = 10.0, "cpu"
+    advanced_items = "vacuum-gap"
+    if ml_prerelax:
+        advanced_items += ", ML device"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
+            "(default: 10.0): ", 10.0)
+        if ml_prerelax:
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+
+    # 7. Preparar e executar o script
     args = [
         "-s", structure_file,
         "-c", calc_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
         "-d", str(distance),
         "-p", pseudo_dir,
+        "--vacuum-gap", str(vacuum_gap),
         "--no-intro"
     ]
+    if ml_prerelax:
+        args += ["--ml-prerelax", "--ml-model", ml_model, "--ml-device", ml_device,
+                  "--ml-fmax", str(ml_fmax)]
 
     print(color_text("\nGenerating phonon displacement folders...", 'green'))
     run_tool("stb-phononsCreate", args)
@@ -262,11 +345,30 @@ def run_phonon_ml() -> None:
     if not output_dir:
         output_dir = "phonon_ml_runs"
 
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, device, fmax = 10.0, "cpu", 0.05
+    advanced_items = "vacuum-gap, device"
+    if relax:
+        advanced_items += ", relax force threshold"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
+            "(default: 10.0): ", 10.0)
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if relax:
+            fmax = get_float_input("Relax force convergence threshold, eV/Ang (default: 0.05): ", 0.05)
+
     args = [
         "-s", structure_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
         "-d", str(distance),
         "--model", model,
+        "--device", device,
+        "--fmax", str(fmax),
+        "--vacuum-gap", str(vacuum_gap),
         "-o", output_dir,
         "--no-intro",
     ]
@@ -322,16 +424,62 @@ def run_phonon_qha() -> None:
     if not output_dir:
         output_dir = "phonon_qha_runs"
 
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    (distance, m_x, m_y, m_z, tmin, tmax, tstep, eos, device, relax, fmax,
+     plot_dir) = (0.01, 20, 20, 20, 0.0, 1000.0, 10.0, "vinet", "cpu", True, 0.05, "phonon_plots")
+    show_advanced = get_input(
+        "\nConfigure advanced settings (distance, mesh, temperature range, EOS, "
+        "device, per-volume relax, plot directory)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        distance = get_float_input("Displacement distance in Ang (default: 0.01): ", 0.01)
+        mesh_input = get_input("Q-point mesh, e.g. '20 20 20' (default: 20 20 20): ").strip()
+        if mesh_input:
+            try:
+                dims = [int(x) for x in mesh_input.split()]
+                if len(dims) == 3:
+                    m_x, m_y, m_z = dims
+                else:
+                    print(color_text("Please provide exactly 3 integers. Using default 20 20 20.", 'yellow'))
+            except ValueError:
+                print(color_text("Invalid input format. Using default 20 20 20.", 'yellow'))
+        tmin = get_float_input("Minimum temperature (K) (default: 0): ", 0.0)
+        tmax = get_float_input("Maximum temperature (K) (default: 1000): ", 1000.0)
+        tstep = get_float_input("Temperature step (K) (default: 10): ", 10.0)
+        eos_choice = get_input("Equation of state [vinet/murnaghan/birch_murnaghan, default: vinet]: ").strip().lower()
+        if eos_choice in ("vinet", "murnaghan", "birch_murnaghan"):
+            eos = eos_choice
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        relax_choice = get_input("Relax positions per volume before generating displacements? (Y/n): ").strip().lower()
+        relax = relax_choice not in ('n', 'no')
+        if relax:
+            fmax = get_float_input("Per-volume relax force threshold, eV/Ang (default: 0.05): ", 0.05)
+        plot_dir = get_input("Gnuplot .dat/.gplot output directory (default: phonon_plots): ").strip()
+        if not plot_dir:
+            plot_dir = "phonon_plots"
+
     args = [
         "-s", structure_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
+        "-d", str(distance),
         "--n-points", str(n_points),
         "--strain-min", str(-abs(strain_range)),
         "--strain-max", str(abs(strain_range)),
+        "-m", str(m_x), str(m_y), str(m_z),
+        "--tmin", str(tmin),
+        "--tmax", str(tmax),
+        "--tstep", str(tstep),
+        "--eos", eos,
         "--model", model,
+        "--device", device,
+        "--fmax", str(fmax),
+        "--plot-dir", plot_dir,
         "-o", output_dir,
         "--no-intro",
     ]
+    if not relax:
+        args.append("--no-relax")
 
     print(color_text("\nRunning QHA via MACE-MP-0 (this scans several volumes -- can take a "
                       "while)...", 'green'))

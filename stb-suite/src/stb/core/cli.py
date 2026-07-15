@@ -13,6 +13,7 @@ mechanics (ASCII logo, colors, borders, line-by-line reveal) are shared.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 import threading
@@ -95,6 +96,21 @@ def get_int_input(prompt: str, default: int | None = None) -> int:
             return int(value_str)
         except ValueError:
             print(color_text("Please enter a valid integer", 'red'))
+
+
+def print_dual(text: str, file_handle=None) -> None:
+    """Prints to stdout with color, writes to file without color.
+
+    Moved here from phonons_pos.py when stb-convergenceAnalysis needed the
+    same helper; phonons_create.py, phonons_qha.py, phonons_ml.py and
+    elastic_analysis.py still carry their own identical, undeduplicated
+    copies of this function -- pre-existing before this move, left alone here
+    since they belong to unrelated workflows.
+    """
+    print(text)
+    if file_handle:
+        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+        file_handle.write(clean_text + "\n")
 
 
 def run_with_spinner(func, *args, label: str = "Working", **kwargs):

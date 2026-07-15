@@ -30,7 +30,7 @@ except ImportError:
     sys.exit(1)
 
 # Cores ANSI para terminal
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, show_intro, print_dual
 from stb.core import kspace
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
@@ -65,14 +65,6 @@ def detect_system_label(phonon_dir):
         if match:
             return match.group(1)
     return None
-
-
-def print_dual(text, file_handle=None):
-    """Prints to stdout with color, writes to file without color."""
-    print(text)
-    if file_handle:
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        file_handle.write(clean_text + "\n")
 
 
 def write_thermal_plots(plot_dir, temperatures, free_energy, entropy, heat_capacity, f_out):

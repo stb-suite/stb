@@ -128,6 +128,13 @@ one run folder per value.""",
     values = build_values(args.min, args.max, args.step)
     print(f"  {color_text('Parameter:', 'cyan')} {args.parameter}")
     print(f"  {color_text('Sweep values:', 'cyan')} {[round(float(v), 4) for v in values]}")
+    if args.parameter == "kgrid":
+        print(color_text(
+            "  Note: convergence is checked against FreeEng (F = E - T*S). For metallic "
+            "systems, the electronic entropy term is sensitive to how many states cross "
+            "E_f, which changes discretely with k-mesh density -- this can add noise to "
+            "the k-grid curve beyond what Mesh.CutOff/PAO.EnergyShift sweeps show. "
+            "Not a concern for insulators/semiconductors with a gap.", 'yellow'))
 
     os.makedirs(args.output_dir, exist_ok=True)
 

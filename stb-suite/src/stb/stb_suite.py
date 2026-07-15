@@ -2564,12 +2564,26 @@ def run_convergence_analyzer() -> None:
 
     tolerance = get_float_input("Convergence tolerance in eV/atom [default: 0.001]: ", 0.001)
 
+    curve_output = get_input("Output curve data file name [default: convergence_curve.dat]: ").strip()
+    if not curve_output:
+        curve_output = "convergence_curve.dat"
+
     args = [
         "--dir", run_dir,
         "--file", output_filename,
         "--tolerance", str(tolerance),
+        "--output", curve_output,
         "--no-intro"
     ]
+
+    apply_target = get_input("\nApply the converged value to a calc.fdf now? "
+                              "Path to the file, or leave blank to skip: ").strip()
+    if apply_target:
+        args.extend(["--apply", apply_target])
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang, only used if the sweep "
+            "was kgrid [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
 
     run_tool("stb-convergenceAnalysis", args)
 

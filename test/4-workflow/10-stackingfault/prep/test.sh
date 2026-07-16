@@ -139,6 +139,55 @@ check_contains " 2   5   B" shift_00_00/structure.fdf
 check_contains " 3   7   N" shift_00_00/structure.fdf
 
 
+# --- 3b. --ml-prerelax-layers (MACE-MP-0, cached locally) ---
+echo -e "\n--- Testing --ml-prerelax-layers ---"
+rm -rf shift_* stackingfault_setup.txt
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -n 3 --ml-prerelax-layers \
+    --no-intro > log_prerelax.txt 2>&1
+check_exit_code $? 0
+check_contains "ML pre-relax" log_prerelax.txt
+check_contains "Converged (layer 1)" log_prerelax.txt
+check_contains "Converged (layer 2)" log_prerelax.txt
+check_success shift_00_00/structure.fdf
+
+# --- 3c. --ml-preview (MACE-MP-0, cached locally) ---
+echo -e "\n--- Testing --ml-preview ---"
+rm -rf shift_* stackingfault_setup.txt stackingfault_ml_preview.png
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -n 3 --ml-preview \
+    --no-intro > log_preview.txt 2>&1
+check_exit_code $? 0
+check_success stackingfault_ml_preview.png
+check_contains "ML preview: predicted equilibrium at shift_" log_preview.txt
+check_contains "predicted corrugation" log_preview.txt
+
+# --- 3d. --ml-relax-gap (MACE-MP-0, cached locally) ---
+echo -e "\n--- Testing --ml-relax-gap ---"
+rm -rf shift_* stackingfault_setup.txt stackingfault_ml_preview.png
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -n 3 --ml-relax-gap \
+    --ml-relax-gap-steps 5 --no-intro > log_relaxgap.txt 2>&1
+check_exit_code $? 0
+check_contains "ML relax gap" log_relaxgap.txt
+check_contains "ML-optimized gap ranged" log_relaxgap.txt
+check_contains "gap:.*Ang (ML)" log_relaxgap.txt
+
+echo "Testing: the written structure.fdf's actual interlayer gap matches the reported ML-optimized value"
+python3 -c "
+import re
+from stb.core import structure_io
+with open('log_relaxgap.txt') as f:
+    text = f.read()
+m = re.search(r'shift_00_00.*?gap: ([\d.]+) Ang \(ML\)', text)
+assert m, 'could not find shift_00_00 reported gap in log'
+reported_gap = float(m.group(1))
+s = structure_io.read_fdf('shift_00_00/structure.fdf')
+zs = sorted(set(round(p[2], 6) for _, p in s.atoms))
+actual_gap = (zs[1] - zs[0]) * s.lattice[2][2]
+assert abs(actual_gap - reported_gap) < 0.01, f'reported {reported_gap} vs actual {actual_gap}'
+print('OK')
+" > log_gap_check.txt 2>&1
+check_contains "OK" log_gap_check.txt
+
+
 # --- 4. Grid resolution minimum ---
 echo -e "\n--- Testing -n minimum (n=1) ---"
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -n 1 --no-intro > log_nmin.txt 2>&1
@@ -161,6 +210,9 @@ echo "Testing: --help documents --grid-n/--gap"
 stb-stackingfault --help > log_help.txt 2>&1
 check_contains "grid-n" log_help.txt
 check_contains "gap" log_help.txt
+check_contains "ml-prerelax-layers" log_help.txt
+check_contains "ml-relax-gap" log_help.txt
+check_contains "ml-preview" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.10.1) ---
@@ -176,6 +228,9 @@ rm -rf shift_* stackingfault_setup.txt
   echo ""              # pp_path (skip)
   echo "3"             # grid_n
   echo ""              # gap (default 3.2)
+  echo ""              # ml_prerelax_choice (default N)
+  echo ""              # ml_relax_gap_choice (default N)
+  echo ""              # ml_preview_choice (default N)
   echo ""              # show_advanced (default -> skip)
   echo ""              # press enter to continue
   echo "0"             # quit stage submenu
@@ -183,6 +238,26 @@ rm -rf shift_* stackingfault_setup.txt
 check_contains "Success:.*9 grid folder" log_menu.txt
 check_success shift_00_00/structure.fdf
 check_success shift_02_02/structure.fdf
+
+echo "Testing: navigate 4.10.1 -> ML preview on -> quit"
+rm -rf shift_* stackingfault_setup.txt stackingfault_ml_preview.png
+{
+  echo "4.10.1"
+  echo "graphene.fdf"
+  echo "graphene.fdf"
+  echo "calc.fdf"
+  echo ""
+  echo "3"
+  echo ""
+  echo ""              # ml_prerelax_choice
+  echo ""              # ml_relax_gap_choice
+  echo "y"              # ml_preview_choice -> Y
+  echo ""              # show_advanced
+  echo ""              # press enter
+  echo "0"
+} | stb-suite > log_menu_preview.txt 2>&1
+check_contains "Success:.*9 grid folder" log_menu_preview.txt
+check_success stackingfault_ml_preview.png
 
 
 popd > /dev/null

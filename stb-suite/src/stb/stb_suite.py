@@ -1060,7 +1060,27 @@ def run_stackingfault_setup() -> None:
     pp_path = prompt_pseudo_source(optional=True)
 
     grid_n = get_int_input("\nGrid resolution, N x N shifts [default: 7]: ", 7)
-    gap = get_float_input("Interlayer gap, Ang (fixed across the grid) [default: 3.2]: ", 3.2)
+    gap = get_float_input("Interlayer gap, Ang (fixed across the grid, unless --ml-relax-gap "
+                           "below) [default: 3.2]: ", 3.2)
+
+    ml_prerelax_choice = get_input(
+        "\nPre-relax each monolayer with MACE-MP-0 before stacking? Needs the optional 'ml' "
+        "extra (y/N): ").strip().lower()
+    ml_prerelax_layers = ml_prerelax_choice in ('y', 'yes')
+
+    ml_relax_gap_choice = get_input(
+        "\nOptimize the interlayer gap per grid point with MACE-MP-0, instead of the fixed "
+        "gap above? Needs the optional 'ml' extra (y/N): ").strip().lower()
+    ml_relax_gap = ml_relax_gap_choice in ('y', 'yes')
+    ml_relax_gap_window = 1.0
+    if ml_relax_gap:
+        ml_relax_gap_window = get_float_input(
+            "  Scan window, +/- Ang around the gap above [default: 1.0]: ", 1.0)
+
+    ml_preview_choice = get_input(
+        "\nGenerate a fast MACE-MP-0 preview of the gamma-surface (no SIESTA) before writing "
+        "the grid? Needs the optional 'ml' extra (y/N): ").strip().lower()
+    ml_preview = ml_preview_choice in ('y', 'yes')
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
@@ -1100,6 +1120,12 @@ def run_stackingfault_setup() -> None:
         args.extend(["-p", pp_path])
     if vacuum is not None:
         args.extend(["--vacuum", str(vacuum)])
+    if ml_prerelax_layers:
+        args.append("--ml-prerelax-layers")
+    if ml_relax_gap:
+        args.extend(["--ml-relax-gap", "--ml-relax-gap-window", str(ml_relax_gap_window)])
+    if ml_preview:
+        args.append("--ml-preview")
 
     summary_rows = [
         ("Layer 1", layer1_file),
@@ -1109,6 +1135,9 @@ def run_stackingfault_setup() -> None:
         ("Grid", f"{grid_n} x {grid_n}"),
         ("Gap (fixed)", f"{gap} Ang"),
         ("Twist (fixed)", f"{twist} deg"),
+        ("ML pre-relax layers", "ON" if ml_prerelax_layers else "OFF"),
+        ("ML relax gap", f"ON (window +/-{ml_relax_gap_window} Ang)" if ml_relax_gap else "OFF"),
+        ("ML preview", "ON" if ml_preview else "OFF"),
         ("Output directory", output_dir),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)

@@ -12,11 +12,14 @@ import os
 import sys
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
+from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.calc_directives import force_single_point
 from stb.core.heterostructure import find_zsl_match, build_stacked_structure
+from stb.core.deps import require_mace
 
 REPORT_FILE = "stackingfault_setup.txt"
 
@@ -47,6 +50,69 @@ def min_interlayer_distance(pmg_structure, n_layer1):
         return None
     dm = pmg_structure.distance_matrix
     return float(dm[:n_layer1, n_layer1:].min())
+
+
+def optimize_gap(layer1_pmg, layer2_pmg, t_mat1, t_mat2, shift_x, shift_y, calc,
+                  nominal_gap, window=1.0, n_scan=8, target_vacuum=None, strain_mode='top'):
+    """Finds the MACE-MP-0-optimal RIGID interlayer gap for one grid point
+    (only the gap distance is varied -- both layers stay internally rigid,
+    matching the "rigid-shift" protocol's own spirit, just no longer with
+    a single gap value forced on every registry). A coarse scan over
+    `n_scan` points in [nominal_gap - window, nominal_gap + window] first,
+    then a bounded local polish around the scan's minimum -- same global-
+    search-then-polish strategy as neb_analysis.py's fit_spline_barrier,
+    for the same reason: a single bounded scalar search can miss the true
+    minimum if it starts in a purely repulsive region far from the actual
+    well (e.g. --gap set too small for this specific registry).
+
+    Returns (optimal_gap, energy_at_optimal_gap) -- the energy is returned
+    too so a caller also wanting an --ml-preview value doesn't need a
+    second MACE evaluation at the same (now-known) geometry.
+    """
+    from scipy.optimize import minimize_scalar
+
+    def energy_at_gap(gap):
+        hetero, _n1, _strain = build_stacked_structure(
+            layer1_pmg, layer2_pmg, t_mat1, t_mat2, shift_x, shift_y, gap,
+            target_vacuum=target_vacuum, strain_mode=strain_mode)
+        atoms = AseAtomsAdaptor.get_atoms(hetero)
+        atoms.calc = calc
+        return atoms.get_potential_energy()
+
+    gap_min = max(nominal_gap - window, 0.5)
+    gaps = list(np.linspace(gap_min, nominal_gap + window, n_scan))
+    energies = [energy_at_gap(g) for g in gaps]
+    i_min = int(np.argmin(energies))
+    lo = gaps[max(i_min - 1, 0)]
+    hi = gaps[min(i_min + 1, len(gaps) - 1)]
+    result = minimize_scalar(energy_at_gap, bounds=(lo, hi), method='bounded')
+    return float(result.x), float(result.fun)
+
+
+def write_ml_preview_plot(ml_grid, grid_n, out_path):
+    """2D heatmap preview of the MACE-MP-0 single-point energy at every
+    grid point (E - E_min, eV) -- a fast sanity check of the gamma-
+    surface's shape before committing to the full N**2 DFT single-points.
+    Plain matplotlib imshow, NOT the gnuplot pm3d convention
+    stb-stackingfaultAnalysis uses for the real DFT-level map (that one
+    reuses core/grid_export.py, shared with density.py's charge-density
+    plots) -- self-contained here instead, same "prep tool writes its own
+    quick PNG directly" pattern as neb.py's write_ml_preview_plot /
+    adsorb.py's write_site_plot, since this is the only consumer.
+    """
+    energies = np.full((grid_n, grid_n), np.nan)
+    for i, j, energy in ml_grid:
+        energies[i, j] = energy
+    e_rel = energies - np.nanmin(energies)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(e_rel.T, origin='lower', extent=(0, 1, 0, 1), cmap='inferno', aspect='auto')
+    ax.set_xlabel("shift_x (fractional)")
+    ax.set_ylabel("shift_y (fractional)")
+    ax.set_title("ML (MACE-MP-0) stacking-fault energy preview")
+    fig.colorbar(im, ax=ax, label="E - E_min (eV)")
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
 
 
 def write_grid_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path):
@@ -125,6 +191,35 @@ def main():
                          help="Grid resolution: an N x N grid of lateral shifts covering [0, 1) "
                               "in each direction (default: 7).")
 
+    parser.add_argument("--ml-prerelax-layers", action="store_true",
+                         help="Relax each monolayer's positions (cell fixed) with MACE-MP-0 "
+                              "before stacking -- a cheap safety net when you're not fully "
+                              "certain --layer1/--layer2 are already at equilibrium. Needs the "
+                              "optional 'ml' extra.")
+    parser.add_argument("--ml-relax-gap", action="store_true",
+                         help="Find the MACE-MP-0-optimal RIGID interlayer gap at EACH grid "
+                              "point instead of using the single fixed --gap everywhere -- a "
+                              "real physics improvement over the rigid-shift default (some "
+                              "registries are more repulsive/attractive than others at a given "
+                              "gap). Needs the optional 'ml' extra; slower (a small gap scan per "
+                              "grid point, not just one MACE evaluation).")
+    parser.add_argument("--ml-relax-gap-window", type=float, default=1.0,
+                         help="With --ml-relax-gap: scan +/- this many Ang around --gap "
+                              "(default: 1.0).")
+    parser.add_argument("--ml-relax-gap-steps", type=int, default=8,
+                         help="With --ml-relax-gap: number of coarse scan points before the "
+                              "local polish (default: 8).")
+    parser.add_argument("--ml-preview", action="store_true",
+                         help="Evaluate the whole grid's single-point energy on MACE-MP-0 (fast, "
+                              "no SIESTA) and write stackingfault_ml_preview.png -- a quick sanity "
+                              "check of the gamma-surface's shape before committing to the full "
+                              "N x N DFT single-points. Written alongside the normal SIESTA "
+                              "folders, not instead of them. Needs the optional 'ml' extra.")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small")
+    parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu")
+    parser.add_argument("--ml-fmax", type=float, default=0.05,
+                         help="Force convergence for --ml-prerelax-layers (default: 0.05).")
+
     parser.add_argument("-O", "--output-dir", type=str, default=".",
                          help="Root directory (default: current directory) for every "
                               "shift_II_JJ/.")
@@ -185,9 +280,34 @@ def main():
         print_dual(f"  Pseudo dir      : {args.pseudo_dir or '(none)'}", f_out)
         print_dual(f"  Output dir      : {output_root}", f_out)
         print_dual(f"  Grid            : {args.grid_n} x {args.grid_n}", f_out)
-        print_dual(f"  Gap (fixed)     : {args.gap} Ang", f_out)
+        print_dual(f"  Gap (fixed)     : {args.gap} Ang"
+                    + (" (overridden per-point by --ml-relax-gap below)" if args.ml_relax_gap else ""),
+                    f_out)
         print_dual(f"  Twist (fixed)   : {args.twist} deg", f_out)
         print_dual(f"  max_area/max_strain/match_id: {args.max_area} / {args.max_strain} / {args.match_id}", f_out)
+        print_dual(f"  ML pre-relax layers : {'yes' if args.ml_prerelax_layers else 'no'}", f_out)
+        print_dual(f"  ML relax gap        : {'yes' if args.ml_relax_gap else 'no'}", f_out)
+        print_dual(f"  ML preview          : {'yes' if args.ml_preview else 'no'}", f_out)
+
+        calc_mace = None
+        if args.ml_prerelax_layers or args.ml_relax_gap or args.ml_preview:
+            require_mace()
+            from stb.core import mace_relax
+            calc_mace = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+
+        if args.ml_prerelax_layers:
+            print_dual(f"\n{color_text('ML pre-relax:', 'cyan')} relaxing each monolayer "
+                        "(positions only) with MACE-MP-0 ...", f_out)
+            for label, pmg in (("layer 1", layer1_pmg), ("layer 2", layer2_pmg)):
+                ase_atoms = AseAtomsAdaptor.get_atoms(pmg)
+                converged, steps = mace_relax.relax(ase_atoms, calc_mace, fmax=args.ml_fmax, max_steps=200)
+                relaxed_pmg = AseAtomsAdaptor.get_structure(ase_atoms)
+                if label == "layer 1":
+                    layer1_pmg = relaxed_pmg
+                else:
+                    layer2_pmg = relaxed_pmg
+                print_dual(f"  {'Converged' if converged else 'Hit step cap, not fully converged'} "
+                            f"({label}) after {steps} step(s).", f_out)
 
         print_dual(f"\n{color_text('[1] ZSL MATCH', 'bold')}", f_out)
         t_mat1, t_mat2, best_match_data = find_zsl_match(
@@ -208,15 +328,38 @@ def main():
         shifts = list(np.linspace(0.0, 1.0, args.grid_n, endpoint=False))
 
         print_dual(f"\n{color_text('[2] GRID FOLDERS', 'bold')}", f_out)
-        report_rows = []  # (label, i, j, shift_x, shift_y, dir)
+        if args.ml_relax_gap:
+            print_dual(f"  {color_text('ML relax gap:', 'cyan')} scanning +/- {args.ml_relax_gap_window} "
+                        f"Ang around {args.gap} Ang at every grid point with MACE-MP-0 ...", f_out)
+        report_rows = []  # (label, i, j, shift_x, shift_y, gap_used, dir)
         closest_contact = None
         closest_label = None
+        ml_grid = []  # (i, j, energy) -- only populated if --ml-preview
+        gaps_used = []
         for i, shift_x in enumerate(shifts):
             for j, shift_y in enumerate(shifts):
                 label = f"shift_{i:02d}_{j:02d}"
+
+                ml_energy = None
+                if args.ml_relax_gap:
+                    gap_used, ml_energy = optimize_gap(
+                        layer1_pmg, layer2_pmg, t_mat1, t_mat2, shift_x, shift_y, calc_mace,
+                        args.gap, window=args.ml_relax_gap_window, n_scan=args.ml_relax_gap_steps,
+                        target_vacuum=args.vacuum, strain_mode=args.strain_mode)
+                else:
+                    gap_used = args.gap
+                gaps_used.append(gap_used)
+
                 hetero, n_layer1_atoms, _max_strain_val = build_stacked_structure(
-                    layer1_pmg, layer2_pmg, t_mat1, t_mat2, shift_x, shift_y, args.gap,
+                    layer1_pmg, layer2_pmg, t_mat1, t_mat2, shift_x, shift_y, gap_used,
                     target_vacuum=args.vacuum, strain_mode=args.strain_mode)
+
+                if args.ml_preview:
+                    if ml_energy is None:
+                        atoms = AseAtomsAdaptor.get_atoms(hetero)
+                        atoms.calc = calc_mace
+                        ml_energy = atoms.get_potential_energy()
+                    ml_grid.append((i, j, ml_energy))
 
                 contact = min_interlayer_distance(hetero, n_layer1_atoms)
                 if contact is not None and (closest_contact is None or contact < closest_contact):
@@ -226,9 +369,10 @@ def main():
                 grid_dir = os.path.join(output_root, label)
                 write_grid_folder(grid_dir, hetero, single_point_calc_text, species_meta,
                                    args.pseudo_dir)
+                gap_note = f", gap: {gap_used:.3f} Ang (ML)" if args.ml_relax_gap else ""
                 print_dual(f"  {color_text('[OK]', 'green')} {grid_dir} "
-                            f"(shift: {shift_x:.4f}, {shift_y:.4f})", f_out)
-                report_rows.append((label, i, j, shift_x, shift_y, grid_dir))
+                            f"(shift: {shift_x:.4f}, {shift_y:.4f}{gap_note})", f_out)
+                report_rows.append((label, i, j, shift_x, shift_y, gap_used, grid_dir))
 
         print_dual(f"\n{color_text('[3] SUMMARY', 'bold')}", f_out)
         print_dual(f"  {len(report_rows)} grid folder(s) written under '{output_root}'.", f_out)
@@ -236,13 +380,27 @@ def main():
             print_dual(f"  [INFO] Closest interlayer contact anywhere in the grid: "
                         f"{closest_contact:.3f} Ang at {closest_label} -- expected to be small at "
                         "eclipsed/high-energy registries, not necessarily a problem.", f_out)
+        if args.ml_relax_gap:
+            print_dual(f"  [INFO] ML-optimized gap ranged {min(gaps_used):.3f} - "
+                        f"{max(gaps_used):.3f} Ang across the grid (nominal --gap was {args.gap}).",
+                        f_out)
+        if args.ml_preview and ml_grid:
+            preview_path = os.path.join(output_root, "stackingfault_ml_preview.png")
+            write_ml_preview_plot(ml_grid, args.grid_n, preview_path)
+            ml_min = min(ml_grid, key=lambda r: r[2])
+            ml_max = max(ml_grid, key=lambda r: r[2])
+            print_dual(f"  {color_text('[Saved]', 'cyan')} {preview_path}", f_out)
+            print_dual(f"  ML preview: predicted equilibrium at shift_{ml_min[0]:02d}_{ml_min[1]:02d}, "
+                        f"predicted corrugation {ml_max[2] - ml_min[2]:.4f} eV (MACE-MP-0 -- NOT a "
+                        "DFT-level number, use stb-stackingfaultAnalysis for the real one).", f_out)
         print_dual("  Run SIESTA (single-point: MD.NumCGsteps forced to 0) in every "
                     "shift_II_JJ/ folder, then use stb-stackingfaultAnalysis.", f_out)
 
-        f_out.write("\n# GRID_TABLE -- parsed by stb-stackingfaultAnalysis, do not reorder the columns\n")
-        f_out.write(f"# {'label':<16}{'i':<5}{'j':<5}{'shift_x':<12}{'shift_y':<12}{'dir'}\n")
-        for label, i, j, shift_x, shift_y, grid_dir in report_rows:
-            f_out.write(f"{label:<18}{i:<5}{j:<5}{shift_x:<12.6f}{shift_y:<12.6f}{grid_dir}\n")
+        f_out.write("\n# GRID_TABLE -- parsed by stb-stackingfaultAnalysis, do not reorder the "
+                     "first 5 columns\n")
+        f_out.write(f"# {'label':<16}{'i':<5}{'j':<5}{'shift_x':<12}{'shift_y':<12}{'gap':<10}{'dir'}\n")
+        for label, i, j, shift_x, shift_y, gap_used, grid_dir in report_rows:
+            f_out.write(f"{label:<18}{i:<5}{j:<5}{shift_x:<12.6f}{shift_y:<12.6f}{gap_used:<10.4f}{grid_dir}\n")
 
     print(f"\n{color_text('Success:', 'green')} {len(report_rows)} grid folder(s) written under "
           f"'{output_root}'.")

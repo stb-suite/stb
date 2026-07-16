@@ -9,11 +9,7 @@
 VERSION = "1.14.0"
 
 import os
-import re
 import sys
-import glob
-import shutil
-import subprocess
 import argparse
 import yaml
 from time import sleep
@@ -23,7 +19,6 @@ from scipy.constants import h as PLANCK_H, k as BOLTZMANN_K
 from ase.cell import Cell
 from ase.dft.kpoints import parse_path_string
 try:
-    import phonopy
     from phonopy.interface.siesta import get_physical_units, write_siesta
 except ImportError:
     print("\n[ERROR] Phonopy is not installed. Please install it using: pip install phonopy")
@@ -32,8 +27,7 @@ except ImportError:
 # Cores ANSI para terminal
 from stb.core.cli import COLORS, color_text, show_intro, print_dual
 from stb.core import kspace
-
-_LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
+from stb.core.phonon_workflow import detect_system_label, load_phonon_with_force_constants
 
 REPORT_FILE = "phonon_properties.txt"
 # Same palette as elastic_analysis.py's PLOT_COLORS (first 3 entries), kept
@@ -44,27 +38,6 @@ PLOT_COLORS = ['#2255cc', '#cc5522', '#22aa55']
 # whose series count isn't fixed (DOS/PDOS/thermal-displacements by species).
 SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaaa',
                   '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
-
-
-def detect_system_label(phonon_dir):
-    """Auto-detect SystemLabel from the calc.fdf/structure.fdf copied into the
-    first disp-* folder, same regex-based approach as
-    hubbardu.get_system_label/wantibexos.get_system_label. Returns None (not
-    "siesta") when nothing is found, so callers can tell "not detected" apart
-    from a genuine label of "siesta".
-    """
-    disp_dirs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*")))
-    if not disp_dirs:
-        return None
-    for fdf_path in glob.glob(os.path.join(disp_dirs[0], "*.fdf")):
-        try:
-            with open(fdf_path) as f:
-                match = _LABEL_RE.search(f.read())
-        except OSError:
-            continue
-        if match:
-            return match.group(1)
-    return None
 
 
 def write_thermal_plots(plot_dir, temperatures, free_energy, entropy, heat_capacity, f_out):
@@ -572,64 +545,19 @@ def main():
         print_dual(f"\n{color_text('[1] FORCE EXTRACTION', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
 
-        if has_embedded_fc:
-            print_dual("Force constants already embedded in phonopy_disp.yaml "
-                        "(ML-computed, e.g. via stb-phononsML) -- skipping SIESTA "
-                        ".FA/FORCE_SETS extraction.", f_out)
-        else:
-            fa_files_abs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*", f"{system_label}.FA")))
-
-            if not fa_files_abs:
-                print_dual(color_text(f"[ERROR] No {system_label}.FA files found in {phonon_dir}/disp-*", 'red'), f_out)
-                print_dual(color_text("Make sure SIESTA calculations finished successfully.", 'yellow'), f_out)
-                sys.exit(1)
-
-            # Pegamos os caminhos relativos ao phonon_dir para rodar o comando lá dentro
-            fa_files_rel = [os.path.relpath(f, phonon_dir) for f in fa_files_abs]
-            print_dual(f"Force files found : {len(fa_files_rel)} (label '{system_label}')", f_out)
-
-            # phonopy >=4 moved the FORCE_SETS-creation flags ("-f"/"--siesta")
-            # out of the main `phonopy` CLI into a separate `phonopy-init`
-            # command; older installs (<4) only have `phonopy`. Prefer the new
-            # command when present, fall back otherwise.
-            force_sets_bin = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
-            cmd = [force_sets_bin, "--siesta", "-f"] + fa_files_rel
-
-            try:
-                # Roda o comando de extração de forças DENTRO da pasta phonon_runs
-                subprocess.check_call(cmd, cwd=phonon_dir, stdout=subprocess.DEVNULL)
-                print_dual(color_text("FORCE_SETS       : generated successfully", 'green'), f_out)
-            except subprocess.CalledProcessError as e:
-                print_dual(color_text(f"[ERROR] Failed to generate FORCE_SETS. Phonopy error: {e}", 'red'), f_out)
-                sys.exit(1)
-
-        # 3. Propriedades Térmicas usando a API Python do Phonopy
-        print(f"\n[INFO] Initializing Phonopy API and loading FORCE_SETS ...")
-        original_dir = os.getcwd()
-        try:
-            # Como o yaml e o FORCE_SETS estão na mesma pasta, precisamos avisar o phonopy ou mudar o dir de execução
-            os.chdir(phonon_dir)
-            phonon = phonopy.load("phonopy_disp.yaml")
-        except Exception as e:
-            print_dual(color_text(f"[ERROR] Could not load phonopy data: {e}", 'red'), f_out)
-            os.chdir(original_dir)
-            sys.exit(1)
-
-        # phonon's internal cell/positions are in bohr (SIESTA-interface
-        # convention, calculator="siesta") for a stb-phononsCreate-sourced
-        # run, but already in native Angstrom (calculator=None) for an
-        # ML-sourced one (stb-phononsML/stb-phononsQHA -- see
-        # core/mace_phonons.py). true_bohr_to_angstrom is the real physical
-        # constant (only meaningful for the bohr-numeric/SIESTA case);
-        # internal_to_angstrom is what actually converts *this* phonon
-        # object's internal units to real Angstrom, and is 1.0 (no-op) for
-        # the ML case -- using true_bohr_to_angstrom unconditionally here
-        # was a real bug (verified: it silently over-displaced
-        # --freeze-unstable-mode's output by 1/Bohr =~1.8897x for ML-sourced
-        # data, self-masked because the same wrong factor was used to both
-        # calibrate and report the "achieved" displacement).
+        # 3. Propriedades Térmicas usando a API Python do Phonopy -- FORCE_SETS
+        # extraction (or skipping it for an ML-embedded yaml) + phonopy.load,
+        # via core/phonon_workflow.py (also stb-ramanModes's Stage 2 loader).
+        # Leaves the process chdir'd into phonon_dir; os.chdir(original_dir)
+        # happens once, near the very end of this function, same as before.
+        phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
+            phonon_dir, system_label, has_embedded_fc, f_out)
+        # true_bohr_to_angstrom (only meaningful for the bohr-numeric/SIESTA
+        # case, distinct from internal_to_angstrom which is 1.0 for the
+        # ML-embedded case -- see core/phonon_workflow.py's docstring for the
+        # bug this distinction fixes) is still needed standalone below, e.g.
+        # for the tdispmat.cif cell-unit fix.
         true_bohr_to_angstrom = get_physical_units().Bohr
-        internal_to_angstrom = 1.0 if has_embedded_fc else true_bohr_to_angstrom
 
         print(f"[INFO] Running thermal properties calculation ...")
         print(f"       -> Q-Mesh: {args.mesh}")

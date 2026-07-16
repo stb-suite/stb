@@ -3215,6 +3215,154 @@ def run_hubbardu_analysis() -> None:
     run_tool("stb-hubbarduAnalysis", args)
 
 
+def run_raman_prep() -> None:
+    """Interface for the Raman Spectrum Stage 1 (stb-raman)"""
+    print("\n" + "="*60)
+    print(color_text("RAMAN SPECTRUM - STAGE 1: PHONON DISPLACEMENTS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    calc_file = get_input("Calculation parameters file [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
+
+    dim_input = get_input("\nSupercell dimensions for the phonon calc (e.g. '2 2 2') "
+                           "[default: 2 2 2]: ").strip()
+    if not dim_input:
+        dim_x, dim_y, dim_z = 2, 2, 2
+    else:
+        try:
+            dims = [int(x) for x in dim_input.split()]
+            if len(dims) == 3:
+                dim_x, dim_y, dim_z = dims
+            else:
+                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
+                dim_x, dim_y, dim_z = 2, 2, 2
+        except ValueError:
+            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
+            dim_x, dim_y, dim_z = 2, 2, 2
+
+    distance = get_float_input("\nPhonon displacement distance in Ang [default: 0.02]: ", 0.02)
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if not pseudo_dir:
+        pseudo_dir = "."
+
+    output_dir = get_input("\nOutput root directory [default: raman_study]: ").strip()
+    if not output_dir:
+        output_dir = "raman_study"
+
+    vacuum_gap = 10.0
+    show_advanced = get_input("\nConfigure advanced settings (vacuum-gap)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
+            "(default: 10.0): ", 10.0)
+
+    args = [
+        "-s", structure_file, "-c", calc_file,
+        "-dim", str(dim_x), str(dim_y), str(dim_z),
+        "-d", str(distance), "-p", pseudo_dir,
+        "--vacuum-gap", str(vacuum_gap),
+        "-O", output_dir, "--no-intro"
+    ]
+
+    print(color_text("\nGenerating Raman workflow phonon displacement folders...", 'green'))
+    run_tool("stb-raman", args)
+
+
+def run_raman_modes() -> None:
+    """Interface for the Raman Spectrum Stage 2 (stb-ramanModes)"""
+    print("\n" + "="*60)
+    print(color_text("RAMAN SPECTRUM - STAGE 2: MODES & OPTICAL DISPLACEMENTS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: raman_study]: ").strip()
+    if not run_dir:
+        run_dir = "raman_study"
+
+    calc_file = get_input("Calc.fdf template for the Optical calculations: ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the Optical calculations: ")
+
+    args = ["--directory", run_dir, "--calc", calc_file, "--no-intro"]
+
+    modes_str = get_input(
+        "\nMode indices to process, space-separated [optional, default: every "
+        "non-acoustic mode]: ").strip()
+    if modes_str:
+        args.extend(["--modes"] + modes_str.split())
+
+    full_tensor_choice = get_input(
+        "\nCompute the FULL Raman tensor (Rxx,Ryy,Rzz,Rxy,Rxz,Ryz) instead of just the "
+        "diagonal? Doubles the folder count per mode (12 instead of 6) (y/N): ").strip().lower()
+    if full_tensor_choice in ('y', 'yes'):
+        args.append("--full-tensor")
+
+    displacement = get_float_input("\nFinite-difference displacement in Ang [default: 0.02]: ", 0.02)
+    args.extend(["--displacement", str(displacement)])
+
+    optical_mesh, optical_broaden = [10, 10, 10], 0.2
+    show_advanced = get_input(
+        "\nConfigure advanced settings (Optical mesh/broadening/frequency range/pseudopotential "
+        "override)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        mesh_input = get_input("Optical.Mesh k-grid (e.g. '10 10 10') [default: 10 10 10]: ").strip()
+        if mesh_input:
+            try:
+                mesh_vals = [int(x) for x in mesh_input.split()]
+                if len(mesh_vals) == 3:
+                    optical_mesh = mesh_vals
+            except ValueError:
+                pass
+        optical_broaden = get_float_input("Optical.Broaden in eV [default: 0.2]: ", 0.2)
+        freq_min = get_input("Skip modes below this frequency in THz [optional]: ").strip()
+        if freq_min:
+            args.extend(["--freq-min", freq_min])
+        freq_max = get_input("Skip modes above this frequency in THz [optional]: ").strip()
+        if freq_max:
+            args.extend(["--freq-max", freq_max])
+        print(color_text(
+            "\nPseudopotential source (blank = reuse whatever Stage 1 already copied into its "
+            "phonon_disp/disp-*/ folders -- the normal case):", 'yellow'))
+        pseudo_dir = prompt_pseudo_source(optional=True)
+        if pseudo_dir:
+            args.extend(["--pseudo-dir", pseudo_dir])
+
+    args.extend(["--optical-mesh", str(optical_mesh[0]), str(optical_mesh[1]), str(optical_mesh[2])])
+    args.extend(["--optical-broaden", str(optical_broaden)])
+
+    print(color_text("\nBuilding phonon force constants and Optical displacement folders...", 'green'))
+    run_tool("stb-ramanModes", args)
+
+
+def run_raman_analysis() -> None:
+    """Interface for the Raman Spectrum Stage 3 (stb-ramanAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("RAMAN SPECTRUM - STAGE 3: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with the stb-raman/stb-ramanModes run [default: raman_study]: ").strip()
+    if not run_dir:
+        run_dir = "raman_study"
+
+    output_filename = get_input("SIESTA output filename inside each mode_*/ folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
+
+    linewidth = get_float_input("\nLorentzian linewidth for the spectrum, cm^-1 [default: 10.0]: ", 10.0)
+    args.extend(["--linewidth", str(linewidth)])
+
+    run_tool("stb-ramanAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -4328,6 +4476,24 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-stackingfaultAnalysis)",
                 'description': "Compute the equilibrium stacking and corrugation energy.",
                 'func': run_stackingfault_analysis},
+        }},
+    11: {'title': "Raman Spectrum",
+        'description': "Self-contained: computes its own phonons, then the +/-delta Optical "
+                        "(dielectric-response) displacements needed for the diagonal Raman "
+                        "tensor, then the approximate Raman-active frequencies and spectrum.",
+        'stages': {
+            1: {'title': "Stage 1 - Phonon Displacements (stb-raman)",
+                'description': "Generate one phonon_disp/disp-NNN/ folder per finite-difference "
+                                "displacement.",
+                'func': run_raman_prep},
+            2: {'title': "Stage 2 - Modes & Optical Displacements (stb-ramanModes)",
+                'description': "Build FORCE_SETS, get the Gamma-point modes, and generate one "
+                                "optical_disp/mode_*/ folder per +/-delta x/y/z displacement.",
+                'func': run_raman_modes},
+            3: {'title': "Stage 3 - Analysis (stb-ramanAnalysis)",
+                'description': "Compute the diagonal Raman tensor per mode and the approximate "
+                                "Raman spectrum.",
+                'func': run_raman_analysis},
         }},
        }
 

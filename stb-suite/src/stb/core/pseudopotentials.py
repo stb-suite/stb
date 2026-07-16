@@ -66,6 +66,40 @@ def resolve_pseudo_source(value):
     return path
 
 
+def get_required_pseudos(symbols, pseudo_dir):
+    """Checks whether a pseudopotential file (.psf preferred, .psml
+    fallback) exists in `pseudo_dir` for every symbol in `symbols`.
+    Returns (found_pseudos, missing_elements) -- found_pseudos is the list
+    of resolved file paths (for copying, e.g. into disp-NNN/ folders),
+    missing_elements is any symbol with neither extension present. Moved
+    here from phonons_create.py once stb-raman (Stage 1, same "copy the
+    exact pseudos a structure needs into every generated folder" need)
+    became a second consumer, same extract-on-second-use policy as
+    structure_io.py/core/symmetry.py.
+    """
+    # sorted(), not a plain set iteration: a bare `set` has no guaranteed
+    # order (varies with Python's per-process string-hash randomization),
+    # which made the "Found all required"/"Missing pseudopotentials" report
+    # lines every caller prints from these lists non-deterministic run to
+    # run -- undesirable for a persisted report.
+    unique_elements = sorted(set(symbols))
+    found_pseudos = []
+    missing_elements = []
+
+    for element in unique_elements:
+        psf_path = os.path.join(pseudo_dir, f"{element}.psf")
+        psml_path = os.path.join(pseudo_dir, f"{element}.psml")
+
+        if os.path.exists(psf_path):
+            found_pseudos.append(psf_path)
+        elif os.path.exists(psml_path):
+            found_pseudos.append(psml_path)
+        else:
+            missing_elements.append(element)
+
+    return found_pseudos, missing_elements
+
+
 def link_pseudo(pp_path, symbol, target_dir, dest_label=None):
     """Symlinks the pseudopotential (.psml preferred, .psf fallback) for
     `symbol`, found under `pp_path` (already resolved via

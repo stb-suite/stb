@@ -11,19 +11,18 @@ VERSION = "1.11.0"
 import os
 import re
 import sys
-import shutil
 import argparse
 from time import sleep
 from datetime import datetime
 import glob
 import numpy as np
 from ase import Atoms
-from phonopy import Phonopy
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
 from stb.core.cli import COLORS, color_text, show_intro
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
+from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
 REPORT_FILE = "phonon_prep_properties.txt"
 
@@ -36,29 +35,6 @@ def print_dual(text, file_handle=None):
     if file_handle:
         clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
         file_handle.write(clean_text + "\n")
-
-
-def get_required_pseudos(symbols: list, pseudo_dir: str):
-    """
-    Verifica se os pseudopotenciais existem no diretório fornecido.
-    Retorna a lista de caminhos encontrados e a lista de elementos ausentes.
-    """
-    unique_elements = set(symbols)
-    found_pseudos = []
-    missing_elements = []
-
-    for element in unique_elements:
-        psf_path = os.path.join(pseudo_dir, f"{element}.psf")
-        psml_path = os.path.join(pseudo_dir, f"{element}.psml")
-
-        if os.path.exists(psf_path):
-            found_pseudos.append(psf_path)
-        elif os.path.exists(psml_path):
-            found_pseudos.append(psml_path)
-        else:
-            missing_elements.append(element)
-
-    return found_pseudos, missing_elements
 
 
 def print_symmetry_table(phonon, f_out=None):
@@ -297,15 +273,14 @@ def main():
             [0, 0, args.dim[2]]
         ]
 
-        phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, calculator="siesta")
         # phonopy's SIESTA interface keeps the structure internally in bohr (not
         # Angstrom, unlike every other calculator interface) -- distance has to be
         # converted to that same unit, or the real Cartesian displacement ends up
         # ~1.89x smaller than requested (0.01 Ang asked -> 0.00529 Ang actually
-        # applied), verified numerically against this tool's own output.
-        # (bohr_to_angstrom computed above, right after reading the structure.)
-        phonon.generate_displacements(distance=args.distance / bohr_to_angstrom)
-        supercells = phonon.supercells_with_displacements
+        # applied), verified numerically against this tool's own output. Handled
+        # inside build_phonon_displacements() (bohr_to_angstrom computed above,
+        # right after reading the structure, is the same physical constant).
+        phonon, supercells = build_phonon_displacements(unitcell, supercell_matrix, args.distance)
 
         print_symmetry_table(phonon, f_out)
 
@@ -314,28 +289,9 @@ def main():
         print_dual("-" * 60, f_out)
         print_dual(f"Building {len(supercells)} displacement folders in '{output_root}' ...", f_out)
 
-        for i, scell in enumerate(supercells):
-            if scell is None:
-                continue
+        _folders, yaml_path = write_displacement_folders(
+            output_root, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
 
-            folder_name = os.path.join(output_root, f"disp-{i+1:03d}")
-            os.makedirs(folder_name, exist_ok=True)
-
-            # A. Escreve a supercélula deslocada
-            disp_struct_path = os.path.join(folder_name, os.path.basename(args.structure))
-            write_siesta(disp_struct_path, scell)
-
-            # B. Copia o calc.fdf
-            shutil.copy(args.calc, os.path.join(folder_name, os.path.basename(args.calc)))
-
-            # C. Copia apenas os pseudopotenciais exigidos
-            for pseudo_path in pseudos_to_copy:
-                pseudo_filename = os.path.basename(pseudo_path)
-                shutil.copy(pseudo_path, os.path.join(folder_name, pseudo_filename))
-
-        # 6. Salvar metadados do Phonopy
-        yaml_path = os.path.join(output_root, "phonopy_disp.yaml")
-        phonon.save(yaml_path)
         print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
 
         print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)

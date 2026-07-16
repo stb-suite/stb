@@ -15,14 +15,36 @@ import glob
 import shutil
 import argparse
 from datetime import datetime
+import numpy as np
 import yaml
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro
 from stb.core.calc_directives import force_single_point
 from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
+from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
 )
+from stb.core.raman_symmetry import classify_modes
+
+# Default THz tolerance for the extra 0D trivial-mode (free rotation)
+# search in get_gamma_modes. Deliberately conservative (LOW), not just
+# "generously above the rotational noise seen in testing": the two
+# failure directions aren't symmetric. Too low just means a rotational
+# mode doesn't get caught and falls back to today's behavior (treated as
+# an ordinary mode, same as before this fix -- harmless). Too high can
+# silently swallow a genuine low-frequency vibrational mode (skeletal
+# torsions in floppy/heavy molecules are a known case that can sit well
+# under 5 THz / 167 cm^-1) before the user ever sees it in Stage 2's mode
+# list -- unlike the group-theory --use-symmetry skip, this has no
+# "[symmetry-forbidden]" audit trail to catch it. Verified live with a
+# relaxed H2O molecule via MACE-MP-0: rotational bands were ~-0.01 to
+# 0.22 THz, real vibrational modes 44.5+ THz -- 2.0 THz keeps a ~10x
+# margin above the observed rotational noise while staying well under
+# realistic low-frequency vibrational modes. Exposed as --rotational-
+# mode-tol since it's a real judgment call for unusual molecules, not a
+# pure numerical-noise constant.
+_DEFAULT_ROTATIONAL_MODE_TOL_THZ = 2.0
 
 REPORT_FILE = "raman_stage2.txt"
 
@@ -129,6 +151,19 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                         help="Skip modes below this frequency (THz).")
     parser.add_argument("--freq-max", type=float, default=None,
                         help="Skip modes above this frequency (THz).")
+    parser.add_argument("--vacuum-gap", type=float, default=10.0,
+                        help="Minimum gap (Ang) along an axis to consider it vacuum-padded, "
+                             "same convention as stb-raman (default: 10.0). Only used to detect "
+                             "a genuinely isolated (0D) structure, which has 3 extra trivial "
+                             "(free-rotation) modes at Gamma beyond the usual 3 translations -- "
+                             "irrelevant for 3D/2D/1D structures.")
+    parser.add_argument("--rotational-mode-tol", type=float, default=_DEFAULT_ROTATIONAL_MODE_TOL_THZ,
+                        help="0D (molecule) only: a mode within the first 3 bands after the "
+                             "translations is treated as free rotation (trivial, excluded) if "
+                             "|frequency| is below this (THz) (default: "
+                             f"{_DEFAULT_ROTATIONAL_MODE_TOL_THZ}). Lower this if your molecule "
+                             "has genuine low-frequency skeletal/torsional vibrational modes you "
+                             "want to make sure aren't mistaken for rotation.")
     parser.add_argument("--displacement", type=float, default=0.02,
                         help="Finite-difference displacement (Ang) along each mode's "
                              "eigendisplacement for the Raman-tensor derivative (default: 0.02).")
@@ -138,6 +173,16 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                              "directions per sign (the face-diagonals), doubling the folder count "
                              "per mode (12 instead of 6). Off-diagonal components are recovered "
                              "by stb-ramanAnalysis from these mixed-direction measurements.")
+    parser.add_argument("--use-symmetry", action="store_true",
+                        help="Skip modes that group theory guarantees are Raman-INACTIVE (their "
+                             "irreducible representation at Gamma isn't contained in the "
+                             "quadratic-function representation x^2/y^2/z^2/xy/xz/yz -- their "
+                             "Raman tensor is exactly zero, not just numerically small). Works "
+                             "for any of the 32 point groups, not just centrosymmetric ones. "
+                             "Only applies to the default mode selection (every non-acoustic "
+                             "mode) -- an explicit --modes list is never second-guessed. Needs a "
+                             "PRIMITIVE cell (see stb-unitcell --mode primitive); falls back to "
+                             "running every mode, with a warning, if that's not available.")
     parser.add_argument("--optical-mesh", type=int, nargs=3, default=[10, 10, 10],
                         help="Optical.Mesh k-grid for the dielectric-function calculation "
                              "(default: 10 10 10).")
@@ -222,10 +267,29 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
         phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
             phonon_dir, system_label, has_embedded_fc, f_out)
         try:
-            frequencies, mode_band_indices = get_gamma_modes(phonon, exclude_acoustic=True)
             unique_elements = list(set(phonon.primitive.symbols))
+            lattice_ang = np.array(phonon.primitive.cell) * internal_to_angstrom
+            frac_coords = np.array(phonon.primitive.scaled_positions)
+            vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
+            is_0d = all(vacuum_axes)
+            frequencies, mode_band_indices, n_extra_trivial = get_gamma_modes(
+                phonon, exclude_acoustic=True,
+                extra_trivial_tol_thz=args.rotational_mode_tol if is_0d else None)
+            mode_symmetries, point_group, symmetry_error = classify_modes(phonon)
         finally:
             os.chdir(original_dir)
+
+        band_to_symmetry = {}
+        for ms in mode_symmetries:
+            for b in ms.band_indices:
+                band_to_symmetry[b] = ms
+
+        print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+        if n_extra_trivial:
+            print_dual(color_text(
+                f"[NOTE] 0D structure detected -- excluded {n_extra_trivial} extra trivial "
+                "mode(s) (free rotation) beyond the usual 3 translations. These aren't real "
+                "vibrations and have no Raman activity to speak of.", 'yellow'), f_out)
 
         n_imaginary = int((frequencies < 0).sum())
         print_dual(f"Non-acoustic Gamma modes : {len(frequencies)}", f_out)
@@ -236,7 +300,39 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 "is not physically meaningful.", 'yellow'), f_out)
         for k, (freq, band_idx) in enumerate(zip(frequencies, mode_band_indices), start=1):
             flag = color_text(" [IMAGINARY]", 'red') if freq < 0 else ""
-            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag}", f_out)
+            ms = band_to_symmetry.get(int(band_idx))
+            sym_note = ""
+            if args.use_symmetry and ms is not None:
+                label_str = f" ({ms.label})" if ms.label else ""
+                sym_note = (color_text(f"{label_str} [Raman-active]", 'green') if ms.is_raman_active
+                            else color_text(f"{label_str} [symmetry-forbidden]", 'yellow'))
+            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
+
+        if args.use_symmetry:
+            print_dual(f"\n{color_text('[1b] SYMMETRY ANALYSIS', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            print_dual(f"Point group       : {point_group}", f_out)
+            if symmetry_error:
+                print_dual(color_text(
+                    f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
+                    "running every mode, same as without --use-symmetry. If your structure is "
+                    "a conventional (non-primitive) cell, try reducing it first with "
+                    "stb-unitcell --mode primitive.", 'yellow'), f_out)
+            else:
+                n_forbidden = sum(1 for band_idx in mode_band_indices
+                                   if band_to_symmetry.get(int(band_idx)) is not None
+                                   and not band_to_symmetry[int(band_idx)].is_raman_active)
+                n_unknown = sum(1 for band_idx in mode_band_indices
+                                 if band_to_symmetry.get(int(band_idx)) is None)
+                print_dual(f"Symmetry-forbidden (Raman-inactive) : {n_forbidden}/{len(mode_band_indices)}", f_out)
+                if n_unknown:
+                    print_dual(color_text(
+                        f"[NOTE] {n_unknown} mode(s) could not be classified (label matching "
+                        "failed) -- kept, never auto-skipped when uncertain.", 'yellow'), f_out)
+                if args.modes is not None:
+                    print_dual(color_text(
+                        "--modes was given explicitly -- symmetry filtering is informational "
+                        "only here, no mode is auto-skipped.", 'yellow'), f_out)
 
         print_dual(f"\n{color_text('[2] PSEUDOPOTENTIALS', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
@@ -267,7 +363,9 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             sys.exit(1)
         print_dual(f"Found all required : {', '.join(os.path.basename(p) for p in pseudos)}", f_out)
 
+        apply_symmetry_skip = (args.use_symmetry and args.modes is None and not symmetry_error)
         selected = []
+        n_actually_skipped = 0
         for k, (freq, band_idx) in enumerate(zip(frequencies, mode_band_indices), start=1):
             if args.modes is not None and k not in args.modes:
                 continue
@@ -275,12 +373,23 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 continue
             if args.freq_max is not None and freq > args.freq_max:
                 continue
+            if apply_symmetry_skip:
+                ms = band_to_symmetry.get(int(band_idx))
+                if ms is not None and not ms.is_raman_active:
+                    n_actually_skipped += 1
+                    continue
             selected.append((k, freq, int(band_idx)))
+
+        if apply_symmetry_skip and n_actually_skipped:
+            print_dual(f"\n{color_text('[Symmetry]', 'cyan')} Skipped {n_actually_skipped} "
+                        "mode(s) confirmed symmetry-forbidden from being Raman-active (see "
+                        "[1b] SYMMETRY ANALYSIS above).", f_out)
 
         if not selected:
             print_dual(color_text(
-                "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max "
-                "-- nothing to do.", 'red'), f_out)
+                "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max"
+                + ("/--use-symmetry" if apply_symmetry_skip else "")
+                + " -- nothing to do.", 'red'), f_out)
             sys.exit(1)
 
         print_dual(f"\n{color_text('[3] OPTICAL DISPLACEMENT FOLDERS', 'magenta')}", f_out)

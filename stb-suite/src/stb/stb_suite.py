@@ -3303,13 +3303,20 @@ def run_raman_modes() -> None:
     if full_tensor_choice in ('y', 'yes'):
         args.append("--full-tensor")
 
+    if not modes_str:
+        use_symmetry_choice = get_input(
+            "\nUse group theory to skip modes that are symmetry-forbidden from being "
+            "Raman-active (saves SIESTA time, needs a primitive cell) (y/N): ").strip().lower()
+        if use_symmetry_choice in ('y', 'yes'):
+            args.append("--use-symmetry")
+
     displacement = get_float_input("\nFinite-difference displacement in Ang [default: 0.02]: ", 0.02)
     args.extend(["--displacement", str(displacement)])
 
     optical_mesh, optical_broaden = [10, 10, 10], 0.2
     show_advanced = get_input(
         "\nConfigure advanced settings (Optical mesh/broadening/frequency range/pseudopotential "
-        "override)? [y/N]: ").strip().lower()
+        "override/vacuum-gap/rotational-mode tolerance)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         mesh_input = get_input("Optical.Mesh k-grid (e.g. '10 10 10') [default: 10 10 10]: ").strip()
         if mesh_input:
@@ -3332,6 +3339,16 @@ def run_raman_modes() -> None:
         pseudo_dir = prompt_pseudo_source(optional=True)
         if pseudo_dir:
             args.extend(["--pseudo-dir", pseudo_dir])
+        vacuum_gap = get_float_input(
+            "\nVacuum gap threshold in Ang, to detect an isolated (0D) molecule -- it has 3 "
+            "extra trivial (free-rotation) modes at Gamma that don't count as real vibrations "
+            "(default: 10.0): ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+        rotational_mode_tol = get_float_input(
+            "0D only: frequency threshold in THz below which a mode is treated as free rotation "
+            "rather than a real vibration -- lower it if your molecule has genuine low-frequency "
+            "skeletal/torsional modes (default: 2.0): ", 2.0)
+        args.extend(["--rotational-mode-tol", str(rotational_mode_tol)])
 
     args.extend(["--optical-mesh", str(optical_mesh[0]), str(optical_mesh[1]), str(optical_mesh[2])])
     args.extend(["--optical-broaden", str(optical_broaden)])

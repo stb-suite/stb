@@ -108,6 +108,7 @@ stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 3 --no-intro 
 check_exit_code $? 0
 check_contains "Force files found : 84" log_basic.txt
 check_contains "FORCE_SETS       : generated successfully" log_basic.txt
+check_contains "Dimensionality    : 3D (bulk material)" log_basic.txt
 check_contains "Non-acoustic Gamma modes : 39" log_basic.txt
 check_contains "Selected modes    : 3" log_basic.txt
 check_contains "Folders to write  : 3 modes x 2 signs x 3 axes = 18" log_basic.txt
@@ -197,6 +198,191 @@ echo "Testing: mode_01_plus_xy uses the (x+y)/sqrt(2) Optical.Vector direction"
 check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/calc.fdf
 
 
+# --- 5b. core.raman_symmetry correctness gate: silicon (point group m-3m/Oh) ---
+# Independent of the Sn3O4 CLI fixture -- builds real phonons for bulk Si via
+# MACE-MP-0 (same model already cached locally by earlier ML tests in this
+# suite) and checks classify_modes() against the textbook-known result: the
+# acoustic modes are T1u (translation, never Raman-active) and the triply
+# degenerate optical mode is T2g (Si's actual, experimentally known Raman
+# mode) -- this is the mandatory correctness gate for --use-symmetry's group
+# theory (see core/raman_symmetry.py's own docstring for the derivation).
+echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known silicon (Oh) result ---"
+python3 - <<'PYEOF' > log_symmetry_gate.txt 2>&1
+import numpy as np
+from ase.build import bulk
+from ase import Atoms
+from phonopy import Phonopy
+from phonopy.structure.atoms import PhonopyAtoms
+from stb.core import mace_relax
+from stb.core.raman_symmetry import classify_modes
+
+atoms = bulk('Si', 'diamond', a=5.43)
+calc = mace_relax.get_calculator(model='small', device='cpu')
+atoms.calc = calc
+mace_relax.relax(atoms, calc, cell_mask=None, fmax=0.01, max_steps=200)
+
+cell = PhonopyAtoms(symbols=atoms.get_chemical_symbols(), cell=atoms.get_cell(),
+                     scaled_positions=atoms.get_scaled_positions())
+phonon = Phonopy(cell, supercell_matrix=[[2, 0, 0], [0, 2, 0], [0, 0, 2]])
+phonon.generate_displacements(distance=0.01)
+
+force_sets = []
+for scell in phonon.supercells_with_displacements:
+    a2 = Atoms(symbols=scell.symbols, positions=scell.positions, cell=scell.cell, pbc=True)
+    a2.calc = calc
+    force_sets.append(a2.get_forces())
+phonon.forces = force_sets
+phonon.produce_force_constants()
+
+mode_symmetries, point_group, error = classify_modes(phonon)
+assert error is None, f"unexpected error: {error}"
+assert point_group == "m-3m", f"expected m-3m, got {point_group}"
+
+acoustic = [ms for ms in mode_symmetries if max(ms.band_indices) < 3]
+optical = [ms for ms in mode_symmetries if min(ms.band_indices) >= 3]
+assert len(acoustic) == 1 and acoustic[0].label == "T1u" and acoustic[0].is_raman_active is False, \
+    f"acoustic modes must be T1u/inactive, got {acoustic}"
+assert len(optical) == 1 and optical[0].label == "T2g" and optical[0].is_raman_active is True, \
+    f"optical mode must be T2g/active, got {optical}"
+print("SYMMETRY_GATE_OK")
+PYEOF
+check_contains "SYMMETRY_GATE_OK" log_symmetry_gate.txt
+
+
+# --- 5b-2. core.raman_symmetry correctness gate: graphene (2D, point group D6h) ---
+# A vacuum-padded 2D slab -- classify_modes uses the point group spglib
+# detects on the padded cell (a standard, practical stand-in for the true
+# "layer group" formalism). Checked against two well-known, widely-cited
+# graphene Raman facts: the doubly-degenerate in-plane E2g mode (origin of
+# graphene's G-band) is Raman-active, and the out-of-plane B1g mode is
+# Raman-SILENT (not in D6h's quadratic basis) -- neither is a centrosymmetric
+# g/u-only shortcut result, so this also exercises the general (non-g/u)
+# path of the reduction formula on a real, physically meaningful case.
+echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known graphene (D6h) result ---"
+python3 - <<'PYEOF' > log_symmetry_gate_2d.txt 2>&1
+import numpy as np
+from ase.build import graphene
+from ase import Atoms
+from phonopy import Phonopy
+from phonopy.structure.atoms import PhonopyAtoms
+from stb.core import mace_relax
+from stb.core.raman_symmetry import classify_modes
+
+atoms = graphene(formula='C2', a=2.46, vacuum=10.0)
+calc = mace_relax.get_calculator(model='small', device='cpu')
+atoms.calc = calc
+mace_relax.relax(atoms, calc, cell_mask=[True, True, False, False, False, False],
+                  fmax=0.01, max_steps=300)
+
+cell = PhonopyAtoms(symbols=atoms.get_chemical_symbols(), cell=atoms.get_cell(),
+                     scaled_positions=atoms.get_scaled_positions())
+phonon = Phonopy(cell, supercell_matrix=[[2, 0, 0], [0, 2, 0], [0, 0, 1]])
+phonon.generate_displacements(distance=0.01)
+
+force_sets = []
+for scell in phonon.supercells_with_displacements:
+    a2 = Atoms(symbols=scell.symbols, positions=scell.positions, cell=scell.cell, pbc=True)
+    a2.calc = calc
+    force_sets.append(a2.get_forces())
+phonon.forces = force_sets
+phonon.produce_force_constants()
+
+mode_symmetries, point_group, error = classify_modes(phonon)
+assert error is None, f"unexpected error: {error}"
+assert point_group == "6/mmm", f"expected 6/mmm (D6h), got {point_group}"
+
+optical = [ms for ms in mode_symmetries if min(ms.band_indices) >= 3]
+b1g = [ms for ms in optical if ms.label == "B1g"]
+e2g = [ms for ms in optical if ms.label == "E2g"]
+assert len(b1g) == 1 and b1g[0].is_raman_active is False, f"B1g (out-of-plane) must be silent, got {b1g}"
+assert len(e2g) == 1 and e2g[0].is_raman_active is True, f"E2g (G-band) must be active, got {e2g}"
+print("SYMMETRY_GATE_2D_OK")
+PYEOF
+check_contains "SYMMETRY_GATE_2D_OK" log_symmetry_gate_2d.txt
+
+
+# --- 5b-3. get_gamma_modes 0D fix: H2O molecule (3 translations + 3 rotations) ---
+# A genuinely isolated molecule has 6 trivial modes at Gamma (3 translation
+# + 3 free rotation for a non-linear molecule like water), not 3 -- verified
+# live via MACE-MP-0 during planning: bands 0-2 (translation) and 3-5
+# (rotation) are both far below the genuine vibrational bending/stretching
+# modes (~44.5/111.6/115.2 THz for water). get_gamma_modes must return
+# exactly 3 non-acoustic modes here (the real vibrations), not 6.
+echo -e "\n--- Testing get_gamma_modes 0D trivial-mode exclusion (H2O molecule) ---"
+python3 - <<'PYEOF' > log_0d_gate.txt 2>&1
+import numpy as np
+from ase.build import molecule
+from ase import Atoms
+from phonopy import Phonopy
+from phonopy.structure.atoms import PhonopyAtoms
+from stb.core import mace_relax
+from stb.core import kspace
+from stb.core.phonon_workflow import get_gamma_modes
+
+atoms = molecule('H2O')
+atoms.center(vacuum=8.0)
+atoms.pbc = True
+calc = mace_relax.get_calculator(model='small', device='cpu')
+atoms.calc = calc
+mace_relax.relax(atoms, calc, cell_mask=None, fmax=0.01, max_steps=300)
+
+frac = atoms.get_scaled_positions()
+vac = kspace.detect_vacuum_axes(frac, np.array(atoms.get_cell()), 5.0)
+assert all(vac), f"expected 0D (all axes vacuum-padded), got {vac}"
+
+cell = PhonopyAtoms(symbols=atoms.get_chemical_symbols(), cell=atoms.get_cell(),
+                     scaled_positions=atoms.get_scaled_positions())
+phonon = Phonopy(cell, supercell_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+phonon.generate_displacements(distance=0.01)
+force_sets = []
+for scell in phonon.supercells_with_displacements:
+    a2 = Atoms(symbols=scell.symbols, positions=scell.positions, cell=scell.cell, pbc=True)
+    a2.calc = calc
+    force_sets.append(a2.get_forces())
+phonon.forces = force_sets
+phonon.produce_force_constants()
+
+# Without the 0D fix (extra_trivial_tol_thz=None): still 6 "non-acoustic"
+# modes -- the 3 rotations wrongly included.
+freqs_before, _, n_extra_before = get_gamma_modes(phonon, exclude_acoustic=True)
+assert n_extra_before == 0
+assert len(freqs_before) == 6, f"expected 6 without the 0D fix, got {len(freqs_before)}"
+
+# With the fix (0D confirmed, as raman_modes.py itself now does): exactly
+# the 3 real vibrations, all well above the rotational tolerance.
+freqs_after, band_idx_after, n_extra_after = get_gamma_modes(
+    phonon, exclude_acoustic=True, extra_trivial_tol_thz=5.0)
+assert n_extra_after == 3, f"expected 3 extra trivial modes excluded, got {n_extra_after}"
+assert len(freqs_after) == 3, f"expected 3 real vibrations, got {len(freqs_after)}"
+assert all(f > 5.0 for f in freqs_after), f"leftover modes must be real vibrations, got {freqs_after}"
+print("ZERO_D_FIX_OK")
+PYEOF
+check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
+
+
+# --- 5c. --use-symmetry CLI wiring (Sn3O4 fixture) ---
+# The fabricated Sn3O4.FA data (see make_phonon_disp above) deliberately
+# scales forces differently per disp-*/ folder to avoid a degenerate
+# dynamical matrix -- as a side effect it has no real crystal symmetry
+# (point group 1), so this only exercises the WIRING (new report section,
+# no crash, correctly finds nothing to skip when there's no symmetry to
+# exploit) -- the actual group-theory correctness is 5b's job, above.
+echo -e "\n--- Testing --use-symmetry CLI wiring ---"
+make_phonon_disp
+stb-ramanModes --directory raman_study --calc calc.fdf --use-symmetry --no-intro > log_symmetry.txt 2>&1
+check_exit_code $? 0
+check_contains "\[1b\] SYMMETRY ANALYSIS" log_symmetry.txt
+check_contains "Point group       : 1" log_symmetry.txt
+check_contains "Symmetry-forbidden (Raman-inactive) : 0/39" log_symmetry.txt
+
+echo "Testing: --use-symmetry + explicit --modes is informational only, never auto-skips"
+stb-ramanModes --directory raman_study --calc calc.fdf --use-symmetry --modes 1 2 --no-intro \
+    > log_symmetry_explicit.txt 2>&1
+check_exit_code $? 0
+check_contains "informational only" log_symmetry_explicit.txt
+check_contains "Selected modes    : 2" log_symmetry_explicit.txt
+
+
 # --- 6. Error cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -209,12 +395,15 @@ echo "Testing: --version"
 stb-ramanModes --version > log_version.txt 2>&1
 check_contains "stb-ramanModes" log_version.txt
 
-echo "Testing: --help documents --modes/--optical-mesh/--optical-broaden/--full-tensor"
+echo "Testing: --help documents --modes/--optical-mesh/--optical-broaden/--full-tensor/--use-symmetry/--vacuum-gap"
 stb-ramanModes --help > log_help.txt 2>&1
 check_contains "modes" log_help.txt
 check_contains "optical-mesh" log_help.txt
 check_contains "optical-broaden" log_help.txt
 check_contains "full-tensor" log_help.txt
+check_contains "use-symmetry" log_help.txt
+check_contains "vacuum-gap" log_help.txt
+check_contains "rotational-mode-tol" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.11.2) ---
@@ -251,6 +440,46 @@ make_phonon_disp
 } | stb-suite > log_menu_fulltensor.txt 2>&1
 check_contains "Folders to write  : 1 modes x 2 signs x 6 axes = 12" log_menu_fulltensor.txt
 check_success raman_study/optical_disp/mode_01_plus_xy/structure.fdf
+
+echo "Testing: navigate 4.11.2 -> default modes (empty), use-symmetry ON -> quit"
+make_phonon_disp
+{
+  echo "4.11.2"
+  echo "raman_study"    # run_dir
+  echo "calc.fdf"       # calc_file
+  echo ""               # modes (default -> every non-acoustic mode; unlocks the use-symmetry prompt)
+  echo ""               # full_tensor_choice (default N)
+  echo "y"              # use_symmetry_choice -> Y
+  echo ""               # displacement (default 0.02)
+  echo ""               # show_advanced (default -> skip)
+  echo ""               # press enter to continue
+  echo "0"              # quit stage submenu
+} | stb-suite > log_menu_symmetry.txt 2>&1
+check_contains "\[1b\] SYMMETRY ANALYSIS" log_menu_symmetry.txt
+
+echo "Testing: navigate 4.11.2 -> advanced settings ON (mesh/broaden/vacuum-gap/rotational-mode-tol)"
+make_phonon_disp
+{
+  echo "4.11.2"
+  echo "raman_study"    # run_dir
+  echo "calc.fdf"       # calc_file
+  echo "1"              # modes
+  echo ""               # full_tensor_choice (default N)
+  echo ""               # displacement (default 0.02)
+  echo "y"              # show_advanced -> Y
+  echo "8 8 8"           # mesh_input
+  echo "0.15"            # optical_broaden
+  echo ""                # freq_min (skip)
+  echo ""                # freq_max (skip)
+  echo ""                # pseudo_dir prompt (skip)
+  echo "12.5"             # vacuum_gap
+  echo "1.5"              # rotational_mode_tol
+  echo ""               # press enter to continue
+  echo "0"              # quit stage submenu
+} | stb-suite > log_menu_advanced.txt 2>&1
+check_contains "Optical mesh      : 8 x 8 x 8" log_menu_advanced.txt
+check_contains "Optical broaden   : 0.15 eV" log_menu_advanced.txt
+check_success raman_study/optical_disp/mode_01_plus_x/structure.fdf
 
 
 popd > /dev/null

@@ -187,26 +187,56 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
     return phonon, internal_to_angstrom, original_dir
 
 
-def get_gamma_modes(phonon, exclude_acoustic=True):
+def get_gamma_modes(phonon, exclude_acoustic=True, extra_trivial_tol_thz=None):
     """Runs phonon.run_qpoints([[0, 0, 0]]) and returns
-    (frequencies, mode_indices) at Gamma: frequencies in THz, mode_indices
-    the corresponding 0-based Phonopy band indices -- usable directly as
-    the `band_index` in phonon.run_modulations([[q_point, band_index,
-    amplitude, phase]]) (see displace_along_mode below), rather than
-    exposing raw eigenvectors and reimplementing Phonopy's own
+    (frequencies, mode_indices, n_extra_trivial) at Gamma: frequencies in
+    THz, mode_indices the corresponding 0-based Phonopy band indices --
+    usable directly as the `band_index` in phonon.run_modulations([[q_point,
+    band_index, amplitude, phase]]) (see displace_along_mode below), rather
+    than exposing raw eigenvectors and reimplementing Phonopy's own
     mass-weighting/normalization math here.
 
     `exclude_acoustic=True` (default) drops the first 3 modes (pure
     translation, omega ~ 0 at Gamma) -- these aren't real Raman-active
-    vibrations.
+    vibrations. This is the right, and ONLY, trivial-mode count for a
+    genuinely 3D/2D/1D (at least one real periodic direction) structure --
+    free rotation isn't a zero-energy motion there, so no other mode is
+    ever trivial no matter how soft it is.
+
+    `extra_trivial_tol_thz`: for a genuinely isolated (0D) structure only,
+    a real molecule has 3 MORE trivial modes at Gamma beyond translation --
+    free rotation (3 for a non-linear molecule, 2 for a linear one, since
+    spinning about the molecular axis isn't a real degree of freedom for
+    point masses on a line). Verified live with a relaxed H2O molecule via
+    MACE-MP-0: bands 0-2 (translation, ~-1.9 to -1.5 THz -- numerical box
+    noise) and bands 3-5 (rotation, ~-0.01 to 0.22 THz -- distinctly
+    closer to zero) are both far below the genuine vibrational modes at
+    44.5/111.6/115.2 THz. When given (in THz), after the first 3 bands, up
+    to 3 MORE contiguous bands are also dropped as long as their
+    |frequency| stays below this tolerance -- naturally stops at 2 extra
+    for a linear molecule (the 3rd real mode is a genuine, much higher-
+    frequency vibration) and at 3 for a non-linear one. The hard cap of 3
+    extra is what makes this safe to call unconditionally once a caller
+    has confirmed 0D (e.g. via core.kspace.detect_vacuum_axes): it can
+    never eat into a real vibrational mode of a 3D/2D/1D structure, because
+    those callers must never pass this parameter at all -- there's no
+    "maybe rotational" ambiguity to resolve there in the first place.
     """
     phonon.run_qpoints([[0, 0, 0]])
     frequencies = phonon.qpoints.frequencies[0]
     mode_indices = np.arange(len(frequencies))
-    if exclude_acoustic:
-        frequencies = frequencies[3:]
-        mode_indices = mode_indices[3:]
-    return frequencies, mode_indices
+    if not exclude_acoustic:
+        return frequencies, mode_indices, 0
+
+    n_trivial = 3
+    if extra_trivial_tol_thz is not None:
+        for i in range(3, min(6, len(frequencies))):
+            if abs(frequencies[i]) < extra_trivial_tol_thz:
+                n_trivial += 1
+            else:
+                break
+
+    return frequencies[n_trivial:], mode_indices[n_trivial:], n_trivial - 3
 
 
 def displace_along_mode(phonon, band_index, amplitude_ang, internal_to_angstrom, sign=1.0):

@@ -196,6 +196,14 @@ def main():
         print_dual(f"  Selected match ID {args.match_id}: area {best_match_data['area']:.2f} Ang^2, "
                     f"strain {best_match_data['strain']:.2f}%, angular strain "
                     f"{best_match_data['angle_strain']:.2f} deg.", f_out)
+        n_layer1_supercell = len(layer1_pmg) * round(np.linalg.det(t_mat1))
+        n_layer2_supercell = len(layer2_pmg) * round(np.linalg.det(t_mat2))
+        n_total = n_layer1_supercell + n_layer2_supercell
+        n_grid_points = args.grid_n * args.grid_n
+        print_dual(f"  Each grid point: {n_total} atoms ({n_layer1_supercell} layer 1 + "
+                    f"{n_layer2_supercell} layer 2). {n_grid_points} grid point(s) total -- "
+                    f"{n_grid_points} independent single-point SIESTA runs at {n_total} atoms each.",
+                    f_out)
 
         shifts = list(np.linspace(0.0, 1.0, args.grid_n, endpoint=False))
 

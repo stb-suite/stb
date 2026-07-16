@@ -134,9 +134,29 @@ check_contains "NumberofAtoms      4" equilibrium.fdf
 # --- 4. A grid point missing calc.out is skipped, not fatal ---
 echo -e "\n--- Testing that a grid point missing calc.out is skipped ---"
 mv shift_02_02/calc.out shift_02_02/calc.out.bak
+# clear the surface plot files left by the earlier complete-grid run (test
+# 2) BEFORE the incomplete-grid run below, so we can tell whether THIS run
+# (re)creates them, not whether they were already there from before.
+rm -f stackingfault_surface.dat stackingfault_surface.gplot
 stb-stackingfaultAnalysis --dir . --no-intro > log_partial.txt 2>&1
 check_contains "SKIP" log_partial.txt
 check_contains "skipped: 1" log_partial.txt
+
+# --- 4b. Regression: an INCOMPLETE grid must skip the pm3d surface plot
+#     entirely (not write a broken/blank one) -- gnuplot's pm3d map renders
+#     the WHOLE plot blank if even a single grid point is missing (verified
+#     live against real gnuplot 6.0, not just assumed), so the fix must
+#     actually suppress the plot files, not just print a warning alongside
+#     a broken one.
+echo -e "\n--- Testing that an incomplete grid skips the surface plot (not a broken one) ---"
+check_contains "Skipping the gamma-surface plot" log_partial.txt
+if [ -f stackingfault_surface.dat ] || [ -f stackingfault_surface.gplot ]; then
+    echo -e "   -> ${RED}Failed:${NC} surface plot files were written despite an incomplete grid"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no surface plot files written for an incomplete grid"
+    PASS=$((PASS+1))
+fi
 mv shift_02_02/calc.out.bak shift_02_02/calc.out
 
 

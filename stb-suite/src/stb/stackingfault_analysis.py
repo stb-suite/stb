@@ -287,23 +287,45 @@ def main():
             "high-energy registries may have a non-relaxed interlayer distance; the true "
             "corrugation with a fully relaxed distance at each point may be somewhat lower.",
             'yellow'), f_out)
+        if n_skipped:
+            print_dual(color_text(
+                f"[NOTE] {n_skipped} grid point(s) were skipped -- the reported min/max above are "
+                "only over the points actually computed; the true equilibrium stacking or highest-"
+                "energy registry may be among the missing ones.", 'yellow'), f_out)
 
         print_dual(f"\n{color_text('[3] SUMMARY', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
         print_dual(f"Grid points analyzed : {len(rows)} (skipped: {n_skipped})", f_out)
 
-        write_surface_data(args.output, rows, grid_n, lattice)
-        plane_angle = check_planar_orthogonality(lattice, axis_idx=2)
-        e_max_rel = corrugation
-        cb_range = (0.0, e_max_rel) if e_max_rel > 0 else None
-        write_gnuplot_script(args.output, args.output, mode='slice',
-                              quantity_label="Stacking Fault Energy", is_signed=False,
-                              axis_idx=2, plane_angle_deg=plane_angle, cb_range=cb_range,
-                              contour=True, generator_name="stb-stackingfaultAnalysis", units="eV")
-        gplot_path = args.output.rsplit('.', 1)[0] + ".gplot"
-        print_dual(f"{color_text('[Saved]', 'cyan')} Surface data -> {args.output}, {gplot_path} "
-                    f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
-                    f_out)
+        # A gnuplot pm3d map needs EVERY point of the rectangular grid present
+        # to render at all -- verified live: even a single missing/NaN point
+        # in an otherwise-complete N x N block doesn't just leave a local gap,
+        # it makes pm3d render the WHOLE plot blank (no error, no warning from
+        # gnuplot itself -- a silent, easy-to-miss failure). So the surface
+        # plot is only attempted when every point was actually computed;
+        # otherwise the numeric analysis above still stands (it tolerates a
+        # partial grid fine), but the map is skipped with a clear reason
+        # instead of silently writing a broken/blank one.
+        if len(rows) == grid_n * grid_n:
+            write_surface_data(args.output, rows, grid_n, lattice)
+            plane_angle = check_planar_orthogonality(lattice, axis_idx=2)
+            e_max_rel = corrugation
+            cb_range = (0.0, e_max_rel) if e_max_rel > 0 else None
+            write_gnuplot_script(args.output, args.output, mode='slice',
+                                  quantity_label="Stacking Fault Energy", is_signed=False,
+                                  axis_idx=2, plane_angle_deg=plane_angle, cb_range=cb_range,
+                                  contour=True, generator_name="stb-stackingfaultAnalysis", units="eV")
+            gplot_path = args.output.rsplit('.', 1)[0] + ".gplot"
+            print_dual(f"{color_text('[Saved]', 'cyan')} Surface data -> {args.output}, {gplot_path} "
+                        f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
+                        f_out)
+        else:
+            print_dual(color_text(
+                f"[WARNING] Skipping the gamma-surface plot: {n_skipped} grid point(s) are missing "
+                f"out of {grid_n * grid_n} -- a gnuplot pm3d map needs every point of the grid to "
+                "render correctly (a single missing point can make the ENTIRE map render blank, "
+                "not just a local gap). Complete SIESTA in the remaining folders and re-run to get "
+                "the map.", 'yellow'), f_out)
         print_dual(f"{color_text('[Saved]', 'cyan')} Report       -> {REPORT_FILE}", f_out)
 
         if args.apply:

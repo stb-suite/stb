@@ -9,7 +9,6 @@
 VERSION = "1.0.0"
 
 import os
-import re
 import sys
 import argparse
 from collections import Counter
@@ -21,10 +20,9 @@ from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.deps import require_mace
+from stb.core.calc_directives import force_single_point
 
 REPORT_FILE = "neb_setup.txt"
-_MD_RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_MD_NUMCGSTEPS_RE = re.compile(r'MD\.NumCGsteps\s+\d+', re.IGNORECASE)
 
 
 def check_composition_match(initial_structure, final_structure):
@@ -154,25 +152,6 @@ def idpp_refine_images(pmg_images, fmax=0.1, steps=100):
     neb = NEB(ase_images, method="improvedtangent")
     idpp_interpolate(neb, traj=None, log=None, fmax=fmax, steps=steps)
     return [AseAtomsAdaptor.get_structure(a) for a in ase_images]
-
-
-def force_single_point(calc_text):
-    """Substitutes/appends 'MD.TypeOfRun CG' and 'MD.NumCGsteps 0' onto
-    calc_text -- same substitute-or-append style as adsorb.py's
-    force_gamma_kgrid/force_spin_polarized (regex .subn, append if the tag
-    isn't present at all rather than erroring, since an absent tag is a
-    normal template, not a malformed one). Forced unconditionally, no
-    opt-out flag: SIESTA has no inter-image spring coupling once images
-    are independent folders, so relaxing one on its own would silently
-    collapse it toward one of the two endpoints and destroy the path.
-    """
-    new_text, count = _MD_RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
-    if count == 0:
-        new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _MD_NUMCGSTEPS_RE.subn('MD.NumCGsteps         0', new_text)
-    if count == 0:
-        new_text += "MD.NumCGsteps         0\n"
-    return new_text
 
 
 def cumulative_reaction_coordinates(pmg_images):

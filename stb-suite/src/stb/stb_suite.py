@@ -1027,6 +1027,130 @@ def run_neb_analysis() -> None:
     run_tool("stb-nebAnalysis", args)
 
 
+def run_stackingfault_setup() -> None:
+    """Interface for the Stacking Fault Prep (stackingfault.py)"""
+    print("\n" + "="*60)
+    print(color_text("STACKING FAULT (GAMMA-SURFACE) SETUP", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Rigidly slides one layer of a bilayer across a 2D grid of lateral offsets and writes "
+        "one single-point SIESTA folder per grid point -- run SIESTA in each, then use Stage 2 "
+        "(Analysis) for the equilibrium stacking and the stacking-fault energy landscape.", 'cyan'))
+    print()
+
+    layer1_file = get_input("Bottom monolayer FDF file (-l1): ").strip()
+    while not os.path.isfile(layer1_file):
+        print(color_text("File not found!", 'red'))
+        layer1_file = get_input("Bottom monolayer FDF file (-l1): ").strip()
+
+    print(color_text(
+        "\nTop monolayer: pass the SAME file as above for the canonical use case (a material "
+        "sliding against itself, e.g. graphite ABA vs. ABC stacking); a different file studies "
+        "an interlayer/heterostructure sliding energy landscape instead.", 'cyan'))
+    layer2_file = get_input("Top monolayer FDF file (-l2): ").strip()
+    while not os.path.isfile(layer2_file):
+        print(color_text("File not found!", 'red'))
+        layer2_file = get_input("Top monolayer FDF file (-l2): ").strip()
+
+    calc_file = get_input("Calc.fdf template (-c): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ").strip()
+
+    pp_path = prompt_pseudo_source(optional=True)
+
+    grid_n = get_int_input("\nGrid resolution, N x N shifts [default: 7]: ", 7)
+    gap = get_float_input("Interlayer gap, Ang (fixed across the grid) [default: 3.2]: ", 3.2)
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    max_area, max_strain, match_id, vacuum, strain_mode, twist, output_dir = \
+        150.0, 0.05, 0, None, "top", 0.0, "."
+    show_advanced = get_input(
+        "\nConfigure advanced settings (ZSL match tolerance, vacuum, strain mode, twist, "
+        "output directory)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        max_area = get_float_input("Max ZSL supercell area, Ang^2 [default: 150.0]: ", 150.0)
+        max_strain = get_float_input("Max ZSL match strain fraction [default: 0.05]: ", 0.05)
+        match_id = get_int_input("Which ZSL match to use, 0-based [default: 0]: ", 0)
+        vacuum_str = get_input("Target vacuum, Ang [default: inherit layer 1]: ").strip()
+        vacuum = float(vacuum_str) if vacuum_str else None
+        strain_mode_choice = get_input("Strain mode top/bottom/sym [default: top]: ").strip().lower()
+        strain_mode = strain_mode_choice if strain_mode_choice in ('top', 'bottom', 'sym') else 'top'
+        twist = get_float_input("Twist angle, degrees (fixed) [default: 0.0]: ", 0.0)
+        output_dir = get_input("Output root directory [default: current directory]: ").strip()
+        if not output_dir:
+            output_dir = "."
+
+    args = [
+        "-l1", layer1_file,
+        "-l2", layer2_file,
+        "-c", calc_file,
+        "-n", str(grid_n),
+        "-g", str(gap),
+        "-a", str(max_area),
+        "-s", str(max_strain),
+        "-id", str(match_id),
+        "-sm", strain_mode,
+        "-t", str(twist),
+        "--output-dir", output_dir,
+        "--no-intro",
+    ]
+    if pp_path:
+        args.extend(["-p", pp_path])
+    if vacuum is not None:
+        args.extend(["--vacuum", str(vacuum)])
+
+    summary_rows = [
+        ("Layer 1", layer1_file),
+        ("Layer 2", layer2_file),
+        ("Calc template", calc_file),
+        ("Pseudopotentials", pp_path or "(none)"),
+        ("Grid", f"{grid_n} x {grid_n}"),
+        ("Gap (fixed)", f"{gap} Ang"),
+        ("Twist (fixed)", f"{twist} deg"),
+        ("Output directory", output_dir),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
+    run_tool("stb-stackingfault", args)
+
+
+def run_stackingfault_analysis() -> None:
+    """Interface for the Stacking Fault Analysis (stackingfault_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("STACKING FAULT (GAMMA-SURFACE) ANALYSIS", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads every 'shift_II_JJ/' folder and reports the equilibrium stacking, the "
+        "highest-energy registry, the corrugation energy, and the full 2D gamma-surface map.",
+        'cyan'))
+    print()
+
+    dir_path = get_input("Root directory with every 'shift_II_JJ/' [default: .]: ").strip()
+    if not dir_path:
+        dir_path = "."
+
+    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this point single-point-converged' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--dir", dir_path, "--file", out_file,
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    apply_target = get_input(
+        "\nCopy the equilibrium (lowest-energy) point's structure.fdf to a production file? "
+        "Path to write, or leave blank to skip: ").strip()
+    if apply_target:
+        args.extend(["--apply", apply_target])
+
+    run_tool("stb-stackingfaultAnalysis", args)
+
+
 def run_2d_stacker() -> None:
     """Interface for the Monolayer Stacker (stb.stacking2D:main)"""
     print("\n" + "="*60)
@@ -4164,6 +4288,17 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-nebAnalysis)",
                 'description': "Compute the energy profile and forward/backward barrier.",
                 'func': run_neb_analysis},
+        }},
+    10: {'title': "2D Stacking Fault (Gamma-Surface)",
+        'description': "Slide one 2D layer across a grid of lateral offsets, then compute the "
+                        "equilibrium stacking, corrugation energy, and full gamma-surface map.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-stackingfault)",
+                'description': "Generate one single-point shift_II_JJ/ folder per grid point.",
+                'func': run_stackingfault_setup},
+            2: {'title': "Stage 2 - Analysis (stb-stackingfaultAnalysis)",
+                'description': "Compute the equilibrium stacking and corrugation energy.",
+                'func': run_stackingfault_analysis},
         }},
        }
 

@@ -56,10 +56,14 @@ check_exit_code() {
     fi
 }
 
-# Runs stb-raman + stb-ramanModes (Stages 1-2, tested separately) with 3
-# selected modes, then fabricates SystemLabel.EPSIMG + calc.out in every
-# resulting optical_disp/mode_*/ folder.
+# Runs stb-raman + stb-ramanModes (Stages 1-2, tested separately) with the
+# given selected modes (default: 1 2 3, all imaginary in this fixture --
+# pass e.g. "1 39" to also include mode 39, the one genuinely real/positive
+# -frequency vibration in this fixture, when a test needs one), then
+# fabricates SystemLabel.EPSIMG + calc.out in every resulting
+# optical_disp/mode_*/ folder.
 make_optical_disp() {
+    local modes="${1:-1 2 3}"
     rm -rf raman_study
     stb-raman -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-intro > /dev/null 2>&1
     python3 - <<'PYEOF'
@@ -77,7 +81,7 @@ for i, d in enumerate(sorted(glob.glob("raman_study/phonon_disp/disp-*")), start
             vals = [float(v) * scale for v in parts[1:]]
             out.write(f"{idx:>6}  {vals[0]: .9E}  {vals[1]: .9E}  {vals[2]: .9E}\n")
 PYEOF
-    stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 3 --no-intro > /dev/null 2>&1
+    stb-ramanModes --directory raman_study --calc calc.fdf --modes $modes --no-intro > /dev/null 2>&1
     python3 - <<'PYEOF'
 import glob, os
 import numpy as np
@@ -234,6 +238,99 @@ check_contains "OK" log_tensor_check.txt
 echo "Testing: spectrum .dat has the expected 2-column header"
 check_contains "frequency.cm" raman_study/raman_spectrum.dat
 
+echo "Testing: depolarization ratio (rho) reported with a polarized/depolarized tag"
+check_contains "rho~" raman_study/raman_stage3.txt
+python3 -c "
+import re
+with open('raman_study/raman_stage3.txt') as f:
+    text = f.read()
+matches = re.findall(r'rho~([\d.]+) \((polarized|depolarized)\)', text)
+assert matches, 'no rho values found'
+for rho_str, tag in matches:
+    rho = float(rho_str)
+    assert 0.0 <= rho <= 0.75 + 1e-6, f'rho {rho} out of physical range [0, 0.75]'
+    expected_tag = 'polarized' if rho < 0.75 - 1e-6 else 'depolarized'
+    assert tag == expected_tag, f'rho={rho} tagged {tag}, expected {expected_tag}'
+print('OK')
+" > log_rho_check.txt 2>&1
+check_contains "OK" log_rho_check.txt
+
+
+# --- 3b. --temperature: Bose-Einstein weighting changes the spectrum ---
+# Modes "1 39": mode 1 is imaginary (must be left unweighted, see the
+# [WARNING] below), mode 39 is the one genuinely real/positive-frequency
+# vibration in this fixture (2.7882 THz) -- needed so the weighting
+# actually has something real to change.
+echo -e "\n--- Testing --temperature (Bose-Einstein thermal weighting) ---"
+make_optical_disp "1 39"
+stb-ramanAnalysis --directory raman_study --temperature 300 -o raman_spectrum_300k --no-intro \
+    > log_temperature.txt 2>&1
+check_exit_code $? 0
+check_contains "Thermal weighting : Bose-Einstein Stokes factor (n+1) at 300.0 K" log_temperature.txt
+check_contains "imaginary-frequency mode(s) left unweighted" log_temperature.txt
+check_success raman_study/raman_spectrum_300k.dat
+
+echo "Testing: weighted spectrum differs from the unweighted default (T=300K changes intensities)"
+stb-ramanAnalysis --directory raman_study -o raman_spectrum_unweighted --no-intro > /dev/null 2>&1
+python3 -c "
+import numpy as np
+weighted = np.loadtxt('raman_study/raman_spectrum_300k.dat')
+unweighted = np.loadtxt('raman_study/raman_spectrum_unweighted.dat')
+assert weighted.shape == unweighted.shape
+assert not np.allclose(weighted[:, 1], unweighted[:, 1]), 'thermal weighting had no effect'
+# Bose weight (n+1) is always >= 1, so every weighted intensity must be >= the unweighted one.
+assert (weighted[:, 1] >= unweighted[:, 1] - 1e-9).all(), 'weighted intensity fell below unweighted'
+print('OK')
+" > log_temperature_check.txt 2>&1
+check_contains "OK" log_temperature_check.txt
+
+
+# --- 3c. --experimental: overlay + nearest-neighbor peak match ---
+# Mode 39 alone -> exactly one simulated peak, at 2.7882 THz * 33.35641 =
+# ~92.99 cm^-1 (known from this fixture, see make_optical_disp's comment).
+# Fabricates a synthetic experimental spectrum with ONE clean Gaussian
+# peak at a nearby, deliberately different position (95.0 cm^-1) so the
+# match has a known, checkable non-zero delta (~2.0 cm^-1).
+echo -e "\n--- Testing --experimental (peak overlay + matching) ---"
+make_optical_disp "39"
+python3 -c "
+import numpy as np
+freq = np.linspace(50, 140, 500)
+intensity = 100.0 * np.exp(-0.5 * ((freq - 95.0) / 3.0) ** 2)
+with open('fake_experimental.dat', 'w') as f:
+    f.write('# fake experimental spectrum for testing\n')
+    for fr, it in zip(freq, intensity):
+        f.write(f'{fr:.4f} {it:.6f}\n')
+"
+stb-ramanAnalysis --directory raman_study --experimental fake_experimental.dat --no-intro \
+    > log_experimental.txt 2>&1
+check_exit_code $? 0
+check_contains "\[3b\] EXPERIMENTAL COMPARISON" log_experimental.txt
+check_contains "Peaks found       : 1 simulated, 1 experimental" log_experimental.txt
+check_success raman_study/raman_spectrum_experimental.dat
+
+echo "Testing: matched peak delta is close to the known ~2.0 cm^-1 offset (95.0 exp vs ~92.99 sim)"
+python3 -c "
+import re
+with open('raman_study/raman_stage3.txt') as f:
+    text = f.read()
+section = text.split('EXPERIMENTAL COMPARISON')[1]
+m = re.search(r'(\d+\.\d+)\s+(\d+\.\d+)\s+([+-]\d+\.\d+)', section)
+assert m, 'could not find the peak-match row'
+exp_f, sim_f, delta = float(m.group(1)), float(m.group(2)), float(m.group(3))
+assert abs(exp_f - 95.0) < 0.5, f'expected exp peak near 95.0, got {exp_f}'
+assert abs(sim_f - 92.99) < 1.0, f'expected sim peak near 92.99, got {sim_f}'
+assert abs(delta - (sim_f - exp_f)) < 1e-6
+print('OK')
+" > log_experimental_check.txt 2>&1
+check_contains "OK" log_experimental_check.txt
+
+echo "Testing: missing --experimental file is a clear error, not a crash"
+stb-ramanAnalysis --directory raman_study --experimental does_not_exist.dat --no-intro \
+    > log_experimental_missing.txt 2>&1
+check_exit_code $? 1
+check_contains "not found" log_experimental_missing.txt
+
 
 # --- 4. Missing .EPSIMG in one folder -> that mode is skipped, others still analyzed ---
 echo -e "\n--- Testing graceful skip of an incomplete mode (missing .EPSIMG) ---"
@@ -272,6 +369,191 @@ print('OK')
 check_contains "OK" log_fulltensor_check.txt
 
 
+# --- 4c. Reconstruction from a stb-ramanModes --reduce-components sidecar ---
+# Hand-crafts a mode_XX_tensor_form.json (a KNOWN, purely off-diagonal T0 --
+# same shape as water's real B2 mode, verified against core.raman_symmetry.
+# tensor_form directly in test/.../modes/test.sh) and fabricates EPSIMG data
+# for ONLY the single probe-axis pair it names, encoding a KNOWN scale
+# factor c=3.0 -- lets the test assert the reconstructed Rxx..Ryz match
+# c*T0 EXACTLY, not just "some plausible numbers", for the new single-
+# measurement reconstruction math specifically. Builds a minimal
+# raman_study/ tree by hand (doesn't need real Stage 1/2 output -- only
+# Stage 3's reading side is under test here).
+echo -e "\n--- Testing reconstruction from a --reduce-components sidecar (known ground truth) ---"
+rm -rf raman_study
+python3 - <<'PYEOF'
+import json, os
+import numpy as np
+
+os.makedirs("raman_study/optical_disp/mode_05_plus_yz", exist_ok=True)
+os.makedirs("raman_study/optical_disp/mode_05_minus_yz", exist_ok=True)
+
+T0 = np.array([
+    [0.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0],
+    [0.0, 1.0, 0.0],
+])
+np.save("reduced_ground_truth_T0.npy", T0)
+c_true = 3.0
+delta = 0.02
+BASE = 5.0
+inv_sqrt2 = 0.70710678118654752440
+n_probe = np.array([0.0, inv_sqrt2, inv_sqrt2])
+quad = n_probe @ T0 @ n_probe  # = 1.0 for this T0
+
+wp, gamma = 5.0, 0.3
+w = np.linspace(0.05, 15, 400)
+for sign, folder in (("plus", "raman_study/optical_disp/mode_05_plus_yz"),
+                      ("minus", "raman_study/optical_disp/mode_05_minus_yz")):
+    sign_factor = 1.0 if sign == "plus" else -1.0
+    target_static = BASE + sign_factor * delta * c_true * quad
+    w0 = (wp**2 / (target_static - 1.0)) ** 0.5
+    denom = (w0**2 - w**2)**2 + (gamma*w)**2
+    eps2 = wp**2 * gamma * w / denom
+    with open(os.path.join(folder, "Sn3O4.EPSIMG"), "w") as f:
+        f.write("## Minimum and maximum energy in eV\n")
+        f.write(f"##  {w[0]:.6f}  {w[-1]:.6f}\n")
+        f.write("## Number of spin components\n")
+        f.write("## 1\n")
+        for wi, e2i in zip(w, eps2):
+            f.write(f"{wi:.6f}  {e2i:.6f}\n")
+    with open(os.path.join(folder, "calc.out"), "w") as f:
+        f.write("siesta: SCF Convergence by DM criterion\n")
+        f.write("SCF cycle converged after 12 iterations\n")
+    with open(os.path.join(folder, "calc.fdf"), "w") as f:
+        f.write("SystemLabel Sn3O4\n")
+
+with open("raman_study/optical_disp/mode_05_tensor_form.json", "w") as f:
+    json.dump({"T0": T0.tolist(), "probe_axis": "yz"}, f)
+
+with open("raman_study/raman_stage2.txt", "w") as f:
+    f.write("Displacement      : 0.02 Ang\n")
+    f.write("\n# MODE_TABLE -- parsed by stb-ramanAnalysis, do not reorder the first 6 columns\n")
+    f.write(f"# {'label':<22}{'mode_index':<12}{'band_index':<12}{'frequency_thz':<16}{'sign':<8}{'axis':<6}{'dir'}\n")
+    f.write(f"{'mode_05_plus_yz':<24}{5:<12}{7:<12}{10.0:<16.6f}{'plus':<8}{'yz':<6}raman_study/optical_disp/mode_05_plus_yz\n")
+    f.write(f"{'mode_05_minus_yz':<24}{5:<12}{7:<12}{10.0:<16.6f}{'minus':<8}{'yz':<6}raman_study/optical_disp/mode_05_minus_yz\n")
+print("fixture ready")
+PYEOF
+stb-ramanAnalysis --directory raman_study --no-intro > log_reconstruct.txt 2>&1
+check_exit_code $? 0
+check_contains "Component reduction" log_reconstruct.txt
+
+echo "Testing: reconstructed Rxx..Ryz match the known ground truth c*T0 exactly (c=3.0)"
+python3 -c "
+import re
+import numpy as np
+T0 = np.load('reduced_ground_truth_T0.npy')
+expected = 3.0 * T0
+with open('raman_study/raman_stage3.txt') as f:
+    text = f.read()
+m = re.search(
+    r'Rxx=([\-\d.]+)\s+Ryy=([\-\d.]+)\s+Rzz=([\-\d.]+)\s+Rxy=([\-\d.]+)\s+Rxz=([\-\d.]+)\s+Ryz=([\-\d.]+)',
+    text)
+assert m, 'could not find the reconstructed tensor line in the report'
+rxx, ryy, rzz, rxy, rxz, ryz = (float(v) for v in m.groups())
+recovered = np.array([[rxx, rxy, rxz], [rxy, ryy, ryz], [rxz, ryz, rzz]])
+assert np.allclose(recovered, expected, atol=0.02), f'recovered {recovered} vs expected {expected}'
+print('OK')
+" > log_reconstruct_check.txt 2>&1
+check_contains "OK" log_reconstruct_check.txt
+
+
+# --- 4d. --skip-degenerate: a DERIVED mode reuses its representative's tensor exactly ---
+# Hand-crafts a minimal raman_study/ tree (doesn't need a real degenerate
+# structure -- only Stage 3's reading side is under test here, same
+# "build the MODE_TABLE by hand" approach as 4c above): mode 5 gets 6 real
+# folders (a KNOWN diagonal Raman tensor, same Lorentz-oscillator trick as
+# every other fixture in this file) and mode 6 is written as a bare
+# DERIVED row pointing at mode 5 (same format stb-ramanModes --skip-
+# degenerate itself writes -- see raman_modes.py). Real CLI-level
+# correctness of the degenerate-GROUP DETECTION (an actual doubly-
+# degenerate mode collapsing to 1 representative) is covered end to end in
+# test/.../modes/test.sh's graphene E2g gate; this test is Stage 3's half:
+# given a DERIVED row, does it reuse the exact right numbers.
+echo -e "\n--- Testing --skip-degenerate reuse (a DERIVED mode reports its representative's exact tensor) ---"
+rm -rf raman_study
+python3 - <<'PYEOF'
+import os
+import numpy as np
+
+for axis in ("x", "y", "z"):
+    for sign in ("plus", "minus"):
+        os.makedirs(f"raman_study/optical_disp/mode_05_{sign}_{axis}", exist_ok=True)
+
+R_true = {"x": 1.0, "y": 1.0, "z": -2.0}
+delta = 0.02
+BASE = 5.0
+wp, gamma = 5.0, 0.3
+w = np.linspace(0.05, 15, 400)
+
+for axis in ("x", "y", "z"):
+    for sign in ("plus", "minus"):
+        folder = f"raman_study/optical_disp/mode_05_{sign}_{axis}"
+        sign_factor = 1.0 if sign == "plus" else -1.0
+        target_static = BASE + sign_factor * delta * R_true[axis]
+        w0 = (wp**2 / (target_static - 1.0)) ** 0.5
+        denom = (w0**2 - w**2)**2 + (gamma*w)**2
+        eps2 = wp**2 * gamma * w / denom
+        with open(os.path.join(folder, "Sn3O4.EPSIMG"), "w") as f:
+            f.write("## Minimum and maximum energy in eV\n")
+            f.write(f"##  {w[0]:.6f}  {w[-1]:.6f}\n")
+            f.write("## Number of spin components\n")
+            f.write("## 1\n")
+            for wi, e2i in zip(w, eps2):
+                f.write(f"{wi:.6f}  {e2i:.6f}\n")
+        with open(os.path.join(folder, "calc.out"), "w") as f:
+            f.write("siesta: SCF Convergence by DM criterion\n")
+            f.write("SCF cycle converged after 12 iterations\n")
+        with open(os.path.join(folder, "calc.fdf"), "w") as f:
+            f.write("SystemLabel Sn3O4\n")
+
+with open("raman_study/raman_stage2.txt", "w") as f:
+    f.write("Displacement      : 0.02 Ang\n")
+    f.write("\n# MODE_TABLE -- parsed by stb-ramanAnalysis, do not reorder the first 6 columns\n")
+    f.write(f"# {'label':<22}{'mode_index':<12}{'band_index':<12}{'frequency_thz':<16}"
+            f"{'sign':<8}{'axis':<6}{'dir':<24}{'derived_from'}\n")
+    for axis in ("x", "y", "z"):
+        for sign in ("plus", "minus"):
+            label = f"mode_05_{sign}_{axis}"
+            f.write(f"{label:<24}{5:<12}{7:<12}{10.0:<16.6f}{sign:<8}{axis:<6}"
+                    f"raman_study/optical_disp/{label}  -\n")
+    f.write(f"{'mode_06_derived':<24}{6:<12}{8:<12}{10.0:<16.6f}{'DERIVED':<8}{'-':<6}-  5\n")
+print("fixture ready")
+PYEOF
+stb-ramanAnalysis --directory raman_study --no-intro > log_skipdeg_reuse.txt 2>&1
+check_exit_code $? 0
+check_contains "\[Degenerate partner\]" log_skipdeg_reuse.txt
+
+echo "Testing: mode 6's activity/rho exactly match mode 5's (the representative)"
+python3 -c "
+import re
+with open('raman_study/raman_stage3.txt') as f:
+    text = f.read()
+
+def block(mode_num):
+    idx = text.index(f'Mode {mode_num} (')
+    nxt = text.find('\n  Mode ', idx + 1)
+    if nxt == -1:
+        nxt = text.find('\n\n', idx)
+    return text[idx:nxt]
+
+b5, b6 = block(5), block(6)
+assert '[derived]' not in b5, b5
+assert '[derived]' in b6, b6
+a5 = float(re.search(r'activity~([\-\d.]+)', b5).group(1))
+a6 = float(re.search(r'activity~([\-\d.]+)', b6).group(1))
+assert a5 == a6, f'activity mismatch: mode 5={a5} vs mode 6={a6}'
+r5 = float(re.search(r'rho~([\-\d.]+)', b5).group(1))
+r6 = float(re.search(r'rho~([\-\d.]+)', b6).group(1))
+assert r5 == r6, f'rho mismatch: mode 5={r5} vs mode 6={r6}'
+print('OK')
+" > log_skipdeg_reuse_check.txt 2>&1
+check_contains "OK" log_skipdeg_reuse_check.txt
+
+echo "Testing: both mode 5 and derived mode 6 count toward Modes analyzed"
+check_contains "Modes analyzed      : 2/2" log_skipdeg_reuse.txt
+
+
 # --- 5. Error cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -279,10 +561,13 @@ echo "Testing: --version"
 stb-ramanAnalysis --version > log_version.txt 2>&1
 check_contains "stb-ramanAnalysis" log_version.txt
 
-echo "Testing: --help documents --linewidth/--file"
+echo "Testing: --help documents --linewidth/--file/--temperature/--experimental"
 stb-ramanAnalysis --help > log_help.txt 2>&1
 check_contains "linewidth" log_help.txt
 check_contains "file" log_help.txt
+check_contains "temperature" log_help.txt
+check_contains "experimental" log_help.txt
+check_contains "peak-prominence" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.11.3) ---
@@ -295,6 +580,8 @@ make_optical_disp
   echo "raman_study"    # run_dir
   echo ""               # output_filename (default calc.out)
   echo ""               # linewidth (default 10.0)
+  echo ""               # temperature (optional, skip)
+  echo ""               # experimental_file (optional, skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1

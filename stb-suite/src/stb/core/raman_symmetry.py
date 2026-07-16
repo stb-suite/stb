@@ -154,3 +154,134 @@ def _classify_from_irreps(irreps):
         mode_symmetries.append(ModeSymmetry(bset, label, is_active))
 
     return mode_symmetries
+
+
+# --- Component-level tensor-form reduction (stb-ramanModes --reduce-components) ---
+#
+# Symmetric-tensor basis order used throughout this section: xx, yy, zz,
+# xy, xz, yz (matches _OFFDIAG_PAIRS' naming in raman_analysis.py).
+_QUAD_INDICES = [(0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2)]
+_QUAD_AXIS_NAMES = ["xx", "yy", "zz", "xy", "xz", "yz"]
+
+# The 6 Optical.Vector probe directions stb-ramanModes can write folders
+# for (x/y/z always; xy/xz/yz only with --full-tensor) -- same unit
+# vectors as raman_modes.py's _AXES_DIAGONAL/_AXES_OFFDIAG, duplicated
+# here (not imported) to keep this module independent of the CLI tool.
+_INV_SQRT2 = 0.70710678118654752440
+_PROBE_VECTORS = {
+    "x": np.array([1.0, 0.0, 0.0]), "y": np.array([0.0, 1.0, 0.0]), "z": np.array([0.0, 0.0, 1.0]),
+    "xy": np.array([_INV_SQRT2, _INV_SQRT2, 0.0]),
+    "xz": np.array([_INV_SQRT2, 0.0, _INV_SQRT2]),
+    "yz": np.array([0.0, _INV_SQRT2, _INV_SQRT2]),
+}
+
+
+def _vector_to_symmetric_matrix(v):
+    Q = np.zeros((3, 3))
+    for k, (i, j) in enumerate(_QUAD_INDICES):
+        Q[i, j] = v[k]
+        Q[j, i] = v[k]
+    return Q
+
+
+def _symmetric_matrix_to_vector(Q):
+    return np.array([Q[i, j] for i, j in _QUAD_INDICES])
+
+
+def _quad_representation_matrix(rotation):
+    """6x6 matrix acting on the (xx,yy,zz,xy,xz,yz) basis induced by the
+    3x3 Cartesian rotation `rotation`: a quadratic form (as a 3x3
+    symmetric matrix Q) transforms as Q' = R Q R^T under r' = R r. Built
+    by direct probing (each of the 6 basis quadratic functions run
+    through the transform) rather than a hand-derived index formula --
+    simpler to get right, and cross-checked during development: its
+    trace exactly reproduces (to 1e-15) the (chi_v(g)^2+chi_v(g^2))/2
+    formula already used above for the same chi_quad(g), on a real
+    MACE-MP-0 silicon calculation.
+    """
+    D = np.zeros((6, 6))
+    for k in range(6):
+        v = np.zeros(6)
+        v[k] = 1.0
+        transformed = rotation @ _vector_to_symmetric_matrix(v) @ rotation.T
+        D[:, k] = _symmetric_matrix_to_vector(transformed)
+    return D
+
+
+def tensor_form(phonon, band_index, full_tensor=False):
+    """For a Gamma-point mode that is (a) NOT part of a degenerate
+    band-group (its own group has exactly 1 band -- a 1D irrep, no
+    "which partner" ambiguity) and (b) has multiplicity exactly 1 in the
+    quadratic-function representation (n_i == 1: the Raman tensor's SHAPE
+    is fixed up to one overall scale by symmetry alone, no further
+    ambiguity), returns a dict describing that fixed shape and the single
+    probe direction needed to fully determine it:
+
+        {"T0": 3x3 array (the invariant tensor shape, unit-normalized),
+         "probe_axis": str, one of "x"/"y"/"z"/"xy"/"xz"/"yz"}
+
+    Every OTHER component of the true Raman tensor is then exactly
+    `measured_value_at_probe_axis / (n_probe^T T0 n_probe) * T0`, i.e. a
+    single +/-delta measurement at `probe_axis` is enough to reconstruct
+    the entire tensor (stb-ramanModes only needs to write that one pair
+    of folders; stb-ramanAnalysis reconstructs the rest algebraically).
+
+    Returns None when the mode doesn't qualify for this reduction:
+    degenerate (band-group size != 1), inactive (n_i == 0 -- already
+    handled by --use-symmetry, nothing to probe at all), multiplicity
+    >= 2 (genuinely needs more than one independent measurement -- not
+    reduced by this function, falls back to full probing), or any
+    unexpected failure (mirrors classify_modes' own broad safety net --
+    this is an opt-in optimization, never worth crashing Stage 2 over).
+
+    `full_tensor`: when False (stb-ramanModes' default diagonal-only
+    scope), `probe_axis` is chosen only from {"x","y","z"}; when True,
+    also considers the face-diagonal directions {"xy","xz","yz"} (whichever
+    has the largest |n^T T0 n|, for the best-conditioned single
+    calibration measurement) -- matches whichever probe set the caller
+    is actually going to write folders for.
+    """
+    try:
+        irreps = phonon.run_irreps([0, 0, 0])
+        band_groups = irreps.band_indices
+        group_idx = next((i for i, bset in enumerate(band_groups) if band_index in bset), None)
+        if group_idx is None or len(band_groups[group_idx]) != 1:
+            return None
+
+        characters = irreps.characters
+        rotations = irreps.conventional_rotations
+        n_elem = rotations.shape[0]
+        chi_i = characters[group_idx]
+
+        projector = np.zeros((6, 6), dtype=complex)
+        for g in range(n_elem):
+            projector += np.conj(chi_i[g]) * _quad_representation_matrix(rotations[g])
+        projector = (projector / n_elem).real
+
+        eigvals, eigvecs = np.linalg.eigh(projector)
+        n_i = int(round(float(np.sum(eigvals[eigvals > 0.5]))))
+        if n_i != 1:
+            return None
+
+        v0 = eigvecs[:, int(np.argmax(eigvals))]
+        t0 = _vector_to_symmetric_matrix(v0)
+        # Deterministic sign/normalization: make the largest-|value| entry
+        # of T0 positive (T0 and -T0 are equally valid basis vectors of a
+        # 1-dim real subspace -- fixing a convention keeps reruns stable).
+        flat = t0.flatten()
+        if flat[np.argmax(np.abs(flat))] < 0:
+            t0 = -t0
+
+        axis_names = ("x", "y", "z") if not full_tensor else ("x", "y", "z", "xy", "xz", "yz")
+        best_axis, best_overlap = None, 0.0
+        for name in axis_names:
+            n = _PROBE_VECTORS[name]
+            overlap = abs(float(n @ t0 @ n))
+            if overlap > best_overlap:
+                best_axis, best_overlap = name, overlap
+        if best_axis is None or best_overlap < 1e-8:
+            return None
+
+        return {"T0": t0, "probe_axis": best_axis}
+    except Exception:
+        return None

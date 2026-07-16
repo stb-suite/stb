@@ -198,6 +198,27 @@ echo "Testing: mode_01_plus_xy uses the (x+y)/sqrt(2) Optical.Vector direction"
 check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/calc.fdf
 
 
+# --- 5a2. --export-animations: looping .axsf per selected mode ---
+echo -e "\n--- Testing --export-animations ---"
+make_phonon_disp
+stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 --export-animations \
+    --animation-frames 8 --no-intro > log_animations.txt 2>&1
+check_exit_code $? 0
+check_contains "Mode animations   : 2 .axsf file(s), 8 frames each." log_animations.txt
+check_success raman_study/optical_disp/mode_01_animation.axsf
+check_success raman_study/optical_disp/mode_02_animation.axsf
+
+echo "Testing: the .axsf is a real ASE-readable 8-frame animation, atom count matches the structure"
+python3 -c "
+import ase.io
+frames = ase.io.read('raman_study/optical_disp/mode_01_animation.axsf', index=':')
+assert len(frames) == 8, f'expected 8 frames, got {len(frames)}'
+assert len(frames[0]) == 14, f'expected 14 atoms (Sn3O4), got {len(frames[0])}'
+print('OK')
+" > log_animations_check.txt 2>&1
+check_contains "OK" log_animations_check.txt
+
+
 # --- 5b. core.raman_symmetry correctness gate: silicon (point group m-3m/Oh) ---
 # Independent of the Sn3O4 CLI fixture -- builds real phonons for bulk Si via
 # MACE-MP-0 (same model already cached locally by earlier ML tests in this
@@ -360,6 +381,76 @@ PYEOF
 check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
 
 
+# --- 5b-4. core.raman_symmetry.tensor_form() correctness gate: water (C2v/mm2) ---
+# Reuses the same relaxed H2O/MACE setup as the 0D gate above. Water's 3
+# real vibrational modes are known (textbook C2v triatomic result) to be
+# 2xA1 + 1xB2 -- A1 has multiplicity 2 in the quadratic representation
+# (xx+yy and zz are BOTH independently A1-invariant, so tensor_form must
+# correctly decline to reduce it, at any --full-tensor scope), while B2's
+# only invariant is the OFF-DIAGONAL xy-type combination (yz here, given
+# this molecule's orientation) -- multiplicity exactly 1, so tensor_form
+# must find a reduction, but ONLY when full_tensor=True (yz isn't among
+# the diagonal-only x/y/z probe set, so there's nothing to reduce to
+# without it -- correctly declining is just as important a check here as
+# succeeding).
+echo -e "\n--- Testing core.raman_symmetry.tensor_form() against known water (C2v) result ---"
+python3 - <<'PYEOF' > log_tensor_form_gate.txt 2>&1
+import numpy as np
+from ase.build import molecule
+from ase import Atoms
+from phonopy import Phonopy
+from phonopy.structure.atoms import PhonopyAtoms
+from stb.core import mace_relax
+from stb.core.raman_symmetry import classify_modes, tensor_form
+
+atoms = molecule('H2O')
+atoms.center(vacuum=8.0)
+atoms.pbc = True
+calc = mace_relax.get_calculator(model='small', device='cpu')
+atoms.calc = calc
+mace_relax.relax(atoms, calc, cell_mask=None, fmax=0.01, max_steps=300)
+
+cell = PhonopyAtoms(symbols=atoms.get_chemical_symbols(), cell=atoms.get_cell(),
+                     scaled_positions=atoms.get_scaled_positions())
+phonon = Phonopy(cell, supercell_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+phonon.generate_displacements(distance=0.01)
+force_sets = []
+for scell in phonon.supercells_with_displacements:
+    a2 = Atoms(symbols=scell.symbols, positions=scell.positions, cell=scell.cell, pbc=True)
+    a2.calc = calc
+    force_sets.append(a2.get_forces())
+phonon.forces = force_sets
+phonon.produce_force_constants()
+
+mode_symmetries, point_group, error = classify_modes(phonon)
+assert error is None and point_group == "mm2", f"expected mm2 (C2v), got {point_group}"
+
+vibrational = [ms for ms in mode_symmetries if min(ms.band_indices) >= 6]
+a1_bands = [ms.band_indices[0] for ms in vibrational if ms.label == "A1"]
+b2_bands = [ms.band_indices[0] for ms in vibrational if ms.label == "B2"]
+assert len(a1_bands) == 2 and len(b2_bands) == 1, f"expected 2xA1+1xB2, got A1={a1_bands} B2={b2_bands}"
+
+for band_idx in a1_bands:
+    assert tensor_form(phonon, band_idx, full_tensor=False) is None
+    assert tensor_form(phonon, band_idx, full_tensor=True) is None, \
+        "A1 has multiplicity 2 in the quadratic rep -- must never be reduced"
+
+band_idx = b2_bands[0]
+assert tensor_form(phonon, band_idx, full_tensor=False) is None, \
+    "B2's only invariant is off-diagonal -- no reduction possible from x/y/z alone"
+result = tensor_form(phonon, band_idx, full_tensor=True)
+assert result is not None, "B2 has multiplicity 1 -- must reduce once xy/xz/yz are available"
+assert result["probe_axis"] == "yz", f"expected probe_axis 'yz', got {result['probe_axis']}"
+t0 = result["T0"]
+assert abs(t0[0, 0]) < 1e-6 and abs(t0[1, 1]) < 1e-6 and abs(t0[2, 2]) < 1e-6, \
+    f"B2 tensor form must have zero diagonal, got diag={np.diag(t0)}"
+assert abs(t0[1, 2]) > 1e-3 and abs(t0[0, 1]) < 1e-6 and abs(t0[0, 2]) < 1e-6, \
+    f"B2 tensor form must be pure yz, got {t0}"
+print("TENSOR_FORM_GATE_OK")
+PYEOF
+check_contains "TENSOR_FORM_GATE_OK" log_tensor_form_gate.txt
+
+
 # --- 5c. --use-symmetry CLI wiring (Sn3O4 fixture) ---
 # The fabricated Sn3O4.FA data (see make_phonon_disp above) deliberately
 # scales forces differently per disp-*/ folder to avoid a degenerate
@@ -383,6 +474,137 @@ check_contains "informational only" log_symmetry_explicit.txt
 check_contains "Selected modes    : 2" log_symmetry_explicit.txt
 
 
+# --- 5d. --reduce-components CLI wiring (Sn3O4 fixture, point group 1 -> no-op) ---
+# Same caveat as the --use-symmetry wiring test above: this fabricated
+# fixture has no real crystal symmetry (point group 1, where every
+# quadratic function has multiplicity 6, never 1), so no mode actually
+# qualifies for reduction here -- this only proves the flag doesn't crash
+# and correctly finds nothing to reduce. The real group-theory correctness
+# (including a genuine positive reduction) is 5b-4's job, above.
+echo -e "\n--- Testing --reduce-components CLI wiring (no-op on this asymmetric fixture) ---"
+stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 --reduce-components --no-intro \
+    > log_reduce.txt 2>&1
+check_exit_code $? 0
+check_contains "Folders to write  : 2 modes x 2 signs x 3 axes = 12" log_reduce.txt
+check_success raman_study/optical_disp/mode_01_plus_x/structure.fdf
+
+echo "Testing: no mode_XX_tensor_form.json sidecar is written when nothing was reduced"
+python3 -c "
+import glob
+sidecars = glob.glob('raman_study/optical_disp/*_tensor_form.json')
+assert sidecars == [], f'unexpected sidecar(s): {sidecars}'
+print('OK')
+" > log_reduce_check.txt 2>&1
+check_contains "OK" log_reduce_check.txt
+
+
+# --- 5e. --skip-degenerate CLI wiring (Sn3O4 fixture, point group 1 -> no-op) ---
+# Same caveat as 5c/5d: no real degeneracy in this fabricated asymmetric
+# fixture, so this only proves the flag doesn't crash and correctly finds
+# no group to collapse. Real degenerate-group correctness (an actual
+# doubly-degenerate mode getting collapsed to 1 representative) is 5f's
+# job, below, on real graphene E2g phonons.
+echo -e "\n--- Testing --skip-degenerate CLI wiring (no-op on this asymmetric fixture) ---"
+stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 --skip-degenerate --no-intro \
+    > log_skipdeg_noop.txt 2>&1
+check_exit_code $? 0
+check_contains "Folders to write  : 2 modes x 2 signs x 3 axes = 12" log_skipdeg_noop.txt
+
+echo "Testing: no DERIVED row is written when nothing was collapsed"
+python3 -c "
+from stb.raman_analysis import read_mode_table, group_by_mode
+rows = read_mode_table('raman_study/raman_stage2.txt')
+modes = group_by_mode(rows)
+derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
+assert derived == {}, f'unexpected derived mode(s): {derived}'
+print('OK')
+" > log_skipdeg_noop_check.txt 2>&1
+check_contains "OK" log_skipdeg_noop_check.txt
+
+
+# --- 5f. --skip-degenerate correctness gate: graphene E2g (real MACE-MP-0 phonons) ---
+# Real doubly-degenerate case, same graphene fixture/known result as 5b-2
+# (in-plane E2g is Raman-active, out-of-plane B1g is silent) -- built
+# directly as an ML-sourced (embedded force_constants) phonopy_disp.yaml,
+# same has_embedded_fc path stb-phononsML produces, so no SIESTA .FA/
+# FORCE_SETS extraction or real stb-raman Stage 1 run is needed.
+echo -e "\n--- Testing --skip-degenerate against a real doubly-degenerate mode (graphene E2g) ---"
+rm -rf raman_study
+python3 - <<'PYEOF' > log_skipdeg_fixture.txt 2>&1
+import os
+from ase.build import graphene
+from ase import Atoms
+from phonopy import Phonopy
+from phonopy.structure.atoms import PhonopyAtoms
+from stb.core import mace_relax
+
+atoms = graphene(formula='C2', a=2.46, vacuum=10.0)
+calc = mace_relax.get_calculator(model='small', device='cpu')
+atoms.calc = calc
+mace_relax.relax(atoms, calc, cell_mask=[True, True, False, False, False, False],
+                  fmax=0.01, max_steps=300)
+
+cell = PhonopyAtoms(symbols=atoms.get_chemical_symbols(), cell=atoms.get_cell(),
+                     scaled_positions=atoms.get_scaled_positions())
+phonon = Phonopy(cell, supercell_matrix=[[2, 0, 0], [0, 2, 0], [0, 0, 1]])
+phonon.generate_displacements(distance=0.01)
+
+force_sets = []
+for scell in phonon.supercells_with_displacements:
+    a2 = Atoms(symbols=scell.symbols, positions=scell.positions, cell=scell.cell, pbc=True)
+    a2.calc = calc
+    force_sets.append(a2.get_forces())
+phonon.forces = force_sets
+phonon.produce_force_constants()
+
+os.makedirs("raman_study/phonon_disp", exist_ok=True)
+phonon.save(filename="raman_study/phonon_disp/phonopy_disp.yaml", settings={'force_constants': True})
+print("FIXTURE_OK")
+PYEOF
+check_contains "FIXTURE_OK" log_skipdeg_fixture.txt
+touch C.psf
+
+echo "Testing: --skip-degenerate alone (3 selected modes: B1g singlet + E2g pair -> 2 written)"
+stb-ramanModes --directory raman_study --calc calc.fdf --pseudo-dir . --skip-degenerate --no-intro \
+    > log_skipdeg.txt 2>&1
+check_exit_code $? 0
+check_contains "Degenerate groups : 1 mode(s) skipped" log_skipdeg.txt
+
+python3 -c "
+import glob
+real_dirs = glob.glob('raman_study/optical_disp/mode_*_plus_*') + glob.glob('raman_study/optical_disp/mode_*_minus_*')
+modes_with_folders = sorted(set(int(d.split('/')[-1].split('_')[1]) for d in real_dirs))
+assert len(modes_with_folders) == 2, f'expected 2 modes with real folders, got {modes_with_folders}'
+derived_dirs = glob.glob('raman_study/optical_disp/mode_*_derived')
+assert derived_dirs == [], f'derived mode must not get a folder: {derived_dirs}'
+print('OK')
+" > log_skipdeg_folders.txt 2>&1
+check_contains "OK" log_skipdeg_folders.txt
+
+echo "Testing: MODE_TABLE records the derived mode against a fully-computed representative"
+python3 -c "
+from stb.raman_analysis import read_mode_table, group_by_mode
+rows = read_mode_table('raman_study/raman_stage2.txt')
+modes = group_by_mode(rows)
+derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
+assert len(derived) == 1, f'expected exactly 1 derived mode, got {derived}'
+rep_k = list(derived.values())[0]
+assert modes[rep_k]['derived_from'] is None, 'representative must not itself be derived'
+assert len(modes[rep_k]['folders']) == 6, f\"representative should have 6 folders (2 signs x 3 diagonal axes), got {len(modes[rep_k]['folders'])}\"
+print('OK')
+" > log_skipdeg_table.txt 2>&1
+check_contains "OK" log_skipdeg_table.txt
+
+echo "Testing: --skip-degenerate + --use-symmetry together (E2g pair survives, B1g filtered out)"
+rm -rf raman_study/optical_disp raman_study/raman_stage2.txt
+stb-ramanModes --directory raman_study --calc calc.fdf --pseudo-dir . --use-symmetry --skip-degenerate \
+    --no-intro > log_skipdeg_sym.txt 2>&1
+check_exit_code $? 0
+check_contains "Selected modes    : 2" log_skipdeg_sym.txt
+check_contains "E2g" log_skipdeg_sym.txt
+check_contains "Degenerate groups : 1 mode(s) skipped" log_skipdeg_sym.txt
+
+
 # --- 6. Error cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -404,12 +626,15 @@ check_contains "full-tensor" log_help.txt
 check_contains "use-symmetry" log_help.txt
 check_contains "vacuum-gap" log_help.txt
 check_contains "rotational-mode-tol" log_help.txt
+check_contains "export-animations" log_help.txt
+check_contains "reduce-components" log_help.txt
+check_contains "skip-degenerate" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.11.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.11.2) ---"
 
-echo "Testing: navigate 4.11.2 -> modes 1 2, skip full-tensor -> quit"
+echo "Testing: navigate 4.11.2 -> modes 1 2, skip full-tensor, skip-degenerate ON, animations ON -> quit"
 make_phonon_disp
 {
   echo "4.11.2"
@@ -417,13 +642,18 @@ make_phonon_disp
   echo "calc.fdf"       # calc_file
   echo "1 2"            # modes
   echo ""               # full_tensor_choice (default N)
+  echo ""               # reduce_components_choice (default N)
+  echo "y"              # skip_degenerate_choice -> Y (no-op on this asymmetric fixture)
   echo ""               # displacement (default 0.02)
+  echo "y"              # animations_choice -> Y
+  echo ""               # animation_frames (default 20)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Folders to write  : 2 modes x 2 signs x 3 axes = 12" log_menu.txt
 check_success raman_study/optical_disp/mode_01_plus_x/structure.fdf
+check_success raman_study/optical_disp/mode_01_animation.axsf
 
 echo "Testing: navigate 4.11.2 -> modes 1, full-tensor ON -> quit"
 make_phonon_disp
@@ -433,7 +663,10 @@ make_phonon_disp
   echo "calc.fdf"       # calc_file
   echo "1"              # modes
   echo "y"              # full_tensor_choice -> Y
+  echo ""               # reduce_components_choice (default N)
+  echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
+  echo ""               # animations_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -450,7 +683,10 @@ make_phonon_disp
   echo ""               # modes (default -> every non-acoustic mode; unlocks the use-symmetry prompt)
   echo ""               # full_tensor_choice (default N)
   echo "y"              # use_symmetry_choice -> Y
+  echo ""               # reduce_components_choice (default N)
+  echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
+  echo ""               # animations_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -465,7 +701,10 @@ make_phonon_disp
   echo "calc.fdf"       # calc_file
   echo "1"              # modes
   echo ""               # full_tensor_choice (default N)
+  echo ""               # reduce_components_choice (default N)
+  echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
+  echo ""               # animations_choice (default N)
   echo "y"              # show_advanced -> Y
   echo "8 8 8"           # mesh_input
   echo "0.15"            # optical_broaden

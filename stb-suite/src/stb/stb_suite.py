@@ -3310,8 +3310,31 @@ def run_raman_modes() -> None:
         if use_symmetry_choice in ('y', 'yes'):
             args.append("--use-symmetry")
 
+    reduce_components_choice = get_input(
+        "\nProbe only ONE direction (instead of all of them) for modes whose Raman tensor "
+        "shape is already fixed by symmetry -- saves SIESTA time, needs a primitive cell "
+        "(y/N): ").strip().lower()
+    if reduce_components_choice in ('y', 'yes'):
+        args.append("--reduce-components")
+
+    skip_degenerate_choice = get_input(
+        "\nFor degenerate modes (2+ bands sharing one irrep, e.g. E/T representations), "
+        "compute only ONE representative and reuse its Raman activity/depolarization ratio "
+        "for the rest (both are rotational invariants, identical for every degenerate "
+        "partner) -- saves SIESTA time, needs a primitive cell (y/N): ").strip().lower()
+    if skip_degenerate_choice in ('y', 'yes'):
+        args.append("--skip-degenerate")
+
     displacement = get_float_input("\nFinite-difference displacement in Ang [default: 0.02]: ", 0.02)
     args.extend(["--displacement", str(displacement)])
+
+    animations_choice = get_input(
+        "\nExport a looping animation (.axsf, viewable in XCrySDen/VESTA) of each selected "
+        "mode's eigendisplacement (y/N): ").strip().lower()
+    if animations_choice in ('y', 'yes'):
+        args.append("--export-animations")
+        animation_frames = get_int_input("Frames per mode animation [default: 20]: ", 20)
+        args.extend(["--animation-frames", str(animation_frames)])
 
     optical_mesh, optical_broaden = [10, 10, 10], 0.2
     show_advanced = get_input(
@@ -3376,6 +3399,22 @@ def run_raman_analysis() -> None:
 
     linewidth = get_float_input("\nLorentzian linewidth for the spectrum, cm^-1 [default: 10.0]: ", 10.0)
     args.extend(["--linewidth", str(linewidth)])
+
+    temperature = get_input(
+        "\nWeight the spectrum by the Bose-Einstein thermal population factor at a given "
+        "temperature in K [optional, blank = no weighting]: ").strip()
+    if temperature:
+        args.extend(["--temperature", temperature])
+
+    experimental_file = get_input(
+        "\nOverlay a measured Raman spectrum (2-column text file: frequency cm^-1, intensity) "
+        "[optional, blank = skip]: ").strip()
+    if experimental_file:
+        args.extend(["--experimental", experimental_file])
+        peak_prominence = get_float_input(
+            "Minimum peak prominence, as a fraction of each spectrum's own max intensity "
+            "[default: 0.01]: ", 0.01)
+        args.extend(["--peak-prominence", str(peak_prominence)])
 
     run_tool("stb-ramanAnalysis", args)
 

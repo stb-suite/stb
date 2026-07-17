@@ -277,7 +277,10 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         print_dual(f"Directory         : {output_root}", f_out)
         print_dual(f"SystemLabel       : {'N/A (ML-computed force constants)' if has_embedded_fc else f'{system_label} ({label_source})'}", f_out)
         print_dual(f"Calc template     : {args.calc}", f_out)
-        print_dual(f"Displacement      : {args.displacement} Ang", f_out)
+        print_dual(f"Displacement      : {args.displacement} Ang (non-bulk path only)", f_out)
+        print_dual(f"FC displacement   : {args.fc_displ} Bohr (bulk path only)", f_out)
+        print_dual(f"Polarization grid : {' '.join(str(v) for v in args.polarization_grid)} "
+                    "(bulk path only)", f_out)
 
         print_dual(f"\n{color_text('[1] PHONON MODES AT GAMMA', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)

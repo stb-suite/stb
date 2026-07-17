@@ -3744,6 +3744,217 @@ def run_her_analysis() -> None:
     run_tool("stb-herAnalysis", args)
 
 
+def run_oer_prep() -> None:
+    """Interface for the OER Stage 1 (stb-oer)"""
+    print("\n" + "="*60)
+    print(color_text("OER WORKFLOW - STAGE 1: ADSORPTION SITES (OH*)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    structure_file = get_input("Relaxed slab/2D structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    calc_file = get_input("Calc.fdf template for the site relaxations: ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the site relaxations: ")
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    site_type = get_input(
+        "\nSite type to search: ontop/bridge/hollow/all [default: all]: ").strip().lower()
+    if site_type not in ("ontop", "bridge", "hollow", "all"):
+        site_type = "all"
+
+    height = get_float_input("\nOH adsorption height in Ang [default: 1.8]: ", 1.8)
+
+    both_sides_choice = get_input(
+        "\nAdsorb on both faces (free-standing 2D material with vacuum on both sides) "
+        "(y/N): ").strip().lower()
+
+    output_dir = get_input("\nOutput root directory [default: oer_study]: ").strip()
+    if not output_dir:
+        output_dir = "oer_study"
+
+    args = [
+        "-s", structure_file, "-c", calc_file,
+        "--site-type", site_type, "--height", str(height),
+        "-O", output_dir, "--no-intro"
+    ]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+    if both_sides_choice in ('y', 'yes'):
+        args.append("--both-sides")
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (O-H bond length/symprec/vacuum-gap)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        oh_bond_length = get_float_input(
+            "O-H bond length of the adsorbing OH group, in Ang [default: 0.970]: ", 0.970)
+        args.extend(["--oh-bond-length", str(oh_bond_length)])
+        symprec = get_float_input(
+            "Symmetry-reduction tolerance for site-finding [default: 0.01]: ", 0.01)
+        args.extend(["--symprec", str(symprec)])
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+
+    print(color_text("\nSearching OH-adsorption sites...", 'green'))
+    run_tool("stb-oer", args)
+
+
+def run_oer_intermediates() -> None:
+    """Interface for the OER Stage 2 (stb-oerIntermediates)"""
+    print("\n" + "="*60)
+    print(color_text("OER WORKFLOW - STAGE 2: O*/OOH* INTERMEDIATES", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: oer_study]: ").strip()
+    if not run_dir:
+        run_dir = "oer_study"
+
+    output_filename = get_input("SIESTA output filename inside each site folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    o_strategy = get_input(
+        "\nO* starting geometry: derived (from the winning OH* site, cheap)/search (independent "
+        "site search, more rigorous) [default: derived]: ").strip().lower()
+    if o_strategy not in ("derived", "search"):
+        o_strategy = "derived"
+
+    ooh_strategy = get_input(
+        "OOH* starting geometry: derived/search [default: derived]: ").strip().lower()
+    if ooh_strategy not in ("derived", "search"):
+        ooh_strategy = "derived"
+
+    args = ["--directory", run_dir, "--file", output_filename,
+            "--o-strategy", o_strategy, "--ooh-strategy", ooh_strategy, "--no-intro"]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+
+    if o_strategy == "search":
+        print(color_text("\nO* search settings:", 'yellow'))
+        o_site_type = get_input("  Site type: ontop/bridge/hollow/all [default: all]: ").strip().lower()
+        if o_site_type not in ("ontop", "bridge", "hollow", "all"):
+            o_site_type = "all"
+        args.extend(["--o-site-type", o_site_type])
+        o_height = get_float_input("  O adsorption height in Ang [default: 1.5]: ", 1.5)
+        args.extend(["--o-height", str(o_height)])
+
+    if ooh_strategy == "search":
+        print(color_text("\nOOH* search settings:", 'yellow'))
+        ooh_site_type = get_input("  Site type: ontop/bridge/hollow/all [default: all]: ").strip().lower()
+        if ooh_site_type not in ("ontop", "bridge", "hollow", "all"):
+            ooh_site_type = "all"
+        args.extend(["--ooh-site-type", ooh_site_type])
+        ooh_height = get_float_input("  OOH adsorption height in Ang [default: 2.0]: ", 2.0)
+        args.extend(["--ooh-height", str(ooh_height)])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (OOH* starting bond lengths/bend angle)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        oo_bond_length = get_float_input(
+            "Illustrative starting O-O bond length for OOH*, in Ang [default: 1.45]: ", 1.45)
+        args.extend(["--oo-bond-length", str(oo_bond_length)])
+        ooh_oh_bond_length = get_float_input(
+            "Illustrative starting O-H bond length for OOH*'s new H, in Ang [default: 0.970]: ", 0.970)
+        args.extend(["--ooh-oh-bond-length", str(ooh_oh_bond_length)])
+        ooh_bend_deg = get_float_input(
+            "Illustrative starting O-O-H bend angle for OOH*, in degrees [default: 100.0]: ", 100.0)
+        args.extend(["--ooh-bend-deg", str(ooh_bend_deg)])
+
+    print(color_text("\nBuilding O*/OOH* intermediate geometries...", 'green'))
+    run_tool("stb-oerIntermediates", args)
+
+
+def run_oer_refs() -> None:
+    """Interface for the OER Stage 3 (stb-oerRefs)"""
+    print("\n" + "="*60)
+    print(color_text("OER WORKFLOW - STAGE 3: REFERENCES, BSSE & ZPE PREP", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1/2 [default: oer_study]: ").strip()
+    if not run_dir:
+        run_dir = "oer_study"
+
+    output_filename = get_input("SIESTA output filename inside each folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    bsse_mode = get_input(
+        "\nBSSE mode: shared (one triad at OOH*'s geometry, cheaper)/full (one triad per "
+        "intermediate) [default: shared]: ").strip().lower()
+    if bsse_mode not in ("shared", "full"):
+        bsse_mode = "shared"
+
+    zpe_mode = get_input(
+        "\nZPE/entropy mode: local/full [default: local]: ").strip().lower()
+    if zpe_mode not in ("local", "full"):
+        zpe_mode = "local"
+
+    args = ["--directory", run_dir, "--file", output_filename, "--bsse-mode", bsse_mode,
+            "--zpe-mode", zpe_mode, "--no-intro"]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (displacement/supercell/vacuum-box)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        displacement = get_float_input("Finite-difference displacement in Ang [default: 0.015]: ", 0.015)
+        args.extend(["--displacement", str(displacement)])
+        vacuum_box = get_float_input("H2/H2O reference vacuum box side in Ang [default: 15.0]: ", 15.0)
+        args.extend(["--vacuum-box", str(vacuum_box)])
+        if zpe_mode == "full":
+            supercell_input = get_input(
+                "Supercell dimensions for the full phonon calc (e.g. '1 1 1') "
+                "[default: 1 1 1]: ").strip()
+            if supercell_input:
+                try:
+                    dims = [int(x) for x in supercell_input.split()]
+                    if len(dims) == 3:
+                        args.extend(["--supercell", str(dims[0]), str(dims[1]), str(dims[2])])
+                except ValueError:
+                    pass
+
+    print(color_text("\nBuilding references, BSSE and ZPE folders...", 'green'))
+    run_tool("stb-oerRefs", args)
+
+
+def run_oer_analysis() -> None:
+    """Interface for the OER Stage 4 (stb-oerAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("OER WORKFLOW - STAGE 4: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with the stb-oer/stb-oerIntermediates/stb-oerRefs run "
+                         "[default: oer_study]: ").strip()
+    if not run_dir:
+        run_dir = "oer_study"
+
+    output_filename = get_input("SIESTA output filename inside each folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    temperature = get_float_input("\nTemperature in K [default: 298.15]: ", 298.15)
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this folder relaxed/converged' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--directory", run_dir, "--file", output_filename, "--temp", str(temperature),
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    run_tool("stb-oerAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -4914,6 +5125,29 @@ WORKFLOW_TOOLS = {
             3: {'title': "Stage 3 - Analysis (stb-herAnalysis)",
                 'description': "Combine every reference energy into the final Delta-G_H*.",
                 'func': run_her_analysis},
+        }},
+    14: {'title': "Oxygen Evolution Reaction (OER)",
+        'description': "Self-contained: finds the most stable OH-adsorption site on a slab, derives "
+                        "(or independently searches for) the O*/OOH* intermediates from it, then the "
+                        "H2/H2O/BSSE/ZPE references needed for the 4-electron CHE descriptor "
+                        "(Delta-G1..4, overpotential eta, potential-determining step; Rossmeisl et "
+                        "al. 2007, Man et al. 2011).",
+        'stages': {
+            1: {'title': "Stage 1 - Adsorption Sites (stb-oer)",
+                'description': "Find every symmetrically distinct OH-adsorption site and write "
+                                "one relaxation folder per site.",
+                'func': run_oer_prep},
+            2: {'title': "Stage 2 - O*/OOH* Intermediates (stb-oerIntermediates)",
+                'description': "Derive (or independently search for) O*/OOH* from the winning OH* "
+                                "site and write their own CG-relaxation folder(s).",
+                'func': run_oer_intermediates},
+            3: {'title': "Stage 3 - References, BSSE & ZPE Prep (stb-oerRefs)",
+                'description': "Build the H2/H2O/BSSE/ZPE reference folders from the final relaxed "
+                                "OH*/O*/OOH* geometries.",
+                'func': run_oer_refs},
+            4: {'title': "Stage 4 - Analysis (stb-oerAnalysis)",
+                'description': "Combine every reference energy into Delta-G1..4, eta, and the PDS.",
+                'func': run_oer_analysis},
         }},
        }
 

@@ -106,6 +106,10 @@ stb-irAnalysis="stb.ir_analysis:main"
 stb-her="stb.her:main"
 stb-herRefs="stb.her_refs:main"
 stb-herAnalysis="stb.her_analysis:main"
+stb-oer="stb.oer:main"
+stb-oerIntermediates="stb.oer_intermediates:main"
+stb-oerRefs="stb.oer_refs:main"
+stb-oerAnalysis="stb.oer_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

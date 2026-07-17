@@ -74,6 +74,38 @@ check_exit_code $? 1
 check_contains "run stb-irModes" log_no_stage2.txt
 
 
+# --- 2b. core.born_charges.read_born_charges: both real .BC layouts ---
+echo -e "\n--- Testing read_born_charges against both the unlabeled (real, confirmed) and "
+echo "    x/y/z-labeled (SIESTA tutorial material) .BC layouts ---"
+python3 -c "
+import numpy as np
+from stb.core.born_charges import read_born_charges
+
+# Real confirmed layout: bare header, N*3 unlabeled rows.
+with open('/tmp/unlabeled.BC', 'w') as f:
+    f.write('BC matrix\n')
+    f.write('   1.0000000   0.0000000   0.0000000\n')
+    f.write('   0.0000000   1.0000000   0.0000000\n')
+    f.write('   0.0000000   0.0000000   1.0000000\n')
+labels, Z = read_born_charges('/tmp/unlabeled.BC')
+assert Z.shape == (1, 3, 3), Z.shape
+assert np.allclose(Z[0], np.eye(3)), Z
+
+# x/y/z-labeled layout (never seen live, but keep supporting it).
+with open('/tmp/labeled.BC', 'w') as f:
+    f.write('BC matrix\n')
+    f.write('            x              y              z\n')
+    f.write('x    2.0000000   0.0000000   0.0000000\n')
+    f.write('y    0.0000000   2.0000000   0.0000000\n')
+    f.write('z    0.0000000   0.0000000   2.0000000\n')
+labels, Z = read_born_charges('/tmp/labeled.BC')
+assert Z.shape == (1, 3, 3), Z.shape
+assert np.allclose(Z[0], np.eye(3) * 2), Z
+print('OK')
+" > log_bc_parser_check.txt 2>&1
+check_contains "OK" log_bc_parser_check.txt
+
+
 # --- 3. Bulk path: known Born charges + eigendisplacements -> exact dmu/dQ ---
 echo -e "\n--- Testing bulk-path analysis against known ground truth (fabricated Z* + eigendisplacement) ---"
 rm -rf ir_study
@@ -102,11 +134,17 @@ with open("ir_study/born_charge_disp/mode_02_eigendisplacement.json", "w") as f:
     json.dump({"eigendisplacement": eigendisp_mode2.tolist()}, f)
 
 with open("ir_study/born_charge_disp/equilibrium/Sn3O4.BC", "w") as f:
+    # Real confirmed SIESTA .BC layout (MaX-1.2/PSML build, 2026-07): a
+    # bare "BC matrix" header, then N*3 UNLABELED rows (no per-row x/y/z
+    # prefix, no column header) -- NOT the x/y/z-labeled layout originally
+    # guessed from SIESTA's tutorial material, which this exact fixture
+    # used to write (and which passed even though it never exercised the
+    # real unlabeled format -- caught live against a real .BC file, see
+    # core/born_charges.py's own docstring).
+    f.write("BC matrix\n")
     for Z in Z_star:
-        f.write("BC matrix\n")
-        f.write("            x              y              z\n")
-        for row_name, row in zip("xyz", Z):
-            f.write(f"{row_name}   {row[0]: .7f}   {row[1]: .7f}   {row[2]: .7f}\n")
+        for row in Z:
+            f.write(f"   {row[0]: .7f}   {row[1]: .7f}   {row[2]: .7f}\n")
 
 with open("ir_study/born_charge_disp/equilibrium/calc.fdf", "w") as f:
     f.write("SystemLabel Sn3O4\n")

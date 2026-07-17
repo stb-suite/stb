@@ -6,30 +6,31 @@ precedent as core/dielectric.py (.EPSIMG) -- kept out of core/siesta_log.py,
 which is scoped to .out calculation logs specifically, not SIESTA's other
 auxiliary output files.
 
-FORMAT CAVEAT (unlike core/dielectric.py's .EPSIMG parser, which was
-verified against SIESTA's own Src/optical.F source): the exact .BC layout
-below is reconstructed from SIESTA's official Born-effective-charge
-tutorial/exercise material (BornCharge .true. + MD.TypeOfRun FC +
-%block PolarizationGrids), not from a real .BC file read in this
-environment. The documented example is one 3x3 tensor block per atom,
-each block a column header line (x/y/z) followed by 3 rows labeled
-x/y/z:
+FORMAT (confirmed against a real SystemLabel.BC, SIESTA MaX-1.2/PSML
+build, 2026-07 -- the x/y/z-labeled layout originally assumed here, from
+SIESTA's Born-effective-charge tutorial/exercise material, does NOT
+match: this SIESTA build's real .BC file has a bare "BC matrix" header
+line followed directly by N*3 UNLABELED rows of 3 floats each, one 3x3
+tensor per atom, IN FILE ORDER, no per-atom separator:
 
     BC matrix
-                x              y              z
-    x       2.7661178      0.0000107     -0.0000000
-    y      -0.0085767      2.7538482      0.0000000
-    z       0.0004767      0.0000000      0.7117852
+           0.0000449      -0.0000023      -0.0000023
+          -0.0000023       0.0000449      -0.0000023
+          -0.0000023      -0.0000023       0.0000449
+           0.0000656       0.0000106       0.0000106
+           0.0000106       0.0000656       0.0000106
+           0.0000106       0.0000106       0.0000657
 
-but the atom-labeling convention (species symbol vs. bare index) was not
-confirmed. read_born_charges() is written to be tolerant of that
-uncertainty: it locates every run of 3 consecutive x/y/z-labeled data
-rows anywhere in the file (ignoring any header/label text around them)
-and treats each run, IN FILE ORDER, as one atom's Z* tensor -- this
-degrades safely (a malformed/unexpected file yields None, not a
-misparsed tensor) but the atom-label strings it returns are best-effort
-only. VERIFY AGAINST A REAL SystemLabel.BC FILE before trusting this in
-production; adjust the regex/labeling below once one is available.
+read_born_charges() accepts EITHER this unlabeled layout or the
+originally-assumed x/y/z-labeled one (SIESTA's own tutorial material
+does show labels, so a different build/version may still emit them) --
+it locates every run of 3 consecutive data rows that are either all
+unlabeled or labeled x/y/z in order (ignoring any other header/label
+text around them) and treats each run, IN FILE ORDER, as one atom's Z*
+tensor. This degrades safely (a malformed/unexpected file yields None,
+not a misparsed tensor); atom_labels stays best-effort-generic ("atom_i")
+since there's still no confirmed real example of a per-atom species/index
+label in this file.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ import re
 import numpy as np
 
 _ROW_RE = re.compile(
-    r'^\s*([xyzXYZ])\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*'
+    r'^\s*(?:([xyzXYZ])\s+)?([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*$'
 )
 
 
@@ -72,12 +73,12 @@ def read_born_charges(path):
     except OSError:
         return None
 
-    rows = []  # (axis_letter, [v0, v1, v2])
+    rows = []  # (axis_letter_or_None, [v0, v1, v2])
     for line in lines:
         m = _ROW_RE.match(line)
         if m is None:
             continue
-        axis = m.group(1).lower()
+        axis = m.group(1).lower() if m.group(1) else None
         try:
             vals = [float(m.group(i)) for i in (2, 3, 4)]
         except ValueError:
@@ -89,7 +90,8 @@ def read_born_charges(path):
     axis_order = ('x', 'y', 'z')
     while i + 3 <= len(rows):
         triplet = rows[i:i + 3]
-        if tuple(axis for axis, _ in triplet) == axis_order:
+        axes = tuple(axis for axis, _ in triplet)
+        if axes == axis_order or axes == (None, None, None):
             tensor = np.array([vals for _, vals in triplet], dtype=float)
             tensors.append(tensor)
             i += 3

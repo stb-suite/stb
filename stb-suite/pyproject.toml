@@ -110,6 +110,8 @@ stb-oer="stb.oer:main"
 stb-oerIntermediates="stb.oer_intermediates:main"
 stb-oerRefs="stb.oer_refs:main"
 stb-oerAnalysis="stb.oer_analysis:main"
+stb-gqca="stb.gqca:main"
+stb-gqcaAnalysis="stb.gqca_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

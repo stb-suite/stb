@@ -3962,6 +3962,106 @@ def run_oer_analysis() -> None:
     run_tool("stb-oerAnalysis", args)
 
 
+def run_gqca_prep() -> None:
+    """Interface for the GQCA Stage 1 (stb-gqca)"""
+    print("\n" + "="*60)
+    print(color_text("GQCA WORKFLOW - STAGE 1: CLUSTER STRUCTURE GENERATION", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Builds the 3 ordered pair-cluster-representative structures (AA/AB/BB) for a "
+        "substitutional alloy A(1-x)Bx -- works on any lattice, 2D or 3D alike.", 'cyan'))
+    print()
+
+    structure_file = get_input("Input structure file (2D or 3D) [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    sublattice = get_input("\nExisting species whose sites become the alloy sublattice "
+                            "(e.g. Mo): ").strip()
+    species_b = get_input("Second alloy species (e.g. W): ").strip()
+
+    calc_file = get_input("\nCalc.fdf template for the 3 cluster relaxations: ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the 3 cluster relaxations: ")
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    output_dir = get_input("\nOutput root directory [default: gqca_study]: ").strip()
+    if not output_dir:
+        output_dir = "gqca_study"
+
+    args = [
+        "-f", structure_file, "--sublattice", sublattice, "--species-b", species_b,
+        "-c", calc_file, "-O", output_dir, "--no-intro"
+    ]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (k-point density/vacuum-gap)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        kdensity = get_float_input("k-point density, same convention as stb-kgrid "
+                                    "[default: 0.04]: ", 0.04)
+        args.extend(["--kdensity", str(kdensity)])
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+
+    print(color_text("\nGenerating AA/AB/BB cluster structures...", 'green'))
+    run_tool("stb-gqca", args)
+
+
+def run_gqca_analysis() -> None:
+    """Interface for the GQCA Stage 2 (stb-gqcaAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("GQCA WORKFLOW - STAGE 2: MASS-ACTION ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: gqca_study]: ").strip()
+    if not run_dir:
+        run_dir = "gqca_study"
+
+    output_filename = get_input("SIESTA output filename inside each cluster_n* folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    print(f"\n{color_text('Temperature:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Single fixed temperature (default)")
+    print(f"  {color_text('2', 'cyan')} = Temperature sweep")
+    temp_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+
+    args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
+    if temp_choice == '2':
+        temp_min = get_float_input("  T min (K): ")
+        temp_max = get_float_input("  T max (K): ")
+        temp_points = get_int_input("  Number of T points [default: 5]: ", 5)
+        args.extend(["--temp-min", str(temp_min), "--temp-max", str(temp_max),
+                     "--temp-points", str(temp_points)])
+    else:
+        temp = get_float_input("  Temperature in K [default: 300.0]: ", 300.0)
+        args.extend(["--temp", str(temp)])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (composition grid/force tolerance/output name)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        x_min = get_float_input("  x min [default: 0.0]: ", 0.0)
+        x_max = get_float_input("  x max [default: 1.0]: ", 1.0)
+        x_points = get_int_input("  Number of x points [default: 21]: ", 21)
+        args.extend(["--x-min", str(x_min), "--x-max", str(x_max), "--x-points", str(x_points)])
+        force_tolerance = get_float_input(
+            "  Force tolerance for the 'is this folder relaxed' check, in eV/Ang "
+            "[default: 0.05]: ", 0.05)
+        args.extend(["--force-tolerance", str(force_tolerance)])
+        output = get_input("  Base filename for .csv/.dat/.gplot [default: gqca_results]: ").strip()
+        if output:
+            args.extend(["--output", output])
+
+    run_tool("stb-gqcaAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5155,6 +5255,22 @@ WORKFLOW_TOOLS = {
             4: {'title': "Stage 4 - Analysis (stb-oerAnalysis)",
                 'description': "Combine every reference energy into Delta-G1..4, eta, and the PDS.",
                 'func': run_oer_analysis},
+        }},
+    15: {'title': "Generalized Quasi-Chemical Approximation (GQCA)",
+        'description': "Self-contained: builds the 3 ordered pair-cluster-representative "
+                        "structures (AA/AB/BB) for a substitutional alloy A(1-x)Bx, then solves "
+                        "the mass-action equilibrium to get Delta-H_mix/Delta-S_mix/Delta-G_mix"
+                        "(x,T) and short-range-order parameters (Sher et al., PRB 36, 4279, "
+                        "1987). Works on 2D and 3D structures alike.",
+        'stages': {
+            1: {'title': "Stage 1 - Structure Generation (stb-gqca)",
+                'description': "Generate the 3 ordered pair-representative structures (AA/AB/BB), "
+                                "fully relaxed, ready for SIESTA.",
+                'func': run_gqca_prep},
+            2: {'title': "Stage 2 - Analysis (stb-gqcaAnalysis)",
+                'description': "Solve the mass-action equilibrium over an x/T grid and report "
+                                "Delta-H_mix, Delta-S_mix, Delta-G_mix, and SRO parameters.",
+                'func': run_gqca_analysis},
         }},
        }
 

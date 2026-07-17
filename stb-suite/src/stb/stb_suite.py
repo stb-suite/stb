@@ -3612,6 +3612,138 @@ def run_ir_analysis() -> None:
     run_tool("stb-irAnalysis", args)
 
 
+def run_her_prep() -> None:
+    """Interface for the HER Stage 1 (stb-her)"""
+    print("\n" + "="*60)
+    print(color_text("HER WORKFLOW - STAGE 1: ADSORPTION SITES", 'bold').center(60))
+    print("="*60 + "\n")
+
+    structure_file = get_input("Relaxed slab/2D structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    calc_file = get_input("Calc.fdf template for the site relaxations: ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the site relaxations: ")
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    site_type = get_input(
+        "\nSite type to search: ontop/bridge/hollow/all [default: all]: ").strip().lower()
+    if site_type not in ("ontop", "bridge", "hollow", "all"):
+        site_type = "all"
+
+    height = get_float_input("\nH adsorption height in Ang [default: 1.5]: ", 1.5)
+
+    both_sides_choice = get_input(
+        "\nAdsorb on both faces (free-standing 2D material with vacuum on both sides) "
+        "(y/N): ").strip().lower()
+
+    output_dir = get_input("\nOutput root directory [default: her_study]: ").strip()
+    if not output_dir:
+        output_dir = "her_study"
+
+    args = [
+        "-s", structure_file, "-c", calc_file,
+        "--site-type", site_type, "--height", str(height),
+        "-O", output_dir, "--no-intro"
+    ]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+    if both_sides_choice in ('y', 'yes'):
+        args.append("--both-sides")
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (symprec/vacuum-gap)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        symprec = get_float_input(
+            "Symmetry-reduction tolerance for site-finding [default: 0.01]: ", 0.01)
+        args.extend(["--symprec", str(symprec)])
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+
+    print(color_text("\nSearching H-adsorption sites...", 'green'))
+    run_tool("stb-her", args)
+
+
+def run_her_refs() -> None:
+    """Interface for the HER Stage 2 (stb-herRefs)"""
+    print("\n" + "="*60)
+    print(color_text("HER WORKFLOW - STAGE 2: REFERENCES & ZPE PREP", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: her_study]: ").strip()
+    if not run_dir:
+        run_dir = "her_study"
+
+    output_filename = get_input("SIESTA output filename inside each site folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    zpe_mode = get_input(
+        "\nZPE/entropy mode: standard/local/full [default: local]: ").strip().lower()
+    if zpe_mode not in ("standard", "local", "full"):
+        zpe_mode = "local"
+
+    args = ["--directory", run_dir, "--file", output_filename, "--zpe-mode", zpe_mode, "--no-intro"]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (displacement/supercell/vacuum-box)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        displacement = get_float_input("Finite-difference displacement in Ang [default: 0.015]: ", 0.015)
+        args.extend(["--displacement", str(displacement)])
+        vacuum_box = get_float_input("H2 reference vacuum box side in Ang [default: 15.0]: ", 15.0)
+        args.extend(["--vacuum-box", str(vacuum_box)])
+        if zpe_mode == "full":
+            supercell_input = get_input(
+                "Supercell dimensions for the full phonon calc (e.g. '1 1 1') "
+                "[default: 1 1 1]: ").strip()
+            if supercell_input:
+                try:
+                    dims = [int(x) for x in supercell_input.split()]
+                    if len(dims) == 3:
+                        args.extend(["--supercell", str(dims[0]), str(dims[1]), str(dims[2])])
+                except ValueError:
+                    pass
+
+    print(color_text("\nBuilding winning-site references and ZPE folders...", 'green'))
+    run_tool("stb-herRefs", args)
+
+
+def run_her_analysis() -> None:
+    """Interface for the HER Stage 3 (stb-herAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("HER WORKFLOW - STAGE 3: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with the stb-her/stb-herRefs run [default: her_study]: ").strip()
+    if not run_dir:
+        run_dir = "her_study"
+
+    output_filename = get_input("SIESTA output filename inside each folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    temperature = get_float_input("\nTemperature in K [default: 298.15]: ", 298.15)
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this folder relaxed/converged' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--directory", run_dir, "--file", output_filename, "--temp", str(temperature),
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    run_tool("stb-herAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -4765,6 +4897,23 @@ WORKFLOW_TOOLS = {
                                 "Born-charge x eigendisplacement projection) and the IR "
                                 "spectrum.",
                 'func': run_ir_analysis},
+        }},
+    13: {'title': "Hydrogen Evolution Reaction (HER)",
+        'description': "Self-contained: finds the most stable H-adsorption site on a slab, "
+                        "then the H2/BSSE/ZPE references needed for the computational hydrogen "
+                        "electrode descriptor Delta-G_H* (Norskov et al.).",
+        'stages': {
+            1: {'title': "Stage 1 - Adsorption Sites (stb-her)",
+                'description': "Find every symmetrically distinct H-adsorption site and write "
+                                "one relaxation folder per site.",
+                'func': run_her_prep},
+            2: {'title': "Stage 2 - References & ZPE Prep (stb-herRefs)",
+                'description': "Pick the winning site, build the H2/deformed-slab/BSSE-ghost "
+                                "references, and the ZPE calculation folder(s).",
+                'func': run_her_refs},
+            3: {'title': "Stage 3 - Analysis (stb-herAnalysis)",
+                'description': "Combine every reference energy into the final Delta-G_H*.",
+                'func': run_her_analysis},
         }},
        }
 

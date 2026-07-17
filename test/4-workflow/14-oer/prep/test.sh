@@ -82,6 +82,7 @@ check_contains "\[2\] ADSORPTION SITES" oer_study/oer_stage1.txt
 check_contains "\[3\] SUMMARY & NEXT STEPS" oer_study/oer_stage1.txt
 check_contains "stb-oerIntermediates --directory oer_study" oer_study/oer_stage1.txt
 check_contains "No O2 gas-phase reference is generated" oer_study/oer_stage1.txt
+check_contains "lattice oxygen evolution mechanism" oer_study/oer_stage1.txt
 
 echo "Testing: OH is appended as the LAST 2 atoms (O then H, 4th/3rd), Slab.DipoleCorrection forced on"
 check_contains "NumberofAtoms      4" oer_study/sites/site_1_ontop/structure.fdf

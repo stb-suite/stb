@@ -3831,10 +3831,17 @@ def run_oer_intermediates() -> None:
     if ooh_strategy not in ("derived", "search"):
         ooh_strategy = "derived"
 
+    ml_prerelax_choice = get_input(
+        "\nPre-relax O*/OOH*'s adsorbate atoms with MACE-MP-0 before writing the CG-relaxation "
+        "folder(s) (substrate fixed)? Needs the optional 'ml' extra (y/N): ").strip().lower()
+    ml_prerelax = ml_prerelax_choice in ('y', 'yes')
+
     args = ["--directory", run_dir, "--file", output_filename,
             "--o-strategy", o_strategy, "--ooh-strategy", ooh_strategy, "--no-intro"]
     if pseudo_dir:
         args.extend(["-p", pseudo_dir])
+    if ml_prerelax:
+        args.append("--ml-prerelax")
 
     if o_strategy == "search":
         print(color_text("\nO* search settings:", 'yellow'))

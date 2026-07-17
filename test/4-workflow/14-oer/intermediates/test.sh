@@ -136,6 +136,39 @@ check_contains "Slab.DipoleCorrection   T" oer_study/intermediates/o_star/calc.f
 check_contains "Slab.DipoleCorrection   T" oer_study/intermediates/ooh_star/calc.fdf
 
 
+# --- 3b. --ml-prerelax (MACE-MP-0 already cached locally) ---
+echo -e "\n--- Testing --ml-prerelax (derived O*/OOH*, substrate fixed) ---"
+make_site_disp
+stb-oerIntermediates --directory oer_study -p . --ml-prerelax --no-intro > log_mlprerelax.txt 2>&1
+check_exit_code $? 0
+check_contains "ML pre-relax" log_mlprerelax.txt
+check_success oer_study/intermediates/o_star/structure.fdf
+check_success oer_study/intermediates/ooh_star/structure.fdf
+check_contains "NumberofAtoms      3" oer_study/intermediates/o_star/structure.fdf
+check_contains "NumberofAtoms      5" oer_study/intermediates/ooh_star/structure.fdf
+
+echo "Testing: substrate (first 2 atoms) unchanged by --ml-prerelax (FixAtoms)"
+python3 -c "
+import re
+
+def frac_rows(path):
+    with open(path) as f:
+        text = f.read()
+    m = re.search(r'%block AtomicCoordinatesAndAtomicSpecies\n(.*?)%endblock', text, re.DOTALL)
+    return [[float(x) for x in r.split()[:3]] for r in m.group(1).strip().split(chr(10))]
+
+def close(a, b, tol=1e-6):
+    return all(abs(x - y) < tol for x, y in zip(a, b))
+
+rows = frac_rows('oer_study/intermediates/o_star/structure.fdf')
+# substrate = first 2 rows (the graphene C atoms), must be untouched (FixAtoms)
+assert close(rows[0], [0.0, 0.0, 0.5]), f'substrate atom 1 moved: {rows[0]}'
+assert close(rows[1], [0.33333333, 0.66666667, 0.5]), f'substrate atom 2 moved: {rows[1]}'
+print('OK')
+" > log_mlprerelax_substrate_check.txt 2>&1
+check_contains "OK" log_mlprerelax_substrate_check.txt
+
+
 # --- 4. --o-strategy search ---
 echo -e "\n--- Testing --o-strategy search (independent site search for O*) ---"
 make_site_disp
@@ -170,11 +203,13 @@ echo "Testing: --version"
 stb-oerIntermediates --version > log_version.txt 2>&1
 check_contains "stb-oerIntermediates" log_version.txt
 
-echo "Testing: --help documents --o-strategy/--ooh-strategy/--oo-bond-length"
+echo "Testing: --help documents --o-strategy/--ooh-strategy/--oo-bond-length/--ml-prerelax"
 stb-oerIntermediates --help > log_help.txt 2>&1
 check_contains "o-strategy" log_help.txt
 check_contains "ooh-strategy" log_help.txt
 check_contains "oo-bond-length" log_help.txt
+check_contains "ml-prerelax" log_help.txt
+check_contains "ml-model" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.14.2) ---
@@ -190,6 +225,7 @@ make_site_disp
   echo "."              # custom pseudo path
   echo ""               # o_strategy (default derived)
   echo ""               # ooh_strategy (default derived)
+  echo ""               # ml_prerelax_choice (default N)
   echo ""               # show_advanced (default N)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu

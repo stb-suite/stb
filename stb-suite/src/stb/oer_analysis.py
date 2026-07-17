@@ -241,7 +241,13 @@ No --zpe-mode 'standard' is offered: every intermediate's (and H2O's own) ZPE/en
 from your own DFT+phonon data (--zpe-mode local/full in stb-oerRefs), never a hardcoded per-species
 literature default -- OER would need 4 additional constants beyond HER's single well-established
 H2 value, and their exact digits could not be pinned to a verified primary source during this
-tool's development.""",
+tool's development.
+
+[LIMITATION] This descriptor assumes the adsorbate evolution mechanism (AEM: OH*/O*/OOH* bound at
+a single site) -- it does NOT model the lattice oxygen evolution mechanism (LOER, where lattice
+oxygen atoms participate directly, common on some oxide/oxyhydroxide catalysts and linked to
+catalyst instability under anodic potential; see Exner, ChemCatChem 2021). Treat eta here as an
+AEM-only estimate, not the full mechanistic picture, especially for perovskites or Ru/Ir oxides.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --directory oer_study --temp 298.15\n"
@@ -471,6 +477,9 @@ tool's development.""",
                    else "moderate OER activity" if eta < 0.6
                    else "poor OER catalyst (large overpotential)")
         print_dual(f"  Qualitative assessment: {verdict}", f_out)
+        print_dual(color_text(
+            "  [LIMITATION] AEM descriptor only (OH*/O*/OOH* at one site) -- does not model the "
+            "lattice oxygen evolution mechanism (LOER). See --help.", 'cyan'), f_out)
 
         report_str_path = os.path.join(output_root, f"{args.output}.txt")
         with open(report_str_path, "w") as f_report:

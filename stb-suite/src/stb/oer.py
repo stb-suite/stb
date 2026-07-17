@@ -354,6 +354,15 @@ stb-oerAnalysis --help for details.""",
         print_dual(color_text(
             "[NOTE] No O2 gas-phase reference is generated anywhere in this workflow -- "
             "intentional, see stb-oerAnalysis --help.", 'cyan'), f_out)
+        print_dual(color_text(
+            "[NOTE] This workflow assumes the adsorbate evolution mechanism (AEM: OH*/O*/OOH* "
+            "bound at a single site) -- it does NOT model the lattice oxygen evolution mechanism "
+            "(LOER, where lattice oxygen atoms themselves participate, common on some oxide/"
+            "oxyhydroxide catalysts and linked to catalyst instability; see Exner, ChemCatChem "
+            "2021, 'On the Lattice Oxygen Evolution Mechanism: Avoiding Pitfalls'). If your "
+            "material is expected to favor LOER (e.g. a perovskite or Ru/Ir oxide operating at "
+            "high anodic potential), treat this workflow's Delta-G/eta as an AEM-only estimate, "
+            "not the full mechanistic picture.", 'cyan'), f_out)
 
         f_out.write("\n# SITE_TABLE -- parsed by stb-oerIntermediates, do not reorder the columns\n")
         f_out.write(f"# {'label':<24}{'dir'}\n")

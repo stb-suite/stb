@@ -19,6 +19,7 @@ from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.siesta_log import get_free_energy, get_outcell, report_quality_diagnostics
+from stb.core.deps import require_mace
 
 REPORT_FILE = "oer_stage2.txt"
 _OOH_OO_BOND_ANG = 1.45   # illustrative peroxo-like O-O starting bond length -- NOT pinned to a
@@ -274,15 +275,50 @@ def write_relax_folder(out_dir, fdf_structure, calc_text, pp_path):
         link_pseudo(pp_path, sym, out_dir)
 
 
+def ml_prerelax_adsorbate(fdf_structure, n_substrate, model, device, fmax):
+    """Positions-only MACE-MP-0 relax of ONLY the adsorbate atoms (every
+    index >= n_substrate), with the substrate held fixed via ase's
+    FixAtoms -- same pattern as stb-adsorb's own --ml-rank
+    (mace_relax.get_calculator + relax + FixAtoms(indices=range(n_substrate))),
+    just operating on this module's FdfStructure representation instead
+    of a pymatgen Structure directly. A fast classical-potential
+    pre-screen to improve O*/OOH*'s starting geometry -- especially
+    --strategy derived's hand-built guess (build_ooh_structure's O-O bond
+    length/bend angle are explicitly illustrative, not literature-fitted)
+    -- before the real, much more expensive SIESTA CG relaxation this
+    module always still writes a folder for. NOT a substitute for that
+    real relaxation, just a better-informed starting point for it.
+    Callers must call core.deps.require_mace() themselves first (see
+    main()), matching every other MACE consumer in this suite.
+    """
+    from ase.constraints import FixAtoms
+    from pymatgen.io.ase import AseAtomsAdaptor
+    from stb.core import mace_relax
+
+    pmg_structure = structure_io.to_pymatgen(fdf_structure)
+    ase_atoms = AseAtomsAdaptor.get_atoms(pmg_structure)
+    ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
+    calc = mace_relax.get_calculator(model=model, device=device)
+    mace_relax.relax(ase_atoms, calc, fmax=fmax, max_steps=200)
+    relaxed_pmg = AseAtomsAdaptor.get_structure(ase_atoms)
+    species_meta = structure_io.species_dict(fdf_structure)
+    return structure_io.from_pymatgen(relaxed_pmg, species_meta=species_meta, coord_format="fractional")
+
+
 def search_intermediate_sites(pmg_clean, clean_species_meta, ads_molecule, site_type, height,
-                               symprec, label_prefix, out_root, base_calc_text, pp_path, f_out):
+                               symprec, label_prefix, out_root, base_calc_text, pp_path,
+                               ml_prerelax, ml_model, ml_device, ml_fmax, f_out):
     """--strategy search: an independent AdsorbateSiteFinder sweep for
     `ads_molecule` on the CLEAN slab -- same site-finding machinery as
     Stage 1's own OH* search (oer.py's main()), duplicated here rather
     than imported (self-contained stage, see module docstring). Writes
     one CG-relaxation folder per symmetrically distinct site under
-    `out_root/<label_prefix>_candidates/site_N_type/`. Returns the number
-    of folders written.
+    `out_root/<label_prefix>_candidates/site_N_type/`. If `ml_prerelax`,
+    every candidate's adsorbate geometry is MACE-MP-0 pre-relaxed
+    (substrate fixed) before being written out, same idea as
+    ml_prerelax_adsorbate but applied per-candidate here since each one
+    starts from AdsorbateSiteFinder's own fixed-height, non-relaxed
+    placement. Returns the number of folders written.
     """
     finder = AdsorbateSiteFinder(pmg_clean)
     site_types = ["ontop", "bridge", "hollow"] if site_type == "all" else [site_type]
@@ -295,9 +331,26 @@ def search_intermediate_sites(pmg_clean, clean_species_meta, ads_molecule, site_
 
     candidates_root = os.path.join(out_root, f"{label_prefix}_candidates")
     os.makedirs(candidates_root, exist_ok=True)
+    n_substrate = len(pmg_clean)
+
+    mace_calc = None
+    if ml_prerelax:
+        from stb.core import mace_relax
+        from ase.constraints import FixAtoms
+        from pymatgen.io.ase import AseAtomsAdaptor
+        mace_calc = mace_relax.get_calculator(model=ml_model, device=ml_device)
+        print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing each {label_prefix.upper()} "
+                    "candidate's adsorbate atoms with MACE-MP-0 (substrate fixed) before writing "
+                    "it out ...", f_out)
+
     n_written = 0
     for i, (st, coord) in enumerate(candidates, start=1):
         ads_struct = finder.add_adsorbate(ads_molecule, coord)
+        if mace_calc is not None:
+            ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
+            ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
+            mace_relax.relax(ase_atoms, mace_calc, fmax=ml_fmax, max_steps=200)
+            ads_struct = AseAtomsAdaptor.get_structure(ase_atoms)
         label = f"site_{i}_{st}"
         site_dir = os.path.join(candidates_root, label)
         fdf_structure = structure_io.from_pymatgen(
@@ -370,6 +423,22 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
                          help="--ooh-strategy search only: OOH adsorption height in Ang (default: 2.0).")
     parser.add_argument("--ooh-symprec", type=float, default=0.01,
                          help="--ooh-strategy search only: symmetry-reduction tolerance (default: 0.01).")
+    parser.add_argument("--ml-prerelax", action="store_true",
+                         help="Relax O*/OOH*'s adsorbate atoms (positions only, substrate fixed) "
+                              "with MACE-MP-0 before writing the CG-relaxation folder(s) -- same "
+                              "idea as stb-adsorb --ml-rank. Mainly useful for --strategy derived's "
+                              "hand-built starting geometry (the O-O bond length/bend angle are "
+                              "illustrative, not literature-fitted), but also applies to --strategy "
+                              "search's AdsorbateSiteFinder placements. A better-informed starting "
+                              "point for the real SIESTA relaxation, NOT a substitute for it. Needs "
+                              "the optional 'ml' extra.")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
+                         help="MACE-MP-0 model size, with --ml-prerelax (default: small).")
+    parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu",
+                         help="Device for --ml-prerelax (default: cpu).")
+    parser.add_argument("--ml-fmax", type=float, default=0.05,
+                         help="Force convergence threshold in eV/Ang, with --ml-prerelax "
+                              "(default: 0.05).")
     parser.add_argument("-v", "--version", action="version", version=f"stb-oerIntermediates {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -401,6 +470,9 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
             print(color_text(f"[ERROR] {e}", 'red'))
             sys.exit(1)
 
+    if args.ml_prerelax:
+        require_mace()
+
     report_path = os.path.join(output_root, REPORT_FILE)
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== OER STAGE 2 REPORT (O*/OOH* INTERMEDIATES) =====', 'magenta')}", f_out)
@@ -410,6 +482,9 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
         print_dual(f"Directory       : {output_root}", f_out)
         print_dual(f"O* strategy     : {args.o_strategy}", f_out)
         print_dual(f"OOH* strategy   : {args.ooh_strategy}", f_out)
+        print_dual(f"ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}"
+                    + (f" (model={args.ml_model}, device={args.ml_device})" if args.ml_prerelax else ""),
+                    f_out)
 
         print_dual(f"\n{color_text('[1] WINNING OH* SITE', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
@@ -445,16 +520,23 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
         if args.o_strategy == "derived":
             o_dir = os.path.join(output_root, "intermediates", "o_star")
             o_structure = build_o_structure(relaxed_oh, h_index)
+            prerelax_note = ""
+            if args.ml_prerelax:
+                print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing O*'s adsorbate atom "
+                            "with MACE-MP-0 (substrate fixed) ...", f_out)
+                o_structure = ml_prerelax_adsorbate(o_structure, o_index, args.ml_model,
+                                                     args.ml_device, args.ml_fmax)
+                prerelax_note = ", ML pre-relaxed"
             o_calc = force_system_label(force_relaxation(site_calc_text), "oer_o_star")
             write_relax_folder(o_dir, o_structure, o_calc, args.pseudo_dir)
             print_dual(f"  {color_text('[OK]', 'green')} {o_dir} (derived from the winning OH* "
-                        "site: H removed)", f_out)
+                        f"site: H removed{prerelax_note})", f_out)
         else:
             o_molecule = Molecule(["O"], [[0.0, 0.0, 0.0]])
             n_written = search_intermediate_sites(
                 pmg_clean, clean_species_meta, o_molecule, args.o_site_type, args.o_height,
                 args.o_symprec, "o", os.path.join(output_root, "intermediates"), site_calc_text,
-                args.pseudo_dir, f_out)
+                args.pseudo_dir, args.ml_prerelax, args.ml_model, args.ml_device, args.ml_fmax, f_out)
             print_dual(f"{n_written} O* candidate folder(s) written -- run SIESTA in all of them, "
                         "stb-oerRefs will pick the winner.", f_out)
 
@@ -465,19 +547,26 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
             ooh_structure = build_ooh_structure(relaxed_oh, o_index, h_index,
                                                  args.oo_bond_length, args.ooh_oh_bond_length,
                                                  args.ooh_bend_deg)
+            prerelax_note = ""
+            if args.ml_prerelax:
+                print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing OOH*'s adsorbate "
+                            "atoms with MACE-MP-0 (substrate fixed) ...", f_out)
+                ooh_structure = ml_prerelax_adsorbate(ooh_structure, o_index, args.ml_model,
+                                                       args.ml_device, args.ml_fmax)
+                prerelax_note = ", ML pre-relaxed"
             ooh_calc = force_system_label(force_relaxation(site_calc_text), "oer_ooh_star")
             write_relax_folder(ooh_dir, ooh_structure, ooh_calc, args.pseudo_dir)
             print_dual(f"  {color_text('[OK]', 'green')} {ooh_dir} (derived from the winning OH* "
                         f"site: +O at {args.oo_bond_length:.3f} Ang, +H bent "
                         f"{args.ooh_bend_deg:.1f} deg -- illustrative starting geometry, refined "
-                        "by CG relaxation)", f_out)
+                        f"by CG relaxation{prerelax_note})", f_out)
         else:
             ooh_molecule = build_ooh_molecule(args.oo_bond_length, args.ooh_oh_bond_length,
                                                args.ooh_bend_deg)
             n_written = search_intermediate_sites(
                 pmg_clean, clean_species_meta, ooh_molecule, args.ooh_site_type, args.ooh_height,
                 args.ooh_symprec, "ooh", os.path.join(output_root, "intermediates"), site_calc_text,
-                args.pseudo_dir, f_out)
+                args.pseudo_dir, args.ml_prerelax, args.ml_model, args.ml_device, args.ml_fmax, f_out)
             print_dual(f"{n_written} OOH* candidate folder(s) written -- run SIESTA in all of "
                         "them, stb-oerRefs will pick the winner.", f_out)
 

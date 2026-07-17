@@ -278,6 +278,10 @@ check_contains "temp" log_help.txt
 check_contains "force-tolerance" log_help.txt
 check_contains "potential-determining step" log_help.txt
 check_contains "4.92 eV" log_help.txt
+check_contains "lattice oxygen evolution mechanism" log_help.txt
+
+echo "Testing: final report includes the AEM/LOER limitation note"
+check_contains "LIMITATION" oer_study/oer_stage4.txt
 
 
 # --- 5. Interactive path (stb-suite, shortcut 4.14.4) ---

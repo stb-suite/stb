@@ -239,6 +239,38 @@ def get_gamma_modes(phonon, exclude_acoustic=True, extra_trivial_tol_thz=None):
     return frequencies[n_trivial:], mode_indices[n_trivial:], n_trivial - 3
 
 
+def _unit_mode_probe(phonon, band_index, internal_to_angstrom):
+    """Runs a unit-amplitude probe of phonon mode `band_index` at Gamma
+    via phonon.run_modulations, and returns
+    (delta_positions_ang, probe_shift): `delta_positions_ang` is the
+    per-atom Cartesian displacement pattern (n_atoms, 3) in Angstrom at
+    that unit-amplitude probe; `probe_shift` is the largest per-atom
+    Cartesian displacement norm in that pattern (Angstrom) -- the
+    calibration factor needed to turn Phonopy's own (not-Angstrom)
+    amplitude units into a real physical displacement. Shared by
+    displace_along_mode (rescales this pattern to a specific +/-delta
+    Angstrom displacement of the actual structure) and
+    mode_eigendisplacement (normalizes this pattern to a unit-amplitude
+    eigendisplacement) -- extracted out from displace_along_mode once
+    mode_eigendisplacement needed the identical calibration trick,
+    instead of duplicating it.
+
+    Raises ValueError if probe_shift == 0 (zero displacement amplitude at
+    a unit probe -- can't calibrate a real Angstrom displacement from it).
+    """
+    q_point = [0, 0, 0]
+    phonon.run_modulations([1, 1, 1], [[q_point, band_index, 1.0, 0.0]])
+    mod = phonon.modulation
+    delta_positions_ang = (
+        mod.modulated_supercells[0].positions - mod.supercell.positions
+    ) * internal_to_angstrom
+    probe_shift = np.linalg.norm(delta_positions_ang, axis=1).max()
+    if probe_shift == 0:
+        raise ValueError(f"Mode {band_index} has zero displacement amplitude at a unit "
+                          "probe -- cannot calibrate a real Angstrom displacement.")
+    return delta_positions_ang, probe_shift
+
+
 def displace_along_mode(phonon, band_index, amplitude_ang, internal_to_angstrom, sign=1.0):
     """Displaces the Gamma-point primitive cell along phonon mode
     `band_index` (0-based Phonopy band index at q=[0,0,0], e.g. from
@@ -252,24 +284,43 @@ def displace_along_mode(phonon, band_index, amplitude_ang, internal_to_angstrom,
     variation to visualize, so the "modulated supercell" IS the primitive
     cell). run_modulations' amplitude parameter isn't itself in Angstrom
     (same note as the freeze-unstable-mode code this mirrors), so a
-    unit-amplitude probe is run first and the real displacement rescaled
-    linearly from it.
+    unit-amplitude probe is run first (via _unit_mode_probe) and the real
+    displacement rescaled linearly from it.
 
     Returns a PhonopyAtoms (phonon.modulation.modulated_supercells[0]) --
     same object type/unit-convention as build_phonon_displacements's
     output, ready for phonopy.interface.siesta.write_siesta.
     """
-    q_point = [0, 0, 0]
-    phonon.run_modulations([1, 1, 1], [[q_point, band_index, 1.0, 0.0]])
-    mod = phonon.modulation
-    probe_shift = np.linalg.norm(
-        mod.modulated_supercells[0].positions - mod.supercell.positions,
-        axis=1).max() * internal_to_angstrom
-    if probe_shift == 0:
-        raise ValueError(f"Mode {band_index} has zero displacement amplitude at a unit "
-                          "probe -- cannot calibrate a real Angstrom displacement.")
+    _, probe_shift = _unit_mode_probe(phonon, band_index, internal_to_angstrom)
     scale = sign * amplitude_ang / probe_shift
 
+    q_point = [0, 0, 0]
     phonon.run_modulations([1, 1, 1], [[q_point, band_index, scale, 0.0]])
     mod = phonon.modulation
     return mod.modulated_supercells[0]
+
+
+def mode_eigendisplacement(phonon, band_index, internal_to_angstrom):
+    """The real-Cartesian-Angstrom eigendisplacement pattern of phonon
+    mode `band_index` at Gamma, shape (n_atoms, 3), unit-normalized so
+    the LARGEST per-atom Cartesian norm is exactly 1.0 -- the SAME
+    normalization convention displace_along_mode already uses internally
+    (a displacement of `amplitude_ang` there means "amplitude_ang along
+    THIS same max-atom-shift-normalized pattern"). This is a deliberate,
+    load-bearing physical choice, not an arbitrary one: it's what makes
+    the bulk IR path's mode effective charge
+    (dmu/dQ = sum_atom Z*_atom @ e_atom(mode), core.born_charges) land on
+    the same physical footing as the non-bulk path's own
+    (mu(+delta)-mu(-delta))/(2*delta) -- both express "per Angstrom of
+    displacement along this same normalized pattern". Combining Z* with a
+    differently-normalized eigendisplacement (e.g. mass-weighted,
+    sum|e|^2=1) would silently put the two IR paths' intensities on
+    different, non-comparable footings.
+
+    Reuses _unit_mode_probe's own calibration (a single run_modulations
+    call, no second one needed -- unlike displace_along_mode, which needs
+    a real displaced structure, this only needs the normalized pattern
+    itself).
+    """
+    delta_positions_ang, probe_shift = _unit_mode_probe(phonon, band_index, internal_to_angstrom)
+    return delta_positions_ang / probe_shift

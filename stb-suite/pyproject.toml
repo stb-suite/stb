@@ -100,6 +100,9 @@ stb-dftu="stb.dftu:main"
 stb-raman="stb.raman:main"
 stb-ramanModes="stb.raman_modes:main"
 stb-ramanAnalysis="stb.raman_analysis:main"
+stb-ir="stb.ir:main"
+stb-irModes="stb.ir_modes:main"
+stb-irAnalysis="stb.ir_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

@@ -53,6 +53,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from stb.core.vibrational_symmetry import (
+    run_gamma_irreps, acoustic_chi_vector, reduction_multiplicity,
+)
+
 RAMAN_ACTIVE_TOL = 1e-3
 
 
@@ -100,10 +104,11 @@ def classify_modes(phonon):
     correctness-critical path, so "never take the whole Stage 2 run down"
     outweighs the usual preference for a narrow except clause.
     """
-    point_group = phonon.symmetry.pointgroup_symbol
+    irreps, point_group, error = run_gamma_irreps(phonon)
+    if error is not None:
+        return [], point_group, error
 
     try:
-        irreps = phonon.run_irreps([0, 0, 0])
         mode_symmetries = _classify_from_irreps(irreps)
     except Exception as e:
         return [], point_group, str(e)
@@ -118,17 +123,7 @@ def _classify_from_irreps(irreps):
     n_elem = rotations.shape[0]
     labels = getattr(irreps, "_ir_labels", None)  # best-effort, display only
 
-    # The 3 acoustic (translational) bands are always Phonopy's first 3
-    # at Gamma -- same convention already used by
-    # core.phonon_workflow.get_gamma_modes(exclude_acoustic=True). A
-    # band-group is "acoustic" if it's entirely contained in {0, 1, 2}
-    # (one 3D group for high-symmetry point groups, up to three separate
-    # 1D/2D groups when x, y, z split across different irreps).
-    acoustic_group_idx = [i for i, bset in enumerate(band_groups) if max(bset) < 3]
-
-    chi_v = np.zeros(n_elem, dtype=complex)
-    for i in acoustic_group_idx:
-        chi_v += characters[i]
+    chi_v = acoustic_chi_vector(irreps)
 
     # chi_v(g^2): find, for each element g, the index g' whose rotation
     # matrix equals rotations[g] @ rotations[g] (exact integer match).
@@ -148,7 +143,7 @@ def _classify_from_irreps(irreps):
 
     mode_symmetries = []
     for i, bset in enumerate(band_groups):
-        n_i = np.sum(chi_quad * np.conj(characters[i])) / n_elem
+        n_i = reduction_multiplicity(chi_quad, characters[i], n_elem)
         is_active = bool(abs(n_i.real) > RAMAN_ACTIVE_TOL)
         label = labels[i] if labels else None
         mode_symmetries.append(ModeSymmetry(bset, label, is_active))

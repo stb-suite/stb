@@ -3,7 +3,10 @@
 Consolidates parsers that used to live independently in elastic_analysis.py,
 strain_analysis.py, workfunction.py, wantibexos.py and cohesive_analysis.py:
 Fermi energy, cell height (Lz), stress tensor (two flavors -- see note below)
-and free energy.
+and free energy. get_electric_dipole() was added directly here (ir_analysis.py
+is its only consumer so far) rather than via an extract-on-second-use move,
+since it's exactly the kind of "one labeled quantity from a .out log" parser
+this module already exists to hold.
 
 Error contract: every function here returns None (or 1.0 for
 get_cell_height, a multiplicative normalization factor rather than a
@@ -235,6 +238,38 @@ def get_free_energy(path: str) -> float | None:
     except Exception:
         return None
     return energy
+
+
+def get_electric_dipole(path: str) -> np.ndarray | None:
+    """Last 'siesta: Electric dipole (a.u.) = X  Y  Z' line from a SIESTA
+    .out file, as a (3,) array in atomic units. SIESTA only prints this
+    line for non-bulk systems (molecule/wire/slab -- any structure with
+    at least one non-periodic direction); a genuinely 3D-periodic bulk
+    calculation never prints it at all (a naive dipole moment is
+    gauge-ambiguous there without a Berry-phase treatment -- see
+    core.born_charges for the bulk-appropriate quantity instead). Returns
+    None if the line is never found or fails to parse -- same contract as
+    every other function in this module.
+
+    Parses tolerantly (splits on the first '=', then takes the first 3
+    numeric tokens via _parse_float_line) rather than assuming a fixed
+    column width or that exactly 3 numbers always follow -- the precise
+    spacing of this line has not been verified against a real SIESTA run
+    in this environment; a format surprise should degrade to None (caller
+    reports "not found"), not a silently wrong parse.
+    """
+    dipole = None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if "Electric dipole" in line and "a.u." in line and "=" in line:
+                    tail = line.split("=", 1)[1]
+                    nums = _parse_float_line(tail)
+                    if nums:
+                        dipole = np.array(nums, dtype=float)
+    except Exception:
+        return None
+    return dipole
 
 
 def get_scf_convergence(path: str) -> tuple[bool, int | None]:

@@ -3419,6 +3419,199 @@ def run_raman_analysis() -> None:
     run_tool("stb-ramanAnalysis", args)
 
 
+def run_ir_prep() -> None:
+    """Interface for the IR Spectrum Stage 1 (stb-ir)"""
+    print("\n" + "="*60)
+    print(color_text("IR SPECTRUM - STAGE 1: PHONON DISPLACEMENTS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    calc_file = get_input("Calculation parameters file [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
+
+    dim_input = get_input("\nSupercell dimensions for the phonon calc (e.g. '2 2 2') "
+                           "[default: 2 2 2]: ").strip()
+    if not dim_input:
+        dim_x, dim_y, dim_z = 2, 2, 2
+    else:
+        try:
+            dims = [int(x) for x in dim_input.split()]
+            if len(dims) == 3:
+                dim_x, dim_y, dim_z = dims
+            else:
+                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
+                dim_x, dim_y, dim_z = 2, 2, 2
+        except ValueError:
+            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
+            dim_x, dim_y, dim_z = 2, 2, 2
+
+    distance = get_float_input("\nPhonon displacement distance in Ang [default: 0.02]: ", 0.02)
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if not pseudo_dir:
+        pseudo_dir = "."
+
+    output_dir = get_input("\nOutput root directory [default: ir_study]: ").strip()
+    if not output_dir:
+        output_dir = "ir_study"
+
+    vacuum_gap = 10.0
+    show_advanced = get_input("\nConfigure advanced settings (vacuum-gap)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for the supercell-dimension advisory and the Stage 2 "
+            "dipole-path preview (default: 10.0): ", 10.0)
+
+    args = [
+        "-s", structure_file, "-c", calc_file,
+        "-dim", str(dim_x), str(dim_y), str(dim_z),
+        "-d", str(distance), "-p", pseudo_dir,
+        "--vacuum-gap", str(vacuum_gap),
+        "-O", output_dir, "--no-intro"
+    ]
+
+    print(color_text("\nGenerating IR workflow phonon displacement folders...", 'green'))
+    run_tool("stb-ir", args)
+
+
+def run_ir_modes() -> None:
+    """Interface for the IR Spectrum Stage 2 (stb-irModes)"""
+    print("\n" + "="*60)
+    print(color_text("IR SPECTRUM - STAGE 2: MODES & DISPLACEMENTS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: ir_study]: ").strip()
+    if not run_dir:
+        run_dir = "ir_study"
+
+    calc_file = get_input("Calc.fdf template for the follow-up calculation(s): ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the follow-up calculation(s): ")
+
+    args = ["--directory", run_dir, "--calc", calc_file, "--no-intro"]
+
+    modes_str = get_input(
+        "\nMode indices to process, space-separated [optional, default: every "
+        "non-acoustic mode]: ").strip()
+    if modes_str:
+        args.extend(["--modes"] + modes_str.split())
+
+    if not modes_str:
+        use_symmetry_choice = get_input(
+            "\nUse group theory to skip modes that are symmetry-forbidden from being "
+            "IR-active (saves SIESTA time on the non-bulk path, needs a primitive cell) "
+            "(y/N): ").strip().lower()
+        if use_symmetry_choice in ('y', 'yes'):
+            args.append("--use-symmetry")
+
+    skip_degenerate_choice = get_input(
+        "\nFor degenerate modes (2+ bands sharing one irrep), compute only ONE representative "
+        "and reuse its IR intensity for the rest (rotational invariant, identical for every "
+        "degenerate partner) -- saves SIESTA time on the non-bulk path only, needs a primitive "
+        "cell (y/N): ").strip().lower()
+    if skip_degenerate_choice in ('y', 'yes'):
+        args.append("--skip-degenerate")
+
+    displacement = get_float_input("\nFinite-difference displacement in Ang [default: 0.02]: ", 0.02)
+    args.extend(["--displacement", str(displacement)])
+
+    animations_choice = get_input(
+        "\nExport a looping animation (.axsf, viewable in XCrySDen/VESTA) of each selected "
+        "mode's eigendisplacement (y/N): ").strip().lower()
+    if animations_choice in ('y', 'yes'):
+        args.append("--export-animations")
+        animation_frames = get_int_input("Frames per mode animation [default: 20]: ", 20)
+        args.extend(["--animation-frames", str(animation_frames)])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (frequency range/pseudopotential override/vacuum-gap/"
+        "rotational-mode tolerance/bulk Born-charge settings)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        freq_min = get_input("Skip modes below this frequency in THz [optional]: ").strip()
+        if freq_min:
+            args.extend(["--freq-min", freq_min])
+        freq_max = get_input("Skip modes above this frequency in THz [optional]: ").strip()
+        if freq_max:
+            args.extend(["--freq-max", freq_max])
+        print(color_text(
+            "\nPseudopotential source (blank = reuse whatever Stage 1 already copied into its "
+            "phonon_disp/disp-*/ folders -- the normal case):", 'yellow'))
+        pseudo_dir = prompt_pseudo_source(optional=True)
+        if pseudo_dir:
+            args.extend(["--pseudo-dir", pseudo_dir])
+        vacuum_gap = get_float_input(
+            "\nVacuum gap threshold in Ang -- also used to auto-select the bulk vs. non-bulk "
+            "IR path (default: 10.0): ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
+        rotational_mode_tol = get_float_input(
+            "0D only: frequency threshold in THz below which a mode is treated as free rotation "
+            "rather than a real vibration (default: 2.0): ", 2.0)
+        args.extend(["--rotational-mode-tol", str(rotational_mode_tol)])
+        print(color_text(
+            "\nBulk (3D) path only -- ignored for a non-bulk structure:", 'yellow'))
+        fc_displ = get_float_input("MD.FCDispl in Bohr [default: 0.02]: ", 0.02)
+        args.extend(["--fc-displ", str(fc_displ)])
+        pol_grid_input = get_input(
+            "PolarizationGrids, 9 integers row-major 3x3 [default: 10 4 4 4 10 4 4 4 10]: "
+        ).strip()
+        if pol_grid_input:
+            try:
+                pol_grid_vals = [int(x) for x in pol_grid_input.split()]
+                if len(pol_grid_vals) == 9:
+                    args.extend(["--polarization-grid"] + [str(v) for v in pol_grid_vals])
+                else:
+                    print(color_text("Expected 9 integers -- using default.", 'yellow'))
+            except ValueError:
+                print(color_text("Invalid input -- using default.", 'yellow'))
+
+    print(color_text("\nBuilding phonon force constants and IR displacement folder(s)...", 'green'))
+    run_tool("stb-irModes", args)
+
+
+def run_ir_analysis() -> None:
+    """Interface for the IR Spectrum Stage 3 (stb-irAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("IR SPECTRUM - STAGE 3: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with the stb-ir/stb-irModes run [default: ir_study]: ").strip()
+    if not run_dir:
+        run_dir = "ir_study"
+
+    output_filename = get_input("SIESTA output filename inside each displacement folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
+
+    linewidth = get_float_input("\nLorentzian linewidth for the spectrum, cm^-1 [default: 10.0]: ", 10.0)
+    args.extend(["--linewidth", str(linewidth)])
+
+    temperature = get_input(
+        "\nWeight the spectrum by the Bose-Einstein thermal population factor at a given "
+        "temperature in K [optional, blank = no weighting]: ").strip()
+    if temperature:
+        args.extend(["--temperature", temperature])
+
+    experimental_file = get_input(
+        "\nOverlay a measured IR spectrum (2-column text file: frequency cm^-1, intensity) "
+        "[optional, blank = skip]: ").strip()
+    if experimental_file:
+        args.extend(["--experimental", experimental_file])
+        peak_prominence = get_float_input(
+            "Minimum peak prominence, as a fraction of each spectrum's own max intensity "
+            "[default: 0.01]: ", 0.01)
+        args.extend(["--peak-prominence", str(peak_prominence)])
+
+    run_tool("stb-irAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -4550,6 +4743,28 @@ WORKFLOW_TOOLS = {
                 'description': "Compute the diagonal Raman tensor per mode and the approximate "
                                 "Raman spectrum.",
                 'func': run_raman_analysis},
+        }},
+    12: {'title': "IR Spectrum",
+        'description': "Self-contained: computes its own phonons, then either the +/-delta "
+                        "dipole displacements (0D/1D/2D) or a single equilibrium "
+                        "Born-effective-charge run (3D bulk), then the IR-active frequencies "
+                        "and spectrum. Path auto-selected by structure dimensionality.",
+        'stages': {
+            1: {'title': "Stage 1 - Phonon Displacements (stb-ir)",
+                'description': "Generate one phonon_disp/disp-NNN/ folder per finite-difference "
+                                "displacement.",
+                'func': run_ir_prep},
+            2: {'title': "Stage 2 - Modes & Dipole/Born-Charge Displacements (stb-irModes)",
+                'description': "Build FORCE_SETS, get the Gamma-point modes, and generate "
+                                "either one dipole_disp/mode_*/ folder pair per +/-delta mode "
+                                "(non-bulk) or a single born_charge_disp/equilibrium/ folder "
+                                "(bulk).",
+                'func': run_ir_modes},
+            3: {'title': "Stage 3 - Analysis (stb-irAnalysis)",
+                'description': "Compute dmu/dQ per mode (dipole finite-difference or "
+                                "Born-charge x eigendisplacement projection) and the IR "
+                                "spectrum.",
+                'func': run_ir_analysis},
         }},
        }
 

@@ -882,6 +882,84 @@ def convert_coordinates(typevectors_in: str,
 ##### END NEW HELPER FUNCTION #####
 
 
+##### 3D VIEWER HELPERS (--view / --view-image) #####
+def build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition):
+    """Builds an ase.Atoms from the 5-tuple every getatomsandvectors_* returns,
+    for the optional --view/--view-image 3D visualization."""
+    from ase import Atoms
+
+    final_type, final_positions = convert_coordinates(
+        typevectors, latticeparameter, vectors, atomsposition, 'cartesian'
+    )
+    cell = np.array(vectors, dtype=float) * float(latticeparameter)
+
+    symbols = []
+    positions = []
+    for elem in getatoms:
+        species = elem[2]
+        for pos in final_positions[species]:
+            symbols.append(species)
+            positions.append([float(pos[0]), float(pos[1]), float(pos[2])])
+
+    return Atoms(symbols=symbols, positions=positions, cell=cell, pbc=True)
+
+
+def view_structure_interactive(atoms):
+    """Opens ASE's interactive 3D structure viewer. Needs a display (local X11,
+    or `ssh -X`/`-Y` to a remote machine) and a working Tk installation."""
+    try:
+        from ase.visualize import view
+        # block=True: waits for the GUI subprocess so a failure (e.g. no display)
+        # raises here and is reported, instead of failing silently in the background.
+        view(atoms, block=True)
+    except Exception as e:
+        print(color_text(f"[FAIL] Could not open the interactive 3D viewer: {e}", 'red'))
+        print(color_text(
+            "       This needs a display (local X11, or `ssh -X`/`-Y` to a remote "
+            "machine) and a working Tk installation. Try --view-image instead to "
+            "save a static picture without needing a display.", 'yellow'))
+
+
+def save_structure_image(atoms, path):
+    """Renders the structure (atoms + unit cell edges) in 3D with matplotlib and
+    saves it to `path`. Works headless (no display needed)."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    positions = atoms.get_positions()
+    symbols = atoms.get_chemical_symbols()
+    cell = atoms.get_cell()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    for species in sorted(set(symbols)):
+        idx = [i for i, s in enumerate(symbols) if s == species]
+        pts = positions[idx]
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], label=species, s=80, depthshade=True)
+
+    if cell is not None and np.linalg.det(cell) != 0:
+        import itertools
+        coeffs_list = list(itertools.product([0, 1], repeat=3))
+        corners = np.array([sum(c * v for c, v in zip(coeffs, cell)) for coeffs in coeffs_list])
+        for i in range(8):
+            for j in range(i + 1, 8):
+                if sum(a != b for a, b in zip(coeffs_list[i], coeffs_list[j])) == 1:
+                    p1, p2 = corners[i], corners[j]
+                    ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]],
+                            color='black', linewidth=0.8)
+
+    ax.set_xlabel('X (Ang)')
+    ax.set_ylabel('Y (Ang)')
+    ax.set_zlabel('Z (Ang)')
+    ax.set_box_aspect((1, 1, 1))
+    ax.legend()
+    fig.savefig(path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+##### END 3D VIEWER HELPERS #####
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -922,6 +1000,17 @@ def main():
         metavar=("AX", "AY", "AZ", "BX", "BY", "BZ", "CX", "CY", "CZ"),
         help="The 3 lattice vectors in Cartesian Angstrom, required only for XYZ "
              "input, e.g. --lattice-vectors 5.43 0 0 0 5.43 0 0 0 5.43.")
+
+    ##### OPTIONAL 3D VIEWER #####
+    parser.add_argument("--view", action="store_true",
+                        help="Open an interactive 3D viewer (ASE GUI) for the parsed "
+                             "structure. Needs a display (local X11, or ssh -X/-Y).")
+    parser.add_argument("--view-image", default=None, metavar="PATH",
+                        help="Save a static 3D snapshot of the parsed structure to PATH "
+                             "(e.g. structure.png). Works without a display; can be used "
+                             "together with, or instead of, --view.")
+    ##### END OPTIONAL 3D VIEWER #####
+
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-translate {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -1003,6 +1092,15 @@ def main():
 
 
         print(f"[OK] Read the file {args.in_file} ({args.in_format})")
+
+        if args.view or args.view_image:
+            atoms = build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition)
+            if args.view_image:
+                save_structure_image(atoms, args.view_image)
+                print(f"[OK] Saved 3D structure image to {args.view_image}")
+            if args.view:
+                print("[INFO] Opening interactive 3D viewer (ASE GUI) -- close the window to continue...")
+                view_structure_interactive(atoms)
 
         if args.dry_run:
             print_structure_summary(typevectors, latticeparameter, vectors, getatoms)

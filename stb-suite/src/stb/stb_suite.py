@@ -4920,6 +4920,17 @@ def run_file_translator() -> None:
             for axis in ("x", "y", "z"):
                 vec_values.append(get_float_input(f"Vector {vec_name}.{axis}: "))
         args.extend(["--lattice-vectors"] + [str(v) for v in vec_values])
+
+    # ##### NOVO BLOCO: Visualização 3D opcional #####
+    view_choice = get_input("\nView the structure in 3D? (y/N): ").strip().lower()
+    if view_choice == "y":
+        window_choice = get_input("  Open interactive window? (Y/n): ").strip().lower()
+        if window_choice != "n":
+            args.append("--view")
+        image_path = get_input("  Save a snapshot image to (path, or Enter to skip): ").strip()
+        if image_path:
+            args.extend(["--view-image", image_path])
+    # ##### FIM DO NOVO BLOCO #####
     
     run_tool("stb-translate", args)
 

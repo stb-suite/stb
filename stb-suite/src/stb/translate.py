@@ -27,8 +27,52 @@ from stb.core.cli import COLORS, color_text, show_intro
 # Supported formats
 ##### MODIFICADO #####
 # Adicionado "fdf" aos formatos de entrada
-INPUT_FORMATS = {"poscar", "cif", "siesta", "xyz", "fhi", "dftb", "xsf", "fdf"} 
+INPUT_FORMATS = {"poscar", "cif", "siesta", "xyz", "fhi", "dftb", "xsf", "fdf"}
 OUTPUT_FORMATS = {"cif","xyz", "poscar", "fdf", "dftb", "xsf", "fhi"}
+
+# Extension -> --in-format guess, used when -if/--in-format is omitted.
+EXTENSION_FORMAT_MAP = {
+    ".poscar": "poscar", ".vasp": "poscar",
+    ".cif": "cif",
+    ".xyz": "xyz",
+    ".fdf": "fdf",
+    ".xsf": "xsf",
+    ".gen": "dftb",
+    ".in": "fhi",
+    ".struct_out": "siesta",
+}
+# Filenames with no (or a non-informative) extension that VASP/SIESTA use by convention.
+BASENAME_FORMAT_MAP = {
+    "poscar": "poscar", "contcar": "poscar",
+}
+
+
+def guess_format_from_filename(path):
+    """Best-effort --in-format guess from a filename; None if not recognized."""
+    base = os.path.basename(path).lower()
+    if base in BASENAME_FORMAT_MAP:
+        return BASENAME_FORMAT_MAP[base]
+    _, ext = os.path.splitext(base)
+    return EXTENSION_FORMAT_MAP.get(ext)
+
+
+def print_structure_summary(typevectors, latticeparameter, vectors, getatoms):
+    """Prints a short structure summary for --dry-run: formula, atom count,
+    coordinate type, lattice vectors and cell volume."""
+    formula = " ".join(f"{elem[2]}{elem[3]}" for elem in getatoms)
+    natoms_total = sum(int(elem[3]) for elem in getatoms)
+    vectors_np = np.array(vectors, dtype=float) * float(latticeparameter)
+    volume = abs(np.linalg.det(vectors_np))
+
+    print("\n" + color_text("Structure summary:", 'bold'))
+    print(f"  Formula:          {formula}")
+    print(f"  Total atoms:      {natoms_total}")
+    print(f"  Coordinate type:  {typevectors}")
+    print(f"  Lattice parameter: {latticeparameter}")
+    print(f"  Lattice vectors (Ang):")
+    for row in vectors_np:
+        print(f"    {row[0]:12.8f}  {row[1]:12.8f}  {row[2]:12.8f}")
+    print(f"  Cell volume:      {volume:.4f} Ang^3")
 
 
 # Dictionary with all periodic elements table
@@ -178,14 +222,13 @@ def dic_atoms_position(atomsposition):
 ############# Extract Data Functions ######################
 
 # This Function define the number of atoms types for xyz file
-def getatomsandvectors_xyz(dataxyz, latticedata):
+def getatomsandvectors_xyz(dataxyz, vectors):
+    """vectors: the 3 lattice vectors as [[ax, ay, az], [bx, by, bz], [cx, cy, cz]]
+    (already Cartesian Angstrom strings) -- see --lattice-vectors in main()."""
     element, atomicnumber = periodic_table()
     xyz = readfile(dataxyz)[2:]
-    lattice = readfile(latticedata)
-    # Lattice
-    latticeparameter = lattice[0][0]
+    latticeparameter = "1.0"
     typevectors = 'Cartesian'
-    vectors = [lattice[1], lattice[2], lattice[3]]
     # Atoms position
     atoms = []
     j = 1
@@ -212,12 +255,15 @@ def getatomsandvectors_vasp(poscar):
     datavasp = readfile(poscar)
     latticeparameter = datavasp[1][0]
     vectors = datavasp[2:5]
-    typevectors = datavasp[7][0]
+    # Optional "Selective dynamics" line (VASP only requires the first letter to
+    # match) shifts the coordinate-type line and the start of positions by one.
+    coord_line_idx = 8 if datavasp[7][0].lower().startswith('s') else 7
+    typevectors = datavasp[coord_line_idx][0]
     getatoms = []
     for i in range(len(datavasp[5])):
         getatoms.append([i+1, element[datavasp[5][i]],datavasp[5][i], datavasp[6][i]])
     atomsposition = []
-    cont = 8 
+    cont = coord_line_idx + 1
     for el in getatoms:
         for i in range(int(el[3])):
             atomsposition.append([el[2], datavasp[cont][0], datavasp[cont][1], datavasp[cont][2]])
@@ -277,15 +323,8 @@ def getatomsandvectors_cif(input_cif):
     # Adicionamos um try...except para o caso da ASE não estar instalada.
     try:
         structure = ase_read(input_cif)
-    except NameError:
-        # Este erro acontece se a importação no Passo 1 falhar
-        print(color_text("[ERRO] A função 'ase_read' não foi encontrada.", 'red'))
-        print(color_text("       Verifique se adicionou 'from ase.io import read as ase_read' no topo do script.", 'yellow'))
-        sys.exit(1)
     except Exception as e:
-        # Captura outros erros de leitura da ASE
-        print(color_text(f"[ERRO] Falha ao ler o arquivo CIF com ASE: {e}", 'red'))
-        print(color_text("       Verifique se a biblioteca 'ase' está instalada (pip install ase)", 'yellow'))
+        print(color_text(f"[FAIL] Could not read CIF file '{input_cif}': {e}", 'red'))
         sys.exit(1)
 
 
@@ -622,12 +661,12 @@ def writefilexyz(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- END NEW ---
     outfile = []
     outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
-    sum = 0
+    natoms_total = 0
     comment = ""
     for el in getatoms:
         comment = comment+f"{el[2]}{el[3]} "
-        sum = sum+int(el[3])
-    outfile.append(f"{sum}")
+        natoms_total = natoms_total+int(el[3])
+    outfile.append(f"{natoms_total}")
     outfile.append(comment)
     
     # --- MODIFIED: Simplified to use final_positions ---
@@ -651,17 +690,17 @@ def writefiledftb(typevectors, latticeparameter, vectors, getatoms, atomspositio
     # --- END NEW ---
     outfile = []
     outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
-    sum = 0
+    natoms_total = 0
     comment = ""
     for el in getatoms:
         comment = comment+f"{el[2]}{el[3]} "
-        sum = sum+int(el[3])
+        natoms_total = natoms_total+int(el[3])
     
     # --- MODIFIED: Use final_type ---
     if final_type == 'Cartesian':
-        outfile.append(f"{sum}   S") # S = Cartesian
+        outfile.append(f"{natoms_total}   S") # S = Cartesian
     elif final_type == 'Direct':
-        outfile.append(f"{sum}   F") # F = Fractional
+        outfile.append(f"{natoms_total}   F") # F = Fractional
     # --- END MODIFIED ---
 
     atoms = ""
@@ -701,11 +740,11 @@ def writefilexsf(typevectors, latticeparameter, vectors, getatoms, atomsposition
     
     outfile = []
     outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
-    sum = 0
+    natoms_total = 0
     comment = ""
     for el in getatoms:
         comment = comment+f"{el[2]}{el[3]} "
-        sum = sum+int(el[3])
+        natoms_total = natoms_total+int(el[3])
     vectors_np = np.array(vectors, dtype="float")*float(latticeparameter)
     outfile.append('# create by stb-translate ')
     outfile.append(f'# {comment}\n')
@@ -717,7 +756,7 @@ def writefilexsf(typevectors, latticeparameter, vectors, getatoms, atomsposition
     # --- MODIFIED: Simplified to use final_positions ---
     # Since we know final_positions is 'Cartesian':
     outfile.append(f"PRIMCOORD")
-    outfile.append(f"{sum}  1")
+    outfile.append(f"{natoms_total}  1")
     for elem in getatoms:
         for position in final_positions[elem[2]]:
             outfile.append(
@@ -738,11 +777,11 @@ def writefilefhi(typevectors, latticeparameter, vectors, getatoms, atomsposition
 
     outfile = []
     outfile.append('# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)')
-    sum = 0
+    natoms_total = 0
     comment = ""
     for el in getatoms:
         comment = comment+f"{el[2]}{el[3]} "
-        sum = sum+int(el[3])
+        natoms_total = natoms_total+int(el[3])
     vectors_np = np.array(vectors, dtype="float")*float(latticeparameter)
     for vector in vectors_np:
         outfile.append(f"lattice_vector   {vector[0]:.8f}   {vector[1]:.8f}   {vector[2]:.8f}")
@@ -850,20 +889,28 @@ def main():
     )
 
     ##### MODIFICADO #####
-    # Atualizado o texto de ajuda para incluir 'fdf'
-    parser.add_argument("-if", "--in-format", required=True, choices=INPUT_FORMATS,
-                        help="Input file format (options: poscar, cif, siesta, xyz, fhi, dftb, xsf, fdf)")
+    # in-format agora é opcional: se omitido, é inferido da extensão do --in-file
+    parser.add_argument("-if", "--in-format", required=False, default=None, choices=INPUT_FORMATS,
+                        help="Input file format (options: poscar, cif, "
+                             "siesta [SIESTA STRUCT_OUT-style output], xyz, fhi, dftb, xsf, "
+                             "fdf [SIESTA .fdf input file]). If omitted, inferred from "
+                             "--in-file's name/extension.")
     parser.add_argument("-i", "--in-file", required=True,
                         help="Path to the input file")
-    parser.add_argument("-of", "--out-format", required=True, choices=OUTPUT_FORMATS,
-                        help="Output file format (options: cif , xyz, poscar, fdf, dftb, xsf, fhi)")
-    parser.add_argument("-o", "--out-file", required=True,
-                        help="Path to the output file")
-    
+    parser.add_argument("-of", "--out-format", required=False, default=None, choices=OUTPUT_FORMATS,
+                        help="Output file format (options: cif , xyz, poscar, fdf, dftb, xsf, fhi). "
+                             "Required unless --dry-run.")
+    parser.add_argument("-o", "--out-file", required=False, default=None,
+                        help="Path to the output file. Required unless --dry-run.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Parse --in-file and print a summary (formula, atom count, "
+                             "coordinate type, lattice vectors, cell volume) without writing "
+                             "any output file. --out-format/--out-file are not needed.")
+
     ##### NEW ARGUMENT #####
     parser.add_argument(
-        "-cf", "--coord-format", 
-        choices=['direct', 'cartesian'], 
+        "-cf", "--coord-format",
+        choices=['direct', 'cartesian'],
         default=None,
         help="Specify the output coordinate format (direct/fractional or cartesian). "
              "If not specified, uses the input format or the output format's default."
@@ -871,7 +918,10 @@ def main():
     ##### END NEW ARGUMENT #####
 
     parser.add_argument(
-        "--lattice", help="Lattice vectors file, required only for XYZ output")
+        "--lattice-vectors", type=float, nargs=9, default=None,
+        metavar=("AX", "AY", "AZ", "BX", "BY", "BZ", "CX", "CY", "CZ"),
+        help="The 3 lattice vectors in Cartesian Angstrom, required only for XYZ "
+             "input, e.g. --lattice-vectors 5.43 0 0 0 5.43 0 0 0 5.43.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-translate {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -890,80 +940,111 @@ def main():
     print("\n" + color_text("TRANSLATE:", 'bold'))
     print("-"*60)
 
+    # Infer --in-format from --in-file's name when omitted
+    if args.in_format is None:
+        args.in_format = guess_format_from_filename(args.in_file)
+        if args.in_format is None:
+            parser.error(
+                f"Could not infer --in-format from '{args.in_file}'; pass it explicitly "
+                f"(options: {', '.join(sorted(INPUT_FORMATS))}).")
+        print(f"[INFO] Inferred input format: {args.in_format}")
 
-
-
-    # Validate lattice parameter requirement
-    if args.in_format == "xyz" and not args.lattice:
+    if not args.dry_run and (args.out_format is None or args.out_file is None):
         parser.error(
-            "The --lattice argument is required when input format is XYZ.")
+            "--out-format and --out-file are required unless --dry-run is set.")
 
-    print(f"\n[INFO] Converting {args.in_file} ({args.in_format}) to {args.out_file} ({args.out_format})...")
+    # Validate lattice vectors requirement
+    if args.in_format == "xyz" and not args.lattice_vectors:
+        parser.error(
+            "The --lattice-vectors argument is required when input format is XYZ.")
+
+    if args.dry_run:
+        print(f"\n[INFO] Reading {args.in_file} ({args.in_format})...")
+    else:
+        print(f"\n[INFO] Converting {args.in_file} ({args.in_format}) to {args.out_file} ({args.out_format})...")
 
     # Add info about coordinate format
     if args.coord_format:
         print(f"[INFO] Requested output coordinate format: {args.coord_format}")
 
 
-    if args.out_format == "xyz":
-        print(f"[INFO] Lattice vector file: {args.lattice}")
+    try:
+        ##### MODIFICADO #####
+        # Adicionado o 'case' para o novo formato 'fdf'
+        match (args.in_format):
+            case "poscar":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_vasp(
+                    args.in_file)
+            case "cif":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_cif(
+                    args.in_file)
+            case "siesta":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_siesta(
+                    args.in_file)
+            case "xyz":
+                v = args.lattice_vectors
+                xyz_vectors = [[str(v[0]), str(v[1]), str(v[2])],
+                               [str(v[3]), str(v[4]), str(v[5])],
+                               [str(v[6]), str(v[7]), str(v[8])]]
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_xyz(
+                    args.in_file, xyz_vectors)
+            case "fhi":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_fhi(
+                    args.in_file)
+            case "dftb":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_dftb(
+                    args.in_file)
+            case "xsf":
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_xsf(
+                    args.in_file)
+            case "fdf": ##### NOVO #####
+                typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_fdf(
+                    args.in_file)
 
-    ##### MODIFICADO #####
-    # Adicionado o 'case' para o novo formato 'fdf'
-    match (args.in_format):
-        case "poscar":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_vasp(
-                args.in_file)
-        case "cif":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_cif(
-                args.in_file)
-        case "siesta":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_siesta(
-                args.in_file)
-        case "xyz":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_xyz(
-                args.in_file, args.lattice)
-        case "fhi":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_fhi(
-                args.in_file)
-        case "dftb":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_dftb(
-                args.in_file)
-        case "xsf":
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_xsf(
-                args.in_file)
-        case "fdf": ##### NOVO #####
-            typevectors, latticeparameter, vectors, getatoms, atomsposition = getatomsandvectors_fdf(
-                args.in_file)
-        
 
-    print(f"[OK] Read the file {args.in_file} ({args.in_format})")
+        print(f"[OK] Read the file {args.in_file} ({args.in_format})")
 
-    ##### MODIFIED #####
-    # All write functions now receive 'args.coord_format'
-    match (args.out_format):
-        case "xyz":
-            writefilexyz(typevectors, latticeparameter, vectors,
-                         getatoms, atomsposition, args.out_file, args.coord_format)
-        case "poscar":
-            writefileposcar(typevectors, latticeparameter, vectors,
-                            getatoms, atomsposition, args.out_file, args.coord_format)
-        case "fdf":
-            writefilefdf(typevectors, latticeparameter, vectors,
-                         getatoms, atomsposition, args.out_file, args.coord_format)
-        case "dftb":
-            writefiledftb(typevectors, latticeparameter, vectors,
-                          getatoms, atomsposition, args.out_file, args.coord_format)
-        case "xsf":
-            writefilexsf(typevectors, latticeparameter, vectors,
-                         getatoms, atomsposition, args.out_file, args.coord_format)
-        case "fhi":
-            writefilefhi(typevectors, latticeparameter, vectors,
-                         getatoms, atomsposition, args.out_file, args.coord_format)
+        if args.dry_run:
+            print_structure_summary(typevectors, latticeparameter, vectors, getatoms)
+            print("\n[INFO] Dry run complete - no output file written.")
+            return
 
-        case "cif":
-            writefilecif(typevectors, latticeparameter, vectors,
-                         getatoms, atomsposition, args.out_file, args.coord_format)
+        ##### MODIFIED #####
+        # All write functions now receive 'args.coord_format'
+        match (args.out_format):
+            case "xyz":
+                writefilexyz(typevectors, latticeparameter, vectors,
+                             getatoms, atomsposition, args.out_file, args.coord_format)
+            case "poscar":
+                writefileposcar(typevectors, latticeparameter, vectors,
+                                getatoms, atomsposition, args.out_file, args.coord_format)
+            case "fdf":
+                writefilefdf(typevectors, latticeparameter, vectors,
+                             getatoms, atomsposition, args.out_file, args.coord_format)
+            case "dftb":
+                writefiledftb(typevectors, latticeparameter, vectors,
+                              getatoms, atomsposition, args.out_file, args.coord_format)
+            case "xsf":
+                writefilexsf(typevectors, latticeparameter, vectors,
+                             getatoms, atomsposition, args.out_file, args.coord_format)
+            case "fhi":
+                writefilefhi(typevectors, latticeparameter, vectors,
+                             getatoms, atomsposition, args.out_file, args.coord_format)
+
+            case "cif":
+                writefilecif(typevectors, latticeparameter, vectors,
+                             getatoms, atomsposition, args.out_file, args.coord_format)
+    except FileNotFoundError as e:
+        print(color_text(f"[FAIL] File not found: {e}", 'red'))
+        sys.exit(1)
+    except (IndexError, KeyError, ValueError) as e:
+        print(color_text(
+            f"[FAIL] Could not parse '{args.in_file}' as '{args.in_format}': {e}",
+            'red'))
+        print(color_text(
+            "       Check that the file matches the expected structure for --in-format.",
+            'yellow'))
+        sys.exit(1)
 
     print(f"[OK] Writing the file {args.out_file} ({args.out_format})")
     

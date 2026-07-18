@@ -4914,13 +4914,12 @@ def run_file_translator() -> None:
 
 
     if in_format == "xyz":
-        print(color_text("\nXYZ format requires a separate lattice file.", 'yellow'))
-        # Esta linha agora terá Tab-completion!
-        lattice_file = get_input("Lattice vectors file (required for XYZ): ")
-        while not os.path.isfile(lattice_file):
-            print(color_text("File not found!", 'red'))
-            lattice_file = get_input("Lattice vectors file: ")
-        args.extend(["--lattice", lattice_file])
+        print(color_text("\nXYZ format requires the 3 lattice vectors (Cartesian, in Angstrom).", 'yellow'))
+        vec_values = []
+        for vec_name in ("A", "B", "C"):
+            for axis in ("x", "y", "z"):
+                vec_values.append(get_float_input(f"Vector {vec_name}.{axis}: "))
+        args.extend(["--lattice-vectors"] + [str(v) for v in vec_values])
     
     run_tool("stb-translate", args)
 

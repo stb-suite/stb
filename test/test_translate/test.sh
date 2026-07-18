@@ -115,14 +115,6 @@ Si 0.0000 0.0000 0.0000
 Si 1.3575 1.3575 1.3575
 EOF
 
-# --- Exemplo: si.lattice (Necessário para o .xyz) ---
-cat > $TEST_DIR/si.lattice << 'EOF'
-5.43
-1.0 0.0 0.0
-0.0 1.0 0.0
-0.0 0.0 1.0
-EOF
-
 # --- Exemplo: si.dftb ---
 cat > $TEST_DIR/si.dftb << 'EOF'
 2 F
@@ -180,8 +172,8 @@ echo -n "Testando: SIESTA -> CIF"
 $BASE_CMD -if siesta -i $TEST_DIR/si.siesta -of cif -o $TEST_DIR/out_from_siesta.cif
 check_success "$TEST_DIR/out_from_siesta.cif"
 
-echo -n "Testando: XYZ (+lattice) -> CIF"
-$BASE_CMD -if xyz -i $TEST_DIR/si.xyz --lattice $TEST_DIR/si.lattice -of cif -o $TEST_DIR/out_from_xyz.cif
+echo -n "Testando: XYZ (+lattice-vectors) -> CIF"
+$BASE_CMD -if xyz -i $TEST_DIR/si.xyz --lattice-vectors 5.43 0 0 0 5.43 0 0 0 5.43 -of cif -o $TEST_DIR/out_from_xyz.cif
 check_success "$TEST_DIR/out_from_xyz.cif"
 
 echo -n "Testando: DFTB -> CIF"

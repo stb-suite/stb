@@ -42,6 +42,16 @@ def find_inequivalent_sites(pmg_structure, symprec, filter_species=None):
     return sites, space_group
 
 
+def space_group_label(pmg_structure, symprec=1e-3) -> str:
+    """Returns e.g. "Fm-3m (No. 225)" -- the same "international symbol (No.
+    number)" format find_inequivalent_sites already builds inline, extracted
+    here once stb-translate became a second consumer (--dry-run/conversion
+    symmetry summary, and the space group actually written to CIF output
+    instead of always P1)."""
+    dataset = SpacegroupAnalyzer(pmg_structure, symprec=symprec).get_symmetry_dataset()
+    return f"{dataset.international} (No. {dataset.number})"
+
+
 def equivalent_cartesian_axes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
     """Groups the 3 Cartesian axes (x=0, y=1, z=2) by point-group symmetry:
     axes in the same group are related by a rotation/reflection of the

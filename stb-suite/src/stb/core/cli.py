@@ -113,6 +113,16 @@ def print_dual(text: str, file_handle=None) -> None:
         file_handle.write(clean_text + "\n")
 
 
+def print_section(label: str, f_out=None) -> None:
+    """Prints one '[N] SECTION TITLE' header + separator, matching the
+    suite's stage-report style (e.g. stb-ramanAnalysis's numbered sections).
+    Moved here once stb-clean became a second consumer alongside
+    stb-translate.
+    """
+    print_dual(f"\n{color_text(label, 'magenta')}", f_out)
+    print_dual("-" * 60, f_out)
+
+
 def run_with_spinner(func, *args, label: str = "Working", **kwargs):
     """Runs `func(*args, **kwargs)` in a background thread, showing an indeterminate
     CLI spinner with elapsed time while it blocks. For a slow call with no step-based

@@ -18,10 +18,52 @@ instead, or they'd silently double-apply the lattice constant on write.
 
 from __future__ import annotations
 
+import os
+import re
+import glob
 from dataclasses import dataclass, field
 
 import numpy as np
 from pymatgen.core import Lattice, Structure
+
+_SYSTEM_LABEL_RE = re.compile(r"^\s*SystemLabel\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+
+
+def get_system_label(fdf_path: str) -> str | None:
+    """Best-effort SystemLabel from a SIESTA .fdf file: a tolerant regex
+    scan, not a full read_fdf() parse -- usable on files read_fdf() would
+    reject (missing lattice/species blocks, etc.), since this is only for
+    identifying/labeling a run, not building a structure. None if the file
+    can't be read or has no SystemLabel line.
+
+    raman_analysis.py's detect_optical_label has its own identical copy of
+    this same regex (a different lookup context -- globs a mode_*/ folder
+    pattern first, then reads its calc.fdf); not consolidated onto this one
+    here to avoid touching unrelated, already-working workflow code.
+    """
+    try:
+        with open(fdf_path) as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = _SYSTEM_LABEL_RE.search(text)
+    return m.group(1) if m else None
+
+
+def find_fdf_system_label(directory: str, explicit_label: str | None = None) -> str | None:
+    """Returns `explicit_label` if given, else the SystemLabel from the
+    first *.fdf (sorted by filename) in `directory` that has one. None if
+    neither works. Shared by stb-status and stb-archive, which both need to
+    answer "whose calculation is this" from a bare directory before they
+    can find its <label>.out/.XV/etc.
+    """
+    if explicit_label:
+        return explicit_label
+    for fdf in sorted(glob.glob(os.path.join(directory, "*.fdf"))):
+        label = get_system_label(fdf)
+        if label:
+            return label
+    return None
 
 _COORD_FORMAT_FRACTIONAL = {"fractional"}
 _COORD_FORMAT_CARTESIAN = {"ang", "notscaledcartesianang"}

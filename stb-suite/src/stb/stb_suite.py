@@ -1300,12 +1300,127 @@ def run_grid_to_cube() -> None:
     
     print(f"\nTarget File: {color_text(f'{label}.{selected_type}', 'cyan')}")
 
-    # 3. Execução
-    args = ["--label", label, "--type", selected_type, "--no-intro"]
+    # 3. Canal de spin (só importa para cálculos spin-polarizados; ignorado
+    # com aviso caso o arquivo não seja spin-polarizado)
+    print(f"\n{color_text('Spin channel (only matters for spin-polarized calculations):', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Total (up + down)")
+    print(f"  {color_text('2', 'cyan')} = Up")
+    print(f"  {color_text('3', 'cyan')} = Down")
+    print(f"  {color_text('4', 'cyan')} = Diff (up - down, i.e. spin/magnetization density)")
+    spin_map = {'1': 'total', '2': 'up', '3': 'down', '4': 'diff'}
+    spin_choice = get_input("Select spin channel (1-4) [default: 1]: ").strip()
+    selected_spin = spin_map.get(spin_choice, 'total')
+
+    # 4. Nome de saída (opcional)
+    default_output = (f"{label}_{selected_type}.cube" if selected_spin == 'total'
+                      else f"{label}_{selected_type}_{selected_spin}.cube")
+    output = get_input(f"Output filename (default: {default_output}): ").strip()
+
+    # 5. Execução
+    args = ["--label", label, "--type", selected_type, "--spin", selected_spin, "--no-intro"]
+    if output:
+        args.extend(["--output", output])
 
     print(color_text("\nConverting to Cube format...", 'green'))
     run_tool("stb-cube", args)
 
+
+def run_ani2traj_converter() -> None:
+    """Interface for the AIMD Trajectory Converter (ani2traj.py)"""
+    print("\n" + "="*60)
+    print(color_text("SIESTA AIMD TRAJECTORY CONVERTER", 'bold').center(60))
+    print("="*60 + "\n")
+    print("Converts <label>.ANI (SIESTA's AIMD trajectory, no lattice of its own) into a")
+    print("multi-frame format that also carries the cell -- for OVITO, VMD, etc. The")
+    print("lattice is read from <label>.XV (or <label>.fdf as a fallback).\n")
+
+    # 1. SystemLabel
+    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    while not label:
+        print(color_text("Label cannot be empty!", 'red'))
+        label = get_input("Enter the Siesta SystemLabel: ")
+
+    # 2. Formato de saída
+    print(f"\n{color_text('Select output trajectory format:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = XSF (multi-frame AXSF -- OVITO and VMD's xsf plugin)")
+    print(f"  {color_text('2', 'cyan')} = PDB (multi-model, CRYST1 -- VMD's own default format)")
+    print(f"  {color_text('3', 'cyan')} = XYZ (extended, Lattice tag -- OVITO-native; no PBC in VMD)")
+    format_map = {'1': 'xsf', '2': 'pdb', '3': 'xyz'}
+    ext_map = {'xsf': '.xsf', 'pdb': '.pdb', 'xyz': '.xyz'}
+    choice = get_input("Select format (1-3) [default: 1]: ").strip()
+    selected_format = format_map.get(choice, 'xsf')
+
+    # 3. Stride (opcional)
+    stride = get_int_input("Keep every Nth frame (stride) [default: 1]: ", 1)
+
+    # 4. Nome de saída (opcional)
+    default_output = f"{label}_traj{ext_map[selected_format]}"
+    output = get_input(f"Output filename (default: {default_output}): ").strip()
+
+    args = ["--label", label, "--out-format", selected_format, "--stride", str(stride), "--no-intro"]
+    if output:
+        args.extend(["--output", output])
+
+    print(color_text("\nConverting AIMD trajectory...", 'green'))
+    run_tool("stb-ani2traj", args)
+
+
+def run_status_checker() -> None:
+    """Interface for the Status Checker (status.py)"""
+    print("\n" + "="*60)
+    print(color_text("SIESTA STATUS CHECKER", 'bold').center(60))
+    print("="*60 + "\n")
+    print("Reports run type, SCF convergence, max force, final energy, and which key")
+    print("output files are present in a calc folder.\n")
+
+    path = get_input("Directory (or glob pattern, e.g. strain_*) to inspect (default: current): ").strip()
+    if path == "":
+        path = "."
+    is_glob = any(c in path for c in '*?[')
+    while not is_glob and not os.path.isdir(path):
+        print(color_text("Directory not found!", 'red'))
+        path = get_input("Enter a valid directory (or glob pattern): ").strip()
+        is_glob = any(c in path for c in '*?[')
+
+    label = get_input("SystemLabel override (leave blank to auto-detect): ").strip()
+
+    args = ["--path", path, "--no-intro"]
+    if label:
+        args.extend(["--label", label])
+
+    run_tool("stb-status", args)
+
+
+def run_archive_packager() -> None:
+    """Interface for the Archive Packager (archive.py)"""
+    print("\n" + "="*60)
+    print(color_text("SIESTA ARCHIVE PACKAGER", 'bold').center(60))
+    print("="*60 + "\n")
+    print("Packages a finished calculation (inputs + essential outputs) into a single")
+    print(".tar.gz for sharing/reproducibility -- the complement of stb-clean, which")
+    print("deletes that same class of outputs to prep for a restart instead.\n")
+
+    path = get_input("Directory (or glob pattern, e.g. strain_*) to archive (default: current): ").strip()
+    if path == "":
+        path = "."
+    is_glob = any(c in path for c in '*?[')
+    while not is_glob and not os.path.isdir(path):
+        print(color_text("Directory not found!", 'red'))
+        path = get_input("Enter a valid directory (or glob pattern): ").strip()
+        is_glob = any(c in path for c in '*?[')
+
+    extra_include = get_input(
+        "Extra extensions to include, space-separated (e.g. .RHO), or Enter to skip: ").strip()
+    extra_exclude = get_input(
+        "Extensions to exclude from the defaults, space-separated, or Enter to skip: ").strip()
+
+    args = ["--path", path, "--no-intro"]
+    if extra_include:
+        args.extend(["--include"] + extra_include.split())
+    if extra_exclude:
+        args.extend(["--exclude"] + extra_exclude.split())
+
+    run_tool("stb-archive", args)
 
 
 def run_density_plotter() -> None:
@@ -4837,7 +4952,7 @@ def run_file_translator() -> None:
     
     # Formatos suportados (o 'cif' foi adicionado à lista de saída)
     input_formats = ['fdf','poscar', 'cif', 'siesta', 'xyz', 'fhi', 'dftb', 'xsf']
-    output_formats = ['cif', 'xyz', 'poscar', 'fdf', 'dftb', 'xsf', 'fhi'] # Adicionei 'cif' aqui
+    output_formats = ['cif', 'xyz', 'poscar', 'fdf', 'dftb', 'xsf', 'fhi', 'lammps']
     
     input_file = get_input("Input file path: ")
     while not os.path.isfile(input_file):
@@ -4962,14 +5077,21 @@ def run_clean_tool() -> None:
     print("\n" + "="*60)
     print(color_text("CLEAN FILES TOOL (stb-clean)", 'bold').center(60))
     print("="*60 + "\n")
+    print("Preps a SIESTA calc folder to restart a fresh run: removes prior run outputs")
+    print("(logs, .out, .XV, .bands, .DOS, ...), keeps only the extensions below")
+    print("(inputs/submission script by default). This deletes results too -- it's for")
+    print("restarting, not archiving. Everything removed is backed up (tar.gz) first,")
+    print("unless you skip that below.\n")
 
     # Esta linha agora terá Tab-completion!
-    path = get_input("Directory to clean (default: current): ").strip()
+    path = get_input("Directory (or glob pattern, e.g. strain_*) to clean (default: current): ").strip()
     if path == "":
         path = "."
-    while not os.path.isdir(path):
+    is_glob = any(c in path for c in '*?[')
+    while not is_glob and not os.path.isdir(path):
         print(color_text("Directory not found!", 'red'))
-        path = get_input("Enter a valid directory: ").strip()
+        path = get_input("Enter a valid directory (or glob pattern): ").strip()
+        is_glob = any(c in path for c in '*?[')
 
     default_exts = ['.psml', '.psf', '.fdf', '.sh']
     print(f"\nExtensions to keep (space-separated, default: {' '.join(default_exts)}):")
@@ -4979,25 +5101,34 @@ def run_clean_tool() -> None:
     else:
         extensions = default_exts
 
+    recursive_choice = get_input("Clean subdirectories too (recursive)? [y/N]: ").strip().lower()
+    recursive = recursive_choice == 'y'
+
+    archive_choice = get_input("Create a backup archive before deleting? [Y/n]: ").strip().lower()
+    no_archive = archive_choice == 'n'
+
     confirm_choice = get_input("Skip confirmation and delete directly? [y/N]: ").strip().lower()
     no_confirm = confirm_choice == 'y'
 
-    dry_run_choice = get_input("Perform a dry run (show what would be deleted)? [y/N]: ").strip().lower()
-    dry_run = dry_run_choice == 'y'
+    report_choice = get_input("Save the report to a file? [y/N]: ").strip().lower()
+    save_report = report_choice == 'y'
 
     args = ["--path", path, "--keep"] + extensions
+    if recursive:
+        args.append("--recursive")
+    if no_archive:
+        args.append("--no-archive")
     if no_confirm:
         args.append("--no-confirm")
-    if dry_run:
-        args.append("--dry-run")
-    
+    if save_report:
+        args.append("--save-report")
+
     args.append("--no-intro")
 
     print()
     run_tool("stb-clean", args)
 
-    if not dry_run:
-        print("\n" + color_text("Cleanup complete. Your folder is now cleaner than my browser history.", "green"))
+    print("\n" + color_text("Cleanup complete. Your folder is now cleaner than my browser history.", "green"))
 
 def run_symmetry_analyzer() -> None:
     """Interface for the Symmetry Analyzer (stb-symmetry)"""
@@ -5453,12 +5584,25 @@ UTILITY_TOOLS = {
         'description': "Convert between file formats (CIF, POSCAR, fdf, xyz...).",
         'func': run_file_translator},
     2: {'title': "Clean File Tools (stb-clean)",
-        'description': "Clean the directory of calculation files (except essential ones).",
+        'description': "Prep a calc folder to restart a fresh run (removes prior outputs, "
+                        "keeps only inputs/submission script).",
         'func': run_clean_tool},
     3: {'title': "Grid to Cube Converter", 'description': "Convert Siesta Grid files (VT, RHO, VH) to Gaussian .cube.", 'func': run_grid_to_cube},
     4: {'title': "Wantibexos Interface (stb-siesta2wtb)",
         'description': "Convert SIESTA Hamiltonian to Wantibexos format.",
         'func': run_wantibexos_interface},
+    5: {'title': "AIMD Trajectory Converter (stb-ani2traj)",
+        'description': "Convert a SIESTA AIMD .ANI trajectory (no lattice of its own) into "
+                        "a multi-frame format with the cell, for OVITO/VMD.",
+        'func': run_ani2traj_converter},
+    6: {'title': "Status Checker (stb-status)",
+        'description': "Quick summary of a calc folder: run type, SCF convergence, max "
+                        "force, final energy, and which key output files are present.",
+        'func': run_status_checker},
+    7: {'title': "Archive Packager (stb-archive)",
+        'description': "Package a finished calc (inputs + essential outputs) into a "
+                        ".tar.gz for sharing/reproducibility -- the complement of stb-clean.",
+        'func': run_archive_packager},
 }
 
 

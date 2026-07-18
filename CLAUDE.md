@@ -203,6 +203,67 @@ sibling script file via `__file__` and invoking it with `sys.executable`) — th
 coexist for about a third of the tools for no documented reason and was consolidated
 onto `run_tool()` alone.
 
+`stb-ani2traj` (Utils, `ani2traj.py`) converts a SIESTA AIMD trajectory (`<label>.ANI`)
+into a multi-frame format that also carries the lattice, for viewing in OVITO/VMD/etc.
+`.ANI` itself is a bare multi-frame XYZ (via sisl's `aniSileSiesta`, a subclass of its
+`xyzSile`) with no cell information at all — the tool reads all frames via
+`sisl.get_sile(ani_file).read_geometry[::stride]()` (an sisl multi-frame slicing API,
+not just a plain method call). Output format is one of `xsf` (multi-frame AXSF,
+default — read natively by OVITO and VMD's xsf plugin), `pdb` (multi-model with
+`CRYST1`, VMD's own default format), or `xyz` (extended XYZ with a `Lattice=` tag,
+OVITO-native but VMD's plain xyz reader ignores that tag, so no PBC there) — all three
+written via ASE's native multi-frame writers (`ase.io.write` given a list of `Atoms`),
+not hand-rolled, since ASE already handles e.g. the triclinic-cell conventions each
+format needs. Lattice source, in preference order: per-MD-step `outcell:` blocks in
+`<label>.out` (via `core.siesta_log.get_md_trajectory`, added for this — correct even
+for variable-cell/NPT/Parrinello-Rahman runs, since it reads the actual cell at every
+step instead of assuming one fixed cell), then `<label>.XV`, then `<label>.fdf`. When
+the `.out` source is used and `--out-format xyz`, each frame's `E_KS`/`Temp_ion` (also
+from `get_md_trajectory`) and real simulation time (`MD.InitialTimeStep`/
+`MD.LengthTimeStep`, parsed from `<label>.fdf`) are embedded as extended-XYZ header
+properties too — only `xyz` has a slot for this (ASE's xsf/pdb writers don't). `--unwrap`
+removes periodic-boundary "jumps" (minimum-image displacement accumulated frame to
+frame, same convention as `Atoms.get_all_distances(mic=True)` elsewhere in this suite)
+so a molecule that legitimately drifts across the box edge reads as continuous motion
+instead of teleporting.
+
+`stb-translate` also writes a `lammps` output format (`writefilelammps`, via
+`ase.io.write(..., format='lammps-data')`, `atom_style` implicitly `atomic`) for
+handing a relaxed SIESTA structure off to classical MD/force-field tools. It's
+output-only (never a valid `--in-format`) since ASE's own LAMMPS reader is for the
+dump/trajectory format, not `lammps-data`; deliberately not extended into
+`stb-ani2traj`'s format list either, since ASE can only *write* `lammps-data` as a
+single frame, not a multi-frame trajectory. Because there's no
+`getatomsandvectors_lammps` input reader, the post-write round-trip integrity check
+(`reread_for_check`) special-cases `out_format == "lammps"` to re-read the just
+-written file directly via `ase.io.read(..., format='lammps-data')` instead of
+going through the `getatomsandvectors_* -> build_ase_atoms` path every other format
+uses.
+
+`stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
+run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +
+`categorize_dynamics`), SCF convergence, max force, final energy, final ionic
+temperature (AIMD only), and which key output files (`.XV`, `.bands`, `.DOS`, `.RHO`,
+`.ANI`, ...) are present — "can I run stb-bands/-dos/-cube/-ani2traj on this folder
+right now". `--path` accepts a glob (e.g. `strain_*`) to scan several folders at
+once, printing a summary table at the end. Every field degrades to `None`/`unknown`
+instead of raising so a batch scan always finishes and reports what it found per
+folder, rather than aborting on the first folder missing a `.out`/`.fdf`.
+
+`stb-archive` (Utils, `archive.py`) packages a finished calculation (inputs +
+essential outputs, `DEFAULT_INCLUDE_EXTS`) into a single `.tar.gz` with an embedded
+`MANIFEST.txt` (SystemLabel, run type, SCF convergence, final energy — the same
+`core.siesta_log` fields `stb-status` reports) — the intentional complement of
+`stb-clean`, which deletes that same class of files to prep for a restart instead of
+preserving them for sharing/reproducibility. Default include set deliberately
+excludes large regenerable intermediates (`.HSX`, `.DM`, `.RHO`, `.VT`, `.VH`,
+extensionless logs like `MESSAGES`) — `--include`/`--exclude` adjust the set
+per-run. `--path` glob support and per-directory failure handling mirror
+`stb-status`. Shares `core.siesta_log.find_out_file` with `stb-status` (extracted
+there once `archive.py` became a second consumer needing to locate a generically
+-named log like `calc.out`, not just `<label>.out`) and
+`core.structure_io.find_fdf_system_label` (same "extract on second use" pattern).
+
 ## Domain conventions worth knowing
 
 - Structure file formats handled throughout: POSCAR (VASP), CIF, FDF (SIESTA), XYZ

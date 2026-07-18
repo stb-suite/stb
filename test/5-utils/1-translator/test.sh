@@ -216,6 +216,21 @@ echo -n "Testando: CIF -> FHI"
 $BASE_CMD -if cif -i $TEST_DIR/si.cif -of fhi -o $TEST_DIR/out_from_cif.fhi
 check_success "$TEST_DIR/out_from_cif.fhi"
 
+echo -n "Testando: CIF -> LAMMPS ${YELLOW}(NOVO!)${NC}"
+$BASE_CMD -if cif -i $TEST_DIR/si.cif -of lammps -o $TEST_DIR/out_from_cif.data
+check_success "$TEST_DIR/out_from_cif.data"
+
+# Confirma que o formato lammps tem uma seção "Masses" (marca de um ficheiro
+# lammps-data válido) e que a checagem de integridade (ida e volta) não falha
+# -- essa reconferência usa ase.io.read(format='lammps-data') diretamente
+# (lammps é só formato de SAÍDA, sem getatomsandvectors_lammps de entrada).
+grep -q "Masses" $TEST_DIR/out_from_cif.data
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verificado: Seção 'Masses' encontrada.${NC}"
+else
+    echo -e "   -> ${RED}Falha: Seção 'Masses' NÃO encontrada.${NC}"
+fi
+
 
 # --- Teste da Flag -cf (Conversão de Coordenadas) ---
 echo -e "\n--- Testando Conversão de Coordenadas (-cf) ${YELLOW}(NOVO!)${NC} ---"

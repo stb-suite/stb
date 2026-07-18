@@ -37,7 +37,9 @@ extract-on-second-use policy as structure_io.py/core/symmetry.py.
 
 from __future__ import annotations
 
+import os
 import re
+import glob
 
 import numpy as np
 
@@ -45,6 +47,23 @@ from stb.core.cli import color_text, print_dual
 
 _STRAIN_FOLDER_RE = re.compile(r"strain_([a-zA-Z0-9]+)_(m?)(\d+\.\d+)")
 _EV_A3_TO_GPA = 160.21766  # 1 eV/Angstrom^3 in GPa
+
+
+def find_out_file(directory: str, label: str | None) -> str | None:
+    """<directory>/<label>.out if `label` is known and that file exists,
+    else the sole *.out in `directory` if there's exactly one (many SIESTA
+    jobs redirect stdout to a generic name like calc.out, not
+    <label>.out), else None if there's no match or the directory has
+    several *.out files and no way to disambiguate. Shared by stb-status
+    and stb-archive, which both need to locate "the" .out log for a
+    directory without assuming its filename.
+    """
+    if label:
+        candidate = os.path.join(directory, f"{label}.out")
+        if os.path.isfile(candidate):
+            return candidate
+    matches = glob.glob(os.path.join(directory, "*.out"))
+    return matches[0] if len(matches) == 1 else None
 
 
 def parse_strain_folder_name(folder_name: str) -> tuple[str | None, float | None]:
@@ -156,6 +175,126 @@ def get_outcell(path: str) -> np.ndarray | None:
     except Exception:
         return None
     return None
+
+
+_DYNAMICS_OPTION_RE = re.compile(r"redata: Dynamics option\s*=\s*(.+)")
+_GEOMETRY_STEP_RE = re.compile(r"Begin (?:\S+ opt\. move|MD step)\s*=\s*(\d+)")
+
+
+def get_dynamics_type(path: str) -> str | None:
+    """Raw 'redata: Dynamics option' string from a SIESTA .out log, e.g.
+    'Single-point calculation', 'CG coord. optimization', 'Verlet MD run'.
+    None if the file can't be read or doesn't have that line (older/atypical
+    logs). Use categorize_dynamics() to turn this into a coarse
+    single-point/relaxation/aimd bucket.
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            for line in f:
+                m = _DYNAMICS_OPTION_RE.search(line)
+                if m:
+                    return m.group(1).strip()
+    except Exception:
+        pass
+    return None
+
+
+def categorize_dynamics(dynamics_type: str | None) -> str:
+    """Buckets get_dynamics_type()'s raw string into 'single-point',
+    'relaxation' (CG/Broyden/FIRE coord. optimization), 'aimd' (Verlet/Nose/
+    Parrinello-Rahman/Anneal MD), or 'unknown' (None, or a string that
+    doesn't match any known SIESTA dynamics-option wording).
+    """
+    if dynamics_type is None:
+        return "unknown"
+    lower = dynamics_type.lower()
+    if "single-point" in lower:
+        return "single-point"
+    if "opt." in lower or "optimization" in lower:
+        return "relaxation"
+    if any(kw in lower for kw in ("md run", "nose", "parrinello", "anneal")):
+        return "aimd"
+    return "unknown"
+
+
+def count_geometry_steps(path: str) -> int:
+    """Number of 'Begin MD step = N' / 'Begin <optimizer> opt. move = N'
+    markers in a SIESTA .out log -- the number of MD steps for an AIMD run,
+    or the number of geometry-optimization moves for a relaxation. 0 for a
+    single-point run (neither marker appears) or if the file can't be read.
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            text = f.read()
+    except Exception:
+        return 0
+    return len(_GEOMETRY_STEP_RE.findall(text))
+
+
+_MD_STEP_RE = re.compile(r"Begin MD step\s*=\s*(\d+)")
+
+
+def get_md_trajectory(path: str) -> list[dict]:
+    """Per-MD-step data from an AIMD .out log: splits the file into chunks
+    at each 'Begin MD step = N' marker and extracts, from each chunk, the
+    outcell 3x3 cell matrix (Angstrom; present every step regardless of
+    whether the cell actually varies -- SIESTA reprints it either way), the
+    KS energy ('siesta: E_KS(eV) =', eV) and the ionic temperature
+    ('siesta: Temp_ion =', K). Chunk-scoped (not a single pass over the
+    whole file) so a value from one MD step can never leak into another's
+    entry.
+
+    Returns a list of {'step': int, 'cell': np.ndarray|None,
+    'E_KS': float|None, 'Temp_ion': float|None}, one per step found, in step
+    order -- [] if no 'Begin MD step' marker exists at all (e.g. a
+    single-point or plain geometry-relaxation run, not an AIMD one) or the
+    file can't be read. Any individual field stays None if that step's
+    chunk doesn't contain it, rather than aborting the whole parse -- built
+    for stb-ani2traj's per-frame lattice/energy/temperature enrichment,
+    which degrades gracefully field by field.
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            text = f.read()
+    except Exception:
+        return []
+
+    markers = list(_MD_STEP_RE.finditer(text))
+    if not markers:
+        return []
+
+    steps = []
+    for i, m in enumerate(markers):
+        start = m.end()
+        end = markers[i + 1].start() if i + 1 < len(markers) else len(text)
+        chunk_lines = text[start:end].splitlines()
+
+        cell = None
+        for j, line in enumerate(chunk_lines):
+            if "outcell: Unit cell vectors" in line:
+                rows = [_parse_float_line(chunk_lines[j + off]) for off in (1, 2, 3)]
+                if all(rows):
+                    cell = np.array(rows, dtype=float)
+                break
+
+        e_ks = None
+        temp_ion = None
+        for line in chunk_lines:
+            stripped = line.strip()
+            if e_ks is None and stripped.startswith("siesta: E_KS(eV)"):
+                try:
+                    e_ks = float(stripped.split("=", 1)[1].split()[0])
+                except (IndexError, ValueError):
+                    pass
+            elif temp_ion is None and stripped.startswith("siesta: Temp_ion"):
+                try:
+                    temp_ion = float(stripped.split("=", 1)[1].split()[0])
+                except (IndexError, ValueError):
+                    pass
+
+        steps.append({'step': int(m.group(1)), 'cell': cell, 'E_KS': e_ks, 'Temp_ion': temp_ion})
+
+    return steps
 
 
 def get_stress_tensor(path: str) -> np.ndarray | None:

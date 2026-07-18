@@ -23,7 +23,7 @@ from ase.io import read as ase_read
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
-from stb.core.cli import COLORS, color_text, show_intro, print_dual
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core.symmetry import crystal_system, space_group_label
 
 # Import libraries:
@@ -32,7 +32,7 @@ from stb.core.symmetry import crystal_system, space_group_label
 ##### MODIFICADO #####
 # Adicionado "fdf" aos formatos de entrada
 INPUT_FORMATS = {"poscar", "cif", "siesta", "xyz", "fhi", "dftb", "xsf", "fdf"}
-OUTPUT_FORMATS = {"cif","xyz", "poscar", "fdf", "dftb", "xsf", "fhi"}
+OUTPUT_FORMATS = {"cif","xyz", "poscar", "fdf", "dftb", "xsf", "fhi", "lammps"}
 
 # Extension -> --in-format guess, used when -if/--in-format is omitted.
 EXTENSION_FORMAT_MAP = {
@@ -54,7 +54,7 @@ BASENAME_FORMAT_MAP = {
 # (--in-file as a glob pattern matching more than one file).
 OUTPUT_EXTENSION_MAP = {
     "poscar": "poscar", "cif": "cif", "xyz": "xyz", "fdf": "fdf",
-    "dftb": "gen", "xsf": "xsf", "fhi": "in",
+    "dftb": "gen", "xsf": "xsf", "fhi": "in", "lammps": "data",
 }
 
 # Report filename written alongside the output (--out-dir in batch mode, or
@@ -63,13 +63,6 @@ OUTPUT_EXTENSION_MAP = {
 # raman_stage3.txt). Not written for --dry-run, which by definition has no
 # disk side effects.
 REPORT_FILE = "stb_translate_report.txt"
-
-
-def print_section(label, f_out=None):
-    """Prints one '[N] SECTION TITLE' header + separator, matching the
-    suite's stage-report style (e.g. stb-ramanAnalysis)."""
-    print_dual(f"\n{color_text(label, 'magenta')}", f_out)
-    print_dual("-" * 60, f_out)
 
 
 def guess_format_from_filename(path):
@@ -826,8 +819,25 @@ def writefilefhi(typevectors, latticeparameter, vectors, getatoms, atomsposition
     return
 
 
+def writefilelammps(typevectors, latticeparameter, vectors, getatoms, atomsposition, outfilename, coord_format=None):
+    """Writes a LAMMPS data file (atom_style 'atomic', 'metal' units --
+    Angstrom/eV, matching a DFT-derived structure) via ASE's own writer, for
+    handing a relaxed SIESTA structure off to classical MD/force-field
+    simulations. Reuses build_ase_atoms (the same conversion this file's
+    --view/--view-image use) rather than hand-rolling LAMMPS's triclinic
+    box-bounds convention (tilt factors for a non-orthogonal cell need a
+    basis rotation ASE's Prism already implements and tests)."""
+    if coord_format and coord_format.lower() == 'direct':
+        print("[WARNING] LAMMPS data format requires Cartesian (Angstrom) coordinates.")
+        print("[INFO]    Ignoring '--coord-format direct' and converting to Cartesian.")
+
+    atoms = build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition)
+    from ase.io import write as ase_write
+    ase_write(outfilename, atoms, format='lammps-data', masses=True)
+
+
 ##### NEW HELPER FUNCTION #####
-def convert_coordinates(typevectors_in: str, 
+def convert_coordinates(typevectors_in: str,
                         latticeparameter: str, 
                         vectors: List[List[str]], 
                         atomsposition_in: Dict[str, List[List[str]]], 
@@ -1011,10 +1021,21 @@ def check_close_contacts(atoms, threshold=0.5, f_out=None):
 
 
 def reread_for_check(out_format, out_file, vectors, latticeparameter):
-    """Re-parses the just-written output file with the matching reader, for
-    the post-conversion round-trip check below. `vectors`/`latticeparameter`
-    are the ORIGINAL input's, reused for an xyz output re-read since an .xyz
-    file itself carries no cell information."""
+    """Re-parses the just-written output file with the matching reader and
+    returns an ase.Atoms, for the post-conversion round-trip check below.
+    `vectors`/`latticeparameter` are the ORIGINAL input's, reused for an xyz
+    output re-read since an .xyz file itself carries no cell information.
+
+    Every format except lammps goes through this file's own
+    getatomsandvectors_* + build_ase_atoms (the same pair every other format
+    conversion uses); lammps has no getatomsandvectors_lammps (it's an
+    output-only format here) and ASE can already read a lammps-data file
+    directly, so that one path is a straight ase.io.read call instead.
+    """
+    if out_format == "lammps":
+        from ase.io import read as ase_read_atoms
+        return ase_read_atoms(out_file, format='lammps-data')
+
     readers = {
         "poscar": lambda: getatomsandvectors_vasp(out_file),
         "cif": lambda: getatomsandvectors_cif(out_file),
@@ -1024,7 +1045,7 @@ def reread_for_check(out_format, out_file, vectors, latticeparameter):
         "xsf": lambda: getatomsandvectors_xsf(out_file),
         "fdf": lambda: getatomsandvectors_fdf(out_file),
     }
-    return readers[out_format]()
+    return build_ase_atoms(*readers[out_format]())
 
 
 def verify_round_trip(atoms_in, atoms_out, f_out=None):
@@ -1161,6 +1182,9 @@ def convert_one(args, in_file, out_file, f_out=None, header=None):
             case "cif":
                 writefilecif(typevectors, latticeparameter, vectors,
                              getatoms, atomsposition, out_file, args.coord_format)
+            case "lammps":
+                writefilelammps(typevectors, latticeparameter, vectors,
+                                getatoms, atomsposition, out_file, args.coord_format)
     except FileNotFoundError as e:
         print_dual(color_text(f"[FAIL] File not found: {e}", 'red'), f_out)
         return False, None
@@ -1176,8 +1200,7 @@ def convert_one(args, in_file, out_file, f_out=None, header=None):
     print_dual(f"[OK] Writing the file {out_file} ({args.out_format})", f_out)
 
     try:
-        reread_tuple = reread_for_check(args.out_format, out_file, vectors, latticeparameter)
-        atoms_out = build_ase_atoms(*reread_tuple)
+        atoms_out = reread_for_check(args.out_format, out_file, vectors, latticeparameter)
         verify_round_trip(atoms, atoms_out, f_out=f_out)
     except Exception as e:
         print_dual(color_text(f"[WARNING] Could not verify output file integrity: {e}", 'yellow'), f_out)
@@ -1202,7 +1225,9 @@ def main():
                         help="Path to the input file, or a glob pattern (e.g. '*.poscar') "
                              "matching several files for batch conversion.")
     parser.add_argument("-of", "--out-format", required=False, default=None, choices=OUTPUT_FORMATS,
-                        help="Output file format (options: cif , xyz, poscar, fdf, dftb, xsf, fhi). "
+                        help="Output file format (options: cif, xyz, poscar, fdf, dftb, xsf, fhi, "
+                             "lammps [LAMMPS data file, atom_style atomic, metal units -- for "
+                             "handing a relaxed structure off to classical MD/force-field runs]). "
                              "Required unless --dry-run.")
     parser.add_argument("-o", "--out-file", required=False, default=None,
                         help="Path to the output file. Required unless --dry-run, or in batch "

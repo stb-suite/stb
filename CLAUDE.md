@@ -422,6 +422,33 @@ Output filenames key off a generic `stem` (the SystemLabel, or the trajectory
 file's basename) instead of `args.label` directly, so naming works the same in
 either input mode.
 
+**`stb-mlphonons`** (ML Simulations, `mlphonons.py`) is the second tool in the ML
+Simulations category — a standalone, single-shot phonon calculation (displacements,
+force constants, band structure, DOS, thermal properties) driven entirely by a MACE
+potential, no SIESTA and no separate `stb-phononsPos` analysis step needed. Deliberately
+kept separate from the existing SIESTA-based `stb-phononsCreate`/`stb-phononsPos`
+workflow and its own ML variants `stb-phononsML`/`stb-phononsQHA` (which don't accept
+a custom fine-tuned model, only `small`/`medium`/`large` foundation checkpoints) — the
+user explicitly wanted an isolated tool in this new category rather than retrofitting
+those, even though it means duplicating a small amount of orchestration. Reuses,
+rather than duplicates, the actual algorithmic pieces already extracted for this exact
+purpose: `core.mace_phonons.generate_ml_displacements`/`compute_force_constants`
+(already shared by `stb-phononsML`/`stb-phononsQHA`, this becomes their 3rd consumer)
+for the physics, and `phonons_pos.build_band_path`/`band_path_to_phonopy_format`/
+`band_tick_positions`/`pretty_label` for the q-path (ASE's own Bravais-lattice/
+`Cell.bandpath` machinery, deliberately NOT phonopy's seekpath-based
+`auto_band_structure` — `seekpath` isn't installed/a dependency of this suite;
+`phonons_pos.py`'s own docstring already explains this exact tradeoff). Plots (bands/
+DOS/thermal, matplotlib PNGs) are new code, not reused from `phonons_pos.py` (which
+writes gnuplot `.dat`+`.gplot` pairs, the older convention) — matching the newer
+matplotlib convention this session's tools (`aimd_analysis.py`/`mlff_analysis.py`/
+`mlmd.py`) already use. Flags an imaginary (negative) frequency along the band path
+as a `[WARNING]`, same QC check `stb-phononsPos` does — especially relevant here since
+ML potentials are markedly less reliable for phonons than DFT. Verified live on a
+64-atom bulk Si:Ge cell: physically sensible dispersion (correct acoustic branches to
+~0 at Γ, max frequency in the right ballpark) and textbook Debye-like thermal
+properties (entropy → 0 as T → 0, heat capacity saturating at high T).
+
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +
 `categorize_dynamics`), SCF convergence, max force, final energy, final ionic

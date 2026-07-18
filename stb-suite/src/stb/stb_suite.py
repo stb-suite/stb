@@ -4592,6 +4592,55 @@ def run_mlmd_generator() -> None:
     run_tool("stb-mlmd", args)
 
 
+def run_mlphonons_generator() -> None:
+    """Interface for ML Phonons (stb-mlphonons)"""
+    print("\n" + "="*60)
+    print(color_text("ML PHONONS (stb-mlphonons)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Standalone phonon "
+        "calculation (bands, DOS, thermal properties) driven entirely by a MACE potential -- "
+        "no SIESTA, no separate analysis tool. A fast heuristic preview, not a substitute "
+        "for the real SIESTA-based Phonons workflow.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    dim_str = get_input("Supercell dimensions, 3 integers [default: 2 2 2]: ").strip()
+    dim = dim_str.split() if dim_str else ["2", "2", "2"]
+    args.extend(["--dim", *dim])
+
+    output_dir = get_input("Output directory [default: mlphonons_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("Also save the raw plot data (.dat files)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nComputing ML phonons...", 'green'))
+    run_tool("stb-mlphonons", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5903,6 +5952,10 @@ MLSIM_TOOLS = {
         'description': "NVE/NVT/NPT molecular dynamics driven by a MACE potential -- fast "
                         "exploration with the foundation model or your own fine-tuned one.",
         'func': run_mlmd_generator},
+    2: {'title': "ML Phonons (stb-mlphonons)",
+        'description': "Standalone phonon bands/DOS/thermal properties driven entirely by a "
+                        "MACE potential -- no SIESTA, no separate analysis tool needed.",
+        'func': run_mlphonons_generator},
 }
 
 

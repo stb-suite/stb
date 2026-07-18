@@ -104,6 +104,19 @@ echo "Testing: E0s uses 'average' (SIESTA-scale), never 'foundation' (wrong abso
 check_contains "E0s average" log_basic.txt
 
 
+# --- 1b. --export-lammps ---
+echo -e "\n--- Testing --export-lammps ---"
+if command -v mace_create_lammps_model &> /dev/null; then
+    stb-mlffAnalysis --path "mlff_config_*" --epochs 3 --batch-size 4 --device cpu \
+        --name test_model_lammps --export-lammps --no-intro > log_lammps.txt 2>&1
+    check_exit_code $? 0
+    check_contains "Exported LAMMPS model" log_lammps.txt
+    check_success test_model_lammps_compiled.model-lammps.pt
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: 'mace_create_lammps_model' not on PATH."
+fi
+
+
 # --- 2. Missing mace_run_train dependency check (simulated via empty PATH) ---
 echo -e "\n--- Testing a folder with too few usable configs (expects failure) ---"
 mkdir -p too_few/mlff_config_001
@@ -138,16 +151,17 @@ echo "Testing: --version"
 stb-mlffAnalysis --version > log_version.txt 2>&1
 check_contains "stb-mlffAnalysis" log_version.txt
 
-echo "Testing: --help documents --foundation-model, --epochs, --valid-fraction"
+echo "Testing: --help documents --foundation-model, --epochs, --valid-fraction, --export-lammps"
 stb-mlffAnalysis --help > log_help.txt 2>&1
 check_contains "foundation-model" log_help.txt
 check_contains "epochs" log_help.txt
 check_contains "valid-fraction" log_help.txt
+check_contains "export-lammps" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.17.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.17.2) ---"
-printf '4.17.2\nmlff_config_*\n1\n3\n4\ncpu\ntest_model3\n.\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.17.2\nmlff_config_*\n1\n3\n4\ncpu\ntest_model3\n.\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Fine-tuned model" log_menu.txt
 

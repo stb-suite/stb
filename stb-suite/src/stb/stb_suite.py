@@ -4389,7 +4389,7 @@ def run_mlff_analysis() -> None:
     print(color_text(
         "Aggregates the finished SIESTA calculations from Stage 1 (energy + forces, "
         "best-effort stress) and fine-tunes a MACE-MP foundation model on them via "
-        "'mace_run_train --multiheads_finetuning'.", 'cyan'))
+        "'mace_run_train'.", 'cyan'))
     print()
 
     path = get_input("Glob pattern for the config folders [default: mlff_config_*]: ").strip()
@@ -4417,6 +4417,12 @@ def run_mlff_analysis() -> None:
             "--name", name, "--work-dir", work_dir, "--no-intro"]
     if device in ("cpu", "cuda"):
         args.extend(["--device", device])
+
+    export_lammps = get_input(
+        "\nAlso export a LAMMPS-loadable model (needs a LAMMPS build with the MACE pair "
+        "style)? (y/N): ").strip().lower()
+    if export_lammps == 'y':
+        args.append("--export-lammps")
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -5706,7 +5712,8 @@ WORKFLOW_TOOLS = {
         'description': "Generate training configurations (rattled and/or AIMD-sampled), then "
                         "fine-tune a MACE-MP foundation model on the resulting SIESTA "
                         "energy/forces/stress -- a fast potential specialized to your own "
-                        "material instead of the generic foundation model.",
+                        "material instead of the generic foundation model. Optionally exports "
+                        "a LAMMPS-loadable model.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-mlff)",
                 'description': "Generate rattled/AIMD-sampled training configurations, ready "

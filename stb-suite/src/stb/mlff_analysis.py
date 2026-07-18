@@ -156,7 +156,8 @@ def main():
                      "SIESTA data.",
         epilog="Example usage:\n"
                "  stb-mlffAnalysis --path 'mlff_config_*' --epochs 100 --device cpu\n"
-               "  stb-mlffAnalysis --path 'mlff_config_*' --foundation-model medium --device cuda",
+               "  stb-mlffAnalysis --path 'mlff_config_*' --foundation-model medium --device cuda\n"
+               "  stb-mlffAnalysis --path 'mlff_config_*' --export-lammps",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--path", default="mlff_config_*",
@@ -177,6 +178,10 @@ def main():
     parser.add_argument("--seed", type=int, default=123, help="Training random seed (default: 123).")
     parser.add_argument("-o", "--work-dir", default=".",
                         help="Working directory for the training run and its outputs (default: current directory).")
+    parser.add_argument("--export-lammps", action="store_true",
+                        help="Also compile the fine-tuned model into a TorchScript file "
+                             "loadable by LAMMPS's 'pair_style mace' (via mace_create_lammps_model, "
+                             "part of mace-torch) -- '<model>-lammps.pt'. Off by default.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -307,18 +312,26 @@ def main():
 
     print_section("[3] SUMMARY & FILES", f_out)
     model_path = find_mace_model(args.work_dir, args.name)
+    lammps_model_path = None
     if model_path:
         print_dual(f"[OK] Fine-tuned model: {model_path}", f_out)
         smoke_test_model(model_path, atoms_list[0], device, f_out)
+        if args.export_lammps:
+            lammps_model_path = export_lammps_model(model_path, f_out)
     else:
         print_dual(color_text(
             "[WARNING] Training finished but no '<name>*.model' file was found under "
             f"'{args.work_dir}' -- check the log for the model's actual output path.",
             'yellow'), f_out)
+        if args.export_lammps:
+            print_dual(color_text(
+                "[WARNING] --export-lammps skipped: no model file to convert.", 'yellow'), f_out)
 
     print_dual("Status            : OK", f_out)
     print_dual(f"Training set      : {dataset_path}", f_out)
     print_dual(f"Training log      : {log_path}", f_out)
+    if lammps_model_path:
+        print_dual(f"LAMMPS model      : {lammps_model_path}", f_out)
     if report_path:
         print_dual(f"Report            : {report_path}", f_out)
 
@@ -352,6 +365,36 @@ def smoke_test_model(model_path, sample_atoms, device, f_out=None):
         print_dual(f"[OK] Model loads and runs -- sample energy: {energy:.6f} eV", f_out)
     except (ImportError, CalculationFailed, Exception) as e:
         print_dual(color_text(f"[WARNING] Could not smoke-test the fine-tuned model: {e}", 'yellow'), f_out)
+
+
+def export_lammps_model(model_path, f_out=None):
+    """Compiles `model_path` into a TorchScript file LAMMPS's 'pair_style
+    mace' can load directly (via mace_create_lammps_model, part of
+    mace-torch -- writes '<model_path>-lammps.pt', libtorch format, single
+    -head models skip mace_create_lammps_model's own interactive head
+    -selection prompt automatically). Requires a LAMMPS build with the MACE
+    pair style (https://github.com/ACEsuit/lammps) to actually USE the
+    resulting file -- this only produces it. Returns the output path, or
+    None on failure (never aborts the whole run: the fine-tuned .model
+    itself is already usable via ASE/Python regardless of this step).
+    """
+    if shutil.which("mace_create_lammps_model") is None:
+        print_dual(color_text(
+            "[WARNING] --export-lammps skipped: 'mace_create_lammps_model' not found on PATH.",
+            'yellow'), f_out)
+        return None
+
+    out_path = model_path + "-lammps.pt"
+    cmd = ["mace_create_lammps_model", model_path, "--dtype", "float64", "--format", "libtorch"]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not os.path.isfile(out_path):
+        print_dual(color_text(
+            f"[WARNING] Could not export a LAMMPS model: {result.stderr.strip().splitlines()[-1] if result.stderr else 'unknown error'}",
+            'yellow'), f_out)
+        return None
+
+    print_dual(f"[OK] Exported LAMMPS model: {out_path}", f_out)
+    return out_path
 
 
 if __name__ == "__main__":

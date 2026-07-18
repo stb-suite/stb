@@ -297,6 +297,14 @@ asserts against `average` outright, so the choice is: correct energy scale, or
 anti-forgetting replay, not both. Verified end-to-end against a real 8-configuration
 SIESTA dataset (O2 in vacuum): correct-scale RMSE convergence, a loadable
 `.model` file, and a working `mace.calculators.MACECalculator` energy evaluation.
+`--export-lammps` additionally compiles the fine-tuned model into a TorchScript file
+(`<model>-lammps.pt`, via `mace_create_lammps_model`, also part of `mace-torch`)
+loadable by LAMMPS's `pair_style mace` (needs a LAMMPS build with the MACE pair
+style, e.g. https://github.com/ACEsuit/lammps -- this only produces the file, it
+doesn't need or use a LAMMPS installation itself). Verified live: converts either of
+the two `.model` files `mace_run_train` writes (plain and TorchScript-`_compiled`)
+non-interactively for a single-head model (multi-head would otherwise prompt for a
+head to export).
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

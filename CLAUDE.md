@@ -28,9 +28,9 @@ whose source lives under `stb-suite/src/stb/`.
   paired prep+analysis properties (strain, elastic, cohesive, phonons,
   convergence, XRD structure solution, Hubbard U linear response). This is
   **not** an automated test suite (no pytest/unittest, no CI config exists).
-  `test/test_translate/test.sh` is representative: it generates sample structure
-  files in every supported format, runs the built CLI against them, and greps the
-  output for expected content.
+  `test/5-utils/1-translator/test.sh` is representative: it generates sample
+  structure files in every supported format, runs the built CLI against them, and
+  greps the output for expected content.
 
 ## Build / install / "test" commands
 
@@ -47,9 +47,9 @@ stb-suite   # interactive menu wrapping all tools
 
 There is no unit test suite to run. To validate a change to a tool, exercise it
 against the fixtures under `test/` (or the generator scripts, e.g.
-`bash test/test_translate/test.sh`) and inspect the produced output files, following
-the same "generate sample input → run the CLI → check the output file" pattern used
-in `test.sh`.
+`bash test/5-utils/1-translator/test.sh`) and inspect the produced output files,
+following the same "generate sample input → run the CLI → check the output file"
+pattern used in `test.sh`.
 
 ## Architecture
 

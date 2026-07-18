@@ -14,6 +14,7 @@ import glob
 import warnings
 import subprocess
 from time import sleep
+from datetime import datetime
 import argparse
 import textwrap
 from typing import List, Dict
@@ -22,7 +23,7 @@ from ase.io import read as ase_read
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, show_intro, print_dual
 from stb.core.symmetry import crystal_system, space_group_label
 
 # Import libraries:
@@ -56,6 +57,20 @@ OUTPUT_EXTENSION_MAP = {
     "dftb": "gen", "xsf": "xsf", "fhi": "in",
 }
 
+# Report filename written alongside the output (--out-dir in batch mode, or
+# --out-file's own directory otherwise) -- same print_dual-to-screen-and-file
+# convention as the workflow analysis stages (e.g. stb-ramanAnalysis's
+# raman_stage3.txt). Not written for --dry-run, which by definition has no
+# disk side effects.
+REPORT_FILE = "stb_translate_report.txt"
+
+
+def print_section(label, f_out=None):
+    """Prints one '[N] SECTION TITLE' header + separator, matching the
+    suite's stage-report style (e.g. stb-ramanAnalysis)."""
+    print_dual(f"\n{color_text(label, 'magenta')}", f_out)
+    print_dual("-" * 60, f_out)
+
 
 def guess_format_from_filename(path):
     """Best-effort --in-format guess from a filename; None if not recognized."""
@@ -66,36 +81,36 @@ def guess_format_from_filename(path):
     return EXTENSION_FORMAT_MAP.get(ext)
 
 
-def print_structure_summary(typevectors, latticeparameter, vectors, getatoms, atoms=None):
+def print_structure_summary(typevectors, latticeparameter, vectors, getatoms, atoms=None, f_out=None):
     """Prints a structure summary: formula, atom count, coordinate type,
     lattice vectors, cell volume, and (when `atoms` is given) the detected
-    space group/crystal system/point group. Shown for every successful read,
-    not just --dry-run."""
+    space group/crystal system/point group. Shown for every successful read
+    (not just --dry-run), via print_dual so it's also captured in the run's
+    persisted REPORT_FILE."""
     formula = " ".join(f"{elem[2]}{elem[3]}" for elem in getatoms)
     natoms_total = sum(int(elem[3]) for elem in getatoms)
     vectors_np = np.array(vectors, dtype=float) * float(latticeparameter)
     volume = abs(np.linalg.det(vectors_np))
 
-    print("\n" + color_text("Structure summary:", 'bold'))
-    print(f"  Formula:          {formula}")
-    print(f"  Total atoms:      {natoms_total}")
-    print(f"  Coordinate type:  {typevectors}")
-    print(f"  Lattice parameter: {latticeparameter}")
-    print(f"  Lattice vectors (Ang):")
+    print_dual(f"Formula           : {formula}", f_out)
+    print_dual(f"Total atoms       : {natoms_total}", f_out)
+    print_dual(f"Coordinate type   : {typevectors}", f_out)
+    print_dual(f"Lattice parameter : {latticeparameter}", f_out)
+    print_dual("Lattice vectors (Ang):", f_out)
     for row in vectors_np:
-        print(f"    {row[0]:12.8f}  {row[1]:12.8f}  {row[2]:12.8f}")
-    print(f"  Cell volume:      {volume:.4f} Ang^3")
+        print_dual(f"    {row[0]:12.8f}  {row[1]:12.8f}  {row[2]:12.8f}", f_out)
+    print_dual(f"Cell volume       : {volume:.4f} Ang^3", f_out)
 
     if atoms is not None:
         try:
             structure = AseAtomsAdaptor.get_structure(atoms)
             sg_label = space_group_label(structure)
             system, point_group = crystal_system(structure)
-            print(f"  Space group:      {sg_label}")
-            print(f"  Crystal system:   {system}")
-            print(f"  Point group:      {point_group}")
+            print_dual(f"Space group       : {sg_label}", f_out)
+            print_dual(f"Crystal system    : {system}", f_out)
+            print_dual(f"Point group       : {point_group}", f_out)
         except Exception as e:
-            print(color_text(f"  [WARNING] Could not determine symmetry: {e}", 'yellow'))
+            print_dual(color_text(f"[WARNING] Could not determine symmetry: {e}", 'yellow'), f_out)
 
 
 # Dictionary with all periodic elements table
@@ -344,15 +359,16 @@ def getatomsandvectors_cif(input_cif):
     # 2. Ler o arquivo CIF usando a função 'ase_read'
     # Esta função foi importada no topo do script como 'ase_read'
     # Adicionamos um try...except para o caso da ASE não estar instalada.
+    # NOTE: raises ValueError (not sys.exit) on every failure below -- caught by
+    # convert_one's own try/except, so one bad CIF in a batch run is reported
+    # and skipped instead of killing the whole batch.
     try:
         structure = ase_read(input_cif)
     except Exception as e:
-        print(color_text(f"[FAIL] Could not read CIF file '{input_cif}': {e}", 'red'))
-        sys.exit(1)
+        raise ValueError(f"could not read CIF: {e}") from e
 
     if len(structure) == 0:
-        print(color_text(f"[FAIL] '{input_cif}' parsed with 0 atoms -- check the file.", 'red'))
-        sys.exit(1)
+        raise ValueError("parsed with 0 atoms -- check the file")
 
     occupancy = structure.info.get('occupancy')
     if occupancy:
@@ -362,13 +378,10 @@ def getatomsandvectors_cif(input_cif):
             details = "; ".join(
                 f"atom {tag} ({', '.join(f'{sym}:{frac:g}' for sym, frac in occ.items())})"
                 for tag, occ in partial_sites)
-            print(color_text(
-                f"[FAIL] '{input_cif}' has partial-occupancy/disordered site(s): "
-                f"{details}.", 'red'))
-            print(color_text(
-                "       stb-translate does not resolve disorder -- pre-process the CIF "
-                "(pick one occupant per site) before converting.", 'yellow'))
-            sys.exit(1)
+            raise ValueError(
+                f"has partial-occupancy/disordered site(s): {details} -- stb-translate "
+                "does not resolve disorder, pre-process the CIF (pick one occupant per "
+                "site) before converting")
 
     # 3. Extrair vetores de rede (vectors)
     # O método .get_cell() da ASE retorna os vetores de rede completos,
@@ -459,8 +472,10 @@ def getatomsandvectors_dftb(input_dftb):
     elif datadftb[0][1] == 'F':
         typevectors = 'Direct'
     else:
-        print("[FAIL] Type of coordinate not define: Only S or F are accepted")
-        exit()
+        # Raises (not sys.exit/exit()) so convert_one's try/except catches it --
+        # one bad file in a batch run is reported and skipped, not fatal to the
+        # whole batch.
+        raise ValueError("coordinate type not defined on line 1 -- only 'S' or 'F' accepted")
     for i in range(1, 4):
         vectors.append([f"{float(datadftb[-i][0]):.8f}",
                         f"{float(datadftb[-i][1]):.8f}",
@@ -968,14 +983,16 @@ def save_structure_image(atoms, path):
 
 
 ##### INTEGRITY CHECKS (close contacts + post-conversion round-trip) #####
-def check_close_contacts(atoms, threshold=0.5):
-    """Warns about any pair of atoms closer than `threshold` Angstrom (mic
+def check_close_contacts(atoms, threshold=0.5, f_out=None):
+    """Reports on any pair of atoms closer than `threshold` Angstrom (mic
     -aware, via ASE's get_all_distances) -- a common symptom of mixing up
     Direct/Cartesian coordinates or the wrong lattice scale. Not fatal: an
     intentionally unrelaxed starting guess can legitimately have short
-    contacts, so this only warns."""
+    contacts, so this only warns -- but always prints a result (clean or
+    not), so the check is visibly part of the report rather than silent."""
     n = len(atoms)
     if n < 2:
+        print_dual("[OK] Close-contact check skipped (fewer than 2 atoms).", f_out)
         return
     distances = atoms.get_all_distances(mic=True)
     symbols = atoms.get_chemical_symbols()
@@ -983,12 +1000,14 @@ def check_close_contacts(atoms, threshold=0.5):
                    for i in range(n) for j in range(i + 1, n)
                    if distances[i, j] < threshold]
     if close_pairs:
-        print(color_text(
+        print_dual(color_text(
             f"[WARNING] {len(close_pairs)} suspiciously close contact(s) found "
             f"(< {threshold} Ang) -- check for a Direct/Cartesian mixup or a wrong "
-            f"lattice scale:", 'yellow'))
+            f"lattice scale:", 'yellow'), f_out)
         for i, j, d in close_pairs:
-            print(color_text(f"           {symbols[i]}{i} -- {symbols[j]}{j}: {d:.4f} Ang", 'yellow'))
+            print_dual(color_text(f"           {symbols[i]}{i} -- {symbols[j]}{j}: {d:.4f} Ang", 'yellow'), f_out)
+    else:
+        print_dual(f"[OK] No suspiciously close contacts found (< {threshold} Ang).", f_out)
 
 
 def reread_for_check(out_format, out_file, vectors, latticeparameter):
@@ -1008,7 +1027,7 @@ def reread_for_check(out_format, out_file, vectors, latticeparameter):
     return readers[out_format]()
 
 
-def verify_round_trip(atoms_in, atoms_out):
+def verify_round_trip(atoms_in, atoms_out, f_out=None):
     """Compares the pre-write structure against the just-written file
     (re-read via reread_for_check): reduced-formula stoichiometry, and cell
     volume PER FORMULA UNIT. Prints [OK] (confirms it verified) when they
@@ -1035,33 +1054,44 @@ def verify_round_trip(atoms_in, atoms_out):
     vol_out = abs(np.linalg.det(atoms_out.get_cell())) / z_out
 
     if formula_in == formula_out:
-        print(color_text(
+        print_dual(color_text(
             f"[OK] Stoichiometry verified: {formula_in} ({len(atoms_in)} -> {len(atoms_out)} "
-            f"atoms) -- matches input.", 'green'))
+            f"atoms) -- matches input.", 'green'), f_out)
     else:
-        print(color_text(
+        print_dual(color_text(
             f"[WARNING] Stoichiometry mismatch: input is {formula_in}, output is "
-            f"{formula_out} -- check the conversion!", 'yellow'))
+            f"{formula_out} -- check the conversion!", 'yellow'), f_out)
 
     if np.isclose(vol_in, vol_out, rtol=1e-3):
-        print(color_text(
+        print_dual(color_text(
             f"[OK] Cell volume verified: {vol_out:.4f} Ang^3 per formula unit -- "
-            f"matches input.", 'green'))
+            f"matches input.", 'green'), f_out)
     else:
-        print(color_text(
+        print_dual(color_text(
             f"[WARNING] Cell volume mismatch (per formula unit): input is {vol_in:.4f} "
-            f"Ang^3, output is {vol_out:.4f} Ang^3 -- check the conversion!", 'yellow'))
+            f"Ang^3, output is {vol_out:.4f} Ang^3 -- check the conversion!", 'yellow'), f_out)
 ##### END INTEGRITY CHECKS #####
 
 
-def convert_one(args, in_file, out_file):
-    """Runs the read -> integrity checks -> (optional) write pipeline for a
-    single file. `in_file`/`out_file` are passed explicitly (rather than read
-    off `args`) since they vary per file in batch mode; every other option
-    (in_format, out_format, coord_format, lattice_vectors, dry_run, view,
-    view_image) is shared across the whole batch. Returns True on success,
-    False on failure (prints its own [FAIL] message rather than exiting, so a
-    batch run can continue past one bad file)."""
+def convert_one(args, in_file, out_file, f_out=None, header=None):
+    """Runs the read -> structure/symmetry summary -> integrity checks ->
+    (optional) write -> round-trip verification pipeline for a single file,
+    printing a report block via print_dual (screen + the run's REPORT_FILE).
+    `in_file`/`out_file` are passed explicitly (rather than read off `args`)
+    since they vary per file in batch mode; every other option (in_format,
+    out_format, coord_format, lattice_vectors, dry_run) is shared across the
+    whole batch. `header`, if given, labels this file's block (batch mode).
+
+    Does NOT do --view/--view-image -- that's deferred by main() to run once,
+    after every file has been read/written/verified and reported, as the
+    final step of the whole run.
+
+    Returns (ok, atoms): ok is False on failure (prints its own [FAIL], never
+    raises/exits, so a batch run can continue past one bad file); atoms is
+    the parsed ase.Atoms on success (for the deferred view step), else None.
+    """
+    if header:
+        print_dual(f"\n--- {header} ---", f_out)
     try:
         ##### MODIFICADO #####
         # Adicionado o 'case' para o novo formato 'fdf'
@@ -1096,22 +1126,15 @@ def convert_one(args, in_file, out_file):
                     in_file)
 
 
-        print(f"[OK] Read the file {in_file} ({args.in_format})")
+        print_dual(f"[OK] Read the file {in_file} ({args.in_format})", f_out)
 
         atoms = build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition)
-        check_close_contacts(atoms)
-        print_structure_summary(typevectors, latticeparameter, vectors, getatoms, atoms)
-
-        if args.view_image:
-            save_structure_image(atoms, args.view_image)
-            print(f"[OK] Saved 3D structure image to {args.view_image}")
-        if args.view:
-            print("[INFO] Opening interactive 3D viewer (ASE GUI) -- close the window to continue...")
-            view_structure_interactive(atoms)
+        print_structure_summary(typevectors, latticeparameter, vectors, getatoms, atoms, f_out)
+        check_close_contacts(atoms, f_out=f_out)
 
         if args.dry_run:
-            print("\n[INFO] Dry run complete - no output file written.")
-            return True
+            print_dual("[INFO] Dry run -- no output file written.", f_out)
+            return True, atoms
 
         ##### MODIFIED #####
         # All write functions now receive 'args.coord_format'
@@ -1139,28 +1162,27 @@ def convert_one(args, in_file, out_file):
                 writefilecif(typevectors, latticeparameter, vectors,
                              getatoms, atomsposition, out_file, args.coord_format)
     except FileNotFoundError as e:
-        print(color_text(f"[FAIL] File not found: {e}", 'red'))
-        return False
+        print_dual(color_text(f"[FAIL] File not found: {e}", 'red'), f_out)
+        return False, None
     except (IndexError, KeyError, ValueError) as e:
-        print(color_text(
+        print_dual(color_text(
             f"[FAIL] Could not parse '{in_file}' as '{args.in_format}': {e}",
-            'red'))
-        print(color_text(
+            'red'), f_out)
+        print_dual(color_text(
             "       Check that the file matches the expected structure for --in-format.",
-            'yellow'))
-        return False
+            'yellow'), f_out)
+        return False, None
 
-    print(f"[OK] Writing the file {out_file} ({args.out_format})")
+    print_dual(f"[OK] Writing the file {out_file} ({args.out_format})", f_out)
 
     try:
         reread_tuple = reread_for_check(args.out_format, out_file, vectors, latticeparameter)
         atoms_out = build_ase_atoms(*reread_tuple)
-        verify_round_trip(atoms, atoms_out)
+        verify_round_trip(atoms, atoms_out, f_out=f_out)
     except Exception as e:
-        print(color_text(f"[WARNING] Could not verify output file integrity: {e}", 'yellow'))
+        print_dual(color_text(f"[WARNING] Could not verify output file integrity: {e}", 'yellow'), f_out)
 
-    print("[INFO] Complete job!")
-    return True
+    return True, atoms
 
 
 def main():
@@ -1215,11 +1237,15 @@ def main():
     ##### OPTIONAL 3D VIEWER #####
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D viewer (ASE GUI) for the parsed "
-                             "structure. Needs a display (local X11, or ssh -X/-Y).")
+                             "structure. Needs a display (local X11, or ssh -X/-Y). Runs "
+                             "as the very last step, once every file has been read, "
+                             "written and verified.")
     parser.add_argument("--view-image", default=None, metavar="PATH",
                         help="Save a static 3D snapshot of the parsed structure to PATH "
-                             "(e.g. structure.png). Works without a display; can be used "
-                             "together with, or instead of, --view.")
+                             "(e.g. structure.png). In batch mode, PATH is a directory "
+                             "instead, and each file's snapshot is named after its stem. "
+                             "Works without a display; can be used together with, or "
+                             "instead of, --view. Runs as the very last step.")
     ##### END OPTIONAL 3D VIEWER #####
 
     parser.add_argument("-v", "--version", action="version",
@@ -1254,7 +1280,6 @@ def main():
             parser.error(
                 f"Could not infer --in-format from '{matches[0]}'; pass it explicitly "
                 f"(options: {', '.join(sorted(INPUT_FORMATS))}).")
-        print(f"[INFO] Inferred input format: {args.in_format}")
 
     if batch_mode:
         if args.out_file:
@@ -1276,46 +1301,103 @@ def main():
         parser.error(
             "The --lattice-vectors argument is required when input format is XYZ.")
 
-    # Add info about coordinate format
-    if args.coord_format:
-        print(f"[INFO] Requested output coordinate format: {args.coord_format}")
+    # Persisted report (print_dual'd alongside the screen output), same
+    # convention as the workflow analysis stages (e.g. stb-ramanAnalysis's
+    # raman_stage3.txt) -- not written for --dry-run, which by definition has
+    # no disk side effects.
+    report_path = None
+    if not args.dry_run:
+        report_dir = args.out_dir if batch_mode else (os.path.dirname(args.out_file) or ".")
+        report_path = os.path.join(report_dir, REPORT_FILE)
+    f_out = open(report_path, "w") if report_path else None
 
-    if not batch_mode:
-        in_file = matches[0]
+    try:
+        print_dual(color_text("===== STB-TRANSLATE REPORT =====", 'magenta'), f_out)
+
+        print_section("[0] RUN METADATA", f_out)
+        print_dual(f"Date/time         : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+        if batch_mode:
+            print_dual(f"Input pattern     : '{args.in_file}' ({len(matches)} file(s) "
+                        f"matched, {args.in_format})", f_out)
+        else:
+            print_dual(f"Input file        : {matches[0]} ({args.in_format})", f_out)
         if args.dry_run:
-            print(f"\n[INFO] Reading {in_file} ({args.in_format})...")
+            print_dual("Output            : (dry run -- no file written)", f_out)
+        elif batch_mode:
+            print_dual(f"Output directory  : {args.out_dir} ({args.out_format})", f_out)
         else:
-            print(f"\n[INFO] Converting {in_file} ({args.in_format}) to {args.out_file} ({args.out_format})...")
+            print_dual(f"Output file       : {args.out_file} ({args.out_format})", f_out)
+        if args.coord_format:
+            print_dual(f"Coordinate format : {args.coord_format} (requested)", f_out)
+        if args.in_format == "xyz":
+            print_dual("Lattice vectors   : inline (--lattice-vectors)", f_out)
+        if report_path:
+            print_dual(f"Report file       : {report_path}", f_out)
 
-        if not convert_one(args, in_file, args.out_file):
-            sys.exit(1)
-
-        print("\n"+"-"*60)
-        print(color_text("Converting input files is 10% coding, 90% crying.\n\n", 'bold'))
-        return
-
-    # Batch mode: one file at a time, a failure doesn't abort the rest.
-    print(f"\n[INFO] Batch mode: {len(matches)} file(s) matched '{args.in_file}'.")
-    ok_files, failed_files = [], []
-    for in_file in matches:
-        print("\n" + "-"*60)
-        if args.dry_run:
-            print(f"[INFO] Reading {in_file} ({args.in_format})...")
-            out_file = None
+        print_section("[1] READING, STRUCTURE & INTEGRITY CHECKS", f_out)
+        results = []  # (in_file, ok, atoms, out_file)
+        if not batch_mode:
+            in_file = matches[0]
+            ok, atoms = convert_one(args, in_file, args.out_file, f_out)
+            results.append((in_file, ok, atoms, args.out_file))
         else:
-            base = os.path.splitext(os.path.basename(in_file))[0]
-            out_file = os.path.join(args.out_dir, f"{base}.{OUTPUT_EXTENSION_MAP[args.out_format]}")
-            print(f"[INFO] Converting {in_file} ({args.in_format}) to {out_file} ({args.out_format})...")
+            for in_file in matches:
+                if args.dry_run:
+                    out_file = None
+                else:
+                    base = os.path.splitext(os.path.basename(in_file))[0]
+                    out_file = os.path.join(args.out_dir, f"{base}.{OUTPUT_EXTENSION_MAP[args.out_format]}")
+                ok, atoms = convert_one(args, in_file, out_file, f_out, header=in_file)
+                results.append((in_file, ok, atoms, out_file))
 
-        if convert_one(args, in_file, out_file):
-            ok_files.append(in_file)
+        ok_results = [r for r in results if r[1]]
+        failed_results = [r for r in results if not r[1]]
+
+        print_section("[2] SUMMARY & FILES", f_out)
+        if batch_mode:
+            print_dual(f"Status            : {len(ok_results)} ok, {len(failed_results)} failed", f_out)
+            if failed_results:
+                print_dual(color_text(
+                    "Failed            : " + ", ".join(r[0] for r in failed_results), 'red'), f_out)
         else:
-            failed_files.append(in_file)
+            print_dual(f"Status            : {'OK' if ok_results else 'FAILED'}", f_out)
+        if not args.dry_run:
+            written = [r[3] for r in ok_results]
+            if written:
+                print_dual(f"Files written     : {', '.join(written)}", f_out)
+        if report_path:
+            print_dual(f"Report            : {report_path}", f_out)
+    finally:
+        if f_out:
+            f_out.close()
 
-    print("\n" + "="*60)
-    print(color_text(f"Batch complete: {len(ok_files)} ok, {len(failed_files)} failed.", 'bold'))
-    if failed_files:
-        print(color_text("Failed: " + ", ".join(failed_files), 'red'))
+    print("\n" + "-"*60)
+    print(color_text("Converting input files is 10% coding, 90% crying.\n", 'bold'))
+
+    # [3] 3D VISUALIZATION -- deliberately the LAST step of the whole run,
+    # after every file has been read, written and verified/reported above, so
+    # a blocking --view window never delays or hides any check that follows it.
+    viewable = [(in_file, atoms) for in_file, ok, atoms, _ in results if ok and atoms is not None]
+    if (args.view or args.view_image) and viewable:
+        print("\n" + color_text("[3] 3D VISUALIZATION", 'magenta'))
+        print("-" * 60)
+        if args.view_image and batch_mode:
+            os.makedirs(args.view_image, exist_ok=True)
+        for in_file, atoms in viewable:
+            label = f" ({in_file})" if batch_mode else ""
+            if args.view_image:
+                image_path = args.view_image
+                if batch_mode:
+                    stem = os.path.splitext(os.path.basename(in_file))[0]
+                    image_path = os.path.join(args.view_image, f"{stem}.png")
+                save_structure_image(atoms, image_path)
+                print(f"[OK] Saved 3D structure image to {image_path}{label}")
+            if args.view:
+                print(f"[INFO] Opening interactive 3D viewer (ASE GUI){label} "
+                      "-- close the window to continue...")
+                view_structure_interactive(atoms)
+
+    if failed_results:
         sys.exit(1)
 
 if __name__ == "__main__":

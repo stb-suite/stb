@@ -106,6 +106,13 @@ to `stb-suite/src/stb/core/`:
   `mace`/`ase.optimize`/`ase.filters` lazily inside each function, never at module
   level, so merely importing it (e.g. from `defect.py`, which most users run without
   ever touching `--ml-rank`) doesn't force the heavy optional dependency to load.
+- `core/md_traj.py` — `read_static_lattice`/`read_frame_lattices` (per-MD-step cell
+  from `.out`, falling back to `.XV`/`.fdf`), `read_md_timestep_fs` (real MD time
+  step from `.fdf`), `unwrap_trajectory` (minimum-image PBC unwrap). Extracted from
+  `ani2traj.py` once `stb-aimdAnalysis` became a second consumer needing the exact
+  same per-frame lattice/timestep/unwrap logic (same extract-on-second-use policy as
+  the rest of `core/`); `ani2traj.py` now imports these instead of defining them
+  locally, no behavior change there.
 
 New format-specific structure readers/writers (POSCAR, CIF, XYZ, XSF, FHI, DFTB) still
 live only in `translate.py` — it's the sole consumer of those formats, so there's
@@ -239,6 +246,22 @@ single frame, not a multi-frame trajectory. Because there's no
 -written file directly via `ase.io.read(..., format='lammps-data')` instead of
 going through the `getatomsandvectors_* -> build_ase_atoms` path every other format
 uses.
+
+`stb-aimdAnalysis` (Analysis, `aimd_analysis.py`) extracts physical quantities from a
+SIESTA AIMD trajectory (`<label>.ANI` + `.out`) that `stb-ani2traj` doesn't: radial
+distribution function g(r) (vectorized numpy over all frames at once, not one
+`ase.Atoms`/frame — matters for long trajectories), mean-squared displacement (MSD)
+and a diffusion coefficient (Einstein relation, `D = slope/6` from a linear fit over
+a configurable time window), and a vibrational density of states (VDOS) from the
+Fourier transform of the velocity autocorrelation function (VACF, Wiener-Khinchin
+theorem). `.ANI` carries no velocities, only positions, so velocities are estimated
+by central finite difference (`v(t) = (x(t+dt) - x(t-dt)) / (2*dt)`) — the VDOS is
+explicitly documented as qualitative, not benchmark-grade, since this amplifies
+positional noise. Reuses `core/md_traj.py` for per-frame lattice/timestep/unwrap
+(same functions `stb-ani2traj` uses) rather than duplicating that parsing. Analysis
+category (not Workflow), since it post-processes one existing trajectory rather than
+generating new geometry or aggregating multiple folders (same reasoning as
+`stb-bands`/`stb-dos` etc.).
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

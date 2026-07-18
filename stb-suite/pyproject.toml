@@ -117,6 +117,7 @@ stb-gqca="stb.gqca:main"
 stb-gqcaAnalysis="stb.gqca_analysis:main"
 stb-optical="stb.optical:main"
 stb-opticalAnalysis="stb.optical_analysis:main"
+stb-aimdAnalysis="stb.aimd_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

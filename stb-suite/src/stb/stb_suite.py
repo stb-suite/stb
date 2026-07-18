@@ -1365,6 +1365,40 @@ def run_ani2traj_converter() -> None:
     run_tool("stb-ani2traj", args)
 
 
+def run_aimd_analyzer() -> None:
+    """Interface for the AIMD Trajectory Analysis tool (aimd_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("AIMD TRAJECTORY ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+    print("Radial distribution function (RDF), mean-squared displacement (MSD) /")
+    print("diffusion coefficient, and a VACF-derived vibrational density of states")
+    print("(VDOS) from a SIESTA AIMD trajectory (<label>.ANI + .out).\n")
+
+    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    while not label:
+        print(color_text("Label cannot be empty!", 'red'))
+        label = get_input("Enter the Siesta SystemLabel: ")
+
+    stride = get_int_input("Keep every Nth frame (stride) [default: 1]: ", 1)
+    skip = get_int_input("Discard the first N frames as equilibration (--skip) [default: 0]: ", 0)
+
+    pair = get_input("Restrict the RDF to one species pair, e.g. 'O-H' (default: all pairs): ").strip()
+
+    save_data = get_input("Also save the raw plot data (.dat files)? (y/N): ").strip().lower()
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+
+    args = ["--label", label, "--stride", str(stride), "--skip", str(skip), "--no-intro"]
+    if pair:
+        args.extend(["--pair", pair])
+    if save_data == 'y':
+        args.append("--save-data")
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nAnalyzing AIMD trajectory...", 'green'))
+    run_tool("stb-aimdAnalysis", args)
+
+
 def run_status_checker() -> None:
     """Interface for the Status Checker (status.py)"""
     print("\n" + "="*60)
@@ -5342,6 +5376,9 @@ ANALYSIS_TOOLS = {
     17: {'title': "Spin Texture Analyzer (stb-spintexture)",
         'description': "Spin moments (<Sx>,<Sy>,<Sz>) scattered onto a band structure from a non-collinear/SOC .WFSX.",
         'func': run_spintexture_analyzer},
+    18: {'title': "AIMD Trajectory Analysis (stb-aimdAnalysis)",
+        'description': "RDF, MSD/diffusion coefficient, and VACF-derived VDOS from an AIMD trajectory.",
+        'func': run_aimd_analyzer},
        }
 
 

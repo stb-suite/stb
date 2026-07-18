@@ -364,6 +364,47 @@ bare `.fdf` (same `from_pymatgen`+`write_fdf` pattern already used by `stb-mlrel
 `stb-amorphize`, not `rewrite_fdf_positions` — that one's for the mlff workflow's
 different need of preserving many configs' full calc setup).
 
+Manually reviewed + physics-verified live (real MACE-MP-0 runs on a 64-atom bulk Si
+cell) after shipping, leading to 4 follow-up additions, all confirmed against that
+same live data:
+- **Total energy tracking**: the report only ever printed `E_pot`, which is NOT the
+  NVE-conserved quantity (`E_pot` trades with `E_kin` by design) — verified this was
+  misleading by hand-reconstructing `E_total = E_pot + E_kin` from a saved trajectory
+  and finding ~2e-6 relative drift over 1000 steps, invisible from the tool's own
+  original output. Now tracks and reports `E_total` directly every run (drift %,
+  flagged if >1%, for NVE; mean/std `T` — and mean/std cell volume for NPT —
+  instead of just the final instantaneous value, for NVT/NPT).
+- **`--equilibration-steps`**: verified live that a freshly Maxwell-Boltzmann-seeded
+  structure's `E_pot` relaxes for ~100-200 steps before settling into steady
+  dynamics; this transient was previously included in the saved trajectory/
+  statistics/final structure. Runs and discards N steps before production starts.
+- **`<stem>_md_diagnostics.png`**: always-generated 2-panel plot (`E_total` and `T`
+  vs time, matplotlib, same visual convention as the rest of the suite) plus
+  `--save-data` for the raw numbers. The temperature panel's reference line is
+  labeled "initial (NVE has no target)" for the nve ensemble specifically — NVE has
+  no thermostat, so `--temperature` there is only the initial-velocity seed, not
+  something the dynamics maintains; labeling it "target" (as nvt/npt correctly are)
+  would misrepresent that.
+- **`--taut`/`--taup`/`--compressibility`**: previously hardcoded in `build_dynamics`
+  (100 fs / 500 fs / water's `4.57e-5` eV/Å³ — the same generic placeholder
+  `stb-amorphize` uses). Exposed as CLI overrides for a better-calibrated NPT
+  barostat response on a real, non-water-like material.
+
+Also closed a real analysis gap found during this review: `stb-aimdAnalysis` could
+only read a SIESTA `.ANI`, so an `stb-mlmd` trajectory had no path into the suite's
+RDF/MSD/VDOS analysis at all. `stb-aimdAnalysis` now accepts `--trajectory <path>`
+(mutually exclusive with `--label`) to read any ASE-readable multi-frame file
+directly (`ase.io.read(path, index=':')`) instead of going through `sisl`/SIESTA at
+all — every `compute_rdf`/`compute_msd`/`compute_vacf_vdos` function already worked
+on plain `frac_positions`/`cells`/`symbols`/`dt_fs` arrays, so only the "read frames
+and determine `dt_fs`" input path needed a second branch, not the analysis math
+itself. `--dt` (fs between saved frames) is auto-detected from consecutive frames'
+`Time` info when reading an extended-xyz written with it (e.g. `stb-mlmd
+--out-format xyz`); required explicitly otherwise (xsf/pdb carry no such data).
+Output filenames key off a generic `stem` (the SystemLabel, or the trajectory
+file's basename) instead of `args.label` directly, so naming works the same in
+either input mode.
+
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +
 `categorize_dynamics`), SCF convergence, max force, final energy, final ionic

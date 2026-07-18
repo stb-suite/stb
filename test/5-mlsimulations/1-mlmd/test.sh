@@ -69,21 +69,50 @@ pushd "$TEST_DIR" > /dev/null
 # --- 1. NVT (default ensemble) ---
 echo -e "\n--- Testing NVT (default), 100 steps, stride 20 ---"
 stb-mlmd --file si_bulk.fdf --ensemble nvt --temperature 300 --n-steps 100 --stride 20 \
-    -o nvt_traj.xsf --output-structure nvt_final.fdf --no-intro > log_nvt.txt 2>&1
+    -o nvt_traj.xsf --output-structure nvt_final.fdf --save-data --no-intro > log_nvt.txt 2>&1
 check_exit_code $? 0
 check_contains "Ensemble          : NVT" log_nvt.txt
 check_contains "Collected 5 frame(s)" log_nvt.txt
+check_contains "Temperature       : mean" log_nvt.txt
 check_success nvt_traj.xsf
 check_success nvt_final.fdf
+check_success si_bulk_md_diagnostics.png
+check_success si_bulk_md_diagnostics.dat
 
 
-# --- 2. NVE ---
-echo -e "\n--- Testing NVE ---"
-stb-mlmd --file si_bulk.fdf --ensemble nve --n-steps 40 --stride 10 \
+# --- 1b. --equilibration-steps discards the initial transient ---
+echo -e "\n--- Testing --equilibration-steps ---"
+stb-mlmd --file si_bulk.fdf --ensemble nvt --equilibration-steps 20 --n-steps 40 --stride 10 \
+    --no-intro > log_equil.txt 2>&1
+check_exit_code $? 0
+check_contains "EQUILIBRATION (discarded)" log_equil.txt
+check_contains "Equilibration done" log_equil.txt
+check_contains "20 equilibration" log_equil.txt
+
+
+# --- 2. NVE (checks total-energy conservation reporting) ---
+echo -e "\n--- Testing NVE (energy conservation report) ---"
+stb-mlmd --file si_bulk.fdf --ensemble nve --n-steps 200 --stride 20 --seed 1 \
     -o nve_traj.xsf --output-structure nve_final.fdf --no-intro > log_nve.txt 2>&1
 check_exit_code $? 0
 check_contains "Ensemble          : NVE" log_nve.txt
+check_contains "Relative drift" log_nve.txt
 check_success nve_traj.xsf
+
+echo "Testing: NVE total-energy drift is small (well-conserved integrator)"
+python3 -c "
+import re, sys
+text = open('log_nve.txt').read()
+m = re.search(r'Relative drift    : ([\d.eE+-]+)%', text)
+sys.exit(0 if m and abs(float(m.group(1))) < 1.0 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} NVE relative energy drift is well under 1%"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} NVE relative energy drift missing or too large"
+    FAIL=$((FAIL+1))
+fi
 
 
 # --- 3. NPT on bulk (allowed) ---
@@ -158,18 +187,27 @@ echo "Testing: --version"
 stb-mlmd --version > log_version.txt 2>&1
 check_contains "stb-mlmd" log_version.txt
 
-echo "Testing: --help documents --ensemble, --custom-model, --friction, --pressure"
+echo "Testing: --help documents --ensemble, --custom-model, --friction, --pressure, --equilibration-steps, --taut/--taup/--compressibility"
 stb-mlmd --help > log_help.txt 2>&1
 check_contains "ensemble" log_help.txt
 check_contains "custom-model" log_help.txt
 check_contains "friction" log_help.txt
 check_contains "pressure" log_help.txt
+check_contains "equilibration-steps" log_help.txt
+check_contains "taut" log_help.txt
+check_contains "taup" log_help.txt
+check_contains "compressibility" log_help.txt
+
+echo "Testing: --taut/--taup/--compressibility are accepted on an NPT run"
+stb-mlmd --file si_bulk.fdf --ensemble npt --n-steps 20 --stride 10 \
+    --taut 50 --taup 300 --compressibility 1.0e-6 --no-intro > log_nptparams.txt 2>&1
+check_exit_code $? 0
 
 
 # --- 9. Interactive path (stb-suite, shortcut 5.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.1) ---"
 rm -f interactive_traj.xsf md_final.fdf
-printf '5.1\nsi_bulk.fdf\n\nsmall\n1\n300\n30\n1.0\ninteractive_traj.xsf\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.1\nsi_bulk.fdf\n\nsmall\n1\n300\n0\n30\n1.0\nn\ninteractive_traj.xsf\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_traj.xsf
 check_success md_final.fdf

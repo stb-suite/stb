@@ -1373,12 +1373,32 @@ def run_aimd_analyzer() -> None:
     print("="*60 + "\n")
     print("Radial distribution function (RDF), mean-squared displacement (MSD) /")
     print("diffusion coefficient, and a VACF-derived vibrational density of states")
-    print("(VDOS) from a SIESTA AIMD trajectory (<label>.ANI + .out).\n")
+    print("(VDOS) from a SIESTA AIMD trajectory (<label>.ANI + .out) or a generic")
+    print("ASE-readable trajectory (e.g. one written by stb-mlmd).\n")
 
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
-    while not label:
-        print(color_text("Label cannot be empty!", 'red'))
-        label = get_input("Enter the Siesta SystemLabel: ")
+    print(f"{color_text('Input source:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = SIESTA SystemLabel (<label>.ANI, default)")
+    print(f"  {color_text('2', 'cyan')} = Generic trajectory file (e.g. stb-mlmd output)")
+    source_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+
+    args = ["--no-intro"]
+    if source_choice == '2':
+        trajectory = get_input("Trajectory file path: ").strip()
+        while not os.path.isfile(trajectory):
+            print(color_text("File not found!", 'red'))
+            trajectory = get_input("Trajectory file path: ").strip()
+        args.extend(["--trajectory", trajectory])
+        dt = get_input(
+            "Real time between saved frames, fs (blank = auto-detect from embedded "
+            "'Time' info, only works for an extended-xyz file): ").strip()
+        if dt:
+            args.extend(["--dt", dt])
+    else:
+        label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+        while not label:
+            print(color_text("Label cannot be empty!", 'red'))
+            label = get_input("Enter the Siesta SystemLabel: ")
+        args.extend(["--label", label])
 
     stride = get_int_input("Keep every Nth frame (stride) [default: 1]: ", 1)
     skip = get_int_input("Discard the first N frames as equilibration (--skip) [default: 0]: ", 0)
@@ -1388,7 +1408,7 @@ def run_aimd_analyzer() -> None:
     save_data = get_input("Also save the raw plot data (.dat files)? (y/N): ").strip().lower()
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
 
-    args = ["--label", label, "--stride", str(stride), "--skip", str(skip), "--no-intro"]
+    args.extend(["--stride", str(stride), "--skip", str(skip)])
     if pair:
         args.extend(["--pair", pair])
     if save_data == 'y':
@@ -4526,13 +4546,33 @@ def run_mlmd_generator() -> None:
         pressure = get_float_input("Pressure, GPa [default: 0.0]: ", 0.0)
         args.extend(["--pressure", str(pressure)])
 
-    n_steps = get_int_input("Number of MD steps [default: 1000]: ", 1000)
+    equilibration_steps = get_int_input(
+        "Equilibration steps to run and discard before production [default: 0]: ", 0)
+    n_steps = get_int_input("Number of PRODUCTION MD steps [default: 1000]: ", 1000)
     timestep = get_float_input("Timestep, fs [default: 1.0]: ", 1.0)
-    args.extend(["--n-steps", str(n_steps), "--timestep", str(timestep)])
+    args.extend(["--equilibration-steps", str(equilibration_steps),
+                 "--n-steps", str(n_steps), "--timestep", str(timestep)])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (thermostat/barostat coupling, compressibility)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        if ensemble in ("nvt", "npt"):
+            taut = get_float_input("Thermostat coupling time, fs [default: 100]: ", 100.0)
+            args.extend(["--taut", str(taut)])
+        if ensemble == "npt":
+            taup = get_float_input("Barostat coupling time, fs [default: 500]: ", 500.0)
+            compressibility = get_float_input(
+                "Compressibility, eV/Ang^3 [default: 4.57e-5 -- water's value]: ", 4.57e-5)
+            args.extend(["--taup", str(taup), "--compressibility", str(compressibility)])
 
     output = get_input("\nTrajectory filename [default: <input>_md_traj.xsf]: ").strip()
     if output:
         args.extend(["--output", output])
+
+    save_data = get_input("Also save the raw energy/temperature diagnostics data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
 
     run_tool("stb-mlmd", args)
 

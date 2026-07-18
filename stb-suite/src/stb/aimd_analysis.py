@@ -203,18 +203,30 @@ def compute_vacf_vdos(cart_positions, dt_fs):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Physical post-processing of a SIESTA AIMD trajectory (<label>.ANI): "
-                     "radial distribution function g(r), mean-squared displacement (MSD) "
-                     "and diffusion coefficient, and a VACF-derived vibrational density of "
-                     "states (VDOS). Complements stb-ani2traj, which only converts the "
+        description="Physical post-processing of an AIMD/MD trajectory -- a SIESTA AIMD run "
+                     "(<label>.ANI) or a generic ASE-readable trajectory (e.g. one written by "
+                     "stb-mlmd): radial distribution function g(r), mean-squared displacement "
+                     "(MSD) and diffusion coefficient, and a VACF-derived vibrational density "
+                     "of states (VDOS). Complements stb-ani2traj, which only converts a SIESTA "
                      "trajectory's format for external viewers.",
         epilog="Example usage:\n"
                "  stb-aimdAnalysis --label aimd\n"
                "  stb-aimdAnalysis -l aimd --pair O-H --skip 50\n"
-               "  stb-aimdAnalysis -l aimd --fit-start 5000 --fit-end 15000",
+               "  stb-aimdAnalysis -l aimd --fit-start 5000 --fit-end 15000\n"
+               "  stb-aimdAnalysis --trajectory si_bulk_md_traj.xyz --dt 10",
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("-l", "--label", required=True, help="SystemLabel (required).")
+    parser.add_argument("-l", "--label", default=None,
+                        help="SIESTA SystemLabel -- reads '<label>.ANI'. Mutually exclusive with --trajectory.")
+    parser.add_argument("--trajectory", default=None, metavar="PATH",
+                        help="Read a generic ASE-readable multi-frame trajectory instead of a "
+                             "SIESTA .ANI -- e.g. one written by stb-mlmd (xsf/pdb/xyz). "
+                             "Mutually exclusive with --label.")
+    parser.add_argument("--dt", type=float, default=None, metavar="FS",
+                        help="Real time between saved frames in the --trajectory file, in fs "
+                             "(--trajectory mode only). Auto-detected if the file is an "
+                             "extended-xyz with per-frame 'Time' info (e.g. stb-mlmd --out-format "
+                             "xyz); required otherwise (xsf/pdb carry no such data).")
     parser.add_argument("--stride", type=int, default=1,
                         help="Keep only every Nth frame (default: 1, every frame).")
     parser.add_argument("--skip", type=int, default=0,
@@ -241,6 +253,11 @@ def main():
 
     args = parser.parse_args()
 
+    if not args.label and not args.trajectory:
+        parser.error("one of --label or --trajectory is required.")
+    if args.label and args.trajectory:
+        parser.error("--label and --trajectory are mutually exclusive.")
+
     pair = None
     if args.pair:
         parts = args.pair.split("-")
@@ -248,7 +265,14 @@ def main():
             parser.error(f"--pair must be 'A-B' (e.g. 'O-H'), got '{args.pair}'.")
         pair = tuple(parts)
 
-    ani_file = f"{args.label}.ANI"
+    # Output filenames are keyed off `stem` regardless of input mode --
+    # args.label only resolves the SIESTA <label>.ANI/.out/.XV/.fdf input set.
+    if args.label:
+        ani_file = f"{args.label}.ANI"
+        stem = args.label
+    else:
+        ani_file = args.trajectory
+        stem = os.path.splitext(os.path.basename(args.trajectory))[0]
 
     if args.intro:
         show_intro([
@@ -288,52 +312,101 @@ def main():
     if args.stride < 1:
         fail(f"--stride must be >= 1, got {args.stride}.")
 
-    try:
-        sile = sisl.get_sile(ani_file)
-        all_frames = sile.read_geometry[:]()
-    except Exception as e:
-        fail(f"Could not read '{ani_file}': {e}")
+    if args.label:
+        try:
+            sile = sisl.get_sile(ani_file)
+            all_frames = sile.read_geometry[:]()
+        except Exception as e:
+            fail(f"Could not read '{ani_file}': {e}")
 
-    if not all_frames:
-        fail(f"'{ani_file}' contains no frames.")
+        if not all_frames:
+            fail(f"'{ani_file}' contains no frames.")
 
-    all_cells, all_steps = read_frame_lattices(args.label, len(all_frames), f_out)
-    if all_cells is None:
-        fail(f"Could not find a readable '{args.label}.out', '{args.label}.XV' or "
-             f"'{args.label}.fdf' -- a lattice is required ('{ani_file}' doesn't carry "
-             f"one of its own).")
+        all_cells, all_steps = read_frame_lattices(args.label, len(all_frames), f_out)
+        if all_cells is None:
+            fail(f"Could not find a readable '{args.label}.out', '{args.label}.XV' or "
+                 f"'{args.label}.fdf' -- a lattice is required ('{ani_file}' doesn't carry "
+                 f"one of its own).")
 
-    frames = all_frames[::args.stride]
-    cells = all_cells[::args.stride]
+        frames = all_frames[::args.stride]
+        cells = all_cells[::args.stride]
 
-    if args.skip >= len(frames):
-        fail(f"--skip {args.skip} discards all {len(frames)} available (post-stride) frame(s).")
-    frames = frames[args.skip:]
-    cells = cells[args.skip:]
+        if args.skip >= len(frames):
+            fail(f"--skip {args.skip} discards all {len(frames)} available (post-stride) frame(s).")
+        frames = frames[args.skip:]
+        cells = cells[args.skip:]
 
-    symbols = [a.symbol for a in frames[0].atoms]
-    if pair and (pair[0] not in symbols or pair[1] not in symbols):
-        fail(f"--pair {args.pair}: species not found in structure "
-             f"(available: {', '.join(sorted(set(symbols)))}).")
+        symbols = [a.symbol for a in frames[0].atoms]
+        if pair and (pair[0] not in symbols or pair[1] not in symbols):
+            fail(f"--pair {args.pair}: species not found in structure "
+                 f"(available: {', '.join(sorted(set(symbols)))}).")
 
-    print_dual(f"[OK] Read {len(frames)} frame(s) from {ani_file} "
-               f"(stride {args.stride}, skip {args.skip}).", f_out)
+        print_dual(f"[OK] Read {len(frames)} frame(s) from {ani_file} "
+                   f"(stride {args.stride}, skip {args.skip}).", f_out)
+
+        initial_step, dt_fs = read_md_timestep_fs(args.label)
+        if dt_fs is None:
+            print_dual(color_text(
+                "[WARNING] MD.LengthTimeStep not found in "
+                f"'{args.label}.fdf' -- assuming 1 fs per (strided) frame for MSD/VDOS time axes.",
+                'yellow'), f_out)
+            dt_fs = 1.0
+        else:
+            dt_fs *= args.stride
+
+        frac_positions = [g.fxyz for g in frames]
+        cart_positions_raw = [g.xyz for g in frames]
+
+    else:
+        # Generic ASE-readable trajectory (e.g. stb-mlmd's xsf/pdb/xyz output)
+        # -- no sisl/SIESTA involved at all. Every ASE multi-frame reader
+        # already carries a per-frame cell (that's the whole point of these
+        # 3 formats, same as stb-ani2traj's own choice), so there's no
+        # separate lattice-source lookup needed here.
+        from ase.io import read as ase_read
+        try:
+            all_frames = ase_read(args.trajectory, index=':')
+        except Exception as e:
+            fail(f"Could not read '{args.trajectory}': {e}")
+
+        if not all_frames:
+            fail(f"'{args.trajectory}' contains no frames.")
+
+        all_cells = [np.array(f.cell) for f in all_frames]
+        frames = all_frames[::args.stride]
+        cells = all_cells[::args.stride]
+
+        if args.skip >= len(frames):
+            fail(f"--skip {args.skip} discards all {len(frames)} available (post-stride) frame(s).")
+        frames = frames[args.skip:]
+        cells = cells[args.skip:]
+
+        symbols = frames[0].get_chemical_symbols()
+        if pair and (pair[0] not in symbols or pair[1] not in symbols):
+            fail(f"--pair {args.pair}: species not found in structure "
+                 f"(available: {', '.join(sorted(set(symbols)))}).")
+
+        print_dual(f"[OK] Read {len(frames)} frame(s) from {args.trajectory} "
+                   f"(stride {args.stride}, skip {args.skip}).", f_out)
+
+        if args.dt is not None:
+            dt_fs = args.dt * args.stride
+        elif len(frames) >= 2 and 'Time' in frames[0].info and 'Time' in frames[1].info:
+            dt_fs = frames[1].info['Time'] - frames[0].info['Time']
+            print_dual(f"[INFO] Auto-detected dt = {dt_fs:.4f} fs from embedded per-frame "
+                       "'Time' info.", f_out)
+        else:
+            fail("--dt is required for --trajectory input without embedded per-frame 'Time' "
+                 "info (only an extended-xyz written with Time, e.g. stb-mlmd --out-format "
+                 "xyz, carries this automatically).")
+
+        frac_positions = [f.get_scaled_positions(wrap=False) for f in frames]
+        cart_positions_raw = [f.get_positions() for f in frames]
+
     print_dual(f"Atoms per frame   : {len(symbols)}", f_out)
     composition = ", ".join(f"{el}{n}" for el, n in sorted(Counter(symbols).items()))
     print_dual(f"Composition       : {composition}", f_out)
 
-    initial_step, dt_fs = read_md_timestep_fs(args.label)
-    if dt_fs is None:
-        print_dual(color_text(
-            "[WARNING] MD.LengthTimeStep not found in "
-            f"'{args.label}.fdf' -- assuming 1 fs per (strided) frame for MSD/VDOS time axes.",
-            'yellow'), f_out)
-        dt_fs = 1.0
-    else:
-        dt_fs *= args.stride
-
-    frac_positions = [g.fxyz for g in frames]
-    cart_positions_raw = [g.xyz for g in frames]
     cart_positions = unwrap_trajectory(cart_positions_raw, cells)
 
     print_section("[2] RADIAL DISTRIBUTION FUNCTION (RDF)", f_out)
@@ -348,12 +421,12 @@ def main():
         print_dual(color_text("[WARNING] RDF could not be computed (no pairs in range).", 'yellow'), f_out)
 
     pair_tag = f"_{pair[0]}{pair[1]}" if pair else ""
-    rdf_plot = f"{args.label}_rdf{pair_tag}.png"
+    rdf_plot = f"{stem}_rdf{pair_tag}.png"
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(r, g_r)
     ax.set_xlabel("r (Ang)")
     ax.set_ylabel("g(r)")
-    ax.set_title(f"RDF{' (' + pair[0] + '-' + pair[1] + ')' if pair else ''} -- {args.label}")
+    ax.set_title(f"RDF{' (' + pair[0] + '-' + pair[1] + ')' if pair else ''} -- {stem}")
     ax.axhline(1.0, color='gray', linestyle='--', linewidth=0.8)
     fig.tight_layout()
     fig.savefig(rdf_plot, dpi=150)
@@ -361,7 +434,7 @@ def main():
     print_dual(f"[OK] Saved {rdf_plot}", f_out)
     rdf_data_file = None
     if args.save_data:
-        rdf_data_file = f"{args.label}_rdf{pair_tag}.dat"
+        rdf_data_file = f"{stem}_rdf{pair_tag}.dat"
         np.savetxt(rdf_data_file, np.column_stack([r, g_r]), header="r(Ang) g(r)")
         print_dual(f"[OK] Saved {rdf_data_file}", f_out)
 
@@ -384,16 +457,16 @@ def main():
                 f"fit window to fit.", 'yellow'), f_out)
     ax.set_xlabel("t (fs)")
     ax.set_ylabel("MSD (Ang^2)")
-    ax.set_title(f"MSD -- {args.label}")
+    ax.set_title(f"MSD -- {stem}")
     ax.legend()
     fig.tight_layout()
-    msd_plot = f"{args.label}_msd.png"
+    msd_plot = f"{stem}_msd.png"
     fig.savefig(msd_plot, dpi=150)
     plt.close(fig)
     print_dual(f"[OK] Saved {msd_plot}", f_out)
     msd_data_file = None
     if args.save_data:
-        msd_data_file = f"{args.label}_msd.dat"
+        msd_data_file = f"{stem}_msd.dat"
         t_all, msd_all, _ = msd_results["all"]
         np.savetxt(msd_data_file, np.column_stack([t_all, msd_all]), header="t(fs) MSD_all(Ang^2)")
         print_dual(f"[OK] Saved {msd_data_file}", f_out)
@@ -421,15 +494,15 @@ def main():
         axes[1].set_xlabel("Frequency (cm^-1)")
         axes[1].set_ylabel("VDOS (arb. units)")
         axes[1].set_title("Vibrational density of states")
-        fig.suptitle(args.label)
+        fig.suptitle(stem)
         fig.tight_layout()
-        vdos_plot = f"{args.label}_vdos.png"
+        vdos_plot = f"{stem}_vdos.png"
         fig.savefig(vdos_plot, dpi=150)
         plt.close(fig)
         print_dual(f"[OK] Saved {vdos_plot}", f_out)
         vdos_data_file = None
         if args.save_data:
-            vdos_data_file = f"{args.label}_vdos.dat"
+            vdos_data_file = f"{stem}_vdos.dat"
             np.savetxt(vdos_data_file, np.column_stack([freq_cm1, vdos]),
                       header="freq(cm^-1) VDOS(arb.units)")
             print_dual(f"[OK] Saved {vdos_data_file}", f_out)

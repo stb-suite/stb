@@ -121,6 +121,39 @@ echo "Testing: each suggested config keeps the reference basis/SCF settings"
 check_contains "PAO.BasisSize       SZ" mlff_config_009/calc.fdf
 
 
+# --- 1b. --sampling-method md: MD-driven candidate generation (stb-mlmd's own dynamics) ---
+echo -e "\n--- Testing --sampling-method md ---"
+rm -rf mlff_config_009 mlff_config_010 mlff_config_011
+stb-mlffActiveLearning --model "$QUICK_MODEL" --file mlff_config_001/calc.fdf --pseudo-dir . \
+    --sampling-method md --md-steps 100 --md-temperature 800 --stride 20 --top-k 3 \
+    --no-intro > log_md.txt 2>&1
+check_exit_code $? 0
+check_contains "Sampling method   : md" log_md.txt
+check_contains "Screened 5/5 candidate(s)" log_md.txt
+check_success mlff_config_009/calc.fdf
+check_success mlff_config_010/calc.fdf
+check_success mlff_config_011/calc.fdf
+
+echo "Testing: MD-sampled configs also keep the reference basis/SCF settings"
+check_contains "PAO.BasisSize       SZ" mlff_config_009/calc.fdf
+
+echo "Testing: MD-sampled configs are also ranked by decreasing predicted max|F|"
+python3 -c "
+import re, sys
+text = open('log_md.txt').read()
+scores = [float(x) for x in re.findall(r'max\|F\| = ([\d.]+) eV/Ang\)', text)]
+sys.exit(0 if scores == sorted(scores, reverse=True) and len(scores) == 3 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} MD-sampled configs ranked by decreasing predicted force"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} MD-sampled configs not correctly ranked"
+    FAIL=$((FAIL+1))
+fi
+rm -rf mlff_config_009 mlff_config_010 mlff_config_011
+
+
 # --- 2. --save-report ---
 echo -e "\n--- Testing --save-report ---"
 rm -f stb_mlffActiveLearning_report.txt
@@ -148,17 +181,20 @@ echo "Testing: --version"
 stb-mlffActiveLearning --version > log_version.txt 2>&1
 check_contains "stb-mlffActiveLearning" log_version.txt
 
-echo "Testing: --help documents --n-candidates, --top-k, --stdev"
+echo "Testing: --help documents --n-candidates, --top-k, --stdev, --sampling-method, --md-steps, --md-temperature"
 stb-mlffActiveLearning --help > log_help.txt 2>&1
 check_contains "n-candidates" log_help.txt
 check_contains "top-k" log_help.txt
 check_contains "stdev" log_help.txt
+check_contains "sampling-method" log_help.txt
+check_contains "md-steps" log_help.txt
+check_contains "md-temperature" log_help.txt
 
 
 # --- 4. Interactive path (stb-suite, shortcut 4.17.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.17.3) ---"
 rm -rf mlff_config_012 mlff_config_013
-printf '4.17.3\n%s\nmlff_config_001/calc.fdf\n\n5\n0.2\n1\n.\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
+printf '4.17.3\n%s\nmlff_config_001/calc.fdf\n\n\n5\n0.2\n1\n.\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Suggested configs" log_menu.txt
 

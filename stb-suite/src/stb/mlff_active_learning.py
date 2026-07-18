@@ -23,6 +23,7 @@ from stb.core import structure_io
 from stb.core.pseudopotentials import get_required_pseudos
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.mlff import build_rattled_configs, write_config_folder
+from stb.mlmd import build_dynamics
 
 REPORT_FILE = "stb_mlffActiveLearning_report.txt"
 
@@ -79,19 +80,76 @@ def score_candidates(atoms_ref, coord_format, positions_list, cells, calc):
     return scored
 
 
+def sample_md_candidates(atoms_ref, coord_format, calc, n_steps, temperature_k, stride, seed,
+                         friction_fs=0.01):
+    """Alternative to build_rattled_configs()+score_candidates(): instead of
+    independent, static Gaussian-displaced snapshots, runs one short NVT
+    trajectory with the fine-tuned model itself (reusing stb-mlmd's own
+    build_dynamics -- same physically-verified fs/GPa unit conversions, not
+    a re-implementation) and scores every stride-th frame ALONG that real
+    trajectory by its predicted max atomic force -- already computed by the
+    integrator each step, no extra evaluation needed per frame.
+
+    Physically more representative than rattling: a thermally-driven
+    trajectory visits the configuration space the system would actually
+    explore at `temperature_k`, rather than a blind random perturbation
+    around the static reference. `temperature_k` is deliberately meant to be
+    run HIGHER than the system's real production temperature (default 800 K
+    regardless of end-use) purely to cover more configuration space per step
+    -- a common MLIP training-set-generation trick, not a claim that the
+    material is being studied at that temperature.
+
+    A poorly-fitted model can make this MD numerically unstable (huge
+    forces/displacements) -- that instability is itself a useful active-
+    learning signal (exactly where the model doesn't know what to do), but
+    any step where the calculator raises (e.g. a NaN/Inf force) is skipped
+    rather than aborting the whole scan.
+
+    Returns a list of (max|F|, positions) sorted by score descending, same
+    contract as score_candidates() -- write_config_folder() downstream
+    doesn't need to know which sampling method produced them.
+    """
+    atoms = atoms_ref.copy()
+    atoms.calc = calc
+    dyn = build_dynamics(atoms, "nvt", timestep_fs=1.0, temperature_k=temperature_k,
+                         friction_fs=friction_fs, pressure_gpa=0.0, seed=seed)
+
+    scored = []
+    for step in range(1, n_steps + 1):
+        try:
+            dyn.run(1)
+            forces = atoms.get_forces()
+        except Exception:
+            continue
+        if step % stride != 0:
+            continue
+        max_f = float(np.abs(forces).max())
+        positions = (atoms.get_scaled_positions(wrap=False) if coord_format == "fractional"
+                    else atoms.get_positions())
+        scored.append((max_f, positions.copy()))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stage 3 (Active Learning) of the Custom ML Force Field workflow: uses "
                      "an already fine-tuned model (stb-mlffAnalysis) to screen a fresh batch "
-                     "of candidate configurations and writes the ones with the largest "
-                     "predicted atomic force as new mlff_config_NNN/ folders, ready for the "
-                     "user to label with real SIESTA and feed back into another round of "
-                     "stb-mlffAnalysis. NOT rigorous uncertainty quantification (that needs a "
-                     "committee of independently-trained models) -- a cheap, single-model "
-                     "heuristic for where the current model is likely weakest.",
+                     "of candidate configurations (independent rattled snapshots, or frames "
+                     "from a short real NVT trajectory driven by the model itself via "
+                     "--sampling-method md, reusing stb-mlmd's own dynamics) and writes the "
+                     "ones with the largest predicted atomic force as new mlff_config_NNN/ "
+                     "folders, ready for the user to label with real SIESTA and feed back "
+                     "into another round of stb-mlffAnalysis. NOT rigorous uncertainty "
+                     "quantification (that needs a committee of independently-trained models) "
+                     "-- a cheap, single-model heuristic for where the current model is likely "
+                     "weakest.",
         epilog="Example usage:\n"
                "  stb-mlffActiveLearning --model mlff_model_compiled.model --file calc.fdf \\\n"
-               "                          --n-candidates 50 --stdev 0.15 --top-k 5",
+               "                          --n-candidates 50 --stdev 0.15 --top-k 5\n"
+               "  stb-mlffActiveLearning --model mlff_model_compiled.model --file calc.fdf \\\n"
+               "                          --sampling-method md --md-steps 500 --md-temperature 800",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--model", required=True, help="Fine-tuned MACE model file (from stb-mlffAnalysis).")
@@ -102,16 +160,35 @@ def main():
     parser.add_argument("--pseudo-dir", default=".",
                         help="Directory to search for <element>.psf/.psml pseudopotentials "
                              "(default: current directory).")
+    parser.add_argument("--sampling-method", choices=["rattle", "md"], default="rattle",
+                        help="How to generate candidate configurations (default: rattle):\n"
+                             "  rattle - independent, static Gaussian-displaced snapshots "
+                             "(cheap: 1 evaluation per candidate).\n"
+                             "  md     - one short NVT trajectory with the model itself "
+                             "(stb-mlmd's own dynamics, reused directly); more physically "
+                             "representative of the configuration space the system actually "
+                             "explores, at the cost of running real MD steps.")
     parser.add_argument("--n-candidates", type=int, default=50,
-                        help="Number of candidate configurations to screen (default: 50).")
+                        help="Number of candidate configurations to screen (--sampling-method "
+                             "rattle only, default: 50).")
     parser.add_argument("--stdev", type=float, nargs="+", default=[0.15],
                         help="Rattling standard deviation(s) in Angstrom for the candidate "
-                             "batch (default: 0.15 -- typically larger than the amplitude(s) "
-                             "used for the original training set, to probe configuration "
-                             "space not yet covered).")
+                             "batch (--sampling-method rattle only, default: 0.15 -- typically "
+                             "larger than the amplitude(s) used for the original training set, "
+                             "to probe configuration space not yet covered).")
+    parser.add_argument("--md-steps", type=int, default=500,
+                        help="Total NVT steps to run (--sampling-method md only, default: 500).")
+    parser.add_argument("--md-temperature", type=float, default=800.0,
+                        help="NVT temperature, K (--sampling-method md only, default: 800 -- "
+                             "deliberately higher than a typical production temperature, purely "
+                             "to cover more configuration space per step; not a claim about the "
+                             "material's real operating conditions).")
+    parser.add_argument("--stride", type=int, default=10,
+                        help="Score one frame every Nth MD step (--sampling-method md only, default: 10).")
     parser.add_argument("--top-k", type=int, default=5,
                         help="Number of highest-scoring candidates to write out (default: 5).")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for rattling (default: 42).")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for rattling / initial MD velocities (default: 42).")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"],
                         help="Device to run the model on (default: cpu).")
     parser.add_argument("-o", "--output-dir", default=".",
@@ -151,7 +228,12 @@ def main():
     print_dual(f"Date/time         : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
     print_dual(f"Model             : {args.model}", f_out)
     print_dual(f"Reference file    : {args.file}", f_out)
-    print_dual(f"Candidates/top-k  : {args.n_candidates} / {args.top_k} (stdev {args.stdev})", f_out)
+    print_dual(f"Sampling method   : {args.sampling_method}", f_out)
+    if args.sampling_method == "rattle":
+        print_dual(f"Candidates/top-k  : {args.n_candidates} / {args.top_k} (stdev {args.stdev})", f_out)
+    else:
+        print_dual(f"MD steps/temp     : {args.md_steps} / {args.md_temperature:.1f} K "
+                   f"(stride {args.stride}) / top-k {args.top_k}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 
@@ -187,15 +269,22 @@ def main():
 
     print_section("[2] SCREENING CANDIDATES", f_out)
 
-    candidate_positions = build_rattled_configs(
-        ase_atoms, ref_structure.coord_format, args.n_candidates, args.stdev, args.seed)
-    cells = [np.array(ase_atoms.cell)] * len(candidate_positions)
+    if args.sampling_method == "rattle":
+        candidate_positions = build_rattled_configs(
+            ase_atoms, ref_structure.coord_format, args.n_candidates, args.stdev, args.seed)
+        cells = [np.array(ase_atoms.cell)] * len(candidate_positions)
+        scored = score_candidates(ase_atoms, ref_structure.coord_format, candidate_positions, cells, calc)
+        n_attempted = args.n_candidates
+    else:
+        scored = sample_md_candidates(
+            ase_atoms, ref_structure.coord_format, calc, args.md_steps, args.md_temperature,
+            args.stride, args.seed)
+        n_attempted = args.md_steps // args.stride
 
-    scored = score_candidates(ase_atoms, ref_structure.coord_format, candidate_positions, cells, calc)
     if not scored:
         fail("None of the candidate configurations could be evaluated by the model.")
 
-    print_dual(f"[OK] Screened {len(scored)}/{args.n_candidates} candidate(s).", f_out)
+    print_dual(f"[OK] Screened {len(scored)}/{n_attempted} candidate(s).", f_out)
     print_dual(f"Predicted max|F| range: {scored[-1][0]:.3f} - {scored[0][0]:.3f} eV/Ang", f_out)
 
     top_k = scored[:args.top_k]

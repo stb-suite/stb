@@ -333,15 +333,32 @@ the underlying predicted/DFT pairs as `.dat` files.
 
 `stb-mlffActiveLearning` (Stage 3 of the same Workflow item, `mlff_active_learning.py`)
 uses an already fine-tuned model to screen a fresh batch of candidate configurations
-(reusing `mlff.build_rattled_configs`, typically at a larger `--stdev` than the
-original training set) and writes the `--top-k` ones with the largest *predicted*
-atomic force as new `mlff_config_NNN/` folders (continuing the numbering of any
-already present), for the user to label with real SIESTA and fold back into another
-`stb-mlffAnalysis` round. Explicitly documented as NOT rigorous uncertainty
-quantification (that needs a committee of independently-trained models) — a
-single-model heuristic: a configuration where the potential itself predicts an
-unusually large local force is a reasonable, cheap signal that the region is poorly
-represented in the current training set, not a proof.
+and writes the `--top-k` ones with the largest *predicted* atomic force as new
+`mlff_config_NNN/` folders (continuing the numbering of any already present), for
+the user to label with real SIESTA and fold back into another `stb-mlffAnalysis`
+round. Two candidate-generation strategies, `--sampling-method`:
+- `rattle` (default, cheap): independent static snapshots via `mlff.
+  build_rattled_configs`, typically at a larger `--stdev` than the original
+  training set.
+- `md`: one short NVT trajectory driven by the model itself, reusing `stb-mlmd`'s
+  own `build_dynamics` **directly** (not a reimplementation — same physically
+  -verified fs/GPa unit conversions) via `sample_md_candidates`. More physically
+  representative than rattling (visits the configuration space the system would
+  actually explore thermally, instead of a blind perturbation around the static
+  reference) — deliberately run at a HIGHER temperature than any real production
+  use (`--md-temperature`, default 800 K) purely to cover more configuration space
+  per step, a common MLIP training-set-generation trick, not a claim about the
+  material's real operating conditions. The predicted max|F| score comes for free
+  from each MD step (already computed by the integrator), no extra evaluation per
+  frame needed. `stb-mlmd` itself stays unaware of any of this — it only knows how
+  to run MD; `stb-mlffActiveLearning` decides to reuse that as a sampling engine,
+  matching the same direct-import-reuse pattern already used with `mlff.py`.
+
+Explicitly documented as NOT rigorous uncertainty quantification (that needs a
+committee of independently-trained models) — a single-model heuristic: a
+configuration where the potential itself predicts an unusually large local force is
+a reasonable, cheap signal that the region is poorly represented in the current
+training set, not a proof.
 
 **`stb-mlmd`** (ML Simulations, `mlmd.py`) is the first tool in the new ML Simulations
 category (5) — tools that RUN a simulation with a trained MACE potential rather than

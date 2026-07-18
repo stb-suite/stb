@@ -4483,17 +4483,32 @@ def run_mlff_active_learning() -> None:
 
     pseudo_dir = prompt_pseudo_source(optional=True) or "."
 
-    n_candidates = get_int_input("Number of candidates to screen [default: 50]: ", 50)
-    stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated "
-                          "[default: 0.15]: ").strip()
-    stdevs = stdev_str.split() if stdev_str else ["0.15"]
-    top_k = get_int_input("Number of highest-scoring candidates to write out [default: 5]: ", 5)
-
-    output_dir = get_input("Output directory [default: .]: ").strip() or "."
+    print(f"\n{color_text('Candidate sampling method:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Rattle -- independent, static displaced snapshots (default, cheap)")
+    print(f"  {color_text('2', 'cyan')} = MD -- short NVT trajectory with the model itself "
+          "(stb-mlmd's own dynamics, more physically representative)")
+    method_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+    sampling_method = {'1': 'rattle', '2': 'md'}.get(method_choice, 'rattle')
 
     args = ["--model", model_path, "--file", calc_file, "--pseudo-dir", pseudo_dir,
-            "--n-candidates", str(n_candidates), "--stdev", *stdevs,
-            "--top-k", str(top_k), "--output-dir", output_dir, "--no-intro"]
+            "--sampling-method", sampling_method, "--no-intro"]
+
+    if sampling_method == "rattle":
+        n_candidates = get_int_input("Number of candidates to screen [default: 50]: ", 50)
+        stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated "
+                              "[default: 0.15]: ").strip()
+        stdevs = stdev_str.split() if stdev_str else ["0.15"]
+        args.extend(["--n-candidates", str(n_candidates), "--stdev", *stdevs])
+    else:
+        md_steps = get_int_input("Total MD steps to run [default: 500]: ", 500)
+        md_temperature = get_float_input("NVT temperature, K [default: 800]: ", 800.0)
+        stride = get_int_input("Score one frame every Nth MD step [default: 10]: ", 10)
+        args.extend(["--md-steps", str(md_steps), "--md-temperature", str(md_temperature),
+                     "--stride", str(stride)])
+
+    top_k = get_int_input("Number of highest-scoring candidates to write out [default: 5]: ", 5)
+    output_dir = get_input("Output directory [default: .]: ").strip() or "."
+    args.extend(["--top-k", str(top_k), "--output-dir", output_dir])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':

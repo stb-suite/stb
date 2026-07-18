@@ -1216,6 +1216,10 @@ def main():
                         help="Parse --in-file and print a summary (formula, atom count, "
                              "coordinate type, lattice vectors, cell volume, symmetry) without "
                              "writing any output file. --out-format/--out-file are not needed.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to {REPORT_FILE} (next to --out-file, "
+                             "or in --out-dir in batch mode), not just print it. Off by default; "
+                             "ignored with --dry-run (no disk side effects there regardless).")
 
     ##### NEW ARGUMENT #####
     parser.add_argument(
@@ -1303,10 +1307,11 @@ def main():
 
     # Persisted report (print_dual'd alongside the screen output), same
     # convention as the workflow analysis stages (e.g. stb-ramanAnalysis's
-    # raman_stage3.txt) -- not written for --dry-run, which by definition has
-    # no disk side effects.
+    # raman_stage3.txt) -- opt-in via --save-report (off by default), and
+    # never written for --dry-run regardless, which by definition has no
+    # disk side effects.
     report_path = None
-    if not args.dry_run:
+    if not args.dry_run and args.save_report:
         report_dir = args.out_dir if batch_mode else (os.path.dirname(args.out_file) or ".")
         report_path = os.path.join(report_dir, REPORT_FILE)
     f_out = open(report_path, "w") if report_path else None

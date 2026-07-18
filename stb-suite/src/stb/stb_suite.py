@@ -4945,7 +4945,13 @@ def run_file_translator() -> None:
         if image_path:
             args.extend(["--view-image", image_path])
     # ##### FIM DO NOVO BLOCO #####
-    
+
+    # ##### NOVO BLOCO: Salvar relatório em arquivo (opcional) #####
+    report_choice = get_input("\nSave the report to a file? (y/N): ").strip().lower()
+    if report_choice == "y":
+        args.append("--save-report")
+    # ##### FIM DO NOVO BLOCO #####
+
     run_tool("stb-translate", args)
 
 

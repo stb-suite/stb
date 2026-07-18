@@ -4845,18 +4845,32 @@ def run_file_translator() -> None:
         input_file = get_input("Input file path: ")
 
     print(f"\n{color_text('Supported input formats:', 'yellow')}")
+    print(f"  {color_text('0.', 'yellow')} Auto-detect from filename")
     for i, fmt in enumerate(input_formats, 1):
         print(f"  {color_text(str(i)+'.', 'yellow')} {fmt}")
 
-    choice_in = 0
     max_in = len(input_formats)
-    while not (1 <= choice_in <= max_in):
-        choice_in = get_int_input(f"\nSelect input format (1-{max_in}): ")
-        if not (1 <= choice_in <= max_in):
-            print(color_text(f"Invalid choice! Please select between 1 and {max_in}.", 'red'))
-    
-    in_format = input_formats[choice_in - 1]
-    print(f"Selected input format: {color_text(in_format, 'cyan')}")
+    choice_in = get_int_input(f"\nSelect input format (0-{max_in}) [default: 0]: ", 0)
+    while not (0 <= choice_in <= max_in):
+        print(color_text(f"Invalid choice! Please select between 0 and {max_in}.", 'red'))
+        choice_in = get_int_input(f"Select input format (0-{max_in}) [default: 0]: ", 0)
+
+    if choice_in == 0:
+        from stb.translate import guess_format_from_filename
+        in_format = guess_format_from_filename(input_file)
+        if in_format is None:
+            print(color_text(f"Could not auto-detect the format from '{input_file}'.", 'red'))
+            while not (1 <= choice_in <= max_in):
+                choice_in = get_int_input(f"Select input format (1-{max_in}): ")
+                if not (1 <= choice_in <= max_in):
+                    print(color_text(f"Invalid choice! Please select between 1 and {max_in}.", 'red'))
+            in_format = input_formats[choice_in - 1]
+            print(f"Selected input format: {color_text(in_format, 'cyan')}")
+        else:
+            print(f"Auto-detected input format: {color_text(in_format, 'cyan')}")
+    else:
+        in_format = input_formats[choice_in - 1]
+        print(f"Selected input format: {color_text(in_format, 'cyan')}")
 
     out_file = get_input("\nOutput file path: ")
     

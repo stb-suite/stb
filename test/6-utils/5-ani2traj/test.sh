@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-ani2traj (AIMD Trajectory Converter, item 5.5).
+# Smoke test for stb-ani2traj (AIMD Trajectory Converter, item 6.5).
 #
 # Fixtures: aimd.ANI/.XV/.fdf/.out are from a real SIESTA AIMD run (5-step
 # Verlet MD on an isolated O2 molecule in a 10x10x10 Ang box -- see aimd.fdf
@@ -63,7 +63,7 @@ check_exit_code() {
 }
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-ANI2TRAJ (item 5.5) ---"
+echo "--- Starting tester for STB-ANI2TRAJ (item 6.5) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/aimd.ANI" "$TEST_DIR/"
@@ -165,11 +165,11 @@ check_contains "a lattice is required" log_nolattice.txt
 rm -rf no_lattice
 
 
-# --- 12. Interactive path (stb-suite, shortcut 5.5) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.5) ---"
+# --- 12. Interactive path (stb-suite, shortcut 6.5) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 6.5) ---"
 rm -f aimd_traj.xsf interactive_traj.xsf
 # Prompts in order: label, format choice, stride, output filename
-printf '5.5\naimd\n1\n1\ninteractive_traj.xsf\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '6.5\naimd\n1\n1\ninteractive_traj.xsf\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_success interactive_traj.xsf
 check_contains "Converting AIMD trajectory" log_interactive.txt
 

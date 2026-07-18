@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-status (Status Checker, item 5.6).
+# Smoke test for stb-status (Status Checker, item 6.6).
 #
 # Fixtures are 3 real, distinctly-typed SIESTA runs:
 #   singlepoint/  -- Sn3O4.out (calc.out/calc.fdf), single-point, shared with
@@ -52,7 +52,7 @@ check_exit_code() {
 }
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-STATUS (item 5.6) ---"
+echo "--- Starting tester for STB-STATUS (item 6.6) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR/singlepoint" "$TEST_DIR/aimd" "$TEST_DIR/relax"
 cp "$FIXTURE_DIR/singlepoint/calc.out" "$FIXTURE_DIR/singlepoint/calc.fdf" "$TEST_DIR/singlepoint/"
@@ -123,9 +123,9 @@ check_exit_code $? 2
 check_contains "is not a directory" log_missing.txt
 
 
-# --- 9. Interactive path (stb-suite, shortcut 5.6) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.6) ---"
-printf '5.6\naimd\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+# --- 9. Interactive path (stb-suite, shortcut 6.6) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 6.6) ---"
+printf '6.6\naimd\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "Run type          : aimd" log_interactive.txt
 check_contains "Status check complete" log_interactive.txt
 

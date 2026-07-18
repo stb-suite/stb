@@ -161,6 +161,7 @@ melting a vacuum-padded slab/wire/molecule is physically meaningless.""",
           f"then ramp to {args.quench_temp:.0f} K over {args.quench_steps} steps "
           f"(timestep {args.timestep} fs)")
 
+    from ase import units
     from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
     from ase.md.nptberendsen import NPTBerendsen
 
@@ -170,7 +171,11 @@ melting a vacuum-padded slab/wire/molecule is physically meaningless.""",
     MaxwellBoltzmannDistribution(atoms, temperature_K=min(args.melt_temp, 300.0), rng=(
         np.random.default_rng(args.seed) if args.seed is not None else None))
 
-    dyn = NPTBerendsen(atoms, timestep=args.timestep * 1.0, temperature_K=args.melt_temp,
+    # timestep=args.timestep * units.fs, NOT * 1.0: NPTBerendsen's `timestep`
+    # is in ASE's internal time units, not real fs (1 ASE time unit =~
+    # 10.18 fs) -- passing the raw fs number through silently ran at
+    # ~10x the timestep documented above (verified: units.fs =~ 0.0982).
+    dyn = NPTBerendsen(atoms, timestep=args.timestep * units.fs, temperature_K=args.melt_temp,
                        pressure_au=0.0, taut=50.0, taup=200.0, compressibility_au=4.57e-5)
 
     print(f"\n  {color_text('Melting...', 'yellow')}")

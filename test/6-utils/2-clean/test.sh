@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-clean (Clean Files Tool, item 5.2).
+# Smoke test for stb-clean (Clean Files Tool, item 6.2).
 #
 # Uses its own disposable test_files/ subdir with small dummy files -- NOT
 # the real ~12MB completed-SIESTA-run fixture already sitting next to this
@@ -105,7 +105,7 @@ populate_fixture() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Clean (item 5.2) ---"
+echo "--- Starting tester for STB-Clean (item 6.2) ---"
 populate_fixture
 echo "Test directory '$TEST_DIR' prepared."
 
@@ -192,11 +192,11 @@ check_contains "STB-CLEAN REPORT" stb_clean_report.txt
 rm -f stb_clean_report.txt
 
 
-# --- 8. Interactive path (stb-suite, shortcut 5.2) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2) ---"
+# --- 8. Interactive path (stb-suite, shortcut 6.2) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 6.2) ---"
 populate_fixture
 # Prompts in order: path, extensions (default), recursive?, archive?, no-confirm?, save-report?
-printf '5.2\n%s\n\nn\nn\ny\nn\n\n0\n' "$TEST_DIR" | stb-suite > "$FIXTURE_DIR/log_interactive.txt" 2>&1
+printf '6.2\n%s\n\nn\nn\ny\nn\n\n0\n' "$TEST_DIR" | stb-suite > "$FIXTURE_DIR/log_interactive.txt" 2>&1
 check_contains "Cleanup complete" "$FIXTURE_DIR/log_interactive.txt"
 check_exists calc.fdf
 check_removed calc.out

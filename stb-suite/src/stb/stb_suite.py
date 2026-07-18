@@ -65,7 +65,8 @@ def show_main_menu() -> None:
     print(f"{color_text('2.', 'yellow')} {color_text('Structures', 'blue')}\n    Tools to build, generate, or transform structure files (stacking, supercells, slabs, defects, SQS, etc.)\n")
     print(f"{color_text('3.', 'yellow')} {color_text('Analysis', 'blue')}\n    Tools to analyze simulation results (bands, DOS, structures, charge density, etc.)\n")
     print(f"{color_text('4.', 'yellow')} {color_text('Workflow', 'blue')}\n    Complete prep + analysis pipelines for a specific property (strain, elastic constants, cohesive energy, phonons)\n")
-    print(f"{color_text('5.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
+    print(f"{color_text('5.', 'yellow')} {color_text('ML Simulations', 'blue')}\n    Run MD (and more, over time) with a trained MACE potential -- the foundation model or your own fine-tuned one\n")
+    print(f"{color_text('6.', 'yellow')} {color_text('Utils', 'blue')}\n    Helper tools for file management and conversion\n")
     print(f"{color_text('0.', 'yellow')} {color_text('Exit', 'red')}")
     print("-"*60)
     print(color_text("Tip: you can also type a tool code directly (e.g. 4.1.2) to jump straight to it.", 'yellow'))
@@ -4482,6 +4483,60 @@ def run_mlff_active_learning() -> None:
     run_tool("stb-mlffActiveLearning", args)
 
 
+def run_mlmd_generator() -> None:
+    """Interface for ML Molecular Dynamics (stb-mlmd)"""
+    print("\n" + "="*60)
+    print(color_text("ML MOLECULAR DYNAMICS (stb-mlmd)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). NVE/NVT/NPT MD "
+        "driven by MACE-MP-0 or a custom fine-tuned model -- a fast heuristic, not a "
+        "substitute for ab initio MD.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    print(f"\n{color_text('Ensemble:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = NVT (Langevin thermostat, default)")
+    print(f"  {color_text('2', 'cyan')} = NVE (microcanonical, no thermostat)")
+    print(f"  {color_text('3', 'cyan')} = NPT (Berendsen thermostat+barostat, bulk only)")
+    ensemble_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    ensemble = {'1': 'nvt', '2': 'nve', '3': 'npt'}.get(ensemble_choice, 'nvt')
+    args.extend(["--ensemble", ensemble])
+
+    temperature = get_float_input("Temperature, K [default: 300]: ", 300.0)
+    args.extend(["--temperature", str(temperature)])
+    if ensemble == "npt":
+        pressure = get_float_input("Pressure, GPa [default: 0.0]: ", 0.0)
+        args.extend(["--pressure", str(pressure)])
+
+    n_steps = get_int_input("Number of MD steps [default: 1000]: ", 1000)
+    timestep = get_float_input("Timestep, fs [default: 1.0]: ", 1.0)
+    args.extend(["--n-steps", str(n_steps), "--timestep", str(timestep)])
+
+    output = get_input("\nTrajectory filename [default: <input>_md_traj.xsf]: ").strip()
+    if output:
+        args.extend(["--output", output])
+
+    run_tool("stb-mlmd", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5782,6 +5837,20 @@ WORKFLOW_TOOLS = {
        }
 
 
+# Tools that RUN a simulation using a trained MACE potential (the MACE-MP-0
+# foundation model, or a custom one fine-tuned via stb-mlffAnalysis) instead
+# of driving a real SIESTA calculation -- distinct from WORKFLOW_TOOLS (which
+# is about generating/analyzing DFT calculations), and from stb-mlrelax/
+# stb-amorphize/etc. in STRUCTURE_TOOLS (one-shot structure preprocessing).
+# Category 5 in the main menu, between Workflow (4) and Utils (6).
+MLSIM_TOOLS = {
+    1: {'title': "ML Molecular Dynamics (stb-mlmd)",
+        'description': "NVE/NVT/NPT molecular dynamics driven by a MACE potential -- fast "
+                        "exploration with the foundation model or your own fine-tuned one.",
+        'func': run_mlmd_generator},
+}
+
+
 UTILITY_TOOLS = {
     1: {'title': "File Translator (stb-translate)",
         'description': "Convert between file formats (CIF, POSCAR, fdf, xyz...).",
@@ -5811,9 +5880,9 @@ UTILITY_TOOLS = {
 
 def _flatten_tool_codes() -> Dict[str, Callable]:
     """Builds a flat {"1.1": func, ..., "2.1": func, ..., "4.1.2": func, ...,
-    "5.4": func} lookup across all 5 categories, from the dicts above -- lets
-    the main menu jump straight to a tool via a dotted code instead of
-    navigating level by level.
+    "5.1": func, ..., "6.4": func} lookup across all 6 categories, from the
+    dicts above -- lets the main menu jump straight to a tool via a dotted
+    code instead of navigating level by level.
     """
     codes: Dict[str, Callable] = {}
     for key, info in INPUT_TOOLS.items():
@@ -5825,8 +5894,10 @@ def _flatten_tool_codes() -> Dict[str, Callable]:
     for prop_key, prop_info in WORKFLOW_TOOLS.items():
         for stage_key, stage_info in prop_info['stages'].items():
             codes[f"4.{prop_key}.{stage_key}"] = stage_info['func']
-    for key, info in UTILITY_TOOLS.items():
+    for key, info in MLSIM_TOOLS.items():
         codes[f"5.{key}"] = info['func']
+    for key, info in UTILITY_TOOLS.items():
+        codes[f"6.{key}"] = info['func']
     return codes
 
 
@@ -5886,7 +5957,7 @@ def main():
         show_main_menu()
         
         try:
-            choice = get_input("\nSelect an option (0-5, or a tool code like 4.1.2): ")
+            choice = get_input("\nSelect an option (0-6, or a tool code like 4.1.2): ")
 
             if choice in TOOL_CODES:
                 TOOL_CODES[choice]()
@@ -5899,12 +5970,14 @@ def main():
             elif choice == '4':
                 run_sub_menu("Workflow", WORKFLOW_TOOLS)
             elif choice == '5':
+                run_sub_menu("ML Simulations", MLSIM_TOOLS)
+            elif choice == '6':
                 run_sub_menu("Utils", UTILITY_TOOLS)
             elif choice == '0':
                 print(color_text("\nThank you for using STB-SUITE!", 'cyan'))
                 break
             else:
-                print(color_text("\nInvalid choice! Please select between 0 and 5, or a valid tool code.", 'red'))
+                print(color_text("\nInvalid choice! Please select between 0 and 6, or a valid tool code.", 'red'))
                 sleep(1)
                 
         except ValueError:

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-archive (Archive Packager, item 5.7).
+# Smoke test for stb-archive (Archive Packager, item 6.7).
 #
 # Fixtures are real files from a completed single-point Sn3O4 calculation
 # (shared with the other 5-utils fixtures): calc.fdf/calc.out (SystemLabel
@@ -72,7 +72,7 @@ check_exit_code() {
 }
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-ARCHIVE (item 5.7) ---"
+echo "--- Starting tester for STB-ARCHIVE (item 6.7) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR"/calc.fdf "$FIXTURE_DIR"/calc.out "$FIXTURE_DIR"/O.psf "$FIXTURE_DIR"/Sn.psf \
@@ -152,10 +152,10 @@ check_contains "nothing to archive" log_empty.txt
 rm -rf empty_dir
 
 
-# --- 9. Interactive path (stb-suite, shortcut 5.7) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.7) ---"
+# --- 9. Interactive path (stb-suite, shortcut 6.7) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 6.7) ---"
 rm -f "$TEST_DIR"_archive.tar.gz
-printf '5.7\n%s\n\n\n\n0\n' "$TEST_DIR" | stb-suite > log_interactive.txt 2>&1
+printf '6.7\n%s\n\n\n\n0\n' "$TEST_DIR" | stb-suite > log_interactive.txt 2>&1
 check_success "$TEST_DIR"_archive.tar.gz
 check_contains "Archived" log_interactive.txt
 rm -f "$TEST_DIR"_archive.tar.gz

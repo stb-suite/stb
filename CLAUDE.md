@@ -23,12 +23,12 @@ whose source lives under `stb-suite/src/stb/`.
 - `stb-suite/meta.yaml` — conda-forge recipe (mirrors `pyproject.toml` dependencies).
 - `test/` — example input files and manual smoke scripts organized by category,
   mirroring the `stb-suite` main menu 1:1 (`1-inputs`, `2-structures`,
-  `3-analysis`, `4-workflow`, `5-utils`), each mirroring one or more tools.
+  `3-analysis`, `4-workflow`, `5-mlsimulations`, `6-utils`), each mirroring one or more tools.
   `4-workflow/<property>/` has `prep/` + `analysis/` subfolders for the 7
   paired prep+analysis properties (strain, elastic, cohesive, phonons,
   convergence, XRD structure solution, Hubbard U linear response). This is
   **not** an automated test suite (no pytest/unittest, no CI config exists).
-  `test/5-utils/1-translator/test.sh` is representative: it generates sample
+  `test/6-utils/1-translator/test.sh` is representative: it generates sample
   structure files in every supported format, runs the built CLI against them, and
   greps the output for expected content.
 
@@ -47,7 +47,7 @@ stb-suite   # interactive menu wrapping all tools
 
 There is no unit test suite to run. To validate a change to a tool, exercise it
 against the fixtures under `test/` (or the generator scripts, e.g.
-`bash test/5-utils/1-translator/test.sh`) and inspect the produced output files,
+`bash test/6-utils/1-translator/test.sh`) and inspect the produced output files,
 following the same "generate sample input → run the CLI → check the output file"
 pattern used in `test.sh`.
 
@@ -197,24 +197,29 @@ Newer `2-structures` tools worth knowing about specifically:
   matching real amorphous-Si physics.
 
 **`stb_suite.py`** (`stb-suite` command) is the interactive front-end / dispatcher. It
-shows a menu with 5 categories, in this order: **1 Inputs, 2 Structures, 3 Analysis,
-4 Workflow, 5 Utils** — backed by five dicts, `INPUT_TOOLS`, `STRUCTURE_TOOLS`,
-`ANALYSIS_TOOLS`, `WORKFLOW_TOOLS`, `UTILITY_TOOLS`, each keyed by menu number to
-`{'title', 'description', 'func'}`. `INPUT_TOOLS` (category 1) holds only the 3
-tools that configure an actual SIESTA run (input file, k-grid, k-path);
-`STRUCTURE_TOOLS` (category 2, e.g. `stb-slab`, `stb-supercell`, `stb-defect`,
-`stb-crystalcast`) holds everything that builds/generates/transforms a structure
-file, split out once `INPUT_TOOLS` grew to 17 entries mixing the two concerns.
-`WORKFLOW_TOOLS` is one level deeper (the 4 paired prep+analysis properties —
-strain, elastic, cohesive, phonons — each with a `'stages'` dict of 2 entries
-instead of a `'func'`); `run_sub_menu()` recurses into `entry['stages']`
-automatically whenever it finds one instead of a `'func'`, so no separate menu
-function was needed for the extra level. `_flatten_tool_codes()` builds a flat
-`{"1.1": func, ..., "2.1": func, ..., "4.1.2": func, ..., "5.4": func}` lookup
-from these same dicts at import time (`TOOL_CODES`), letting the main menu's
-prompt accept a dotted code (e.g. `4.1.2`) to jump straight to a tool instead of
-navigating level by level — regenerate nothing by hand here, it derives entirely
-from the 5 dicts above. Every `run_*` function builds an `args: List[str]`
+shows a menu with 6 categories, in this order: **1 Inputs, 2 Structures, 3 Analysis,
+4 Workflow, 5 ML Simulations, 6 Utils** — backed by six dicts, `INPUT_TOOLS`,
+`STRUCTURE_TOOLS`, `ANALYSIS_TOOLS`, `WORKFLOW_TOOLS`, `MLSIM_TOOLS`,
+`UTILITY_TOOLS`, each keyed by menu number to `{'title', 'description', 'func'}`.
+`INPUT_TOOLS` (category 1) holds only the 3 tools that configure an actual SIESTA
+run (input file, k-grid, k-path); `STRUCTURE_TOOLS` (category 2, e.g. `stb-slab`,
+`stb-supercell`, `stb-defect`, `stb-crystalcast`) holds everything that builds/
+generates/transforms a structure file, split out once `INPUT_TOOLS` grew to 17
+entries mixing the two concerns. `MLSIM_TOOLS` (category 5, added alongside
+`stb-mlmd`) holds tools that RUN a simulation using a trained MACE potential
+(the foundation model or a custom one fine-tuned via `stb-mlffAnalysis`) instead
+of driving a real SIESTA calculation — distinct from `WORKFLOW_TOOLS` (generating/
+analyzing DFT calculations) and from the one-shot ML structure-preprocessing tools
+already in `STRUCTURE_TOOLS` (`stb-mlrelax`, `stb-amorphize`). `WORKFLOW_TOOLS` is
+one level deeper (each property has a `'stages'` dict of 2+ entries instead of a
+`'func'`); `run_sub_menu()` recurses into `entry['stages']` automatically whenever
+it finds one instead of a `'func'`, so no separate menu function was needed for the
+extra level. `_flatten_tool_codes()` builds a flat `{"1.1": func, ..., "2.1": func,
+..., "4.1.2": func, ..., "5.1": func, ..., "6.4": func}` lookup from these same
+dicts at import time (`TOOL_CODES`), letting the main menu's prompt accept a dotted
+code (e.g. `4.1.2`) to jump straight to a tool instead of navigating level by level
+— regenerate nothing by hand here, it derives entirely from the 6 dicts above.
+Every `run_*` function builds an `args: List[str]`
 from interactive prompts (`get_input`/`get_float_input`/`get_int_input`) and dispatches
 via `run_tool(tool_name, args)`, which shells out to the **installed** console command
 by name (`subprocess.run`, must be on `PATH`) and centralizes error handling plus the
@@ -337,6 +342,27 @@ quantification (that needs a committee of independently-trained models) — a
 single-model heuristic: a configuration where the potential itself predicts an
 unusually large local force is a reasonable, cheap signal that the region is poorly
 represented in the current training set, not a proof.
+
+**`stb-mlmd`** (ML Simulations, `mlmd.py`) is the first tool in the new ML Simulations
+category (5) — tools that RUN a simulation with a trained MACE potential rather than
+generating/analyzing a real SIESTA calculation. Runs NVE (`ase.md.verlet.
+VelocityVerlet`), NVT (`ase.md.langevin.Langevin`), or NPT (`ase.md.nptberendsen.
+NPTBerendsen`, bulk-only — rejects a vacuum-padded axis, same reasoning as
+`stb-amorphize`) molecular dynamics with either the MACE-MP-0 foundation model or a
+custom fine-tuned one (`--custom-model`, same flag name/semantics as `stb-mlrelax`).
+Physical units (`--timestep` in fs, `--friction` in fs⁻¹, `--pressure` in GPa) are
+explicitly converted to ASE's internal unit system (`* ase.units.fs`, `/
+ase.units.fs`, `* ase.units.GPa`) before being passed to the ASE MD classes, which
+all expect ASE's own internal time/pressure units, not fs/GPa directly — verified
+against ASE's own docstrings (`timestep: The time step in ASE time units`) after
+finding a real, verified ~10x timestep bug in `stb-amorphize`'s own MD call
+(`timestep=args.timestep * 1.0` instead of `* units.fs`, silently running its
+melt-quench at ~10.18x the documented timestep since `ase.units.fs ≈ 0.0982`) —
+fixed there too once found. Trajectory output reuses `stb-ani2traj`'s exact 3-format
+choice (xsf/pdb/xyz) for viewer consistency; the final frame is also written as a
+bare `.fdf` (same `from_pymatgen`+`write_fdf` pattern already used by `stb-mlrelax`/
+`stb-amorphize`, not `rewrite_fdf_positions` — that one's for the mlff workflow's
+different need of preserving many configs' full calc setup).
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

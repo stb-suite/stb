@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-cube (Grid to Cube Converter, item 5.3).
+# Smoke test for stb-cube (Grid to Cube Converter, item 6.3).
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -61,7 +61,7 @@ check_exit_code() {
 # exact input; SIESTA itself reports spin moment |S| = 2.0, which is what
 # the --spin diff checks below verify against, and o2.HSX correctly reads
 # back as Spin{polarized} via sisl).
-echo "--- Starting tester for STB-Cube (item 5.3) ---"
+echo "--- Starting tester for STB-Cube (item 6.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/Sn3O4.RHO" "$TEST_DIR/"
@@ -167,11 +167,11 @@ check_contains "STB-CUBE REPORT" stb_cube_report.txt
 rm -f stb_cube_report.txt
 
 
-# --- 9. Interactive path (stb-suite, shortcut 5.3) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.3) ---"
+# --- 9. Interactive path (stb-suite, shortcut 6.3) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 6.3) ---"
 rm -f Sn3O4_RHO.cube interactive_out.cube
 # Prompts in order: label, type choice, spin choice, output filename
-printf '5.3\nSn3O4\n1\n1\ninteractive_out.cube\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '6.3\nSn3O4\n1\n1\ninteractive_out.cube\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_success interactive_out.cube
 check_contains "Converting to Cube format" log_interactive.txt
 

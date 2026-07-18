@@ -4161,6 +4161,17 @@ def run_optical_analysis() -> None:
                 "[default: 0.01]: ", 0.01)
             args.extend(["--peak-prominence", str(peak_prominence)])
 
+    dimcorr_choice = get_input(
+        "\nRestore the intrinsic (vacuum-independent) response for a 2D/0D structure "
+        "(needs --thickness for 2D) [y/N]: ").strip().lower()
+    if dimcorr_choice in ('y', 'yes'):
+        args.append("--dimensionality-correction")
+        thickness = get_input(
+            "Physical thickness of the 2D material in Ang [blank if the structure is 0D/bulk]: "
+        ).strip()
+        if thickness:
+            args.extend(["--thickness", thickness])
+
     show_advanced = get_input(
         "\nConfigure advanced settings (energy range/output name)? [y/N]: ").strip().lower()
     if show_advanced == 'y':

@@ -56,8 +56,11 @@ echo "--- Starting tester for STB-OPTICALANALYSIS stage 2: analysis (item 4.16.2
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$PREP_DIR/cubic.fdf" "$TEST_DIR/"
+cp "$PREP_DIR/mos2.fdf" "$TEST_DIR/"
 cp "$PREP_DIR/calc.fdf" "$TEST_DIR/"
-echo "# placeholder pseudopotential" > "$TEST_DIR/Na.psf"
+for sym in Na Mo S; do
+    echo "# placeholder pseudopotential" > "$TEST_DIR/$sym.psf"
+done
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -235,6 +238,181 @@ stb-opticalAnalysis --directory optical_study --plot-quantity alpha --experiment
     --no-intro > log_experimental_missing.txt 2>&1
 check_exit_code $? 1
 check_contains "not found" log_experimental_missing.txt
+
+
+# --- 3e. --dimensionality-correction (2D and 0D) ---
+echo -e "\n--- Testing --dimensionality-correction on a 2D fixture (mos2.fdf) ---"
+rm -rf optical_study_2d
+stb-optical -f mos2.fdf -c calc.fdf -p . -O optical_study_2d --directions x z --no-intro \
+    > /dev/null 2>&1
+python3 - <<'PYEOF'
+import numpy as np
+params = {"x": (5.0, 3.0, 0.3), "z": (7.0, 1.5, 0.4)}
+w = np.linspace(0.05, 15.0, 800)
+for axis, (w0, wp, gamma) in params.items():
+    denom = (w0**2 - w**2)**2 + (gamma*w)**2
+    eps2 = wp**2 * gamma * w / denom
+    with open(f"optical_study_2d/dir_{axis}/siesta.EPSIMG", "w") as f:
+        f.write("# energy(eV)  eps2\n")
+        for wi, e2i in zip(w, eps2):
+            f.write(f"{wi:.6f}  {e2i:.8f}\n")
+    with open(f"optical_study_2d/dir_{axis}/calc.out", "w") as f:
+        f.write("siesta: SCF Convergence by DM criterion\n")
+        f.write("SCF cycle converged after 10 iterations\n")
+print("fixtures written")
+PYEOF
+
+echo "Testing: missing --thickness on a 2D structure is a clear error"
+stb-opticalAnalysis --directory optical_study_2d --dimensionality-correction \
+    -o dimcorr_err1 --no-intro > log_dimcorr_missing_thickness.txt 2>&1
+check_exit_code $? 1
+check_contains "requires --thickness" log_dimcorr_missing_thickness.txt
+
+echo "Testing: --thickness >= cell length is a clear error"
+stb-opticalAnalysis --directory optical_study_2d --dimensionality-correction --thickness 50 \
+    -o dimcorr_err2 --no-intro > log_dimcorr_bad_thickness.txt 2>&1
+check_exit_code $? 1
+check_contains "must be smaller than" log_dimcorr_bad_thickness.txt
+
+echo "Testing: 2D correction against the closed-form Laturia/Yang-Gao formula"
+stb-opticalAnalysis --directory optical_study_2d --dimensionality-correction --thickness 3.13 \
+    -o dimcorr --no-intro > log_dimcorr.txt 2>&1
+check_exit_code $? 0
+check_contains "Laturia" log_dimcorr.txt
+check_success optical_study_2d/dimcorr_2Dcorrected.csv
+check_success optical_study_2d/dimcorr_x_2Dcorrected.dat
+check_success optical_study_2d/dimcorr_z_2Dcorrected.dat
+
+python3 -c "
+import csv
+import numpy as np
+
+params = {'x': (5.0, 3.0, 0.3), 'z': (7.0, 1.5, 0.4)}
+c, t, E_test = 33.13, 3.13, 6.0
+
+def analytic(w, w0, wp, gamma):
+    denom = (w0**2 - w**2)**2 + (gamma*w)**2
+    return (1.0 + wp**2*(w0**2-w**2)/denom) + 1j*(wp**2*gamma*w/denom)
+
+with open('optical_study_2d/dimcorr_2Dcorrected.csv') as f:
+    rows = list(csv.DictReader(f))
+
+for axis, (w0, wp, gamma) in params.items():
+    eps_sc = analytic(E_test, w0, wp, gamma)
+    ratio = c / t
+    if axis == 'z':
+        eps_2d = 1.0 / (1.0 + ratio*(1.0/eps_sc - 1.0))
+    else:
+        eps_2d = 1.0 + ratio*(eps_sc - 1.0)
+    axis_rows = [r for r in rows if r['direction'] == axis]
+    closest = min(axis_rows, key=lambda r: abs(float(r['E_eV']) - E_test))
+    assert abs(float(closest['eps1']) - eps_2d.real) / abs(eps_2d.real) < 0.02, (axis, 'eps1')
+    assert abs(float(closest['eps2']) - eps_2d.imag) / abs(eps_2d.imag) < 0.02, (axis, 'eps2')
+print('OK')
+" > log_dimcorr_check.txt 2>&1
+check_contains "OK" log_dimcorr_check.txt
+
+echo -e "\n--- Testing --dimensionality-correction on a 0D fixture (isolated molecule) ---"
+rm -rf optical_study_0d
+python3 -c "
+from ase.build import molecule
+from ase.io import write as ase_write
+from pymatgen.io.ase import AseAtomsAdaptor
+from stb.core import structure_io
+atoms = molecule('H2O')
+atoms.center(vacuum=10.0)
+pmg = AseAtomsAdaptor.get_structure(atoms)
+fdf = structure_io.from_pymatgen(pmg)
+structure_io.write_fdf(fdf, 'h2o.fdf')
+"
+echo "# placeholder pseudopotential" > H.psf
+echo "# placeholder pseudopotential" > O.psf
+stb-optical -f h2o.fdf -c calc.fdf -p . -O optical_study_0d --directions x --no-intro > /dev/null 2>&1
+python3 - <<'PYEOF'
+import numpy as np
+w0, wp, gamma = 8.0, 0.5, 0.3
+w = np.linspace(0.05, 15.0, 500)
+denom = (w0**2 - w**2)**2 + (gamma*w)**2
+eps2 = wp**2 * gamma * w / denom
+with open("optical_study_0d/dir_x/siesta.EPSIMG", "w") as f:
+    f.write("# energy(eV)  eps2\n")
+    for wi, e2i in zip(w, eps2):
+        f.write(f"{wi:.6f}  {e2i:.8f}\n")
+with open("optical_study_0d/dir_x/calc.out", "w") as f:
+    f.write("siesta: SCF Convergence by DM criterion\n")
+    f.write("SCF cycle converged after 10 iterations\n")
+PYEOF
+
+stb-opticalAnalysis --directory optical_study_0d --dimensionality-correction \
+    -o dimcorr0d --no-intro > log_dimcorr0d.txt 2>&1
+check_exit_code $? 0
+check_contains "Clausius-Mossotti" log_dimcorr0d.txt
+check_success optical_study_0d/dimcorr0d_polarizability.csv
+check_success optical_study_0d/dimcorr0d_x_polarizability.dat
+
+python3 -c "
+import csv
+from scipy import constants
+
+w0, wp, gamma, V = 8.0, 0.5, 0.3, 20.0*21.526478*20.596309
+E_test = 6.0
+denom = (w0**2 - E_test**2)**2 + (gamma*E_test)**2
+eps1 = 1.0 + wp**2*(w0**2-E_test**2)/denom
+eps2 = wp**2*gamma*E_test/denom
+alpha_si = (eps1 - 1.0 + 1j*eps2) * constants.epsilon_0 * V * 1e-30
+alpha_a3_expected = (alpha_si / (4*3.141592653589793*constants.epsilon_0) * 1e30).real
+
+with open('optical_study_0d/dimcorr0d_polarizability.csv') as f:
+    rows = list(csv.DictReader(f))
+closest = min(rows, key=lambda r: abs(float(r['E_eV']) - E_test))
+got = float(closest['alpha1_Ang3'])
+assert abs(got - alpha_a3_expected) / abs(alpha_a3_expected) < 0.02, (got, alpha_a3_expected)
+print('OK')
+" > log_dimcorr0d_check.txt 2>&1
+check_contains "OK" log_dimcorr0d_check.txt
+
+echo -e "\n--- Testing --dimensionality-correction on a 1D fixture (no correction, [NOTE] only) ---"
+rm -rf optical_study_1d
+python3 -c "
+from ase import Atoms
+from pymatgen.io.ase import AseAtomsAdaptor
+from stb.core import structure_io
+atoms = Atoms('C2', positions=[[0,0,0],[1.4,0,0]], cell=[2.8, 15.0, 15.0], pbc=True)
+pmg = AseAtomsAdaptor.get_structure(atoms)
+fdf = structure_io.from_pymatgen(pmg)
+structure_io.write_fdf(fdf, 'wire1d.fdf')
+"
+echo "# placeholder pseudopotential" > C.psf
+stb-optical -f wire1d.fdf -c calc.fdf -p . -O optical_study_1d --directions x --no-intro \
+    > /dev/null 2>&1
+python3 -c "
+import numpy as np
+w = np.linspace(0.05, 15.0, 300)
+eps2 = 0.1*np.ones_like(w)
+with open('optical_study_1d/dir_x/siesta.EPSIMG', 'w') as f:
+    f.write('# e eps2\n')
+    for wi, e2i in zip(w, eps2):
+        f.write(f'{wi:.6f} {e2i:.6f}\n')
+with open('optical_study_1d/dir_x/calc.out', 'w') as f:
+    f.write('siesta: SCF Convergence by DM criterion\nSCF cycle converged after 10 iterations\n')
+"
+stb-opticalAnalysis --directory optical_study_1d --dimensionality-correction \
+    -o dimcorr1d --no-intro > log_dimcorr1d.txt 2>&1
+check_exit_code $? 0
+check_contains "\[NOTE\] 1D" log_dimcorr1d.txt
+python3 -c "
+import glob
+extra = glob.glob('optical_study_1d/dimcorr1d*2Dcorrected*') + glob.glob('optical_study_1d/dimcorr1d*polarizability*')
+assert not extra, f'unexpected correction files written for a 1D structure: {extra}'
+print('OK')
+" > log_dimcorr1d_check.txt 2>&1
+check_contains "OK" log_dimcorr1d_check.txt
+
+echo "Testing: --help documents --dimensionality-correction/--thickness and cites Laturia/Yang-Gao"
+stb-opticalAnalysis --help > log_help_dimcorr.txt 2>&1
+check_contains "dimensionality-correction" log_help_dimcorr.txt
+check_contains "thickness" log_help_dimcorr.txt
+check_contains "Laturia" log_help_dimcorr.txt
 
 
 # --- 4. Only one direction present (partial results, still runs OK) ---

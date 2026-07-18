@@ -17,7 +17,10 @@ import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual
 from stb.core.dielectric import read_epsimg
-from stb.core.optical_properties import compute_all
+from stb.core.optical_properties import (
+    compute_all, correct_2d_perpendicular, correct_2d_parallel, molecular_polarizability,
+    derive_from_eps,
+)
 from stb.core.siesta_log import get_scf_convergence
 from stb.core.spectrum import read_experimental_spectrum, find_spectrum_peaks, match_peaks
 
@@ -238,6 +241,32 @@ def write_results_csv(csv_path, results):
                         f"{result['sigma1'][i]:.6e}\n")
 
 
+def write_polarizability_dat(dat_path, axis, omega, alpha1_si, alpha2_si, alpha1_ang3, alpha2_ang3):
+    """5-column .dat for one direction's molecular polarizability (0D
+    correction): E_eV, alpha1_SI, alpha2_SI, alpha1_Ang3, alpha2_Ang3.
+    """
+    with open(dat_path, "w") as f:
+        f.write(f"# stb-opticalAnalysis -- molecular polarizability along direction {axis} "
+                "(dilute Clausius-Mossotti correction)\n")
+        f.write("# columns: 1=E(eV) 2=alpha1_SI(C*m^2/V) 3=alpha2_SI(C*m^2/V) 4=alpha1(Ang^3) "
+                "5=alpha2(Ang^3)\n")
+        for i in range(len(omega)):
+            f.write(f"{omega[i]:12.6f} {alpha1_si[i]:16.6e} {alpha2_si[i]:16.6e} "
+                     f"{alpha1_ang3[i]:14.6f} {alpha2_ang3[i]:14.6f}\n")
+
+
+def write_polarizability_csv(csv_path, rows):
+    """Long-format CSV, one row per (direction, energy) point, for the
+    0D molecular-polarizability correction.
+    """
+    with open(csv_path, "w") as f:
+        f.write("direction,E_eV,alpha1_SI,alpha2_SI,alpha1_Ang3,alpha2_Ang3\n")
+        for axis, omega, a1si, a2si, a1a3, a2a3 in rows:
+            for i in range(len(omega)):
+                f.write(f"{axis},{omega[i]:.6f},{a1si[i]:.6e},{a2si[i]:.6e},"
+                        f"{a1a3[i]:.6f},{a2a3[i]:.6f}\n")
+
+
 def write_combined_gplot(gplot_path, dat_paths_by_axis, quantity, experimental=None,
                           experimental_dat_path=None):
     """One gnuplot script overlaying `quantity`'s column(s) across every
@@ -322,9 +351,11 @@ or incomplete direction folders are skipped with a warning, never block the dire
 ready (advisory only, same convention as this suite's other multi-folder analysis stages).
 
 [ASSUMPTION] Reflectivity R(E) is normal-incidence, vacuum(n0=1)/material interface -- no angle-
-dependent Fresnel formula or thin-film interference is computed. [KNOWN LIMITATION, 2D/slab inputs]
-No correction is applied for the vacuum-dilution of a slab's periodic-supercell dielectric response
--- see stb-optical --help for the full explanation.
+dependent Fresnel formula or thin-film interference is computed. [KNOWN LIMITATION, 2D/1D/0D inputs]
+The raw supercell values above are diluted by the vacuum region and NOT corrected by default -- pass
+--dimensionality-correction (see its own --help entry) to additionally restore the intrinsic 2D
+dielectric function or extract a 0D molecular polarizability, written ALONGSIDE the raw values, never
+replacing them (1D is not yet implemented -- see --dimensionality-correction's own help text).
 
 When all 3 of x/y/z are present, also computes and reports/plots an isotropic ('avg') average --
 eps2 averaged across the 3 directions first, then every other quantity (including eps1) re-derived
@@ -336,6 +367,7 @@ experimental measurement, which doesn't correspond to any single crystallographi
                "  %(prog)s --directory optical_study --plot-quantity alpha "
                "--experimental uvvis.dat\n"
                "  %(prog)s --directory optical_study --plot-quantity all\n"
+               "  %(prog)s --directory optical_study --dimensionality-correction --thickness 3.13\n"
     )
 
     parser.add_argument("--directory", type=str, default="optical_study",
@@ -365,6 +397,26 @@ experimental measurement, which doesn't correspond to any single crystallographi
     parser.add_argument("--peak-prominence", type=float, default=0.01, metavar="FRACTION",
                          help="Minimum peak prominence, as a fraction of that spectrum's own max "
                               "value, for --experimental's peak-finding (default: 0.01).")
+    parser.add_argument("--dimensionality-correction", action="store_true",
+                         help="Restore the intrinsic (vacuum-independent) response from the raw "
+                              "vacuum-padded supercell result. 2D (1 vacuum axis): rescales eps(E) "
+                              "via the D-field/E-field continuity argument (Laturia et al., npj 2D "
+                              "Mater. Appl. 2, 6, 2018; Yang & Gao, npj 2D Mater. Appl. 5, 78, 2021) "
+                              "-- requires --thickness. 0D (3 vacuum axes, an isolated molecule): "
+                              "extracts the molecular polarizability alpha(E) via the dilute-limit "
+                              "Clausius-Mossotti relation -- no extra input needed (uses the cell "
+                              "volume). 1D (2 vacuum axes): NOT implemented -- the literature "
+                              "approach (Maxwell-Garnett effective medium) is not a simple "
+                              "generalization of the 2D formula and has not been verified for this "
+                              "tool; prints a [NOTE] and reports only the raw supercell values. 3D "
+                              "(bulk): no-op, nothing to correct. Off by default -- always written "
+                              "ALONGSIDE (never replacing) the raw supercell .dat/.csv files.")
+    parser.add_argument("--thickness", type=float, default=None, metavar="ANG",
+                         help="Physical thickness of the 2D material in Ang, required together "
+                              "with --dimensionality-correction for a 2D (1 vacuum axis) input. "
+                              "Deliberately not auto-estimated -- 'thickness' of a 2D material is "
+                              "not a single well-defined quantity (atomic span? + van der Waals "
+                              "radii? bulk interlayer spacing?), left to the user's own judgment.")
     parser.add_argument("-o", "--output", type=str, default="optical_results",
                          help="Base filename (no extension) for the .csv/.dat/.gplot outputs "
                               "(default: optical_results).")
@@ -455,6 +507,8 @@ experimental measurement, which doesn't correspond to any single crystallographi
                     "the x direction's grid before averaging.", 'yellow'), f_out)
             results.append(avg_result)
 
+        structure = None
+        vacuum_axes = None
         struct_path = os.path.join(results[0]["folder"], "structure.fdf")
         if os.path.isfile(struct_path):
             structure = structure_io.read_fdf(struct_path)
@@ -469,7 +523,7 @@ experimental measurement, which doesn't correspond to any single crystallographi
                 print_dual(color_text(
                     "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- see stb-optical --help; "
                     "every direction's dielectric response below is diluted by the vacuum region, "
-                    "no rescaling applied.", 'yellow'), f_out)
+                    "no rescaling applied unless --dimensionality-correction is given.", 'yellow'), f_out)
 
         print_dual(f"\n{color_text('[2] RESULTS BY DIRECTION', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
@@ -489,6 +543,100 @@ experimental measurement, which doesn't correspond to any single crystallographi
                     f"    [WARNING] Could not confirm SCF convergence for '{result['folder']}' -- "
                     "this direction's spectrum may be unreliable.", 'yellow'), f_out)
 
+        corrected_dat_paths = []
+        polarizability_rows = []
+        if args.dimensionality_correction:
+            print_dual(f"\n{color_text('[2b] DIMENSIONALITY CORRECTION', 'magenta')}", f_out)
+            print_dual("-" * 60, f_out)
+            if structure is None or vacuum_axes is None:
+                print_dual(color_text(
+                    "  [WARNING] Could not read structure.fdf -- --dimensionality-correction "
+                    "skipped.", 'yellow'), f_out)
+            else:
+                n_vacuum = sum(vacuum_axes)
+                lattice = np.array(structure.lattice, dtype=float)
+                cell_volume_ang3 = float(abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2]))))
+
+                if n_vacuum == 0:
+                    print_dual("  3D (bulk) input -- nothing to correct.", f_out)
+                elif n_vacuum == 2:
+                    print_dual(color_text(
+                        "  [NOTE] 1D (wire/tube-like) input -- dimensionality correction is NOT "
+                        "implemented in this version. The literature approach (Maxwell-Garnett "
+                        "effective-medium theory with cross-sectional volume fraction) is not a "
+                        "simple generalization of the 2D formula and has not been verified for "
+                        "this tool. Reporting only the raw supercell values above.", 'yellow'), f_out)
+                elif n_vacuum == 1:
+                    if args.thickness is None:
+                        print_dual(color_text(
+                            "  [ERROR] --dimensionality-correction on a 2D (1 vacuum axis) input "
+                            "requires --thickness (Ang).", 'red'), f_out)
+                        sys.exit(1)
+                    vacuum_idx = vacuum_axes.index(True)
+                    cell_length_ang = float(np.linalg.norm(lattice[vacuum_idx]))
+                    if args.thickness >= cell_length_ang:
+                        print_dual(color_text(
+                            f"  [ERROR] --thickness ({args.thickness} Ang) must be smaller than "
+                            f"the supercell's own length along the vacuum axis ({cell_length_ang:.4f} "
+                            "Ang) -- the material can't be thicker than the whole cell.", 'red'), f_out)
+                        sys.exit(1)
+                    print_dual(f"  Reference : Laturia, Van de Put, Vandenberghe, npj 2D Mater. "
+                                "Appl. 2, 6 (2018); Yang & Gao, npj 2D Mater. Appl. 5, 78 (2021).", f_out)
+                    print_dual(f"  Cell length (vacuum axis) : {cell_length_ang:.4f} Ang", f_out)
+                    print_dual(f"  Thickness (user-supplied) : {args.thickness} Ang", f_out)
+                    corrected_results = []
+                    for result in results:
+                        if result["axis"] not in ("x", "y", "z"):
+                            continue
+                        axis_idx = {"x": 0, "y": 1, "z": 2}[result["axis"]]
+                        if axis_idx == vacuum_idx:
+                            e1c, e2c = correct_2d_perpendicular(
+                                result["eps1"], result["eps2"], cell_length_ang, args.thickness)
+                            kind = "perpendicular"
+                        else:
+                            e1c, e2c = correct_2d_parallel(
+                                result["eps1"], result["eps2"], cell_length_ang, args.thickness)
+                            kind = "parallel"
+                        corrected = derive_from_eps(result["omega"], e1c, e2c)
+                        corrected["axis"] = result["axis"]
+                        print_dual(f"  Direction {result['axis']} ({kind}) -- eps1_2D(E->0) = "
+                                    f"{corrected['eps1'][int(np.argmin(corrected['omega']))]:.4f} "
+                                    f"(raw supercell: {result['eps1'][int(np.argmin(result['omega']))]:.4f})",
+                                    f_out)
+                        corrected_results.append(corrected)
+                    if corrected_results:
+                        corrected_csv_path = os.path.join(args.directory, f"{args.output}_2Dcorrected.csv")
+                        write_results_csv(corrected_csv_path, corrected_results)
+                        for corrected in corrected_results:
+                            dat_path = os.path.join(
+                                args.directory, f"{args.output}_{corrected['axis']}_2Dcorrected.dat")
+                            write_direction_dat(dat_path, corrected)
+                            corrected_dat_paths.append(dat_path)
+                        corrected_dat_paths.append(corrected_csv_path)
+                elif n_vacuum == 3:
+                    print_dual(f"  Cell volume : {cell_volume_ang3:.4f} Ang^3", f_out)
+                    print_dual("  Extracting molecular polarizability (dilute Clausius-Mossotti "
+                                "relation).", f_out)
+                    for result in results:
+                        if result["axis"] not in ("x", "y", "z"):
+                            continue
+                        a1si, a2si, a1a3, a2a3 = molecular_polarizability(
+                            result["eps1"], result["eps2"], cell_volume_ang3)
+                        i0 = int(np.argmin(result["omega"]))
+                        print_dual(f"  Direction {result['axis']} -- alpha(E->0) = {a1a3[i0]:.4f} "
+                                    "Ang^3", f_out)
+                        dat_path = os.path.join(
+                            args.directory, f"{args.output}_{result['axis']}_polarizability.dat")
+                        write_polarizability_dat(dat_path, result["axis"], result["omega"],
+                                                  a1si, a2si, a1a3, a2a3)
+                        corrected_dat_paths.append(dat_path)
+                        polarizability_rows.append(
+                            (result["axis"], result["omega"], a1si, a2si, a1a3, a2a3))
+                    if polarizability_rows:
+                        pol_csv_path = os.path.join(args.directory, f"{args.output}_polarizability.csv")
+                        write_polarizability_csv(pol_csv_path, polarizability_rows)
+                        corrected_dat_paths.append(pol_csv_path)
+
         print_dual(f"\n{color_text('[3] SUMMARY & FILES', 'magenta')}", f_out)
         print_dual("-" * 60, f_out)
 
@@ -502,6 +650,9 @@ experimental measurement, which doesn't correspond to any single crystallographi
             write_direction_dat(dat_path, result)
             dat_paths_by_axis[result["axis"]] = dat_path
             print_dual(f"Direction {result['axis']} .dat     : {dat_path}", f_out)
+
+        for path in corrected_dat_paths:
+            print_dual(f"Dimensionality correction : {path}", f_out)
 
         if args.plot_quantity == "all":
             for quantity in ("eps", "n_k", "alpha", "R", "L", "sigma1"):

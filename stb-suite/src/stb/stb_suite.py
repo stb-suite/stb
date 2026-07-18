@@ -4062,6 +4062,121 @@ def run_gqca_analysis() -> None:
     run_tool("stb-gqcaAnalysis", args)
 
 
+def run_optical_prep() -> None:
+    """Interface for the Optical Properties Stage 1 (stb-optical)"""
+    print("\n" + "="*60)
+    print(color_text("OPTICAL PROPERTIES - STAGE 1: DIRECTION FOLDERS", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Writes one SIESTA folder per requested Cartesian polarization direction, ready for a "
+        "linear-response Optical.Calculate run -- no new geometry, same already-relaxed structure "
+        "in every folder.", 'cyan'))
+    print()
+
+    structure_file = get_input("Already-relaxed input structure file [default: structure.fdf]: ").strip()
+    if not structure_file:
+        structure_file = "structure.fdf"
+
+    calc_file = get_input("\nCalc.fdf template for the Optical calculations: ")
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template for the Optical calculations: ")
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+
+    directions_str = get_input(
+        "\nDirections to compute, space-separated (x/y/z) [default: x y z]: ").strip()
+    directions = directions_str.split() if directions_str else ["x", "y", "z"]
+
+    output_dir = get_input("\nOutput root directory [default: optical_study]: ").strip()
+    if not output_dir:
+        output_dir = "optical_study"
+
+    args = [
+        "-f", structure_file, "-c", calc_file, "--directions", *directions,
+        "-O", output_dir, "--no-intro"
+    ]
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (Optical.Mesh/Optical.Broaden/Optical.NumberOfBands)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        mesh_str = get_input("Optical.Mesh, 3 integers [default: 10 10 10]: ").strip()
+        if mesh_str:
+            mesh_vals = mesh_str.split()
+            if len(mesh_vals) == 3:
+                args.extend(["--optical-mesh", *mesh_vals])
+            else:
+                print(color_text("Expected 3 integers -- using default.", 'yellow'))
+        broaden = get_float_input("Optical.Broaden in eV [default: 0.2]: ", 0.2)
+        args.extend(["--optical-broaden", str(broaden)])
+        nbands_str = get_input("Optical.NumberOfBands [optional, blank = SIESTA default]: ").strip()
+        if nbands_str:
+            args.extend(["--optical-nbands", nbands_str])
+
+    print(color_text("\nWriting direction folder(s)...", 'green'))
+    run_tool("stb-optical", args)
+
+
+def run_optical_analysis() -> None:
+    """Interface for the Optical Properties Stage 2 (stb-opticalAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("OPTICAL PROPERTIES - STAGE 2: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory written by Stage 1 [default: optical_study]: ").strip()
+    if not run_dir:
+        run_dir = "optical_study"
+
+    output_filename = get_input("SIESTA output filename inside each direction folder "
+                                 "[default: calc.out]: ").strip()
+    if not output_filename:
+        output_filename = "calc.out"
+
+    print(f"\n{color_text('Quantity to plot (overlaid across every direction present):', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = eps1 + eps2, dielectric function (default)")
+    print(f"  {color_text('2', 'cyan')} = n + k, refractive index / extinction coefficient")
+    print(f"  {color_text('3', 'cyan')} = alpha, absorption coefficient")
+    print(f"  {color_text('4', 'cyan')} = R, normal-incidence reflectivity")
+    print(f"  {color_text('5', 'cyan')} = L, energy-loss function")
+    print(f"  {color_text('6', 'cyan')} = sigma1, real optical conductivity")
+    print(f"  {color_text('7', 'cyan')} = all -- write every quantity's .gplot in one run")
+    quantity_choice = get_input("Select option (1-7) [default: 1]: ").strip()
+    quantity_map = {'1': 'eps', '2': 'n_k', '3': 'alpha', '4': 'R', '5': 'L', '6': 'sigma1', '7': 'all'}
+    plot_quantity = quantity_map.get(quantity_choice, 'eps')
+
+    args = ["--directory", run_dir, "--file", output_filename,
+            "--plot-quantity", plot_quantity, "--no-intro"]
+
+    if plot_quantity not in ('eps', 'n_k', 'all'):
+        experimental_file = get_input(
+            "\nOverlay a measured spectrum (2-column text file: energy eV, value) "
+            "[optional, blank = skip]: ").strip()
+        if experimental_file:
+            args.extend(["--experimental", experimental_file])
+            peak_prominence = get_float_input(
+                "Minimum peak prominence, as a fraction of the spectrum's own max "
+                "[default: 0.01]: ", 0.01)
+            args.extend(["--peak-prominence", str(peak_prominence)])
+
+    show_advanced = get_input(
+        "\nConfigure advanced settings (energy range/output name)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        energy_min = get_input("Energy min in eV [optional, blank = no trim]: ").strip()
+        if energy_min:
+            args.extend(["--energy-min", energy_min])
+        energy_max = get_input("Energy max in eV [optional, blank = no trim]: ").strip()
+        if energy_max:
+            args.extend(["--energy-max", energy_max])
+        output = get_input("Base filename for .csv/.dat/.gplot [default: optical_results]: ").strip()
+        if output:
+            args.extend(["--output", output])
+
+    run_tool("stb-opticalAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5271,6 +5386,23 @@ WORKFLOW_TOOLS = {
                 'description': "Solve the mass-action equilibrium over an x/T grid and report "
                                 "Delta-H_mix, Delta-S_mix, Delta-G_mix, and SRO parameters.",
                 'func': run_gqca_analysis},
+        }},
+    16: {'title': "Optical Properties",
+        'description': "Self-contained: writes one SIESTA folder per Cartesian polarization "
+                        "direction for a linear-response Optical.Calculate run on an already-"
+                        "relaxed structure, then derives eps1(E)/eps2(E), n(E)/k(E), the "
+                        "absorption coefficient, normal-incidence reflectivity, the energy-loss "
+                        "function, and the real optical conductivity from the resulting "
+                        "SystemLabel.EPSIMG file(s).",
+        'stages': {
+            1: {'title': "Stage 1 - Direction Folders (stb-optical)",
+                'description': "Write one direction folder per requested Optical.Vector axis, "
+                                "ready for SIESTA.",
+                'func': run_optical_prep},
+            2: {'title': "Stage 2 - Analysis (stb-opticalAnalysis)",
+                'description': "Aggregate every direction folder present and derive the full "
+                                "set of linear optical properties.",
+                'func': run_optical_analysis},
         }},
        }
 

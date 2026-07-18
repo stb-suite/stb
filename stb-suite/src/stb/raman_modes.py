@@ -22,7 +22,7 @@ from ase import Atoms
 from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro
-from stb.core.calc_directives import force_single_point
+from stb.core.calc_directives import force_single_point, build_optical_block
 from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core.phonon_workflow import (
@@ -83,28 +83,6 @@ def print_dual(text, file_handle=None):
     if file_handle:
         clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
         file_handle.write(clean_text + "\n")
-
-
-def build_optical_block(mesh, broaden_ev, axis_vec, nbands=None):
-    """The %block Optical.Mesh/Optical.Vector + OpticalCalculation T fdf
-    stanza for one Optical.Vector direction -- SIESTA's interband/RPA
-    dielectric-function machinery, verified via SIESTA's own official
-    tutorial to work for fully 3D periodic bulk crystals (not just
-    vacuum-padded systems, unlike %block ExternalElectricField).
-    """
-    lines = [
-        "OpticalCalculation T",
-        f"Optical.Broaden        {broaden_ev} eV",
-        "%block Optical.Mesh",
-        f"  {mesh[0]}  {mesh[1]}  {mesh[2]}",
-        "%endblock Optical.Mesh",
-        "%block Optical.Vector",
-        f"  {axis_vec[0]:.4f}  {axis_vec[1]:.4f}  {axis_vec[2]:.4f}",
-        "%endblock Optical.Vector",
-    ]
-    if nbands:
-        lines.append(f"Optical.NumberOfBands  {nbands}")
-    return "\n".join(lines) + "\n"
 
 
 def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text, pseudos):

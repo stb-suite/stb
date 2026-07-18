@@ -40,6 +40,33 @@ def force_single_point(calc_text):
     return new_text
 
 
+def build_optical_block(mesh, broaden_ev, axis_vec, nbands=None):
+    """The %block Optical.Mesh/Optical.Vector + OpticalCalculation T fdf
+    stanza for one Optical.Vector direction -- SIESTA's interband/RPA
+    dielectric-function machinery, verified via SIESTA's own official
+    tutorial to work for fully 3D periodic bulk crystals (not just
+    vacuum-padded systems, unlike %block ExternalElectricField).
+
+    Moved here from raman_modes.py once optical.py (stb-optical) became a
+    second consumer -- same "extract on second use" convention as
+    force_single_point above. raman_modes.py now imports this instead of
+    keeping its own copy.
+    """
+    lines = [
+        "OpticalCalculation T",
+        f"Optical.Broaden        {broaden_ev} eV",
+        "%block Optical.Mesh",
+        f"  {mesh[0]}  {mesh[1]}  {mesh[2]}",
+        "%endblock Optical.Mesh",
+        "%block Optical.Vector",
+        f"  {axis_vec[0]:.4f}  {axis_vec[1]:.4f}  {axis_vec[2]:.4f}",
+        "%endblock Optical.Vector",
+    ]
+    if nbands:
+        lines.append(f"Optical.NumberOfBands  {nbands}")
+    return "\n".join(lines) + "\n"
+
+
 def force_born_charge_run(calc_text, fc_displ_bohr, polarization_grid):
     """Substitutes/appends the fdf stanza SIESTA's OWN native Born-
     effective-charge automation needs -- MD.TypeOfRun FC (triggers

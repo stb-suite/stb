@@ -59,11 +59,18 @@ registered as a console script in `stb-suite/pyproject.toml` under
 to `stb-suite/src/stb/core/`:
 
 - `core/structure_io.py` — the only `.fdf` reader/writer (`read_fdf`, `write_fdf`,
-  `to_pymatgen`, `rewrite_fdf_lattice`, plus thin accessors like `lattice_only`,
-  `species_list`/`species_dict`). Use `raw_lattice_vectors()` instead of
-  `lattice_only()`/`.lattice` when you're about to write back into an existing file's
-  `%block LatticeVectors` while leaving its `LatticeConstant` line untouched (see the
-  module docstring) — using the wrong one double-applies the lattice constant.
+  `to_pymatgen`, `rewrite_fdf_lattice`, `rewrite_fdf_positions`, plus thin accessors
+  like `lattice_only`, `species_list`/`species_dict`). Use `raw_lattice_vectors()`
+  instead of `lattice_only()`/`.lattice` when you're about to write back into an
+  existing file's `%block LatticeVectors` while leaving its `LatticeConstant` line
+  untouched (see the module docstring) — using the wrong one double-applies the
+  lattice constant. `rewrite_fdf_positions(source_path, new_positions, out_path)` is
+  the positions analog of `rewrite_fdf_lattice`: replaces only `%block
+  AtomicCoordinatesAndAtomicSpecies`, preserving everything else (basis, SCF,
+  pseudopotential blocks) verbatim — added for `stb-mlff`, which needs many rattled
+  copies of the same reference calculation without hand-reconstructing the whole
+  `.fdf` (`write_fdf` only writes a bare-minimum file, losing the original
+  calculation's setup).
 - `core/siesta_log.py` — parsers for SIESTA `.out` logs: `get_fermi_energy`,
   `get_cell_height`, `get_stress_tensor` (matrix block + Voigt fallback, eV/Å³),
   `get_stress_voigt_kbar` (Voigt-only, raw kBar — kept separate from
@@ -262,6 +269,34 @@ positional noise. Reuses `core/md_traj.py` for per-frame lattice/timestep/unwrap
 category (not Workflow), since it post-processes one existing trajectory rather than
 generating new geometry or aggregating multiple folders (same reasoning as
 `stb-bands`/`stb-dos` etc.).
+
+**`stb-mlff` / `stb-mlffAnalysis`** (Workflow item 17, `mlff.py`/`mlff_analysis.py`) is
+the suite's first tool that trains a genuinely custom ML potential, rather than just
+using the generic MACE-MP-0 foundation model as-is (`stb-mlrelax`, `stb-defect
+--ml-rank`, `stb-amorphize`, `stb-adsorb`/`stb-neb --ml-*`, `stb-phononsML`). Stage 1
+(`stb-mlff`) generates `mlff_config_NNN/` training configurations from a reference
+`calc.fdf` — rattled displacements (`ase.Atoms.rattle`, one or more `--stdev`
+amplitudes) and/or frames sampled from an existing AIMD trajectory via `--from-aimd`
+(reusing `core/md_traj.py`) — each folder keeping the reference's exact basis/mesh
+cutoff/pseudopotentials via the new `rewrite_fdf_positions`. The user runs SIESTA in
+each folder. Stage 2 (`stb-mlffAnalysis`) aggregates the finished calculations
+(energy via `core.siesta_log.get_free_energy`, forces via a new all-atom `.FA`
+reader generalizing `her_analysis.py::read_fa_force`'s single-atom version, stress
+best-effort via `core.siesta_log.get_stress_tensor`), writes a `training_set.xyz`,
+and fine-tunes a MACE-MP checkpoint on it via `mace_run_train` (subprocess, same
+"wrap the external tool" pattern as `core/phonon_workflow.py`'s phonopy calls).
+Deliberately uses plain fine-tuning with `--E0s average` (per-element atomic
+reference energies fit from the SIESTA data itself), NOT
+`--multiheads_finetuning`/`--E0s foundation` (mace_run_train's own recommended
+anti-catastrophic-forgetting mode) — verified live that `foundation` E0s leaves a
+~424 eV/atom constant offset baked into every energy target, because SIESTA's
+absolute total energy (its own pseudopotentials/core treatment) is not on the same
+scale as the foundation model's own reference DFT code; `average` fixes this since
+it's fit from the actual training data, but mace_run_train's `multiheads_finetuning`
+asserts against `average` outright, so the choice is: correct energy scale, or
+anti-forgetting replay, not both. Verified end-to-end against a real 8-configuration
+SIESTA dataset (O2 in vacuum): correct-scale RMSE convergence, a loadable
+`.model` file, and a working `mace.calculators.MACECalculator` energy evaluation.
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

@@ -4337,6 +4337,95 @@ def run_optical_analysis() -> None:
     run_tool("stb-opticalAnalysis", args)
 
 
+def run_mlff_prep() -> None:
+    """Interface for the Custom ML Force Field Stage 1 (stb-mlff)"""
+    print("\n" + "="*60)
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 1: PREP", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Generates SIESTA training configurations (rattled displacements and/or AIMD-sampled "
+        "snapshots) from a reference calculation -- run SIESTA in each folder, then use Stage "
+        "2 to fine-tune a MACE-MP foundation model on the results.", 'cyan'))
+    print()
+
+    calc_file = get_input("Reference calc.fdf (basis/mesh cutoff/pseudos/SCF settings reused as-is): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Reference calc.fdf: ").strip()
+
+    pseudo_dir = prompt_pseudo_source(optional=True) or "."
+
+    n_configs = get_int_input("Number of rattled configurations [default: 10]: ", 10)
+    stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated [default: 0.05]: ").strip()
+    stdevs = stdev_str.split() if stdev_str else ["0.05"]
+
+    args = ["--file", calc_file, "--pseudo-dir", pseudo_dir,
+            "--n-configs", str(n_configs), "--stdev", *stdevs, "--no-intro"]
+
+    use_aimd = get_input(
+        "\nAlso sample starting geometries from an existing AIMD trajectory (<label>.ANI)? "
+        "[y/N]: ").strip().lower()
+    if use_aimd == 'y':
+        aimd_label = get_input("AIMD SystemLabel: ").strip()
+        n_samples = get_int_input("Number of AIMD frames to sample [default: 5]: ", 5)
+        args.extend(["--from-aimd", aimd_label, "--n-samples", str(n_samples)])
+
+    output_dir = get_input("\nOutput directory [default: .]: ").strip() or "."
+    args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nGenerating training configurations...", 'green'))
+    run_tool("stb-mlff", args)
+
+
+def run_mlff_analysis() -> None:
+    """Interface for the Custom ML Force Field Stage 2 (stb-mlffAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 2: FINE-TUNING", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Aggregates the finished SIESTA calculations from Stage 1 (energy + forces, "
+        "best-effort stress) and fine-tunes a MACE-MP foundation model on them via "
+        "'mace_run_train --multiheads_finetuning'.", 'cyan'))
+    print()
+
+    path = get_input("Glob pattern for the config folders [default: mlff_config_*]: ").strip()
+    if not path:
+        path = "mlff_config_*"
+
+    print(f"\n{color_text('Foundation model to fine-tune from:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = small (default -- fastest)")
+    print(f"  {color_text('2', 'cyan')} = medium")
+    print(f"  {color_text('3', 'cyan')} = large")
+    model_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    model_map = {'1': 'small', '2': 'medium', '3': 'large'}
+    foundation_model = model_map.get(model_choice, 'small')
+
+    epochs = get_int_input("Max training epochs [default: 100]: ", 100)
+    batch_size = get_int_input("Batch size [default: 5]: ", 5)
+
+    device = get_input("Device (cpu/cuda) [default: auto-detect]: ").strip().lower()
+
+    name = get_input("Experiment/model name [default: mlff_model]: ").strip() or "mlff_model"
+    work_dir = get_input("Working directory [default: .]: ").strip() or "."
+
+    args = ["--path", path, "--foundation-model", foundation_model,
+            "--epochs", str(epochs), "--batch-size", str(batch_size),
+            "--name", name, "--work-dir", work_dir, "--no-intro"]
+    if device in ("cpu", "cuda"):
+        args.extend(["--device", device])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nFine-tuning the model (this can take a while)...", 'green'))
+    run_tool("stb-mlffAnalysis", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5612,6 +5701,21 @@ WORKFLOW_TOOLS = {
                 'description': "Aggregate every direction folder present and derive the full "
                                 "set of linear optical properties.",
                 'func': run_optical_analysis},
+        }},
+    17: {'title': "Custom ML Force Field (MACE fine-tuning)",
+        'description': "Generate training configurations (rattled and/or AIMD-sampled), then "
+                        "fine-tune a MACE-MP foundation model on the resulting SIESTA "
+                        "energy/forces/stress -- a fast potential specialized to your own "
+                        "material instead of the generic foundation model.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-mlff)",
+                'description': "Generate rattled/AIMD-sampled training configurations, ready "
+                                "for SIESTA.",
+                'func': run_mlff_prep},
+            2: {'title': "Stage 2 - Analysis (stb-mlffAnalysis)",
+                'description': "Aggregate the finished SIESTA calculations and fine-tune a "
+                                "MACE-MP foundation model on them.",
+                'func': run_mlff_analysis},
         }},
        }
 

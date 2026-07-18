@@ -457,6 +457,62 @@ def rewrite_fdf_lattice(source_path: str, new_lattice: np.ndarray, out_path: str
         f.writelines(out_lines)
 
 
+def rewrite_fdf_positions(source_path: str, new_positions: np.ndarray, out_path: str) -> None:
+    """Writes out_path as a copy of source_path with only the atomic positions
+    inside %block AtomicCoordinatesAndAtomicSpecies replaced, one-to-one with
+    `new_positions` (same order, same count) -- everything else (lattice,
+    species, basis, SCF settings, comments...) is preserved verbatim,
+    including each atom's original species-index token (and anything after
+    it on the line): only the leading x/y/z numbers are replaced.
+
+    `new_positions` must already be in whatever coordinate system
+    source_path's AtomicCoordinatesFormat declares (fractional or
+    cartesian) -- this function does not convert between them, same
+    contract as rewrite_fdf_lattice(). The positions analog of that
+    function; added for stb-mlff, which needs to write many rattled/
+    perturbed configurations of the SAME reference calculation (same
+    basis/pseudos/SCF settings) without hand-reconstructing the whole
+    .fdf from scratch (write_fdf() only knows how to write a bare-minimum
+    file, not preserve an existing calculation's full setup).
+    """
+    with open(source_path, "r") as f:
+        lines = f.readlines()
+
+    out_lines: list[str] = []
+    in_coords_block = False
+    atom_i = 0
+    for line in lines:
+        lower = _strip_comment(line).lower()
+        if lower == "%block atomiccoordinatesandatomicspecies":
+            in_coords_block = True
+            out_lines.append(line)
+            continue
+        if in_coords_block and lower.startswith("%endblock"):
+            in_coords_block = False
+            out_lines.append(line)
+            continue
+        if in_coords_block and _strip_comment(line):
+            if atom_i >= len(new_positions):
+                raise ValueError(
+                    f"{source_path} has more atoms than new_positions ({len(new_positions)})."
+                )
+            parts = line.split(None, 3)
+            suffix = parts[3] if len(parts) > 3 else "\n"
+            pos = new_positions[atom_i]
+            out_lines.append(f"  {pos[0]:20.12f}  {pos[1]:20.12f}  {pos[2]:20.12f}   {suffix}")
+            atom_i += 1
+            continue
+        out_lines.append(line)
+
+    if atom_i != len(new_positions):
+        raise ValueError(
+            f"{source_path} has {atom_i} atom(s) but new_positions has {len(new_positions)}."
+        )
+
+    with open(out_path, "w") as f:
+        f.writelines(out_lines)
+
+
 def alias_single_atom_species(source_path: str, out_path: str, species: str,
                                atom_index: int, alias_label: str) -> None:
     """Writes out_path as a copy of source_path with exactly one atom

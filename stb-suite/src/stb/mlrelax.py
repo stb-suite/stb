@@ -61,7 +61,12 @@ that distribution.""",
                         help="Gap (Ang) used to detect vacuum-padded axes for --relax-cell "
                              "(default: 10.0, matches stb-kgrid).")
     parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: small).")
+                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: small). "
+                             "Ignored if --custom-model is given.")
+    parser.add_argument("--custom-model", default=None, metavar="PATH",
+                        help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
+                             "potential -- e.g. one fine-tuned on your own SIESTA data via "
+                             "stb-mlffAnalysis. Overrides --model.")
     parser.add_argument("--fmax", type=float, default=0.05,
                         help="Force convergence threshold, eV/Ang (default: 0.05).")
     parser.add_argument("--max-steps", type=int, default=200,
@@ -124,9 +129,13 @@ that distribution.""",
     atoms = AseAtomsAdaptor.get_atoms(pmg)
 
     print(f"  {color_text('Mode:', 'cyan')} {'positions + cell' if cell_mask is not None else 'positions only'}")
-    print(f"  {color_text('Model:', 'cyan')} MACE-MP-0 ({args.model})")
+    model_arg = args.custom_model if args.custom_model else args.model
+    if args.custom_model and not os.path.isfile(args.custom_model):
+        sys.exit(f"{color_text('[ERROR]', 'red')} --custom-model file not found: {args.custom_model}")
+    print(f"  {color_text('Model:', 'cyan')} "
+          f"{'custom (' + args.custom_model + ')' if args.custom_model else f'MACE-MP-0 ({args.model})'}")
 
-    calc = mace_relax.get_calculator(model=args.model, device=args.device)
+    calc = mace_relax.get_calculator(model=model_arg, device=args.device)
     atoms.calc = calc
 
     e0 = atoms.get_potential_energy()

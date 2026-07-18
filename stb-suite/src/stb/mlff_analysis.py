@@ -17,6 +17,7 @@ import argparse
 from datetime import datetime
 
 import numpy as np
+import matplotlib.pyplot as plt
 from ase import Atoms
 from ase.io import write as ase_write
 from ase.calculators.calculator import CalculationFailed
@@ -146,6 +147,90 @@ def find_mace_model(work_dir, name):
     return max(set(matches), key=os.path.getmtime)
 
 
+def split_train_valid(atoms_list, valid_fraction, seed):
+    """Deterministic (seeded) train/validation split, done here in Python
+    rather than left to mace_run_train's own --valid_fraction: that way we
+    know exactly which configurations ended up in validation, and can
+    independently evaluate the fine-tuned model (and, for comparison, the
+    raw foundation model) on that same held-out set afterwards -- neither
+    is possible if mace_run_train does the split internally. At least 1
+    configuration is kept on each side regardless of how small
+    `valid_fraction` or the dataset is (the >= 4 configs guard upstream
+    already ensures at least 3 remain for training).
+    """
+    n = len(atoms_list)
+    n_valid = min(max(1, round(n * valid_fraction)), n - 1)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(n)
+    valid_idx = set(order[:n_valid].tolist())
+    train = [a for i, a in enumerate(atoms_list) if i not in valid_idx]
+    valid = [a for i, a in enumerate(atoms_list) if i in valid_idx]
+    return train, valid
+
+
+def _rmse(a, b):
+    return float(np.sqrt(np.mean((np.asarray(a) - np.asarray(b)) ** 2)))
+
+
+def evaluate_on_configs(calc, atoms_list):
+    """Evaluates `calc` on every atoms_list entry's OWN geometry (never
+    re-relaxed) and returns (pred_e_per_atom, ref_e_per_atom, pred_forces,
+    ref_forces) as flat arrays -- pred/ref pairs in the same order, ready
+    for a parity plot or an RMSE. Configurations `calc` fails to evaluate
+    (e.g. an element combination outside a small custom model's training
+    domain) are silently skipped, not fatal -- this is a diagnostic
+    report, not the main training path.
+    """
+    pred_e, ref_e, pred_f, ref_f = [], [], [], []
+    for a in atoms_list:
+        atoms = a.copy()
+        atoms.calc = calc
+        try:
+            e_pred = atoms.get_potential_energy()
+            f_pred = atoms.get_forces()
+        except Exception:
+            continue
+        pred_e.append(e_pred / len(atoms))
+        ref_e.append(a.info['REF_energy'] / len(atoms))
+        pred_f.append(f_pred.flatten())
+        ref_f.append(a.arrays['REF_forces'].flatten())
+    pred_f = np.concatenate(pred_f) if pred_f else np.array([])
+    ref_f = np.concatenate(ref_f) if ref_f else np.array([])
+    return np.array(pred_e), np.array(ref_e), pred_f, ref_f
+
+
+def plot_parity(series, out_path):
+    """`series` is a list of (label, pred_e, ref_e, pred_f, ref_f) tuples
+    (one per model evaluated, e.g. fine-tuned and/or the raw foundation
+    model) -- overlays all of them on the same 2-panel energy/force parity
+    figure (each with the y=x reference line) rather than one plot per
+    model, so the improvement from fine-tuning is directly visible in one
+    image.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    for label, pred_e, ref_e, pred_f, ref_f in series:
+        if len(ref_e):
+            axes[0].scatter(ref_e, pred_e, s=18, alpha=0.7, label=label)
+        if len(ref_f):
+            axes[1].scatter(ref_f, pred_f, s=6, alpha=0.4, label=label)
+
+    for ax, xlabel, ylabel, title in [
+        (axes[0], "DFT energy (eV/atom)", "Predicted energy (eV/atom)", "Energy parity"),
+        (axes[1], "DFT force (eV/Ang)", "Predicted force (eV/Ang)", "Force parity"),
+    ]:
+        lims = [*ax.get_xlim(), *ax.get_ylim()]
+        lo, hi = min(lims), max(lims)
+        ax.plot([lo, hi], [lo, hi], color='gray', linestyle='--', linewidth=0.8, zorder=0)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.legend(fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stage 2 (Analysis) of the Custom ML Force Field workflow: aggregates "
@@ -178,6 +263,12 @@ def main():
     parser.add_argument("--seed", type=int, default=123, help="Training random seed (default: 123).")
     parser.add_argument("-o", "--work-dir", default=".",
                         help="Working directory for the training run and its outputs (default: current directory).")
+    parser.add_argument("--skip-foundation-comparison", action="store_true",
+                        help="Skip evaluating the raw (non-fine-tuned) foundation model on the "
+                             "validation set for comparison. On by default (comparison runs "
+                             "unless this is passed).")
+    parser.add_argument("--save-data", action="store_true",
+                        help="Also write the raw parity-plot data (.dat) behind the plot. Off by default.")
     parser.add_argument("--export-lammps", action="store_true",
                         help="Also compile the fine-tuned model into a TorchScript file "
                              "loadable by LAMMPS's 'pair_style mace' (via mace_create_lammps_model, "
@@ -247,9 +338,19 @@ def main():
             "energy+forces only.", 'yellow'), f_out)
 
     os.makedirs(args.work_dir, exist_ok=True)
-    dataset_path = os.path.join(args.work_dir, "training_set.xyz")
-    ase_write(dataset_path, atoms_list, format='extxyz')
-    print_dual(f"[OK] Wrote training set to {dataset_path}", f_out)
+
+    # Split done HERE (not via mace_run_train's own --valid_fraction) so we
+    # know exactly which configurations ended up in validation, and can
+    # independently evaluate the fine-tuned model (and the raw foundation
+    # model, for comparison) on that same held-out set afterwards -- see
+    # split_train_valid()'s docstring.
+    train_atoms, valid_atoms = split_train_valid(atoms_list, args.valid_fraction, args.seed)
+    train_path = os.path.join(args.work_dir, "train_set.xyz")
+    valid_path = os.path.join(args.work_dir, "valid_set.xyz")
+    ase_write(train_path, train_atoms, format='extxyz')
+    ase_write(valid_path, valid_atoms, format='extxyz')
+    print_dual(f"[OK] Wrote {len(train_atoms)} training / {len(valid_atoms)} validation "
+               f"configuration(s) (train_set.xyz / valid_set.xyz)", f_out)
 
     print_section("[2] FINE-TUNING (mace_run_train)", f_out)
 
@@ -260,8 +361,8 @@ def main():
         "mace_run_train",
         "--name", args.name,
         "--work_dir", args.work_dir,
-        "--train_file", dataset_path,
-        "--valid_fraction", str(args.valid_fraction),
+        "--train_file", train_path,
+        "--valid_file", valid_path,
         "--energy_key", "REF_energy",
         "--forces_key", "REF_forces",
         "--foundation_model", args.foundation_model,
@@ -310,7 +411,7 @@ def main():
         sys.exit(1)
     print_dual(f"[OK] mace_run_train finished -- full log at {log_path}", f_out)
 
-    print_section("[3] SUMMARY & FILES", f_out)
+    print_section("[3] MODEL DISCOVERY", f_out)
     model_path = find_mace_model(args.work_dir, args.name)
     lammps_model_path = None
     if model_path:
@@ -327,9 +428,54 @@ def main():
             print_dual(color_text(
                 "[WARNING] --export-lammps skipped: no model file to convert.", 'yellow'), f_out)
 
+    parity_plot_path = None
+    if model_path:
+        print_section("[4] VALIDATION & PARITY", f_out)
+        from mace.calculators import MACECalculator
+        ft_calc = MACECalculator(model_paths=[model_path], device=device)
+        pred_e, ref_e, pred_f, ref_f = evaluate_on_configs(ft_calc, valid_atoms)
+        series = [("Fine-tuned", pred_e, ref_e, pred_f, ref_f)]
+        if len(ref_e):
+            print_dual(f"Fine-tuned RMSE   : E = {_rmse(pred_e, ref_e) * 1000:.2f} meV/atom, "
+                       f"F = {_rmse(pred_f, ref_f) * 1000:.2f} meV/Ang "
+                       f"({len(valid_atoms)} validation config(s))", f_out)
+        else:
+            print_dual(color_text(
+                "[WARNING] Fine-tuned model could not be evaluated on the validation set.",
+                'yellow'), f_out)
+
+        if not args.skip_foundation_comparison:
+            from stb.core import mace_relax
+            found_calc = mace_relax.get_calculator(model=args.foundation_model, device=device)
+            fpred_e, fref_e, fpred_f, fref_f = evaluate_on_configs(found_calc, valid_atoms)
+            series.append((f"Foundation ({args.foundation_model})", fpred_e, fref_e, fpred_f, fref_f))
+            if len(fref_e):
+                print_dual(f"Foundation RMSE   : E = {_rmse(fpred_e, fref_e) * 1000:.2f} meV/atom, "
+                           f"F = {_rmse(fpred_f, fref_f) * 1000:.2f} meV/Ang "
+                           f"(same {len(valid_atoms)} validation config(s), no fine-tuning)", f_out)
+
+        if len(ref_e) or len(ref_f):
+            parity_plot_path = os.path.join(args.work_dir, f"{args.name}_parity.png")
+            plot_parity(series, parity_plot_path)
+            print_dual(f"[OK] Saved parity plot: {parity_plot_path}", f_out)
+            if args.save_data:
+                for label, pe, re_, pf, rf in series:
+                    tag = label.split()[0].lower()
+                    if len(re_):
+                        e_path = os.path.join(args.work_dir, f"{args.name}_parity_{tag}_energy.dat")
+                        np.savetxt(e_path, np.column_stack([re_, pe]), header="ref_E pred_E (eV/atom)")
+                        print_dual(f"[OK] Saved {e_path}", f_out)
+                    if len(rf):
+                        f_path = os.path.join(args.work_dir, f"{args.name}_parity_{tag}_forces.dat")
+                        np.savetxt(f_path, np.column_stack([rf, pf]), header="ref_F pred_F (eV/Ang)")
+                        print_dual(f"[OK] Saved {f_path}", f_out)
+
+    print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status            : OK", f_out)
-    print_dual(f"Training set      : {dataset_path}", f_out)
+    print_dual(f"Training set      : {train_path} / {valid_path}", f_out)
     print_dual(f"Training log      : {log_path}", f_out)
+    if parity_plot_path:
+        print_dual(f"Parity plot       : {parity_plot_path}", f_out)
     if lammps_model_path:
         print_dual(f"LAMMPS model      : {lammps_model_path}", f_out)
     if report_path:

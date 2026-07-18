@@ -113,6 +113,12 @@ to `stb-suite/src/stb/core/`:
   `mace`/`ase.optimize`/`ase.filters` lazily inside each function, never at module
   level, so merely importing it (e.g. from `defect.py`, which most users run without
   ever touching `--ml-rank`) doesn't force the heavy optional dependency to load.
+  `get_calculator`'s `model` argument accepts a custom `.model` file path (e.g. one
+  fine-tuned by `stb-mlffAnalysis`) in addition to `"small"/"medium"/"large"` —
+  autodetected via `os.path.isfile`, loading `mace.calculators.MACECalculator`
+  instead of the `mace_mp` foundation loader. Currently only `stb-mlrelax` exposes
+  this as a `--custom-model` CLI flag; the other consumers can gain one the same way
+  once there's a real need.
 - `core/md_traj.py` — `read_static_lattice`/`read_frame_lattices` (per-MD-step cell
   from `.out`, falling back to `.XV`/`.fdf`), `read_md_timestep_fs` (real MD time
   step from `.fdf`), `unwrap_trajectory` (minimum-image PBC unwrap). Extracted from
@@ -282,10 +288,15 @@ cutoff/pseudopotentials via the new `rewrite_fdf_positions`. The user runs SIEST
 each folder. Stage 2 (`stb-mlffAnalysis`) aggregates the finished calculations
 (energy via `core.siesta_log.get_free_energy`, forces via a new all-atom `.FA`
 reader generalizing `her_analysis.py::read_fa_force`'s single-atom version, stress
-best-effort via `core.siesta_log.get_stress_tensor`), writes a `training_set.xyz`,
-and fine-tunes a MACE-MP checkpoint on it via `mace_run_train` (subprocess, same
-"wrap the external tool" pattern as `core/phonon_workflow.py`'s phonopy calls).
-Deliberately uses plain fine-tuning with `--E0s average` (per-element atomic
+best-effort via `core.siesta_log.get_stress_tensor`). The train/validation split is
+done in Python (`split_train_valid`, seeded, writes `train_set.xyz`/`valid_set.xyz`)
+rather than left to `mace_run_train`'s own `--valid_fraction`, so the exact held-out
+configurations are known afterwards — needed for the parity plot and foundation
+-model comparison below (`mace_run_train`'s own docs confirm `--valid_fraction` is
+simply ignored once `--valid_file` is given). Then fine-tunes a MACE-MP checkpoint
+on it via `mace_run_train` (subprocess, same "wrap the external tool" pattern as
+`core/phonon_workflow.py`'s phonopy calls). Deliberately uses plain fine-tuning with
+`--E0s average` (per-element atomic
 reference energies fit from the SIESTA data itself), NOT
 `--multiheads_finetuning`/`--E0s foundation` (mace_run_train's own recommended
 anti-catastrophic-forgetting mode) — verified live that `foundation` E0s leaves a
@@ -305,6 +316,27 @@ doesn't need or use a LAMMPS installation itself). Verified live: converts eithe
 the two `.model` files `mace_run_train` writes (plain and TorchScript-`_compiled`)
 non-interactively for a single-head model (multi-head would otherwise prompt for a
 head to export).
+
+After training, `stb-mlffAnalysis` evaluates the fine-tuned model on the held-out
+`valid_set.xyz` (`evaluate_on_configs`) and, unless `--skip-foundation-comparison`,
+also evaluates the raw (non-fine-tuned) foundation model on the exact same
+configurations via `core.mace_relax.get_calculator` — reporting RMSE energy/force
+for both side by side and overlaying both on one `<name>_parity.png` (predicted vs
+DFT, `plot_parity`, y=x reference line), so the improvement from fine-tuning is
+directly visible rather than just a number in the training log. `--save-data` writes
+the underlying predicted/DFT pairs as `.dat` files.
+
+`stb-mlffActiveLearning` (Stage 3 of the same Workflow item, `mlff_active_learning.py`)
+uses an already fine-tuned model to screen a fresh batch of candidate configurations
+(reusing `mlff.build_rattled_configs`, typically at a larger `--stdev` than the
+original training set) and writes the `--top-k` ones with the largest *predicted*
+atomic force as new `mlff_config_NNN/` folders (continuing the numbering of any
+already present), for the user to label with real SIESTA and fold back into another
+`stb-mlffAnalysis` round. Explicitly documented as NOT rigorous uncertainty
+quantification (that needs a committee of independently-trained models) — a
+single-model heuristic: a configuration where the potential itself predicts an
+unusually large local force is a reasonable, cheap signal that the region is poorly
+represented in the current training set, not a proof.
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

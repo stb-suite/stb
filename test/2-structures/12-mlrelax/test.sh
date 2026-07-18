@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-mlrelax (ML Pre-Relaxation, item 2.12)
+# Smoke test for stb-mlrelax (ML Pre-Relaxation, item 1.6)
 #
 # Needs the optional 'ml' extra (pip install stb_suite[ml] -- PyTorch +
 # mace-torch). The whole file is skipped with a clear message if `mace`
@@ -57,7 +57,7 @@ check_exit_code() {
 }
 
 
-echo "--- Starting tester for STB-Mlrelax (item 2.12) ---"
+echo "--- Starting tester for STB-Mlrelax (item 1.6) ---"
 
 if ! python3 -c "import mace" 2>/dev/null; then
     echo -e "${YELLOW}Skipped entirely:${NC} the optional 'ml' extra is not installed."
@@ -157,6 +157,40 @@ check_success h2o_relaxed.fdf
 rm -f h2o_for_test.fdf h2o_relaxed.fdf
 
 
+# --- 4c. --custom-model: relax with a fine-tuned MACE model instead of the foundation one ---
+echo -e "\n--- Testing --custom-model (a real model quickly fine-tuned from stb-mlffAnalysis fixtures) ---"
+MLFF_FIXTURES="$FIXTURE_DIR/../../4-workflow/17-mlff/analysis"
+if command -v mace_run_train &> /dev/null && [ -d "$MLFF_FIXTURES" ]; then
+    mkdir -p custom_model_src
+    cp -r "$MLFF_FIXTURES"/mlff_config_* custom_model_src/
+    (cd custom_model_src && stb-mlffAnalysis --path "mlff_config_*" --epochs 2 --batch-size 4 \
+        --device cpu --name quick_model --skip-foundation-comparison --no-intro > ../log_quicktrain.txt 2>&1)
+    QUICK_MODEL=$(find custom_model_src -maxdepth 1 -name "quick_model*.model" | sort | tail -1)
+    if [ -n "$QUICK_MODEL" ]; then
+        # Relax the SAME O2 reference the model was fine-tuned on (not
+        # si_ge_defect.fdf) -- a model trained only on O never learned Si/Ge,
+        # so it would (correctly) fail on elements outside its training set.
+        rm -f custom_relaxed.fdf
+        stb-mlrelax -f custom_model_src/mlff_config_001/calc.fdf --custom-model "$QUICK_MODEL" \
+            -o custom_relaxed.fdf --no-intro > log_custommodel.txt 2>&1
+        check_exit_code $? 0
+        check_contains "Model:.*custom" log_custommodel.txt
+        check_success custom_relaxed.fdf
+    else
+        echo -e "   -> ${RED}Failed:${NC} quick fine-tuned model was not produced"
+        FAIL=$((FAIL+1))
+    fi
+    rm -rf custom_model_src custom_relaxed.fdf
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: 'mace_run_train' not on PATH or mlff fixtures not found."
+fi
+
+echo "Testing: --custom-model with a nonexistent file (expects failure)"
+stb-mlrelax -f si_ge_defect.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_missing.txt 2>&1
+check_exit_code $? 1
+check_contains "not found" log_custommodel_missing.txt
+
+
 # --- 5. --help / --version ---
 echo -e "\n--- Testing --help / --version ---"
 stb-mlrelax --version > log_version.txt 2>&1
@@ -166,14 +200,15 @@ stb-mlrelax --help > log_help.txt 2>&1
 check_contains "relax-cell" log_help.txt
 check_contains "fmax" log_help.txt
 check_contains "model" log_help.txt
+check_contains "custom-model" log_help.txt
 
 
-# --- 6. Interactive path (stb-suite, shortcut 1.15) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.15) ---"
+# --- 6. Interactive path (stb-suite, shortcut 1.6) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
 
-echo "Testing: navigate 1.15 -> invalid file then valid -> no cell relax -> defaults -> default output -> quit"
+echo "Testing: navigate 1.6 -> invalid file then valid -> no cell relax -> defaults -> default output -> quit"
 rm -f relaxed.fdf
-printf '2.12\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '1.6\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Max atomic displacement" log_menu.txt
 check_success relaxed.fdf

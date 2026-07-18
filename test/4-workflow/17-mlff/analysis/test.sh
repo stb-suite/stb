@@ -80,25 +80,31 @@ check_contains "8 usable configuration(s) (0 skipped)" log_basic.txt
 check_contains "mace_run_train finished" log_basic.txt
 check_contains "Fine-tuned model" log_basic.txt
 check_contains "Model loads and runs" log_basic.txt
-check_success training_set.xyz
+check_success train_set.xyz
+check_success valid_set.xyz
 check_success mace_run_train.log
 
-echo "Testing: training_set.xyz has the right per-atom/info fields"
+echo "Testing: train_set.xyz + valid_set.xyz together have 8 frames with REF_energy/REF_forces"
 python3 -c "
 import sys
 from ase.io import read
-frames = read('training_set.xyz', index=':')
+frames = read('train_set.xyz', index=':') + read('valid_set.xyz', index=':')
 sys.exit(0 if len(frames) == 8 and all(
     'REF_energy' in a.info and 'REF_forces' in a.arrays for a in frames
 ) else 1)
 "
 if [ $? -eq 0 ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} training_set.xyz has 8 frames with REF_energy/REF_forces"
+    echo -e "   -> ${GREEN}Verified:${NC} train_set.xyz + valid_set.xyz have 8 frames total with REF_energy/REF_forces"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} training_set.xyz missing expected frames/fields"
+    echo -e "   -> ${RED}Failed:${NC} train/valid sets missing expected frames/fields"
     FAIL=$((FAIL+1))
 fi
+
+echo "Testing: parity plot + comparison against the raw foundation model"
+check_success test_model_parity.png
+check_contains "Fine-tuned RMSE" log_basic.txt
+check_contains "Foundation RMSE" log_basic.txt
 
 echo "Testing: E0s uses 'average' (SIESTA-scale), never 'foundation' (wrong absolute scale)"
 check_contains "E0s average" log_basic.txt
@@ -151,12 +157,27 @@ echo "Testing: --version"
 stb-mlffAnalysis --version > log_version.txt 2>&1
 check_contains "stb-mlffAnalysis" log_version.txt
 
-echo "Testing: --help documents --foundation-model, --epochs, --valid-fraction, --export-lammps"
+echo "Testing: --help documents --foundation-model, --epochs, --valid-fraction, --export-lammps, --skip-foundation-comparison"
 stb-mlffAnalysis --help > log_help.txt 2>&1
 check_contains "foundation-model" log_help.txt
 check_contains "epochs" log_help.txt
 check_contains "valid-fraction" log_help.txt
 check_contains "export-lammps" log_help.txt
+check_contains "skip-foundation-comparison" log_help.txt
+
+echo "Testing: --skip-foundation-comparison skips the foundation-model evaluation"
+stb-mlffAnalysis --path "mlff_config_*" --epochs 2 --batch-size 4 --device cpu \
+    --name test_model_nofound --skip-foundation-comparison --no-intro > log_nofound.txt 2>&1
+check_exit_code $? 0
+check_contains "Fine-tuned RMSE" log_nofound.txt
+grep -q "Foundation RMSE" log_nofound.txt
+if [ $? -ne 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 'Foundation RMSE' correctly absent with --skip-foundation-comparison"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} 'Foundation RMSE' unexpectedly present"
+    FAIL=$((FAIL+1))
+fi
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.17.2) ---

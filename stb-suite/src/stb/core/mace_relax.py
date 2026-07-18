@@ -37,12 +37,27 @@ def build_cell_mask(vacuum_axes):
 
 
 def get_calculator(model="small", device="cpu", dtype="float64"):
-    """Loads the MACE-MP-0 foundation potential as an ASE calculator.
+    """Loads a MACE potential as an ASE calculator: the MACE-MP-0 foundation
+    model (`model` = "small"/"medium"/"large", downloaded/cached on first
+    use) by default, or a custom model file (`model` = a path to a `.model`
+    -- e.g. one fine-tuned by stb-mlffAnalysis on real SIESTA data) when
+    `model` resolves to an existing file. This single entry point is shared
+    by every ML consumer in the suite (stb-mlrelax, stb-defect --ml-rank,
+    stb-amorphize, stb-adsorb/stb-neb --ml-*, stb-phononsML), so a custom
+    model becomes usable everywhere this is called from -- currently only
+    stb-mlrelax exposes a --custom-model CLI flag for it, the others can
+    gain one the same way once there's a real need (same "expose on first
+    genuine use" policy as everywhere else in this suite).
+
     Default float64 for geometry optimization (MACE's own guidance is
     unambiguous that float32 is for MD, not geometry optimization) --
     callers doing MD (e.g. stb-amorphize's melt/quench stages) should pass
     dtype="float32" explicitly.
     """
+    import os
+    if os.path.isfile(model):
+        from mace.calculators import MACECalculator
+        return MACECalculator(model_paths=[model], device=device, default_dtype=dtype)
     from mace.calculators import mace_mp
     return mace_mp(model=model, device=device, default_dtype=dtype)
 

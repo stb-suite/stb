@@ -3103,9 +3103,21 @@ def run_mlrelax_generator() -> None:
         "\nAlso relax the cell? Only for bulk (no vacuum) structures (y/N): "
     ).strip().lower()
 
-    model = get_input("Model size, small/medium/large [default: small]: ").strip()
-    if not model:
-        model = "small"
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        if not model:
+            model = "small"
+        args.extend(["--model", model])
 
     fmax = get_float_input("Force convergence, eV/Ang [default: 0.05]: ", 0.05)
 
@@ -3113,13 +3125,7 @@ def run_mlrelax_generator() -> None:
     if not output_file:
         output_file = "relaxed.fdf"
 
-    args = [
-        "--file", input_file,
-        "--model", model,
-        "--fmax", str(fmax),
-        "--output", output_file,
-        "--no-intro"
-    ]
+    args.extend(["--fmax", str(fmax), "--output", output_file])
     if relax_cell in ('y', 'yes'):
         args.append("--relax-cell")
 
@@ -4432,6 +4438,50 @@ def run_mlff_analysis() -> None:
     run_tool("stb-mlffAnalysis", args)
 
 
+def run_mlff_active_learning() -> None:
+    """Interface for the Custom ML Force Field Stage 3 (stb-mlffActiveLearning)"""
+    print("\n" + "="*60)
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 3: ACTIVE LEARNING", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Uses the fine-tuned model itself to screen a fresh batch of candidate "
+        "configurations and suggests the ones it's least confident about (largest "
+        "predicted force) as new SIESTA calculations to run -- NOT rigorous uncertainty "
+        "quantification, a cheap single-model heuristic.", 'cyan'))
+    print()
+
+    model_path = get_input("Fine-tuned model file (from stb-mlffAnalysis): ").strip()
+    while not os.path.isfile(model_path):
+        print(color_text("File not found!", 'red'))
+        model_path = get_input("Fine-tuned model file: ").strip()
+
+    calc_file = get_input("Reference calc.fdf (same one stb-mlff used): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Reference calc.fdf: ").strip()
+
+    pseudo_dir = prompt_pseudo_source(optional=True) or "."
+
+    n_candidates = get_int_input("Number of candidates to screen [default: 50]: ", 50)
+    stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated "
+                          "[default: 0.15]: ").strip()
+    stdevs = stdev_str.split() if stdev_str else ["0.15"]
+    top_k = get_int_input("Number of highest-scoring candidates to write out [default: 5]: ", 5)
+
+    output_dir = get_input("Output directory [default: .]: ").strip() or "."
+
+    args = ["--model", model_path, "--file", calc_file, "--pseudo-dir", pseudo_dir,
+            "--n-candidates", str(n_candidates), "--stdev", *stdevs,
+            "--top-k", str(top_k), "--output-dir", output_dir, "--no-intro"]
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nScreening candidate configurations...", 'green'))
+    run_tool("stb-mlffActiveLearning", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5723,6 +5773,11 @@ WORKFLOW_TOOLS = {
                 'description': "Aggregate the finished SIESTA calculations and fine-tune a "
                                 "MACE-MP foundation model on them.",
                 'func': run_mlff_analysis},
+            3: {'title': "Stage 3 - Active Learning (stb-mlffActiveLearning)",
+                'description': "Use the fine-tuned model to suggest new configurations to "
+                                "label with SIESTA (largest predicted force), for another "
+                                "round of refinement.",
+                'func': run_mlff_active_learning},
         }},
        }
 

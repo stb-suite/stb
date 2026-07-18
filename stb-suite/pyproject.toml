@@ -120,6 +120,7 @@ stb-opticalAnalysis="stb.optical_analysis:main"
 stb-aimdAnalysis="stb.aimd_analysis:main"
 stb-mlff="stb.mlff:main"
 stb-mlffAnalysis="stb.mlff_analysis:main"
+stb-mlffActiveLearning="stb.mlff_active_learning:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

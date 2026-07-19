@@ -284,7 +284,7 @@ generating new geometry or aggregating multiple folders (same reasoning as
 **`stb-mlff` / `stb-mlffAnalysis`** (Workflow item 17, `mlff.py`/`mlff_analysis.py`) is
 the suite's first tool that trains a genuinely custom ML potential, rather than just
 using the generic MACE-MP-0 foundation model as-is (`stb-mlrelax`, `stb-defect
---ml-rank`, `stb-amorphize`, `stb-adsorb`/`stb-neb --ml-*`, `stb-phononsML`). Stage 1
+--ml-rank`, `stb-amorphize`, `stb-adsorb`/`stb-neb --ml-*`, `stb-mlphonons`). Stage 1
 (`stb-mlff`) generates `mlff_config_NNN/` training configurations from a reference
 `calc.fdf` — rattled displacements (`ase.Atoms.rattle`, one or more `--stdev`
 amplitudes) and/or frames sampled from an existing AIMD trajectory via `--from-aimd`
@@ -422,32 +422,69 @@ Output filenames key off a generic `stem` (the SystemLabel, or the trajectory
 file's basename) instead of `args.label` directly, so naming works the same in
 either input mode.
 
-**`stb-mlphonons`** (ML Simulations, `mlphonons.py`) is the second tool in the ML
-Simulations category — a standalone, single-shot phonon calculation (displacements,
-force constants, band structure, DOS, thermal properties) driven entirely by a MACE
-potential, no SIESTA and no separate `stb-phononsPos` analysis step needed. Deliberately
-kept separate from the existing SIESTA-based `stb-phononsCreate`/`stb-phononsPos`
-workflow and its own ML variants `stb-phononsML`/`stb-phononsQHA` (which don't accept
-a custom fine-tuned model, only `small`/`medium`/`large` foundation checkpoints) — the
-user explicitly wanted an isolated tool in this new category rather than retrofitting
-those, even though it means duplicating a small amount of orchestration. Reuses,
-rather than duplicates, the actual algorithmic pieces already extracted for this exact
-purpose: `core.mace_phonons.generate_ml_displacements`/`compute_force_constants`
-(already shared by `stb-phononsML`/`stb-phononsQHA`, this becomes their 3rd consumer)
-for the physics, and `phonons_pos.build_band_path`/`band_path_to_phonopy_format`/
-`band_tick_positions`/`pretty_label` for the q-path (ASE's own Bravais-lattice/
-`Cell.bandpath` machinery, deliberately NOT phonopy's seekpath-based
-`auto_band_structure` — `seekpath` isn't installed/a dependency of this suite;
-`phonons_pos.py`'s own docstring already explains this exact tradeoff). Plots (bands/
-DOS/thermal, matplotlib PNGs) are new code, not reused from `phonons_pos.py` (which
-writes gnuplot `.dat`+`.gplot` pairs, the older convention) — matching the newer
-matplotlib convention this session's tools (`aimd_analysis.py`/`mlff_analysis.py`/
-`mlmd.py`) already use. Flags an imaginary (negative) frequency along the band path
-as a `[WARNING]`, same QC check `stb-phononsPos` does — especially relevant here since
-ML potentials are markedly less reliable for phonons than DFT. Verified live on a
-64-atom bulk Si:Ge cell: physically sensible dispersion (correct acoustic branches to
-~0 at Γ, max frequency in the right ballpark) and textbook Debye-like thermal
-properties (entropy → 0 as T → 0, heat capacity saturating at high T).
+**`stb-mlphonons`** (ML Simulations, `mlphonons.py`, v2.0.0) is the second tool in the
+ML Simulations category — a standalone phonon calculation (displacements, force
+constants, band structure, DOS, thermal properties, optionally QHA) driven entirely by
+a MACE potential, no SIESTA and no separate `stb-phononsPos` analysis step needed. It
+originally coexisted with two SIESTA-Phonons-workflow ML variants,
+`stb-phononsML`/`stb-phononsQHA`, which only accepted `small`/`medium`/`large`
+foundation checkpoints (no custom fine-tuned model). Once `stb-mlphonons` gained
+foundation-model comparison and its own QHA mode (making it a strict superset), the
+user had those two **deleted outright** (`phonons_ml.py`/`phonons_qha.py`, their
+`pyproject.toml` entries, and their Phonons-workflow menu stages all removed) rather
+than kept as parallel paths — `stb-mlphonons` is now the only ML-driven phonon tool in
+the suite. Reuses, rather than duplicates, the algorithmic pieces originally extracted
+for those two tools: `core.mace_phonons.generate_ml_displacements`/
+`compute_force_constants` (this is now their sole consumer — the module docstring
+explains why it still lives in `core/` despite that) for the physics, and
+`phonons_pos.build_band_path`/`band_path_to_phonopy_format`/`band_tick_positions`/
+`pretty_label` for the q-path (ASE's own Bravais-lattice/`Cell.bandpath` machinery,
+deliberately NOT phonopy's seekpath-based `auto_band_structure` — `seekpath` isn't
+installed/a dependency of this suite; `phonons_pos.py`'s own docstring already explains
+this exact tradeoff). Plots (bands/DOS/thermal, matplotlib PNGs) are new code, not
+reused from `phonons_pos.py` (which writes gnuplot `.dat`+`.gplot` pairs, the older
+convention) — matching the newer matplotlib convention this session's tools
+(`aimd_analysis.py`/`mlff_analysis.py`/`mlmd.py`) already use.
+
+Four features on top of the original single-volume calculation:
+- **Foundation-model comparison**: when `--custom-model <path>` is given, also runs
+  the same pipeline with the MACE-MP-0 foundation model (`--skip-foundation-comparison`
+  to disable) and overlays both on the same bands/DOS/thermal plots — an honest,
+  at-a-glance check of whether fine-tuning actually changed the phonon physics.
+  Verified live: an 8-atom Si model fine-tuned this session showed a visibly different
+  top optical branch (~18.2 THz) vs. the foundation model (~11.7 THz) on the same
+  structure.
+- **Acoustic sum rule (ASR) correction**: calls `phonon.symmetrize_force_constants
+  (show_drift=False)` before computing bands/DOS, eliminating spurious near-zero
+  negative frequencies at Γ that are numerical noise, not a genuine instability. Even
+  after this correction a residual like `-0.0000 THz` can still print, so the
+  imaginary-mode check uses a tolerance (`_IMAGINARY_MODE_TOL_THZ = -0.01`, a module
+  constant) instead of a strict `< 0`, avoiding a false-positive `[WARNING]` — verified
+  live (a real run went from a spurious `-0.0003 THz` warning to a clean "No imaginary
+  modes found").
+- **Species-projected DOS + symmetry report**: `phonon.run_mesh(..., with_eigenvectors=
+  True)` enables both `run_total_dos`/`run_projected_dos`, the latter summed per
+  species (`phonon.primitive.symbols`) into `dos.dat`'s extra columns; a symmetry table
+  (space group, point group, and the displacement-count reduction from symmetry) is
+  printed alongside, adapted from the deleted `phonons_ml.py`. Verified live: a Ge
+  substitutional defect in bulk Si showed a physically correct low-frequency PDOS bump
+  from the heavier, more weakly-bonded Ge atom.
+- **QHA (`--qha`)**: a self-contained volume scan (`--n-volumes`, `--strain-range`,
+  `--eos`), adapted directly from the deleted `phonons_qha.py`'s `phonopy.api_qha.
+  PhonopyQHA`-based fitting — isotropic strain via `np.linspace`, one full
+  displacement+force-constant+thermal-properties pass per volume, then bulk modulus/
+  thermal expansion/equilibrium volume vs. temperature. Requires `--n-volumes >= 4`
+  (enforced via `parser.error`) since `PhonopyQHA`'s derivatives need at least that
+  many points. Mutually exclusive with foundation-model comparison (no QHA-vs-QHA
+  overlay yet — documented limitation, not a bug). Verified live with
+  `--n-volumes 5 --strain-range 3.0`: qualitatively sensible EOS/thermal-expansion/
+  bulk-modulus curves (values themselves noisy, as expected from deliberately toy
+  scan parameters, not a code defect).
+
+Verified live on a 64-atom bulk Si:Ge cell for the base pipeline: physically sensible
+dispersion (correct acoustic branches to ~0 at Γ, max frequency in the right ballpark)
+and textbook Debye-like thermal properties (entropy → 0 as T → 0, heat capacity
+saturating at high T).
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

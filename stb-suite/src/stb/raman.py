@@ -26,7 +26,7 @@ REPORT_FILE = "raman_stage1.txt"
 
 def print_dual(text, file_handle=None):
     """Prints to stdout with color, writes to file without color. Same
-    duplicated-per-tool helper as phonons_create.py/phonons_qha.py."""
+    duplicated-per-tool helper as phonons_create.py."""
     print(text)
     if file_handle:
         clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)

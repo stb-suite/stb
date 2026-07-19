@@ -102,10 +102,10 @@ def print_dual(text: str, file_handle=None) -> None:
     """Prints to stdout with color, writes to file without color.
 
     Moved here from phonons_pos.py when stb-convergenceAnalysis needed the
-    same helper; phonons_create.py, phonons_qha.py, phonons_ml.py and
-    elastic_analysis.py still carry their own identical, undeduplicated
-    copies of this function -- pre-existing before this move, left alone here
-    since they belong to unrelated workflows.
+    same helper; phonons_create.py and elastic_analysis.py still carry their
+    own identical, undeduplicated copies of this function -- pre-existing
+    before this move, left alone here since they belong to unrelated
+    workflows.
     """
     print(text)
     if file_handle:

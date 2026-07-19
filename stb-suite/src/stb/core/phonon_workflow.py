@@ -114,7 +114,7 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
     installs -- same fallback phonons_pos.py already used) and loads the
     Phonopy object with force constants ready. Skips straight to loading
     when `has_embedded_fc` (an ML-sourced phonopy_disp.yaml, e.g. from
-    stb-phononsML, already has force constants embedded -- no SIESTA
+    stb-mlphonons, already has force constants embedded -- no SIESTA
     .FA/FORCE_SETS involved at all).
 
     Leaves the process chdir'd into `phonon_dir` on return (phonopy.load
@@ -136,7 +136,7 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
 
     if has_embedded_fc:
         print_dual("Force constants already embedded in phonopy_disp.yaml "
-                    "(ML-computed, e.g. via stb-phononsML) -- skipping SIESTA "
+                    "(ML-computed, e.g. via stb-mlphonons) -- skipping SIESTA "
                     ".FA/FORCE_SETS extraction.", f_out)
     else:
         fa_files_abs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*", f"{system_label}.FA")))

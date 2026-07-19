@@ -43,11 +43,11 @@ def get_calculator(model="small", device="cpu", dtype="float64"):
     -- e.g. one fine-tuned by stb-mlffAnalysis on real SIESTA data) when
     `model` resolves to an existing file. This single entry point is shared
     by every ML consumer in the suite (stb-mlrelax, stb-defect --ml-rank,
-    stb-amorphize, stb-adsorb/stb-neb --ml-*, stb-phononsML), so a custom
-    model becomes usable everywhere this is called from -- currently only
-    stb-mlrelax exposes a --custom-model CLI flag for it, the others can
-    gain one the same way once there's a real need (same "expose on first
-    genuine use" policy as everywhere else in this suite).
+    stb-amorphize, stb-adsorb/stb-neb --ml-*), so a custom model becomes
+    usable everywhere this is called from -- stb-mlrelax, stb-mlmd, and
+    stb-mlphonons already expose a --custom-model CLI flag for it, the
+    others can gain one the same way once there's a real need (same
+    "expose on first genuine use" policy as everywhere else in this suite).
 
     Default float64 for geometry optimization (MACE's own guidance is
     unambiguous that float32 is for MD, not geometry optimization) --

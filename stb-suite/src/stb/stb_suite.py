@@ -123,8 +123,8 @@ def run_phonon_postprocessing() -> None:
 
     # 2. System Label -- left blank means "auto-detect from calc.fdf" (the
     # CLI's own default); NOT the same as forcing "siesta" -- an ML-sourced
-    # directory (stb-phononsML/stb-phononsQHA) has no SystemLabel at all and
-    # must never get -l passed.
+    # directory (e.g. one produced by stb-mlphonons, see ML Simulations) has
+    # no SystemLabel at all and must never get -l passed.
     sys_label = get_input(
         "SystemLabel used in calculations [blank = auto-detect from calc.fdf, "
         "or N/A for an ML-sourced directory]: ").strip()
@@ -334,190 +334,6 @@ def run_phonon_generator() -> None:
 
     print(color_text("\nGenerating phonon displacement folders...", 'green'))
     run_tool("stb-phononsCreate", args)
-
-
-def run_phonon_ml() -> None:
-    """Interface for the ML phonon force-constant calculator (phonons_ml.py)"""
-    print("\n" + "="*60)
-    print(color_text("PHONON FORCE CONSTANTS VIA MACE-MP-0 (NO SIESTA)", 'bold').center(60))
-    print("="*60 + "\n")
-    print(color_text(
-        "Heuristic preview (dispersion, DOS, thermal properties -- via the same Stage 2 "
-        "analysis), not a DFT replacement -- same caveat as stb-mlrelax.", 'yellow'))
-    print()
-
-    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
-    if not structure_file:
-        structure_file = "structure.fdf"
-
-    dim_input = get_input("\nSupercell dimensions (e.g. '2 2 2') [default: 2 2 2]: ").strip()
-    if not dim_input:
-        dim_x, dim_y, dim_z = 2, 2, 2
-    else:
-        try:
-            dims = [int(x) for x in dim_input.split()]
-            if len(dims) == 3:
-                dim_x, dim_y, dim_z = dims
-            else:
-                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
-                dim_x, dim_y, dim_z = 2, 2, 2
-        except ValueError:
-            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
-            dim_x, dim_y, dim_z = 2, 2, 2
-
-    distance = get_float_input("\nDisplacement distance in Å [default: 0.01]: ", 0.01)
-
-    model = get_input("\nMACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
-    if model not in ("small", "medium", "large"):
-        model = "small"
-
-    relax_choice = get_input(
-        "\nRelax positions with MACE before generating displacements? (Y/n): ").strip().lower()
-    relax = relax_choice not in ('n', 'no')
-
-    output_dir = get_input("\nOutput directory [default: phonon_ml_runs]: ").strip()
-    if not output_dir:
-        output_dir = "phonon_ml_runs"
-
-    # Advanced settings (rarely-touched -- gated so the essential flow above
-    # stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, device, fmax = 10.0, "cpu", 0.05
-    advanced_items = "vacuum-gap, device"
-    if relax:
-        advanced_items += ", relax force threshold"
-    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        vacuum_gap = get_float_input(
-            "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
-            "(default: 10.0): ", 10.0)
-        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
-        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
-        if relax:
-            fmax = get_float_input("Relax force convergence threshold, eV/Ang (default: 0.05): ", 0.05)
-
-    args = [
-        "-s", structure_file,
-        "-dim", str(dim_x), str(dim_y), str(dim_z),
-        "-d", str(distance),
-        "--model", model,
-        "--device", device,
-        "--fmax", str(fmax),
-        "--vacuum-gap", str(vacuum_gap),
-        "-o", output_dir,
-        "--no-intro",
-    ]
-    if not relax:
-        args.append("--no-relax")
-
-    print(color_text("\nComputing phonon force constants via MACE-MP-0...", 'green'))
-    run_tool("stb-phononsML", args)
-
-
-def run_phonon_qha() -> None:
-    """Interface for the ML-only QHA tool (phonons_qha.py)"""
-    print("\n" + "="*60)
-    print(color_text("QUASI-HARMONIC APPROXIMATION VIA MACE-MP-0 (NO SIESTA)", 'bold').center(60))
-    print("="*60 + "\n")
-    print(color_text(
-        "Runs the full ML phonon pipeline at several isotropically-scaled volumes and fits "
-        "an equation of state. Heuristic preview, not a DFT replacement.", 'yellow'))
-    print()
-
-    structure_file = get_input("Input structure file [default: structure.fdf]: ").strip()
-    if not structure_file:
-        structure_file = "structure.fdf"
-
-    dim_input = get_input("\nSupercell dimensions (e.g. '2 2 2') [default: 2 2 2]: ").strip()
-    if not dim_input:
-        dim_x, dim_y, dim_z = 2, 2, 2
-    else:
-        try:
-            dims = [int(x) for x in dim_input.split()]
-            if len(dims) == 3:
-                dim_x, dim_y, dim_z = dims
-            else:
-                print(color_text("Please provide exactly 3 integers. Using default 2 2 2.", 'yellow'))
-                dim_x, dim_y, dim_z = 2, 2, 2
-        except ValueError:
-            print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
-            dim_x, dim_y, dim_z = 2, 2, 2
-
-    n_points = get_int_input("\nNumber of volume points, >= 4 [default: 5]: ", 5)
-    while n_points < 4:
-        print(color_text("Need at least 4 points to fit an equation of state.", 'red'))
-        n_points = get_int_input("Number of volume points, >= 4 [default: 5]: ", 5)
-
-    strain_range = get_float_input(
-        "\nVolume range around equilibrium, +/- % [default: 3.0]: ", 3.0)
-
-    model = get_input("\nMACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
-    if model not in ("small", "medium", "large"):
-        model = "small"
-
-    output_dir = get_input("\nOutput directory [default: phonon_qha_runs]: ").strip()
-    if not output_dir:
-        output_dir = "phonon_qha_runs"
-
-    # Advanced settings (rarely-touched -- gated so the essential flow above
-    # stays short; CLI defaults apply untouched when skipped).
-    (distance, m_x, m_y, m_z, tmin, tmax, tstep, eos, device, relax, fmax,
-     plot_dir) = (0.01, 20, 20, 20, 0.0, 1000.0, 10.0, "vinet", "cpu", True, 0.05, "phonon_plots")
-    show_advanced = get_input(
-        "\nConfigure advanced settings (distance, mesh, temperature range, EOS, "
-        "device, per-volume relax, plot directory)? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        distance = get_float_input("Displacement distance in Ang (default: 0.01): ", 0.01)
-        mesh_input = get_input("Q-point mesh, e.g. '20 20 20' (default: 20 20 20): ").strip()
-        if mesh_input:
-            try:
-                dims = [int(x) for x in mesh_input.split()]
-                if len(dims) == 3:
-                    m_x, m_y, m_z = dims
-                else:
-                    print(color_text("Please provide exactly 3 integers. Using default 20 20 20.", 'yellow'))
-            except ValueError:
-                print(color_text("Invalid input format. Using default 20 20 20.", 'yellow'))
-        tmin = get_float_input("Minimum temperature (K) (default: 0): ", 0.0)
-        tmax = get_float_input("Maximum temperature (K) (default: 1000): ", 1000.0)
-        tstep = get_float_input("Temperature step (K) (default: 10): ", 10.0)
-        eos_choice = get_input("Equation of state [vinet/murnaghan/birch_murnaghan, default: vinet]: ").strip().lower()
-        if eos_choice in ("vinet", "murnaghan", "birch_murnaghan"):
-            eos = eos_choice
-        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
-        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
-        relax_choice = get_input("Relax positions per volume before generating displacements? (Y/n): ").strip().lower()
-        relax = relax_choice not in ('n', 'no')
-        if relax:
-            fmax = get_float_input("Per-volume relax force threshold, eV/Ang (default: 0.05): ", 0.05)
-        plot_dir = get_input("Gnuplot .dat/.gplot output directory (default: phonon_plots): ").strip()
-        if not plot_dir:
-            plot_dir = "phonon_plots"
-
-    args = [
-        "-s", structure_file,
-        "-dim", str(dim_x), str(dim_y), str(dim_z),
-        "-d", str(distance),
-        "--n-points", str(n_points),
-        "--strain-min", str(-abs(strain_range)),
-        "--strain-max", str(abs(strain_range)),
-        "-m", str(m_x), str(m_y), str(m_z),
-        "--tmin", str(tmin),
-        "--tmax", str(tmax),
-        "--tstep", str(tstep),
-        "--eos", eos,
-        "--model", model,
-        "--device", device,
-        "--fmax", str(fmax),
-        "--plot-dir", plot_dir,
-        "-o", output_dir,
-        "--no-intro",
-    ]
-    if not relax:
-        args.append("--no-relax")
-
-    print(color_text("\nRunning QHA via MACE-MP-0 (this scans several volumes -- can take a "
-                      "while)...", 'green'))
-    run_tool("stb-phononsQHA", args)
 
 
 def run_cohesive_setup() -> None:
@@ -4630,7 +4446,27 @@ def run_mlphonons_generator() -> None:
     if output_dir:
         args.extend(["--output-dir", output_dir])
 
-    save_data = get_input("Also save the raw plot data (.dat files)? (y/N): ").strip().lower()
+    qha = get_input(
+        "\nRun a quasi-harmonic approximation (QHA) volume scan instead of a single-volume "
+        "calculation? (y/N): ").strip().lower()
+    if qha == 'y':
+        args.append("--qha")
+        n_volumes = get_input("Number of volumes to scan, >= 4 [default: 5]: ").strip()
+        args.extend(["--n-volumes", n_volumes or "5"])
+        strain_range = get_input(
+            "Max isotropic strain around the reference volume, %% [default: 3.0]: ").strip()
+        args.extend(["--strain-range", strain_range or "3.0"])
+        eos = get_input(
+            "Equation of state, vinet/murnaghan/birch_murnaghan [default: vinet]: ").strip()
+        args.extend(["--eos", eos or "vinet"])
+    elif custom_model:
+        skip_compare = get_input(
+            "\nAlso compare against the MACE-MP-0 foundation model on the same plots? "
+            "(Y/n): ").strip().lower()
+        if skip_compare == 'n':
+            args.append("--skip-foundation-comparison")
+
+    save_data = get_input("\nAlso save the raw plot data (.dat files)? (y/N): ").strip().lower()
     if save_data == 'y':
         args.append("--save-data")
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
@@ -5718,7 +5554,9 @@ WORKFLOW_TOOLS = {
                 'func': run_cohesive_analysis},
         }},
     4: {'title': "Phonons",
-        'description': "Generate displaced supercells via Phonopy, then post-process into thermal properties.",
+        'description': "Generate displaced supercells via Phonopy, then post-process into thermal "
+                        "properties. For a fast ML-only preview (no SIESTA) instead, including "
+                        "QHA, see ML Simulations > ML Phonons (stb-mlphonons).",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-phononsCreate)",
                 'description': "Automate SIESTA phonon displacement folders using Phonopy.",
@@ -5726,14 +5564,6 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-phononsPos)",
                 'description': "Extract forces, generate FORCE_SETS, and calculate thermal properties.",
                 'func': run_phonon_postprocessing},
-            3: {'title': "Stage 3 - ML Preview (stb-phononsML)",
-                'description': "Fast phonon force constants via MACE-MP-0 -- no SIESTA needed. "
-                                "Feed the output straight into Stage 2's analysis.",
-                'func': run_phonon_ml},
-            4: {'title': "Stage 4 - ML QHA (stb-phononsQHA)",
-                'description': "Quasi-harmonic approximation (thermal expansion, bulk modulus "
-                                "vs. T) via MACE-MP-0 only -- no SIESTA needed.",
-                'func': run_phonon_qha},
         }},
     5: {'title': "Convergence Tests",
         'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",

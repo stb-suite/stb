@@ -1,8 +1,15 @@
 """Shared MACE-MP-0 finite-difference phonon force-constant logic, used by
-stb-phononsML and stb-phononsQHA. Callers must call core.deps.require_mace()
-themselves first, same convention as core/mace_relax.py -- this module only
-imports ase/phonopy/mace lazily inside the functions below, never at module
-level.
+stb-mlphonons (ML Simulations). Originally extracted for stb-phononsML/
+stb-phononsQHA (the Phonons workflow's ML-only stages 3/4); those were
+deleted and consolidated into stb-mlphonons as a single standalone tool
+(also supporting --custom-model, which they never did), leaving this module
+with one consumer again -- kept here rather than folded back into
+mlphonons.py since the "shared, reusable" contract (no printing, generic
+ase.Atoms/Phonopy objects in, no CLI-specific state) is still the right
+shape regardless of consumer count. Callers must call core.deps.
+require_mace() themselves first, same convention as core/mace_relax.py --
+this module only imports ase/phonopy/mace lazily inside the functions
+below, never at module level.
 """
 
 import numpy as np

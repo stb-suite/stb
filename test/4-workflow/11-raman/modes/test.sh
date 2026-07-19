@@ -526,7 +526,7 @@ check_contains "OK" log_skipdeg_noop_check.txt
 # Real doubly-degenerate case, same graphene fixture/known result as 5b-2
 # (in-plane E2g is Raman-active, out-of-plane B1g is silent) -- built
 # directly as an ML-sourced (embedded force_constants) phonopy_disp.yaml,
-# same has_embedded_fc path stb-phononsML produces, so no SIESTA .FA/
+# same has_embedded_fc path stb-mlphonons produces, so no SIESTA .FA/
 # FORCE_SETS extraction or real stb-raman Stage 1 run is needed.
 echo -e "\n--- Testing --skip-degenerate against a real doubly-degenerate mode (graphene E2g) ---"
 rm -rf raman_study

@@ -3,9 +3,10 @@
 # --- Setup ---
 # Smoke test for stb-phononsPos (Phonons Analysis, item 4.4.2), covering both
 # ways it can be fed: real SIESTA .FA forces (fabricated here -- same 14-atom
-# Sn3O4 system and format as test/5-utils/2-clean/Sn3O4.FA, physically
+# Sn3O4 system and format as test/6-utils/2-clean/Sn3O4.FA, physically
 # meaningless but format-correct, enough to exercise FORCE_SETS extraction),
-# and an ML-computed phonopy_disp.yaml (stb-phononsML, no SIESTA needed).
+# and an ML-computed phonopy_disp.yaml (stb-mlphonons, ML Simulations, no
+# SIESTA needed).
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREP_DIR="$(cd "$FIXTURE_DIR/../prep" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
@@ -131,9 +132,10 @@ check_success phonon_runs/phonon_plots/dos.dat
 #     the exact pipeline that surfaced the "bands didn't do anything" menu
 #     bug (typing "y" at the old free-text prompt silently dropped --bands);
 #     covered again in the interactive section below ---
-echo -e "\n--- Testing the ML-computed (stb-phononsML) path with --bands ---"
+echo -e "\n--- Testing the ML-computed (stb-mlphonons) path with --bands ---"
 rm -rf phonon_ml_runs
-stb-phononsML -s structure.fdf -dim 1 1 1 -o phonon_ml_runs --no-relax --no-intro > log_ml.txt 2>&1
+stb-mlphonons --file structure.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
+    --output-dir phonon_ml_runs --no-relax --no-intro > log_ml.txt 2>&1
 check_success phonon_ml_runs/phonopy_disp.yaml
 
 stb-phononsPos -dir phonon_ml_runs -m 4 4 4 --bands --no-intro > log_pos_ml.txt 2>&1

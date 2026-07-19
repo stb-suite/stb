@@ -494,7 +494,7 @@ def main():
         print(color_text(f"[ERROR] '{yaml_file}' not found. Did you run the displacement generator?", 'red'))
         sys.exit(1)
 
-    # A yaml from stb-phononsML already has force constants embedded
+    # A yaml from stb-mlphonons already has force constants embedded
     # (phonon.save(..., settings={'force_constants': True})) -- no SIESTA
     # .FA/FORCE_SETS/SystemLabel involved in that case at all. Peeked with a
     # plain yaml load (not phonopy.load, which needs a chdir first) purely

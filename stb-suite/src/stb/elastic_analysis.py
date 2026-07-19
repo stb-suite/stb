@@ -788,7 +788,7 @@ def write_energy_plots(plot_dir, series, fit_coeffs, unit_label, f_out):
 def check_stability_and_report(C, dimensionality, unit_label, f_out):
     """Returns `summary`, a dict of the final derived properties + verdict
     already printed here -- so callers (see the [5] SUMMARY & FILES section
-    in _emit_elastic_report) can recap them without recomputing.
+    in emit_elastic_report) can recap them without recomputing.
     """
     print_dual(f"\n{color_text('[4] STABILITY AND PROPERTIES', 'magenta')}", f_out)
     print_dual("-" * 60, f_out)
@@ -905,13 +905,21 @@ def check_stability_and_report(C, dimensionality, unit_label, f_out):
     return summary
 
 
-def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                           eggbox_results=None, fit_diagnostics=None, symmetry_check=None,
-                          plot_files=None):
+                          plot_files=None, report_path=REPORT_FILE):
     """Prints/writes the stiffness-matrix + constants + stability sections
     shared by every method (--method stress's basic/full paths and --method
     energy) -- extracted once --method energy needed to reach this same
     reporting tail from its own, separate data-mining branch in main().
+    Renamed from the original _emit_elastic_report (dropped the leading
+    underscore) once stb-mlelastic became a second consumer -- it only
+    reads args.dimensionality/method/symmetry_method/fit_quality_tolerance/
+    eggbox_tolerance/plot_dir, so any caller's argparse Namespace with those
+    same attribute names works, DFT- or ML-sourced data alike; pass
+    plot_files=None from a caller using its own plot format (e.g.
+    stb-mlelastic's matplotlib PNGs, instead of this module's own gnuplot
+    .dat/.gplot pairs) to skip the gnuplot-specific closing message.
 
     `eggbox_results` (see eggbox_cross_check), `fit_diagnostics` (see
     direction_fit_diagnostics) and `symmetry_check` (see
@@ -925,6 +933,13 @@ def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_di
 
     `plot_files` (see write_stress_plots/write_energy_plots) feeds the
     closing [5] SUMMARY & FILES section.
+
+    `report_path` defaults to this module's own REPORT_FILE (elastic_
+    analysis.py's own two call sites always write there unconditionally,
+    unchanged behavior) -- a caller whose report is opt-in (e.g.
+    stb-mlelastic's --save-report) should pass its own path, or None to
+    omit the "Full report" line entirely rather than claim a file exists
+    when nothing was written.
     """
     if args.dimensionality == "1d":
         # 1D REPORT -- only C33 (axial, along the periodic wire/tube axis)
@@ -1148,7 +1163,8 @@ def _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_di
                    f"v={summary['nu']:.3f}  A^U={au_str}", f_out)
     verdict = color_text('STABLE', 'green') if summary['passes'] else color_text('UNSTABLE', 'red')
     print_dual(f"Verdict: {verdict}  |  Quality warnings raised in [3]: {warning_count}", f_out)
-    print_dual(f"Full report : {REPORT_FILE}", f_out)
+    if report_path:
+        print_dual(f"Full report : {report_path}", f_out)
     if plot_files:
         print_dual(f"Plot data   : {args.plot_dir}/ ({len(plot_files)} file pair(s) -- raw fitting "
                    "data + gnuplot scripts, see [Saved] lines above)", f_out)
@@ -1462,7 +1478,7 @@ def main():
             os.makedirs(args.plot_dir, exist_ok=True)
             plot_files = write_energy_plots(args.plot_dir, energy_series, fit_coeffs, unit_label, f_out)
 
-            _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+            emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                                  plot_files=plot_files)
             print("-" * 60)
             print(f"[DONE] Report saved to: {color_text(REPORT_FILE, 'green')}")
@@ -1541,7 +1557,7 @@ def main():
         # a 1D wire, which always touches a vacuum-padded axis) aren't a
         # real "missing data" or "reconstructed by symmetry" situation --
         # filter both advisory lists down to what's actually relevant so
-        # _emit_elastic_report doesn't tell a nanowire user to go run 'yy'.
+        # emit_elastic_report doesn't tell a nanowire user to go run 'yy'.
         relevant = RELEVANT_DIRECTIONS[args.dimensionality]
         filled_by_symmetry = [d for d in filled_by_symmetry if d in relevant]
         missing_directions = [d for d in missing_directions if d in relevant]
@@ -1581,7 +1597,7 @@ def main():
         plot_files = write_stress_plots(args.plot_dir, data, fit_diagnostics, CONV_FACTOR,
                                          unit_label, f_out)
 
-        _emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
+        emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                              eggbox_results=eggbox_results, fit_diagnostics=fit_diagnostics,
                              symmetry_check=symmetry_check, plot_files=plot_files)
 

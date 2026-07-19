@@ -4523,6 +4523,87 @@ def run_mlphonons_generator() -> None:
     run_tool("stb-mlphonons", args)
 
 
+def run_mlelastic_generator() -> None:
+    """Interface for ML Elastic Constants (stb-mlelastic)"""
+    print("\n" + "="*60)
+    print(color_text("ML ELASTIC CONSTANTS (stb-mlelastic)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Standalone stiffness "
+        "matrix (stress-strain method) driven entirely by a MACE potential -- no SIESTA, no "
+        "separate strain_*/ folders. A fast heuristic preview, not a substitute for the real "
+        "SIESTA-based Elastic workflow.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    max_strain = get_input("Max strain magnitude, %% [default: 1.0]: ").strip()
+    if max_strain:
+        args.extend(["--max", max_strain])
+    steps = get_input("Strain points per direction [default: 4]: ").strip()
+    if steps:
+        args.extend(["--steps", steps])
+
+    dimensionality = get_input(
+        "Dimensionality, auto/3d/2d/1d [default: auto]: ").strip()
+    if dimensionality:
+        args.extend(["--dimensionality", dimensionality])
+
+    output_dir = get_input("Output directory [default: mlelastic_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    check_convergence = get_input(
+        "\nInstead run a strain-amplitude convergence check (multiple --max values)? "
+        "(y/N): ").strip().lower()
+    if check_convergence == 'y':
+        args.append("--check-convergence")
+        conv_strains = get_input(
+            "Strain magnitudes to compare, space-separated %% [default: half/same/double "
+            "the max above]: ").strip()
+        if conv_strains:
+            args.extend(["--convergence-strains", *conv_strains.split()])
+    elif custom_model:
+        skip_compare = get_input(
+            "\nAlso compare against the MACE-MP-0 foundation model on the same plot/table? "
+            "(Y/n): ").strip().lower()
+        if skip_compare == 'n':
+            args.append("--skip-foundation-comparison")
+
+    if check_convergence != 'y':
+        skip_aniso = get_input(
+            "\nSkip the directional Young's-modulus anisotropy surface (3D only)? "
+            "(y/N): ").strip().lower()
+        if skip_aniso == 'y':
+            args.append("--skip-anisotropy-surface")
+
+    save_data = get_input("\nAlso save the raw stress-strain data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nComputing ML elastic constants...", 'green'))
+    run_tool("stb-mlelastic", args)
+
+
 def run_dftu_generator() -> None:
     """Interface for the DFT+U / Hubbard Block Generator (stb-dftu)"""
     print("\n" + "="*60)
@@ -5832,6 +5913,10 @@ MLSIM_TOOLS = {
         'description': "Standalone phonon bands/DOS/thermal properties driven entirely by a "
                         "MACE potential -- no SIESTA, no separate analysis tool needed.",
         'func': run_mlphonons_generator},
+    3: {'title': "ML Elastic Constants (stb-mlelastic)",
+        'description': "Standalone stiffness matrix (stress-strain method) driven entirely by "
+                        "a MACE potential -- no SIESTA, no separate strain_*/ folders needed.",
+        'func': run_mlelastic_generator},
 }
 
 

@@ -121,6 +121,7 @@ stb-mlffAnalysis="stb.mlff_analysis:main"
 stb-mlffActiveLearning="stb.mlff_active_learning:main"
 stb-mlmd="stb.mlmd:main"
 stb-mlphonons="stb.mlphonons:main"
+stb-mlelastic="stb.mlelastic:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

@@ -526,6 +526,77 @@ gave a real optical mode only ~0.094 Ang of motion for a nominal "1.0", not 1 An
 identical latent bug existed in `phonons_pos.py`'s pre-existing `--freeze-unstable-mode`
 (same raw-Cartesian-difference pattern) and was fixed there too with the same helper.
 
+**`stb-mlelastic`** (ML Simulations, `mlelastic.py`, v1.1.0) is the third tool in the ML
+Simulations category -- a standalone stiffness-matrix (stress-strain) calculation driven
+entirely by a MACE potential, the same relationship `stb-mlphonons` has to
+`stb-phononsCreate`/`stb-phononsPos`. Unlike that pair, it's a single self-contained
+tool with no `strain_*/` folders to hand off to SIESTA and reload later: MACE stress is
+cheap enough to evaluate in-memory for every canonical Voigt direction in one run, so
+there's no DFT-cost reason for `stb-elasticInputs`' symmetry-based direction-reduction,
+and no `--method energy` path either (that method exists in the DFT tool specifically to
+sidestep SIESTA's real-space-grid "eggbox effect" on stress, which MACE has no analog
+of). Reuses, rather than duplicates, `elastic_analysis.py`'s post-fit numerics --
+`compute_stiffness_matrix`, `direction_fit_diagnostics`, `tensor_symmetry_check`,
+`check_stability_and_report`, and `emit_elastic_report` (renamed from the original
+`_emit_elastic_report` once this became a second consumer; it only reads a handful of
+attribute names off any caller's argparse `Namespace`, so it doesn't care whether the
+data came from SIESTA or MACE) -- since a stress-strain elastic-constant fit is the same
+linear algebra regardless of data source; only the data-mining step (reading `calc.out`
+per folder there) differs, replaced here by `compute_ml_elastic_data`'s in-memory MACE
+evaluation loop. Also reuses `elastic_inputs.py`'s `get_strain_matrix`/`direction_axes`
+for the identical deformation-matrix/vacuum-blocking convention, so a strain labeled
+`xy` means the same deformation in both tools. Plots (`plot_stress_strain`) are new
+matplotlib code, not `elastic_analysis.py`'s gnuplot `.dat`+`.gplot` writer -- matching
+the newer matplotlib convention this session's ML tools already use. A **real bug** was
+found and fixed while wiring the report reuse: `emit_elastic_report`'s closing "Full
+report" line read `elastic_analysis.py`'s own hardcoded `REPORT_FILE` module constant
+directly, so it always printed `mechanical_properties.txt` regardless of what
+`stb-mlelastic` actually wrote -- fixed by adding a `report_path` parameter (defaulting
+to the original constant, so `elastic_analysis.py`'s own 2 call sites are unaffected).
+Verified live: an 8-atom bulk Si cell recovered cubic symmetry (C11=C22=C33,
+C12=C13=C23, C44=C55=C66, all independently fit with no symmetry constraint imposed)
+and passed the Born stability check; a 2-atom graphene monolayer (vacuum along c)
+correctly dropped the vacuum-blocked zz/yz/xz directions, applied the same Lz dilution
+correction `stb-elasticAnalysis` needs for SIESTA's own volumetric stress, and gave a
+layer modulus (~264-318 N/m) in the right physical ballpark against the experimental
+~340 N/m.
+
+A second pass added 4 more features:
+- **Foundation-model comparison**: when `--custom-model` is given, also runs the same
+  pipeline with the MACE-MP-0 foundation model (`--skip-foundation-comparison` to
+  disable) and overlays both on the stress-strain plot plus a side-by-side diagonal
+  -constants table -- same pattern as `stb-mlphonons`/`stb-mlffAnalysis`.
+- **Sound velocities + Debye temperature** (3D only): Vp/Vs/Vm and theta_D derived from
+  the Voigt-Reuss-Hill bulk/shear moduli `check_stability_and_report` already computes,
+  plus the structure's own mass density -- zero extra MACE cost. Verified live on bulk
+  Si: density came out 2285 kg/m^3 (real Si: 2329), and the ~391 K Debye temperature
+  (real Si: ~645 K) is proportionally consistent with MACE-MP-0's own known
+  underestimate of Si's elastic constants (~95.6/57.8/26.8 GPa vs. the ~166/64/80 GPa
+  experimental C11/C12/C44) -- an internal-consistency check, not an independent error.
+- **Directional Young's-modulus anisotropy surface** (3D only, `--skip-anisotropy-surface`
+  to disable): builds the full compliance tensor from the fitted C_sym
+  (`compliance_voigt_to_full`, its own small helper -- NOT `core/symmetry.py`'s
+  `voigt_to_full_tensor`, which uses the STIFFNESS engineering-strain factor convention,
+  not compliance's) and evaluates `1/E(n) = s_ijkl n_i n_j n_k n_l` over a spherical grid,
+  plotted as a 3D "material property surface" (ELATE-style). Verified numerically
+  against a synthetic isotropic tensor (C44=(C11-C12)/2): E(n) constant to machine
+  precision across arbitrary directions and matching the closed-form isotropic formula
+  E=(C11-C12)(C11+2*C12)/(C11+C12) exactly.
+- **`--check-convergence`**: re-fits at multiple `--max` strain magnitudes
+  (`--convergence-strains`) and reports how each diagonal constant changes -- checks the
+  linear-regime assumption itself, mutually exclusive with foundation comparison.
+
+**Real bug found and fixed while testing `--dimensionality` manual override**: forcing
+a lower-dimensional structure (e.g. 2D graphene) to report as 3D leaves several
+canonical directions (zz/yz/xz) with no data regardless of the override (direction
+selection is vacuum-based, unaffected by `--dimensionality`), making C_sym singular --
+`plot_anisotropy_surface`'s `np.linalg.inv` crashed uncaught, and the sound-velocity
+section would have silently returned a physically meaningless number (its Reuss-average
+inversion already had a fallback, masking the same underlying rank-deficiency). Fixed
+by checking `missing_directions` before attempting either section (prints an honest
+`[WARNING] Skipped` instead) and additionally wrapping `plot_anisotropy_surface`'s
+inversion in `try/except LinAlgError` as defense in depth.
+
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +
 `categorize_dynamics`), SCF convergence, max force, final energy, final ionic

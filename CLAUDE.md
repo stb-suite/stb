@@ -422,7 +422,7 @@ Output filenames key off a generic `stem` (the SystemLabel, or the trajectory
 file's basename) instead of `args.label` directly, so naming works the same in
 either input mode.
 
-**`stb-mlphonons`** (ML Simulations, `mlphonons.py`, v2.0.0) is the second tool in the
+**`stb-mlphonons`** (ML Simulations, `mlphonons.py`, v2.1.0) is the second tool in the
 ML Simulations category — a standalone phonon calculation (displacements, force
 constants, band structure, DOS, thermal properties, optionally QHA) driven entirely by
 a MACE potential, no SIESTA and no separate `stb-phononsPos` analysis step needed. It
@@ -485,6 +485,46 @@ Verified live on a 64-atom bulk Si:Ge cell for the base pipeline: physically sen
 dispersion (correct acoustic branches to ~0 at Γ, max frequency in the right ballpark)
 and textbook Debye-like thermal properties (entropy → 0 as T → 0, heat capacity
 saturating at high T).
+
+Three more features on a second pass, plus a real bug fix shared with the SIESTA path:
+- **`--freeze-unstable-mode`**: mirrors `stb-phononsPos`'s own feature of the same name
+  -- if the DOS mesh has a genuine imaginary mode (below `_IMAGINARY_MODE_TOL_THZ`),
+  displaces the supercell along that mode's eigenvector (`phonon.run_modulations`,
+  calibrated to the requested `--freeze-amplitude` in Angstrom via a unit-amplitude
+  probe displacement first, since phonopy's own "amplitude" parameter is an internal
+  eigenvector-normalization scale, not itself in Angstrom) and writes the result as a
+  new `.fdf`. Unlike `phonons_pos.py`, no bohr conversion is needed on write since this
+  tool's Phonopy object is already built in Angstrom (see `core/mace_phonons.py`).
+- **`--animate-mode`**: writes a multi-frame trajectory (xsf/pdb/xyz, same convention as
+  `stb-ani2traj`/`stb-mlmd`) animating one normal mode's vibration at a given q-point
+  (`--animate-qpoint`, default Gamma) by sweeping `phonon.run_modulations`'s phase over
+  a full cycle -- same modulation machinery `--freeze-unstable-mode` uses for a single
+  snapshot. `--animate-dim` controls the modulation supercell size and must make the
+  q-point commensurate (only the default Gamma point works with the default `1 1 1`).
+- **`--check-convergence`**: runs the full single-volume pipeline at multiple
+  `--convergence-dims` supercell sizes (default: the given `--dim` and `--dim+1` on
+  every non-vacuum axis) and reports how the max frequency / heat capacity / entropy
+  change between them -- MACE is cheap enough that this is an actually affordable
+  convergence check, unlike the real DFT-based workflow. Mutually exclusive with
+  `--qha`/`--freeze-unstable-mode`/`--animate-mode`.
+
+**Real bug found and fixed while verifying `--freeze-unstable-mode` live**: the
+amplitude-calibration probe (`mod.modulated_supercells[0].positions -
+mod.supercell.positions`, comparing raw Cartesian coordinates) is wrong under periodic
+wraparound -- an atom sitting near a cell face can have its wrapped fractional
+coordinate flip from ~0.999 to ~0.001 between the unmodulated and modulated supercells
+for a real displacement of a fraction of an Angstrom, which reads as a jump of nearly a
+full lattice vector. Caught live on a real compressed (deliberately made unstable)
+8-atom Si cell: a requested `--freeze-amplitude 0.2` measured as ~74 Ang achieved,
+instead of the correct 0.2. Fixed with a minimum-image-convention helper
+(`_pbc_atomic_shift`, fractional-difference-then-wrap-then-back-to-Cartesian, same
+convention as `core/md_traj.py`'s trajectory unwrapping elsewhere in the suite) used for
+both the freeze probe/achieved measurement and `--animate-mode`'s own amplitude
+calibration (which needed the exact same probe-and-rescale treatment -- verified live
+that passing the requested Angstrom value straight through as phonopy's "amplitude"
+gave a real optical mode only ~0.094 Ang of motion for a nominal "1.0", not 1 Ang). The
+identical latent bug existed in `phonons_pos.py`'s pre-existing `--freeze-unstable-mode`
+(same raw-Cartesian-difference pattern) and was fixed there too with the same helper.
 
 `stb-status` (Utils, `status.py`) prints a quick per-folder summary of a SIESTA calc:
 run type (single-point/relaxation/AIMD, via `core.siesta_log.get_dynamics_type` +

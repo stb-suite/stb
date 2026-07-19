@@ -40,6 +40,26 @@ SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaa
                   '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
 
 
+def _pbc_atomic_shift(positions_new, positions_ref, cell):
+    """Per-atom displacement magnitude between two position arrays of the
+    same periodic cell, using the minimum-image convention -- NOT a plain
+    Cartesian difference. A plain difference is wrong for the mode-freeze
+    amplitude calibration below: an atom sitting near a cell face can have
+    its wrapped fractional coordinate flip from ~0.999 to ~0.001 between
+    the unmodulated and modulated supercells for a real displacement of a
+    fraction of an Angstrom, which shows up as a jump of nearly a full
+    lattice vector (tens of Angstrom) in raw Cartesian coordinates --
+    verified live (in stb-mlphonons, which shares this exact freeze
+    mechanism) that this silently broke the requested-amplitude scaling on
+    a real unstable-mode test case (~74 Ang measured instead of the true
+    ~0.0002 Ang).
+    """
+    frac_diff = (positions_new - positions_ref) @ np.linalg.inv(cell)
+    frac_diff -= np.round(frac_diff)
+    cart_diff = frac_diff @ cell
+    return np.linalg.norm(cart_diff, axis=1)
+
+
 def write_thermal_plots(plot_dir, temperatures, free_energy, entropy, heat_capacity, f_out):
     """One <property>.dat + <property>.gplot per thermal-property curve
     (raw data, no fit -- there's nothing to fit here) plus a combined
@@ -656,16 +676,16 @@ def main():
                 # linearly to hit the user's requested Angstrom target.
                 phonon.run_modulations(args.mesh, [[q_point, band_idx, 1.0, 0.0]])
                 mod = phonon.modulation
-                probe_shift = np.linalg.norm(
-                    mod.modulated_supercells[0].positions - mod.supercell.positions,
-                    axis=1).max() * internal_to_angstrom
+                probe_shift = _pbc_atomic_shift(
+                    mod.modulated_supercells[0].positions, mod.supercell.positions,
+                    np.array(mod.supercell.cell)).max() * internal_to_angstrom
                 scale = args.freeze_amplitude / probe_shift
 
                 phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
                 mod = phonon.modulation
-                achieved_shift = np.linalg.norm(
-                    mod.modulated_supercells[0].positions - mod.supercell.positions,
-                    axis=1).max() * internal_to_angstrom
+                achieved_shift = _pbc_atomic_shift(
+                    mod.modulated_supercells[0].positions, mod.supercell.positions,
+                    np.array(mod.supercell.cell)).max() * internal_to_angstrom
 
                 frozen_mode_filename = "frozen_mode.fdf"
                 frozen_struct = mod.modulated_supercells[0]

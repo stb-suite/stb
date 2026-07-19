@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 import os
 import sys
@@ -15,6 +15,8 @@ from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
+from ase import Atoms
+from ase.io import write as ase_write
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, kspace, mace_relax, mace_phonons
@@ -27,6 +29,17 @@ require_mace()
 REPORT_FILE = "stb_mlphonons_report.txt"
 
 _SERIES_COLORS = ['tab:blue', 'tab:orange']
+
+# Same 3-format convention already used by stb-ani2traj/stb-mlmd for
+# multi-frame trajectories (xsf/pdb natively carry a lattice, extxyz via a
+# Lattice= header tag) -- duplicated here rather than imported, same as
+# mlmd.py already does, since it's tiny and tied to each tool's own CLI
+# --animate-format choices/help text.
+OUTPUT_FORMATS = {
+    "xsf": ("xsf", ".xsf"),
+    "pdb": ("proteindatabank", ".pdb"),
+    "xyz": ("extxyz", ".xyz"),
+}
 
 # Below this (THz), a "negative" frequency is treated as numerical noise
 # (e.g. residual acoustic-sum-rule violation after symmetrize_force_
@@ -143,6 +156,134 @@ def run_phonon_pipeline(atoms_ref, calc, args, f_out, tag=""):
     result["heat_capacity"] = tp['heat_capacity']
 
     return result
+
+
+def _pbc_atomic_shift(positions_new, positions_ref, cell):
+    """Per-atom displacement magnitude between two position arrays of the
+    same periodic cell, using the minimum-image convention (same convention
+    as core/md_traj.py's trajectory unwrapping elsewhere in this suite) --
+    NOT a plain Cartesian difference. A plain difference is wrong here: an
+    atom sitting near a cell face can have its wrapped fractional
+    coordinate flip from ~0.999 to ~0.001 between the two supercells for a
+    displacement of a fraction of an Angstrom, which shows up as a jump of
+    nearly a full lattice vector (tens of Angstrom) in raw Cartesian
+    coordinates -- verified live: an amplitude-calibration probe this
+    caused to read ~74 Ang instead of the true ~0.0002 Ang for a real
+    unstable-mode test case, silently breaking the requested-amplitude
+    scaling below.
+    """
+    frac_diff = (positions_new - positions_ref) @ np.linalg.inv(cell)
+    frac_diff -= np.round(frac_diff)
+    cart_diff = frac_diff @ cell
+    return np.linalg.norm(cart_diff, axis=1)
+
+
+def freeze_unstable_mode(phonon, args, species_meta, f_out):
+    """If the DOS mesh (already computed with eigenvectors on a full,
+    non-symmetry-reduced grid inside run_phonon_pipeline) contains a
+    genuine imaginary mode -- below the same numerical-noise tolerance used
+    for the band-path warning -- displaces the supercell along that mode's
+    eigenvector and writes it out as a new structure, the exact escape-a-
+    saddle-point trick stb-phononsPos's own --freeze-unstable-mode already
+    does for the SIESTA path (phonon.run_modulations, calibrated to the
+    requested Angstrom amplitude via a unit-amplitude probe displacement
+    first -- the modulation amplitude parameter isn't itself in Angstrom).
+    Unlike phonons_pos.py, no bohr conversion is needed on write: this
+    tool's Phonopy object is built directly in Angstrom (see
+    core/mace_phonons.py's module docstring), so the modulated supercell's
+    positions/cell are already in the right convention for from_pymatgen/
+    write_fdf. Returns the written path, or None if the mesh had no mode
+    below the noise tolerance.
+    """
+    freqs = phonon.mesh.frequencies
+    min_freq = freqs.min()
+    if min_freq >= _IMAGINARY_MODE_TOL_THZ:
+        print_dual("No imaginary mode on the sampled mesh -- nothing to freeze.", f_out)
+        return None
+
+    q_idx, band_idx = np.unravel_index(np.argmin(freqs), freqs.shape)
+    q_point = phonon.mesh.qpoints[q_idx]
+
+    phonon.run_modulations(args.mesh, [[q_point, band_idx, 1.0, 0.0]])
+    mod = phonon.modulation
+    probe_shift = _pbc_atomic_shift(
+        mod.modulated_supercells[0].positions, mod.supercell.positions,
+        np.array(mod.supercell.cell)).max()
+    scale = args.freeze_amplitude / probe_shift
+
+    phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
+    mod = phonon.modulation
+    achieved_shift = _pbc_atomic_shift(
+        mod.modulated_supercells[0].positions, mod.supercell.positions,
+        np.array(mod.supercell.cell)).max()
+
+    frozen = mod.modulated_supercells[0]
+    frozen_atoms = Atoms(numbers=frozen.numbers, positions=frozen.positions,
+                         cell=frozen.cell, pbc=True)
+    pmg = AseAtomsAdaptor.get_structure(frozen_atoms)
+    new_structure = structure_io.from_pymatgen(pmg, species_meta=species_meta)
+    out_path = os.path.join(args.output_dir, "frozen_mode.fdf")
+    structure_io.write_fdf(new_structure, out_path)
+
+    print_dual(f"Softest mode      : q = {np.array2string(np.array(q_point), precision=4)}, "
+               f"band {band_idx}, {min_freq:.4f} THz", f_out)
+    print_dual(f"Displacement      : requested {args.freeze_amplitude:.4f} Ang, "
+               f"achieved {achieved_shift:.4f} Ang (max atomic shift)", f_out)
+    print_dual(f"Structure written : {out_path}", f_out)
+    return out_path
+
+
+def animate_normal_mode(phonon, qpoint, band_index, amplitude, n_frames, dim):
+    """Builds a multi-frame ASE trajectory animating one normal mode's
+    vibration at fractional q-point `qpoint`, by calling phonon.
+    run_modulations once per frame with the phase swept over a full 360
+    -degree cycle -- same phonopy modulation machinery freeze_unstable_mode
+    uses for a single displaced snapshot, sampled here at many phases
+    instead, purely for visualization (OVITO/VMD), not a physical
+    perturbation. `dim` is the modulation supercell size and must make
+    `qpoint` commensurate (q times dim ~ integer vector) -- Gamma is
+    commensurate with any dim, [1, 1, 1] included; a non-Gamma q needs a
+    correspondingly larger dim. phonon.get_frequencies(q) diagonalizes the
+    dynamical matrix directly at the given q (no mesh/supercell needed for
+    this part), so it works for any q regardless of `dim`, letting the
+    out-of-range check below run before wasting time on a bad request.
+
+    `amplitude` is calibrated to true Angstrom via the same unit-amplitude
+    probe + rescale trick freeze_unstable_mode uses -- phonopy's own
+    "amplitude" parameter is an internal eigenvector-normalization scale,
+    not itself in Angstrom (verified live: amplitude=1.0 gave a ~0.094 Ang
+    max shift for a real optical mode, not 1 Ang), so passing the user's
+    requested Angstrom value straight through would silently produce the
+    wrong displacement, just like the pre-fix freeze_unstable_mode bug this
+    mirrors. The scale is amplitude-only (not phase-dependent, since phase
+    is applied as a separate multiplicative factor in phonopy's own
+    modulation formula), so one probe covers every frame in the cycle.
+
+    Returns (frames, n_bands_at_q, frequency_thz) -- frames is None (with
+    n_bands_at_q still valid) if band_index is out of range, so the caller
+    can print a friendlier error.
+    """
+    frequencies_at_q = phonon.get_frequencies(np.array(qpoint))
+    n_bands = len(frequencies_at_q)
+    if not (0 <= band_index < n_bands):
+        return None, n_bands, None
+
+    phonon.run_modulations(dim, [[qpoint, band_index, 1.0, 0.0]])
+    mod = phonon.modulation
+    probe_shift = _pbc_atomic_shift(
+        mod.modulated_supercells[0].positions, mod.supercell.positions,
+        np.array(mod.supercell.cell)).max()
+    scale = amplitude / probe_shift if probe_shift > 1e-12 else 0.0
+
+    frames = []
+    for phase_deg in np.linspace(0.0, 360.0, n_frames, endpoint=False):
+        phonon.run_modulations(dim, [[qpoint, band_index, scale, phase_deg]])
+        mod = phonon.modulation
+        cell_atoms = mod.modulated_supercells[0]
+        frames.append(Atoms(numbers=cell_atoms.numbers, positions=cell_atoms.positions,
+                            cell=cell_atoms.cell, pbc=True))
+
+    return frames, n_bands, frequencies_at_q[band_index]
 
 
 def plot_bands(series, out_path):
@@ -320,6 +461,77 @@ def run_qha(atoms_ref, calc, args, f_out):
     return qha, volumes, energies, temperatures_ref
 
 
+def _max_frequency(result):
+    """Max band-path frequency if a q-path exists (vacuum-padded/0D
+    structures have none), else the max mesh frequency -- same fallback
+    both run_convergence_check and plot_convergence need."""
+    if "bs" in result:
+        return np.concatenate(result["bs"].frequencies).max()
+    return result["phonon"].mesh.frequencies.max()
+
+
+def run_convergence_check(atoms_ref, calc, args, conv_dims, f_out):
+    """Runs the full single-volume pipeline once per supercell size in
+    `conv_dims` (reusing run_phonon_pipeline unchanged, just with --dim
+    overridden per point) and reports how the maximum band-path/mesh
+    frequency and the heat capacity/entropy at a reference temperature
+    change between them -- MACE evaluations are cheap enough that this is
+    an actually affordable convergence scan, unlike the real SIESTA-based
+    workflow where a scan of this kind rarely is. `conv_dims` is a list of
+    (na, nb, nc) tuples; returns a list of (dim_tuple, result_dict) for the
+    caller to plot/save.
+    """
+    import copy
+
+    ref_t = min(args.tmax, 300.0)
+    rows = []
+    print_dual(f"{'Supercell':>12} {'N_disp':>7} {'MaxFreq(THz)':>13} "
+               f"{'Cv@' + str(int(ref_t)) + 'K':>12} {'S@' + str(int(ref_t)) + 'K':>12}", f_out)
+    for dim_tuple in conv_dims:
+        dim_args = copy.copy(args)
+        dim_args.dim = list(dim_tuple)
+        tag = "x".join(str(d) for d in dim_tuple)
+        result = run_phonon_pipeline(atoms_ref, calc, dim_args, f_out, tag=tag)
+        n_disp = len(result["phonon"].dataset['first_atoms'])
+        max_freq = _max_frequency(result)
+        t_idx = int(np.argmin(np.abs(result["temps"] - ref_t)))
+        cv_ref = result["heat_capacity"][t_idx]
+        s_ref = result["entropy"][t_idx]
+        print_dual(f"{tag:>12} {n_disp:7d} {max_freq:13.4f} {cv_ref:12.4f} {s_ref:12.4f}", f_out)
+        rows.append((dim_tuple, result))
+    return rows
+
+
+def plot_convergence(rows, ref_t, out_path):
+    """rows: list of (dim_tuple, result_dict) from run_convergence_check.
+    x-axis is the supercell's atom-count multiplier (na*nb*nc) so unevenly
+    -spaced dim choices (e.g. 1x1x1, 2x2x2, 3x3x3) still land at a
+    meaningful, monotonic position instead of just a bare category index.
+    """
+    labels = ["x".join(str(d) for d in dim_tuple) for dim_tuple, _ in rows]
+    n_cells = [int(np.prod(dim_tuple)) for dim_tuple, _ in rows]
+    max_freqs = [_max_frequency(result) for _, result in rows]
+    cvs = []
+    for _, result in rows:
+        t_idx = int(np.argmin(np.abs(result["temps"] - ref_t)))
+        cvs.append(result["heat_capacity"][t_idx])
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+    axes[0].plot(n_cells, max_freqs, marker='o')
+    axes[0].set_xticks(n_cells)
+    axes[0].set_xticklabels(labels, rotation=30, ha='right')
+    axes[0].set_ylabel("Max frequency (THz)")
+    axes[0].set_title("Frequency convergence")
+    axes[1].plot(n_cells, cvs, marker='o', color='tab:orange')
+    axes[1].set_xticks(n_cells)
+    axes[1].set_xticklabels(labels, rotation=30, ha='right')
+    axes[1].set_ylabel(f"Heat capacity @ {ref_t:.0f} K (J/K/mol)")
+    axes[1].set_title("Thermal-property convergence")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Standalone phonon calculation driven entirely by a MACE potential -- the "
@@ -381,6 +593,51 @@ def main():
                         help="Volume range around equilibrium for --qha, +/- %% (default: 3.0).")
     parser.add_argument("--eos", choices=["vinet", "murnaghan", "birch_murnaghan"], default="vinet",
                         help="Equation of state for --qha (default: vinet).")
+    parser.add_argument("--check-convergence", action="store_true",
+                        help="Instead of a single-volume calculation, run the same pipeline "
+                             "at multiple supercell sizes (--convergence-dims) and report how "
+                             "the max frequency / heat capacity / entropy change between them "
+                             "-- MACE is cheap enough to check --dim convergence directly, "
+                             "unlike DFT. Not supported together with --qha. Off by default.")
+    parser.add_argument("--convergence-dims", type=int, nargs='+', default=None, metavar="N",
+                        help="Flat list of supercell sizes for --check-convergence, given as "
+                             "consecutive NA NB NC triples (e.g. 1 1 1 2 2 2 3 3 3 tests "
+                             "1x1x1, 2x2x2, and 3x3x3) -- must be a multiple of 3 values. "
+                             "Default: --dim itself and --dim+1 on every non-vacuum axis "
+                             "(two points).")
+    parser.add_argument("--freeze-unstable-mode", action="store_true",
+                        help="If the phonon mesh has a genuine imaginary (unstable) mode, "
+                             "write a new structure displaced along that mode's eigenvector -- "
+                             "a common trick to escape a saddle point and find the true "
+                             "minimum. Same feature stb-phononsPos already has for the SIESTA "
+                             "path. Not supported together with --qha/--check-convergence. "
+                             "Off by default.")
+    parser.add_argument("--freeze-amplitude", type=float, default=0.05,
+                        help="Max atomic displacement (Angstrom) for --freeze-unstable-mode "
+                             "(default: 0.05).")
+    parser.add_argument("--animate-mode", type=int, default=None, metavar="BAND_INDEX",
+                        help="Animate a normal mode's vibration and write it as a multi-frame "
+                             "trajectory (xsf/pdb/xyz, same convention as stb-ani2traj/"
+                             "stb-mlmd) for viewing in OVITO/VMD -- BAND_INDEX selects which "
+                             "mode (0 = lowest frequency) at --animate-qpoint. Not supported "
+                             "together with --qha/--check-convergence. Off by default.")
+    parser.add_argument("--animate-qpoint", type=float, nargs=3, default=[0.0, 0.0, 0.0],
+                        metavar=("QA", "QB", "QC"),
+                        help="Fractional q-point to animate a mode at (default: 0 0 0, Gamma).")
+    parser.add_argument("--animate-dim", type=int, nargs=3, default=[1, 1, 1],
+                        metavar=("NA", "NB", "NC"),
+                        help="Supercell size used to build the animated modulation -- must "
+                             "make --animate-qpoint commensurate (q x dim ~ integer vector); "
+                             "the default 1 1 1 only works exactly at Gamma (default: 1 1 1).")
+    parser.add_argument("--animate-amplitude", type=float, default=0.5,
+                        help="Max atomic displacement for the animation, Angstrom -- "
+                             "deliberately larger than --freeze-amplitude since this is for "
+                             "visualization, not a physical perturbation (default: 0.5).")
+    parser.add_argument("--animate-frames", type=int, default=30,
+                        help="Number of frames in one full vibration cycle (default: 30).")
+    parser.add_argument("--animate-format", choices=sorted(OUTPUT_FORMATS), default="xsf",
+                        help="Output trajectory format for --animate-mode, same convention as "
+                             "stb-ani2traj/stb-mlmd (default: xsf).")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
                         help="Device to run the model on (default: cpu).")
     parser.add_argument("-o", "--output-dir", default="mlphonons_out",
@@ -397,6 +654,24 @@ def main():
     if args.qha and args.n_volumes < 4:
         parser.error("--n-volumes must be at least 4 -- vinet/murnaghan/birch_murnaghan all "
                      "fit 4 parameters (E0, V0, B0, B0'), so need at least 4 volumes.")
+
+    for flag_name, flag_val in (("--freeze-unstable-mode", args.freeze_unstable_mode),
+                                 ("--animate-mode", args.animate_mode is not None)):
+        if args.qha and flag_val:
+            parser.error(f"{flag_name} is not supported together with --qha.")
+        if args.check_convergence and flag_val:
+            parser.error(f"{flag_name} is not supported together with --check-convergence.")
+    if args.qha and args.check_convergence:
+        parser.error("--qha is not supported together with --check-convergence.")
+
+    conv_dims_override = None
+    if args.convergence_dims is not None:
+        if len(args.convergence_dims) % 3 != 0:
+            parser.error("--convergence-dims must be a multiple of 3 values (NA NB NC per point).")
+        flat = args.convergence_dims
+        conv_dims_override = [tuple(flat[i:i + 3]) for i in range(0, len(flat), 3)]
+        if len(conv_dims_override) < 2:
+            parser.error("--check-convergence needs at least 2 supercell sizes to compare.")
 
     if args.intro:
         show_intro([
@@ -424,7 +699,10 @@ def main():
     print_section("[0] RUN METADATA", f_out)
     print_dual(f"Date/time         : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
     print_dual(f"Input file        : {args.file}", f_out)
-    print_dual(f"Mode              : {'QHA (volume scan)' if args.qha else 'single-volume'}", f_out)
+    mode_label = ("QHA (volume scan)" if args.qha
+                  else "supercell convergence check" if args.check_convergence
+                  else "single-volume")
+    print_dual(f"Mode              : {mode_label}", f_out)
     print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
     print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
     print_dual(f"Model             : "
@@ -472,6 +750,44 @@ def main():
             "[WARNING] --no-relax: generating displacements from the structure as given. "
             "If it isn't already at a MACE-relaxed minimum, expect spurious imaginary "
             "modes downstream.", 'yellow'), f_out)
+
+    if args.check_convergence:
+        if conv_dims_override is not None:
+            conv_dims = conv_dims_override
+        else:
+            base = list(args.dim)
+            bumped = [d if is_vac else d + 1 for d, is_vac in zip(base, vacuum_axes)]
+            conv_dims = [tuple(base), tuple(bumped)]
+
+        print_section("[2] SUPERCELL CONVERGENCE CHECK", f_out)
+        ref_t = min(args.tmax, 300.0)
+        rows = run_convergence_check(atoms, calc, args, conv_dims, f_out)
+
+        print_section("[3] SUMMARY & FILES", f_out)
+        conv_plot = os.path.join(args.output_dir, "convergence.png")
+        plot_convergence(rows, ref_t, conv_plot)
+        print_dual(f"[OK] Saved {conv_plot}", f_out)
+        if args.save_data:
+            conv_data = os.path.join(args.output_dir, "convergence.dat")
+            with open(conv_data, "w") as f:
+                f.write("# dim n_disp max_freq(THz) Cv_ref(J/K/mol) S_ref(J/K/mol)\n")
+                for dim_tuple, result in rows:
+                    tag = "x".join(str(d) for d in dim_tuple)
+                    n_disp = len(result["phonon"].dataset['first_atoms'])
+                    max_freq = _max_frequency(result)
+                    t_idx = int(np.argmin(np.abs(result["temps"] - ref_t)))
+                    f.write(f"{tag} {n_disp} {max_freq:.6f} {result['heat_capacity'][t_idx]:.6f} "
+                            f"{result['entropy'][t_idx]:.6f}\n")
+            print_dual(f"[OK] Saved {conv_data}", f_out)
+        print_dual("Status            : OK", f_out)
+        print_dual(f"Convergence plot  : {conv_plot}", f_out)
+        if report_path:
+            print_dual(f"Report            : {report_path}", f_out)
+        if f_out:
+            f_out.close()
+        print("\n" + "-" * 60)
+        print(color_text("ML phonon supercell convergence check complete.\n", 'bold'))
+        return
 
     if args.qha:
         print_section("[2] VOLUME SCAN", f_out)
@@ -591,6 +907,28 @@ def main():
                         f.write(f"{d:.6f} " + " ".join(f"{fr:.6f}" for fr in row) + "\n")
                     f.write("\n")
             print_dual(f"[OK] Saved {bands_data}", f_out)
+
+    if args.freeze_unstable_mode:
+        print_section("[3b] MODE FREEZE", f_out)
+        freeze_unstable_mode(result_main["phonon"], args, structure.species_meta, f_out)
+
+    if args.animate_mode is not None:
+        print_section("[3c] MODE ANIMATION", f_out)
+        frames, n_bands, freq = animate_normal_mode(
+            result_main["phonon"], args.animate_qpoint, args.animate_mode,
+            args.animate_amplitude, args.animate_frames, args.animate_dim)
+        if frames is None:
+            print_dual(color_text(
+                f"[WARNING] --animate-mode {args.animate_mode} out of range -- only {n_bands} "
+                f"band(s) at q = {args.animate_qpoint}. Skipping animation.", 'red'), f_out)
+        else:
+            ase_format, ext = OUTPUT_FORMATS[args.animate_format]
+            anim_path = os.path.join(args.output_dir, f"mode_{args.animate_mode}{ext}")
+            ase_write(anim_path, frames, format=ase_format)
+            print_dual(f"q-point           : {args.animate_qpoint}", f_out)
+            print_dual(f"Band index        : {args.animate_mode} ({freq:.4f} THz)", f_out)
+            print_dual(f"Frames            : {len(frames)} ({args.animate_format} format)", f_out)
+            print_dual(f"[OK] Saved {anim_path}", f_out)
 
     print_section("[4] DENSITY OF STATES", f_out)
     series = [(("Fine-tuned" if args.custom_model else f"MACE-MP-0 ({args.model})"), result_main, _SERIES_COLORS[0])]

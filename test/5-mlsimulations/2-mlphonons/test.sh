@@ -207,6 +207,98 @@ check_contains "n-volumes must be at least 4" log_qha_toofew.txt
 rm -rf mlphonons_qha
 
 
+# --- 1e. --check-convergence ---
+echo -e "\n--- Testing --check-convergence (2 supercell sizes) ---"
+stb-mlphonons --file si8.fdf --check-convergence --convergence-dims 1 1 1 2 2 2 \
+    --mesh 4 4 4 --band-points 5 --save-data --no-intro -o mlphonons_conv > log_conv.txt 2>&1
+check_exit_code $? 0
+check_contains "SUPERCELL CONVERGENCE CHECK" log_conv.txt
+check_contains "1x1x1" log_conv.txt
+check_contains "2x2x2" log_conv.txt
+check_success mlphonons_conv/convergence.png
+check_success mlphonons_conv/convergence.dat
+rm -rf mlphonons_conv
+
+echo "Testing: --convergence-dims must be a multiple of 3 (expects failure)"
+stb-mlphonons --file si8.fdf --check-convergence --convergence-dims 1 1 --no-intro > log_conv_bad.txt 2>&1
+check_exit_code $? 2
+check_contains "multiple of 3" log_conv_bad.txt
+
+echo "Testing: --check-convergence + --qha are mutually exclusive (expects failure)"
+stb-mlphonons --file si8.fdf --check-convergence --qha --no-intro > log_conv_qha.txt 2>&1
+check_exit_code $? 2
+check_contains "not supported together" log_conv_qha.txt
+
+
+# --- 1f. --freeze-unstable-mode (needs a genuinely unstable structure --
+#     compress si8.fdf's cell to force a real imaginary mode) ---
+echo -e "\n--- Testing --freeze-unstable-mode ---"
+python3 -c "
+from stb.core import structure_io
+from pymatgen.io.ase import AseAtomsAdaptor
+s = structure_io.read_fdf('si8.fdf')
+pmg = structure_io.to_pymatgen(s)
+atoms = AseAtomsAdaptor.get_atoms(pmg)
+atoms.set_cell(atoms.get_cell() * 0.80, scale_atoms=True)
+pmg2 = AseAtomsAdaptor.get_structure(atoms)
+new_s = structure_io.from_pymatgen(pmg2, species_meta=s.species_meta)
+structure_io.write_fdf(new_s, 'si8_compressed.fdf')
+"
+stb-mlphonons --file si8_compressed.fdf --dim 1 1 1 --mesh 6 6 6 --band-points 5 \
+    --no-relax --freeze-unstable-mode --freeze-amplitude 0.2 --no-intro \
+    -o mlphonons_freeze > log_freeze.txt 2>&1
+check_exit_code $? 0
+check_contains "MODE FREEZE" log_freeze.txt
+check_contains "Negative (imaginary) frequency found" log_freeze.txt
+check_contains "Softest mode" log_freeze.txt
+check_success mlphonons_freeze/frozen_mode.fdf
+
+echo "Testing: --freeze-unstable-mode calibrates the requested Angstrom amplitude correctly"
+python3 -c "
+import re, sys
+text = open('log_freeze.txt').read()
+m = re.search(r'requested ([0-9.]+) Ang, achieved ([0-9.]+) Ang', text)
+if not m:
+    sys.exit(1)
+requested, achieved = float(m.group(1)), float(m.group(2))
+sys.exit(0 if abs(requested - achieved) < 1e-3 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} achieved displacement matches requested --freeze-amplitude"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} achieved displacement does not match requested --freeze-amplitude"
+    FAIL=$((FAIL+1))
+fi
+rm -rf mlphonons_freeze
+
+echo "Testing: no imaginary mode -- nothing to freeze"
+stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 6 6 6 --band-points 5 \
+    --freeze-unstable-mode --no-intro -o mlphonons_freeze_stable > log_freeze_stable.txt 2>&1
+check_exit_code $? 0
+check_contains "nothing to freeze" log_freeze_stable.txt
+rm -rf mlphonons_freeze_stable
+
+
+# --- 1g. --animate-mode ---
+echo -e "\n--- Testing --animate-mode ---"
+stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
+    --animate-mode 5 --animate-frames 6 --animate-amplitude 0.3 --animate-format xsf \
+    --no-intro -o mlphonons_animate > log_animate.txt 2>&1
+check_exit_code $? 0
+check_contains "MODE ANIMATION" log_animate.txt
+check_contains "Band index        : 5" log_animate.txt
+check_success mlphonons_animate/mode_5.xsf
+rm -rf mlphonons_animate
+
+echo "Testing: --animate-mode out of range is flagged instead of crashing"
+stb-mlphonons --file si8.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
+    --animate-mode 99 --no-intro -o mlphonons_animate_bad > log_animate_bad.txt 2>&1
+check_exit_code $? 0
+check_contains "out of range" log_animate_bad.txt
+rm -rf mlphonons_animate_bad
+
+
 # --- 2. --custom-model with a nonexistent file (expects failure) ---
 echo -e "\n--- Testing --custom-model with a nonexistent file (expects failure) ---"
 stb-mlphonons --file si_bulk.fdf --custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
@@ -251,12 +343,22 @@ check_contains "skip-foundation-comparison" log_help.txt
 check_contains "n-volumes" log_help.txt
 check_contains "strain-range" log_help.txt
 check_contains "eos" log_help.txt
+check_contains "check-convergence" log_help.txt
+check_contains "convergence-dims" log_help.txt
+check_contains "freeze-unstable-mode" log_help.txt
+check_contains "freeze-amplitude" log_help.txt
+check_contains "animate-mode" log_help.txt
+check_contains "animate-qpoint" log_help.txt
+check_contains "animate-dim" log_help.txt
+check_contains "animate-amplitude" log_help.txt
+check_contains "animate-frames" log_help.txt
+check_contains "animate-format" log_help.txt
 
 
 # --- 5. Interactive path (stb-suite, shortcut 5.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2) ---"
 rm -rf interactive_out
-printf '5.2\nsi_bulk.fdf\n\nsmall\n1 1 1\ninteractive_out\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.2\nsi_bulk.fdf\n\nsmall\n1 1 1\ninteractive_out\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/bands.png
 check_success interactive_out/dos.png

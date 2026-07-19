@@ -4446,10 +4446,13 @@ def run_mlphonons_generator() -> None:
     if output_dir:
         args.extend(["--output-dir", output_dir])
 
-    qha = get_input(
-        "\nRun a quasi-harmonic approximation (QHA) volume scan instead of a single-volume "
-        "calculation? (y/N): ").strip().lower()
-    if qha == 'y':
+    print(f"\n{color_text('Run mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Single-volume (bands, DOS, thermal properties) (default)")
+    print(f"  {color_text('2', 'cyan')} = Quasi-harmonic approximation (QHA), volume scan")
+    print(f"  {color_text('3', 'cyan')} = Supercell (--dim) convergence check")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip() or '1'
+
+    if mode_choice == '2':
         args.append("--qha")
         n_volumes = get_input("Number of volumes to scan, >= 4 [default: 5]: ").strip()
         args.extend(["--n-volumes", n_volumes or "5"])
@@ -4459,12 +4462,55 @@ def run_mlphonons_generator() -> None:
         eos = get_input(
             "Equation of state, vinet/murnaghan/birch_murnaghan [default: vinet]: ").strip()
         args.extend(["--eos", eos or "vinet"])
-    elif custom_model:
-        skip_compare = get_input(
-            "\nAlso compare against the MACE-MP-0 foundation model on the same plots? "
-            "(Y/n): ").strip().lower()
-        if skip_compare == 'n':
-            args.append("--skip-foundation-comparison")
+    elif mode_choice == '3':
+        args.append("--check-convergence")
+        conv_dims_str = get_input(
+            "Supercell sizes to compare, as space-separated NA NB NC triples "
+            "(e.g. 1 1 1 2 2 2 3 3 3) [default: --dim and --dim+1 on every "
+            "non-vacuum axis]: ").strip()
+        if conv_dims_str:
+            args.extend(["--convergence-dims", *conv_dims_str.split()])
+    else:
+        if custom_model:
+            skip_compare = get_input(
+                "\nAlso compare against the MACE-MP-0 foundation model on the same plots? "
+                "(Y/n): ").strip().lower()
+            if skip_compare == 'n':
+                args.append("--skip-foundation-comparison")
+
+        freeze = get_input(
+            "\nIf a genuine imaginary (unstable) mode is found, write a structure displaced "
+            "along it (--freeze-unstable-mode)? (y/N): ").strip().lower()
+        if freeze == 'y':
+            args.append("--freeze-unstable-mode")
+            freeze_amp = get_input("Displacement amplitude, Ang [default: 0.05]: ").strip()
+            if freeze_amp:
+                args.extend(["--freeze-amplitude", freeze_amp])
+
+        animate = get_input(
+            "\nAnimate a normal mode's vibration as a trajectory for OVITO/VMD "
+            "(--animate-mode)? (y/N): ").strip().lower()
+        if animate == 'y':
+            band_idx = get_input(
+                "Band index to animate (0 = lowest frequency at the q-point): ").strip()
+            args.extend(["--animate-mode", band_idx or "0"])
+            qpoint_str = get_input(
+                "Fractional q-point, 3 numbers [default: 0 0 0, Gamma]: ").strip()
+            if qpoint_str:
+                args.extend(["--animate-qpoint", *qpoint_str.split()])
+            animate_dim_str = get_input(
+                "Modulation supercell size, 3 integers [default: 1 1 1, only exact at "
+                "Gamma]: ").strip()
+            if animate_dim_str:
+                args.extend(["--animate-dim", *animate_dim_str.split()])
+            animate_amp = get_input("Animation amplitude, Ang [default: 0.5]: ").strip()
+            if animate_amp:
+                args.extend(["--animate-amplitude", animate_amp])
+            animate_frames = get_input("Number of frames [default: 30]: ").strip()
+            if animate_frames:
+                args.extend(["--animate-frames", animate_frames])
+            animate_fmt = get_input("Output format, xsf/pdb/xyz [default: xsf]: ").strip()
+            args.extend(["--animate-format", animate_fmt or "xsf"])
 
     save_data = get_input("\nAlso save the raw plot data (.dat files)? (y/N): ").strip().lower()
     if save_data == 'y':

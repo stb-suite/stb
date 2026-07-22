@@ -116,6 +116,30 @@ def print_section(label: str, f_out=None) -> None:
     print_dual("-" * 60, f_out)
 
 
+def print_table(headers, rows, f_out=None) -> None:
+    """Prints a simple aligned ' | '-separated table via print_dual.
+
+    `headers` is a list of column-name strings. `rows` is a list of
+    (cells, color) tuples, where `cells` is a list of plain (uncolored)
+    strings matching `headers` and `color` is an optional color name (e.g.
+    'yellow') applied to the whole row, or None. Column widths are computed
+    from the actual content, not fixed, so it reads well regardless of how
+    long any one cell's text is (e.g. a full space-group label vs. a short
+    number). Shared by core/structure_checks.py's per-check validation table
+    and stb-mlrelax's before/after comparison table.
+    """
+    widths = [len(h) for h in headers]
+    for cells, _ in rows:
+        for i, cell in enumerate(cells):
+            widths[i] = max(widths[i], len(cell))
+    header_line = " | ".join(f"{h:<{w}}" for h, w in zip(headers, widths))
+    print_dual(color_text(header_line, 'blue'), f_out)
+    print_dual("-" * len(header_line), f_out)
+    for cells, color in rows:
+        line = " | ".join(f"{c:<{w}}" for c, w in zip(cells, widths))
+        print_dual(color_text(line, color) if color else line, f_out)
+
+
 def run_with_spinner(func, *args, label: str = "Working", **kwargs):
     """Runs `func(*args, **kwargs)` in a background thread, showing an indeterminate
     CLI spinner with elapsed time while it blocks. For a slow call with no step-based

@@ -80,7 +80,7 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing --relax-cell (si_wrong_a.fdf, 5.00 -> ~5.46 Ang) ---"
 rm -f si_relaxed.fdf
 stb-mlrelax -f si_wrong_a.fdf --relax-cell -o si_relaxed.fdf --no-intro > log_cell.txt 2>&1
-check_contains "Lattice a,b,c after" log_cell.txt
+check_contains "Lattice a,b,c (Ang)" log_cell.txt
 check_success si_relaxed.fdf
 python3 - <<'EOF'
 from stb.core import structure_io
@@ -102,8 +102,8 @@ fi
 echo -e "\n--- Testing default positions-only mode (si_ge_defect.fdf) ---"
 rm -f ge_relaxed.fdf
 stb-mlrelax -f si_ge_defect.fdf -o ge_relaxed.fdf --no-intro > log_positions.txt 2>&1
-check_contains "Mode:.*positions only" log_positions.txt
-check_contains "Max atomic displacement" log_positions.txt
+check_contains "Mode.*positions only" log_positions.txt
+check_contains "Displacement.*mean" log_positions.txt
 check_success ge_relaxed.fdf
 python3 - <<'EOF'
 from stb.core import structure_io
@@ -174,7 +174,7 @@ if command -v mace_run_train &> /dev/null && [ -d "$MLFF_FIXTURES" ]; then
         stb-mlrelax -f custom_model_src/mlff_config_001/calc.fdf --custom-model "$QUICK_MODEL" \
             -o custom_relaxed.fdf --no-intro > log_custommodel.txt 2>&1
         check_exit_code $? 0
-        check_contains "Model:.*custom" log_custommodel.txt
+        check_contains "Model.*custom" log_custommodel.txt
         check_success custom_relaxed.fdf
     else
         echo -e "   -> ${RED}Failed:${NC} quick fine-tuned model was not produced"
@@ -201,16 +201,46 @@ check_contains "relax-cell" log_help.txt
 check_contains "fmax" log_help.txt
 check_contains "model" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "save-report" log_help.txt
+check_contains "save-data" log_help.txt
+check_contains "view" log_help.txt
+
+
+# --- 5b. --save-report / --save-data / references.bib / structure validation ---
+echo -e "\n--- Testing --save-report, --save-data, references.bib, and structure validation sections ---"
+rm -rf report_test && mkdir report_test
+(cd report_test && stb-mlrelax -f ../si_ge_defect.fdf --save-report --save-data --no-intro > console.log 2>&1)
+check_success report_test/stb_mlrelax_report.txt
+check_contains "STRUCTURE VALIDATION (pre-relaxation)" report_test/stb_mlrelax_report.txt
+check_contains "STRUCTURE VALIDATION (post-relaxation)" report_test/stb_mlrelax_report.txt
+check_contains "Atom proximity" report_test/stb_mlrelax_report.txt
+check_contains "Lattice handedness" report_test/stb_mlrelax_report.txt
+check_contains "\[OK\]" report_test/stb_mlrelax_report.txt
+check_contains "BEFORE / AFTER COMPARISON" report_test/stb_mlrelax_report.txt
+check_contains "Quantity" report_test/stb_mlrelax_report.txt
+check_contains "Energy (eV)" report_test/stb_mlrelax_report.txt
+check_success report_test/references.bib
+check_contains "Soler2002" report_test/references.bib
+check_contains "Batatia" report_test/references.bib
+check_success report_test/relaxed_relax_convergence.dat
+rm -rf report_test
 
 
 # --- 6. Interactive path (stb-suite, shortcut 1.6) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
 
-echo "Testing: navigate 1.6 -> invalid file then valid -> no cell relax -> defaults -> default output -> quit"
+echo "Testing: navigate 1.6 -> invalid file then valid -> no cell relax -> defaults -> default output -> no report -> no view -> quit"
 rm -f relaxed.fdf
-printf '1.6\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '1.6\ndoes_not_exist.fdf\nsi_ge_defect.fdf\nn\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
-check_contains "Max atomic displacement" log_menu.txt
+check_contains "Displacement" log_menu.txt
+check_contains "Optimizer      : FIRE" log_menu.txt
+check_success relaxed.fdf
+
+echo "Testing: navigate 1.6 -> choosing BFGS as the optimizer"
+rm -f relaxed.fdf
+printf '1.6\nsi_ge_defect.fdf\nn\n\n\n\nBFGS\n\nn\nn\n\n0\n' | stb-suite > log_menu_bfgs.txt 2>&1
+check_contains "Optimizer      : BFGS" log_menu_bfgs.txt
 check_success relaxed.fdf
 
 

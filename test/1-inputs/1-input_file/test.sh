@@ -157,12 +157,15 @@ mv calc.fdf calc_spin_d3.fdf
 # --- 2c. Structure validation (symmetry + malformation warnings), section [2] ---
 echo -e "\n--- Testing [2] STRUCTURE VALIDATION ---"
 
-echo -n "Testing: normal structure -> symmetry reported, no malformation warnings"
+echo -n "Testing: normal structure -> symmetry reported, explicit per-check [OK] table"
 rm -f calc.fdf
 stb-inputfile structure.fdf -t total_energy --no-intro > log_validation_ok.txt 2>&1
 check_contains "Space group :" log_validation_ok.txt
 check_contains "Crystal system :" log_validation_ok.txt
-check_contains "No malformation issues detected." log_validation_ok.txt
+check_contains "Atom proximity" log_validation_ok.txt
+check_contains "Lattice handedness" log_validation_ok.txt
+check_contains "Atomic density" log_validation_ok.txt
+check_contains "\[OK\]" log_validation_ok.txt
 check_not_contains "Unusual atomic density" log_validation_ok.txt
 rm -f calc.fdf
 

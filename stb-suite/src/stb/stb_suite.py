@@ -2987,13 +2987,25 @@ def run_mlrelax_generator() -> None:
 
     fmax = get_float_input("Force convergence, eV/Ang [default: 0.05]: ", 0.05)
 
+    optimizer = get_input("Optimizer, FIRE/BFGS/LBFGS [default: FIRE]: ").strip()
+    if not optimizer:
+        optimizer = "FIRE"
+
     output_file = get_input("\nOutput file name [default: relaxed.fdf]: ").strip()
     if not output_file:
         output_file = "relaxed.fdf"
 
-    args.extend(["--fmax", str(fmax), "--output", output_file])
+    args.extend(["--fmax", str(fmax), "--optimizer", optimizer, "--output", output_file])
     if relax_cell in ('y', 'yes'):
         args.append("--relax-cell")
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-mlrelax", args)
 

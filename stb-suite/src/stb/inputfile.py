@@ -14,17 +14,12 @@ import sys
 import os
 import shutil
 import argparse
-from stb.core import structure_io, kspace
+from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
 from stb.core.ase_view import view_structure_interactive
-
-# Sanity thresholds for the pre-generation structure validation (section [2]).
-MIN_ATOM_DISTANCE_ANG = 0.5   # same threshold as crystalbuilder.py/crystalcast.py
-MIN_DENSITY_ATOMS_PER_ANG3 = 0.01   # generous band spanning light-to-dense solids
-MAX_DENSITY_ATOMS_PER_ANG3 = 0.15   # (only checked for a genuine 3D bulk cell)
 
 REPORT_FILE = "stb_inputfile_report.txt"
 
@@ -980,8 +975,10 @@ def check_declared_atom_counts(structure):
     (if present) against what the %block contents actually contain -- catches
     a stale header left over from hand-editing. read_fdf() itself never
     parses these two header lines (only the actual blocks), so this scans
-    `structure.raw_lines` directly. Returns a list of warning strings (empty
-    if both headers are absent, unparsable, or consistent -- this is a bonus
+    `structure.raw_lines` directly. Returns a list of (label, status, detail)
+    tuples -- status one of "OK"/"WARNING"/"SKIPPED" -- for
+    structure_checks.run_malformation_checks()'s extra_checks table: SKIPPED
+    when a given header line isn't present at all (it's an optional, bonus
     consistency check, not a required header)."""
     declared = {}
     for line in structure.raw_lines:
@@ -996,22 +993,33 @@ def check_declared_atom_counts(structure):
             except ValueError:
                 continue
 
-    warnings = []
     n_atoms = len(structure.atoms)
     n_species = len(structure_io.species_list(structure))
-    if "numberofatoms" in declared and declared["numberofatoms"] != n_atoms:
-        warnings.append(
-            f"[WARNING] Declared NumberOfAtoms ({declared['numberofatoms']}) does not "
+    checks = []
+
+    if "numberofatoms" not in declared:
+        checks.append(("NumberOfAtoms header", "SKIPPED", "not present in file (optional)"))
+    elif declared["numberofatoms"] != n_atoms:
+        checks.append(("NumberOfAtoms header", "WARNING",
+            f"Declared NumberOfAtoms ({declared['numberofatoms']}) does not "
             f"match the {n_atoms} atom(s) actually found in %block "
-            "AtomicCoordinatesAndAtomicSpecies -- check for a stale header."
-        )
-    if "numberofspecies" in declared and declared["numberofspecies"] != n_species:
-        warnings.append(
-            f"[WARNING] Declared NumberOfSpecies ({declared['numberofspecies']}) does not "
+            "AtomicCoordinatesAndAtomicSpecies -- check for a stale header."))
+    else:
+        checks.append(("NumberOfAtoms header", "OK",
+            f"declared {declared['numberofatoms']}, matches actual atom count"))
+
+    if "numberofspecies" not in declared:
+        checks.append(("NumberOfSpecies header", "SKIPPED", "not present in file (optional)"))
+    elif declared["numberofspecies"] != n_species:
+        checks.append(("NumberOfSpecies header", "WARNING",
+            f"Declared NumberOfSpecies ({declared['numberofspecies']}) does not "
             f"match the {n_species} species actually found in %block "
-            "ChemicalSpeciesLabel -- check for a stale header."
-        )
-    return warnings
+            "ChemicalSpeciesLabel -- check for a stale header."))
+    else:
+        checks.append(("NumberOfSpecies header", "OK",
+            f"declared {declared['numberofspecies']}, matches actual species count"))
+
+    return checks
 
 def copy_pseudopotentials(species_list, pp_path, f_out=None):
     """
@@ -1124,43 +1132,13 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[2] STRUCTURE VALIDATION", f_out)
         try:
             pmg_structure = structure_io.to_pymatgen(fdf_structure)
-            validation_warnings = []
 
-            # --- Malformation checks ---
-            min_dist = structure_io.min_pairwise_distance(pmg_structure)
-            if min_dist is not None and min_dist < MIN_ATOM_DISTANCE_ANG:
-                validation_warnings.append(
-                    f"[WARNING] Some atoms are unusually close ({min_dist:.3f} Ang) -- "
-                    "check the input structure."
-                )
-
-            volume = np.linalg.det(lattice)
-            if volume < 0:
-                validation_warnings.append(
-                    "[WARNING] Lattice is left-handed (negative cell volume/determinant) "
-                    "-- check the order/sign of the lattice vectors."
-                )
-
-            if sum(vacuum_axes) == 0 and abs(volume) > 0:
-                # Density is only a meaningful sanity metric for a genuine 3D
-                # bulk cell -- a vacuum-padded structure's volume is dominated
-                # by the artificial vacuum by design, not the real material.
-                # (A zero/degenerate volume is handled separately, as a hard
-                # error, by the k-grid section right after this one.)
-                density = len(fdf_structure.atoms) / abs(volume)
-                if not (MIN_DENSITY_ATOMS_PER_ANG3 <= density <= MAX_DENSITY_ATOMS_PER_ANG3):
-                    validation_warnings.append(
-                        f"[WARNING] Unusual atomic density ({density:.4f} atoms/Ang^3) -- "
-                        "check for a unit mismatch (e.g. Bohr vs Angstrom in LatticeConstant)."
-                    )
-
-            validation_warnings.extend(check_declared_atom_counts(fdf_structure))
-
-            if validation_warnings:
-                for w in validation_warnings:
-                    print_dual(color_text(w, 'yellow'), f_out)
-            else:
-                print_dual("No malformation issues detected.", f_out)
+            # --- Malformation checks (shared with stb-fetch/stb-mlrelax) ---
+            # (A zero/degenerate cell volume is handled separately, as a hard
+            # error, by the k-grid section right after this one.)
+            structure_checks.run_malformation_checks(
+                pmg_structure, vacuum_axes, f_out,
+                extra_checks=check_declared_atom_counts(fdf_structure))
 
             # --- Symmetry analysis ---
             sg_label = core_symmetry.space_group_label(pmg_structure)

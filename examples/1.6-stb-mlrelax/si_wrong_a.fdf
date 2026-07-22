@@ -1,0 +1,33 @@
+# Bulk Si (diamond cubic, conventional 8-atom cell) with a DELIBERATELY
+# WRONG lattice constant (5.00 Ang instead of the correct ~5.43-5.46 Ang) --
+# simulates a bad initial guess (hand-typed, or converted from a different
+# source with a unit slip). Used with --relax-cell to show a dramatic,
+# physically meaningful before/after lattice-parameter correction.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.00000000   0.00000000   0.00000000
+ 0.00000000   5.00000000   0.00000000
+ 0.00000000   0.00000000   5.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

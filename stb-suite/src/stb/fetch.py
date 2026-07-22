@@ -10,11 +10,10 @@ VERSION = "1.14.0"
 
 import sys
 import argparse
-import numpy as np
 import requests
 from pymatgen.core import Composition, Structure
 from pymatgen.io.cif import CifParser
-from stb.core import citations, kspace, structure_io
+from stb.core import citations, kspace, structure_checks, structure_io
 from stb.core.ase_view import view_structure_interactive
 from stb.core.cli import color_text, get_input, print_dual, print_section, show_intro
 from stb.core.symmetry import (
@@ -46,14 +45,6 @@ CURATED_OPTIMADE_PROVIDERS = [
 
 REPORT_FILE = "stb_fetch_report.txt"
 BIB_FILE = "references.bib"
-
-# Same thresholds as stb-inputfile's [2] STRUCTURE VALIDATION section (and,
-# for MIN_ATOM_DISTANCE_ANG, stb-crystalbuilder/stb-crystalcast) -- a fetched
-# database entry deserves the exact same sanity checks as a hand-built/
-# converted one before it's trusted as a SIESTA input.
-MIN_ATOM_DISTANCE_ANG = 0.5
-MIN_DENSITY_ATOMS_PER_ANG3 = 0.01
-MAX_DENSITY_ATOMS_PER_ANG3 = 0.15
 
 # Same default as stb-kgrid/stb-symmetry/etc. (core/kspace.py's other callers).
 VACUUM_GAP_ANG = 10.0
@@ -498,38 +489,10 @@ Look it up by exact id, or search by formula and pick a candidate.""",
 
     print_section("[3] STRUCTURE VALIDATION", f_out)
     try:
-        validation_warnings = []
-
-        min_dist = structure_io.min_pairwise_distance(structure)
-        if min_dist is not None and min_dist < MIN_ATOM_DISTANCE_ANG:
-            validation_warnings.append(
-                f"[WARNING] Some atoms are unusually close ({min_dist:.3f} Ang) -- "
-                "check the fetched structure.")
-
-        det = np.linalg.det(structure.lattice.matrix)
-        if det < 0:
-            validation_warnings.append(
-                "[WARNING] Lattice is left-handed (negative cell volume/determinant) "
-                "-- check the order/sign of the lattice vectors.")
-
         vacuum_axes = kspace.detect_vacuum_axes(
             structure.frac_coords, structure.lattice.matrix, VACUUM_GAP_ANG)
 
-        if sum(vacuum_axes) == 0 and abs(det) > 0:
-            # Density is only a meaningful sanity metric for a genuine 3D
-            # bulk cell -- a vacuum-padded structure's volume is dominated
-            # by the artificial vacuum by design, not the real material.
-            density = len(structure) / abs(det)
-            if not (MIN_DENSITY_ATOMS_PER_ANG3 <= density <= MAX_DENSITY_ATOMS_PER_ANG3):
-                validation_warnings.append(
-                    f"[WARNING] Unusual atomic density ({density:.4f} atoms/Ang^3) -- "
-                    "check for a unit mismatch or a spuriously large/small fetched cell.")
-
-        if validation_warnings:
-            for w in validation_warnings:
-                print_dual(color_text(w, 'yellow'), f_out)
-        else:
-            print_dual("No malformation issues detected.", f_out)
+        structure_checks.run_malformation_checks(structure, vacuum_axes, f_out)
 
         print_dual(f"Dimensionality : {kspace.dimensionality_label(vacuum_axes)}", f_out)
         print_dual(f"Space group    : {space_group_label(structure, args.symprec)}", f_out)

@@ -10,6 +10,8 @@ function (not at module level), so merely importing this module never
 forces the heavy PyTorch/mace dependency chain to load.
 """
 
+import numpy as np
+
 # ASE/Voigt strain order: [xx, yy, zz, yz, xz, xy]. Maps each shear component
 # to the pair of axes it mixes, so any vacuum axis also fixes the shears that
 # would tilt it into the periodic directions.
@@ -63,10 +65,20 @@ def get_calculator(model="small", device="cpu", dtype="float64"):
     return mace_mp(model=model, device=device, default_dtype=dtype)
 
 
-def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=200):
+def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=200,
+          step_history=None):
     """Relaxes `atoms` in place (positions, plus cell if `cell_mask` is
     given -- a 6-element Voigt mask from build_cell_mask()). Returns
     (converged, steps_used).
+
+    If `step_history` is given (a list), appends one (step_index, energy,
+    max|F|) tuple per optimizer iteration via ASE's standard
+    Optimizer.attach() observer hook -- lets a caller (stb-mlrelax) plot/
+    report the optimizer's own convergence trace without this function
+    reimplementing the step loop itself. None (default) is a no-op, so
+    every other caller of this shared function (stb-defect --ml-rank,
+    stb-amorphize, stb-adsorb, stb-neb, stb-mlsearch, stb-mlconvergence)
+    is unaffected.
     """
     from ase.optimize import FIRE, BFGS, LBFGS
     from ase.filters import FrechetCellFilter
@@ -75,6 +87,11 @@ def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=20
     atoms.calc = calc
     target = FrechetCellFilter(atoms, mask=cell_mask) if cell_mask is not None else atoms
     opt = optimizers[optimizer](target, logfile=None)
+    if step_history is not None:
+        def _record():
+            step_history.append((len(step_history), atoms.get_potential_energy(),
+                                  float(np.abs(atoms.get_forces()).max())))
+        opt.attach(_record, interval=1)
     converged = opt.run(fmax=fmax, steps=max_steps)
     return converged, opt.nsteps
 

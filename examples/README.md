@@ -55,3 +55,4 @@ This puts every `stb-*` command (and `stb-suite` itself) on your PATH.
 | 1.3  | `stb-kpath`     | [`1.3-stb-kpath/`](1.3-stb-kpath/)          |
 | 1.4  | `stb-dftu`      | [`1.4-stb-dftu/`](1.4-stb-dftu/)            |
 | 1.5  | `stb-fetch`     | [`1.5-stb-fetch/`](1.5-stb-fetch/)          |
+| 1.6  | `stb-mlrelax`   | [`1.6-stb-mlrelax/`](1.6-stb-mlrelax/)      |

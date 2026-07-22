@@ -102,12 +102,28 @@ CLI and the menu produce identical output.
 
 Every run prints a `[2] STRUCTURE VALIDATION` section, right after parsing
 the structure and before the k-grid is even computed. It always runs --
-there's no flag to turn it on, and it never blocks generation. It checks
-five specific things:
+there's no flag to turn it on, and it never blocks generation. Every check
+is listed **explicitly**, one row per check, each marked
+`[OK]`/`[WARNING]`/`[SKIPPED]` (via the shared `core/structure_checks.py`
+module, also used by `stb-fetch`/`stb-mlrelax`) -- not just a summary line
+-- so it's always clear exactly what was verified:
+
+```
+Check                  | Result                                            | Status
+--------------------------------------------------------------------------------------
+Atom proximity         | min. distance = 2.211 Ang (>= 0.5 Ang threshold) | [OK]
+Lattice handedness     | right-handed (positive determinant)               | [OK]
+Atomic density         | 0.0500 atoms/Ang^3 (within [0.01, 0.15])          | [OK]
+NumberOfAtoms header   | declared 8, matches actual atom count             | [OK]
+NumberOfSpecies header | declared 1, matches actual species count          | [OK]
+```
+
+Five specific things get checked:
 
 1. **Atoms too close together** -- any two atoms closer than 0.5 Ang
    (minimum-image distance). Usually means two overlapping/duplicate atoms
-   from a bad edit or a bad supercell/merge operation.
+   from a bad edit or a bad supercell/merge operation. `[SKIPPED]` if the
+   structure has fewer than 2 atoms.
 2. **Left-handed cell** -- the lattice vectors' determinant is negative
    (negative cell volume). A silent geometry bug: SIESTA will still run,
    but stress/chirality-sensitive downstream analysis can pick up sign
@@ -120,13 +136,15 @@ five specific things:
    **Only checked for a genuine 3D bulk structure** (see the vacuum note
    below) -- a vacuum-padded cell's volume is dominated by the artificial
    vacuum by design, so this metric would be meaningless (and would
-   false-positive) there.
+   false-positive) there; `[SKIPPED]` instead, explicitly, rather than
+   silently absent.
 4. **Stale atom-count header** -- the `.fdf` file's own declared
    `NumberOfAtoms`/`NumberOfSpecies` line doesn't match what's actually in
    `%block AtomicCoordinatesAndAtomicSpecies`/`%block
    ChemicalSpeciesLabel`. Catches a header left un-updated after hand-editing
-   the structure. Silently skipped if the header lines aren't present at all
-   (they're not required).
+   the structure. `[SKIPPED]` if a given header line isn't present at all
+   (they're not required) -- two independent rows, since either header can
+   be present/absent on its own.
 5. **Symmetry** -- space group and crystal system, always printed
    (informational, not a warning by itself). **This is where dimensionality
    matters**: an ordinary space group only means what it says for a fully

@@ -104,9 +104,12 @@ def main():
                              "geometry rather than the true minimum. Advisory only, never "
                              "blocks the result.")
 
+    parser.add_argument("--save-report", action="store_true",
+                        help="Also persist the results to cohesive_results.dat. Off by default.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-cohesiveAnalysis {VERSION}")
 
-    parser.add_argument("--no-intro", dest="intro", action="store_false", 
+    parser.add_argument("--no-intro", dest="intro", action="store_false",
                         help="Do not show the introduction")
 
     args = parser.parse_args()
@@ -319,50 +322,51 @@ def main():
               "means the BSSE correction is converged w.r.t. cutoff; large means increase "
               "--bsse-cutoff further)")
 
-    # 4. Save results to a .dat file
-    print("\n[INFO] Write files ...")
-    out_file_path = os.path.join(root_dir, "cohesive_results.dat")
-    try:
-        with open(out_file_path, 'w') as f_out:
-            f_out.write("==================================================\n")
-            f_out.write("             COHESIVE ENERGY RESULTS              \n")
-            f_out.write("==================================================\n\n")
+    # 4. Save results to a .dat file (opt-in)
+    if args.save_report:
+        print("\n[INFO] Write files ...")
+        out_file_path = os.path.join(root_dir, "cohesive_results.dat")
+        try:
+            with open(out_file_path, 'w') as f_out:
+                f_out.write("==================================================\n")
+                f_out.write("             COHESIVE ENERGY RESULTS              \n")
+                f_out.write("==================================================\n\n")
 
-            f_out.write(f"Total atoms in cell: {total_atoms}\n")
-            for sym, count in atom_counts.items():
-                note = "" if count > 0 else "  (declared but never placed)"
-                f_out.write(f"  -> {sym}: {count} atoms{note}\n")
-            f_out.write("-" * 50 + "\n")
+                f_out.write(f"Total atoms in cell: {total_atoms}\n")
+                for sym, count in atom_counts.items():
+                    note = "" if count > 0 else "  (declared but never placed)"
+                    f_out.write(f"  -> {sym}: {count} atoms{note}\n")
+                f_out.write("-" * 50 + "\n")
 
-            f_out.write(f"Energy (Full Structure): {e_bulk:16.6f} eV\n")
-            for sym in used_species:
-                f_out.write(f"Energy (Isolated {sym}):   {isolated_energies[sym]:16.6f} eV\n")
-            f_out.write("-" * 50 + "\n")
-
-            f_out.write(f"Sum of Isolated Atoms:   {sum_isolated_energy:16.6f} eV\n\n")
-            f_out.write(f"Total Cohesive Energy (uncorrected):       {e_coh_total:12.4f} eV\n")
-            f_out.write(f"Cohesive Energy per Atom (uncorrected):    {e_coh_per_atom:12.4f} eV/atom\n")
-            if e_coh_per_atom_bsse is not None:
-                f_out.write("\n" + "-" * 50 + "\n")
-                f_out.write("BSSE (counterpoise) -corrected reference:\n")
+                f_out.write(f"Energy (Full Structure): {e_bulk:16.6f} eV\n")
                 for sym in used_species:
-                    f_out.write(f"Energy (Isolated {sym}, BSSE-corrected):   {bsse_energies[sym]:16.6f} eV\n")
-                f_out.write(f"Total Cohesive Energy (BSSE-corrected):    {e_coh_total_bsse:12.4f} eV\n")
-                f_out.write(f"Cohesive Energy per Atom (BSSE-corrected): {e_coh_per_atom_bsse:12.4f} eV/atom\n")
-                if e_coh_per_atom_check is not None:
-                    f_out.write(f"Cohesive Energy per Atom (BSSE check, larger cutoff): "
-                                 f"{e_coh_per_atom_check:12.4f} eV/atom\n")
-                    f_out.write(f"BSSE cutoff convergence shift: "
-                                 f"{e_coh_per_atom_check - e_coh_per_atom_bsse:+.4f} eV/atom\n")
-            elif not bsse_available:
-                f_out.write("\nNOTE: not corrected for BSSE (Basis Set Superposition Error) -- "
-                             "re-run stb-cohesive with --bsse-correction for a corrected reference.\n")
-            f_out.write("\n==================================================\n")
+                    f_out.write(f"Energy (Isolated {sym}):   {isolated_energies[sym]:16.6f} eV\n")
+                f_out.write("-" * 50 + "\n")
 
-        print(f"[INFO] Results saved to: {out_file_path}")
-    except Exception as e:
-        print(color_text(f"[ERROR] Failed to save results to file: {e}", 'red'))
-        sys.exit(1)
+                f_out.write(f"Sum of Isolated Atoms:   {sum_isolated_energy:16.6f} eV\n\n")
+                f_out.write(f"Total Cohesive Energy (uncorrected):       {e_coh_total:12.4f} eV\n")
+                f_out.write(f"Cohesive Energy per Atom (uncorrected):    {e_coh_per_atom:12.4f} eV/atom\n")
+                if e_coh_per_atom_bsse is not None:
+                    f_out.write("\n" + "-" * 50 + "\n")
+                    f_out.write("BSSE (counterpoise) -corrected reference:\n")
+                    for sym in used_species:
+                        f_out.write(f"Energy (Isolated {sym}, BSSE-corrected):   {bsse_energies[sym]:16.6f} eV\n")
+                    f_out.write(f"Total Cohesive Energy (BSSE-corrected):    {e_coh_total_bsse:12.4f} eV\n")
+                    f_out.write(f"Cohesive Energy per Atom (BSSE-corrected): {e_coh_per_atom_bsse:12.4f} eV/atom\n")
+                    if e_coh_per_atom_check is not None:
+                        f_out.write(f"Cohesive Energy per Atom (BSSE check, larger cutoff): "
+                                     f"{e_coh_per_atom_check:12.4f} eV/atom\n")
+                        f_out.write(f"BSSE cutoff convergence shift: "
+                                     f"{e_coh_per_atom_check - e_coh_per_atom_bsse:+.4f} eV/atom\n")
+                elif not bsse_available:
+                    f_out.write("\nNOTE: not corrected for BSSE (Basis Set Superposition Error) -- "
+                                 "re-run stb-cohesive with --bsse-correction for a corrected reference.\n")
+                f_out.write("\n==================================================\n")
+
+            print(f"[INFO] Results saved to: {out_file_path}")
+        except Exception as e:
+            print(color_text(f"[ERROR] Failed to save results to file: {e}", 'red'))
+            sys.exit(1)
 
     print("\n[INFO] Complete job!") 
     print("\n"+"-"*60)

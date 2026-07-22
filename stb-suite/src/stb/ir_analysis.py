@@ -16,7 +16,7 @@ import json
 import argparse
 from datetime import datetime
 import numpy as np
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.siesta_log import get_electric_dipole, check_scf_and_force
 from stb.core.born_charges import read_born_charges
 from stb.core.spectrum import (
@@ -200,6 +200,8 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
                         help="Minimum peak prominence, as a fraction of that spectrum's own max "
                              "intensity, for --experimental's peak-finding (default: 0.01 -- "
                              "filters out sub-1%% noise bumps in both spectra).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-irAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -281,233 +283,233 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
     born_charge_root = os.path.join(args.directory, "born_charge_disp")
     born_charges_cache = None  # (atom_labels, Z_star), read once, shared by every BULK mode
 
-    report_path = os.path.join(args.directory, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== IR STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+    print_dual(f"{color_text('===== IR STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory         : {args.directory}", f_out)
-        print_dual(f"SystemLabel       : {label}", f_out)
-        print_dual(f"Modes in table    : {len(modes)}", f_out)
-        print_dual(f"Displacement      : {stage2_delta} Ang (from Stage 2, non-bulk path only)", f_out)
-        if axis_mask is None and vacuum_axes is not None and any(vacuum_axes):
-            print_dual(color_text(
-                "[WARNING] Could not verify that a vacuum-padded lattice vector is aligned to a "
-                "single Cartesian axis -- the non-bulk dipole derivative below uses the FULL, "
-                "unmasked 3-vector. Periodic-direction component(s) may be gauge-ambiguous.",
-                'yellow'), f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory         : {args.directory}", f_out)
+    print_dual(f"SystemLabel       : {label}", f_out)
+    print_dual(f"Modes in table    : {len(modes)}", f_out)
+    print_dual(f"Displacement      : {stage2_delta} Ang (from Stage 2, non-bulk path only)", f_out)
+    if axis_mask is None and vacuum_axes is not None and any(vacuum_axes):
+        print_dual(color_text(
+            "[WARNING] Could not verify that a vacuum-padded lattice vector is aligned to a "
+            "single Cartesian axis -- the non-bulk dipole derivative below uses the FULL, "
+            "unmasked 3-vector. Periodic-direction component(s) may be gauge-ambiguous.",
+            'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[1] READING RUNS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[1] READING RUNS', f_out)
 
-        mode_results = []  # (mode_index, freq_thz, dmu_dq, intensity)
-        computed = {}  # mode_index -> (dmu_dq, intensity, scf_ok), for --skip-degenerate reuse
-        for mode_index in sorted(modes):
-            entry = modes[mode_index]
-            freq_thz = entry["frequency_thz"]
-            print_dual(f"  Mode {mode_index} ({freq_thz:.4f} THz / {freq_thz * THZ_TO_CM1:.2f} cm^-1):", f_out)
+    mode_results = []  # (mode_index, freq_thz, dmu_dq, intensity)
+    computed = {}  # mode_index -> (dmu_dq, intensity, scf_ok), for --skip-degenerate reuse
+    for mode_index in sorted(modes):
+        entry = modes[mode_index]
+        freq_thz = entry["frequency_thz"]
+        print_dual(f"  Mode {mode_index} ({freq_thz:.4f} THz / {freq_thz * THZ_TO_CM1:.2f} cm^-1):", f_out)
 
-            derived_from = entry.get("derived_from")
-            if derived_from is not None:
-                rep = computed.get(derived_from)
-                if rep is None:
+        derived_from = entry.get("derived_from")
+        if derived_from is not None:
+            rep = computed.get(derived_from)
+            if rep is None:
+                print_dual(color_text(
+                    f"    -> SKIP (representative mode {derived_from} has no usable dipole "
+                    "derivative)", 'yellow'), f_out)
+                continue
+            dmu_dq, intensity, scf_ok = rep
+            print_dual("    [Degenerate partner] Reusing mode "
+                        f"{derived_from}'s dipole derivative by symmetry "
+                        "(stb-irModes --skip-degenerate) -- |dmu/dQ|^2 is a rotational "
+                        "invariant, identical for every partner in a degenerate group.", f_out)
+            print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
+                        f"intensity~{intensity:.6f}  [derived]", f_out)
+            mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
+            computed[mode_index] = rep
+            continue
+
+        if entry["path"] == "BULK":
+            if born_charges_cache is None:
+                equilibrium_dir = entry["folders"].get("-")
+                bc_path = os.path.join(equilibrium_dir, f"{label}.BC")
+                result = read_born_charges(bc_path)
+                if result is None:
                     print_dual(color_text(
-                        f"    -> SKIP (representative mode {derived_from} has no usable dipole "
-                        "derivative)", 'yellow'), f_out)
-                    continue
-                dmu_dq, intensity, scf_ok = rep
-                print_dual("    [Degenerate partner] Reusing mode "
-                            f"{derived_from}'s dipole derivative by symmetry "
-                            "(stb-irModes --skip-degenerate) -- |dmu/dQ|^2 is a rotational "
-                            "invariant, identical for every partner in a degenerate group.", f_out)
-                print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
-                            f"intensity~{intensity:.6f}  [derived]", f_out)
-                mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
-                computed[mode_index] = rep
+                        f"    [SKIP] Could not read Born effective charges from "
+                        f"'{bc_path}'.", 'yellow'), f_out)
+                    born_charges_cache = (None, None)
+                else:
+                    atom_labels, Z_star = result
+                    scf_ok_bulk, _max_force = check_scf_and_force(
+                        os.path.join(equilibrium_dir, args.file))
+                    if not scf_ok_bulk:
+                        print_dual(color_text(
+                            f"    [WARNING] Could not confirm SCF convergence for "
+                            f"'{equilibrium_dir}' -- every mode's Born-charge-derived "
+                            "intensity may be unreliable.", 'yellow'), f_out)
+                    born_charges_cache = (Z_star, scf_ok_bulk)
+
+            Z_star, scf_ok = born_charges_cache
+            if Z_star is None:
+                print_dual(color_text("    -> SKIP (Born effective charges unavailable)", 'yellow'), f_out)
                 continue
 
-            if entry["path"] == "BULK":
-                if born_charges_cache is None:
-                    equilibrium_dir = entry["folders"].get("-")
-                    bc_path = os.path.join(equilibrium_dir, f"{label}.BC")
-                    result = read_born_charges(bc_path)
-                    if result is None:
-                        print_dual(color_text(
-                            f"    [SKIP] Could not read Born effective charges from "
-                            f"'{bc_path}'.", 'yellow'), f_out)
-                        born_charges_cache = (None, None)
-                    else:
-                        atom_labels, Z_star = result
-                        scf_ok_bulk, _max_force = check_scf_and_force(
-                            os.path.join(equilibrium_dir, args.file))
-                        if not scf_ok_bulk:
-                            print_dual(color_text(
-                                f"    [WARNING] Could not confirm SCF convergence for "
-                                f"'{equilibrium_dir}' -- every mode's Born-charge-derived "
-                                "intensity may be unreliable.", 'yellow'), f_out)
-                        born_charges_cache = (Z_star, scf_ok_bulk)
+            sidecar_path = os.path.join(born_charge_root, f"mode_{mode_index:02d}_eigendisplacement.json")
+            try:
+                with open(sidecar_path) as f:
+                    eigendisp = np.array(json.load(f)["eigendisplacement"])
+            except (OSError, ValueError, KeyError) as e:
+                print_dual(color_text(
+                    f"    [SKIP] Could not read {sidecar_path}: {e}", 'yellow'), f_out)
+                continue
 
-                Z_star, scf_ok = born_charges_cache
-                if Z_star is None:
-                    print_dual(color_text("    -> SKIP (Born effective charges unavailable)", 'yellow'), f_out)
-                    continue
+            if eigendisp.shape[0] != Z_star.shape[0]:
+                print_dual(color_text(
+                    f"    [SKIP] Atom count mismatch between eigendisplacement "
+                    f"({eigendisp.shape[0]}) and Born charges ({Z_star.shape[0]}).",
+                    'yellow'), f_out)
+                continue
 
-                sidecar_path = os.path.join(born_charge_root, f"mode_{mode_index:02d}_eigendisplacement.json")
-                try:
-                    with open(sidecar_path) as f:
-                        eigendisp = np.array(json.load(f)["eigendisplacement"])
-                except (OSError, ValueError, KeyError) as e:
+            dmu_dq = np.einsum('atb,at->b', Z_star, eigendisp)
+            intensity = ir_intensity(dmu_dq)
+            print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
+                        f"intensity~{intensity:.6f}"
+                        + ("" if scf_ok else color_text("  [equilibrium run unconverged]", 'yellow')), f_out)
+            mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
+            computed[mode_index] = (dmu_dq, intensity, scf_ok)
+
+        else:  # NONBULK
+            plus_dir = entry["folders"].get("plus")
+            minus_dir = entry["folders"].get("minus")
+            if plus_dir is None or minus_dir is None:
+                print_dual(color_text(
+                    "    -> SKIP (missing +/-delta folder(s))", 'yellow'), f_out)
+                continue
+
+            scf_ok = True
+            dipoles = {}
+            for sign, folder in (("plus", plus_dir), ("minus", minus_dir)):
+                out_path = os.path.join(folder, args.file)
+                ok, _max_force = check_scf_and_force(out_path)
+                scf_ok = scf_ok and ok
+                if not ok:
                     print_dual(color_text(
-                        f"    [SKIP] Could not read {sidecar_path}: {e}", 'yellow'), f_out)
-                    continue
-
-                if eigendisp.shape[0] != Z_star.shape[0]:
+                        f"    [WARNING] Could not confirm SCF convergence for {folder} -- "
+                        "this dipole value may be unreliable.", 'yellow'), f_out)
+                dipole = get_electric_dipole(out_path)
+                if dipole is None:
                     print_dual(color_text(
-                        f"    [SKIP] Atom count mismatch between eigendisplacement "
-                        f"({eigendisp.shape[0]}) and Born charges ({Z_star.shape[0]}).",
+                        f"    [SKIP] Could not read the electric dipole from '{out_path}'.",
                         'yellow'), f_out)
-                    continue
+                    dipoles = None
+                    break
+                dipoles[sign] = dipole
+            if not dipoles:
+                continue
 
-                dmu_dq = np.einsum('atb,at->b', Z_star, eigendisp)
-                intensity = ir_intensity(dmu_dq)
-                print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
-                            f"intensity~{intensity:.6f}"
-                            + ("" if scf_ok else color_text("  [equilibrium run unconverged]", 'yellow')), f_out)
-                mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
-                computed[mode_index] = (dmu_dq, intensity, scf_ok)
-
-            else:  # NONBULK
-                plus_dir = entry["folders"].get("plus")
-                minus_dir = entry["folders"].get("minus")
-                if plus_dir is None or minus_dir is None:
+            dmu_dq_full = (dipoles["plus"] - dipoles["minus"]) / (2.0 * stage2_delta)
+            if axis_mask is not None:
+                dmu_dq = np.where(axis_mask, dmu_dq_full, 0.0)
+                periodic_component = dmu_dq_full[~axis_mask]
+                if periodic_component.size and np.max(np.abs(periodic_component)) > 1e-3:
                     print_dual(color_text(
-                        "    -> SKIP (missing +/-delta folder(s))", 'yellow'), f_out)
-                    continue
-
-                scf_ok = True
-                dipoles = {}
-                for sign, folder in (("plus", plus_dir), ("minus", minus_dir)):
-                    out_path = os.path.join(folder, args.file)
-                    ok, _max_force = check_scf_and_force(out_path)
-                    scf_ok = scf_ok and ok
-                    if not ok:
-                        print_dual(color_text(
-                            f"    [WARNING] Could not confirm SCF convergence for {folder} -- "
-                            "this dipole value may be unreliable.", 'yellow'), f_out)
-                    dipole = get_electric_dipole(out_path)
-                    if dipole is None:
-                        print_dual(color_text(
-                            f"    [SKIP] Could not read the electric dipole from '{out_path}'.",
-                            'yellow'), f_out)
-                        dipoles = None
-                        break
-                    dipoles[sign] = dipole
-                if not dipoles:
-                    continue
-
-                dmu_dq_full = (dipoles["plus"] - dipoles["minus"]) / (2.0 * stage2_delta)
-                if axis_mask is not None:
-                    dmu_dq = np.where(axis_mask, dmu_dq_full, 0.0)
-                    periodic_component = dmu_dq_full[~axis_mask]
-                    if periodic_component.size and np.max(np.abs(periodic_component)) > 1e-3:
-                        print_dual(color_text(
-                            "    [WARNING] Non-negligible dipole-derivative component along a "
-                            "periodic direction (masked out) -- check the structure's cell "
-                            "alignment.", 'yellow'), f_out)
-                else:
-                    dmu_dq = dmu_dq_full
-
-                intensity = ir_intensity(dmu_dq)
-                print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
-                            f"intensity~{intensity:.6f}"
-                            + ("" if scf_ok else color_text("  [some folders unconverged]", 'yellow')), f_out)
-                mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
-                computed[mode_index] = (dmu_dq, intensity, scf_ok)
-
-        if not mode_results:
-            print_dual(color_text(
-                "\n[ERROR] No mode had a usable dipole derivative -- nothing to report/plot. "
-                "Make sure SIESTA finished in every displacement folder.", 'red'), f_out)
-            sys.exit(1)
-
-        print_dual(f"\n{color_text('[2] IR-ACTIVE MODES SUMMARY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"  {'Mode':<6}{'THz':<10}{'cm^-1':<10}{'dmu/dQ_x':<12}{'dmu/dQ_y':<12}"
-                    f"{'dmu/dQ_z':<12}{'Intensity'}", f_out)
-        for mode_index, freq_thz, dmu_dq, intensity in mode_results:
-            print_dual(f"  {mode_index:<6}{freq_thz:<10.4f}{freq_thz * THZ_TO_CM1:<10.2f}"
-                        f"{dmu_dq[0]:<12.6f}{dmu_dq[1]:<12.6f}{dmu_dq[2]:<12.6f}{intensity:.6f}", f_out)
-
-        print_dual(f"\n{color_text('[3] SPECTRUM', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        freqs_cm1 = [freq_thz * THZ_TO_CM1 for _, freq_thz, _, _ in mode_results]
-        intensities = [intensity for _, _, _, intensity in mode_results]
-        if args.temperature is not None:
-            # Same imaginary-mode-aware skip as Raman's Stage 3 -- Bose-
-            # Einstein occupation is undefined for a non-positive frequency.
-            n_imaginary_skipped = 0
-            weights = []
-            for _, freq_thz, _, _ in mode_results:
-                if freq_thz <= 0:
-                    weights.append(1.0)
-                    n_imaginary_skipped += 1
-                else:
-                    weights.append(bose_einstein_weight(freq_thz, args.temperature))
-            intensities = [a * w for a, w in zip(intensities, weights)]
-            print_dual(f"Thermal weighting : Bose-Einstein Stokes factor (n+1) at "
-                        f"{args.temperature:.1f} K applied to every mode's contribution.", f_out)
-            if n_imaginary_skipped:
-                print_dual(color_text(
-                    f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
-                    "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
-        grid, intensity_grid = build_lorentzian_spectrum(freqs_cm1, intensities, args.linewidth)
-        dat_path = os.path.join(args.directory, f"{args.output}.dat")
-        gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
-
-        experimental, experimental_dat_path = None, None
-        if args.experimental is not None:
-            exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
-            experimental = (exp_freq, exp_intensity)
-            experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
-
-        write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity_grid, args.temperature,
-                                experimental, experimental_dat_path)
-        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
-                    f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
-
-        extra_files = ""
-        if experimental is not None:
-            print_dual(f"\n{color_text('[3b] EXPERIMENTAL COMPARISON', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            print_dual(f"Experimental file : {args.experimental} ({len(exp_freq)} point(s))", f_out)
-            sim_peaks = find_spectrum_peaks(grid, intensity_grid, args.peak_prominence)
-            exp_peaks = find_spectrum_peaks(exp_freq, exp_intensity, args.peak_prominence)
-            print_dual(f"Peaks found       : {len(sim_peaks)} simulated, {len(exp_peaks)} experimental", f_out)
-            if len(exp_peaks) == 0:
-                print_dual(color_text(
-                    "[WARNING] No experimental peaks found above the prominence threshold -- "
-                    "try lowering --peak-prominence.", 'yellow'), f_out)
-            elif len(sim_peaks) == 0:
-                print_dual(color_text(
-                    "[WARNING] No simulated peaks found -- nothing to match against.", 'yellow'), f_out)
+                        "    [WARNING] Non-negligible dipole-derivative component along a "
+                        "periodic direction (masked out) -- check the structure's cell "
+                        "alignment.", 'yellow'), f_out)
             else:
-                matches = match_peaks(sim_peaks, exp_peaks)
-                print_dual(f"  {'Exp. peak (cm^-1)':<20}{'Sim. peak (cm^-1)':<20}{'Delta (cm^-1)'}", f_out)
-                for exp_f, sim_f, delta in matches:
-                    print_dual(f"  {exp_f:<20.2f}{sim_f:<20.2f}{delta:+.2f}", f_out)
-                mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
-                print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
-                            f"{len(matches)} matched pair(s))", f_out)
-            print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
-            extra_files = f", {experimental_dat_path}"
+                dmu_dq = dmu_dq_full
 
-        print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
+            intensity = ir_intensity(dmu_dq)
+            print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
+                        f"intensity~{intensity:.6f}"
+                        + ("" if scf_ok else color_text("  [some folders unconverged]", 'yellow')), f_out)
+            mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
+            computed[mode_index] = (dmu_dq, intensity, scf_ok)
+
+    if not mode_results:
+        print_dual(color_text(
+            "\n[ERROR] No mode had a usable dipole derivative -- nothing to report/plot. "
+            "Make sure SIESTA finished in every displacement folder.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+
+    print_section('[2] IR-ACTIVE MODES SUMMARY', f_out)
+    print_dual(f"  {'Mode':<6}{'THz':<10}{'cm^-1':<10}{'dmu/dQ_x':<12}{'dmu/dQ_y':<12}"
+                f"{'dmu/dQ_z':<12}{'Intensity'}", f_out)
+    for mode_index, freq_thz, dmu_dq, intensity in mode_results:
+        print_dual(f"  {mode_index:<6}{freq_thz:<10.4f}{freq_thz * THZ_TO_CM1:<10.2f}"
+                    f"{dmu_dq[0]:<12.6f}{dmu_dq[1]:<12.6f}{dmu_dq[2]:<12.6f}{intensity:.6f}", f_out)
+
+    print_section('[3] SPECTRUM', f_out)
+    freqs_cm1 = [freq_thz * THZ_TO_CM1 for _, freq_thz, _, _ in mode_results]
+    intensities = [intensity for _, _, _, intensity in mode_results]
+    if args.temperature is not None:
+        # Same imaginary-mode-aware skip as Raman's Stage 3 -- Bose-
+        # Einstein occupation is undefined for a non-positive frequency.
+        n_imaginary_skipped = 0
+        weights = []
+        for _, freq_thz, _, _ in mode_results:
+            if freq_thz <= 0:
+                weights.append(1.0)
+                n_imaginary_skipped += 1
+            else:
+                weights.append(bose_einstein_weight(freq_thz, args.temperature))
+        intensities = [a * w for a, w in zip(intensities, weights)]
+        print_dual(f"Thermal weighting : Bose-Einstein Stokes factor (n+1) at "
+                    f"{args.temperature:.1f} K applied to every mode's contribution.", f_out)
+        if n_imaginary_skipped:
+            print_dual(color_text(
+                f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
+                "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
+    grid, intensity_grid = build_lorentzian_spectrum(freqs_cm1, intensities, args.linewidth)
+    dat_path = os.path.join(args.directory, f"{args.output}.dat")
+    gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+
+    experimental, experimental_dat_path = None, None
+    if args.experimental is not None:
+        exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
+        experimental = (exp_freq, exp_intensity)
+        experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+
+    write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity_grid, args.temperature,
+                            experimental, experimental_dat_path)
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+
+    extra_files = ""
+    if experimental is not None:
+        print_section('[3b] EXPERIMENTAL COMPARISON', f_out)
+        print_dual(f"Experimental file : {args.experimental} ({len(exp_freq)} point(s))", f_out)
+        sim_peaks = find_spectrum_peaks(grid, intensity_grid, args.peak_prominence)
+        exp_peaks = find_spectrum_peaks(exp_freq, exp_intensity, args.peak_prominence)
+        print_dual(f"Peaks found       : {len(sim_peaks)} simulated, {len(exp_peaks)} experimental", f_out)
+        if len(exp_peaks) == 0:
+            print_dual(color_text(
+                "[WARNING] No experimental peaks found above the prominence threshold -- "
+                "try lowering --peak-prominence.", 'yellow'), f_out)
+        elif len(sim_peaks) == 0:
+            print_dual(color_text(
+                "[WARNING] No simulated peaks found -- nothing to match against.", 'yellow'), f_out)
+        else:
+            matches = match_peaks(sim_peaks, exp_peaks)
+            print_dual(f"  {'Exp. peak (cm^-1)':<20}{'Sim. peak (cm^-1)':<20}{'Delta (cm^-1)'}", f_out)
+            for exp_f, sim_f, delta in matches:
+                print_dual(f"  {exp_f:<20.2f}{sim_f:<20.2f}{delta:+.2f}", f_out)
+            mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
+            print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
+                        f"{len(matches)} matched pair(s))", f_out)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
+        extra_files = f", {experimental_dat_path}"
+
+    print_section('[4] SUMMARY & FILES', f_out)
+    print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
+    if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-        print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+    print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

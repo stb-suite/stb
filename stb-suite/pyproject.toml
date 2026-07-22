@@ -122,6 +122,16 @@ stb-mlffActiveLearning="stb.mlff_active_learning:main"
 stb-mlmd="stb.mlmd:main"
 stb-mlphonons="stb.mlphonons:main"
 stb-mlelastic="stb.mlelastic:main"
+stb-mlsearch="stb.mlsearch:main"
+stb-mlmelting="stb.mlmelting:main"
+stb-mlconvergence="stb.mlconvergence:main"
+stb-mlneb="stb.mlneb:main"
+stb-mldiffusion="stb.mldiffusion:main"
+stb-mlgcmc="stb.mlgcmc:main"
+stb-mladsorb="stb.mladsorb:main"
+stb-mleos="stb.mleos:main"
+stb-eosInputs="stb.eos_inputs:main"
+stb-eosAnalysis="stb.eos_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

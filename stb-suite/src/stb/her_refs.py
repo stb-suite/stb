@@ -16,7 +16,7 @@ import argparse
 import numpy as np
 from pymatgen.core.periodic_table import Element
 from stb.core import structure_io
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.calc_directives import force_single_point
 from stb.core.siesta_log import get_free_energy, get_outcell, check_scf_and_force, report_quality_diagnostics
@@ -406,14 +406,12 @@ stb-herAnalysis.""",
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== HER STAGE 2 REPORT (REFERENCES & ZPE PREP) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Directory       : {output_root}", f_out)
         print_dual(f"ZPE mode        : {args.zpe_mode}", f_out)
         print_dual(f"Displacement    : {args.displacement} Ang", f_out)
 
-        print_dual(f"\n{color_text('[1] WINNING SITE', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] WINNING SITE', f_out)
         winning_dir, winning_energy, all_results = find_winning_site(sites_root, args.file, f_out)
         for label, energy in all_results:
             marker = color_text(" <-- winner", 'green') if os.path.join(sites_root, label) == winning_dir else ""
@@ -436,8 +434,7 @@ stb-herAnalysis.""",
         with open(winning_dir + "/calc.fdf") as f:
             site_calc_text = f.read()
 
-        print_dual(f"\n{color_text('[2] REFERENCE FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] REFERENCE FOLDERS', f_out)
 
         # 00_clean_slab: pristine geometry (Stage 1's own input, already
         # relaxed by the user BEFORE stb-her), single-point with the
@@ -491,8 +488,7 @@ stb-herAnalysis.""",
         write_folder(h_iso_dir, h_iso_structure, h_iso_calc, args.pseudo_dir)
         print_dual(f"  {color_text('[OK]', 'green')} {h_iso_dir}", f_out)
 
-        print_dual(f"\n{color_text('[3] ZPE PREPARATION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] ZPE PREPARATION', f_out)
         if args.zpe_mode == "standard":
             print_dual("Standard mode -- no folders generated. stb-herAnalysis will use the "
                         "fixed Norskov offset (Delta-ZPE - T*Delta-S ~= +0.24 eV).", f_out)
@@ -551,8 +547,7 @@ stb-herAnalysis.""",
             print_dual(f"  {color_text('[OK]', 'green')} {len(clean_folders)} displacement folder(s) "
                         f"under 05_zpe_calc_clean/", f_out)
 
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)
         print_dual("  1. Run SIESTA in every folder written above.", f_out)

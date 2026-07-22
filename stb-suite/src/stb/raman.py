@@ -9,28 +9,18 @@
 VERSION = "1.0.0"
 
 import os
-import re
 import sys
 import argparse
 import glob
 from datetime import datetime
 import numpy as np
 from phonopy.interface.siesta import read_siesta, get_physical_units
-from stb.core.cli import color_text, show_intro
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
 REPORT_FILE = "raman_stage1.txt"
-
-
-def print_dual(text, file_handle=None):
-    """Prints to stdout with color, writes to file without color. Same
-    duplicated-per-tool helper as phonons_create.py."""
-    print(text)
-    if file_handle:
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        file_handle.write(clean_text + "\n")
 
 
 def main():
@@ -70,6 +60,8 @@ machinery is shared, via core/phonon_workflow.py).""",
     parser.add_argument("-O", "--output-dir", type=str, default="raman_study",
                         help="Root directory for the whole Raman workflow (default: raman_study) -- "
                              "phonon displacements are written under <output-dir>/phonon_disp/.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-raman {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -122,91 +114,94 @@ machinery is shared, via core/phonon_workflow.py).""",
         sys.exit(1)
     os.makedirs(phonon_disp_dir, exist_ok=True)
 
-    report_path = os.path.join(output_root, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== RAMAN STAGE 1 REPORT (PHONON DISPLACEMENTS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Structure file    : {args.structure}", f_out)
-        print_dual(f"Calc file         : {args.calc}", f_out)
-        print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
-        print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
-        print_dual(f"Pseudopotentials  : {args.pseudo_dir}", f_out)
-        print_dual(f"Output root       : {output_root}", f_out)
+    print_dual(f"{color_text('===== RAMAN STAGE 1 REPORT (PHONON DISPLACEMENTS) =====', 'magenta')}", f_out)
 
-        bohr_to_angstrom = get_physical_units().Bohr
-        lattice_ang = np.array(unitcell.cell) * bohr_to_angstrom
-        frac_coords = np.array(unitcell.scaled_positions)
-        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
-        print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Structure file    : {args.structure}", f_out)
+    print_dual(f"Calc file         : {args.calc}", f_out)
+    print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
+    print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
+    print_dual(f"Pseudopotentials  : {args.pseudo_dir}", f_out)
+    print_dual(f"Output root       : {output_root}", f_out)
 
-        vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
-                                  if is_vac and args.dim['abc'.index(axis)] > 1]
-        if vacuum_dims_requested:
-            print_dual(color_text(
-                f"[WARNING] -dim requests more than 1 repetition along vacuum-padded "
-                f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
-                "Replicating a supercell across vacuum only multiplies the SIESTA cost without "
-                "adding real periodicity -- consider -dim 1 on that axis.", 'yellow'), f_out)
+    bohr_to_angstrom = get_physical_units().Bohr
+    lattice_ang = np.array(unitcell.cell) * bohr_to_angstrom
+    frac_coords = np.array(unitcell.scaled_positions)
+    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
+    print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
 
-        print_dual(f"\n{color_text('[1] PSEUDOPOTENTIALS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        symbols = unitcell.symbols
-        unique_elements = list(set(symbols))
-        print_dual(f"Elements in unit cell : {', '.join(unique_elements)}", f_out)
-        print_dual(f"Searching in          : {args.pseudo_dir}", f_out)
-        pseudos_to_copy, missing = get_required_pseudos(unique_elements, args.pseudo_dir)
-
-        if missing:
-            print_dual(color_text(
-                f"[CRITICAL ERROR] Missing pseudopotentials for the following elements: "
-                f"{', '.join(missing)}", 'red'), f_out)
-            print_dual(color_text(
-                f"Action required: add the necessary '{missing[0]}.psf' or '{missing[0]}.psml' "
-                f"files into '{args.pseudo_dir}' and rerun.", 'yellow'), f_out)
-            sys.exit(1)
-
-        print_dual(f"Found all required    : "
-                    f"{', '.join(os.path.basename(p) for p in pseudos_to_copy)}", f_out)
-
-        print_dual(f"\n{color_text('[2] PHONON DISPLACEMENTS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print(f"[INFO] Generating supercell {args.dim} with {args.distance} Ang displacements ...")
-        supercell_matrix = [
-            [args.dim[0], 0, 0],
-            [0, args.dim[1], 0],
-            [0, 0, args.dim[2]]
-        ]
-        # phonopy's SIESTA interface keeps the structure internally in bohr --
-        # distance conversion is handled inside build_phonon_displacements()
-        # (see core/phonon_workflow.py for the ~1.89x pitfall this avoids).
-        phonon, supercells = build_phonon_displacements(unitcell, supercell_matrix, args.distance)
-
-        n_used = len(phonon.dataset['first_atoms'])
-        n_naive = phonon.dataset['natom'] * 6
-        print_dual(f"Displacements needed  : {color_text(str(n_used), 'green')} "
-                    f"(vs. {n_naive} without symmetry reduction)", f_out)
-
-        print_dual(f"Building {len(supercells)} displacement folders in '{phonon_disp_dir}' ...", f_out)
-        folders, yaml_path = write_displacement_folders(
-            phonon_disp_dir, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
-        print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
-
-        print_dual(f"\n{color_text('[3] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Displacement folders : {len(folders)} (disp-001 .. disp-{len(folders):03d})", f_out)
-        print_dual(f"Report               : {report_path}", f_out)
-        print_dual(f"Files                : {yaml_path}, {phonon_disp_dir}/disp-*/", f_out)
+    vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
+                              if is_vac and args.dim['abc'.index(axis)] > 1]
+    if vacuum_dims_requested:
         print_dual(color_text(
-            f"\n[NOTE] '{os.path.basename(args.calc)}' was copied as-is into every disp-* folder. "
-            f"Its k-grid was tuned for the {args.dim[0]}x{args.dim[1]}x{args.dim[2]} times smaller "
-            "unit cell -- review it for the generated supercell (roughly kgrid_unitcell / dim per "
-            "direction gives the same sampling density at much lower cost).", 'yellow'), f_out)
-        print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-        print_dual(f"  1. Run SIESTA in every '{phonon_disp_dir}/disp-*/' folder.", f_out)
-        print_dual(f"  2. Once they're done, run: stb-ramanModes --directory {output_root}", f_out)
+            f"[WARNING] -dim requests more than 1 repetition along vacuum-padded "
+            f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
+            "Replicating a supercell across vacuum only multiplies the SIESTA cost without "
+            "adding real periodicity -- consider -dim 1 on that axis.", 'yellow'), f_out)
+
+    print_section('[1] PSEUDOPOTENTIALS', f_out)
+    symbols = unitcell.symbols
+    unique_elements = list(set(symbols))
+    print_dual(f"Elements in unit cell : {', '.join(unique_elements)}", f_out)
+    print_dual(f"Searching in          : {args.pseudo_dir}", f_out)
+    pseudos_to_copy, missing = get_required_pseudos(unique_elements, args.pseudo_dir)
+
+    if missing:
+        print_dual(color_text(
+            f"[CRITICAL ERROR] Missing pseudopotentials for the following elements: "
+            f"{', '.join(missing)}", 'red'), f_out)
+        print_dual(color_text(
+            f"Action required: add the necessary '{missing[0]}.psf' or '{missing[0]}.psml' "
+            f"files into '{args.pseudo_dir}' and rerun.", 'yellow'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+
+    print_dual(f"Found all required    : "
+                f"{', '.join(os.path.basename(p) for p in pseudos_to_copy)}", f_out)
+
+    print_section('[2] PHONON DISPLACEMENTS', f_out)
+    print(f"[INFO] Generating supercell {args.dim} with {args.distance} Ang displacements ...")
+    supercell_matrix = [
+        [args.dim[0], 0, 0],
+        [0, args.dim[1], 0],
+        [0, 0, args.dim[2]]
+    ]
+    # phonopy's SIESTA interface keeps the structure internally in bohr --
+    # distance conversion is handled inside build_phonon_displacements()
+    # (see core/phonon_workflow.py for the ~1.89x pitfall this avoids).
+    phonon, supercells = build_phonon_displacements(unitcell, supercell_matrix, args.distance)
+
+    n_used = len(phonon.dataset['first_atoms'])
+    n_naive = phonon.dataset['natom'] * 6
+    print_dual(f"Displacements needed  : {color_text(str(n_used), 'green')} "
+                f"(vs. {n_naive} without symmetry reduction)", f_out)
+
+    print_dual(f"Building {len(supercells)} displacement folders in '{phonon_disp_dir}' ...", f_out)
+    folders, yaml_path = write_displacement_folders(
+        phonon_disp_dir, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
+    print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
+
+    print_section('[3] SUMMARY & NEXT STEPS', f_out)
+    print_dual(f"Displacement folders : {len(folders)} (disp-001 .. disp-{len(folders):03d})", f_out)
+    if report_path:
+        print_dual(f"Report               : {report_path}", f_out)
+    print_dual(f"Files                : {yaml_path}, {phonon_disp_dir}/disp-*/", f_out)
+    print_dual(color_text(
+        f"\n[NOTE] '{os.path.basename(args.calc)}' was copied as-is into every disp-* folder. "
+        f"Its k-grid was tuned for the {args.dim[0]}x{args.dim[1]}x{args.dim[2]} times smaller "
+        "unit cell -- review it for the generated supercell (roughly kgrid_unitcell / dim per "
+        "direction gives the same sampling density at much lower cost).", 'yellow'), f_out)
+    print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+    print_dual(f"  1. Run SIESTA in every '{phonon_disp_dir}/disp-*/' folder.", f_out)
+    print_dual(f"  2. Once they're done, run: stb-ramanModes --directory {output_root}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

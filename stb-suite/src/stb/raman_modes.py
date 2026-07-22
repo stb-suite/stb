@@ -9,7 +9,6 @@
 VERSION = "1.0.0"
 
 import os
-import re
 import sys
 import glob
 import json
@@ -21,7 +20,7 @@ import yaml
 from ase import Atoms
 from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
-from stb.core.cli import color_text, show_intro
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, build_optical_block
 from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
@@ -74,15 +73,6 @@ _SIGNS = [("plus", 1.0), ("minus", -1.0)]
 # name from this same set; this is how the folder-writing loop turns that
 # name back into the actual Optical.Vector).
 _ALL_AXIS_VECTORS = dict(_AXES_DIAGONAL + _AXES_OFFDIAG)
-
-
-def print_dual(text, file_handle=None):
-    """Prints to stdout with color, writes to file without color. Same
-    duplicated-per-tool helper as phonons_create.py/phonons_pos.py."""
-    print(text)
-    if file_handle:
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        file_handle.write(clean_text + "\n")
 
 
 def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text, pseudos):
@@ -305,8 +295,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== RAMAN STAGE 2 REPORT (MODES & OPTICAL DISPLACEMENTS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
         print_dual(f"Directory         : {output_root}", f_out)
         print_dual(f"SystemLabel       : {'N/A (ML-computed force constants)' if has_embedded_fc else f'{system_label} ({label_source})'}", f_out)
@@ -316,8 +305,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
         print_dual(f"Optical broaden   : {args.optical_broaden} eV", f_out)
         print_dual(f"Tensor scope      : {'full symmetric tensor' if args.full_tensor else 'diagonal only'}", f_out)
 
-        print_dual(f"\n{color_text('[1] PHONON MODES AT GAMMA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] PHONON MODES AT GAMMA', f_out)
         phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
             phonon_dir, system_label, has_embedded_fc, f_out)
         try:
@@ -363,8 +351,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
 
         if args.use_symmetry:
-            print_dual(f"\n{color_text('[1b] SYMMETRY ANALYSIS', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
+            print_section('[1b] SYMMETRY ANALYSIS', f_out)
             print_dual(f"Point group       : {point_group}", f_out)
             if symmetry_error:
                 print_dual(color_text(
@@ -388,8 +375,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                         "--modes was given explicitly -- symmetry filtering is informational "
                         "only here, no mode is auto-skipped.", 'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[2] PSEUDOPOTENTIALS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] PSEUDOPOTENTIALS', f_out)
         print_dual(f"Elements needed   : {', '.join(sorted(unique_elements))}", f_out)
         if args.pseudo_dir is not None:
             pseudo_source = args.pseudo_dir
@@ -504,8 +490,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             else:
                 mode_axes[k] = axes
 
-        print_dual(f"\n{color_text('[3] OPTICAL DISPLACEMENT FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] OPTICAL DISPLACEMENT FOLDERS', f_out)
         n_folders = sum(len(mode_axes[k]) for k, _, _ in selected
                          if representative_of[k] == k) * len(_SIGNS)
         print_dual(f"Selected modes    : {len(selected)}", f_out)
@@ -572,8 +557,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                     json.dump({"T0": t0.tolist(), "probe_axis": mode_reductions[k]["probe_axis"]}, f)
 
         n_real_folders = sum(1 for row in report_rows if row[4] != "DERIVED")
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"{n_real_folders} folder(s) written under '{optical_root}'.", f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)

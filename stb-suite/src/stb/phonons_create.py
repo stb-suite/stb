@@ -9,7 +9,6 @@
 VERSION = "1.11.0"
 
 import os
-import re
 import sys
 import argparse
 from time import sleep
@@ -18,23 +17,13 @@ import glob
 import numpy as np
 from ase import Atoms
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
 REPORT_FILE = "phonon_prep_properties.txt"
-
-
-def print_dual(text, file_handle=None):
-    """Prints to stdout with color, writes to file without color. Same
-    helper as phonons_pos.py -- duplicated per tool, not factored into
-    core/ (presentational, not computational logic)."""
-    print(text)
-    if file_handle:
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        file_handle.write(clean_text + "\n")
 
 
 def print_symmetry_table(phonon, f_out=None):
@@ -110,6 +99,8 @@ def main():
                         help="Force threshold (eV/Ang) for --ml-prerelax: above this, a "
                              "warning is shown and a relax is offered (default: 0.05).")
 
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -170,141 +161,143 @@ def main():
         sys.exit(1)
     os.makedirs(output_root, exist_ok=True)
 
-    report_path = os.path.join(output_root, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== PHONON PREP REPORT =====', 'magenta')}", f_out)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Structure file    : {args.structure}", f_out)
-        print_dual(f"Calc file         : {args.calc}", f_out)
-        print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
-        print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
-        print_dual(f"Pseudopotentials  : {args.pseudo_dir}", f_out)
+    print_dual(f"{color_text('===== PHONON PREP REPORT =====', 'magenta')}", f_out)
 
-        # phonopy's SIESTA interface keeps cell/positions internally in bohr (see
-        # the distance-unit note near generate_displacements below) -- convert to
-        # Angstrom before handing off to the suite's shared, Angstrom-based
-        # vacuum-axis detector.
-        bohr_to_angstrom = get_physical_units().Bohr
-        lattice_ang = np.array(unitcell.cell) * bohr_to_angstrom
-        frac_coords = np.array(unitcell.scaled_positions)
-        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
-        print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Structure file    : {args.structure}", f_out)
+    print_dual(f"Calc file         : {args.calc}", f_out)
+    print_dual(f"Supercell dim     : {args.dim[0]} x {args.dim[1]} x {args.dim[2]}", f_out)
+    print_dual(f"Displacement dist.: {args.distance} Ang", f_out)
+    print_dual(f"Pseudopotentials  : {args.pseudo_dir}", f_out)
 
-        vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
-                                  if is_vac and args.dim['abc'.index(axis)] > 1]
-        if vacuum_dims_requested:
-            print_dual(color_text(
-                f"[WARNING] --dim requests more than 1 repetition along vacuum-padded "
-                f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
-                "Replicating a supercell across vacuum only multiplies the SIESTA cost "
-                "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'), f_out)
+    # phonopy's SIESTA interface keeps cell/positions internally in bohr (see
+    # the distance-unit note near generate_displacements below) -- convert to
+    # Angstrom before handing off to the suite's shared, Angstrom-based
+    # vacuum-axis detector.
+    bohr_to_angstrom = get_physical_units().Bohr
+    lattice_ang = np.array(unitcell.cell) * bohr_to_angstrom
+    frac_coords = np.array(unitcell.scaled_positions)
+    vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
+    print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
 
-        if args.ml_prerelax:
-            require_mace()
-            print_dual(f"\n{color_text('[0b] ML PRE-FLIGHT CHECK', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            print_dual(f"Running MACE-MP-0 ({args.ml_model}) pre-flight check on "
-                       f"'{args.structure}' ...", f_out)
-            atoms = Atoms(numbers=unitcell.numbers,
-                           positions=np.array(unitcell.positions) * bohr_to_angstrom,
-                           cell=lattice_ang, pbc=True)
-            calc = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
-            atoms.calc = calc
-            f0 = np.abs(atoms.get_forces()).max()
-            print_dual(f"Max residual force on input structure: {f0:.4f} eV/Ang "
-                       f"(threshold: {args.ml_fmax} eV/Ang)", f_out)
-
-            if f0 <= args.ml_fmax:
-                print_dual(color_text(
-                    "Looks relaxed -- a good sign for the finite-difference phonon calculation "
-                    "below (which assumes ~zero net force at the reference geometry).", 'green'), f_out)
-            else:
-                print_dual(color_text(
-                    "[WARNING] Residual force is above threshold -- the reference structure may "
-                    "not be at a real energy minimum, a common cause of spurious imaginary "
-                    "phonon modes. Running a quick MACE relax (positions only) for reference "
-                    "...", 'yellow'), f_out)
-                converged, steps_used = mace_relax.relax(
-                    atoms, calc, cell_mask=None, fmax=args.ml_fmax, max_steps=200)
-                f1 = np.abs(atoms.get_forces()).max()
-                print_dual(f"After ML relax: max|F| = {f1:.4f} eV/Ang "
-                           f"({'converged' if converged else 'hit step cap, not fully converged'}, "
-                           f"{steps_used} steps)", f_out)
-
-                relaxed = unitcell.copy()
-                relaxed.positions = atoms.get_positions() / bohr_to_angstrom
-                relaxed_path = f"{os.path.splitext(args.structure)[0]}_mlrelaxed.fdf"
-                write_siesta(relaxed_path, relaxed)
-                max_disp = np.linalg.norm(
-                    atoms.get_positions() - np.array(unitcell.positions) * bohr_to_angstrom,
-                    axis=1).max()
-                print_dual(color_text(
-                    f"Wrote ML-relaxed structure to '{relaxed_path}' (max atomic displacement "
-                    f"from '{args.structure}': {max_disp:.4f} Ang) -- for reference only. This "
-                    f"run continues using '{args.structure}' unchanged; rerun with "
-                    f"-s {relaxed_path} if you want to use it instead.", 'yellow'), f_out)
-
-        # 3. Extração e validação de Pseudopotenciais
-        print_dual(f"\n{color_text('[1] PSEUDOPOTENTIALS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        symbols = unitcell.symbols
-        unique_elements = list(set(symbols))
-        print_dual(f"Elements in unit cell : {', '.join(unique_elements)}", f_out)
-        print_dual(f"Searching in          : {args.pseudo_dir}", f_out)
-        pseudos_to_copy, missing = get_required_pseudos(unique_elements, args.pseudo_dir)
-
-        if missing:
-            print_dual(color_text(f"[CRITICAL ERROR] Missing pseudopotentials for the following elements: {', '.join(missing)}", 'red'), f_out)
-            print_dual(color_text(f"Action required: Please add the necessary '{missing[0]}.psf' or '{missing[0]}.psml' files into the '{args.pseudo_dir}' directory and rerun the script.", 'yellow'), f_out)
-            sys.exit(1)
-
-        print_dual(f"Found all required    : {', '.join([os.path.basename(p) for p in pseudos_to_copy])}", f_out)
-
-        # 4. Inicialização do Phonopy
-        print_dual(f"\n{color_text('[2] SYMMETRY REDUCTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print(f"[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
-        supercell_matrix = [
-            [args.dim[0], 0, 0],
-            [0, args.dim[1], 0],
-            [0, 0, args.dim[2]]
-        ]
-
-        # phonopy's SIESTA interface keeps the structure internally in bohr (not
-        # Angstrom, unlike every other calculator interface) -- distance has to be
-        # converted to that same unit, or the real Cartesian displacement ends up
-        # ~1.89x smaller than requested (0.01 Ang asked -> 0.00529 Ang actually
-        # applied), verified numerically against this tool's own output. Handled
-        # inside build_phonon_displacements() (bohr_to_angstrom computed above,
-        # right after reading the structure, is the same physical constant).
-        phonon, supercells = build_phonon_displacements(unitcell, supercell_matrix, args.distance)
-
-        print_symmetry_table(phonon, f_out)
-
-        # 5. Criação dos diretórios e cópia
-        print_dual(f"\n{color_text('[3] DISPLACEMENT FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Building {len(supercells)} displacement folders in '{output_root}' ...", f_out)
-
-        _folders, yaml_path = write_displacement_folders(
-            output_root, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
-
-        print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
-
-        print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Displacement folders : {len(supercells)} (disp-001 .. disp-{len(supercells):03d})", f_out)
-        print_dual(f"Report               : {report_path}", f_out)
-        print_dual(f"Files                : {yaml_path}, {output_root}/disp-*/", f_out)
+    vacuum_dims_requested = [axis for axis, is_vac in zip('abc', vacuum_axes)
+                              if is_vac and args.dim['abc'.index(axis)] > 1]
+    if vacuum_dims_requested:
         print_dual(color_text(
-            f"\n[NOTE] '{os.path.basename(args.calc)}' was copied as-is into every disp-* "
-            f"folder. Its k-grid was tuned for the {args.dim[0]}x{args.dim[1]}x{args.dim[2]} "
-            "times smaller unit cell -- review it for the generated supercell (roughly "
-            "kgrid_unitcell / dim per direction gives the same sampling density at much "
-            "lower cost).", 'yellow'), f_out)
+            f"[WARNING] --dim requests more than 1 repetition along vacuum-padded "
+            f"axis/axes {', '.join(vacuum_dims_requested)} (gap >= {args.vacuum_gap} Ang). "
+            "Replicating a supercell across vacuum only multiplies the SIESTA cost "
+            "without adding real periodicity -- consider --dim 1 on that axis.", 'yellow'), f_out)
+
+    if args.ml_prerelax:
+        require_mace()
+        print_section('[0b] ML PRE-FLIGHT CHECK', f_out)
+        print_dual(f"Running MACE-MP-0 ({args.ml_model}) pre-flight check on "
+                   f"'{args.structure}' ...", f_out)
+        atoms = Atoms(numbers=unitcell.numbers,
+                       positions=np.array(unitcell.positions) * bohr_to_angstrom,
+                       cell=lattice_ang, pbc=True)
+        calc = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+        atoms.calc = calc
+        f0 = np.abs(atoms.get_forces()).max()
+        print_dual(f"Max residual force on input structure: {f0:.4f} eV/Ang "
+                   f"(threshold: {args.ml_fmax} eV/Ang)", f_out)
+
+        if f0 <= args.ml_fmax:
+            print_dual(color_text(
+                "Looks relaxed -- a good sign for the finite-difference phonon calculation "
+                "below (which assumes ~zero net force at the reference geometry).", 'green'), f_out)
+        else:
+            print_dual(color_text(
+                "[WARNING] Residual force is above threshold -- the reference structure may "
+                "not be at a real energy minimum, a common cause of spurious imaginary "
+                "phonon modes. Running a quick MACE relax (positions only) for reference "
+                "...", 'yellow'), f_out)
+            converged, steps_used = mace_relax.relax(
+                atoms, calc, cell_mask=None, fmax=args.ml_fmax, max_steps=200)
+            f1 = np.abs(atoms.get_forces()).max()
+            print_dual(f"After ML relax: max|F| = {f1:.4f} eV/Ang "
+                       f"({'converged' if converged else 'hit step cap, not fully converged'}, "
+                       f"{steps_used} steps)", f_out)
+
+            relaxed = unitcell.copy()
+            relaxed.positions = atoms.get_positions() / bohr_to_angstrom
+            relaxed_path = f"{os.path.splitext(args.structure)[0]}_mlrelaxed.fdf"
+            write_siesta(relaxed_path, relaxed)
+            max_disp = np.linalg.norm(
+                atoms.get_positions() - np.array(unitcell.positions) * bohr_to_angstrom,
+                axis=1).max()
+            print_dual(color_text(
+                f"Wrote ML-relaxed structure to '{relaxed_path}' (max atomic displacement "
+                f"from '{args.structure}': {max_disp:.4f} Ang) -- for reference only. This "
+                f"run continues using '{args.structure}' unchanged; rerun with "
+                f"-s {relaxed_path} if you want to use it instead.", 'yellow'), f_out)
+
+    # 3. Extração e validação de Pseudopotenciais
+    print_section('[1] PSEUDOPOTENTIALS', f_out)
+    symbols = unitcell.symbols
+    unique_elements = list(set(symbols))
+    print_dual(f"Elements in unit cell : {', '.join(unique_elements)}", f_out)
+    print_dual(f"Searching in          : {args.pseudo_dir}", f_out)
+    pseudos_to_copy, missing = get_required_pseudos(unique_elements, args.pseudo_dir)
+
+    if missing:
+        print_dual(color_text(f"[CRITICAL ERROR] Missing pseudopotentials for the following elements: {', '.join(missing)}", 'red'), f_out)
+        print_dual(color_text(f"Action required: Please add the necessary '{missing[0]}.psf' or '{missing[0]}.psml' files into the '{args.pseudo_dir}' directory and rerun the script.", 'yellow'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+
+    print_dual(f"Found all required    : {', '.join([os.path.basename(p) for p in pseudos_to_copy])}", f_out)
+
+    # 4. Inicialização do Phonopy
+    print_section('[2] SYMMETRY REDUCTION', f_out)
+    print(f"[INFO] Generating supercell {args.dim} with {args.distance} Å displacements ...")
+    supercell_matrix = [
+        [args.dim[0], 0, 0],
+        [0, args.dim[1], 0],
+        [0, 0, args.dim[2]]
+    ]
+
+    # phonopy's SIESTA interface keeps the structure internally in bohr (not
+    # Angstrom, unlike every other calculator interface) -- distance has to be
+    # converted to that same unit, or the real Cartesian displacement ends up
+    # ~1.89x smaller than requested (0.01 Ang asked -> 0.00529 Ang actually
+    # applied), verified numerically against this tool's own output. Handled
+    # inside build_phonon_displacements() (bohr_to_angstrom computed above,
+    # right after reading the structure, is the same physical constant).
+    phonon, supercells = build_phonon_displacements(unitcell, supercell_matrix, args.distance)
+
+    print_symmetry_table(phonon, f_out)
+
+    # 5. Criação dos diretórios e cópia
+    print_section('[3] DISPLACEMENT FOLDERS', f_out)
+    print_dual(f"Building {len(supercells)} displacement folders in '{output_root}' ...", f_out)
+
+    _folders, yaml_path = write_displacement_folders(
+        output_root, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
+
+    print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
+
+    print_section('[4] SUMMARY & FILES', f_out)
+    print_dual(f"Displacement folders : {len(supercells)} (disp-001 .. disp-{len(supercells):03d})", f_out)
+    if report_path:
+        print_dual(f"Report               : {report_path}", f_out)
+    print_dual(f"Files                : {yaml_path}, {output_root}/disp-*/", f_out)
+    print_dual(color_text(
+        f"\n[NOTE] '{os.path.basename(args.calc)}' was copied as-is into every disp-* "
+        f"folder. Its k-grid was tuned for the {args.dim[0]}x{args.dim[1]}x{args.dim[2]} "
+        "times smaller unit cell -- review it for the generated supercell (roughly "
+        "kgrid_unitcell / dim per direction gives the same sampling density at much "
+        "lower cost).", 'yellow'), f_out)
+
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n"+"-"*60)

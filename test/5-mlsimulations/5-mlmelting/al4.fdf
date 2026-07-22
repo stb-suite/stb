@@ -1,0 +1,34 @@
+# Example fixture: bulk Al, fcc conventional cubic cell (a=4.05 Ang, 4
+# atoms), used to smoke-test stb-mlmelting's temperature scan (a small,
+# cheap cell for a fast Lindemann-index/diffusion-coefficient scan).
+SystemName          Al4
+SystemLabel         calc
+
+NumberOfAtoms       4
+NumberOfSpecies     1
+
+%block ChemicalSpeciesLabel
+ 1  13  Al
+%endblock ChemicalSpeciesLabel
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 4.05000000   0.00000000   0.00000000
+ 0.00000000   4.05000000   0.00000000
+ 0.00000000   0.00000000   4.05000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.00000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.50000000   0.00000000   0.50000000   1
+  0.00000000   0.50000000   0.50000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+kgrid_cutoff 5.0 Ang

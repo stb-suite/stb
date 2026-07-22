@@ -13,7 +13,7 @@ import sys
 import argparse
 import numpy as np
 from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, build_optical_block
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 
@@ -114,6 +114,8 @@ vacuum-thickness rescaling is applied here. Interpret out-of-plane 2D results wi
     parser.add_argument("-O", "--output-dir", type=str, default="optical_study",
                          help="Root directory for the whole optical-properties workflow "
                               "(default: optical_study).")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-optical {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -151,57 +153,57 @@ vacuum-thickness rescaling is applied here. Interpret out-of-plane 2D results wi
 
     output_root = args.output_dir
     os.makedirs(output_root, exist_ok=True)
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
 
-    with open(report_path, 'w') as f_out:
-        print_dual(f"{color_text('===== OPTICAL STAGE 1 REPORT (DIRECTION FOLDERS) =====', 'magenta')}", f_out)
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Structure       : {args.file}", f_out)
-        print_dual(f"Calc template   : {args.calc}", f_out)
-        print_dual(f"Directions      : {' '.join(args.directions)}", f_out)
-        print_dual(f"Output root     : {output_root}", f_out)
+    print_dual(f"{color_text('===== OPTICAL STAGE 1 REPORT (DIRECTION FOLDERS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[1] DIMENSIONALITY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Detected : {kspace.dimensionality_label(vacuum_axes)}", f_out)
-        if is_2d:
-            print_dual(color_text(
-                "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- the periodic-supercell "
-                "dielectric response along ANY direction (including out-of-plane) is diluted by "
-                "the vacuum region, a known methodological caveat for slab dielectric/"
-                "polarizability DFT calculations. No vacuum-thickness rescaling is applied. Every "
-                "requested direction is still computed (no direction is skipped for 2D inputs).",
-                'yellow'), f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Structure       : {args.file}", f_out)
+    print_dual(f"Calc template   : {args.calc}", f_out)
+    print_dual(f"Directions      : {' '.join(args.directions)}", f_out)
+    print_dual(f"Output root     : {output_root}", f_out)
 
-        print_dual(f"\n{color_text('[2] OPTICAL PARAMETERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Optical.Mesh     : {args.optical_mesh[0]} {args.optical_mesh[1]} {args.optical_mesh[2]}", f_out)
-        print_dual(f"Optical.Broaden  : {args.optical_broaden} eV", f_out)
-        print_dual(f"Optical.NumberOfBands : {args.optical_nbands if args.optical_nbands else '(SIESTA default)'}", f_out)
+    print_section('[1] DIMENSIONALITY', f_out)
+    print_dual(f"Detected : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+    if is_2d:
+        print_dual(color_text(
+            "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- the periodic-supercell "
+            "dielectric response along ANY direction (including out-of-plane) is diluted by "
+            "the vacuum region, a known methodological caveat for slab dielectric/"
+            "polarizability DFT calculations. No vacuum-thickness rescaling is applied. Every "
+            "requested direction is still computed (no direction is skipped for 2D inputs).",
+            'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[3] FOLDERS WRITTEN', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[2] OPTICAL PARAMETERS', f_out)
+    print_dual(f"Optical.Mesh     : {args.optical_mesh[0]} {args.optical_mesh[1]} {args.optical_mesh[2]}", f_out)
+    print_dual(f"Optical.Broaden  : {args.optical_broaden} eV", f_out)
+    print_dual(f"Optical.NumberOfBands : {args.optical_nbands if args.optical_nbands else '(SIESTA default)'}", f_out)
 
-        calc_text_base = force_single_point(calc_template)
-        for axis in args.directions:
-            axis_vec = _AXIS_VECTORS[axis]
-            optical_block = build_optical_block(args.optical_mesh, args.optical_broaden, axis_vec,
-                                                 args.optical_nbands)
-            calc_text = calc_text_base + "\n" + optical_block
-            out_dir = os.path.join(output_root, f"dir_{axis}")
-            write_direction_folder(out_dir, structure, calc_text, args.pseudo_dir)
-            print_dual(f"  {color_text('[OK]', 'green')} {out_dir} (Optical.Vector = "
-                        f"{axis_vec[0]:.0f} {axis_vec[1]:.0f} {axis_vec[2]:.0f})", f_out)
+    print_section('[3] FOLDERS WRITTEN', f_out)
 
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"{len(args.directions)} direction folder(s) written under '{output_root}'.", f_out)
+    calc_text_base = force_single_point(calc_template)
+    for axis in args.directions:
+        axis_vec = _AXIS_VECTORS[axis]
+        optical_block = build_optical_block(args.optical_mesh, args.optical_broaden, axis_vec,
+                                             args.optical_nbands)
+        calc_text = calc_text_base + "\n" + optical_block
+        out_dir = os.path.join(output_root, f"dir_{axis}")
+        write_direction_folder(out_dir, structure, calc_text, args.pseudo_dir)
+        print_dual(f"  {color_text('[OK]', 'green')} {out_dir} (Optical.Vector = "
+                    f"{axis_vec[0]:.0f} {axis_vec[1]:.0f} {axis_vec[2]:.0f})", f_out)
+
+    print_section('[4] SUMMARY & NEXT STEPS', f_out)
+    print_dual(f"{len(args.directions)} direction folder(s) written under '{output_root}'.", f_out)
+    if report_path:
         print_dual(f"Report               : {report_path}", f_out)
-        print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-        print_dual(f"  1. Run SIESTA in every '{output_root}/dir_*/' folder.", f_out)
-        print_dual(f"  2. Once they're done, run: stb-opticalAnalysis --directory {output_root}", f_out)
+    print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+    print_dual(f"  1. Run SIESTA in every '{output_root}/dir_*/' folder.", f_out)
+    print_dual(f"  2. Once they're done, run: stb-opticalAnalysis --directory {output_root}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

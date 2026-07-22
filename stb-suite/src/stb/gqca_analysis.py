@@ -14,7 +14,7 @@ import sys
 import argparse
 import numpy as np
 from stb.core import siesta_log, structure_io, gqca_solver
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 
 REPORT_FILE = "gqca_stage2.txt"
 
@@ -178,6 +178,8 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
     parser.add_argument("-o", "--output", type=str, default="gqca_results",
                          help="Base filename (no extension) for the .csv/.dat/.gplot outputs "
                               "(default: gqca_results).")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-gqcaAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -218,169 +220,172 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
     N = 2
     g = gqca_solver.degeneracies(N)
 
-    report_path = os.path.join(args.directory, REPORT_FILE)
-    with open(report_path, 'w') as f_out:
-        print_dual(f"{color_text('===== GQCA STAGE 2 REPORT (MASS-ACTION ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, 'w') if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Directory       : {args.directory}", f_out)
-        print_dual(f"Sublattice      : {sublattice}", f_out)
-        print_dual(f"Species B       : {species_b}", f_out)
-        print_dual(f"Cluster type    : pair (N=2), degeneracies g_j = {g}", f_out)
+    print_dual(f"{color_text('===== GQCA STAGE 2 REPORT (MASS-ACTION ANALYSIS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[1] CLUSTER ENERGIES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Directory       : {args.directory}", f_out)
+    print_dual(f"Sublattice      : {sublattice}", f_out)
+    print_dual(f"Species B       : {species_b}", f_out)
+    print_dual(f"Cluster type    : pair (N=2), degeneracies g_j = {g}", f_out)
 
-        e_per_site = [None, None, None]
-        missing = []
-        for n_j in (0, 1, 2):
-            cluster_dir = os.path.join(args.directory, f"cluster_n{n_j}")
-            out_path = os.path.join(cluster_dir, args.file)
-            e_norm, n_sites, raw = read_cluster_energy(cluster_dir, args.file, sublattice, species_b)
-            if e_norm is None:
-                missing.append(cluster_dir)
-                print_dual(color_text(
-                    f"  [ERROR] Could not read '{args.file}' or 'structure.fdf' from '{cluster_dir}'.",
-                    'red'), f_out)
-                continue
-            e_per_site[n_j] = e_norm
-            print_dual(f"  cluster_n{n_j}: FreeEng = {raw:12.6f} eV over {n_sites} sublattice site(s) "
-                        f"-> {e_norm:12.6f} eV/site", f_out)
-            siesta_log.report_quality_diagnostics(f"cluster_n{n_j}", out_path, args.force_tolerance, f_out)
+    print_section('[1] CLUSTER ENERGIES', f_out)
 
-        if missing:
+    e_per_site = [None, None, None]
+    missing = []
+    for n_j in (0, 1, 2):
+        cluster_dir = os.path.join(args.directory, f"cluster_n{n_j}")
+        out_path = os.path.join(cluster_dir, args.file)
+        e_norm, n_sites, raw = read_cluster_energy(cluster_dir, args.file, sublattice, species_b)
+        if e_norm is None:
+            missing.append(cluster_dir)
             print_dual(color_text(
-                "\n[ERROR] Cannot proceed -- one or more cluster_n* results are missing or "
-                "incomplete. Run SIESTA in every folder listed above, then re-run stb-gqcaAnalysis.",
+                f"  [ERROR] Could not read '{args.file}' or 'structure.fdf' from '{cluster_dir}'.",
                 'red'), f_out)
-            sys.exit(1)
+            continue
+        e_per_site[n_j] = e_norm
+        print_dual(f"  cluster_n{n_j}: FreeEng = {raw:12.6f} eV over {n_sites} sublattice site(s) "
+                    f"-> {e_norm:12.6f} eV/site", f_out)
+        siesta_log.report_quality_diagnostics(f"cluster_n{n_j}", out_path, args.force_tolerance, f_out)
 
-        delta_e = gqca_solver.mixing_energies(e_per_site, N)
-        print_dual(f"\nMixing energies Delta_j (excess relative to linear e_0/e_2 interpolation, "
-                    f"local cluster composition):", f_out)
-        for n_j in (0, 1, 2):
-            print_dual(f"  Delta_{n_j} = {delta_e[n_j]:12.6f} eV/site", f_out)
-
-        if ab_deviation >= 1e-6:
-            print_dual(color_text(
-                f"\n[NOTE] cluster_n1's pair correlation deviated by {ab_deviation:.4f} from the "
-                "ideal -1.0 (every-pair-unlike) AB ordering at Stage 1 (see gqca_stage1.txt) -- "
-                "the sublattice is geometrically frustrated (e.g. FCC/HCP/triangular), so this "
-                "reference structure's local environment is not purely n_j=1. Delta_1 (and every "
-                "downstream x_1/H_mix/S_mix/G_mix/SRO value derived from it) is therefore a less "
-                "clean estimate than for a bipartite sublattice -- qualitatively meaningful, but "
-                "not a rigorous quantitative bound.", 'yellow'), f_out)
-
-        print_dual(f"\n{color_text('[2] COMPOSITION / TEMPERATURE GRID', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-
-        x_points = args.x_points
-        x_grid = [args.x_min + i * (args.x_max - args.x_min) / (x_points - 1) for i in range(x_points)]
-        if args.temp is not None:
-            t_grid = [args.temp]
-            print_dual(f"x grid          : {args.x_min} .. {args.x_max}, {x_points} point(s)", f_out)
-            print_dual(f"T               : {args.temp} K (fixed)", f_out)
-        else:
-            t_points = args.temp_points
-            if t_points < 1:
-                print_dual(color_text("[ERROR] --temp-points must be >= 1.", 'red'), f_out)
-                sys.exit(1)
-            if t_points == 1:
-                t_grid = [args.temp_min]
-            else:
-                t_grid = [args.temp_min + i * (args.temp_max - args.temp_min) / (t_points - 1)
-                          for i in range(t_points)]
-            print_dual(f"x grid          : {args.x_min} .. {args.x_max}, {x_points} point(s)", f_out)
-            print_dual(f"T grid          : {args.temp_min} .. {args.temp_max} K, {t_points} point(s)", f_out)
-
-        rows = []
-        for T in t_grid:
-            for x in x_grid:
-                eta = gqca_solver.solve_eta(x, T, g, delta_e, N)
-                x_j = gqca_solver.cluster_fractions(eta, T, g, delta_e, N)
-                H = gqca_solver.mixing_enthalpy(x_j, delta_e)
-                S = gqca_solver.mixing_entropy(x_j, g)
-                G = gqca_solver.free_energy(H, S, T)
-                sro = gqca_solver.sro_parameter(x_j, x, N)
-                rows.append((x, T, eta, x_j, H, S, G, sro))
-
-        print_dual(f"Computed {len(rows)} grid point(s).", f_out)
-
-        print_dual(f"\n{color_text('[3] SANITY DIAGNOSTICS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        # Pure end-member limits reconfirmed against the REAL data just read (not a
-        # standalone unit test) -- always runs, data-independent gate.
-        t_check = t_grid[0]
-        x_j_x0 = gqca_solver.cluster_fractions(gqca_solver.solve_eta(0.0, t_check, g, delta_e, N),
-                                                 t_check, g, delta_e, N)
-        x_j_x1 = gqca_solver.cluster_fractions(gqca_solver.solve_eta(1.0, t_check, g, delta_e, N),
-                                                 t_check, g, delta_e, N)
-        ok_x0 = abs(x_j_x0[0] - 1.0) < 1e-9 and abs(x_j_x0[1]) < 1e-9 and abs(x_j_x0[2]) < 1e-9
-        ok_x1 = abs(x_j_x1[2] - 1.0) < 1e-9 and abs(x_j_x1[0]) < 1e-9 and abs(x_j_x1[1]) < 1e-9
-        status_x0 = color_text("OK", 'green') if ok_x0 else color_text("FAIL", 'red')
-        status_x1 = color_text("OK", 'green') if ok_x1 else color_text("FAIL", 'red')
-        print_dual(f"  x=0 pure-A limit (x_j = [1,0,0]) : {status_x0}", f_out)
-        print_dual(f"  x=1 pure-B limit (x_j = [0,0,1]) : {status_x1}", f_out)
-
-        print_dual(f"\n{color_text('[4] MISCIBILITY GAP (COMMON-TANGENT)', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    if missing:
         print_dual(color_text(
-            "[STRUCTURAL LIMITATION] Within this independent-cluster (Sher-GQCA) formalism, "
-            "Delta_G_mix(x) is PROVABLY CONVEX at every composition for ANY Delta_j (a convex-"
-            "analysis theorem, not a numerical coincidence -- see core/gqca_solver.py::"
-            "common_tangent_gaps' own docstring), so a gap is essentially never found here "
-            "regardless of how unfavorable the cluster energies are. This model captures short-"
-            "range order but NOT genuine phase separation (that needs cluster-cluster "
-            "correlations beyond this independent-cluster treatment). A 'no gap' result below is "
-            "therefore an intrinsic property of the model, NOT a physical claim that this alloy "
-            "is fully miscible -- do not report it as such.", 'yellow'), f_out)
-        print_dual("Discrete-grid common-tangent construction on Delta_G_mix(x) at each sampled T "
-                    "(kept for completeness/future formalism extensions) -- resolution limited by "
-                    "--x-points (x_alpha/x_beta can only land on a sampled grid point).", f_out)
+            "\n[ERROR] Cannot proceed -- one or more cluster_n* results are missing or "
+            "incomplete. Run SIESTA in every folder listed above, then re-run stb-gqcaAnalysis.",
+            'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        phase_rows = []
-        for T in t_grid:
-            rows_at_t = [r for r in rows if r[1] == T]
-            xs_t = np.array([r[0] for r in rows_at_t])
-            gs_t = np.array([r[6] for r in rows_at_t])
-            gaps = gqca_solver.common_tangent_gaps(xs_t, gs_t)
-            if gaps:
-                phase_rows.extend((T, xa, xb) for xa, xb in gaps)
-                gaps_str = ", ".join(f"[{xa:.4f}, {xb:.4f}]" for xa, xb in gaps)
-                print_dual(f"  T = {T:8.2f} K : miscibility gap(s) {gaps_str}", f_out)
-            else:
-                print_dual(f"  T = {T:8.2f} K : fully miscible (no gap) over the sampled x range", f_out)
+    delta_e = gqca_solver.mixing_energies(e_per_site, N)
+    print_dual(f"\nMixing energies Delta_j (excess relative to linear e_0/e_2 interpolation, "
+                f"local cluster composition):", f_out)
+    for n_j in (0, 1, 2):
+        print_dual(f"  Delta_{n_j} = {delta_e[n_j]:12.6f} eV/site", f_out)
 
-        phase_csv_path = None
-        if phase_rows:
-            phase_csv_path = os.path.join(args.directory, f"{args.output}_phase_diagram.csv")
-            with open(phase_csv_path, "w") as f:
-                f.write("T_K,x_alpha,x_beta\n")
-                for T, xa, xb in phase_rows:
-                    f.write(f"{T:.4f},{xa:.6f},{xb:.6f}\n")
+    if ab_deviation >= 1e-6:
+        print_dual(color_text(
+            f"\n[NOTE] cluster_n1's pair correlation deviated by {ab_deviation:.4f} from the "
+            "ideal -1.0 (every-pair-unlike) AB ordering at Stage 1 (see gqca_stage1.txt) -- "
+            "the sublattice is geometrically frustrated (e.g. FCC/HCP/triangular), so this "
+            "reference structure's local environment is not purely n_j=1. Delta_1 (and every "
+            "downstream x_1/H_mix/S_mix/G_mix/SRO value derived from it) is therefore a less "
+            "clean estimate than for a bipartite sublattice -- qualitatively meaningful, but "
+            "not a rigorous quantitative bound.", 'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[5] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[2] COMPOSITION / TEMPERATURE GRID', f_out)
 
-        csv_path = os.path.join(args.directory, f"{args.output}.csv")
-        write_results_csv(csv_path, rows)
-        print_dual(f"CSV (full grid) : {csv_path}", f_out)
-        if phase_csv_path:
-            print_dual(f"Phase diagram (T vs. x_alpha/x_beta) : {phase_csv_path}", f_out)
+    x_points = args.x_points
+    x_grid = [args.x_min + i * (args.x_max - args.x_min) / (x_points - 1) for i in range(x_points)]
+    if args.temp is not None:
+        t_grid = [args.temp]
+        print_dual(f"x grid          : {args.x_min} .. {args.x_max}, {x_points} point(s)", f_out)
+        print_dual(f"T               : {args.temp} K (fixed)", f_out)
+    else:
+        t_points = args.temp_points
+        if t_points < 1:
+            print_dual(color_text("[ERROR] --temp-points must be >= 1.", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        if t_points == 1:
+            t_grid = [args.temp_min]
+        else:
+            t_grid = [args.temp_min + i * (args.temp_max - args.temp_min) / (t_points - 1)
+                      for i in range(t_points)]
+        print_dual(f"x grid          : {args.x_min} .. {args.x_max}, {x_points} point(s)", f_out)
+        print_dual(f"T grid          : {args.temp_min} .. {args.temp_max} K, {t_points} point(s)", f_out)
 
-        t_ref = t_grid[0]
-        rows_at_t = [r for r in rows if r[1] == t_ref]
-        dat_path = os.path.join(args.directory, f"{args.output}.dat")
-        gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
-        write_spectrum_plot(dat_path, gplot_path, rows_at_t, t_ref)
-        print_dual(f"Plot (T={t_ref:.0f} K) : {dat_path}, {gplot_path} "
-                    f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    rows = []
+    for T in t_grid:
+        for x in x_grid:
+            eta = gqca_solver.solve_eta(x, T, g, delta_e, N)
+            x_j = gqca_solver.cluster_fractions(eta, T, g, delta_e, N)
+            H = gqca_solver.mixing_enthalpy(x_j, delta_e)
+            S = gqca_solver.mixing_entropy(x_j, g)
+            G = gqca_solver.free_energy(H, S, T)
+            sro = gqca_solver.sro_parameter(x_j, x, N)
+            rows.append((x, T, eta, x_j, H, S, G, sro))
+
+    print_dual(f"Computed {len(rows)} grid point(s).", f_out)
+
+    print_section('[3] SANITY DIAGNOSTICS', f_out)
+    # Pure end-member limits reconfirmed against the REAL data just read (not a
+    # standalone unit test) -- always runs, data-independent gate.
+    t_check = t_grid[0]
+    x_j_x0 = gqca_solver.cluster_fractions(gqca_solver.solve_eta(0.0, t_check, g, delta_e, N),
+                                             t_check, g, delta_e, N)
+    x_j_x1 = gqca_solver.cluster_fractions(gqca_solver.solve_eta(1.0, t_check, g, delta_e, N),
+                                             t_check, g, delta_e, N)
+    ok_x0 = abs(x_j_x0[0] - 1.0) < 1e-9 and abs(x_j_x0[1]) < 1e-9 and abs(x_j_x0[2]) < 1e-9
+    ok_x1 = abs(x_j_x1[2] - 1.0) < 1e-9 and abs(x_j_x1[0]) < 1e-9 and abs(x_j_x1[1]) < 1e-9
+    status_x0 = color_text("OK", 'green') if ok_x0 else color_text("FAIL", 'red')
+    status_x1 = color_text("OK", 'green') if ok_x1 else color_text("FAIL", 'red')
+    print_dual(f"  x=0 pure-A limit (x_j = [1,0,0]) : {status_x0}", f_out)
+    print_dual(f"  x=1 pure-B limit (x_j = [0,0,1]) : {status_x1}", f_out)
+
+    print_section('[4] MISCIBILITY GAP (COMMON-TANGENT)', f_out)
+    print_dual(color_text(
+        "[STRUCTURAL LIMITATION] Within this independent-cluster (Sher-GQCA) formalism, "
+        "Delta_G_mix(x) is PROVABLY CONVEX at every composition for ANY Delta_j (a convex-"
+        "analysis theorem, not a numerical coincidence -- see core/gqca_solver.py::"
+        "common_tangent_gaps' own docstring), so a gap is essentially never found here "
+        "regardless of how unfavorable the cluster energies are. This model captures short-"
+        "range order but NOT genuine phase separation (that needs cluster-cluster "
+        "correlations beyond this independent-cluster treatment). A 'no gap' result below is "
+        "therefore an intrinsic property of the model, NOT a physical claim that this alloy "
+        "is fully miscible -- do not report it as such.", 'yellow'), f_out)
+    print_dual("Discrete-grid common-tangent construction on Delta_G_mix(x) at each sampled T "
+                "(kept for completeness/future formalism extensions) -- resolution limited by "
+                "--x-points (x_alpha/x_beta can only land on a sampled grid point).", f_out)
+
+    phase_rows = []
+    for T in t_grid:
+        rows_at_t = [r for r in rows if r[1] == T]
+        xs_t = np.array([r[0] for r in rows_at_t])
+        gs_t = np.array([r[6] for r in rows_at_t])
+        gaps = gqca_solver.common_tangent_gaps(xs_t, gs_t)
+        if gaps:
+            phase_rows.extend((T, xa, xb) for xa, xb in gaps)
+            gaps_str = ", ".join(f"[{xa:.4f}, {xb:.4f}]" for xa, xb in gaps)
+            print_dual(f"  T = {T:8.2f} K : miscibility gap(s) {gaps_str}", f_out)
+        else:
+            print_dual(f"  T = {T:8.2f} K : fully miscible (no gap) over the sampled x range", f_out)
+
+    phase_csv_path = None
+    if phase_rows:
+        phase_csv_path = os.path.join(args.directory, f"{args.output}_phase_diagram.csv")
+        with open(phase_csv_path, "w") as f:
+            f.write("T_K,x_alpha,x_beta\n")
+            for T, xa, xb in phase_rows:
+                f.write(f"{T:.4f},{xa:.6f},{xb:.6f}\n")
+
+    print_section('[5] SUMMARY & FILES', f_out)
+
+    csv_path = os.path.join(args.directory, f"{args.output}.csv")
+    write_results_csv(csv_path, rows)
+    print_dual(f"CSV (full grid) : {csv_path}", f_out)
+    if phase_csv_path:
+        print_dual(f"Phase diagram (T vs. x_alpha/x_beta) : {phase_csv_path}", f_out)
+
+    t_ref = t_grid[0]
+    rows_at_t = [r for r in rows if r[1] == t_ref]
+    dat_path = os.path.join(args.directory, f"{args.output}.dat")
+    gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+    write_spectrum_plot(dat_path, gplot_path, rows_at_t, t_ref)
+    print_dual(f"Plot (T={t_ref:.0f} K) : {dat_path}, {gplot_path} "
+                f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    if report_path:
         print_dual(f"Report          : {report_path}", f_out)
 
-        print_dual(color_text(
-            "\n[UNVERIFIED] S_mix and SRO use provisional formulas -- see core/gqca_solver.py's "
-            "mixing_entropy/sro_parameter docstrings.", 'yellow'), f_out)
+    print_dual(color_text(
+        "\n[UNVERIFIED] S_mix and SRO use provisional formulas -- see core/gqca_solver.py's "
+        "mixing_entropy/sro_parameter docstrings.", 'yellow'), f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

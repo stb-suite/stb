@@ -15,7 +15,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 from pymatgen.core.periodic_table import Element
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.siesta_log import get_free_energy, check_scf_and_force, report_quality_diagnostics
 from stb.core.phonon_workflow import load_phonon_with_force_constants
 
@@ -268,6 +268,8 @@ AEM-only estimate, not the full mechanistic picture, especially for perovskites 
                               "folder is flagged as possibly not relaxed/converged. Advisory only.")
     parser.add_argument("-o", "--output", type=str, default="OER_report",
                          help="Base filename (no extension) for the final report (default: OER_report).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-oerAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -344,155 +346,154 @@ AEM-only estimate, not the full mechanistic picture, especially for perovskites 
         report_quality_diagnostics(label, out_path, args.force_tolerance, f_out)
         return energy
 
-    report_path = os.path.join(output_root, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== OER STAGE 4 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+    print_dual(f"{color_text('===== OER STAGE 4 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory       : {output_root}", f_out)
-        print_dual(f"O* strategy     : {o_strategy}   OOH* strategy: {ooh_strategy}", f_out)
-        print_dual(f"BSSE mode       : {bsse_mode}", f_out)
-        print_dual(f"ZPE mode        : {zpe_mode}", f_out)
-        print_dual(f"Temperature     : {args.temp} K", f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory       : {output_root}", f_out)
+    print_dual(f"O* strategy     : {o_strategy}   OOH* strategy: {ooh_strategy}", f_out)
+    print_dual(f"BSSE mode       : {bsse_mode}", f_out)
+    print_dual(f"ZPE mode        : {zpe_mode}", f_out)
+    print_dual(f"Temperature     : {args.temp} K", f_out)
 
-        print_dual(f"\n{color_text('[1] ELECTRONIC ENERGIES (FreeEng)', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        e_clean = read_energy("00_clean_slab", "E_clean", f_out)
-        e_oh = read_energy_at(winning_oh_dir, "E_OH", f_out)
-        e_o = read_energy_at(o_dir, "E_O", f_out)
-        e_ooh = read_energy_at(ooh_dir, "E_OOH", f_out)
-        e_h2 = read_energy("02_h2_molecule", "E_H2", f_out)
-        e_h2o = read_energy("03_h2o_molecule", "E_H2O", f_out)
-        e_deformed = read_energy("04_slab_deformed", "E_deformed", f_out)
+    print_section('[1] ELECTRONIC ENERGIES (FreeEng)', f_out)
+    e_clean = read_energy("00_clean_slab", "E_clean", f_out)
+    e_oh = read_energy_at(winning_oh_dir, "E_OH", f_out)
+    e_o = read_energy_at(o_dir, "E_O", f_out)
+    e_ooh = read_energy_at(ooh_dir, "E_OOH", f_out)
+    e_h2 = read_energy("02_h2_molecule", "E_H2", f_out)
+    e_h2o = read_energy("03_h2o_molecule", "E_H2O", f_out)
+    e_deformed = read_energy("04_slab_deformed", "E_deformed", f_out)
 
-        print_dual(f"\n{color_text('[2] BSSE CORRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        e_deformation = e_deformed - e_clean
-        print_dual(f"  Deformation cost (diagnostic, not used below) : {e_deformation:>10.4f} eV", f_out)
+    print_section('[2] BSSE CORRECTION', f_out)
+    e_deformation = e_deformed - e_clean
+    print_dual(f"  Deformation cost (diagnostic, not used below) : {e_deformation:>10.4f} eV", f_out)
 
-        def bsse_shift(prefix, f_out):
-            # slab_only is read at THIS triad's own geometry (not the diagnostic
-            # '04_slab_deformed', which is always at OH*'s geometry) -- the counterpoise
-            # difference must compare the SAME geometry across basis sets, and in
-            # --bsse-mode shared the triad geometry is OOH*'s, not OH*'s.
-            e_slab_only = read_energy(f"{prefix}_slab_only", f"{prefix}_slab_only", f_out)
-            e_slab_ghost = read_energy(f"{prefix}_slab_ghost", f"{prefix}_slab_gh", f_out)
-            e_ads_ghost = read_energy(f"{prefix}_adsorbate_ghost_slab", f"{prefix}_ads_gh", f_out)
-            e_isolated = read_energy(f"{prefix}_isolated", f"{prefix}_iso", f_out)
-            bsse_slab = e_slab_only - e_slab_ghost
-            bsse_ads = e_isolated - e_ads_ghost
-            total = bsse_slab + bsse_ads
-            print_dual(f"  BSSE ({prefix}): slab={bsse_slab:+.4f} eV  adsorbate={bsse_ads:+.4f} eV  "
-                        f"total={total:+.4f} eV", f_out)
-            return total
+    def bsse_shift(prefix, f_out):
+        # slab_only is read at THIS triad's own geometry (not the diagnostic
+        # '04_slab_deformed', which is always at OH*'s geometry) -- the counterpoise
+        # difference must compare the SAME geometry across basis sets, and in
+        # --bsse-mode shared the triad geometry is OOH*'s, not OH*'s.
+        e_slab_only = read_energy(f"{prefix}_slab_only", f"{prefix}_slab_only", f_out)
+        e_slab_ghost = read_energy(f"{prefix}_slab_ghost", f"{prefix}_slab_gh", f_out)
+        e_ads_ghost = read_energy(f"{prefix}_adsorbate_ghost_slab", f"{prefix}_ads_gh", f_out)
+        e_isolated = read_energy(f"{prefix}_isolated", f"{prefix}_iso", f_out)
+        bsse_slab = e_slab_only - e_slab_ghost
+        bsse_ads = e_isolated - e_ads_ghost
+        total = bsse_slab + bsse_ads
+        print_dual(f"  BSSE ({prefix}): slab={bsse_slab:+.4f} eV  adsorbate={bsse_ads:+.4f} eV  "
+                    f"total={total:+.4f} eV", f_out)
+        return total
 
-        if bsse_mode == "shared":
-            shared_correction = bsse_shift("05_bsse", f_out)
-            bsse_oh = bsse_o = bsse_ooh = shared_correction
+    if bsse_mode == "shared":
+        shared_correction = bsse_shift("05_bsse", f_out)
+        bsse_oh = bsse_o = bsse_ooh = shared_correction
+    else:
+        bsse_oh = bsse_shift("05_bsse_OH", f_out)
+        bsse_o = bsse_shift("05_bsse_O", f_out)
+        bsse_ooh = bsse_shift("05_bsse_OOH", f_out)
+
+    e_oh_corr = e_oh + bsse_oh
+    e_o_corr = e_o + bsse_o
+    e_ooh_corr = e_ooh + bsse_ooh
+    print_dual(f"  E_OH (corrected)  = {e_oh_corr:.4f} eV   E_O (corrected)  = {e_o_corr:.4f} "
+                f"eV   E_OOH (corrected) = {e_ooh_corr:.4f} eV", f_out)
+
+    print_section('[3] THERMAL CORRECTION', f_out)
+
+    def thermal_term(name, dir_suffix, phonon_label, f_out):
+        if zpe_mode == "local":
+            zpe_dir = os.path.join(output_root, f"08_zpe_calc_{dir_suffix}")
+            zpe, ts = compute_local_zpe_entropy(zpe_dir, args.temp, f_out)
         else:
-            bsse_oh = bsse_shift("05_bsse_OH", f_out)
-            bsse_o = bsse_shift("05_bsse_O", f_out)
-            bsse_ooh = bsse_shift("05_bsse_OOH", f_out)
+            zpe_dir = os.path.join(output_root, f"09_zpe_calc_{dir_suffix}")
+            zpe, ts = compute_full_zpe_entropy(zpe_dir, phonon_label, args.temp, f_out)
+        if zpe is None:
+            print_dual(color_text(f"[ERROR] Could not compute {name}'s ZPE/entropy.", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        print_dual(f"  ZPE({name}) = {zpe:.4f} eV   TS({name}) = {ts:.4f} eV", f_out)
+        return zpe, ts
 
-        e_oh_corr = e_oh + bsse_oh
-        e_o_corr = e_o + bsse_o
-        e_ooh_corr = e_ooh + bsse_ooh
-        print_dual(f"  E_OH (corrected)  = {e_oh_corr:.4f} eV   E_O (corrected)  = {e_o_corr:.4f} "
-                    f"eV   E_OOH (corrected) = {e_ooh_corr:.4f} eV", f_out)
+    zpe_h2o, ts_h2o = thermal_term("H2O", "H2O", "oer_zpe_h2o", f_out)
+    if zpe_mode == "full":
+        zpe_clean, ts_clean = thermal_term("clean slab", "clean", "oer_zpe_clean", f_out)
+    else:
+        zpe_clean, ts_clean = 0.0, 0.0  # local mode: substrate frozen, delta vs. clean is 0 by construction
 
-        print_dual(f"\n{color_text('[3] THERMAL CORRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    zpe_oh_raw, ts_oh_raw = thermal_term("OH*", "OH", "oer_zpe_oh", f_out)
+    zpe_o_raw, ts_o_raw = thermal_term("O*", "O", "oer_zpe_o", f_out)
+    zpe_ooh_raw, ts_ooh_raw = thermal_term("OOH*", "OOH", "oer_zpe_ooh", f_out)
 
-        def thermal_term(name, dir_suffix, phonon_label, f_out):
-            if zpe_mode == "local":
-                zpe_dir = os.path.join(output_root, f"08_zpe_calc_{dir_suffix}")
-                zpe, ts = compute_local_zpe_entropy(zpe_dir, args.temp, f_out)
-            else:
-                zpe_dir = os.path.join(output_root, f"09_zpe_calc_{dir_suffix}")
-                zpe, ts = compute_full_zpe_entropy(zpe_dir, phonon_label, args.temp, f_out)
-            if zpe is None:
-                print_dual(color_text(f"[ERROR] Could not compute {name}'s ZPE/entropy.", 'red'), f_out)
-                sys.exit(1)
-            print_dual(f"  ZPE({name}) = {zpe:.4f} eV   TS({name}) = {ts:.4f} eV", f_out)
-            return zpe, ts
+    d_zpe_oh = (zpe_oh_raw - zpe_clean)
+    d_ts_oh = (ts_oh_raw - ts_clean)
+    d_zpe_o = (zpe_o_raw - zpe_clean)
+    d_ts_o = (ts_o_raw - ts_clean)
+    d_zpe_ooh = (zpe_ooh_raw - zpe_clean)
+    d_ts_ooh = (ts_ooh_raw - ts_clean)
 
-        zpe_h2o, ts_h2o = thermal_term("H2O", "H2O", "oer_zpe_h2o", f_out)
-        if zpe_mode == "full":
-            zpe_clean, ts_clean = thermal_term("clean slab", "clean", "oer_zpe_clean", f_out)
-        else:
-            zpe_clean, ts_clean = 0.0, 0.0  # local mode: substrate frozen, delta vs. clean is 0 by construction
+    g_oh = e_oh_corr + d_zpe_oh - args.temp * d_ts_oh
+    g_o = e_o_corr + d_zpe_o - args.temp * d_ts_o
+    g_ooh = e_ooh_corr + d_zpe_ooh - args.temp * d_ts_ooh
+    g_h2 = e_h2 + H2_ZPE_EV - args.temp * H2_TS_298K_EV
+    g_h2o = e_h2o + zpe_h2o - args.temp * ts_h2o
+    g_clean = e_clean
 
-        zpe_oh_raw, ts_oh_raw = thermal_term("OH*", "OH", "oer_zpe_oh", f_out)
-        zpe_o_raw, ts_o_raw = thermal_term("O*", "O", "oer_zpe_o", f_out)
-        zpe_ooh_raw, ts_ooh_raw = thermal_term("OOH*", "OOH", "oer_zpe_ooh", f_out)
+    print_section('[4] GAS-PHASE O2 REFERENCE (DERIVED)', f_out)
+    g_o2 = 2.0 * g_h2o - 2.0 * g_h2 + FOUR_TIMES_U0_EV
+    print_dual(f"  G(H2)  = {g_h2:.4f} eV   G(H2O,l) = {g_h2o:.4f} eV", f_out)
+    print_dual(f"  G(O2) [derived, NOT computed via DFT] = 2*G(H2O) - 2*G(H2) + 4.92 = "
+                f"{g_o2:.4f} eV", f_out)
 
-        d_zpe_oh = (zpe_oh_raw - zpe_clean)
-        d_ts_oh = (ts_oh_raw - ts_clean)
-        d_zpe_o = (zpe_o_raw - zpe_clean)
-        d_ts_o = (ts_o_raw - ts_clean)
-        d_zpe_ooh = (zpe_ooh_raw - zpe_clean)
-        d_ts_ooh = (ts_ooh_raw - ts_clean)
+    print_section('[5] REACTION STEPS & POTENTIAL-DETERMINING STEP', f_out)
+    dG1 = g_oh + 0.5 * g_h2 - g_clean - g_h2o
+    dG2 = g_o + 0.5 * g_h2 - g_oh
+    dG3 = g_ooh + 0.5 * g_h2 - g_o - g_h2o
+    dG4 = g_clean + g_o2 - g_ooh + 0.5 * g_h2
+    steps = [("1: * + H2O -> OH*", dG1), ("2: OH* -> O*", dG2), ("3: O* + H2O -> OOH*", dG3),
+             ("4: OOH* -> * + O2", dG4)]
+    pds_index = int(np.argmax([dG1, dG2, dG3, dG4]))
+    for i, (label, dg) in enumerate(steps):
+        marker = color_text(" <-- PDS", 'yellow') if i == pds_index else ""
+        print_dual(f"  Step {label:<22} dG = {dg:+.4f} eV{marker}", f_out)
+    step_sum = dG1 + dG2 + dG3 + dG4
+    sanity_ok = abs(step_sum - FOUR_TIMES_U0_EV) < 1e-6
+    print_dual(f"  Sum dG1+dG2+dG3+dG4 = {step_sum:.6f} eV (should equal {FOUR_TIMES_U0_EV} eV "
+                f"exactly by construction) -- {'OK' if sanity_ok else color_text('MISMATCH -- BUG', 'red')}",
+                f_out)
 
-        g_oh = e_oh_corr + d_zpe_oh - args.temp * d_ts_oh
-        g_o = e_o_corr + d_zpe_o - args.temp * d_ts_o
-        g_ooh = e_ooh_corr + d_zpe_ooh - args.temp * d_ts_ooh
-        g_h2 = e_h2 + H2_ZPE_EV - args.temp * H2_TS_298K_EV
-        g_h2o = e_h2o + zpe_h2o - args.temp * ts_h2o
-        g_clean = e_clean
+    eta = max(dG1, dG2, dG3, dG4) - 1.23
+    print_dual(f"\n{color_text('[6] FINAL RESULT', 'magenta')}", f_out)
+    print_dual("=" * 60, f_out)
+    print_dual(f"  Theoretical overpotential eta = {eta:+.4f} V", f_out)
+    print_dual(f"  Potential-determining step (PDS) = Step {pds_index + 1}", f_out)
+    print_dual("=" * 60, f_out)
+    verdict = ("excellent OER catalyst (eta close to 0)" if eta < 0.3
+               else "moderate OER activity" if eta < 0.6
+               else "poor OER catalyst (large overpotential)")
+    print_dual(f"  Qualitative assessment: {verdict}", f_out)
+    print_dual(color_text(
+        "  [LIMITATION] AEM descriptor only (OH*/O*/OOH* at one site) -- does not model the "
+        "lattice oxygen evolution mechanism (LOER). See --help.", 'cyan'), f_out)
 
-        print_dual(f"\n{color_text('[4] GAS-PHASE O2 REFERENCE (DERIVED)', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        g_o2 = 2.0 * g_h2o - 2.0 * g_h2 + FOUR_TIMES_U0_EV
-        print_dual(f"  G(H2)  = {g_h2:.4f} eV   G(H2O,l) = {g_h2o:.4f} eV", f_out)
-        print_dual(f"  G(O2) [derived, NOT computed via DFT] = 2*G(H2O) - 2*G(H2) + 4.92 = "
-                    f"{g_o2:.4f} eV", f_out)
+    report_str_path = os.path.join(output_root, f"{args.output}.txt")
+    with open(report_str_path, "w") as f_report:
+        f_report.write(f"OER eta = {eta:+.4f} V, PDS = Step {pds_index + 1}\n")
+        f_report.write(f"BSSE mode = {bsse_mode}, ZPE mode = {zpe_mode}, T = {args.temp} K\n")
+        f_report.write(f"dG1={dG1:+.4f}  dG2={dG2:+.4f}  dG3={dG3:+.4f}  dG4={dG4:+.4f} eV\n")
 
-        print_dual(f"\n{color_text('[5] REACTION STEPS & POTENTIAL-DETERMINING STEP', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        dG1 = g_oh + 0.5 * g_h2 - g_clean - g_h2o
-        dG2 = g_o + 0.5 * g_h2 - g_oh
-        dG3 = g_ooh + 0.5 * g_h2 - g_o - g_h2o
-        dG4 = g_clean + g_o2 - g_ooh + 0.5 * g_h2
-        steps = [("1: * + H2O -> OH*", dG1), ("2: OH* -> O*", dG2), ("3: O* + H2O -> OOH*", dG3),
-                 ("4: OOH* -> * + O2", dG4)]
-        pds_index = int(np.argmax([dG1, dG2, dG3, dG4]))
-        for i, (label, dg) in enumerate(steps):
-            marker = color_text(" <-- PDS", 'yellow') if i == pds_index else ""
-            print_dual(f"  Step {label:<22} dG = {dg:+.4f} eV{marker}", f_out)
-        step_sum = dG1 + dG2 + dG3 + dG4
-        sanity_ok = abs(step_sum - FOUR_TIMES_U0_EV) < 1e-6
-        print_dual(f"  Sum dG1+dG2+dG3+dG4 = {step_sum:.6f} eV (should equal {FOUR_TIMES_U0_EV} eV "
-                    f"exactly by construction) -- {'OK' if sanity_ok else color_text('MISMATCH -- BUG', 'red')}",
-                    f_out)
-
-        eta = max(dG1, dG2, dG3, dG4) - 1.23
-        print_dual(f"\n{color_text('[6] FINAL RESULT', 'magenta')}", f_out)
-        print_dual("=" * 60, f_out)
-        print_dual(f"  Theoretical overpotential eta = {eta:+.4f} V", f_out)
-        print_dual(f"  Potential-determining step (PDS) = Step {pds_index + 1}", f_out)
-        print_dual("=" * 60, f_out)
-        verdict = ("excellent OER catalyst (eta close to 0)" if eta < 0.3
-                   else "moderate OER activity" if eta < 0.6
-                   else "poor OER catalyst (large overpotential)")
-        print_dual(f"  Qualitative assessment: {verdict}", f_out)
-        print_dual(color_text(
-            "  [LIMITATION] AEM descriptor only (OH*/O*/OOH* at one site) -- does not model the "
-            "lattice oxygen evolution mechanism (LOER). See --help.", 'cyan'), f_out)
-
-        report_str_path = os.path.join(output_root, f"{args.output}.txt")
-        with open(report_str_path, "w") as f_report:
-            f_report.write(f"OER eta = {eta:+.4f} V, PDS = Step {pds_index + 1}\n")
-            f_report.write(f"BSSE mode = {bsse_mode}, ZPE mode = {zpe_mode}, T = {args.temp} K\n")
-            f_report.write(f"dG1={dG1:+.4f}  dG2={dG2:+.4f}  dG3={dG3:+.4f}  dG4={dG4:+.4f} eV\n")
-
-        print_dual(f"\n{color_text('[7] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Winning OH* site    : {winning_oh_label}", f_out)
-        print_dual(f"eta                 : {eta:+.4f} V", f_out)
+    print_section('[7] SUMMARY & FILES', f_out)
+    print_dual(f"Winning OH* site    : {winning_oh_label}", f_out)
+    print_dual(f"eta                 : {eta:+.4f} V", f_out)
+    if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-        print_dual(f"Files               : {report_str_path}", f_out)
+    print_dual(f"Files               : {report_str_path}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

@@ -2163,6 +2163,10 @@ def run_input_generator() -> None:
     else:
         print(color_text("Skipping pseudopotential path.", 'yellow'))
 
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
     run_tool("stb-inputfile", args)
 
 def run_kgrid_generator() -> None:
@@ -4334,6 +4338,47 @@ def run_mlff_active_learning() -> None:
     run_tool("stb-mlffActiveLearning", args)
 
 
+def run_eos_inputs_generator() -> None:
+    """Interface for the Equation of State Prep (stb-eosInputs)"""
+    print("\n" + "="*60)
+    print(color_text("EQUATION OF STATE - STAGE 1: PREP", 'bold').center(60))
+    print("="*60 + "\n")
+
+    struct_file = get_input("Input structure file (bulk, 3D periodic, fractional coords): ")
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Input structure file: ")
+
+    n_volumes = get_int_input("Number of volumes to scan [default: 9, min 5]: ", 9)
+    strain_range = get_float_input("Max isotropic volume strain, %% [default: 5.0]: ", 5.0)
+    output_dir = get_input("Output directory [default: eos_runs]: ").strip() or "eos_runs"
+
+    args = ["--file", struct_file, "--n-volumes", str(n_volumes),
+            "--strain-range", str(strain_range), "--output-dir", output_dir, "--no-intro"]
+
+    run_tool("stb-eosInputs", args)
+
+
+def run_eos_analysis_generator() -> None:
+    """Interface for the Equation of State Analysis (stb-eosAnalysis)"""
+    print("\n" + "="*60)
+    print(color_text("EQUATION OF STATE - STAGE 2: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    run_dir = get_input("Directory with 'vol_*' folders [default: eos_runs]: ").strip() or "eos_runs"
+    output_filename = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip() \
+        or "calc.out"
+    eos = get_input("EOS form, birchmurnaghan/vinet/murnaghan/sj [default: birchmurnaghan]: ").strip()
+    curve_output = get_input("Base filename for the .dat/.gplot outputs [default: eos_curve]: ").strip() \
+        or "eos_curve"
+
+    args = ["--dir", run_dir, "--file", output_filename, "--output", curve_output, "--no-intro"]
+    if eos:
+        args.extend(["--eos", eos])
+
+    run_tool("stb-eosAnalysis", args)
+
+
 def run_mlmd_generator() -> None:
     """Interface for ML Molecular Dynamics (stb-mlmd)"""
     print("\n" + "="*60)
@@ -4602,6 +4647,532 @@ def run_mlelastic_generator() -> None:
 
     print(color_text("\nComputing ML elastic constants...", 'green'))
     run_tool("stb-mlelastic", args)
+
+
+def run_mlsearch_generator() -> None:
+    """Interface for ML Structure Search (stb-mlsearch)"""
+    print("\n" + "="*60)
+    print(color_text("ML STRUCTURE SEARCH (stb-mlsearch)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Global structure "
+        "search for the lowest-energy atomic arrangement at a fixed cell -- e.g. defect/"
+        "vacancy site occupation, disordered/alloy configurations. NOT crystal structure "
+        "prediction (cell shape untouched during the search) and NOT a proof of global "
+        "optimality.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    print(f"\n{color_text('Algorithm:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Basin hopping (default)")
+    print(f"  {color_text('2', 'cyan')} = Simulated annealing (MD-based, reuses stb-mlmd's engine)")
+    algo_choice = get_input("Select option (1-2) [default: 1]: ").strip() or '1'
+
+    if algo_choice == '2':
+        args.extend(["--algorithm", "simulated-annealing"])
+        steps = get_input("Total MD steps in the cooling trajectory [default: 50]: ").strip()
+        if steps:
+            args.extend(["--steps", steps])
+        temp_start = get_input("Starting temperature, K [default: 1500]: ").strip()
+        if temp_start:
+            args.extend(["--temp-start", temp_start])
+        temp_end = get_input("Final temperature, K [default: 50]: ").strip()
+        if temp_end:
+            args.extend(["--temp-end", temp_end])
+        schedule = get_input("Cooling schedule, exponential/linear [default: exponential]: ").strip()
+        if schedule:
+            args.extend(["--schedule", schedule])
+        snapshot_interval = get_input("MD steps between snapshot evaluations [default: 20]: ").strip()
+        if snapshot_interval:
+            args.extend(["--snapshot-interval", snapshot_interval])
+    else:
+        steps = get_input("Number of basin-hopping steps [default: 50]: ").strip()
+        if steps:
+            args.extend(["--steps", steps])
+        dr = get_input("Max random displacement per step, Ang [default: 0.3]: ").strip()
+        if dr:
+            args.extend(["--dr", dr])
+        temperature = get_input("Search temperature, K [default: 1000]: ").strip()
+        if temperature:
+            args.extend(["--temperature", temperature])
+
+    seed = get_input("\nRandom seed for reproducibility [default: unseeded]: ").strip()
+    if seed:
+        args.extend(["--seed", seed])
+
+    output_dir = get_input("Output directory [default: mlsearch_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("\nAlso save the raw search-history data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML structure search...", 'green'))
+    run_tool("stb-mlsearch", args)
+
+
+def run_mlmelting_generator() -> None:
+    """Interface for ML Melting Point (stb-mlmelting)"""
+    print("\n" + "="*60)
+    print(color_text("ML MELTING POINT (stb-mlmelting)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Brackets a bulk "
+        "material's melting point via a sequence of short MACE MD runs, tracking the "
+        "Lindemann index vs. temperature. Bulk (3D periodic) only. A coarse heuristic, "
+        "known to superheat past the true melting point (small, defect-free periodic "
+        "cell -- no free surface to nucleate melting from).", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    temp_choice = get_input(
+        "\nTemperatures to scan: [1] range (min/max/step), [2] explicit list "
+        "[default: 1]: ").strip() or '1'
+    if temp_choice == '2':
+        temps_str = get_input("Temperatures, space-separated K: ").strip()
+        if temps_str:
+            args.extend(["--temperatures", *temps_str.split()])
+    else:
+        temp_min = get_input("Min temperature, K [default: 300]: ").strip()
+        if temp_min:
+            args.extend(["--temp-min", temp_min])
+        temp_max = get_input("Max temperature, K [default: 3000]: ").strip()
+        if temp_max:
+            args.extend(["--temp-max", temp_max])
+        temp_step = get_input("Temperature step, K [default: 300]: ").strip()
+        if temp_step:
+            args.extend(["--temp-step", temp_step])
+
+    eq_steps = get_input("Equilibration steps per temperature [default: 200]: ").strip()
+    if eq_steps:
+        args.extend(["--equilibration-steps", eq_steps])
+    prod_steps = get_input("Production steps per temperature [default: 500]: ").strip()
+    if prod_steps:
+        args.extend(["--production-steps", prod_steps])
+
+    output_dir = get_input("Output directory [default: mlmelting_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("\nAlso save the raw Lindemann/diffusion data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML melting-point scan...", 'green'))
+    run_tool("stb-mlmelting", args)
+
+
+def run_mlconvergence_generator() -> None:
+    """Interface for ML Model-Size Convergence (stb-mlconvergence)"""
+    print("\n" + "="*60)
+    print(color_text("ML MODEL-SIZE CONVERGENCE (stb-mlconvergence)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Compares MACE-MP-0 "
+        "model sizes (small/medium/large) on the same reference calculation (a full "
+        "relax by default) -- helps decide whether a bigger, slower model actually "
+        "changes the answer for this structure.", 'yellow'))
+
+    input_file = get_input("\nInput structure file (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    args = ["--file", input_file, "--no-intro"]
+
+    models_str = get_input(
+        "\nModel sizes to compare, space-separated (small/medium/large) "
+        "[default: small medium large]: ").strip()
+    if models_str:
+        args.extend(["--models", *models_str.split()])
+
+    custom_str = get_input(
+        "Also include custom model file(s)? Space-separated paths, or Enter to skip: ").strip()
+    if custom_str:
+        args.extend(["--custom-models", *custom_str.split()])
+
+    energy_tol = get_input("Energy tolerance, meV/atom [default: 5.0]: ").strip()
+    if energy_tol:
+        args.extend(["--energy-tolerance", energy_tol])
+    lattice_tol = get_input("Lattice/volume tolerance, %% [default: 1.0]: ").strip()
+    if lattice_tol:
+        args.extend(["--lattice-tolerance", lattice_tol])
+
+    output_dir = get_input("Output directory [default: mlconvergence_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("\nAlso save the raw comparison data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML model-size convergence check...", 'green'))
+    run_tool("stb-mlconvergence", args)
+
+
+def run_mlneb_generator() -> None:
+    """Interface for ML NEB (stb-mlneb)"""
+    print("\n" + "="*60)
+    print(color_text("ML NEB (stb-mlneb)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Standalone climbing-"
+        "image NEB (reaction/migration barrier estimate) driven entirely by a MACE "
+        "potential -- no SIESTA, no calc.fdf needed. Requires two already-relaxed "
+        "endpoint structures with the exact same composition (e.g. a vacancy/adsorbate "
+        "at two different sites).", 'yellow'))
+
+    initial_file = get_input("\nInitial (relaxed) endpoint structure (fdf): ")
+    while not os.path.isfile(initial_file):
+        print(color_text("File not found!", 'red'))
+        initial_file = get_input("Initial structure file (fdf): ")
+    final_file = get_input("Final (relaxed) endpoint structure (fdf): ")
+    while not os.path.isfile(final_file):
+        print(color_text("File not found!", 'red'))
+        final_file = get_input("Final structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--initial", initial_file, "--final", final_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    n_images = get_input("Total images including both endpoints [default: 7]: ").strip()
+    if n_images:
+        args.extend(["--n-images", n_images])
+
+    freeze = get_input(
+        "\nFreeze substrate atoms that barely move between endpoints? (y/N): ").strip().lower()
+    if freeze == 'y':
+        args.append("--freeze-substrate")
+
+    output_dir = get_input("Output directory [default: mlneb_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_images = get_input("\nAlso save each relaxed image as its own .fdf? (y/N): ").strip().lower()
+    if save_images == 'y':
+        args.append("--save-images")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML NEB...", 'green'))
+    run_tool("stb-mlneb", args)
+
+
+def run_mldiffusion_generator() -> None:
+    """Interface for ML Vacancy Diffusion (stb-mldiffusion)"""
+    print("\n" + "="*60)
+    print(color_text("ML VACANCY DIFFUSION (stb-mldiffusion)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Given a PERFECT bulk "
+        "structure and the index of one atom to remove, auto-detects the neighboring hop "
+        "targets and screens the vacancy migration barrier for each via MACE-driven NEB.",
+        'yellow'))
+
+    input_file = get_input("\nPerfect bulk reference structure (fdf): ")
+    while not os.path.isfile(input_file):
+        print(color_text("File not found!", 'red'))
+        input_file = get_input("Input structure file (fdf): ")
+
+    vacancy_index = get_input("0-based index of the atom to remove (vacancy site): ").strip()
+    while not vacancy_index:
+        print(color_text("This is required.", 'red'))
+        vacancy_index = get_input("0-based index of the atom to remove (vacancy site): ").strip()
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", input_file, "--vacancy-index", vacancy_index, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    n_images = get_input("Total images including both endpoints [default: 5]: ").strip()
+    if n_images:
+        args.extend(["--n-images", n_images])
+
+    output_dir = get_input("Output directory [default: mldiffusion_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML vacancy migration-barrier screening...", 'green'))
+    run_tool("stb-mldiffusion", args)
+
+
+def run_mlgcmc_generator() -> None:
+    """Interface for ML Monte Carlo / GCMC (stb-mlgcmc)"""
+    print("\n" + "="*60)
+    print(color_text("ML MONTE CARLO / GCMC (stb-mlgcmc)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Canonical/grand-"
+        "canonical Monte Carlo adsorption (insert/move/delete a single-atom adsorbate "
+        "in a rigid host framework) driven by a MACE potential.", 'yellow'))
+
+    host_file = get_input("\nHost framework structure (fdf, treated as rigid): ")
+    while not os.path.isfile(host_file):
+        print(color_text("File not found!", 'red'))
+        host_file = get_input("Host framework structure (fdf): ")
+
+    adsorbate = get_input("Adsorbate element symbol (single atom, e.g. Ar): ").strip()
+    while not adsorbate:
+        print(color_text("This is required.", 'red'))
+        adsorbate = get_input("Adsorbate element symbol: ").strip()
+
+    args = ["--host", host_file, "--adsorbate", adsorbate, "--no-intro"]
+
+    print(f"\n{color_text('Ensemble:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Grand-canonical (insert/move/delete at a chemical potential) (default)")
+    print(f"  {color_text('2', 'cyan')} = Canonical (fixed adsorbate count, move only)")
+    ensemble_choice = get_input("Select option (1-2) [default: 1]: ").strip() or '1'
+
+    if ensemble_choice == '2':
+        args.extend(["--ensemble", "canonical"])
+        n_initial = get_input("Number of adsorbate atoms (fixed): ").strip()
+        while not n_initial:
+            print(color_text("This is required for the canonical ensemble.", 'red'))
+            n_initial = get_input("Number of adsorbate atoms (fixed): ").strip()
+        args.extend(["--n-initial", n_initial])
+    else:
+        mu = get_input(
+            "Chemical potential, eV (or Enter to scan multiple values): ").strip()
+        if mu:
+            args.extend(["--mu", mu])
+        else:
+            mu_scan = get_input("Chemical potentials to scan, space-separated eV: ").strip()
+            if mu_scan:
+                args.extend(["--mu-scan", *mu_scan.split()])
+
+    temperature = get_input("\nTemperature, K [default: 300]: ").strip()
+    if temperature:
+        args.extend(["--temperature", temperature])
+    steps = get_input("Total MC steps [default: 2000]: ").strip()
+    if steps:
+        args.extend(["--steps", steps])
+    equilibration_steps = get_input(
+        "Equilibration steps to discard before collecting statistics [default: 500 -- "
+        "must be less than the total steps above]: ").strip()
+    if equilibration_steps:
+        args.extend(["--equilibration-steps", equilibration_steps])
+
+    output_dir = get_input("Output directory [default: mlgcmc_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("\nAlso save the raw history/isotherm data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML Monte Carlo...", 'green'))
+    run_tool("stb-mlgcmc", args)
+
+
+def run_mladsorb_generator() -> None:
+    """Interface for ML Adsorption-Site Screening (stb-mladsorb)"""
+    print("\n" + "="*60)
+    print(color_text("ML ADSORPTION-SITE SCREENING (stb-mladsorb)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Enumerates candidate "
+        "ontop/bridge/hollow adsorption sites, relaxes each (substrate fixed) with MACE, "
+        "and ranks them by a genuine ML adsorption energy -- no SIESTA and no calc.fdf "
+        "needed.", 'yellow'))
+
+    slab_file = get_input("\nSlab/2D-material structure (fdf, vacuum along one axis): ")
+    while not os.path.isfile(slab_file):
+        print(color_text("File not found!", 'red'))
+        slab_file = get_input("Slab structure file (fdf): ")
+
+    adsorbate = get_input(
+        "Adsorbate(s): ASE G2 molecule name or element symbol, comma-separated for "
+        "multiple (e.g. 'H2O' or 'H,O'): ").strip()
+    while not adsorbate:
+        print(color_text("This is required.", 'red'))
+        adsorbate = get_input("Adsorbate(s): ").strip()
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--slab", slab_file, "--adsorbate", adsorbate, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+        skip_compare = get_input(
+            "Also compare against the MACE-MP-0 foundation model on the same sites? "
+            "(Y/n): ").strip().lower()
+        if skip_compare == 'n':
+            args.append("--skip-foundation-comparison")
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    site_type = get_input(
+        "Site type, all/ontop/bridge/hollow [default: all]: ").strip()
+    if site_type:
+        args.extend(["--site-type", site_type])
+    height = get_input("Adsorbate height above the surface, Ang [default: 2.0]: ").strip()
+    if height:
+        args.extend(["--height", height])
+    top_k = get_input("Only keep the N best sites (Enter for all): ").strip()
+    if top_k:
+        args.extend(["--top-k", top_k])
+
+    n_orientations = get_input(
+        "\nFor a multi-atom adsorbate, sample this many random orientations/site "
+        "[default: 1, no sampling]: ").strip()
+    if n_orientations:
+        args.extend(["--n-orientations", n_orientations])
+
+    diffusion = get_input(
+        "Also estimate the adsorbate's surface-diffusion barrier between its 2 best "
+        "sites? (y/N): ").strip().lower()
+    if diffusion == 'y':
+        args.append("--diffusion-barrier")
+
+    output_dir = get_input("\nOutput directory [default: mladsorb_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("Also save the raw ranking data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML adsorption-site screening...", 'green'))
+    run_tool("stb-mladsorb", args)
+
+
+def run_mleos_generator() -> None:
+    """Interface for ML Equation of State (stb-mleos)"""
+    print("\n" + "="*60)
+    print(color_text("ML EQUATION OF STATE (stb-mleos)", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Needs the optional 'ml' extra (pip install stb_suite[ml]). Scans isotropically-"
+        "scaled volumes around equilibrium and fits an E(V) equation of state (Birch-"
+        "Murnaghan by default) via MACE -- gives an independent, curvature-based bulk "
+        "modulus to cross-check against stb-mlelastic's stress-strain-derived one.", 'yellow'))
+
+    struct_file = get_input("\nBulk (3D periodic) structure file (fdf): ")
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Structure file (fdf): ")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+
+    args = ["--file", struct_file, "--no-intro"]
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+        skip_compare = get_input(
+            "Also fit with the MACE-MP-0 foundation model for comparison? (Y/n): ").strip().lower()
+        if skip_compare == 'n':
+            args.append("--skip-foundation-comparison")
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        args.extend(["--model", model or "small"])
+
+    eos = get_input(
+        "EOS form, birchmurnaghan/vinet/murnaghan/sj [default: birchmurnaghan]: ").strip()
+    if eos:
+        args.extend(["--eos", eos])
+    n_volumes = get_input("Number of volumes to scan [default: 9, min 5]: ").strip()
+    if n_volumes:
+        args.extend(["--n-volumes", n_volumes])
+    strain_range = get_input("Max volume strain, %% [default: 5.0]: ").strip()
+    if strain_range:
+        args.extend(["--strain-range", strain_range])
+
+    output_dir = get_input("\nOutput directory [default: mleos_out]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_data = get_input("Also save the raw volume-energy data (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nRunning ML equation-of-state calculation...", 'green'))
+    run_tool("stb-mleos", args)
 
 
 def run_dftu_generator() -> None:
@@ -5895,6 +6466,19 @@ WORKFLOW_TOOLS = {
                                 "round of refinement.",
                 'func': run_mlff_active_learning},
         }},
+    18: {'title': "Equation of State",
+        'description': "Generate isotropically-scaled-volume structures, then fit an E vs V "
+                        "equation of state (V0/E0/B0/B0') from the resulting SIESTA "
+                        "energies. For a fast ML-only preview (no SIESTA) instead, see ML "
+                        "Simulations > ML Equation of State (stb-mleos).",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-eosInputs)",
+                'description': "Generate isotropically-scaled-volume structures for a real-SIESTA EOS scan.",
+                'func': run_eos_inputs_generator},
+            2: {'title': "Stage 2 - Analysis (stb-eosAnalysis)",
+                'description': "Aggregate the vol_* folders and fit an equation of state (bulk modulus, etc).",
+                'func': run_eos_analysis_generator},
+        }},
        }
 
 
@@ -5917,6 +6501,38 @@ MLSIM_TOOLS = {
         'description': "Standalone stiffness matrix (stress-strain method) driven entirely by "
                         "a MACE potential -- no SIESTA, no separate strain_*/ folders needed.",
         'func': run_mlelastic_generator},
+    4: {'title': "ML Structure Search (stb-mlsearch)",
+        'description': "Basin-hopping global search (perturb + relax + accept/reject) for the "
+                        "lowest-energy atomic arrangement at a fixed cell, driven by MACE.",
+        'func': run_mlsearch_generator},
+    5: {'title': "ML Melting Point (stb-mlmelting)",
+        'description': "Brackets a bulk material's melting point via a sequence of short MACE "
+                        "MD runs, tracking the Lindemann index vs. temperature.",
+        'func': run_mlmelting_generator},
+    6: {'title': "ML Model-Size Convergence (stb-mlconvergence)",
+        'description': "Compares MACE-MP-0 model sizes (small/medium/large) on the same "
+                        "reference calculation -- helps pick a size instead of guessing.",
+        'func': run_mlconvergence_generator},
+    7: {'title': "ML NEB (stb-mlneb)",
+        'description': "Standalone climbing-image NEB (reaction barrier estimate) driven "
+                        "entirely by a MACE potential -- no SIESTA, no calc.fdf needed.",
+        'func': run_mlneb_generator},
+    8: {'title': "ML Vacancy Diffusion (stb-mldiffusion)",
+        'description': "Auto-detects neighbor hop targets for a vacancy and screens the "
+                        "migration barrier for each via MACE-driven NEB.",
+        'func': run_mldiffusion_generator},
+    9: {'title': "ML Monte Carlo / GCMC (stb-mlgcmc)",
+        'description': "Canonical/grand-canonical Monte Carlo adsorption (insert/move/"
+                        "delete a single-atom adsorbate) driven by a MACE potential.",
+        'func': run_mlgcmc_generator},
+    10: {'title': "ML Adsorption-Site Screening (stb-mladsorb)",
+        'description': "Enumerates candidate ontop/bridge/hollow sites, relaxes each with "
+                        "MACE, and ranks them by a genuine ML adsorption energy.",
+        'func': run_mladsorb_generator},
+    11: {'title': "ML Equation of State (stb-mleos)",
+        'description': "E vs V curve + equation-of-state fit (V0/E0/B0/B0') driven by MACE -- "
+                        "an independent bulk-modulus cross-check against stb-mlelastic.",
+        'func': run_mleos_generator},
 }
 
 

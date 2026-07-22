@@ -14,7 +14,7 @@ import json
 import argparse
 from datetime import datetime
 import numpy as np
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.siesta_log import get_free_energy, check_scf_and_force, report_quality_diagnostics
 from stb.core.phonon_workflow import load_phonon_with_force_constants
 
@@ -218,6 +218,8 @@ subtract.""",
                               "folder is flagged as possibly not relaxed/converged. Advisory only.")
     parser.add_argument("-o", "--output", type=str, default="HER_report",
                          help="Base filename (no extension) for the final report (default: HER_report).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-herAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -260,112 +262,117 @@ subtract.""",
         report_quality_diagnostics(label, out_path, args.force_tolerance, f_out)
         return energy
 
-    report_path = os.path.join(output_root, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== HER STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+    print_dual(f"{color_text('===== HER STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory       : {output_root}", f_out)
-        print_dual(f"ZPE mode        : {zpe_mode}", f_out)
-        print_dual(f"Temperature     : {args.temp} K", f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory       : {output_root}", f_out)
+    print_dual(f"ZPE mode        : {zpe_mode}", f_out)
+    print_dual(f"Temperature     : {args.temp} K", f_out)
 
-        print_dual(f"\n{color_text('[1] ELECTRONIC ENERGIES (FreeEng)', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        e_clean = read_energy("00_clean_slab", "E_clean", f_out)
-        site_label, e_slab_h = find_winning_site_energy(os.path.join(output_root, "sites"), args.file)
-        if site_label is None:
-            print_dual(color_text("[ERROR] Could not find a winning site with a readable energy "
-                                   "under 'sites/'.", 'red'), f_out)
+    print_section('[1] ELECTRONIC ENERGIES (FreeEng)', f_out)
+    e_clean = read_energy("00_clean_slab", "E_clean", f_out)
+    site_label, e_slab_h = find_winning_site_energy(os.path.join(output_root, "sites"), args.file)
+    if site_label is None:
+        print_dual(color_text("[ERROR] Could not find a winning site with a readable energy "
+                               "under 'sites/'.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+    print_dual(f"  {'E_slab+H':<14} = {e_slab_h:>12.6f} eV  (winning site: {site_label})", f_out)
+    report_quality_diagnostics(site_label, os.path.join(output_root, "sites", site_label, args.file),
+                                args.force_tolerance, f_out)
+    e_h2 = read_energy("02_h2_molecule", "E_H2", f_out)
+    e_deformed = read_energy("03_slab_deformed", "E_deformed", f_out)
+    e_ghost = read_energy("04_slab_ghost", "E_ghost", f_out)
+    e_h_ghost_slab = read_energy("06_h_ghost_slab", "E_H_ghost", f_out)
+    e_h_isolated = read_energy("07_h_isolated", "E_H_iso", f_out)
+
+    print_section('[2] BSSE CORRECTION', f_out)
+    e_deformation = e_deformed - e_clean
+    bsse_slab = e_deformed - e_ghost
+    bsse_adsorbate = e_h_isolated - e_h_ghost_slab
+    bsse_correction = bsse_slab + bsse_adsorbate
+    delta_e_raw = e_slab_h - e_clean - 0.5 * e_h2
+    delta_e_corrected = delta_e_raw + bsse_correction
+    print_dual(f"  Deformation cost (diagnostic, not used below) : {e_deformation:>10.4f} eV", f_out)
+    print_dual(f"  BSSE (slab side)    : {bsse_slab:>10.4f} eV", f_out)
+    print_dual(f"  BSSE (H side)       : {bsse_adsorbate:>10.4f} eV", f_out)
+    print_dual(f"  BSSE (total)        : {bsse_correction:>10.4f} eV", f_out)
+    print_dual(f"  Delta-E_H (raw)       : {delta_e_raw:>10.4f} eV", f_out)
+    print_dual(f"  Delta-E_H (corrected) : {delta_e_corrected:>10.4f} eV", f_out)
+
+    print_section('[3] THERMAL CORRECTION', f_out)
+    if zpe_mode == "standard":
+        delta_thermo = NORSKOV_STANDARD_OFFSET_EV
+        print_dual(f"  Standard Norskov offset: Delta-ZPE - T*Delta-S ~= "
+                    f"{NORSKOV_STANDARD_OFFSET_EV:+.4f} eV", f_out)
+    elif zpe_mode == "local":
+        zpe_dir = os.path.join(output_root, "05_zpe_calc")
+        zpe_h_star, ts_h_star = compute_local_zpe_entropy(zpe_dir, args.temp, f_out)
+        if zpe_h_star is None:
+            if f_out:
+                f_out.close()
             sys.exit(1)
-        print_dual(f"  {'E_slab+H':<14} = {e_slab_h:>12.6f} eV  (winning site: {site_label})", f_out)
-        report_quality_diagnostics(site_label, os.path.join(output_root, "sites", site_label, args.file),
-                                    args.force_tolerance, f_out)
-        e_h2 = read_energy("02_h2_molecule", "E_H2", f_out)
-        e_deformed = read_energy("03_slab_deformed", "E_deformed", f_out)
-        e_ghost = read_energy("04_slab_ghost", "E_ghost", f_out)
-        e_h_ghost_slab = read_energy("06_h_ghost_slab", "E_H_ghost", f_out)
-        e_h_isolated = read_energy("07_h_isolated", "E_H_iso", f_out)
+        delta_zpe = zpe_h_star - 0.5 * H2_ZPE_EV
+        delta_ts = ts_h_star - 0.5 * H2_TS_298K_EV
+        delta_thermo = delta_zpe - delta_ts
+        print_dual(f"  ZPE(H*, local)  = {zpe_h_star:.4f} eV   1/2 ZPE(H2, lit.) = "
+                    f"{0.5 * H2_ZPE_EV:.4f} eV   Delta-ZPE = {delta_zpe:+.4f} eV", f_out)
+        print_dual(f"  TS(H*, local)   = {ts_h_star:.4f} eV   1/2 TS(H2, lit.)  = "
+                    f"{0.5 * H2_TS_298K_EV:.4f} eV   Delta-TS  = {delta_ts:+.4f} eV", f_out)
+        print_dual(f"  Net correction (Delta-ZPE - Delta-TS) : {delta_thermo:+.4f} eV", f_out)
+    else:  # full
+        print_dual("  Site (slab+H) full phonon calculation:", f_out)
+        zpe_site, ts_site = compute_full_zpe_entropy(
+            os.path.join(output_root, "05_zpe_calc_site"), "her_zpe_site", args.temp, f_out)
+        print_dual("  Clean slab full phonon calculation:", f_out)
+        zpe_clean, ts_clean = compute_full_zpe_entropy(
+            os.path.join(output_root, "05_zpe_calc_clean"), "her_zpe_clean", args.temp, f_out)
+        if zpe_site is None or zpe_clean is None:
+            print_dual(color_text("[ERROR] Full-mode phonon calculation(s) incomplete.", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        delta_zpe = (zpe_site - zpe_clean) - 0.5 * H2_ZPE_EV
+        delta_ts = (ts_site - ts_clean) - 0.5 * H2_TS_298K_EV
+        delta_thermo = delta_zpe - delta_ts
+        print_dual(f"  ZPE(site)={zpe_site:.4f}  ZPE(clean)={zpe_clean:.4f}  "
+                    f"1/2 ZPE(H2, lit.)={0.5 * H2_ZPE_EV:.4f}  Delta-ZPE={delta_zpe:+.4f} eV", f_out)
+        print_dual(f"  TS(site)={ts_site:.4f}  TS(clean)={ts_clean:.4f}  "
+                    f"1/2 TS(H2, lit.)={0.5 * H2_TS_298K_EV:.4f}  Delta-TS={delta_ts:+.4f} eV", f_out)
+        print_dual(f"  Net correction (Delta-ZPE - Delta-TS) : {delta_thermo:+.4f} eV", f_out)
 
-        print_dual(f"\n{color_text('[2] BSSE CORRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        e_deformation = e_deformed - e_clean
-        bsse_slab = e_deformed - e_ghost
-        bsse_adsorbate = e_h_isolated - e_h_ghost_slab
-        bsse_correction = bsse_slab + bsse_adsorbate
-        delta_e_raw = e_slab_h - e_clean - 0.5 * e_h2
-        delta_e_corrected = delta_e_raw + bsse_correction
-        print_dual(f"  Deformation cost (diagnostic, not used below) : {e_deformation:>10.4f} eV", f_out)
-        print_dual(f"  BSSE (slab side)    : {bsse_slab:>10.4f} eV", f_out)
-        print_dual(f"  BSSE (H side)       : {bsse_adsorbate:>10.4f} eV", f_out)
-        print_dual(f"  BSSE (total)        : {bsse_correction:>10.4f} eV", f_out)
-        print_dual(f"  Delta-E_H (raw)       : {delta_e_raw:>10.4f} eV", f_out)
-        print_dual(f"  Delta-E_H (corrected) : {delta_e_corrected:>10.4f} eV", f_out)
+    delta_g = delta_e_corrected + delta_thermo
 
-        print_dual(f"\n{color_text('[3] THERMAL CORRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        if zpe_mode == "standard":
-            delta_thermo = NORSKOV_STANDARD_OFFSET_EV
-            print_dual(f"  Standard Norskov offset: Delta-ZPE - T*Delta-S ~= "
-                        f"{NORSKOV_STANDARD_OFFSET_EV:+.4f} eV", f_out)
-        elif zpe_mode == "local":
-            zpe_dir = os.path.join(output_root, "05_zpe_calc")
-            zpe_h_star, ts_h_star = compute_local_zpe_entropy(zpe_dir, args.temp, f_out)
-            if zpe_h_star is None:
-                sys.exit(1)
-            delta_zpe = zpe_h_star - 0.5 * H2_ZPE_EV
-            delta_ts = ts_h_star - 0.5 * H2_TS_298K_EV
-            delta_thermo = delta_zpe - delta_ts
-            print_dual(f"  ZPE(H*, local)  = {zpe_h_star:.4f} eV   1/2 ZPE(H2, lit.) = "
-                        f"{0.5 * H2_ZPE_EV:.4f} eV   Delta-ZPE = {delta_zpe:+.4f} eV", f_out)
-            print_dual(f"  TS(H*, local)   = {ts_h_star:.4f} eV   1/2 TS(H2, lit.)  = "
-                        f"{0.5 * H2_TS_298K_EV:.4f} eV   Delta-TS  = {delta_ts:+.4f} eV", f_out)
-            print_dual(f"  Net correction (Delta-ZPE - Delta-TS) : {delta_thermo:+.4f} eV", f_out)
-        else:  # full
-            print_dual("  Site (slab+H) full phonon calculation:", f_out)
-            zpe_site, ts_site = compute_full_zpe_entropy(
-                os.path.join(output_root, "05_zpe_calc_site"), "her_zpe_site", args.temp, f_out)
-            print_dual("  Clean slab full phonon calculation:", f_out)
-            zpe_clean, ts_clean = compute_full_zpe_entropy(
-                os.path.join(output_root, "05_zpe_calc_clean"), "her_zpe_clean", args.temp, f_out)
-            if zpe_site is None or zpe_clean is None:
-                print_dual(color_text("[ERROR] Full-mode phonon calculation(s) incomplete.", 'red'), f_out)
-                sys.exit(1)
-            delta_zpe = (zpe_site - zpe_clean) - 0.5 * H2_ZPE_EV
-            delta_ts = (ts_site - ts_clean) - 0.5 * H2_TS_298K_EV
-            delta_thermo = delta_zpe - delta_ts
-            print_dual(f"  ZPE(site)={zpe_site:.4f}  ZPE(clean)={zpe_clean:.4f}  "
-                        f"1/2 ZPE(H2, lit.)={0.5 * H2_ZPE_EV:.4f}  Delta-ZPE={delta_zpe:+.4f} eV", f_out)
-            print_dual(f"  TS(site)={ts_site:.4f}  TS(clean)={ts_clean:.4f}  "
-                        f"1/2 TS(H2, lit.)={0.5 * H2_TS_298K_EV:.4f}  Delta-TS={delta_ts:+.4f} eV", f_out)
-            print_dual(f"  Net correction (Delta-ZPE - Delta-TS) : {delta_thermo:+.4f} eV", f_out)
+    print_dual(f"\n{color_text('[4] FINAL RESULT', 'magenta')}", f_out)
+    print_dual("=" * 60, f_out)
+    print_dual(f"  Delta-G_H* = {delta_g:+.4f} eV", f_out)
+    print_dual("=" * 60, f_out)
+    verdict = ("near-optimal (Sabatier principle, |Delta-G_H*| small)" if abs(delta_g) < 0.2
+               else "too strong (H* binds too tightly, poor H2 release)" if delta_g < 0
+               else "too weak (H* adsorption itself is the bottleneck)")
+    print_dual(f"  Qualitative HER assessment: {verdict}", f_out)
 
-        delta_g = delta_e_corrected + delta_thermo
+    report_str_path = os.path.join(output_root, f"{args.output}.txt")
+    with open(report_str_path, "w") as f_report:
+        f_report.write(f"HER Delta-G_H* = {delta_g:+.4f} eV\n")
+        f_report.write(f"ZPE mode = {zpe_mode}, T = {args.temp} K\n")
+        f_report.write(f"Delta-E_H (corrected) = {delta_e_corrected:+.4f} eV\n")
+        f_report.write(f"Thermal correction = {delta_thermo:+.4f} eV\n")
 
-        print_dual(f"\n{color_text('[4] FINAL RESULT', 'magenta')}", f_out)
-        print_dual("=" * 60, f_out)
-        print_dual(f"  Delta-G_H* = {delta_g:+.4f} eV", f_out)
-        print_dual("=" * 60, f_out)
-        verdict = ("near-optimal (Sabatier principle, |Delta-G_H*| small)" if abs(delta_g) < 0.2
-                   else "too strong (H* binds too tightly, poor H2 release)" if delta_g < 0
-                   else "too weak (H* adsorption itself is the bottleneck)")
-        print_dual(f"  Qualitative HER assessment: {verdict}", f_out)
-
-        report_str_path = os.path.join(output_root, f"{args.output}.txt")
-        with open(report_str_path, "w") as f_report:
-            f_report.write(f"HER Delta-G_H* = {delta_g:+.4f} eV\n")
-            f_report.write(f"ZPE mode = {zpe_mode}, T = {args.temp} K\n")
-            f_report.write(f"Delta-E_H (corrected) = {delta_e_corrected:+.4f} eV\n")
-            f_report.write(f"Thermal correction = {delta_thermo:+.4f} eV\n")
-
-        print_dual(f"\n{color_text('[5] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Winning site        : {site_label}", f_out)
-        print_dual(f"ZPE mode            : {zpe_mode}", f_out)
-        print_dual(f"Delta-G_H*          : {delta_g:+.4f} eV", f_out)
+    print_section('[5] SUMMARY & FILES', f_out)
+    print_dual(f"Winning site        : {site_label}", f_out)
+    print_dual(f"ZPE mode            : {zpe_mode}", f_out)
+    print_dual(f"Delta-G_H*          : {delta_g:+.4f} eV", f_out)
+    if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-        print_dual(f"Files               : {report_str_path}", f_out)
+    print_dual(f"Files               : {report_str_path}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

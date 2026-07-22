@@ -85,7 +85,8 @@ def stack_heterostructure(layer1, layer2, gaps, target_vacuum, max_area, max_str
 
     return results
 
-def analyze_and_report_symmetry(layer1, layer2, hetero, filename="symmetry_report.txt", symprec=0.01, print_stdout=True):
+def analyze_and_report_symmetry(layer1, layer2, hetero, filename="symmetry_report.txt", symprec=0.01,
+                                 print_stdout=True, save_report=False):
     """Analyzes symmetry for both layers and the heterostructure, printing a formatted table."""
     def get_details(struct):
         try:
@@ -158,11 +159,13 @@ def analyze_and_report_symmetry(layer1, layer2, hetero, filename="symmetry_repor
             print(table_lines[6])
             
         print(color_text(separator, 'blue'))
-        print(color_text(f"[INFO] Symmetry report saved to: {filename}", 'green'))
-    
-    # Save to text file
-    with open(filename, 'w') as f: 
-        f.write(report_text + "\n")
+        if save_report:
+            print(color_text(f"[INFO] Symmetry report saved to: {filename}", 'green'))
+
+    # Save to text file (opt-in)
+    if save_report:
+        with open(filename, 'w') as f:
+            f.write(report_text + "\n")
 
 def export_to_fdf(structure, filename="stacked_structure.fdf"):
     with open(filename, 'w') as f:
@@ -232,7 +235,9 @@ def main():
     parser.add_argument("-o", "--output", default="stacked_structure.fdf", help="Output .fdf base file name")
     parser.add_argument("--sym_out", default="symmetry_report.txt", help="Output text file for symmetry analysis")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
-    
+    parser.add_argument("--save-report", action="store_true",
+                        help="Also persist the symmetry analysis to --sym_out. Off by default.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-2Dstacking {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -305,7 +310,8 @@ def main():
         
         # Evita poluir o terminal com várias tabelas grandes no modo batch
         print_to_stdout = not is_multi_output
-        analyze_and_report_symmetry(layer1, layer2, hetero, filename=sym_filename, symprec=args.symprec, print_stdout=print_to_stdout)
+        analyze_and_report_symmetry(layer1, layer2, hetero, filename=sym_filename, symprec=args.symprec,
+                                     print_stdout=print_to_stdout, save_report=args.save_report)
 
     print("\n" + color_text("[INFO] Complete job!", 'green')) 
     print("-" * 60)

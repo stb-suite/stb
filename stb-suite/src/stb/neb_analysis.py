@@ -16,7 +16,7 @@ from datetime import datetime
 import numpy as np
 from stb.core import siesta_log
 from stb.core.siesta_log import check_scf_and_force
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 
 REPORT_FILE = "neb_report.txt"
 SETUP_REPORT_FILE = "neb_setup.txt"
@@ -199,6 +199,8 @@ def main():
                               "stb-adsorbAnalysis/stb-cohesiveAnalysis) above which an image's "
                               "calc.out is flagged as possibly not relaxed. Advisory only, never "
                               "blocks the result.")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-nebAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -230,132 +232,137 @@ def main():
         print(color_text(f"[ERROR] No 'image_*' folders found in '{args.dir}'. Did you run stb-neb?", 'red'))
         sys.exit(1)
 
-    with open(REPORT_FILE, 'w') as f_out:
-        print_dual(f"{color_text('===== NEB ENERGY PROFILE REPORT =====', 'magenta')}", f_out)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory  : {args.dir}", f_out)
-        print_dual(f"Output file: {args.file}", f_out)
-        if not table_found:
-            print_dual(color_text(
-                "[NOTE] No 'neb_setup.txt' image table found -- falling back to a sorted glob of "
-                "'image_*' folders (index = sort position, no reaction-coordinate data available; "
-                "the x-axis below uses plain image index instead).", 'yellow'), f_out)
+    print_dual(f"{color_text('===== NEB ENERGY PROFILE REPORT =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[1] IMAGE ENERGIES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        rows = []
-        n_skipped = 0
-        scf_warn_labels = []
-        force_warn_labels = []
-        header = f"{'Image':<14}{'Index':<7}{'ReactionCoord':<16}{'E(eV)':<16}{'SCF':<6}{'MaxF(eV/A)':<12}"
-        print_dual(header, f_out)
-        print_dual("-" * len(header), f_out)
-        for label, index, reaction_coord in image_rows:
-            image_dir = os.path.join(args.dir, label)
-            out_path = os.path.join(image_dir, args.file)
-            if not os.path.exists(out_path):
-                n_skipped += 1
-                print_dual(f"{label:<14}{color_text('SKIP', 'yellow')} (missing {args.file})", f_out)
-                continue
-            energy = siesta_log.get_free_energy(out_path)
-            if energy is None:
-                n_skipped += 1
-                print_dual(f"{label:<14}{color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
-                continue
-            scf_ok, max_force = check_scf_and_force(out_path)
-            if not scf_ok:
-                scf_warn_labels.append(label)
-            if max_force is not None and max_force > args.force_tolerance:
-                force_warn_labels.append(label)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory  : {args.dir}", f_out)
+    print_dual(f"Output file: {args.file}", f_out)
+    if not table_found:
+        print_dual(color_text(
+            "[NOTE] No 'neb_setup.txt' image table found -- falling back to a sorted glob of "
+            "'image_*' folders (index = sort position, no reaction-coordinate data available; "
+            "the x-axis below uses plain image index instead).", 'yellow'), f_out)
 
-            rows.append(ImageRow(label, index, reaction_coord, energy, scf_ok, max_force))
-            coord_str = f"{reaction_coord:<16.4f}" if reaction_coord is not None else f"{'--':<16}"
-            scf_str = color_text("WARN", 'yellow') if not scf_ok else "OK"
-            force_str = f"{max_force:.4f}" if max_force is not None else "--"
-            print_dual(f"{label:<14}{index:<7}{coord_str}{energy:<16.6f}{scf_str:<6}{force_str:<12}", f_out)
-        print_dual("-" * len(header), f_out)
-        if scf_warn_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(scf_warn_labels)} image(s) never confirmed SCF convergence -- "
-                f"their energy may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
-        if force_warn_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(force_warn_labels)} image(s) have residual force above "
-                f"--force-tolerance ({args.force_tolerance} eV/Ang), possibly not single-point-"
-                f"converged: {', '.join(force_warn_labels)}.", 'yellow'), f_out)
+    print_section('[1] IMAGE ENERGIES', f_out)
+    rows = []
+    n_skipped = 0
+    scf_warn_labels = []
+    force_warn_labels = []
+    header = f"{'Image':<14}{'Index':<7}{'ReactionCoord':<16}{'E(eV)':<16}{'SCF':<6}{'MaxF(eV/A)':<12}"
+    print_dual(header, f_out)
+    print_dual("-" * len(header), f_out)
+    for label, index, reaction_coord in image_rows:
+        image_dir = os.path.join(args.dir, label)
+        out_path = os.path.join(image_dir, args.file)
+        if not os.path.exists(out_path):
+            n_skipped += 1
+            print_dual(f"{label:<14}{color_text('SKIP', 'yellow')} (missing {args.file})", f_out)
+            continue
+        energy = siesta_log.get_free_energy(out_path)
+        if energy is None:
+            n_skipped += 1
+            print_dual(f"{label:<14}{color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
+            continue
+        scf_ok, max_force = check_scf_and_force(out_path)
+        if not scf_ok:
+            scf_warn_labels.append(label)
+        if max_force is not None and max_force > args.force_tolerance:
+            force_warn_labels.append(label)
 
-        if not rows:
-            print_dual(color_text("\n[ERROR] No valid image results found.", 'red'), f_out)
-            sys.exit(1)
+        rows.append(ImageRow(label, index, reaction_coord, energy, scf_ok, max_force))
+        coord_str = f"{reaction_coord:<16.4f}" if reaction_coord is not None else f"{'--':<16}"
+        scf_str = color_text("WARN", 'yellow') if not scf_ok else "OK"
+        force_str = f"{max_force:.4f}" if max_force is not None else "--"
+        print_dual(f"{label:<14}{index:<7}{coord_str}{energy:<16.6f}{scf_str:<6}{force_str:<12}", f_out)
+    print_dual("-" * len(header), f_out)
+    if scf_warn_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(scf_warn_labels)} image(s) never confirmed SCF convergence -- "
+            f"their energy may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
+    if force_warn_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(force_warn_labels)} image(s) have residual force above "
+            f"--force-tolerance ({args.force_tolerance} eV/Ang), possibly not single-point-"
+            f"converged: {', '.join(force_warn_labels)}.", 'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[2] BARRIER ANALYSIS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        max_index = max(idx for _, idx, _ in image_rows)
-        initial_row = next((r for r in rows if r.index == 0), None)
-        final_row = next((r for r in rows if r.index == max_index), None)
-        if initial_row is None or final_row is None:
-            print_dual(color_text(
-                "[ERROR] Could not read the initial and/or final endpoint image's energy -- "
-                "cannot compute a barrier.", 'red'), f_out)
-            sys.exit(1)
+    if not rows:
+        print_dual(color_text("\n[ERROR] No valid image results found.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        max_row = max(rows, key=lambda r: r.energy)
-        forward_barrier = max_row.energy - initial_row.energy
-        backward_barrier = max_row.energy - final_row.energy
-        delta_e = final_row.energy - initial_row.energy
+    print_section('[2] BARRIER ANALYSIS', f_out)
+    max_index = max(idx for _, idx, _ in image_rows)
+    initial_row = next((r for r in rows if r.index == 0), None)
+    final_row = next((r for r in rows if r.index == max_index), None)
+    if initial_row is None or final_row is None:
+        print_dual(color_text(
+            "[ERROR] Could not read the initial and/or final endpoint image's energy -- "
+            "cannot compute a barrier.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        print_dual(f"Highest-energy image (approx. TS) : {max_row.label}  "
-                    f"(E = {max_row.energy:.6f} eV)", f_out)
-        print_dual(f"Forward barrier  (TS - initial)   : {forward_barrier:.6f} eV", f_out)
-        print_dual(f"Backward barrier (TS - final)     : {backward_barrier:.6f} eV", f_out)
-        rxn_verdict = "exothermic (favorable)" if delta_e < 0 else "endothermic (unfavorable)"
-        print_dual(f"Reaction energy  (final - initial) : {delta_e:.6f} eV, {rxn_verdict}", f_out)
+    max_row = max(rows, key=lambda r: r.energy)
+    forward_barrier = max_row.energy - initial_row.energy
+    backward_barrier = max_row.energy - final_row.energy
+    delta_e = final_row.energy - initial_row.energy
 
-        use_reaction_coord = all(r.reaction_coord is not None for r in rows)
-        spline_fit = fit_spline_barrier(rows) if use_reaction_coord else None
-        if spline_fit:
-            ts_coord, spline_barrier, spline_dE = spline_fit
-            print_dual(f"Spline-fitted barrier (smoothed)  : {spline_barrier:.6f} eV at reaction "
-                        f"coordinate {ts_coord:.4f} Ang (cubic spline through the {len(rows)} "
-                        "energies)", f_out)
-        elif use_reaction_coord and len(rows) < 4:
-            print_dual("[NOTE] Not enough images (need >= 4) for a spline-fitted barrier estimate.", f_out)
+    print_dual(f"Highest-energy image (approx. TS) : {max_row.label}  "
+                f"(E = {max_row.energy:.6f} eV)", f_out)
+    print_dual(f"Forward barrier  (TS - initial)   : {forward_barrier:.6f} eV", f_out)
+    print_dual(f"Backward barrier (TS - final)     : {backward_barrier:.6f} eV", f_out)
+    rxn_verdict = "exothermic (favorable)" if delta_e < 0 else "endothermic (unfavorable)"
+    print_dual(f"Reaction energy  (final - initial) : {delta_e:.6f} eV, {rxn_verdict}", f_out)
 
-        if ml_neb_used:
-            caveat = ("Stage 1 already converged a real climbing-image band on MACE-MP-0 first, "
-                       "so this is a stronger (ML-relaxed-path) estimate -- but still not an "
-                       "independent DFT confirmation of a converged saddle point.")
+    use_reaction_coord = all(r.reaction_coord is not None for r in rows)
+    spline_fit = fit_spline_barrier(rows) if use_reaction_coord else None
+    if spline_fit:
+        ts_coord, spline_barrier, spline_dE = spline_fit
+        print_dual(f"Spline-fitted barrier (smoothed)  : {spline_barrier:.6f} eV at reaction "
+                    f"coordinate {ts_coord:.4f} Ang (cubic spline through the {len(rows)} "
+                    "energies)", f_out)
+    elif use_reaction_coord and len(rows) < 4:
+        print_dual("[NOTE] Not enough images (need >= 4) for a spline-fitted barrier estimate.", f_out)
+
+    if ml_neb_used:
+        caveat = ("Stage 1 already converged a real climbing-image band on MACE-MP-0 first, "
+                   "so this is a stronger (ML-relaxed-path) estimate -- but still not an "
+                   "independent DFT confirmation of a converged saddle point.")
+    else:
+        caveat = ("Approximate, interpolated-path estimate: no real reaction coordinate was "
+                   "optimized between these DFT single points (no inter-image spring "
+                   "coupling at the DFT level) -- the true saddle point may lie off this "
+                   "fixed path. Re-run stb-neb with --ml-neb for a physically relaxed band "
+                   "shape before the DFT single points.")
+    print_dual(color_text(f"[NOTE] {caveat}", 'yellow'), f_out)
+
+    print_section('[3] SUMMARY', f_out)
+    print_dual(f"Images analyzed : {len(rows)} (skipped: {n_skipped})", f_out)
+
+    gplot_path = write_curve_plot(args.output, rows, use_reaction_coord)
+    print_dual(f"{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
+                f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
+                f_out)
+    if report_path:
+        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {report_path}", f_out)
+
+    if args.apply:
+        print_section('[4] APPLY', f_out)
+        src = os.path.join(args.dir, max_row.label, "structure.fdf")
+        try:
+            shutil.copy(src, args.apply)
+        except OSError as e:
+            print_dual(color_text(f"[ERROR] Could not copy '{src}' to '{args.apply}': {e}", 'red'), f_out)
         else:
-            caveat = ("Approximate, interpolated-path estimate: no real reaction coordinate was "
-                       "optimized between these DFT single points (no inter-image spring "
-                       "coupling at the DFT level) -- the true saddle point may lie off this "
-                       "fixed path. Re-run stb-neb with --ml-neb for a physically relaxed band "
-                       "shape before the DFT single points.")
-        print_dual(color_text(f"[NOTE] {caveat}", 'yellow'), f_out)
+            print_dual(f"{color_text('[Applied]', 'green')} {max_row.label} -> {args.apply}", f_out)
 
-        print_dual(f"\n{color_text('[3] SUMMARY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Images analyzed : {len(rows)} (skipped: {n_skipped})", f_out)
-
-        gplot_path = write_curve_plot(args.output, rows, use_reaction_coord)
-        print_dual(f"{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
-                    f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
-                    f_out)
-        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {REPORT_FILE}", f_out)
-
-        if args.apply:
-            print_dual(f"\n{color_text('[4] APPLY', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            src = os.path.join(args.dir, max_row.label, "structure.fdf")
-            try:
-                shutil.copy(src, args.apply)
-            except OSError as e:
-                print_dual(color_text(f"[ERROR] Could not copy '{src}' to '{args.apply}': {e}", 'red'), f_out)
-            else:
-                print_dual(f"{color_text('[Applied]', 'green')} {max_row.label} -> {args.apply}", f_out)
+    if f_out:
+        f_out.close()
 
 
 if __name__ == "__main__":

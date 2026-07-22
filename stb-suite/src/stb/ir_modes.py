@@ -9,7 +9,6 @@
 VERSION = "1.0.0"
 
 import os
-import re
 import sys
 import glob
 import json
@@ -21,7 +20,7 @@ import yaml
 from ase import Atoms
 from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
-from stb.core.cli import color_text, show_intro
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, force_born_charge_run
 from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
@@ -46,15 +45,6 @@ REPORT_FILE = "ir_stage2.txt"
 # example shape as SIESTA's own PolarizationGrids tutorial material.
 _DEFAULT_POLARIZATION_GRID = [10, 4, 4, 4, 10, 4, 4, 4, 10]
 _DEFAULT_FC_DISPL_BOHR = 0.02
-
-
-def print_dual(text, file_handle=None):
-    """Prints to stdout with color, writes to file without color. Same
-    duplicated-per-tool helper as raman_modes.py/phonons_pos.py."""
-    print(text)
-    if file_handle:
-        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-        file_handle.write(clean_text + "\n")
 
 
 def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
@@ -271,8 +261,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== IR STAGE 2 REPORT (MODES & DISPLACEMENTS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
         print_dual(f"Directory         : {output_root}", f_out)
         print_dual(f"SystemLabel       : {'N/A (ML-computed force constants)' if has_embedded_fc else f'{system_label} ({label_source})'}", f_out)
@@ -282,8 +271,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         print_dual(f"Polarization grid : {' '.join(str(v) for v in args.polarization_grid)} "
                     "(bulk path only)", f_out)
 
-        print_dual(f"\n{color_text('[1] PHONON MODES AT GAMMA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] PHONON MODES AT GAMMA', f_out)
         phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
             phonon_dir, system_label, has_embedded_fc, f_out)
         try:
@@ -344,8 +332,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
 
         if args.use_symmetry:
-            print_dual(f"\n{color_text('[1b] SYMMETRY ANALYSIS', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
+            print_section('[1b] SYMMETRY ANALYSIS', f_out)
             print_dual(f"Point group       : {point_group}", f_out)
             if symmetry_error:
                 print_dual(color_text(
@@ -369,8 +356,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                         "--modes was given explicitly -- symmetry filtering is informational "
                         "only here, no mode is auto-skipped.", 'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[2] PSEUDOPOTENTIALS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] PSEUDOPOTENTIALS', f_out)
         print_dual(f"Elements needed   : {', '.join(sorted(unique_elements))}", f_out)
         if args.pseudo_dir is not None:
             pseudo_source = args.pseudo_dir
@@ -464,8 +450,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                         derived_groups.setdefault(rep_k, []).append(k)
                         skip_degenerate_applied = True
 
-        print_dual(f"\n{color_text('[3] IR DISPLACEMENT FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] IR DISPLACEMENT FOLDERS', f_out)
         print_dual(f"Selected modes    : {len(selected)}", f_out)
         if skip_degenerate_applied:
             n_derived_total = sum(len(v) for v in derived_groups.values())
@@ -548,8 +533,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
 
             n_real_folders = sum(1 for row in report_rows if row[5] != "DERIVED")
 
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"{n_real_folders} folder(s) written under '{output_root}'.", f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)

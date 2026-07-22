@@ -17,7 +17,7 @@ import numpy as np
 from pymatgen.core import Molecule
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 
 REPORT_FILE = "her_stage1.txt"
@@ -178,6 +178,8 @@ folder's relaxation yourself, then use stb-herRefs.""",
                          help="Vacuum-axis detection threshold in Ang (default: 10.0).")
     parser.add_argument("-O", "--output-dir", type=str, default="her_study",
                          help="Root directory for the whole HER workflow (default: her_study).")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-her {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -224,109 +226,116 @@ folder's relaxation yourself, then use stb-herRefs.""",
     clean_slab_dir = os.path.join(output_root, "clean_slab_source")
     sites_root = os.path.join(output_root, "sites")
     os.makedirs(sites_root, exist_ok=True)
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, 'w') if report_path else None
 
-    with open(report_path, 'w') as f_out:
-        print_dual(f"{color_text('===== HER STAGE 1 REPORT (ADSORPTION SITES) =====', 'magenta')}", f_out)
+    print_dual(f"{color_text('===== HER STAGE 1 REPORT (ADSORPTION SITES) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Structure       : {args.structure}", f_out)
-        print_dual(f"Calc template   : {args.calc}", f_out)
-        print_dual(f"Site type       : {args.site_type}", f_out)
-        print_dual(f"Height          : {args.height:.2f} Ang", f_out)
-        print_dual(f"Both sides      : {'yes' if args.both_sides else 'no'}", f_out)
-        print_dual(f"symprec         : {args.symprec}", f_out)
-        print_dual(f"Output root     : {output_root}", f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Structure       : {args.structure}", f_out)
+    print_dual(f"Calc template   : {args.calc}", f_out)
+    print_dual(f"Site type       : {args.site_type}", f_out)
+    print_dual(f"Height          : {args.height:.2f} Ang", f_out)
+    print_dual(f"Both sides      : {'yes' if args.both_sides else 'no'}", f_out)
+    print_dual(f"symprec         : {args.symprec}", f_out)
+    print_dual(f"Output root     : {output_root}", f_out)
 
-        print_dual(f"\n{color_text('[1] CLEAN SLAB REFERENCE', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        os.makedirs(clean_slab_dir, exist_ok=True)
-        shutil.copy(args.structure, os.path.join(clean_slab_dir, "structure.fdf"))
-        print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}/structure.fdf (pristine geometry, "
-                    "copied as-is -- stb-herRefs recomputes it single-point with the winning site's "
-                    "exact numerical settings, for consistency).", f_out)
+    print_section('[1] CLEAN SLAB REFERENCE', f_out)
+    os.makedirs(clean_slab_dir, exist_ok=True)
+    shutil.copy(args.structure, os.path.join(clean_slab_dir, "structure.fdf"))
+    print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}/structure.fdf (pristine geometry, "
+                "copied as-is -- stb-herRefs recomputes it single-point with the winning site's "
+                "exact numerical settings, for consistency).", f_out)
 
-        print_dual(f"\n{color_text('[2] ADSORPTION SITES (H)', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[2] ADSORPTION SITES (H)', f_out)
 
-        site_records = []  # (label, pmg_structure_with_H)
-        if args.both_sides:
-            from pymatgen.core.surface import Slab
-            slab_obj = Slab(
-                lattice=pmg_structure.lattice,
-                species=[site.specie for site in pmg_structure],
-                coords=pmg_structure.frac_coords,
-                miller_index=(0, 0, 1),
-                oriented_unit_cell=pmg_structure,
-                shift=0.0,
-                scale_factor=np.eye(3),
-                reorient_lattice=False,
-            )
-            if len(site_types) != 1:
-                print_dual(color_text(
-                    "[ERROR] --both-sides requires a concrete --site-type (not 'all').", 'red'), f_out)
-                sys.exit(1)
-            try:
-                both_structs = AdsorbateSiteFinder(slab_obj).adsorb_both_surfaces(
-                    h_molecule, repeat=(1, 1, 1),
-                    find_args={"distance": args.height, "symm_reduce": args.symprec,
-                               "positions": site_types})
-            except RuntimeError as e:
-                print_dual(color_text(
-                    f"[ERROR] Could not place H on both faces: {e}. --both-sides needs a slab "
-                    "with a symmetry operation mapping top to bottom (a free-standing 2D "
-                    "material, or a centrosymmetric slab).", 'red'), f_out)
-                sys.exit(1)
-            if not both_structs:
-                print_dual(color_text(f"[ERROR] No {site_types[0]} sites found.", 'red'), f_out)
-                sys.exit(1)
-            for i, s in enumerate(both_structs, start=1):
-                site_records.append((f"site_{i}_{site_types[0]}_bothsides", s))
-        else:
-            found = finder.find_adsorption_sites(distance=args.height, symm_reduce=args.symprec,
-                                                  positions=site_types)
-            candidates = [(st, coord) for st in site_types for coord in found[st]]
-            if not candidates:
-                print_dual(color_text(f"[ERROR] No {'/'.join(site_types)} sites found.", 'red'), f_out)
-                sys.exit(1)
-            for i, (st, coord) in enumerate(candidates, start=1):
-                ads_struct = finder.add_adsorbate(h_molecule, coord)
-                site_records.append((f"site_{i}_{st}", ads_struct))
+    site_records = []  # (label, pmg_structure_with_H)
+    if args.both_sides:
+        from pymatgen.core.surface import Slab
+        slab_obj = Slab(
+            lattice=pmg_structure.lattice,
+            species=[site.specie for site in pmg_structure],
+            coords=pmg_structure.frac_coords,
+            miller_index=(0, 0, 1),
+            oriented_unit_cell=pmg_structure,
+            shift=0.0,
+            scale_factor=np.eye(3),
+            reorient_lattice=False,
+        )
+        if len(site_types) != 1:
+            print_dual(color_text(
+                "[ERROR] --both-sides requires a concrete --site-type (not 'all').", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        try:
+            both_structs = AdsorbateSiteFinder(slab_obj).adsorb_both_surfaces(
+                h_molecule, repeat=(1, 1, 1),
+                find_args={"distance": args.height, "symm_reduce": args.symprec,
+                           "positions": site_types})
+        except RuntimeError as e:
+            print_dual(color_text(
+                f"[ERROR] Could not place H on both faces: {e}. --both-sides needs a slab "
+                "with a symmetry operation mapping top to bottom (a free-standing 2D "
+                "material, or a centrosymmetric slab).", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        if not both_structs:
+            print_dual(color_text(f"[ERROR] No {site_types[0]} sites found.", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        for i, s in enumerate(both_structs, start=1):
+            site_records.append((f"site_{i}_{site_types[0]}_bothsides", s))
+    else:
+        found = finder.find_adsorption_sites(distance=args.height, symm_reduce=args.symprec,
+                                              positions=site_types)
+        candidates = [(st, coord) for st in site_types for coord in found[st]]
+        if not candidates:
+            print_dual(color_text(f"[ERROR] No {'/'.join(site_types)} sites found.", 'red'), f_out)
+            if f_out:
+                f_out.close()
+            sys.exit(1)
+        for i, (st, coord) in enumerate(candidates, start=1):
+            ads_struct = finder.add_adsorbate(h_molecule, coord)
+            site_records.append((f"site_{i}_{st}", ads_struct))
 
-        report_rows = []  # (label, dir)
-        for label, ads_struct in site_records:
-            min_dist = min_h_slab_distance(ads_struct, n_substrate)
-            if min_dist is not None and min_dist < 0.5:
-                print_dual(color_text(
-                    f"  [WARNING] {label}: closest slab-H distance is only {min_dist:.3f} Ang -- "
-                    "likely overlapping atoms (--height too small). Check before running SIESTA.",
-                    'yellow'), f_out)
-            site_dir = os.path.join(sites_root, label)
-            write_site_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir)
-            print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
-            report_rows.append((label, site_dir))
+    report_rows = []  # (label, dir)
+    for label, ads_struct in site_records:
+        min_dist = min_h_slab_distance(ads_struct, n_substrate)
+        if min_dist is not None and min_dist < 0.5:
+            print_dual(color_text(
+                f"  [WARNING] {label}: closest slab-H distance is only {min_dist:.3f} Ang -- "
+                "likely overlapping atoms (--height too small). Check before running SIESTA.",
+                'yellow'), f_out)
+        site_dir = os.path.join(sites_root, label)
+        write_site_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir)
+        print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
+        report_rows.append((label, site_dir))
 
-        print_dual(f"\n{color_text('[3] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"{len(site_records)} site folder(s) written under '{sites_root}'.", f_out)
+    print_section('[3] SUMMARY & NEXT STEPS', f_out)
+    print_dual(f"{len(site_records)} site folder(s) written under '{sites_root}'.", f_out)
+    if report_path:
         print_dual(f"Report               : {report_path}", f_out)
-        print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-        print_dual(f"  1. Run SIESTA in every '{sites_root}/site_*/' folder (a full relaxation).", f_out)
-        print_dual(f"  2. Once they're done, run: stb-herRefs --directory {output_root}", f_out)
-        print_dual(color_text(
-            "\n[NOTE] Spin polarization: H adsorption intermediates can have radical/open-shell "
-            "character depending on the surface -- consider 'Spin polarized' in your calc.fdf "
-            "if you're not already using it.", 'yellow'), f_out)
-        print_dual(color_text(
-            "[NOTE] Van der Waals: standard GGA misses dispersion forces, which can matter for "
-            "physisorption-like distant sites -- a vdW correction (e.g. DFTD3) is recommended.",
-            'yellow'), f_out)
+    print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+    print_dual(f"  1. Run SIESTA in every '{sites_root}/site_*/' folder (a full relaxation).", f_out)
+    print_dual(f"  2. Once they're done, run: stb-herRefs --directory {output_root}", f_out)
+    print_dual(color_text(
+        "\n[NOTE] Spin polarization: H adsorption intermediates can have radical/open-shell "
+        "character depending on the surface -- consider 'Spin polarized' in your calc.fdf "
+        "if you're not already using it.", 'yellow'), f_out)
+    print_dual(color_text(
+        "[NOTE] Van der Waals: standard GGA misses dispersion forces, which can matter for "
+        "physisorption-like distant sites -- a vdW correction (e.g. DFTD3) is recommended.",
+        'yellow'), f_out)
 
+    if f_out:
         f_out.write("\n# SITE_TABLE -- parsed by stb-herRefs, do not reorder the columns\n")
         f_out.write(f"# {'label':<24}{'dir'}\n")
         for label, site_dir in report_rows:
             f_out.write(f"{label:<26}{site_dir}\n")
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

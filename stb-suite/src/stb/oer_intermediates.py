@@ -16,7 +16,7 @@ import numpy as np
 from pymatgen.core import Molecule
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.siesta_log import get_free_energy, get_outcell, report_quality_diagnostics
 from stb.core.deps import require_mace
@@ -477,8 +477,7 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== OER STAGE 2 REPORT (O*/OOH* INTERMEDIATES) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Directory       : {output_root}", f_out)
         print_dual(f"O* strategy     : {args.o_strategy}", f_out)
         print_dual(f"OOH* strategy   : {args.ooh_strategy}", f_out)
@@ -486,8 +485,7 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
                     + (f" (model={args.ml_model}, device={args.ml_device})" if args.ml_prerelax else ""),
                     f_out)
 
-        print_dual(f"\n{color_text('[1] WINNING OH* SITE', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] WINNING OH* SITE', f_out)
         winning_dir, winning_energy, all_results = find_winning_site(sites_root, args.file, f_out)
         for label, energy in all_results:
             marker = color_text(" <-- winner", 'green') if os.path.join(sites_root, label) == winning_dir else ""
@@ -515,8 +513,7 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
         pmg_clean = structure_io.to_pymatgen(clean_fdf_structure)
         clean_species_meta = structure_io.species_dict(clean_fdf_structure)
 
-        print_dual(f"\n{color_text('[2] O* GEOMETRY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] O* GEOMETRY', f_out)
         if args.o_strategy == "derived":
             o_dir = os.path.join(output_root, "intermediates", "o_star")
             o_structure = build_o_structure(relaxed_oh, h_index)
@@ -540,8 +537,7 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
             print_dual(f"{n_written} O* candidate folder(s) written -- run SIESTA in all of them, "
                         "stb-oerRefs will pick the winner.", f_out)
 
-        print_dual(f"\n{color_text('[3] OOH* GEOMETRY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] OOH* GEOMETRY', f_out)
         if args.ooh_strategy == "derived":
             ooh_dir = os.path.join(output_root, "intermediates", "ooh_star")
             ooh_structure = build_ooh_structure(relaxed_oh, o_index, h_index,
@@ -570,8 +566,7 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
             print_dual(f"{n_written} OOH* candidate folder(s) written -- run SIESTA in all of "
                         "them, stb-oerRefs will pick the winner.", f_out)
 
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)
         print_dual("  1. Run SIESTA in every folder written above.", f_out)

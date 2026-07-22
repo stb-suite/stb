@@ -15,7 +15,7 @@ import argparse
 from collections import Counter
 from datetime import datetime
 from stb.core import structure_io, siesta_log
-from stb.core.cli import COLORS, color_text, show_intro, print_dual
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.convergence import substitute_numeric_tag, substitute_kgrid_tag
 
 _FOLDER_RE = re.compile(r'^convergence_([a-zA-Z]+)_([\d.]+)$')
@@ -98,6 +98,8 @@ def main():
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
                         help="--apply with a kgrid sweep only: vacuum-axis detection threshold in "
                              "Angstrom, same meaning as stb-kgrid's --vacuum-gap (default: 10.0).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-convergenceAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -151,174 +153,177 @@ def main():
     n_mismatched = 0
     n_skipped = 0
 
-    with open(REPORT_FILE, 'w') as f_out:
-        print_dual(f"{color_text('===== CONVERGENCE TEST REPORT =====', 'magenta')}", f_out)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory  : {args.dir}", f_out)
-        print_dual(f"Output file: {args.file}", f_out)
-        print_dual(f"Tolerance  : {args.tolerance} eV/atom", f_out)
-        if len(tied_params) > 1:
-            print_dual(color_text(
-                f"[WARNING] Ambiguous parameter mix: {', '.join(tied_params)} are equally "
-                f"represented in '{args.dir}'; picked '{parameter_name}' arbitrarily. "
-                "Use a separate --dir per sweep to avoid this.", 'yellow'), f_out)
+    print_dual(f"{color_text('===== CONVERGENCE TEST REPORT =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[1] READING FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        for folder, param, value in parsed_folders:
-            if param is None:
-                continue
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory  : {args.dir}", f_out)
+    print_dual(f"Output file: {args.file}", f_out)
+    print_dual(f"Tolerance  : {args.tolerance} eV/atom", f_out)
+    if len(tied_params) > 1:
+        print_dual(color_text(
+            f"[WARNING] Ambiguous parameter mix: {', '.join(tied_params)} are equally "
+            f"represented in '{args.dir}'; picked '{parameter_name}' arbitrarily. "
+            "Use a separate --dir per sweep to avoid this.", 'yellow'), f_out)
 
-            if param != parameter_name:
-                n_mismatched += 1
-                print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} "
-                            f"(different parameter: '{param}', expected '{parameter_name}')", f_out)
-                continue
+    print_section('[1] READING FOLDERS', f_out)
+    for folder, param, value in parsed_folders:
+        if param is None:
+            continue
 
-            folder_path = os.path.join(args.dir, folder)
-            struct_path = os.path.join(folder_path, "structure.fdf")
-            out_path = os.path.join(folder_path, args.file)
+        if param != parameter_name:
+            n_mismatched += 1
+            print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} "
+                        f"(different parameter: '{param}', expected '{parameter_name}')", f_out)
+            continue
 
-            if not os.path.exists(struct_path) or not os.path.exists(out_path):
-                n_skipped += 1
-                print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} "
-                            f"(missing structure.fdf or {args.file})", f_out)
-                continue
+        folder_path = os.path.join(args.dir, folder)
+        struct_path = os.path.join(folder_path, "structure.fdf")
+        out_path = os.path.join(folder_path, args.file)
 
-            energy = siesta_log.get_free_energy(out_path)
-            if energy is None:
-                n_skipped += 1
-                print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
-                continue
+        if not os.path.exists(struct_path) or not os.path.exists(out_path):
+            n_skipped += 1
+            print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} "
+                        f"(missing structure.fdf or {args.file})", f_out)
+            continue
 
-            structure = structure_io.read_fdf(struct_path)
-            n_atoms = len(structure.atoms)
-            first_structure = first_structure or structure
+        energy = siesta_log.get_free_energy(out_path)
+        if energy is None:
+            n_skipped += 1
+            print_dual(f"   -> {folder:<30} : {color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
+            continue
 
-            scf_converged, _iterations = siesta_log.get_scf_convergence(out_path)
-            max_force = siesta_log.get_max_force(out_path)
+        structure = structure_io.read_fdf(struct_path)
+        n_atoms = len(structure.atoms)
+        first_structure = first_structure or structure
 
-            data.append((value, energy, n_atoms, scf_converged, max_force))
-            status = color_text('OK', 'green') if scf_converged else color_text('OK (SCF not confirmed converged)', 'yellow')
-            print_dual(f"   -> {folder:<30} : {status}", f_out)
+        scf_converged, _iterations = siesta_log.get_scf_convergence(out_path)
+        max_force = siesta_log.get_max_force(out_path)
 
-        if not data:
-            print_dual(color_text("\nError: No valid data found in convergence folders.", 'red'), f_out)
-            sys.exit(1)
+        data.append((value, energy, n_atoms, scf_converged, max_force))
+        status = color_text('OK', 'green') if scf_converged else color_text('OK (SCF not confirmed converged)', 'yellow')
+        print_dual(f"   -> {folder:<30} : {status}", f_out)
 
-        data.sort(key=lambda d: d[0])
+    if not data:
+        print_dual(color_text("\nError: No valid data found in convergence folders.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        print_dual(f"\n  Parameter : {parameter_name}", f_out)
-        print_dual(f"  Runs found: {len(data)} (skipped: {n_skipped} unreadable, "
-                    f"{n_mismatched} different-parameter)", f_out)
+    data.sort(key=lambda d: d[0])
 
-        print_dual(f"\n{color_text('[2] SWEEP TABLE', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        header = (f"{'Value':<12} {'Energy(eV)':<16} {'E/atom(eV)':<14} {'|Delta E/atom|':<16} "
-                  f"{'SCF':<6} {'MaxForce(eV/Ang)':<16}")
-        print_dual(header, f_out)
-        print_dual("-" * len(header), f_out)
+    print_dual(f"\n  Parameter : {parameter_name}", f_out)
+    print_dual(f"  Runs found: {len(data)} (skipped: {n_skipped} unreadable, "
+                f"{n_mismatched} different-parameter)", f_out)
 
-        rows = []
-        prev_e_per_atom = None
-        for value, energy, n_atoms, scf_converged, max_force in data:
-            e_per_atom = energy / n_atoms
-            delta = None if prev_e_per_atom is None else abs(e_per_atom - prev_e_per_atom)
-            rows.append((value, energy, e_per_atom, delta, scf_converged, max_force))
+    print_section('[2] SWEEP TABLE', f_out)
+    header = (f"{'Value':<12} {'Energy(eV)':<16} {'E/atom(eV)':<14} {'|Delta E/atom|':<16} "
+              f"{'SCF':<6} {'MaxForce(eV/Ang)':<16}")
+    print_dual(header, f_out)
+    print_dual("-" * len(header), f_out)
 
-            delta_str = f"{delta:.6f}" if delta is not None else "--"
-            scf_str = "OK" if scf_converged else color_text("WARN", 'yellow')
-            force_str = f"{max_force:.6f}" if max_force is not None else "--"
-            print_dual(f"{value:<12.4f} {energy:<16.6f} {e_per_atom:<14.6f} {delta_str:<16} "
-                        f"{scf_str:<6} {force_str:<16}", f_out)
+    rows = []
+    prev_e_per_atom = None
+    for value, energy, n_atoms, scf_converged, max_force in data:
+        e_per_atom = energy / n_atoms
+        delta = None if prev_e_per_atom is None else abs(e_per_atom - prev_e_per_atom)
+        rows.append((value, energy, e_per_atom, delta, scf_converged, max_force))
 
-            prev_e_per_atom = e_per_atom
+        delta_str = f"{delta:.6f}" if delta is not None else "--"
+        scf_str = "OK" if scf_converged else color_text("WARN", 'yellow')
+        force_str = f"{max_force:.6f}" if max_force is not None else "--"
+        print_dual(f"{value:<12.4f} {energy:<16.6f} {e_per_atom:<14.6f} {delta_str:<16} "
+                    f"{scf_str:<6} {force_str:<16}", f_out)
 
-        print_dual("-" * len(header), f_out)
+        prev_e_per_atom = e_per_atom
 
-        # Accuracy improves in different directions for different parameters
-        # (see INCREASING_IMPROVES_ACCURACY): scan from cheap towards
-        # accurate, not blindly by ascending value, so the "beyond this point
-        # nothing changes" logic below walks towards the converged limit
-        # instead of away from it.
-        increasing_is_accurate = INCREASING_IMPROVES_ACCURACY.get(parameter_name, True)
-        scan_source = rows if increasing_is_accurate else list(reversed(rows))
-        scan_points = []
-        prev_e_per_atom = None
-        for value, _energy, e_per_atom, _delta, scf_converged, _max_force in scan_source:
-            delta = None if prev_e_per_atom is None else abs(e_per_atom - prev_e_per_atom)
-            scan_points.append((value, delta, scf_converged))
-            prev_e_per_atom = e_per_atom
+    print_dual("-" * len(header), f_out)
 
-        # A single small delta can be a coincidence rather than a real
-        # plateau (e.g. odd/even k-grid parity effects, or two SCF-unconverged
-        # points landing close by chance), so only accept a point as
-        # converged if it and every subsequent (more accurate-ward) step both
-        # have a converged SCF cycle and stay within tolerance.
-        converged_value = None
-        n_scf_warnings = sum(1 for _, _, _, scf_converged, _ in data if not scf_converged)
-        for i in range(1, len(scan_points)):
-            tail = scan_points[i:]
-            if all(d is not None and d < args.tolerance and scf_ok for _, d, scf_ok in tail):
-                converged_value = scan_points[i][0]
-                break
+    # Accuracy improves in different directions for different parameters
+    # (see INCREASING_IMPROVES_ACCURACY): scan from cheap towards
+    # accurate, not blindly by ascending value, so the "beyond this point
+    # nothing changes" logic below walks towards the converged limit
+    # instead of away from it.
+    increasing_is_accurate = INCREASING_IMPROVES_ACCURACY.get(parameter_name, True)
+    scan_source = rows if increasing_is_accurate else list(reversed(rows))
+    scan_points = []
+    prev_e_per_atom = None
+    for value, _energy, e_per_atom, _delta, scf_converged, _max_force in scan_source:
+        delta = None if prev_e_per_atom is None else abs(e_per_atom - prev_e_per_atom)
+        scan_points.append((value, delta, scf_converged))
+        prev_e_per_atom = e_per_atom
 
-        print_dual(f"\n{color_text('[3] CONVERGENCE RESULT', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Increasing {parameter_name} improves accuracy: {increasing_is_accurate}", f_out)
-        if n_scf_warnings:
-            print_dual(color_text(
-                f"[WARNING] {n_scf_warnings} run(s) never confirmed SCF convergence; "
-                "their energy was excluded from the converged-point search.", 'yellow'), f_out)
+    # A single small delta can be a coincidence rather than a real
+    # plateau (e.g. odd/even k-grid parity effects, or two SCF-unconverged
+    # points landing close by chance), so only accept a point as
+    # converged if it and every subsequent (more accurate-ward) step both
+    # have a converged SCF cycle and stay within tolerance.
+    converged_value = None
+    n_scf_warnings = sum(1 for _, _, _, scf_converged, _ in data if not scf_converged)
+    for i in range(1, len(scan_points)):
+        tail = scan_points[i:]
+        if all(d is not None and d < args.tolerance and scf_ok for _, d, scf_ok in tail):
+            converged_value = scan_points[i][0]
+            break
 
-        direction_hint = "or higher" if increasing_is_accurate else "or lower"
-        if converged_value is not None:
-            print_dual(f"{color_text('Converged at:', 'green')} {parameter_name} = {converged_value:.4f} "
-                        f"({direction_hint} is also fine, |Delta E/atom| < {args.tolerance} eV)", f_out)
+    print_section('[3] CONVERGENCE RESULT', f_out)
+    print_dual(f"Increasing {parameter_name} improves accuracy: {increasing_is_accurate}", f_out)
+    if n_scf_warnings:
+        print_dual(color_text(
+            f"[WARNING] {n_scf_warnings} run(s) never confirmed SCF convergence; "
+            "their energy was excluded from the converged-point search.", 'yellow'), f_out)
+
+    direction_hint = "or higher" if increasing_is_accurate else "or lower"
+    if converged_value is not None:
+        print_dual(f"{color_text('Converged at:', 'green')} {parameter_name} = {converged_value:.4f} "
+                    f"({direction_hint} is also fine, |Delta E/atom| < {args.tolerance} eV)", f_out)
+    else:
+        print_dual(color_text(
+            f"[WARNING] No point met the {args.tolerance} eV/atom tolerance; "
+            "consider extending --min/--max.", 'yellow'), f_out)
+
+    gplot_path = write_curve_plot(args.output, parameter_name, rows)
+    print_dual(f"\n{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
+                f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    if report_path:
+        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {report_path}", f_out)
+
+    if args.apply:
+        print_section('[4] APPLY', f_out)
+        if converged_value is None:
+            print_dual(color_text("Skipped: no converged value to apply.", 'yellow'), f_out)
         else:
-            print_dual(color_text(
-                f"[WARNING] No point met the {args.tolerance} eV/atom tolerance; "
-                "consider extending --min/--max.", 'yellow'), f_out)
-
-        gplot_path = write_curve_plot(args.output, parameter_name, rows)
-        print_dual(f"\n{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
-                    f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})", f_out)
-        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {REPORT_FILE}", f_out)
-
-        if args.apply:
-            print_dual(f"\n{color_text('[4] APPLY', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            if converged_value is None:
-                print_dual(color_text("Skipped: no converged value to apply.", 'yellow'), f_out)
+            try:
+                with open(args.apply, 'r') as f:
+                    calc_text = f.read()
+            except OSError as e:
+                print_dual(color_text(f"[ERROR] Could not read '{args.apply}': {e}", 'red'), f_out)
             else:
                 try:
-                    with open(args.apply, 'r') as f:
-                        calc_text = f.read()
-                except OSError as e:
-                    print_dual(color_text(f"[ERROR] Could not read '{args.apply}': {e}", 'red'), f_out)
+                    if parameter_name == "kgrid":
+                        new_calc, divisions = substitute_kgrid_tag(
+                            calc_text, first_structure, converged_value, args.vacuum_gap)
+                        detail = f"grid {divisions[0]} {divisions[1]} {divisions[2]}"
+                    else:
+                        new_calc = substitute_numeric_tag(calc_text, parameter_name, converged_value)
+                        detail = f"{converged_value:.4f} Ry"
+                except ValueError as e:
+                    print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
                 else:
                     try:
-                        if parameter_name == "kgrid":
-                            new_calc, divisions = substitute_kgrid_tag(
-                                calc_text, first_structure, converged_value, args.vacuum_gap)
-                            detail = f"grid {divisions[0]} {divisions[1]} {divisions[2]}"
-                        else:
-                            new_calc = substitute_numeric_tag(calc_text, parameter_name, converged_value)
-                            detail = f"{converged_value:.4f} Ry"
-                    except ValueError as e:
-                        print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+                        with open(args.apply, 'w') as f:
+                            f.write(new_calc)
+                    except OSError as e:
+                        print_dual(color_text(f"[ERROR] Could not write '{args.apply}': {e}", 'red'), f_out)
                     else:
-                        try:
-                            with open(args.apply, 'w') as f:
-                                f.write(new_calc)
-                        except OSError as e:
-                            print_dual(color_text(f"[ERROR] Could not write '{args.apply}': {e}", 'red'), f_out)
-                        else:
-                            print_dual(f"{color_text('[Applied]', 'green')} {parameter_name} = "
-                                        f"{converged_value:.4f} ({detail}) -> {args.apply}", f_out)
+                        print_dual(f"{color_text('[Applied]', 'green')} {parameter_name} = "
+                                    f"{converged_value:.4f} ({detail}) -> {args.apply}", f_out)
+
+    if f_out:
+        f_out.close()
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ import argparse
 import numpy as np
 from pymatgen.core.periodic_table import Element
 from stb.core import structure_io
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 from stb.core.calc_directives import force_single_point
 from stb.core.siesta_log import get_free_energy, get_outcell, check_scf_and_force, report_quality_diagnostics
@@ -505,15 +505,13 @@ stb-oerAnalysis.""",
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== OER STAGE 3 REPORT (REFERENCES, BSSE & ZPE PREP) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Directory       : {output_root}", f_out)
         print_dual(f"BSSE mode       : {args.bsse_mode}", f_out)
         print_dual(f"ZPE mode        : {args.zpe_mode}", f_out)
         print_dual(f"Displacement    : {args.displacement} Ang", f_out)
 
-        print_dual(f"\n{color_text('[1] WINNING OH* SITE', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] WINNING OH* SITE', f_out)
         winning_oh_dir, winning_oh_energy, all_results = find_winning_site(sites_root, args.file, f_out)
         for label, energy in all_results:
             marker = color_text(" <-- winner", 'green') if os.path.join(sites_root, label) == winning_oh_dir else ""
@@ -536,21 +534,18 @@ stb-oerAnalysis.""",
         with open(winning_oh_dir + "/calc.fdf") as f:
             site_calc_text = f.read()
 
-        print_dual(f"\n{color_text('[2] O* FINAL GEOMETRY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] O* FINAL GEOMETRY', f_out)
         relaxed_o, o_source_dir, o_calc_text = _locate_intermediate(
             output_root, "o", o_strategy, args.file, f_out)
         print_dual(f"Source: {o_source_dir} ({o_strategy})", f_out)
 
-        print_dual(f"\n{color_text('[3] OOH* FINAL GEOMETRY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] OOH* FINAL GEOMETRY', f_out)
         relaxed_ooh, ooh_source_dir, ooh_calc_text = _locate_intermediate(
             output_root, "ooh", ooh_strategy, args.file, f_out)
         print_dual(f"Source: {ooh_source_dir} ({ooh_strategy})", f_out)
         n_ooh_total = len(relaxed_ooh.atoms)
 
-        print_dual(f"\n{color_text('[4] REFERENCE FOLDERS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] REFERENCE FOLDERS', f_out)
 
         clean_template = structure_io.read_fdf(clean_slab_source)
         clean_dir = os.path.join(output_root, "00_clean_slab")
@@ -581,8 +576,7 @@ stb-oerAnalysis.""",
         print_dual(f"  {color_text('[OK]', 'green')} {deformed_dir} (diagnostic, not used in "
                     "Delta-G directly)", f_out)
 
-        print_dual(f"\n{color_text('[5] BSSE CORRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[5] BSSE CORRECTION', f_out)
         if args.bsse_mode == "shared":
             write_bsse_triad(output_root, "05_bsse", relaxed_ooh, n_substrate, ooh_calc_text,
                               args.pseudo_dir)
@@ -600,8 +594,7 @@ stb-oerAnalysis.""",
                         "(05_bsse_OH_*, 05_bsse_O_*, 05_bsse_OOH_*), each at its own "
                         "intermediate's geometry", f_out)
 
-        print_dual(f"\n{color_text('[6] ZPE PREPARATION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[6] ZPE PREPARATION', f_out)
         print_dual(color_text(
             "[NOTE] H2O's own ZPE/entropy is computed from its G2 gas-phase starting geometry "
             "(build_h2o_structure), not a re-relaxed one -- unlike OH*/O*/OOH*'s hand-built "
@@ -655,8 +648,7 @@ stb-oerAnalysis.""",
                 print_dual(f"  {color_text('[OK]', 'green')} {len(folders)} displacement folder(s) "
                             f"under 09_zpe_calc_{name}/", f_out)
 
-        print_dual(f"\n{color_text('[7] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[7] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)
         print_dual("  1. Run SIESTA in every folder written above.", f_out)

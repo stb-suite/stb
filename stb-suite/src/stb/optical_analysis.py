@@ -15,7 +15,7 @@ import glob
 import argparse
 import numpy as np
 from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.dielectric import read_epsimg
 from stb.core.optical_properties import (
     compute_all, correct_2d_perpendicular, correct_2d_parallel, molecular_polarizability,
@@ -420,6 +420,8 @@ experimental measurement, which doesn't correspond to any single crystallographi
     parser.add_argument("-o", "--output", type=str, default="optical_results",
                          help="Base filename (no extension) for the .csv/.dat/.gplot outputs "
                               "(default: optical_results).")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-opticalAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -457,241 +459,246 @@ experimental measurement, which doesn't correspond to any single crystallographi
             f"'{args.directory}' -- run stb-optical first.", 'red'))
         sys.exit(1)
 
-    report_path = os.path.join(args.directory, REPORT_FILE)
-    with open(report_path, 'w') as f_out:
-        print_dual(f"{color_text('===== OPTICAL STAGE 2 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, 'w') if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Directory       : {args.directory}", f_out)
-        print_dual(f"Folders found   : {len(folders)}", f_out)
+    print_dual(f"{color_text('===== OPTICAL STAGE 2 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-        results = []
-        seen_axes = {}
-        for folder in folders:
-            result = read_direction_result(folder, args.file, args.label)
-            if result is None:
-                print_dual(color_text(
-                    f"  [WARNING] Could not read '.EPSIMG' from '{folder}' -- skipped.", 'yellow'), f_out)
-                continue
-            if args.energy_min is not None or args.energy_max is not None:
-                result = trim_energy_range(result, args.energy_min, args.energy_max)
-                if len(result["omega"]) == 0:
-                    print_dual(color_text(
-                        f"  [WARNING] '{folder}' has no data points left after --energy-min/"
-                        "--energy-max trimming -- skipped.", 'yellow'), f_out)
-                    continue
-            if result["axis"] in seen_axes:
-                print_dual(color_text(
-                    f"  [WARNING] Both '{seen_axes[result['axis']]}' and '{folder}' were detected "
-                    f"as direction '{result['axis']}' -- keeping the latter, the former's own "
-                    "output file(s) will be silently overwritten below. Rename/remove one of them "
-                    "if this is unintended.", 'yellow'), f_out)
-            seen_axes[result["axis"]] = folder
-            results.append(result)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Directory       : {args.directory}", f_out)
+    print_dual(f"Folders found   : {len(folders)}", f_out)
 
-        if not results:
+    results = []
+    seen_axes = {}
+    for folder in folders:
+        result = read_direction_result(folder, args.file, args.label)
+        if result is None:
             print_dual(color_text(
-                "\n[ERROR] No usable direction results -- run SIESTA in every "
-                f"'{args.directory}/*/' folder, then re-run stb-opticalAnalysis.", 'red'))
-            sys.exit(1)
-
-        _axis_order = {"x": 0, "y": 1, "z": 2}
-        results.sort(key=lambda r: (_axis_order.get(r["axis"], 99), r["axis"]))
-
-        avg_result = compute_isotropic_average(results)
-        if avg_result is not None:
-            if avg_result["interpolated"]:
+                f"  [WARNING] Could not read '.EPSIMG' from '{folder}' -- skipped.", 'yellow'), f_out)
+            continue
+        if args.energy_min is not None or args.energy_max is not None:
+            result = trim_energy_range(result, args.energy_min, args.energy_max)
+            if len(result["omega"]) == 0:
                 print_dual(color_text(
-                    "  [NOTE] Direction energy grids did not match exactly -- interpolated onto "
-                    "the x direction's grid before averaging.", 'yellow'), f_out)
-            results.append(avg_result)
+                    f"  [WARNING] '{folder}' has no data points left after --energy-min/"
+                    "--energy-max trimming -- skipped.", 'yellow'), f_out)
+                continue
+        if result["axis"] in seen_axes:
+            print_dual(color_text(
+                f"  [WARNING] Both '{seen_axes[result['axis']]}' and '{folder}' were detected "
+                f"as direction '{result['axis']}' -- keeping the latter, the former's own "
+                "output file(s) will be silently overwritten below. Rename/remove one of them "
+                "if this is unintended.", 'yellow'), f_out)
+        seen_axes[result["axis"]] = folder
+        results.append(result)
 
-        structure = None
-        vacuum_axes = None
-        struct_path = os.path.join(results[0]["folder"], "structure.fdf")
-        if os.path.isfile(struct_path):
-            structure = structure_io.read_fdf(struct_path)
-            positions = np.array([pos for _, pos in structure.atoms])
-            is_cartesian = structure.coord_format == 'cartesian'
-            frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
-            vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, 10.0)
-            print_dual(f"\n{color_text('[1] DIMENSIONALITY', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            print_dual(f"Detected : {kspace.dimensionality_label(vacuum_axes)}", f_out)
-            if any(vacuum_axes):
-                print_dual(color_text(
-                    "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- see stb-optical --help; "
-                    "every direction's dielectric response below is diluted by the vacuum region, "
-                    "no rescaling applied unless --dimensionality-correction is given.", 'yellow'), f_out)
+    if not results:
+        print_dual(color_text(
+            "\n[ERROR] No usable direction results -- run SIESTA in every "
+            f"'{args.directory}/*/' folder, then re-run stb-opticalAnalysis.", 'red'))
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        print_dual(f"\n{color_text('[2] RESULTS BY DIRECTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        for result in results:
-            i0 = int(np.argmin(result["omega"]))
-            i_alpha_max = int(np.argmax(result["alpha"]))
-            i_R_max = int(np.argmax(result["R"]))
-            print_dual(f"  Direction {result['axis']} ({result['folder']}):", f_out)
-            print_dual(f"    eps1(E->0)      : {result['eps1'][i0]:.4f}", f_out)
-            print_dual(f"    n(E->0)         : {result['n'][i0]:.4f}", f_out)
-            print_dual(f"    alpha peak      : {result['alpha'][i_alpha_max]:.4e} cm^-1 "
-                        f"at {result['omega'][i_alpha_max]:.4f} eV", f_out)
-            print_dual(f"    R peak          : {result['R'][i_R_max]:.4f} "
-                        f"at {result['omega'][i_R_max]:.4f} eV", f_out)
-            if not result["scf_ok"]:
-                print_dual(color_text(
-                    f"    [WARNING] Could not confirm SCF convergence for '{result['folder']}' -- "
-                    "this direction's spectrum may be unreliable.", 'yellow'), f_out)
+    _axis_order = {"x": 0, "y": 1, "z": 2}
+    results.sort(key=lambda r: (_axis_order.get(r["axis"], 99), r["axis"]))
 
-        corrected_dat_paths = []
-        polarizability_rows = []
-        if args.dimensionality_correction:
-            print_dual(f"\n{color_text('[2b] DIMENSIONALITY CORRECTION', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            if structure is None or vacuum_axes is None:
-                print_dual(color_text(
-                    "  [WARNING] Could not read structure.fdf -- --dimensionality-correction "
-                    "skipped.", 'yellow'), f_out)
-            else:
-                n_vacuum = sum(vacuum_axes)
-                lattice = np.array(structure.lattice, dtype=float)
-                cell_volume_ang3 = float(abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2]))))
+    avg_result = compute_isotropic_average(results)
+    if avg_result is not None:
+        if avg_result["interpolated"]:
+            print_dual(color_text(
+                "  [NOTE] Direction energy grids did not match exactly -- interpolated onto "
+                "the x direction's grid before averaging.", 'yellow'), f_out)
+        results.append(avg_result)
 
-                if n_vacuum == 0:
-                    print_dual("  3D (bulk) input -- nothing to correct.", f_out)
-                elif n_vacuum == 2:
-                    print_dual(color_text(
-                        "  [NOTE] 1D (wire/tube-like) input -- dimensionality correction is NOT "
-                        "implemented in this version. The literature approach (Maxwell-Garnett "
-                        "effective-medium theory with cross-sectional volume fraction) is not a "
-                        "simple generalization of the 2D formula and has not been verified for "
-                        "this tool. Reporting only the raw supercell values above.", 'yellow'), f_out)
-                elif n_vacuum == 1:
-                    if args.thickness is None:
-                        print_dual(color_text(
-                            "  [ERROR] --dimensionality-correction on a 2D (1 vacuum axis) input "
-                            "requires --thickness (Ang).", 'red'), f_out)
-                        sys.exit(1)
-                    vacuum_idx = vacuum_axes.index(True)
-                    cell_length_ang = float(np.linalg.norm(lattice[vacuum_idx]))
-                    if args.thickness >= cell_length_ang:
-                        print_dual(color_text(
-                            f"  [ERROR] --thickness ({args.thickness} Ang) must be smaller than "
-                            f"the supercell's own length along the vacuum axis ({cell_length_ang:.4f} "
-                            "Ang) -- the material can't be thicker than the whole cell.", 'red'), f_out)
-                        sys.exit(1)
-                    print_dual(f"  Reference : Laturia, Van de Put, Vandenberghe, npj 2D Mater. "
-                                "Appl. 2, 6 (2018); Yang & Gao, npj 2D Mater. Appl. 5, 78 (2021).", f_out)
-                    print_dual(f"  Cell length (vacuum axis) : {cell_length_ang:.4f} Ang", f_out)
-                    print_dual(f"  Thickness (user-supplied) : {args.thickness} Ang", f_out)
-                    corrected_results = []
-                    for result in results:
-                        if result["axis"] not in ("x", "y", "z"):
-                            continue
-                        axis_idx = {"x": 0, "y": 1, "z": 2}[result["axis"]]
-                        if axis_idx == vacuum_idx:
-                            e1c, e2c = correct_2d_perpendicular(
-                                result["eps1"], result["eps2"], cell_length_ang, args.thickness)
-                            kind = "perpendicular"
-                        else:
-                            e1c, e2c = correct_2d_parallel(
-                                result["eps1"], result["eps2"], cell_length_ang, args.thickness)
-                            kind = "parallel"
-                        corrected = derive_from_eps(result["omega"], e1c, e2c)
-                        corrected["axis"] = result["axis"]
-                        print_dual(f"  Direction {result['axis']} ({kind}) -- eps1_2D(E->0) = "
-                                    f"{corrected['eps1'][int(np.argmin(corrected['omega']))]:.4f} "
-                                    f"(raw supercell: {result['eps1'][int(np.argmin(result['omega']))]:.4f})",
-                                    f_out)
-                        corrected_results.append(corrected)
-                    if corrected_results:
-                        corrected_csv_path = os.path.join(args.directory, f"{args.output}_2Dcorrected.csv")
-                        write_results_csv(corrected_csv_path, corrected_results)
-                        for corrected in corrected_results:
-                            dat_path = os.path.join(
-                                args.directory, f"{args.output}_{corrected['axis']}_2Dcorrected.dat")
-                            write_direction_dat(dat_path, corrected)
-                            corrected_dat_paths.append(dat_path)
-                        corrected_dat_paths.append(corrected_csv_path)
-                elif n_vacuum == 3:
-                    print_dual(f"  Cell volume : {cell_volume_ang3:.4f} Ang^3", f_out)
-                    print_dual("  Extracting molecular polarizability (dilute Clausius-Mossotti "
-                                "relation).", f_out)
-                    for result in results:
-                        if result["axis"] not in ("x", "y", "z"):
-                            continue
-                        a1si, a2si, a1a3, a2a3 = molecular_polarizability(
-                            result["eps1"], result["eps2"], cell_volume_ang3)
-                        i0 = int(np.argmin(result["omega"]))
-                        print_dual(f"  Direction {result['axis']} -- alpha(E->0) = {a1a3[i0]:.4f} "
-                                    "Ang^3", f_out)
-                        dat_path = os.path.join(
-                            args.directory, f"{args.output}_{result['axis']}_polarizability.dat")
-                        write_polarizability_dat(dat_path, result["axis"], result["omega"],
-                                                  a1si, a2si, a1a3, a2a3)
-                        corrected_dat_paths.append(dat_path)
-                        polarizability_rows.append(
-                            (result["axis"], result["omega"], a1si, a2si, a1a3, a2a3))
-                    if polarizability_rows:
-                        pol_csv_path = os.path.join(args.directory, f"{args.output}_polarizability.csv")
-                        write_polarizability_csv(pol_csv_path, polarizability_rows)
-                        corrected_dat_paths.append(pol_csv_path)
+    structure = None
+    vacuum_axes = None
+    struct_path = os.path.join(results[0]["folder"], "structure.fdf")
+    if os.path.isfile(struct_path):
+        structure = structure_io.read_fdf(struct_path)
+        positions = np.array([pos for _, pos in structure.atoms])
+        is_cartesian = structure.coord_format == 'cartesian'
+        frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, 10.0)
+        print_section('[1] DIMENSIONALITY', f_out)
+        print_dual(f"Detected : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+        if any(vacuum_axes):
+            print_dual(color_text(
+                "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- see stb-optical --help; "
+                "every direction's dielectric response below is diluted by the vacuum region, "
+                "no rescaling applied unless --dimensionality-correction is given.", 'yellow'), f_out)
 
-        print_dual(f"\n{color_text('[3] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[2] RESULTS BY DIRECTION', f_out)
+    for result in results:
+        i0 = int(np.argmin(result["omega"]))
+        i_alpha_max = int(np.argmax(result["alpha"]))
+        i_R_max = int(np.argmax(result["R"]))
+        print_dual(f"  Direction {result['axis']} ({result['folder']}):", f_out)
+        print_dual(f"    eps1(E->0)      : {result['eps1'][i0]:.4f}", f_out)
+        print_dual(f"    n(E->0)         : {result['n'][i0]:.4f}", f_out)
+        print_dual(f"    alpha peak      : {result['alpha'][i_alpha_max]:.4e} cm^-1 "
+                    f"at {result['omega'][i_alpha_max]:.4f} eV", f_out)
+        print_dual(f"    R peak          : {result['R'][i_R_max]:.4f} "
+                    f"at {result['omega'][i_R_max]:.4f} eV", f_out)
+        if not result["scf_ok"]:
+            print_dual(color_text(
+                f"    [WARNING] Could not confirm SCF convergence for '{result['folder']}' -- "
+                "this direction's spectrum may be unreliable.", 'yellow'), f_out)
 
-        csv_path = os.path.join(args.directory, f"{args.output}.csv")
-        write_results_csv(csv_path, results)
-        print_dual(f"CSV (all directions) : {csv_path}", f_out)
-
-        dat_paths_by_axis = {}
-        for result in results:
-            dat_path = os.path.join(args.directory, f"{args.output}_{result['axis']}.dat")
-            write_direction_dat(dat_path, result)
-            dat_paths_by_axis[result["axis"]] = dat_path
-            print_dual(f"Direction {result['axis']} .dat     : {dat_path}", f_out)
-
-        for path in corrected_dat_paths:
-            print_dual(f"Dimensionality correction : {path}", f_out)
-
-        if args.plot_quantity == "all":
-            for quantity in ("eps", "n_k", "alpha", "R", "L", "sigma1"):
-                gplot_path = os.path.join(args.directory, f"{args.output}_{quantity}.gplot")
-                write_combined_gplot(gplot_path, dat_paths_by_axis, quantity)
-                print_dual(f"Combined plot ({quantity}) : {gplot_path}", f_out)
+    corrected_dat_paths = []
+    polarizability_rows = []
+    if args.dimensionality_correction:
+        print_section('[2b] DIMENSIONALITY CORRECTION', f_out)
+        if structure is None or vacuum_axes is None:
+            print_dual(color_text(
+                "  [WARNING] Could not read structure.fdf -- --dimensionality-correction "
+                "skipped.", 'yellow'), f_out)
         else:
-            experimental = None
-            experimental_dat_path = None
-            if args.experimental is not None:
-                exp_energy, exp_value = read_experimental_spectrum(args.experimental)
-                experimental = (exp_energy, exp_value)
-                experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+            n_vacuum = sum(vacuum_axes)
+            lattice = np.array(structure.lattice, dtype=float)
+            cell_volume_ang3 = float(abs(np.dot(lattice[0], np.cross(lattice[1], lattice[2]))))
 
-                print_dual(f"\n{color_text('[3b] EXPERIMENTAL COMPARISON', 'magenta')}", f_out)
-                print_dual("-" * 60, f_out)
-                ref_result = next((r for r in results if r["axis"] == "avg"), results[0])
-                print_dual(f"Simulated reference : direction '{ref_result['axis']}'", f_out)
-                sim_key = _QUANTITY_COLUMNS[args.plot_quantity][0][0]
-                sim_peaks = find_spectrum_peaks(ref_result["omega"], ref_result[sim_key],
-                                                 args.peak_prominence)
-                exp_peaks = find_spectrum_peaks(exp_energy, exp_value, args.peak_prominence)
-                matches = match_peaks(sim_peaks, exp_peaks)
-                if matches:
-                    for exp_e, sim_e, delta in matches:
-                        if sim_e is None:
-                            print_dual(f"  Exp {exp_e:.4f} eV -> no simulated peak to match", f_out)
-                        else:
-                            print_dual(f"  Exp {exp_e:.4f} eV -> Sim {sim_e:.4f} eV "
-                                        f"(delta = {delta:+.4f} eV)", f_out)
-                else:
-                    print_dual("  No experimental peaks found above --peak-prominence threshold.", f_out)
+            if n_vacuum == 0:
+                print_dual("  3D (bulk) input -- nothing to correct.", f_out)
+            elif n_vacuum == 2:
+                print_dual(color_text(
+                    "  [NOTE] 1D (wire/tube-like) input -- dimensionality correction is NOT "
+                    "implemented in this version. The literature approach (Maxwell-Garnett "
+                    "effective-medium theory with cross-sectional volume fraction) is not a "
+                    "simple generalization of the 2D formula and has not been verified for "
+                    "this tool. Reporting only the raw supercell values above.", 'yellow'), f_out)
+            elif n_vacuum == 1:
+                if args.thickness is None:
+                    print_dual(color_text(
+                        "  [ERROR] --dimensionality-correction on a 2D (1 vacuum axis) input "
+                        "requires --thickness (Ang).", 'red'), f_out)
+                    if f_out:
+                        f_out.close()
+                    sys.exit(1)
+                vacuum_idx = vacuum_axes.index(True)
+                cell_length_ang = float(np.linalg.norm(lattice[vacuum_idx]))
+                if args.thickness >= cell_length_ang:
+                    print_dual(color_text(
+                        f"  [ERROR] --thickness ({args.thickness} Ang) must be smaller than "
+                        f"the supercell's own length along the vacuum axis ({cell_length_ang:.4f} "
+                        "Ang) -- the material can't be thicker than the whole cell.", 'red'), f_out)
+                    if f_out:
+                        f_out.close()
+                    sys.exit(1)
+                print_dual(f"  Reference : Laturia, Van de Put, Vandenberghe, npj 2D Mater. "
+                            "Appl. 2, 6 (2018); Yang & Gao, npj 2D Mater. Appl. 5, 78 (2021).", f_out)
+                print_dual(f"  Cell length (vacuum axis) : {cell_length_ang:.4f} Ang", f_out)
+                print_dual(f"  Thickness (user-supplied) : {args.thickness} Ang", f_out)
+                corrected_results = []
+                for result in results:
+                    if result["axis"] not in ("x", "y", "z"):
+                        continue
+                    axis_idx = {"x": 0, "y": 1, "z": 2}[result["axis"]]
+                    if axis_idx == vacuum_idx:
+                        e1c, e2c = correct_2d_perpendicular(
+                            result["eps1"], result["eps2"], cell_length_ang, args.thickness)
+                        kind = "perpendicular"
+                    else:
+                        e1c, e2c = correct_2d_parallel(
+                            result["eps1"], result["eps2"], cell_length_ang, args.thickness)
+                        kind = "parallel"
+                    corrected = derive_from_eps(result["omega"], e1c, e2c)
+                    corrected["axis"] = result["axis"]
+                    print_dual(f"  Direction {result['axis']} ({kind}) -- eps1_2D(E->0) = "
+                                f"{corrected['eps1'][int(np.argmin(corrected['omega']))]:.4f} "
+                                f"(raw supercell: {result['eps1'][int(np.argmin(result['omega']))]:.4f})",
+                                f_out)
+                    corrected_results.append(corrected)
+                if corrected_results:
+                    corrected_csv_path = os.path.join(args.directory, f"{args.output}_2Dcorrected.csv")
+                    write_results_csv(corrected_csv_path, corrected_results)
+                    for corrected in corrected_results:
+                        dat_path = os.path.join(
+                            args.directory, f"{args.output}_{corrected['axis']}_2Dcorrected.dat")
+                        write_direction_dat(dat_path, corrected)
+                        corrected_dat_paths.append(dat_path)
+                    corrected_dat_paths.append(corrected_csv_path)
+            elif n_vacuum == 3:
+                print_dual(f"  Cell volume : {cell_volume_ang3:.4f} Ang^3", f_out)
+                print_dual("  Extracting molecular polarizability (dilute Clausius-Mossotti "
+                            "relation).", f_out)
+                for result in results:
+                    if result["axis"] not in ("x", "y", "z"):
+                        continue
+                    a1si, a2si, a1a3, a2a3 = molecular_polarizability(
+                        result["eps1"], result["eps2"], cell_volume_ang3)
+                    i0 = int(np.argmin(result["omega"]))
+                    print_dual(f"  Direction {result['axis']} -- alpha(E->0) = {a1a3[i0]:.4f} "
+                                "Ang^3", f_out)
+                    dat_path = os.path.join(
+                        args.directory, f"{args.output}_{result['axis']}_polarizability.dat")
+                    write_polarizability_dat(dat_path, result["axis"], result["omega"],
+                                              a1si, a2si, a1a3, a2a3)
+                    corrected_dat_paths.append(dat_path)
+                    polarizability_rows.append(
+                        (result["axis"], result["omega"], a1si, a2si, a1a3, a2a3))
+                if polarizability_rows:
+                    pol_csv_path = os.path.join(args.directory, f"{args.output}_polarizability.csv")
+                    write_polarizability_csv(pol_csv_path, polarizability_rows)
+                    corrected_dat_paths.append(pol_csv_path)
 
-            gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
-            write_combined_gplot(gplot_path, dat_paths_by_axis, args.plot_quantity,
-                                  experimental, experimental_dat_path)
-            print_dual(f"\nCombined plot ({args.plot_quantity}) : {gplot_path} "
-                        f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    print_section('[3] SUMMARY & FILES', f_out)
+
+    csv_path = os.path.join(args.directory, f"{args.output}.csv")
+    write_results_csv(csv_path, results)
+    print_dual(f"CSV (all directions) : {csv_path}", f_out)
+
+    dat_paths_by_axis = {}
+    for result in results:
+        dat_path = os.path.join(args.directory, f"{args.output}_{result['axis']}.dat")
+        write_direction_dat(dat_path, result)
+        dat_paths_by_axis[result["axis"]] = dat_path
+        print_dual(f"Direction {result['axis']} .dat     : {dat_path}", f_out)
+
+    for path in corrected_dat_paths:
+        print_dual(f"Dimensionality correction : {path}", f_out)
+
+    if args.plot_quantity == "all":
+        for quantity in ("eps", "n_k", "alpha", "R", "L", "sigma1"):
+            gplot_path = os.path.join(args.directory, f"{args.output}_{quantity}.gplot")
+            write_combined_gplot(gplot_path, dat_paths_by_axis, quantity)
+            print_dual(f"Combined plot ({quantity}) : {gplot_path}", f_out)
+    else:
+        experimental = None
+        experimental_dat_path = None
+        if args.experimental is not None:
+            exp_energy, exp_value = read_experimental_spectrum(args.experimental)
+            experimental = (exp_energy, exp_value)
+            experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+
+            print_section('[3b] EXPERIMENTAL COMPARISON', f_out)
+            ref_result = next((r for r in results if r["axis"] == "avg"), results[0])
+            print_dual(f"Simulated reference : direction '{ref_result['axis']}'", f_out)
+            sim_key = _QUANTITY_COLUMNS[args.plot_quantity][0][0]
+            sim_peaks = find_spectrum_peaks(ref_result["omega"], ref_result[sim_key],
+                                             args.peak_prominence)
+            exp_peaks = find_spectrum_peaks(exp_energy, exp_value, args.peak_prominence)
+            matches = match_peaks(sim_peaks, exp_peaks)
+            if matches:
+                for exp_e, sim_e, delta in matches:
+                    if sim_e is None:
+                        print_dual(f"  Exp {exp_e:.4f} eV -> no simulated peak to match", f_out)
+                    else:
+                        print_dual(f"  Exp {exp_e:.4f} eV -> Sim {sim_e:.4f} eV "
+                                    f"(delta = {delta:+.4f} eV)", f_out)
+            else:
+                print_dual("  No experimental peaks found above --peak-prominence threshold.", f_out)
+
+        gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+        write_combined_gplot(gplot_path, dat_paths_by_axis, args.plot_quantity,
+                              experimental, experimental_dat_path)
+        print_dual(f"\nCombined plot ({args.plot_quantity}) : {gplot_path} "
+                    f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    if report_path:
         print_dual(f"Report                : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

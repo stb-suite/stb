@@ -16,7 +16,7 @@ import argparse
 from datetime import datetime
 from stb.core import siesta_log
 from stb.core.siesta_log import check_scf_and_force, report_quality_diagnostics
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 
 REPORT_FILE = "adsorption_report.txt"
 SITES_REPORT_FILE = "adsorption_sites.txt"
@@ -202,6 +202,8 @@ def main():
                               "possibly not relaxed -- E_ads would then reflect a strained/off-"
                               "equilibrium geometry rather than the true adsorption minimum. "
                               "Advisory only, never blocks the result.")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-adsorbAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -227,231 +229,242 @@ def main():
 
     site_table = read_site_table(sites_root)
 
-    with open(REPORT_FILE, 'w') as f_out:
-        print_dual(f"{color_text('===== ADSORPTION ENERGY REPORT =====', 'magenta')}", f_out)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory  : {args.dir}", f_out)
-        print_dual(f"Output file: {args.file}", f_out)
-        if site_table is None:
+    print_dual(f"{color_text('===== ADSORPTION ENERGY REPORT =====', 'magenta')}", f_out)
+
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory  : {args.dir}", f_out)
+    print_dual(f"Output file: {args.file}", f_out)
+    if site_table is None:
+        print_dual(color_text(
+            "[NOTE] No 'sites/adsorption_sites.txt' site table found -- treating every site "
+            "as a single unnamed adsorbate (pre-multi-adsorbate/height-sweep layout, or the "
+            "report was deleted).", 'yellow'), f_out)
+
+    print_section('[1] REFERENCE ENERGIES', f_out)
+    e_clean_slab = siesta_log.get_free_energy(clean_slab_out)
+    if e_clean_slab is None:
+        print_dual(color_text(f"[ERROR] Could not read energy from '{clean_slab_out}'.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+    print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
+    report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
+
+    # Adsorbate names present, from the site table if available, else a
+    # single unnamed one mapping to the legacy 'adsorbate/' folder.
+    ads_names = sorted({name for name, _h in site_table.values()}) if site_table else [None]
+    adsorbate_energies = {}  # name -> energy
+    for name in ads_names:
+        candidate_dirs = []
+        if name:
+            candidate_dirs.append(os.path.join(args.dir, f"adsorbate_{name}"))
+        candidate_dirs.append(os.path.join(args.dir, "adsorbate"))
+        ads_dir = next((d for d in candidate_dirs if os.path.isdir(d)), None)
+        if ads_dir is None:
             print_dual(color_text(
-                "[NOTE] No 'sites/adsorption_sites.txt' site table found -- treating every site "
-                "as a single unnamed adsorbate (pre-multi-adsorbate/height-sweep layout, or the "
-                "report was deleted).", 'yellow'), f_out)
-
-        print_dual(f"\n{color_text('[1] REFERENCE ENERGIES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        e_clean_slab = siesta_log.get_free_energy(clean_slab_out)
-        if e_clean_slab is None:
-            print_dual(color_text(f"[ERROR] Could not read energy from '{clean_slab_out}'.", 'red'), f_out)
+                f"[ERROR] No adsorbate reference folder found for "
+                f"'{name or '(default)'}' (tried: {', '.join(candidate_dirs)}).", 'red'), f_out)
+            if f_out:
+                f_out.close()
             sys.exit(1)
-        print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
-        report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
-
-        # Adsorbate names present, from the site table if available, else a
-        # single unnamed one mapping to the legacy 'adsorbate/' folder.
-        ads_names = sorted({name for name, _h in site_table.values()}) if site_table else [None]
-        adsorbate_energies = {}  # name -> energy
-        for name in ads_names:
-            candidate_dirs = []
-            if name:
-                candidate_dirs.append(os.path.join(args.dir, f"adsorbate_{name}"))
-            candidate_dirs.append(os.path.join(args.dir, "adsorbate"))
-            ads_dir = next((d for d in candidate_dirs if os.path.isdir(d)), None)
-            if ads_dir is None:
-                print_dual(color_text(
-                    f"[ERROR] No adsorbate reference folder found for "
-                    f"'{name or '(default)'}' (tried: {', '.join(candidate_dirs)}).", 'red'), f_out)
-                sys.exit(1)
-            ads_out_path = os.path.join(ads_dir, args.file)
-            e_ads = siesta_log.get_free_energy(ads_out_path)
-            if e_ads is None:
-                print_dual(color_text(f"[ERROR] Could not read energy from "
-                                       f"'{ads_out_path}'.", 'red'), f_out)
-                sys.exit(1)
-            adsorbate_energies[name] = e_ads
-            print_dual(f"E_adsorbate ({name or 'default'}) : {e_ads:.6f} eV  ({ads_dir})", f_out)
-            report_quality_diagnostics(f"adsorbate ({name or 'default'})", ads_out_path,
-                                        args.force_tolerance, f_out)
-
-        print_dual(f"\n{color_text('[2] SITE RESULTS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        site_dirs = sorted(
-            d for d in os.listdir(sites_root)
-            if os.path.isdir(os.path.join(sites_root, d)) and d.startswith("site_")
-        )
-        if not site_dirs:
-            print_dual(color_text(f"[ERROR] No 'site_*' folders found in '{sites_root}'.", 'red'), f_out)
+        ads_out_path = os.path.join(ads_dir, args.file)
+        e_ads = siesta_log.get_free_energy(ads_out_path)
+        if e_ads is None:
+            print_dual(color_text(f"[ERROR] Could not read energy from "
+                                   f"'{ads_out_path}'.", 'red'), f_out)
+            if f_out:
+                f_out.close()
             sys.exit(1)
+        adsorbate_energies[name] = e_ads
+        print_dual(f"E_adsorbate ({name or 'default'}) : {e_ads:.6f} eV  ({ads_dir})", f_out)
+        report_quality_diagnostics(f"adsorbate ({name or 'default'})", ads_out_path,
+                                    args.force_tolerance, f_out)
 
-        rows = []
-        n_skipped = 0
-        n_bsse_found = 0
-        incomplete_bsse_labels = []
-        scf_warn_labels = []
-        force_warn_labels = []
-        bsse_scf_warn_labels = []
-        header = (f"{'Site':<30} {'Adsorbate':<12} {'Height':<9} {'E_ads(eV)':<14} "
-                  f"{'E_ads_BSSE(eV)':<16}{'SCF':<6}{'MaxF(eV/A)':<12}")
-        print_dual(header, f_out)
-        print_dual("-" * len(header), f_out)
-        for label in site_dirs:
-            site_dir = os.path.join(sites_root, label)
-            ads_name, height = site_table.get(label, (None, None)) if site_table else (None, None)
+    print_section('[2] SITE RESULTS', f_out)
+    site_dirs = sorted(
+        d for d in os.listdir(sites_root)
+        if os.path.isdir(os.path.join(sites_root, d)) and d.startswith("site_")
+    )
+    if not site_dirs:
+        print_dual(color_text(f"[ERROR] No 'site_*' folders found in '{sites_root}'.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-            out_path = os.path.join(site_dir, args.file)
-            if not os.path.exists(out_path):
-                n_skipped += 1
-                print_dual(f"{label:<30} {color_text('SKIP', 'yellow')} (missing {args.file})", f_out)
-                continue
-            e_site = siesta_log.get_free_energy(out_path)
-            if e_site is None:
-                n_skipped += 1
-                print_dual(f"{label:<30} {color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
-                continue
-            e_ads = e_site - e_clean_slab - adsorbate_energies[ads_name]
-            scf_ok, max_force = check_scf_and_force(out_path)
-            if not scf_ok:
-                scf_warn_labels.append(label)
-            if max_force is not None and max_force > args.force_tolerance:
-                force_warn_labels.append(label)
+    rows = []
+    n_skipped = 0
+    n_bsse_found = 0
+    incomplete_bsse_labels = []
+    scf_warn_labels = []
+    force_warn_labels = []
+    bsse_scf_warn_labels = []
+    header = (f"{'Site':<30} {'Adsorbate':<12} {'Height':<9} {'E_ads(eV)':<14} "
+              f"{'E_ads_BSSE(eV)':<16}{'SCF':<6}{'MaxF(eV/A)':<12}")
+    print_dual(header, f_out)
+    print_dual("-" * len(header), f_out)
+    for label in site_dirs:
+        site_dir = os.path.join(sites_root, label)
+        ads_name, height = site_table.get(label, (None, None)) if site_table else (None, None)
 
-            e_ads_bsse = None
-            if os.path.isdir(os.path.join(site_dir, "bsse_slab")):
-                e_bsse_slab, e_bsse_ads = read_bsse_energy(site_dir, args.file)
-                if e_bsse_slab is not None and e_bsse_ads is not None:
-                    e_ads_bsse = e_site - e_bsse_slab - e_bsse_ads
-                    n_bsse_found += 1
-                    bsse_slab_scf, _f1 = check_scf_and_force(
-                        os.path.join(site_dir, "bsse_slab", args.file))
-                    bsse_ads_scf, _f2 = check_scf_and_force(
-                        os.path.join(site_dir, "bsse_adsorbate", args.file))
-                    if not (bsse_slab_scf and bsse_ads_scf):
-                        bsse_scf_warn_labels.append(label)
-                else:
-                    incomplete_bsse_labels.append(label)
+        out_path = os.path.join(site_dir, args.file)
+        if not os.path.exists(out_path):
+            n_skipped += 1
+            print_dual(f"{label:<30} {color_text('SKIP', 'yellow')} (missing {args.file})", f_out)
+            continue
+        e_site = siesta_log.get_free_energy(out_path)
+        if e_site is None:
+            n_skipped += 1
+            print_dual(f"{label:<30} {color_text('SKIP', 'yellow')} (could not parse energy)", f_out)
+            continue
+        e_ads = e_site - e_clean_slab - adsorbate_energies[ads_name]
+        scf_ok, max_force = check_scf_and_force(out_path)
+        if not scf_ok:
+            scf_warn_labels.append(label)
+        if max_force is not None and max_force > args.force_tolerance:
+            force_warn_labels.append(label)
 
-            rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force))
-            bsse_str = f"{e_ads_bsse:<16.6f}" if e_ads_bsse is not None else f"{'--':<16}"
-            height_str = f"{height:<9.2f}" if height is not None else f"{'--':<9}"
-            scf_str = color_text("WARN", 'yellow') if not scf_ok else "OK"
-            force_str = f"{max_force:.4f}" if max_force is not None else "--"
-            print_dual(f"{label:<30} {(ads_name or '--'):<12} {height_str} {e_ads:<14.6f} "
-                        f"{bsse_str}{scf_str:<6}{force_str:<12}", f_out)
-        print_dual("-" * len(header), f_out)
-        if incomplete_bsse_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(incomplete_bsse_labels)} site(s) have a 'bsse_slab/'/"
-                "'bsse_adsorbate/' folder but incomplete/unreadable results -- BSSE-corrected "
-                f"energy skipped for: {', '.join(incomplete_bsse_labels)}.", 'yellow'), f_out)
-        if scf_warn_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(scf_warn_labels)} site(s) never confirmed SCF convergence -- "
-                f"their E_ads may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
-        if force_warn_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(force_warn_labels)} site(s) have residual force above "
-                f"--force-tolerance ({args.force_tolerance} eV/Ang), possibly not relaxed: "
-                f"{', '.join(force_warn_labels)}.", 'yellow'), f_out)
-        if bsse_scf_warn_labels:
-            print_dual(color_text(
-                f"[WARNING] {len(bsse_scf_warn_labels)} site(s)' BSSE ghost-fragment calculation(s) "
-                f"never confirmed SCF convergence -- their E_ads_BSSE may be unreliable: "
-                f"{', '.join(bsse_scf_warn_labels)}.", 'yellow'), f_out)
+        e_ads_bsse = None
+        if os.path.isdir(os.path.join(site_dir, "bsse_slab")):
+            e_bsse_slab, e_bsse_ads = read_bsse_energy(site_dir, args.file)
+            if e_bsse_slab is not None and e_bsse_ads is not None:
+                e_ads_bsse = e_site - e_bsse_slab - e_bsse_ads
+                n_bsse_found += 1
+                bsse_slab_scf, _f1 = check_scf_and_force(
+                    os.path.join(site_dir, "bsse_slab", args.file))
+                bsse_ads_scf, _f2 = check_scf_and_force(
+                    os.path.join(site_dir, "bsse_adsorbate", args.file))
+                if not (bsse_slab_scf and bsse_ads_scf):
+                    bsse_scf_warn_labels.append(label)
+            else:
+                incomplete_bsse_labels.append(label)
 
-        if not rows:
-            print_dual(color_text("\n[ERROR] No valid site results found.", 'red'), f_out)
-            sys.exit(1)
+        rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force))
+        bsse_str = f"{e_ads_bsse:<16.6f}" if e_ads_bsse is not None else f"{'--':<16}"
+        height_str = f"{height:<9.2f}" if height is not None else f"{'--':<9}"
+        scf_str = color_text("WARN", 'yellow') if not scf_ok else "OK"
+        force_str = f"{max_force:.4f}" if max_force is not None else "--"
+        print_dual(f"{label:<30} {(ads_name or '--'):<12} {height_str} {e_ads:<14.6f} "
+                    f"{bsse_str}{scf_str:<6}{force_str:<12}", f_out)
+    print_dual("-" * len(header), f_out)
+    if incomplete_bsse_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(incomplete_bsse_labels)} site(s) have a 'bsse_slab/'/"
+            "'bsse_adsorbate/' folder but incomplete/unreadable results -- BSSE-corrected "
+            f"energy skipped for: {', '.join(incomplete_bsse_labels)}.", 'yellow'), f_out)
+    if scf_warn_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(scf_warn_labels)} site(s) never confirmed SCF convergence -- "
+            f"their E_ads may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
+    if force_warn_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(force_warn_labels)} site(s) have residual force above "
+            f"--force-tolerance ({args.force_tolerance} eV/Ang), possibly not relaxed: "
+            f"{', '.join(force_warn_labels)}.", 'yellow'), f_out)
+    if bsse_scf_warn_labels:
+        print_dual(color_text(
+            f"[WARNING] {len(bsse_scf_warn_labels)} site(s)' BSSE ghost-fragment calculation(s) "
+            f"never confirmed SCF convergence -- their E_ads_BSSE may be unreliable: "
+            f"{', '.join(bsse_scf_warn_labels)}.", 'yellow'), f_out)
 
-        # Primary ranking always uses the uncorrected E_ads -- it's available
-        # for every row, so it's the only metric safe to compare across all
-        # sites uniformly (it's already referenced against each row's own
-        # adsorbate energy, so comparing across different adsorbates is
-        # meaningful too, unlike stb-adsorb --ml-rank's raw MACE energies).
-        # BSSE-corrected values are reported alongside (and separately
-        # ranked below, when complete for every site) rather than silently
-        # mixed into the same sort.
-        rows.sort(key=lambda r: r.e_ads)
+    if not rows:
+        print_dual(color_text("\n[ERROR] No valid site results found.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        print_dual(f"\n{color_text('[3] SUMMARY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Sites analyzed : {len(rows)} (skipped: {n_skipped})", f_out)
-        best = rows[0]
-        verdict = "exothermic (favorable)" if best.e_ads < 0 else "endothermic (unfavorable)"
-        print_dual(f"{color_text('Most stable site (uncorrected):', 'green')} {best.label}  "
-                    f"(E_ads = {best.e_ads:.6f} eV, {verdict})", f_out)
+    # Primary ranking always uses the uncorrected E_ads -- it's available
+    # for every row, so it's the only metric safe to compare across all
+    # sites uniformly (it's already referenced against each row's own
+    # adsorbate energy, so comparing across different adsorbates is
+    # meaningful too, unlike stb-adsorb --ml-rank's raw MACE energies).
+    # BSSE-corrected values are reported alongside (and separately
+    # ranked below, when complete for every site) rather than silently
+    # mixed into the same sort.
+    rows.sort(key=lambda r: r.e_ads)
 
-        apply_source_label = best.label
-        if n_bsse_found == 0:
-            print_dual(color_text(
-                "\n[NOTE] No BSSE-corrected results found -- re-run stb-adsorb with "
-                "--bsse-correction (the CLI default) for a corrected reference.", 'yellow'), f_out)
+    print_section('[3] SUMMARY', f_out)
+    print_dual(f"Sites analyzed : {len(rows)} (skipped: {n_skipped})", f_out)
+    best = rows[0]
+    verdict = "exothermic (favorable)" if best.e_ads < 0 else "endothermic (unfavorable)"
+    print_dual(f"{color_text('Most stable site (uncorrected):', 'green')} {best.label}  "
+                f"(E_ads = {best.e_ads:.6f} eV, {verdict})", f_out)
+
+    apply_source_label = best.label
+    if n_bsse_found == 0:
+        print_dual(color_text(
+            "\n[NOTE] No BSSE-corrected results found -- re-run stb-adsorb with "
+            "--bsse-correction (the CLI default) for a corrected reference.", 'yellow'), f_out)
+    else:
+        bsse_rows = [r for r in rows if r.e_ads_bsse is not None]
+        if len(bsse_rows) == len(rows):
+            bsse_ranked = sorted(bsse_rows, key=lambda r: r.e_ads_bsse)
+            bsse_best = bsse_ranked[0]
+            bsse_verdict = "exothermic (favorable)" if bsse_best.e_ads_bsse < 0 else "endothermic (unfavorable)"
+            print_dual(f"{color_text('Most stable site (BSSE-corrected):', 'green')} "
+                        f"{bsse_best.label}  (E_ads = {bsse_best.e_ads_bsse:.6f} eV, {bsse_verdict})", f_out)
+            shift = bsse_best.e_ads_bsse - bsse_best.e_ads
+            print_dual(f"BSSE correction at that site: {shift:+.6f} eV (uncorrected LCAO "
+                        "adsorption energies systematically over-bind -- expect this to make "
+                        "the energy less negative)", f_out)
+            apply_source_label = bsse_best.label
         else:
-            bsse_rows = [r for r in rows if r.e_ads_bsse is not None]
-            if len(bsse_rows) == len(rows):
-                bsse_ranked = sorted(bsse_rows, key=lambda r: r.e_ads_bsse)
-                bsse_best = bsse_ranked[0]
-                bsse_verdict = "exothermic (favorable)" if bsse_best.e_ads_bsse < 0 else "endothermic (unfavorable)"
-                print_dual(f"{color_text('Most stable site (BSSE-corrected):', 'green')} "
-                            f"{bsse_best.label}  (E_ads = {bsse_best.e_ads_bsse:.6f} eV, {bsse_verdict})", f_out)
-                shift = bsse_best.e_ads_bsse - bsse_best.e_ads
-                print_dual(f"BSSE correction at that site: {shift:+.6f} eV (uncorrected LCAO "
-                            "adsorption energies systematically over-bind -- expect this to make "
-                            "the energy less negative)", f_out)
-                apply_source_label = bsse_best.label
-            else:
-                print_dual(color_text(
-                    f"\n[NOTE] BSSE-corrected energy available for only {len(bsse_rows)}/{len(rows)} "
-                    "site(s) -- not reporting a BSSE-ranked \"most stable\" until all sites have it.",
-                    'yellow'), f_out)
+            print_dual(color_text(
+                f"\n[NOTE] BSSE-corrected energy available for only {len(bsse_rows)}/{len(rows)} "
+                "site(s) -- not reporting a BSSE-ranked \"most stable\" until all sites have it.",
+                'yellow'), f_out)
 
-        if len(ads_names) > 1:
-            print_dual(f"\n{color_text('Best site per adsorbate (uncorrected):', 'cyan')}", f_out)
-            for name in ads_names:
-                per_ads = [r for r in rows if r.ads_name == name]
-                if not per_ads:
-                    continue
-                best_per_ads = min(per_ads, key=lambda r: r.e_ads)
-                print_dual(f"  {name}: {best_per_ads.label} (E_ads = {best_per_ads.e_ads:.6f} eV)", f_out)
-                per_ads_bsse = [r for r in per_ads if r.e_ads_bsse is not None]
-                if per_ads_bsse and len(per_ads_bsse) == len(per_ads):
-                    best_per_ads_bsse = min(per_ads_bsse, key=lambda r: r.e_ads_bsse)
-                    print_dual(f"     BSSE-corrected: {best_per_ads_bsse.label} "
-                                f"(E_ads = {best_per_ads_bsse.e_ads_bsse:.6f} eV)", f_out)
-
-        gplot_path = write_curve_plot(args.output, rows)
-        print_dual(f"\n{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
-                    f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
-                    f_out)
-
-        # Height-sweep approach curves: one per "family" (same site + same
-        # adsorbate, swept across height) that has 2+ heights among the rows
-        # actually analyzed above.
-        families = {}
-        for row in rows:
-            family = _HEIGHT_SUFFIX_RE.sub('', row.label)
-            families.setdefault(family, []).append(row)
-        out_dir = os.path.dirname(args.output) or "."
-        for family, family_rows in families.items():
-            if len({r.height for r in family_rows}) < 2:
+    if len(ads_names) > 1:
+        print_dual(f"\n{color_text('Best site per adsorbate (uncorrected):', 'cyan')}", f_out)
+        for name in ads_names:
+            per_ads = [r for r in rows if r.ads_name == name]
+            if not per_ads:
                 continue
-            dat_path, height_gplot = write_height_curve_plot(family, family_rows, out_dir)
-            print_dual(f"{color_text('[Saved]', 'cyan')} Height curve -> {dat_path}, {height_gplot}", f_out)
+            best_per_ads = min(per_ads, key=lambda r: r.e_ads)
+            print_dual(f"  {name}: {best_per_ads.label} (E_ads = {best_per_ads.e_ads:.6f} eV)", f_out)
+            per_ads_bsse = [r for r in per_ads if r.e_ads_bsse is not None]
+            if per_ads_bsse and len(per_ads_bsse) == len(per_ads):
+                best_per_ads_bsse = min(per_ads_bsse, key=lambda r: r.e_ads_bsse)
+                print_dual(f"     BSSE-corrected: {best_per_ads_bsse.label} "
+                            f"(E_ads = {best_per_ads_bsse.e_ads_bsse:.6f} eV)", f_out)
 
-        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {REPORT_FILE}", f_out)
+    gplot_path = write_curve_plot(args.output, rows)
+    print_dual(f"\n{color_text('[Saved]', 'cyan')} Curve data -> {args.output}, {gplot_path} "
+                f"(cd {os.path.dirname(args.output) or '.'} && gnuplot {os.path.basename(gplot_path)})",
+                f_out)
 
-        if args.apply:
-            print_dual(f"\n{color_text('[4] APPLY', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            src = os.path.join(sites_root, apply_source_label, "structure.fdf")
-            try:
-                shutil.copy(src, args.apply)
-            except OSError as e:
-                print_dual(color_text(f"[ERROR] Could not copy '{src}' to '{args.apply}': {e}", 'red'), f_out)
-            else:
-                print_dual(f"{color_text('[Applied]', 'green')} {apply_source_label} -> {args.apply}", f_out)
+    # Height-sweep approach curves: one per "family" (same site + same
+    # adsorbate, swept across height) that has 2+ heights among the rows
+    # actually analyzed above.
+    families = {}
+    for row in rows:
+        family = _HEIGHT_SUFFIX_RE.sub('', row.label)
+        families.setdefault(family, []).append(row)
+    out_dir = os.path.dirname(args.output) or "."
+    for family, family_rows in families.items():
+        if len({r.height for r in family_rows}) < 2:
+            continue
+        dat_path, height_gplot = write_height_curve_plot(family, family_rows, out_dir)
+        print_dual(f"{color_text('[Saved]', 'cyan')} Height curve -> {dat_path}, {height_gplot}", f_out)
+
+    if report_path:
+        print_dual(f"{color_text('[Saved]', 'cyan')} Report     -> {report_path}", f_out)
+
+    if args.apply:
+        print_section('[4] APPLY', f_out)
+        src = os.path.join(sites_root, apply_source_label, "structure.fdf")
+        try:
+            shutil.copy(src, args.apply)
+        except OSError as e:
+            print_dual(color_text(f"[ERROR] Could not copy '{src}' to '{args.apply}': {e}", 'red'), f_out)
+        else:
+            print_dual(f"{color_text('[Applied]', 'green')} {apply_source_label} -> {args.apply}", f_out)
+
+    if f_out:
+        f_out.close()
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ import json
 import argparse
 from datetime import datetime
 import numpy as np
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.dielectric import read_epsimg, static_dielectric
 from stb.core.siesta_log import check_scf_and_force
 from stb.core.spectrum import (
@@ -431,6 +431,8 @@ spectrum (.dat/.gplot).""",
                         help="Minimum peak prominence, as a fraction of that spectrum's own max "
                              "intensity, for --experimental's peak-finding (default: 0.01 -- "
                              "filters out sub-1%% noise bumps in both spectra).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-ramanAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -488,215 +490,217 @@ spectrum (.dat/.gplot).""",
         sys.exit(1)
     modes = group_by_mode(rows)
 
-    report_path = os.path.join(args.directory, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== RAMAN STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
+    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Directory         : {args.directory}", f_out)
-        print_dual(f"SystemLabel       : {label}", f_out)
-        print_dual(f"Modes in table    : {len(modes)}", f_out)
-        print_dual(f"Displacement      : {stage2_delta} Ang (from Stage 2)", f_out)
+    print_dual(f"{color_text('===== RAMAN STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[1] READING RUNS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Directory         : {args.directory}", f_out)
+    print_dual(f"SystemLabel       : {label}", f_out)
+    print_dual(f"Modes in table    : {len(modes)}", f_out)
+    print_dual(f"Displacement      : {stage2_delta} Ang (from Stage 2)", f_out)
 
-        mode_results = []  # (mode_index, freq_thz, r, activity, is_full, rho)
-        computed = {}  # mode_index -> (r, activity, is_full, rho, scf_ok_all), for --skip-degenerate reuse
-        for mode_index in sorted(modes):
-            entry = modes[mode_index]
-            freq_thz = entry["frequency_thz"]
-            n_folders_total = len(entry["folders"])
-            print_dual(f"  Mode {mode_index} ({freq_thz:.4f} THz / {freq_thz * THZ_TO_CM1:.2f} cm^-1):", f_out)
+    print_section('[1] READING RUNS', f_out)
 
-            derived_from = entry.get("derived_from")
-            if derived_from is not None:
-                rep = computed.get(derived_from)
-                if rep is None:
-                    print_dual(color_text(
-                        f"    -> SKIP (representative mode {derived_from} has no usable Raman "
-                        "tensor)", 'yellow'), f_out)
-                    continue
-                r, activity, is_full, rho, scf_ok_all = rep
-                print_dual("    [Degenerate partner] Reusing mode "
-                            f"{derived_from}'s Raman tensor by symmetry "
-                            "(stb-ramanModes --skip-degenerate) -- activity and rho are "
-                            "rotational invariants, identical for every partner in a degenerate "
-                            "group.", f_out)
-                poln_tag = ""
-                if rho is not None:
-                    poln_tag = "polarized" if rho < 0.75 - 1e-6 else "depolarized"
-                offdiag_str = (f"  Rxy={r['xy']:.6f}  Rxz={r['xz']:.6f}  Ryz={r['yz']:.6f}"
-                                if is_full else "")
-                rho_str = f"  rho~{rho:.4f} ({poln_tag})" if rho is not None else ""
-                print_dual(f"    -> Rxx={r['x']:.6f}  Ryy={r['y']:.6f}  Rzz={r['z']:.6f}{offdiag_str}  "
-                            f"(1/Ang)  activity~{activity:.6f}{rho_str}  [derived]", f_out)
-                mode_results.append((mode_index, freq_thz, r, activity, is_full, rho))
-                computed[mode_index] = rep
+    mode_results = []  # (mode_index, freq_thz, r, activity, is_full, rho)
+    computed = {}  # mode_index -> (r, activity, is_full, rho, scf_ok_all), for --skip-degenerate reuse
+    for mode_index in sorted(modes):
+        entry = modes[mode_index]
+        freq_thz = entry["frequency_thz"]
+        n_folders_total = len(entry["folders"])
+        print_dual(f"  Mode {mode_index} ({freq_thz:.4f} THz / {freq_thz * THZ_TO_CM1:.2f} cm^-1):", f_out)
+
+        derived_from = entry.get("derived_from")
+        if derived_from is not None:
+            rep = computed.get(derived_from)
+            if rep is None:
+                print_dual(color_text(
+                    f"    -> SKIP (representative mode {derived_from} has no usable Raman "
+                    "tensor)", 'yellow'), f_out)
                 continue
+            r, activity, is_full, rho, scf_ok_all = rep
+            print_dual("    [Degenerate partner] Reusing mode "
+                        f"{derived_from}'s Raman tensor by symmetry "
+                        "(stb-ramanModes --skip-degenerate) -- activity and rho are "
+                        "rotational invariants, identical for every partner in a degenerate "
+                        "group.", f_out)
+            poln_tag = ""
+            if rho is not None:
+                poln_tag = "polarized" if rho < 0.75 - 1e-6 else "depolarized"
+            offdiag_str = (f"  Rxy={r['xy']:.6f}  Rxz={r['xz']:.6f}  Ryz={r['yz']:.6f}"
+                            if is_full else "")
+            rho_str = f"  rho~{rho:.4f} ({poln_tag})" if rho is not None else ""
+            print_dual(f"    -> Rxx={r['x']:.6f}  Ryy={r['y']:.6f}  Rzz={r['z']:.6f}{offdiag_str}  "
+                        f"(1/Ang)  activity~{activity:.6f}{rho_str}  [derived]", f_out)
+            mode_results.append((mode_index, freq_thz, r, activity, is_full, rho))
+            computed[mode_index] = rep
+            continue
 
-            sidecar_path = os.path.join(optical_root, f"mode_{mode_index:02d}_tensor_form.json")
-            n_missing = 0
-            if os.path.isfile(sidecar_path):
-                print_dual("    [Component reduction] Reconstructing the full tensor from a "
-                            "single symmetry-fixed probe (stb-ramanModes --reduce-components).", f_out)
-                r, scf_ok_all = reconstruct_reduced_tensor(
-                    sidecar_path, entry["folders"], label, args.file, stage2_delta, f_out)
-                has_offdiag = r is not None
-                if r is None:
-                    n_missing = n_folders_total
-            else:
-                static_eps, n_missing, scf_ok_all = compute_mode_tensor(
-                    entry["folders"], label, args.file, f_out)
-                r, has_offdiag = raman_tensor_full(static_eps, stage2_delta)
-            activity, is_full, alpha_prime, gamma_prime2 = (
-                (None, False, None, None) if r is None else raman_activity(r, has_offdiag))
-            if activity is None:
-                print_dual(color_text(
-                    f"    -> SKIP (incomplete: {n_missing}/{n_folders_total} folder(s) "
-                    "missing/unparseable)", 'yellow'), f_out)
-            else:
-                rho = depolarization_ratio(alpha_prime, gamma_prime2)
-                poln_tag = ""
-                if rho is not None:
-                    poln_tag = "polarized" if rho < 0.75 - 1e-6 else "depolarized"
-                offdiag_str = (f"  Rxy={r['xy']:.6f}  Rxz={r['xz']:.6f}  Ryz={r['yz']:.6f}"
-                                if is_full else "")
-                rho_str = f"  rho~{rho:.4f} ({poln_tag})" if rho is not None else ""
-                print_dual(f"    -> Rxx={r['x']:.6f}  Ryy={r['y']:.6f}  Rzz={r['z']:.6f}{offdiag_str}  "
-                            f"(1/Ang)  activity~{activity:.6f}{rho_str}"
-                            + ("" if scf_ok_all else color_text("  [some folders unconverged]", 'yellow')), f_out)
-                mode_results.append((mode_index, freq_thz, r, activity, is_full, rho))
-                computed[mode_index] = (r, activity, is_full, rho, scf_ok_all)
-
-        if not mode_results:
-            print_dual(color_text(
-                "\n[ERROR] No mode had a complete Raman tensor -- nothing to report/plot. "
-                "Make sure SIESTA finished in every optical_disp/mode_*/ folder.", 'red'), f_out)
-            sys.exit(1)
-
-        all_full = all(is_full for *_, is_full, _ in mode_results)
-        any_full = any(is_full for *_, is_full, _ in mode_results)
-
-        print_dual(f"\n{color_text('[2] RAMAN-ACTIVE MODES SUMMARY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-
-        def _rho_cols(rho):
-            if rho is None:
-                return f"{'N/A':<10}{'N/A'}"
-            return f"{rho:<10.4f}{'polarized' if rho < 0.75 - 1e-6 else 'depolarized'}"
-
-        if any_full:
-            print_dual(f"  {'Mode':<6}{'THz':<10}{'cm^-1':<10}{'Rxx':<12}{'Ryy':<12}{'Rzz':<12}"
-                        f"{'Rxy':<12}{'Rxz':<12}{'Ryz':<12}{'Activity':<12}{'rho':<10}{'Polarization'}", f_out)
-            for mode_index, freq_thz, r, activity, is_full, rho in mode_results:
-                offdiag_cols = (f"{r['xy']:<12.6f}{r['xz']:<12.6f}{r['yz']:<12.6f}" if is_full
-                                 else f"{'N/A':<12}{'N/A':<12}{'N/A':<12}")
-                print_dual(f"  {mode_index:<6}{freq_thz:<10.4f}{freq_thz * THZ_TO_CM1:<10.2f}"
-                            f"{r['x']:<12.6f}{r['y']:<12.6f}{r['z']:<12.6f}{offdiag_cols}"
-                            f"{activity:<12.6f}{_rho_cols(rho)}", f_out)
+        sidecar_path = os.path.join(optical_root, f"mode_{mode_index:02d}_tensor_form.json")
+        n_missing = 0
+        if os.path.isfile(sidecar_path):
+            print_dual("    [Component reduction] Reconstructing the full tensor from a "
+                        "single symmetry-fixed probe (stb-ramanModes --reduce-components).", f_out)
+            r, scf_ok_all = reconstruct_reduced_tensor(
+                sidecar_path, entry["folders"], label, args.file, stage2_delta, f_out)
+            has_offdiag = r is not None
+            if r is None:
+                n_missing = n_folders_total
         else:
-            print_dual(f"  {'Mode':<6}{'THz':<12}{'cm^-1':<12}{'Rxx':<14}{'Ryy':<14}{'Rzz':<14}"
-                        f"{'Activity (approx)':<20}{'rho':<10}{'Polarization'}", f_out)
-            for mode_index, freq_thz, r, activity, is_full, rho in mode_results:
-                print_dual(f"  {mode_index:<6}{freq_thz:<12.4f}{freq_thz * THZ_TO_CM1:<12.2f}"
-                            f"{r['x']:<14.6f}{r['y']:<14.6f}{r['z']:<14.6f}"
-                            f"{activity:<20.6f}{_rho_cols(rho)}", f_out)
-
-        if all_full:
+            static_eps, n_missing, scf_ok_all = compute_mode_tensor(
+                entry["folders"], label, args.file, f_out)
+            r, has_offdiag = raman_tensor_full(static_eps, stage2_delta)
+        activity, is_full, alpha_prime, gamma_prime2 = (
+            (None, False, None, None) if r is None else raman_activity(r, has_offdiag))
+        if activity is None:
             print_dual(color_text(
-                "\n[NOTE] Activity computed from the FULL Raman tensor (diagonal + off-diagonal "
-                "Rxy/Rxz/Ryz), the exact literature invariant (45a^2+7gamma^2).", 'green'), f_out)
-        elif any_full:
-            print_dual(color_text(
-                "\n[NOTE] Mixed scope: some modes have the full tensor (exact invariant), others "
-                "only the diagonal one (approximate -- missing the off-diagonal Rxy/Rxz/Ryz "
-                "anisotropy contribution). Re-run stb-ramanModes with --full-tensor for the "
-                "modes still shown as diagonal-only.", 'yellow'), f_out)
+                f"    -> SKIP (incomplete: {n_missing}/{n_folders_total} folder(s) "
+                "missing/unparseable)", 'yellow'), f_out)
         else:
-            print_dual(color_text(
-                "\n[NOTE] Activity is APPROXIMATE: computed from the diagonal Raman tensor "
-                "(Rxx, Ryy, Rzz) only. The full literature invariant (45a^2+7gamma^2) also needs "
-                "the off-diagonal tensor components (Rxy, Rxz, Ryz) -- re-run stb-ramanModes "
-                "with --full-tensor to get those.", 'yellow'), f_out)
+            rho = depolarization_ratio(alpha_prime, gamma_prime2)
+            poln_tag = ""
+            if rho is not None:
+                poln_tag = "polarized" if rho < 0.75 - 1e-6 else "depolarized"
+            offdiag_str = (f"  Rxy={r['xy']:.6f}  Rxz={r['xz']:.6f}  Ryz={r['yz']:.6f}"
+                            if is_full else "")
+            rho_str = f"  rho~{rho:.4f} ({poln_tag})" if rho is not None else ""
+            print_dual(f"    -> Rxx={r['x']:.6f}  Ryy={r['y']:.6f}  Rzz={r['z']:.6f}{offdiag_str}  "
+                        f"(1/Ang)  activity~{activity:.6f}{rho_str}"
+                        + ("" if scf_ok_all else color_text("  [some folders unconverged]", 'yellow')), f_out)
+            mode_results.append((mode_index, freq_thz, r, activity, is_full, rho))
+            computed[mode_index] = (r, activity, is_full, rho, scf_ok_all)
+
+    if not mode_results:
         print_dual(color_text(
-            "[NOTE] rho (depolarization ratio) uses the same diagonal-only/full-tensor scope as "
-            "activity above, per mode.", 'cyan'), f_out)
+            "\n[ERROR] No mode had a complete Raman tensor -- nothing to report/plot. "
+            "Make sure SIESTA finished in every optical_disp/mode_*/ folder.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
-        print_dual(f"\n{color_text('[3] SPECTRUM', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        freqs_cm1 = [freq_thz * THZ_TO_CM1 for _, freq_thz, _, _, _, _ in mode_results]
-        activities = [activity for _, _, _, activity, _, _ in mode_results]
-        if args.temperature is not None:
-            # Imaginary (negative-frequency) modes aren't real oscillators --
-            # Bose-Einstein occupation is undefined for them (see
-            # bose_einstein_weight's docstring) -- left unweighted (weight 1)
-            # rather than raising, since Stage 2 already reports these as
-            # [IMAGINARY] and the unweighted spectrum already includes them
-            # as-is; thermal weighting just shouldn't touch them.
-            n_imaginary_skipped = 0
-            weights = []
-            for _, freq_thz, _, _, _, _ in mode_results:
-                if freq_thz <= 0:
-                    weights.append(1.0)
-                    n_imaginary_skipped += 1
-                else:
-                    weights.append(bose_einstein_weight(freq_thz, args.temperature))
-            activities = [a * w for a, w in zip(activities, weights)]
-            print_dual(f"Thermal weighting : Bose-Einstein Stokes factor (n+1) at "
-                        f"{args.temperature:.1f} K applied to every mode's contribution.", f_out)
-            if n_imaginary_skipped:
-                print_dual(color_text(
-                    f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
-                    "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
-        grid, intensity = build_lorentzian_spectrum(freqs_cm1, activities, args.linewidth)
-        dat_path = os.path.join(args.directory, f"{args.output}.dat")
-        gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+    all_full = all(is_full for *_, is_full, _ in mode_results)
+    any_full = any(is_full for *_, is_full, _ in mode_results)
 
-        experimental, experimental_dat_path = None, None
-        if args.experimental is not None:
-            exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
-            experimental = (exp_freq, exp_intensity)
-            experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+    print_section('[2] RAMAN-ACTIVE MODES SUMMARY', f_out)
 
-        write_spectrum_plot(dat_path, gplot_path, grid, intensity, all_full, args.temperature,
-                             experimental, experimental_dat_path)
-        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
-                    f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    def _rho_cols(rho):
+        if rho is None:
+            return f"{'N/A':<10}{'N/A'}"
+        return f"{rho:<10.4f}{'polarized' if rho < 0.75 - 1e-6 else 'depolarized'}"
 
-        extra_files = ""
-        if experimental is not None:
-            print_dual(f"\n{color_text('[3b] EXPERIMENTAL COMPARISON', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            print_dual(f"Experimental file : {args.experimental} ({len(exp_freq)} point(s))", f_out)
-            sim_peaks = find_spectrum_peaks(grid, intensity, args.peak_prominence)
-            exp_peaks = find_spectrum_peaks(exp_freq, exp_intensity, args.peak_prominence)
-            print_dual(f"Peaks found       : {len(sim_peaks)} simulated, {len(exp_peaks)} experimental", f_out)
-            if len(exp_peaks) == 0:
-                print_dual(color_text(
-                    "[WARNING] No experimental peaks found above the prominence threshold -- "
-                    "try lowering --peak-prominence.", 'yellow'), f_out)
-            elif len(sim_peaks) == 0:
-                print_dual(color_text(
-                    "[WARNING] No simulated peaks found -- nothing to match against.", 'yellow'), f_out)
+    if any_full:
+        print_dual(f"  {'Mode':<6}{'THz':<10}{'cm^-1':<10}{'Rxx':<12}{'Ryy':<12}{'Rzz':<12}"
+                    f"{'Rxy':<12}{'Rxz':<12}{'Ryz':<12}{'Activity':<12}{'rho':<10}{'Polarization'}", f_out)
+        for mode_index, freq_thz, r, activity, is_full, rho in mode_results:
+            offdiag_cols = (f"{r['xy']:<12.6f}{r['xz']:<12.6f}{r['yz']:<12.6f}" if is_full
+                             else f"{'N/A':<12}{'N/A':<12}{'N/A':<12}")
+            print_dual(f"  {mode_index:<6}{freq_thz:<10.4f}{freq_thz * THZ_TO_CM1:<10.2f}"
+                        f"{r['x']:<12.6f}{r['y']:<12.6f}{r['z']:<12.6f}{offdiag_cols}"
+                        f"{activity:<12.6f}{_rho_cols(rho)}", f_out)
+    else:
+        print_dual(f"  {'Mode':<6}{'THz':<12}{'cm^-1':<12}{'Rxx':<14}{'Ryy':<14}{'Rzz':<14}"
+                    f"{'Activity (approx)':<20}{'rho':<10}{'Polarization'}", f_out)
+        for mode_index, freq_thz, r, activity, is_full, rho in mode_results:
+            print_dual(f"  {mode_index:<6}{freq_thz:<12.4f}{freq_thz * THZ_TO_CM1:<12.2f}"
+                        f"{r['x']:<14.6f}{r['y']:<14.6f}{r['z']:<14.6f}"
+                        f"{activity:<20.6f}{_rho_cols(rho)}", f_out)
+
+    if all_full:
+        print_dual(color_text(
+            "\n[NOTE] Activity computed from the FULL Raman tensor (diagonal + off-diagonal "
+            "Rxy/Rxz/Ryz), the exact literature invariant (45a^2+7gamma^2).", 'green'), f_out)
+    elif any_full:
+        print_dual(color_text(
+            "\n[NOTE] Mixed scope: some modes have the full tensor (exact invariant), others "
+            "only the diagonal one (approximate -- missing the off-diagonal Rxy/Rxz/Ryz "
+            "anisotropy contribution). Re-run stb-ramanModes with --full-tensor for the "
+            "modes still shown as diagonal-only.", 'yellow'), f_out)
+    else:
+        print_dual(color_text(
+            "\n[NOTE] Activity is APPROXIMATE: computed from the diagonal Raman tensor "
+            "(Rxx, Ryy, Rzz) only. The full literature invariant (45a^2+7gamma^2) also needs "
+            "the off-diagonal tensor components (Rxy, Rxz, Ryz) -- re-run stb-ramanModes "
+            "with --full-tensor to get those.", 'yellow'), f_out)
+    print_dual(color_text(
+        "[NOTE] rho (depolarization ratio) uses the same diagonal-only/full-tensor scope as "
+        "activity above, per mode.", 'cyan'), f_out)
+
+    print_section('[3] SPECTRUM', f_out)
+    freqs_cm1 = [freq_thz * THZ_TO_CM1 for _, freq_thz, _, _, _, _ in mode_results]
+    activities = [activity for _, _, _, activity, _, _ in mode_results]
+    if args.temperature is not None:
+        # Imaginary (negative-frequency) modes aren't real oscillators --
+        # Bose-Einstein occupation is undefined for them (see
+        # bose_einstein_weight's docstring) -- left unweighted (weight 1)
+        # rather than raising, since Stage 2 already reports these as
+        # [IMAGINARY] and the unweighted spectrum already includes them
+        # as-is; thermal weighting just shouldn't touch them.
+        n_imaginary_skipped = 0
+        weights = []
+        for _, freq_thz, _, _, _, _ in mode_results:
+            if freq_thz <= 0:
+                weights.append(1.0)
+                n_imaginary_skipped += 1
             else:
-                matches = match_peaks(sim_peaks, exp_peaks)
-                print_dual(f"  {'Exp. peak (cm^-1)':<20}{'Sim. peak (cm^-1)':<20}{'Delta (cm^-1)'}", f_out)
-                for exp_f, sim_f, delta in matches:
-                    print_dual(f"  {exp_f:<20.2f}{sim_f:<20.2f}{delta:+.2f}", f_out)
-                mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
-                print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
-                            f"{len(matches)} matched pair(s))", f_out)
-            print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
-            extra_files = f", {experimental_dat_path}"
+                weights.append(bose_einstein_weight(freq_thz, args.temperature))
+        activities = [a * w for a, w in zip(activities, weights)]
+        print_dual(f"Thermal weighting : Bose-Einstein Stokes factor (n+1) at "
+                    f"{args.temperature:.1f} K applied to every mode's contribution.", f_out)
+        if n_imaginary_skipped:
+            print_dual(color_text(
+                f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
+                "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
+    grid, intensity = build_lorentzian_spectrum(freqs_cm1, activities, args.linewidth)
+    dat_path = os.path.join(args.directory, f"{args.output}.dat")
+    gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
 
-        print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
+    experimental, experimental_dat_path = None, None
+    if args.experimental is not None:
+        exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
+        experimental = (exp_freq, exp_intensity)
+        experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+
+    write_spectrum_plot(dat_path, gplot_path, grid, intensity, all_full, args.temperature,
+                         experimental, experimental_dat_path)
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+
+    extra_files = ""
+    if experimental is not None:
+        print_section('[3b] EXPERIMENTAL COMPARISON', f_out)
+        print_dual(f"Experimental file : {args.experimental} ({len(exp_freq)} point(s))", f_out)
+        sim_peaks = find_spectrum_peaks(grid, intensity, args.peak_prominence)
+        exp_peaks = find_spectrum_peaks(exp_freq, exp_intensity, args.peak_prominence)
+        print_dual(f"Peaks found       : {len(sim_peaks)} simulated, {len(exp_peaks)} experimental", f_out)
+        if len(exp_peaks) == 0:
+            print_dual(color_text(
+                "[WARNING] No experimental peaks found above the prominence threshold -- "
+                "try lowering --peak-prominence.", 'yellow'), f_out)
+        elif len(sim_peaks) == 0:
+            print_dual(color_text(
+                "[WARNING] No simulated peaks found -- nothing to match against.", 'yellow'), f_out)
+        else:
+            matches = match_peaks(sim_peaks, exp_peaks)
+            print_dual(f"  {'Exp. peak (cm^-1)':<20}{'Sim. peak (cm^-1)':<20}{'Delta (cm^-1)'}", f_out)
+            for exp_f, sim_f, delta in matches:
+                print_dual(f"  {exp_f:<20.2f}{sim_f:<20.2f}{delta:+.2f}", f_out)
+            mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
+            print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
+                        f"{len(matches)} matched pair(s))", f_out)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
+        extra_files = f", {experimental_dat_path}"
+
+    print_section('[4] SUMMARY & FILES', f_out)
+    print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
+    if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-        print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+    print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+
+
+    if f_out:
+        f_out.close()
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

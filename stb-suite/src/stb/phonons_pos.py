@@ -25,7 +25,7 @@ except ImportError:
     sys.exit(1)
 
 # Cores ANSI para terminal
-from stb.core.cli import COLORS, color_text, show_intro, print_dual
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core import kspace
 from stb.core.phonon_workflow import detect_system_label, load_phonon_with_force_constants
 
@@ -485,6 +485,8 @@ def main():
     parser.add_argument("--freeze-amplitude", type=float, default=0.05,
                         help="Target maximum atomic displacement (Ang) for "
                              "--freeze-unstable-mode (default: 0.05)")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsPos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -534,364 +536,358 @@ def main():
             print(f"[INFO] Auto-detected SystemLabel '{system_label}' from calc.fdf "
                   "(pass -l/--label to override).")
 
-    # Everything below is wrapped in the report file -- opened as a plain
-    # `with` so it's flushed/closed correctly even on an early sys.exit(1)
-    # (e.g. missing .FA files, failed FORCE_SETS), leaving a partial report
-    # that shows how far processing got.
-    report_path = os.path.join(phonon_dir, REPORT_FILE)
-    with open(report_path, "w") as f_out:
-        print_dual(f"{color_text('===== PHONON PROPERTIES REPORT =====', 'magenta')}", f_out)
+    # Report writing is opt-in (--save-report); print_dual still prints
+    # to stdout unconditionally either way.
+    report_path = os.path.join(phonon_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-        print_dual(f"Phonon directory  : {phonon_dir}", f_out)
-        if has_embedded_fc:
-            print_dual("SystemLabel       : N/A (ML-computed force constants)", f_out)
-        else:
-            print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
-        print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
-        print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
-        extra_analyses = [name for flag, name in [
-            (args.bands, "band structure"),
-            (args.dos, "total DOS"),
-            (args.pdos, "projected DOS"),
-            (args.thermal_displacements, "thermal displacements"),
-            (args.freeze_unstable_mode, "mode freeze"),
-        ] if flag]
-        print_dual(f"Extra analyses    : {', '.join(extra_analyses) if extra_analyses else 'none'}", f_out)
+    print_dual(f"{color_text('===== PHONON PROPERTIES REPORT =====', 'magenta')}", f_out)
 
-        # 2. Extração de Forças (Criando FORCE_SETS)
-        print_dual(f"\n{color_text('[1] FORCE EXTRACTION', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+    print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Date/time         : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+    print_dual(f"Phonon directory  : {phonon_dir}", f_out)
+    if has_embedded_fc:
+        print_dual("SystemLabel       : N/A (ML-computed force constants)", f_out)
+    else:
+        print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
+    print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
+    print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
+    extra_analyses = [name for flag, name in [
+        (args.bands, "band structure"),
+        (args.dos, "total DOS"),
+        (args.pdos, "projected DOS"),
+        (args.thermal_displacements, "thermal displacements"),
+        (args.freeze_unstable_mode, "mode freeze"),
+    ] if flag]
+    print_dual(f"Extra analyses    : {', '.join(extra_analyses) if extra_analyses else 'none'}", f_out)
 
-        # 3. Propriedades Térmicas usando a API Python do Phonopy -- FORCE_SETS
-        # extraction (or skipping it for an ML-embedded yaml) + phonopy.load,
-        # via core/phonon_workflow.py (also stb-ramanModes's Stage 2 loader).
-        # Leaves the process chdir'd into phonon_dir; os.chdir(original_dir)
-        # happens once, near the very end of this function, same as before.
-        phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
-            phonon_dir, system_label, has_embedded_fc, f_out)
-        # true_bohr_to_angstrom (only meaningful for the bohr-numeric/SIESTA
-        # case, distinct from internal_to_angstrom which is 1.0 for the
-        # ML-embedded case -- see core/phonon_workflow.py's docstring for the
-        # bug this distinction fixes) is still needed standalone below, e.g.
-        # for the tdispmat.cif cell-unit fix.
-        true_bohr_to_angstrom = get_physical_units().Bohr
+    # 2. Extração de Forças (Criando FORCE_SETS)
+    print_section('[1] FORCE EXTRACTION', f_out)
 
-        print(f"[INFO] Running thermal properties calculation ...")
-        print(f"       -> Q-Mesh: {args.mesh}")
-        print(f"       -> Temperature Range: {args.tmin} K to {args.tmax} K (step: {args.tstep} K)")
+    # 3. Propriedades Térmicas usando a API Python do Phonopy -- FORCE_SETS
+    # extraction (or skipping it for an ML-embedded yaml) + phonopy.load,
+    # via core/phonon_workflow.py (also stb-ramanModes's Stage 2 loader).
+    # Leaves the process chdir'd into phonon_dir; os.chdir(original_dir)
+    # happens once, near the very end of this function, same as before.
+    phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
+        phonon_dir, system_label, has_embedded_fc, f_out)
+    # true_bohr_to_angstrom (only meaningful for the bohr-numeric/SIESTA
+    # case, distinct from internal_to_angstrom which is 1.0 for the
+    # ML-embedded case -- see core/phonon_workflow.py's docstring for the
+    # bug this distinction fixes) is still needed standalone below, e.g.
+    # for the tdispmat.cif cell-unit fix.
+    true_bohr_to_angstrom = get_physical_units().Bohr
 
-        phonon.run_mesh(args.mesh)
-        min_freq = phonon.mesh.frequencies.min()
+    print(f"[INFO] Running thermal properties calculation ...")
+    print(f"       -> Q-Mesh: {args.mesh}")
+    print(f"       -> Temperature Range: {args.tmin} K to {args.tmax} K (step: {args.tstep} K)")
 
-        print_dual(f"\n{color_text('[2] DYNAMICAL STABILITY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        # Supercell/displacement distance actually used to build the force
-        # constants -- pulled from the loaded phonon object (not re-asked of
-        # the user) so this report is self-contained without cross-
-        # referencing the prep stage's own (now also persisted) report.
-        supercell_dim = np.diag(phonon.supercell_matrix)
-        disp0 = np.array(phonon.dataset['first_atoms'][0]['displacement'])
-        disp_mag = np.linalg.norm(disp0) * internal_to_angstrom
-        print_dual(f"Supercell used         : {supercell_dim[0]} x {supercell_dim[1]} x {supercell_dim[2]} "
-                    f"({len(phonon.dataset['first_atoms'])} displacements, {disp_mag:.4f} Ang each)", f_out)
-        print_dual(f"Minimum mesh frequency : {min_freq:.4f} THz", f_out)
-        if min_freq < 0:
+    phonon.run_mesh(args.mesh)
+    min_freq = phonon.mesh.frequencies.min()
+
+    print_section('[2] DYNAMICAL STABILITY', f_out)
+    # Supercell/displacement distance actually used to build the force
+    # constants -- pulled from the loaded phonon object (not re-asked of
+    # the user) so this report is self-contained without cross-
+    # referencing the prep stage's own (now also persisted) report.
+    supercell_dim = np.diag(phonon.supercell_matrix)
+    disp0 = np.array(phonon.dataset['first_atoms'][0]['displacement'])
+    disp_mag = np.linalg.norm(disp0) * internal_to_angstrom
+    print_dual(f"Supercell used         : {supercell_dim[0]} x {supercell_dim[1]} x {supercell_dim[2]} "
+                f"({len(phonon.dataset['first_atoms'])} displacements, {disp_mag:.4f} Ang each)", f_out)
+    print_dual(f"Minimum mesh frequency : {min_freq:.4f} THz", f_out)
+    if min_freq < 0:
+        print_dual(color_text(
+            "[WARNING] Negative (imaginary) phonon frequencies found -- the "
+            "structure/supercell is dynamically unstable at some q-point (soft mode, "
+            "unrelaxed geometry, or a numerical-quality issue). Phonopy silently drops "
+            "these modes from the thermal-property sums below (cutoff_frequency=0), so "
+            "the resulting free energy/entropy/heat capacity are not physically "
+            "meaningful as-is.", 'red'), f_out)
+    else:
+        print_dual(color_text("No imaginary modes found on the sampled mesh.", 'green'), f_out)
+    band_min_freq = None
+    band_plots_written = []
+    if args.bands:
+        print(f"[INFO] Building auto-detected high-symmetry q-path for band structure ...")
+        path = build_band_path(phonon.primitive, internal_to_angstrom, args.vacuum_gap)
+
+        print_section('[2b] BAND STRUCTURE', f_out)
+        if path is None:
             print_dual(color_text(
-                "[WARNING] Negative (imaginary) phonon frequencies found -- the "
-                "structure/supercell is dynamically unstable at some q-point (soft mode, "
-                "unrelaxed geometry, or a numerical-quality issue). Phonopy silently drops "
-                "these modes from the thermal-property sums below (cutoff_frequency=0), so "
-                "the resulting free energy/entropy/heat capacity are not physically "
-                "meaningful as-is.", 'red'), f_out)
+                "Skipped: every axis is vacuum-padded (0D/isolated system) -- a "
+                "q-path isn't physically meaningful here.", 'yellow'), f_out)
         else:
-            print_dual(color_text("No imaginary modes found on the sampled mesh.", 'green'), f_out)
-        band_min_freq = None
-        band_plots_written = []
-        if args.bands:
-            print(f"[INFO] Building auto-detected high-symmetry q-path for band structure ...")
-            path = build_band_path(phonon.primitive, internal_to_angstrom, args.vacuum_gap)
+            kpoints_dict, path_segments, bravais_name = path
+            print_dual(f"Bravais lattice   : {bravais_name}", f_out)
+            path_str = " | ".join("-".join(pretty_label(l) for l in seg) for seg in path_segments)
+            print_dual(f"Path              : {path_str}", f_out)
 
-            print_dual(f"\n{color_text('[2b] BAND STRUCTURE', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            if path is None:
+            bands, band_labels, path_connections = band_path_to_phonopy_format(
+                kpoints_dict, path_segments, args.band_points)
+            phonon.run_band_structure(bands, with_group_velocities=True,
+                                       path_connections=path_connections,
+                                       labels=band_labels, is_legacy_plot=False)
+            bs = phonon.band_structure
+
+            band_min_freq = np.concatenate(bs.frequencies).min()
+            print_dual(f"Minimum band-path frequency : {band_min_freq:.4f} THz", f_out)
+            if band_min_freq < 0:
                 print_dual(color_text(
-                    "Skipped: every axis is vacuum-padded (0D/isolated system) -- a "
-                    "q-path isn't physically meaningful here.", 'yellow'), f_out)
+                    "[WARNING] Negative (imaginary) frequency found along the band path -- "
+                    "this can catch zone-boundary/high-symmetry instabilities the mesh "
+                    "(sampled only at its own grid points) missed.", 'red'), f_out)
             else:
-                kpoints_dict, path_segments, bravais_name = path
-                print_dual(f"Bravais lattice   : {bravais_name}", f_out)
-                path_str = " | ".join("-".join(pretty_label(l) for l in seg) for seg in path_segments)
-                print_dual(f"Path              : {path_str}", f_out)
+                print_dual(color_text("No imaginary modes found along the band path.", 'green'), f_out)
 
-                bands, band_labels, path_connections = band_path_to_phonopy_format(
-                    kpoints_dict, path_segments, args.band_points)
-                phonon.run_band_structure(bands, with_group_velocities=True,
-                                           path_connections=path_connections,
-                                           labels=band_labels, is_legacy_plot=False)
-                bs = phonon.band_structure
+            gv_mag = np.concatenate([np.linalg.norm(seg, axis=2) for seg in bs.group_velocities])
+            print_dual(f"Group velocity |v_g| : min {gv_mag.min():.4f}, max {gv_mag.max():.4f} "
+                        f"THz*Ang (x{THZ_ANG_TO_KM_PER_S} for km/s -> "
+                        f"{gv_mag.min() * THZ_ANG_TO_KM_PER_S:.4f} to "
+                        f"{gv_mag.max() * THZ_ANG_TO_KM_PER_S:.4f} km/s)", f_out)
 
-                band_min_freq = np.concatenate(bs.frequencies).min()
-                print_dual(f"Minimum band-path frequency : {band_min_freq:.4f} THz", f_out)
-                if band_min_freq < 0:
-                    print_dual(color_text(
-                        "[WARNING] Negative (imaginary) frequency found along the band path -- "
-                        "this can catch zone-boundary/high-symmetry instabilities the mesh "
-                        "(sampled only at its own grid points) missed.", 'red'), f_out)
-                else:
-                    print_dual(color_text("No imaginary modes found along the band path.", 'green'), f_out)
+            band_plot = phonon.plot_band_structure()
+            band_plot.savefig("phonon_bands.png", dpi=300)
+            print(color_text(f" -> Saved plot as '{os.path.join(phonon_dir, 'phonon_bands.png')}'", 'cyan'))
+            phonon.write_yaml_band_structure(filename="band.yaml")
+            print(color_text(f" -> Saved band data as '{os.path.join(phonon_dir, 'band.yaml')}'", 'cyan'))
 
-                gv_mag = np.concatenate([np.linalg.norm(seg, axis=2) for seg in bs.group_velocities])
-                print_dual(f"Group velocity |v_g| : min {gv_mag.min():.4f}, max {gv_mag.max():.4f} "
-                            f"THz*Ang (x{THZ_ANG_TO_KM_PER_S} for km/s -> "
-                            f"{gv_mag.min() * THZ_ANG_TO_KM_PER_S:.4f} to "
-                            f"{gv_mag.max() * THZ_ANG_TO_KM_PER_S:.4f} km/s)", f_out)
+            band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
+                                                    path_connections, f_out)
+            band_plots_written += write_group_velocity_plot(args.plot_dir, bs,
+                                                               path_connections, f_out)
 
-                band_plot = phonon.plot_band_structure()
-                band_plot.savefig("phonon_bands.png", dpi=300)
-                print(color_text(f" -> Saved plot as '{os.path.join(phonon_dir, 'phonon_bands.png')}'", 'cyan'))
-                phonon.write_yaml_band_structure(filename="band.yaml")
-                print(color_text(f" -> Saved band data as '{os.path.join(phonon_dir, 'band.yaml')}'", 'cyan'))
+    frozen_mode_filename = None
+    if args.freeze_unstable_mode:
+        print_section('[2c] MODE FREEZE', f_out)
+        if min_freq >= 0:
+            print_dual("No imaginary mode on the sampled mesh -- nothing to freeze.", f_out)
+        else:
+            q_idx, band_idx = np.unravel_index(np.argmin(phonon.mesh.frequencies),
+                                                 phonon.mesh.frequencies.shape)
+            q_point = phonon.mesh.qpoints[q_idx]
 
-                band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
-                                                        path_connections, f_out)
-                band_plots_written += write_group_velocity_plot(args.plot_dir, bs,
-                                                                   path_connections, f_out)
+            # amplitude here isn't Angstrom (see module notes above) --
+            # calibrate with a unit-amplitude probe first, then rescale
+            # linearly to hit the user's requested Angstrom target.
+            phonon.run_modulations(args.mesh, [[q_point, band_idx, 1.0, 0.0]])
+            mod = phonon.modulation
+            probe_shift = _pbc_atomic_shift(
+                mod.modulated_supercells[0].positions, mod.supercell.positions,
+                np.array(mod.supercell.cell)).max() * internal_to_angstrom
+            scale = args.freeze_amplitude / probe_shift
 
-        frozen_mode_filename = None
-        if args.freeze_unstable_mode:
-            print_dual(f"\n{color_text('[2c] MODE FREEZE', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            if min_freq >= 0:
-                print_dual("No imaginary mode on the sampled mesh -- nothing to freeze.", f_out)
-            else:
-                q_idx, band_idx = np.unravel_index(np.argmin(phonon.mesh.frequencies),
-                                                     phonon.mesh.frequencies.shape)
-                q_point = phonon.mesh.qpoints[q_idx]
+            phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
+            mod = phonon.modulation
+            achieved_shift = _pbc_atomic_shift(
+                mod.modulated_supercells[0].positions, mod.supercell.positions,
+                np.array(mod.supercell.cell)).max() * internal_to_angstrom
 
-                # amplitude here isn't Angstrom (see module notes above) --
-                # calibrate with a unit-amplitude probe first, then rescale
-                # linearly to hit the user's requested Angstrom target.
-                phonon.run_modulations(args.mesh, [[q_point, band_idx, 1.0, 0.0]])
-                mod = phonon.modulation
-                probe_shift = _pbc_atomic_shift(
-                    mod.modulated_supercells[0].positions, mod.supercell.positions,
-                    np.array(mod.supercell.cell)).max() * internal_to_angstrom
-                scale = args.freeze_amplitude / probe_shift
+            frozen_mode_filename = "frozen_mode.fdf"
+            frozen_struct = mod.modulated_supercells[0]
+            if has_embedded_fc:
+                # write_siesta (phonopy's SIESTA writer) always tags its
+                # output "LatticeConstant 1.0 Bohr" and writes cell/
+                # positions verbatim -- correct only if those numbers are
+                # already in the bohr-numeric SIESTA-interface convention.
+                # For an ML-sourced phonon (native Angstrom), convert to
+                # that convention first so the written file's declared
+                # unit actually matches its numbers (same fix as
+                # phonons_create.py's --ml-prerelax for the same
+                # mismatch) -- otherwise every downstream SIESTA-aware
+                # reader (including read_siesta itself) would shrink the
+                # whole cell by ~1.8897x on read-back. Reassigning only
+                # .cell is enough and *correct*: PhonopyAtoms.positions is
+                # a derived getter (scaled_positions @ cell, verified by
+                # reading the source), so scaled/fractional positions --
+                # the real invariant here -- are left untouched and the
+                # Cartesian getter output rescales for free. Also dividing
+                # .positions here (an earlier draft of this fix did) would
+                # read back the *already-rescaled* getter output and
+                # divide it a second time, silently corrupting the
+                # fractional coordinates -- caught only by independently
+                # re-deriving the written file's geometry from scratch.
+                frozen_struct = frozen_struct.copy()
+                frozen_struct.cell = np.array(frozen_struct.cell) / true_bohr_to_angstrom
+            write_siesta(frozen_mode_filename, frozen_struct)
 
-                phonon.run_modulations(args.mesh, [[q_point, band_idx, scale, 0.0]])
-                mod = phonon.modulation
-                achieved_shift = _pbc_atomic_shift(
-                    mod.modulated_supercells[0].positions, mod.supercell.positions,
-                    np.array(mod.supercell.cell)).max() * internal_to_angstrom
+            print_dual(f"Softest mode      : q = {np.array2string(q_point, precision=4)}, "
+                        f"band {band_idx}, {min_freq:.4f} THz", f_out)
+            print_dual(f"Displacement      : requested {args.freeze_amplitude:.4f} Ang, "
+                        f"achieved {achieved_shift:.4f} Ang (max atomic shift)", f_out)
+            print_dual(f"Structure written : {frozen_mode_filename}", f_out)
+            print(color_text(f" -> Saved distorted structure as "
+                              f"'{os.path.join(phonon_dir, frozen_mode_filename)}'", 'cyan'))
 
-                frozen_mode_filename = "frozen_mode.fdf"
-                frozen_struct = mod.modulated_supercells[0]
-                if has_embedded_fc:
-                    # write_siesta (phonopy's SIESTA writer) always tags its
-                    # output "LatticeConstant 1.0 Bohr" and writes cell/
-                    # positions verbatim -- correct only if those numbers are
-                    # already in the bohr-numeric SIESTA-interface convention.
-                    # For an ML-sourced phonon (native Angstrom), convert to
-                    # that convention first so the written file's declared
-                    # unit actually matches its numbers (same fix as
-                    # phonons_create.py's --ml-prerelax for the same
-                    # mismatch) -- otherwise every downstream SIESTA-aware
-                    # reader (including read_siesta itself) would shrink the
-                    # whole cell by ~1.8897x on read-back. Reassigning only
-                    # .cell is enough and *correct*: PhonopyAtoms.positions is
-                    # a derived getter (scaled_positions @ cell, verified by
-                    # reading the source), so scaled/fractional positions --
-                    # the real invariant here -- are left untouched and the
-                    # Cartesian getter output rescales for free. Also dividing
-                    # .positions here (an earlier draft of this fix did) would
-                    # read back the *already-rescaled* getter output and
-                    # divide it a second time, silently corrupting the
-                    # fractional coordinates -- caught only by independently
-                    # re-deriving the written file's geometry from scratch.
-                    frozen_struct = frozen_struct.copy()
-                    frozen_struct.cell = np.array(frozen_struct.cell) / true_bohr_to_angstrom
-                write_siesta(frozen_mode_filename, frozen_struct)
+    phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
 
-                print_dual(f"Softest mode      : q = {np.array2string(q_point, precision=4)}, "
-                            f"band {band_idx}, {min_freq:.4f} THz", f_out)
-                print_dual(f"Displacement      : requested {args.freeze_amplitude:.4f} Ang, "
-                            f"achieved {achieved_shift:.4f} Ang (max atomic shift)", f_out)
-                print_dual(f"Structure written : {frozen_mode_filename}", f_out)
-                print(color_text(f" -> Saved distorted structure as "
-                                  f"'{os.path.join(phonon_dir, frozen_mode_filename)}'", 'cyan'))
+    # 4. Salvando Gráficos e Dados
+    print("[INFO] Exporting results ...")
 
-        phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+    tp_plot = phonon.plot_thermal_properties()
+    plot_filename = "thermal_properties.png"
+    tp_plot.savefig(plot_filename, dpi=300)
+    print(color_text(f" -> Saved plot as '{os.path.join(phonon_dir, plot_filename)}'", 'cyan'))
 
-        # 4. Salvando Gráficos e Dados
-        print("[INFO] Exporting results ...")
+    tp = phonon.thermal_properties
+    temperatures = tp.temperatures
+    free_energy = tp.free_energy
+    entropy = tp.entropy
+    heat_capacity = tp.heat_capacity
 
-        tp_plot = phonon.plot_thermal_properties()
-        plot_filename = "thermal_properties.png"
-        tp_plot.savefig(plot_filename, dpi=300)
-        print(color_text(f" -> Saved plot as '{os.path.join(phonon_dir, plot_filename)}'", 'cyan'))
+    dat_filename = "thermal_properties.dat"
+    with open(dat_filename, "w") as f:
+        f.write("# T(K)       FreeEnergy(kJ/mol)  Entropy(J/K/mol)  HeatCapacity(J/K/mol)\n")
+        for i in range(len(temperatures)):
+            f.write(f"{temperatures[i]:10.2f} {free_energy[i]:18.6f} {entropy[i]:18.6f} {heat_capacity[i]:18.6f}\n")
 
-        tp = phonon.thermal_properties
-        temperatures = tp.temperatures
-        free_energy = tp.free_energy
-        entropy = tp.entropy
-        heat_capacity = tp.heat_capacity
+    print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, dat_filename)}'", 'cyan'))
 
-        dat_filename = "thermal_properties.dat"
-        with open(dat_filename, "w") as f:
-            f.write("# T(K)       FreeEnergy(kJ/mol)  Entropy(J/K/mol)  HeatCapacity(J/K/mol)\n")
-            for i in range(len(temperatures)):
-                f.write(f"{temperatures[i]:10.2f} {free_energy[i]:18.6f} {entropy[i]:18.6f} {heat_capacity[i]:18.6f}\n")
+    print_section('[3] THERMAL PROPERTIES SUMMARY', f_out)
+    print_dual(f"Zero-point energy (F @ {temperatures[0]:.1f} K) : {free_energy[0]:.6f} kJ/mol", f_out)
+    print_dual(f"At T = {temperatures[-1]:.1f} K:", f_out)
+    print_dual(f"  Free energy    : {free_energy[-1]:.6f} kJ/mol", f_out)
+    print_dual(f"  Entropy        : {entropy[-1]:.6f} J/K/mol", f_out)
+    print_dual(f"  Heat capacity  : {heat_capacity[-1]:.6f} J/K/mol", f_out)
 
-        print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, dat_filename)}'", 'cyan'))
+    plots_written = write_thermal_plots(args.plot_dir, temperatures, free_energy,
+                                         entropy, heat_capacity, f_out)
+    plots_written += band_plots_written
 
-        print_dual(f"\n{color_text('[3] THERMAL PROPERTIES SUMMARY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        print_dual(f"Zero-point energy (F @ {temperatures[0]:.1f} K) : {free_energy[0]:.6f} kJ/mol", f_out)
-        print_dual(f"At T = {temperatures[-1]:.1f} K:", f_out)
-        print_dual(f"  Free energy    : {free_energy[-1]:.6f} kJ/mol", f_out)
-        print_dual(f"  Entropy        : {entropy[-1]:.6f} J/K/mol", f_out)
-        print_dual(f"  Heat capacity  : {heat_capacity[-1]:.6f} J/K/mol", f_out)
+    if args.dos:
+        print(f"[INFO] Computing total DOS (reusing the thermal-properties mesh) ...")
+        phonon.run_total_dos()
 
-        plots_written = write_thermal_plots(args.plot_dir, temperatures, free_energy,
-                                             entropy, heat_capacity, f_out)
-        plots_written += band_plots_written
-
-        if args.dos:
-            print(f"[INFO] Computing total DOS (reusing the thermal-properties mesh) ...")
-            phonon.run_total_dos()
-
-        cif_filename = None
-        disp_dat_filename = None
-        tdm = None
-        if args.pdos or args.thermal_displacements:
-            print(f"[INFO] Re-running a denser, symmetry-unreduced mesh with eigenvectors "
-                  f"for {'PDOS' if args.pdos else ''}"
-                  f"{' + ' if args.pdos and args.thermal_displacements else ''}"
-                  f"{'thermal displacements' if args.thermal_displacements else ''} ...")
-            phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
-            if args.pdos:
-                phonon.run_projected_dos()
-            if args.thermal_displacements:
-                phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
-                tdm = phonon.thermal_displacement_matrices
-
-        symbols = phonon.primitive.symbols
-        species = list(dict.fromkeys(symbols))
-
-        if args.dos or args.pdos:
-            print_dual(f"\n{color_text('[3b] DENSITY OF STATES', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            species_pdos = None
-            if args.dos:
-                td = phonon.total_dos
-                peak_idx = int(np.argmax(td.dos))
-                print_dual(f"Total DOS peak    : {td.frequency_points[peak_idx]:.4f} THz", f_out)
-                try:
-                    td.run_debye_frequency()
-                    debye_freq = td.debye_frequency
-                    if debye_freq is not None:
-                        debye_temp = PLANCK_H * (debye_freq * 1e12) / BOLTZMANN_K
-                        print_dual(f"Debye frequency   : {debye_freq:.4f} THz "
-                                    f"(Debye temperature {debye_temp:.2f} K)", f_out)
-                except Exception:
-                    pass  # best-effort -- the quadratic-DOS fit can fail for a noisy/sparse mesh
-                dos_plots = write_dos_plot(args.plot_dir, td.frequency_points, td.dos, f_out)
-                plots_written += dos_plots
-            if args.pdos:
-                pd = phonon.projected_dos
-                species_pdos = {}
-                for sp in species:
-                    idx = [i for i, s in enumerate(symbols) if s == sp]
-                    species_pdos[sp] = pd.projected_dos[idx].sum(axis=0)
-                for sp in species:
-                    peak_idx = int(np.argmax(species_pdos[sp]))
-                    print_dual(f"  {sp} PDOS peak    : {pd.frequency_points[peak_idx]:.4f} THz", f_out)
-                pdos_plots = write_pdos_plot(args.plot_dir, pd.frequency_points, species_pdos, f_out)
-                plots_written += pdos_plots
-
+    cif_filename = None
+    disp_dat_filename = None
+    tdm = None
+    if args.pdos or args.thermal_displacements:
+        print(f"[INFO] Re-running a denser, symmetry-unreduced mesh with eigenvectors "
+              f"for {'PDOS' if args.pdos else ''}"
+              f"{' + ' if args.pdos and args.thermal_displacements else ''}"
+              f"{'thermal displacements' if args.thermal_displacements else ''} ...")
+        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
+        if args.pdos:
+            phonon.run_projected_dos()
         if args.thermal_displacements:
-            matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
-            u_iso = np.trace(matrices, axis1=2, axis2=3) / 3  # (n_temps, n_atoms)
-            atom_labels = []
-            counts = {}
-            for s in symbols:
-                counts[s] = counts.get(s, 0) + 1
-                atom_labels.append(f"{s}{counts[s]}")
+            phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+            tdm = phonon.thermal_displacement_matrices
 
-            disp_dat_filename = "thermal_displacements.dat"
-            with open(disp_dat_filename, "w") as f:
-                f.write("# stb-phononsPos -- isotropic thermal displacement U_iso = trace(ADP)/3, per atom\n")
-                f.write("# columns: 1=T(K) "
-                        + " ".join(f"{i + 2}={lbl}(Ang^2)" for i, lbl in enumerate(atom_labels)) + "\n")
-                for ti, t in enumerate(tdm.temperatures):
-                    row = " ".join(f"{u_iso[ti, ai]:14.6f}" for ai in range(len(atom_labels)))
-                    f.write(f"{t:10.2f} {row}\n")
-            print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, disp_dat_filename)}'", 'cyan'))
+    symbols = phonon.primitive.symbols
+    species = list(dict.fromkeys(symbols))
 
-            # write_cif's cell parameter is written into the CIF's
-            # _cell_length_* header verbatim -- CIF has no unit tag (always
-            # real Ang by spec), so it needs phonon.primitive.cell already
-            # in real Angstrom. That's already true for the ML path
-            # (internal_to_angstrom == 1.0); for the SIESTA-bohr-numeric
-            # path it isn't (verified: writes 9.22662 for a structure whose
-            # real cell length is 4.88252 Ang -- the same bohr-numeric raw
-            # value as everywhere else in this workflow). The ADP tensor
-            # values themselves (U_11 etc.) are unaffected either way --
-            # verified identical with/without this fix -- only the header's
-            # cell size was wrong.
-            cif_cell = phonon.primitive
-            if not has_embedded_fc:
-                cif_cell = cif_cell.copy()
-                cif_cell.cell = np.array(cif_cell.cell) * true_bohr_to_angstrom
-
-            cif_filename = "tdispmat.cif"
-            tdm.write_cif(cif_cell, len(tdm.temperatures) - 1, filename=cif_filename)
-            print(color_text(f" -> Saved ADP CIF (@ {tdm.temperatures[-1]:.1f} K) as "
-                              f"'{os.path.join(phonon_dir, cif_filename)}'", 'cyan'))
-
-            species_uiso = {}
+    if args.dos or args.pdos:
+        print_section('[3b] DENSITY OF STATES', f_out)
+        species_pdos = None
+        if args.dos:
+            td = phonon.total_dos
+            peak_idx = int(np.argmax(td.dos))
+            print_dual(f"Total DOS peak    : {td.frequency_points[peak_idx]:.4f} THz", f_out)
+            try:
+                td.run_debye_frequency()
+                debye_freq = td.debye_frequency
+                if debye_freq is not None:
+                    debye_temp = PLANCK_H * (debye_freq * 1e12) / BOLTZMANN_K
+                    print_dual(f"Debye frequency   : {debye_freq:.4f} THz "
+                                f"(Debye temperature {debye_temp:.2f} K)", f_out)
+            except Exception:
+                pass  # best-effort -- the quadratic-DOS fit can fail for a noisy/sparse mesh
+            dos_plots = write_dos_plot(args.plot_dir, td.frequency_points, td.dos, f_out)
+            plots_written += dos_plots
+        if args.pdos:
+            pd = phonon.projected_dos
+            species_pdos = {}
             for sp in species:
                 idx = [i for i, s in enumerate(symbols) if s == sp]
-                species_uiso[sp] = u_iso[:, idx].mean(axis=1)
-
-            print_dual(f"\n{color_text('[3c] THERMAL DISPLACEMENTS', 'magenta')}", f_out)
-            print_dual("-" * 60, f_out)
-            print_dual(f"ADP CIF (@ {tdm.temperatures[-1]:.1f} K) : {cif_filename}", f_out)
+                species_pdos[sp] = pd.projected_dos[idx].sum(axis=0)
             for sp in species:
-                print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
+                peak_idx = int(np.argmax(species_pdos[sp]))
+                print_dual(f"  {sp} PDOS peak    : {pd.frequency_points[peak_idx]:.4f} THz", f_out)
+            pdos_plots = write_pdos_plot(args.plot_dir, pd.frequency_points, species_pdos, f_out)
+            plots_written += pdos_plots
 
-            thermal_disp_plots = write_thermal_displacement_plot(args.plot_dir, tdm.temperatures,
-                                                                    species_uiso, f_out)
-            plots_written += thermal_disp_plots
+    if args.thermal_displacements:
+        matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
+        u_iso = np.trace(matrices, axis1=2, axis2=3) / 3  # (n_temps, n_atoms)
+        atom_labels = []
+        counts = {}
+        for s in symbols:
+            counts[s] = counts.get(s, 0) + 1
+            atom_labels.append(f"{s}{counts[s]}")
 
-        # Retorna ao diretório original
-        os.chdir(original_dir)
+        disp_dat_filename = "thermal_displacements.dat"
+        with open(disp_dat_filename, "w") as f:
+            f.write("# stb-phononsPos -- isotropic thermal displacement U_iso = trace(ADP)/3, per atom\n")
+            f.write("# columns: 1=T(K) "
+                    + " ".join(f"{i + 2}={lbl}(Ang^2)" for i, lbl in enumerate(atom_labels)) + "\n")
+            for ti, t in enumerate(tdm.temperatures):
+                row = " ".join(f"{u_iso[ti, ai]:14.6f}" for ai in range(len(atom_labels)))
+                f.write(f"{t:10.2f} {row}\n")
+        print(color_text(f" -> Saved raw data as '{os.path.join(phonon_dir, disp_dat_filename)}'", 'cyan'))
 
-        print_dual(f"\n{color_text('[4] SUMMARY & FILES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
-        overall_min_freq = min(min_freq, band_min_freq) if band_min_freq is not None else min_freq
-        stability_verdict = ("UNSTABLE (imaginary modes present)" if overall_min_freq < 0
-                              else "stable on the sampled mesh"
-                                   + (" and band path" if band_min_freq is not None else ""))
-        print_dual(f"Dynamical stability : {stability_verdict}", f_out)
+        # write_cif's cell parameter is written into the CIF's
+        # _cell_length_* header verbatim -- CIF has no unit tag (always
+        # real Ang by spec), so it needs phonon.primitive.cell already
+        # in real Angstrom. That's already true for the ML path
+        # (internal_to_angstrom == 1.0); for the SIESTA-bohr-numeric
+        # path it isn't (verified: writes 9.22662 for a structure whose
+        # real cell length is 4.88252 Ang -- the same bohr-numeric raw
+        # value as everywhere else in this workflow). The ADP tensor
+        # values themselves (U_11 etc.) are unaffected either way --
+        # verified identical with/without this fix -- only the header's
+        # cell size was wrong.
+        cif_cell = phonon.primitive
+        if not has_embedded_fc:
+            cif_cell = cif_cell.copy()
+            cif_cell.cell = np.array(cif_cell.cell) * true_bohr_to_angstrom
+
+        cif_filename = "tdispmat.cif"
+        tdm.write_cif(cif_cell, len(tdm.temperatures) - 1, filename=cif_filename)
+        print(color_text(f" -> Saved ADP CIF (@ {tdm.temperatures[-1]:.1f} K) as "
+                          f"'{os.path.join(phonon_dir, cif_filename)}'", 'cyan'))
+
+        species_uiso = {}
+        for sp in species:
+            idx = [i for i, s in enumerate(symbols) if s == sp]
+            species_uiso[sp] = u_iso[:, idx].mean(axis=1)
+
+        print_section('[3c] THERMAL DISPLACEMENTS', f_out)
+        print_dual(f"ADP CIF (@ {tdm.temperatures[-1]:.1f} K) : {cif_filename}", f_out)
+        for sp in species:
+            print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
+
+        thermal_disp_plots = write_thermal_displacement_plot(args.plot_dir, tdm.temperatures,
+                                                                species_uiso, f_out)
+        plots_written += thermal_disp_plots
+
+    # Retorna ao diretório original
+    os.chdir(original_dir)
+
+    print_section('[4] SUMMARY & FILES', f_out)
+    overall_min_freq = min(min_freq, band_min_freq) if band_min_freq is not None else min_freq
+    stability_verdict = ("UNSTABLE (imaginary modes present)" if overall_min_freq < 0
+                          else "stable on the sampled mesh"
+                               + (" and band path" if band_min_freq is not None else ""))
+    print_dual(f"Dynamical stability : {stability_verdict}", f_out)
+    if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-        extra_files = ""
-        if args.bands and band_min_freq is not None:
-            extra_files += (f", {os.path.join(phonon_dir, 'phonon_bands.png')}, "
-                             f"{os.path.join(phonon_dir, 'band.yaml')}")
-        if cif_filename is not None:
-            extra_files += (f", {os.path.join(phonon_dir, disp_dat_filename)}, "
-                             f"{os.path.join(phonon_dir, cif_filename)}")
-        if frozen_mode_filename is not None:
-            extra_files += f", {os.path.join(phonon_dir, frozen_mode_filename)}"
-        print_dual(f"Files               : {os.path.join(phonon_dir, plot_filename)}, "
-                    f"{os.path.join(phonon_dir, dat_filename)}{extra_files}, "
-                    f"{os.path.join(phonon_dir, args.plot_dir)}/ "
-                    f"({len(plots_written)} .dat/.gplot pairs)", f_out)
+    extra_files = ""
+    if args.bands and band_min_freq is not None:
+        extra_files += (f", {os.path.join(phonon_dir, 'phonon_bands.png')}, "
+                         f"{os.path.join(phonon_dir, 'band.yaml')}")
+    if cif_filename is not None:
+        extra_files += (f", {os.path.join(phonon_dir, disp_dat_filename)}, "
+                         f"{os.path.join(phonon_dir, cif_filename)}")
+    if frozen_mode_filename is not None:
+        extra_files += f", {os.path.join(phonon_dir, frozen_mode_filename)}"
+    print_dual(f"Files               : {os.path.join(phonon_dir, plot_filename)}, "
+                f"{os.path.join(phonon_dir, dat_filename)}{extra_files}, "
+                f"{os.path.join(phonon_dir, args.plot_dir)}/ "
+                f"({len(plots_written)} .dat/.gplot pairs)", f_out)
 
+
+    if f_out:
+        f_out.close()
     print("\n" + "-" * 60)
     print(color_text("Post-processing complete! Results are in your phonon directory.\n", 'bold'))
 

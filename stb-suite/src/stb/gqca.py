@@ -15,7 +15,7 @@ import argparse
 from fractions import Fraction
 import numpy as np
 from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_icet
 from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
 
@@ -555,16 +555,14 @@ surface, not a coarse sample of it.""",
     with open(report_path, 'w') as f_out:
         print_dual(f"{color_text('===== GQCA STAGE 1 REPORT (CLUSTER STRUCTURE GENERATION) =====', 'magenta')}", f_out)
 
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[0] RUN METADATA', f_out)
         print_dual(f"Structure       : {args.file}", f_out)
         print_dual(f"Sublattice      : {args.sublattice} ({len(site_indices)} site(s))", f_out)
         print_dual(f"Species B       : {args.species_b}", f_out)
         print_dual(f"Calc template   : {args.calc}", f_out)
         print_dual(f"Output root     : {output_root}", f_out)
 
-        print_dual(f"\n{color_text('[1] DIMENSIONALITY', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[1] DIMENSIONALITY', f_out)
         print_dual(f"Detected (input) : {kspace.dimensionality_label(input_vacuum_axes)}", f_out)
         if input_is_2d:
             print_dual(color_text(
@@ -591,8 +589,7 @@ surface, not a coarse sample of it.""",
             print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
             sys.exit(1)
 
-        print_dual(f"\n{color_text('[2] PAIR ORBIT', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[2] PAIR ORBIT', f_out)
         print_dual(f"Shortest sublattice-sublattice distance : {min_dist:.4f} Ang", f_out)
         print_dual(f"Orbit radius    : {orbit_radius:.4f} Ang", f_out)
         print_dual(f"Multiplicity    : {orbit_multiplicity} "
@@ -605,8 +602,7 @@ surface, not a coarse sample of it.""",
             print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
             sys.exit(1)
 
-        print_dual(f"\n{color_text('[3] CLUSTER STRUCTURES', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[3] CLUSTER STRUCTURES', f_out)
         print_dual("cluster_n1 (AB) is always built at the fixed cluster-internal 50:50 "
                     "composition (the pair's only interior point) -- your real target alloy "
                     "composition x is swept entirely in Stage 2, not chosen here. See stb-gqca "
@@ -642,8 +638,7 @@ surface, not a coarse sample of it.""",
                     "relaxation, AB-ordered)", f_out)
         report_rows.append((1, out_dir, len(ab_fdf.atoms), divisions))
 
-        print_dual(f"\n{color_text('[4] SUMMARY & NEXT STEPS', 'magenta')}", f_out)
-        print_dual("-" * 60, f_out)
+        print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"3 cluster folder(s) written under '{output_root}'.", f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)

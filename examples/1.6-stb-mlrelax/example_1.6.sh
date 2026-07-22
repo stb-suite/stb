@@ -75,23 +75,48 @@ EOF
 pause
 
 echo "=================================================================="
-echo " The optimizer: FIRE and the fmax convergence criterion"
+echo " Convergence methods: FIRE, BFGS, LBFGS, and the fmax criterion"
 echo "=================================================================="
 cat <<'EOF'
 Once MACE can predict a force on every atom (F = -dE/dR, same physics as
-DFT's Hellmann-Feynman forces), any standard geometry optimizer can use it
-to walk downhill in energy. stb-mlrelax's default is FIRE (Fast Inertial
-Relaxation Engine) -- it treats the atoms like a damped mechanical system:
-move along the force direction like inertia would carry it, but adaptively
-reset/dampen the "velocity" whenever it stops pointing downhill. It's simple,
-has no matrix to invert (unlike BFGS), and is a common default for MLIP-based
-relaxation. BFGS/LBFGS are also available via --optimizer.
+DFT's Hellmann-Feynman forces), an ordinary geometry optimizer walks
+"downhill" in energy, one step at a time, until the structure stops moving
+appreciably. --optimizer picks WHICH algorithm does that walk -- all three
+converge to the same kind of answer (a local energy minimum), they just
+take different-shaped paths to get there, with different costs per step:
 
-Convergence is judged by fmax: the largest force component on any atom, in
-eV/Ang (the default target is 0.05 eV/Ang, tightenable via --fmax) -- the
-same style of criterion SIESTA's own relaxation uses, so "relaxed enough for
-stb-mlrelax" and "relaxed enough for SIESTA" mean the same physical thing,
-just possibly at different thresholds.
+  FIRE (default) -- Fast Inertial Relaxation Engine. Treats the atoms like
+    a damped mechanical system: move along the force direction as inertia
+    would carry it, accelerating while the motion keeps pointing downhill,
+    and adaptively resetting/damping the "velocity" whenever it doesn't.
+    Each step only needs the CURRENT forces -- no extra bookkeeping, no
+    matrix -- so it's cheap and very robust even from a badly-guessed
+    starting geometry, but it can need more steps to fully settle once
+    already close to the minimum (it never looks at curvature).
+
+  BFGS -- Broyden-Fletcher-Goldfarb-Shanno, a quasi-Newton method. Builds
+    up an approximate CURVATURE (Hessian) of the energy surface from the
+    history of positions/forces seen so far, and uses that curvature to
+    jump more directly toward the minimum -- typically far fewer steps
+    once already reasonably close to equilibrium (superlinear
+    convergence), at the cost of a full curvature matrix whose size grows
+    with the SQUARE of the degrees of freedom (3 x atoms, +6 more with
+    --relax-cell).
+
+  LBFGS -- Limited-memory BFGS. Same curvature-based idea as BFGS, but
+    from a short rolling history of recent steps instead of the full
+    matrix -- nearly all of BFGS's fast convergence, at a memory/step
+    cost that stays small regardless of system size. The practical choice
+    once a system is too large for full BFGS to be cheap.
+
+Convergence itself is judged by fmax: the largest force component on any
+single atom, in eV/Ang (default target 0.05, tunable via --fmax) -- the
+same style of criterion SIESTA's own relaxation uses, so "relaxed enough
+for stb-mlrelax" and "relaxed enough for SIESTA" mean the same physical
+thing, just possibly at different thresholds. All three optimizers above
+are judged by this exact same fmax target -- --optimizer only changes HOW
+FAST that target is reached, never what "converged" means. Measured live
+further down (output/optimizer-comparison/).
 EOF
 pause
 
@@ -244,24 +269,8 @@ echo "=================================================================="
 echo " output/optimizer-comparison/  --  FIRE vs. BFGS vs. LBFGS"
 echo "=================================================================="
 cat <<'EOF'
---optimizer picks the ALGORITHM that walks downhill in energy, not the
-target it walks toward -- all three below are judged by the exact same
---fmax (0.05 eV/Ang default). They differ in HOW they use the forces MACE
-gives them each step:
-
-  FIRE   -- only the current force (damped-inertia walk); cheap per step,
-            robust from a bad starting guess, but no curvature information.
-  BFGS   -- builds an approximate curvature (Hessian) from step history,
-            jumping more directly toward the minimum once already close
-            (quasi-Newton, superlinear convergence) -- at the cost of a
-            full curvature matrix that grows with the SQUARE of the
-            degrees of freedom.
-  LBFGS  -- the same curvature idea as BFGS, but from a short rolling
-            history instead of the full matrix -- nearly the same
-            few-steps convergence, at a cost that stays small regardless
-            of system size (the practical choice for large systems).
-
-Same si_defect.fdf, same --fmax, only --optimizer changes:
+Putting numbers to the FIRE/BFGS/LBFGS theory from earlier -- same
+si_defect.fdf, same --fmax, only --optimizer changes:
 EOF
 mkdir -p "$OUT/optimizer-comparison"
 cp si_defect.fdf "$OUT/optimizer-comparison/"

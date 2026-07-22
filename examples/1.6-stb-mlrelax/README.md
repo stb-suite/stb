@@ -199,13 +199,31 @@ extra information here, not a second convergence criterion.
 
 ## Model size: small vs. medium vs. large
 
-MACE-MP-0 ships in 3 sizes — more parameters/message-passing capacity costs
-more compute but (usually, across many structures — not guaranteed for any
-one structure) predicts closer to the underlying DFT reference. Numbers
-below were measured live in this session on the same 8-atom `si_defect.fdf`
-(see `example_1.6.sh`'s `output/model-comparison/`, which reproduces this
-exact table from the tool's own `[3]`/`[4]` report sections, not a separate
-claim):
+"Size" here means the trained network's capacity: how many features each
+atom carries internally (channels), how many message-passing
+interaction blocks it has, and how finely it represents angular
+information (the spherical-harmonic order used for the equivariant
+features -- see "Why this matters" above). None of that is something
+`stb-mlrelax` controls; `--model` just picks which of the 3 pre-trained
+MACE-MP-0 checkpoints to load. More capacity costs more compute but
+(usually, across many structures — not guaranteed for any one structure)
+predicts closer to the underlying DFT reference.
+
+**Cutoff radius** (also shown below) is a *separate* architectural choice:
+it's the distance, in Angstrom, within which two atoms are connected by
+an edge in the graph at all -- a larger cutoff means every atom "sees"
+a bigger local neighborhood per message-passing round, at the cost of
+more edges (more compute) per step. It's worth noting this doesn't scale
+neatly with the other two sizes either: `large` actually uses a *smaller*
+cutoff (4.50 Ang) than `small`/`medium` (6.00 Ang) below -- a reminder
+that "bigger" model checkpoints aren't a strict superset of the smaller
+ones in every dimension, just an independently-tuned, overall more
+expressive network.
+
+Numbers below were measured live in this session on the same 8-atom
+`si_defect.fdf` (see `example_1.6.sh`'s `output/model-comparison/`, which
+reproduces this exact table from the tool's own `[3]`/`[4]` report
+sections, not a separate claim):
 
 | `--model` | Parameters (approx.) | Cutoff radius | Wall time (8 atoms, CPU) | Final energy |
 |-----------|----------------------:|:---:|---:|---:|

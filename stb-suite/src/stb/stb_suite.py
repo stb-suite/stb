@@ -2127,36 +2127,43 @@ def run_input_generator() -> None:
         input_file = get_input("Input structure file: ")
     
     # --- PONTO 1: Menu Numérico para o tipo de cálculo ---
-    mode_list = [
-        'total_energy', 'total_energy+d3',
-        'relax', 'relax+d3',
-        'aimd', 'aimd+d3',
-        'bands', 'bands+d3'
-    ]
-    
+    mode_list = ['total_energy', 'relax', 'aimd', 'bands']
+
     print(f"\n{color_text('Available calculation modes:', 'yellow')}")
     for i, mode in enumerate(mode_list, 1):
         print(f"  {color_text(str(i)+'.', 'yellow')} {mode}")
 
     choice = 0
     max_choice = len(mode_list)
-    
+
     while not (1 <= choice <= max_choice):
         choice = get_int_input(f"\nSelect calculation mode (1-{max_choice}): ")
         if not (1 <= choice <= max_choice):
             print(color_text(f"Invalid choice! Please select between 1 and {max_choice}.", 'red'))
-            
+
     calc_type = mode_list[choice - 1]
-    print(f"Selected mode: {color_text(calc_type, 'cyan')}") 
+    print(f"Selected mode: {color_text(calc_type, 'cyan')}")
+
+    # --- PONTO 1b: DFT-D3, independente do modo de cálculo ---
+    d3_choice = get_input("Enable the DFT-D3 dispersion correction? (y/N): ").strip().lower()
+
+    # --- PONTO 1c: Spin polarization, independente do modo de cálculo ---
+    spin_choice = get_input("Spin-polarized calculation? (y/N, default: non-polarized): ").strip().lower()
 
     # --- PONTO 2: Validação do caminho do Pseudopotencial ---
-    
+
     args = [
-        input_file, 
+        input_file,
         "--type", calc_type,
         "--no-intro"
     ]
-    
+
+    if d3_choice == 'y':
+        args.append("--d3")
+
+    if spin_choice == 'y':
+        args.append("--spin-polarized")
+
     pp_path = prompt_pseudo_source(optional=True)
     if pp_path:
         args.extend(["--pp-path", pp_path])
@@ -2166,6 +2173,10 @@ def run_input_generator() -> None:
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-inputfile", args)
 

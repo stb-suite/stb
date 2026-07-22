@@ -70,17 +70,23 @@ echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
 
-# --- 2. Matrix of the 8 calculation modes ---
-echo -e "\n--- Testing the 8 calculation modes ---"
+# --- 2. Matrix of the 4 calculation modes x DFT-D3 on/off ---
+# DFT-D3 is a standalone flag (-d3/--d3), independent of -t/--type -- not a
+# "<mode>+d3" suffix on the mode string anymore.
+echo -e "\n--- Testing the 4 calculation modes, with and without -d3 ---"
 
-MODES=(total_energy total_energy+d3 relax relax+d3 aimd aimd+d3 bands bands+d3)
+MODES=(total_energy relax aimd bands)
 
 for mode in "${MODES[@]}"; do
-    echo -n "Testing mode: $mode"
-    rm -f calc.fdf
-    stb-inputfile structure.fdf -t "$mode" --no-intro > "log_${mode//+/_}.txt" 2>&1
-    check_success calc.fdf
-    mv calc.fdf "calc_${mode//+/_}.fdf"
+    for d3_flag in "" "-d3"; do
+        label="$mode"
+        [ -n "$d3_flag" ] && label="${mode}_d3"
+        echo -n "Testing mode: $mode (d3=${d3_flag:-off})"
+        rm -f calc.fdf
+        stb-inputfile structure.fdf -t "$mode" $d3_flag --no-intro > "log_${label}.txt" 2>&1
+        check_success calc.fdf
+        mv calc.fdf "calc_${label}.fdf"
+    done
 done
 
 echo -e "\n--- Verifying generated content ---"
@@ -125,6 +131,198 @@ check_not_contains "MD.TypeOfRun            CG" calc_total_energy.fdf
 check_not_contains "^%block Supercell" calc_total_energy.fdf
 check_not_contains "%include kpath_bs.fdf" calc_total_energy.fdf
 
+echo "Checking that Spin defaults to non-polarized (no -s given):"
+check_contains "Spin                non-polarized" calc_relax.fdf
+
+
+# --- 2b. Spin polarization (-s / --spin-polarized), independent of -t and -d3 ---
+echo -e "\n--- Testing -s / --spin-polarized ---"
+
+echo -n "Testing: -s enables spin polarization"
+rm -f calc.fdf
+stb-inputfile structure.fdf -t relax -s --no-intro > log_spin.txt 2>&1
+check_success calc.fdf
+check_contains "Spin                polarized" calc.fdf
+mv calc.fdf calc_spin.fdf
+
+echo -n "Testing: -s combined with -d3 (both independent flags at once)"
+rm -f calc.fdf
+stb-inputfile structure.fdf -t relax -s -d3 --no-intro > log_spin_d3.txt 2>&1
+check_success calc.fdf
+check_contains "Spin                polarized" calc.fdf
+check_contains "DFTD3                   .true." calc.fdf
+mv calc.fdf calc_spin_d3.fdf
+
+
+# --- 2c. Structure validation (symmetry + malformation warnings), section [2] ---
+echo -e "\n--- Testing [2] STRUCTURE VALIDATION ---"
+
+echo -n "Testing: normal structure -> symmetry reported, no malformation warnings"
+rm -f calc.fdf
+stb-inputfile structure.fdf -t total_energy --no-intro > log_validation_ok.txt 2>&1
+check_contains "Space group :" log_validation_ok.txt
+check_contains "Crystal system :" log_validation_ok.txt
+check_contains "No malformation issues detected." log_validation_ok.txt
+check_not_contains "Unusual atomic density" log_validation_ok.txt
+rm -f calc.fdf
+
+echo -n "Testing: two atoms closer than 0.5 Ang -> too-close-atoms warning"
+cat > structure_close_atoms.fdf << 'EOF'
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Ang
+
+%block LatticeVectors
+ 10.0   0.0   0.0
+ 0.0   10.0   0.0
+ 0.0   0.0   10.0
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 5.0   5.0   5.0   1
+ 5.1   5.0   5.0   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-inputfile structure_close_atoms.fdf -t total_energy --no-intro > log_validation_close.txt 2>&1
+check_contains "unusually close" log_validation_close.txt
+rm -f calc.fdf
+
+echo -n "Testing: left-handed lattice (negative determinant) -> warning"
+cat > structure_left_handed.fdf << 'EOF'
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.0   0.0   0.0
+ 0.0   5.0   0.0
+ 0.0   0.0  -5.0
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0   0.0   0.0   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-inputfile structure_left_handed.fdf -t total_energy --no-intro > log_validation_lefthanded.txt 2>&1
+check_contains "left-handed" log_validation_lefthanded.txt
+rm -f calc.fdf
+
+echo -n "Testing: implausibly low density in a genuine 3D bulk cell -> warning"
+cat > structure_dilute.fdf << 'EOF'
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1  14  Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 13.575   0.00000   0.00000
+ 0.00000   13.575   0.00000
+ 0.00000   0.00000   13.575
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-inputfile structure_dilute.fdf -t total_energy --no-intro > log_validation_dilute.txt 2>&1
+check_contains "Unusual atomic density" log_validation_dilute.txt
+rm -f calc.fdf
+
+echo -n "Testing: density check skipped for a vacuum-padded structure (would otherwise trigger)"
+cat > structure_vacuum_dilute.fdf << 'EOF'
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Ang
+
+%block LatticeVectors
+ 3.0   0.0   0.0
+ 0.0   3.0   0.0
+ 0.0   0.0   20.0
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 1.5   1.5   10.0   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-inputfile structure_vacuum_dilute.fdf -t total_energy --no-intro > log_validation_vacuum_dilute.txt 2>&1
+check_not_contains "Unusual atomic density" log_validation_vacuum_dilute.txt
+rm -f calc.fdf
+
+echo -n "Testing: NumberOfAtoms header mismatch -> warning"
+cat > structure_bad_header.fdf << 'EOF'
+NumberOfSpecies    1
+NumberofAtoms      5
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.0   0.0   0.0
+ 0.0   5.0   0.0
+ 0.0   0.0   5.0
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0   0.0   0.0   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+stb-inputfile structure_bad_header.fdf -t total_energy --no-intro > log_validation_badheader.txt 2>&1
+check_contains "Declared NumberOfAtoms" log_validation_badheader.txt
+rm -f calc.fdf
+
+echo -n "Testing: --view is accepted and does not crash (no real display forced via DISPLAY=)"
+rm -f calc.fdf
+DISPLAY= stb-inputfile structure.fdf -t relax --view --no-intro > log_view.txt 2>&1
+EXIT_CODE=$?
+if [ "$EXIT_CODE" -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} --view did not crash the run (exit 0)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} --view run exited with $EXIT_CODE"
+    FAIL=$((FAIL+1))
+fi
+check_success calc.fdf
+mv calc.fdf calc_view.fdf
+
 
 # --- 3. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
@@ -144,6 +342,11 @@ fi
 echo -n "Testing: -t with an invalid value"
 stb-inputfile structure.fdf -t invalid_mode --no-intro > log_bad_mode.txt 2>&1
 check_failure_exit $?
+
+echo -n "Testing: old '<mode>+d3' suffix syntax is now rejected (-d3 is its own flag)"
+stb-inputfile structure.fdf -t relax+d3 --no-intro > log_old_suffix.txt 2>&1
+check_failure_exit $?
+check_contains "invalid choice" log_old_suffix.txt
 
 echo -n "Testing: -t missing (required)"
 stb-inputfile structure.fdf --no-intro > log_missing_type.txt 2>&1
@@ -262,12 +465,14 @@ rm -f C.psf C.psml
 # --- 5. Interactive path (stb-suite, shortcut 1.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.1) ---"
 
-echo -n "Testing: navigate 1.1 -> invalid file then valid -> mode out of range then valid (3=relax) -> skip PP -> quit"
+echo -n "Testing: navigate 1.1 -> invalid file then valid -> mode out of range then valid (2=relax) -> d3=y -> spin=y -> skip PP -> view=n -> quit"
 rm -f calc.fdf
-printf '1.1\ndoes_not_exist.fdf\nstructure.fdf\n99\n3\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '1.1\ndoes_not_exist.fdf\nstructure.fdf\n99\n2\ny\ny\n\nn\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_success calc.fdf
 check_contains "File not found" log_interactive.txt
 check_contains "Invalid choice" log_interactive.txt
+check_contains "DFTD3                   .true." calc.fdf
+check_contains "Spin                polarized" calc.fdf
 mv calc.fdf calc_interactive.fdf
 
 

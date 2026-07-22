@@ -15,8 +15,15 @@ import os
 import shutil
 import argparse
 from stb.core import structure_io, kspace
+from stb.core import symmetry as core_symmetry
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.ase_view import view_structure_interactive
+
+# Sanity thresholds for the pre-generation structure validation (section [2]).
+MIN_ATOM_DISTANCE_ANG = 0.5   # same threshold as crystalbuilder.py/crystalcast.py
+MIN_DENSITY_ATOMS_PER_ANG3 = 0.01   # generous band spanning light-to-dense solids
+MAX_DENSITY_ATOMS_PER_ANG3 = 0.15   # (only checked for a genuine 3D bulk cell)
 
 REPORT_FILE = "stb_inputfile_report.txt"
 
@@ -960,7 +967,7 @@ def build_bib_entries(chosen_mode, d3_enabled, pseudo_bank=None):
     entries = [_BIB_SIESTA, _BIB_SIESTA_RECENT, _BIB_PBE]
     if d3_enabled:
         entries.append(_BIB_DFTD3)
-    if chosen_mode in ('aimd', 'aimd+d3'):
+    if chosen_mode == 'aimd':
         entries.append(_BIB_NOSE)
     if pseudo_bank in _BIB_PSEUDO_BANK:
         entries.append(_BIB_PSEUDO_BANK[pseudo_bank])
@@ -981,15 +988,56 @@ def write_bib_file(bib_path, entries):
 def parse_structure_fdf(filename):
     """
     Parses a .fdf (Siesta) file and returns the lattice vectors, the list of
-    chemical species symbols, and the per-axis vacuum flags (see
-    kspace.detect_vacuum_axes) used to compute a dimensionality-aware k-grid.
+    chemical species symbols, the per-axis vacuum flags (see
+    kspace.detect_vacuum_axes, used to compute a dimensionality-aware k-grid),
+    and the parsed FdfStructure itself (for callers that need e.g. its
+    raw_lines or a pymatgen Structure via structure_io.to_pymatgen).
     """
     structure = structure_io.read_fdf(filename)
     positions = np.array([pos for _, pos in structure.atoms])
     is_cartesian = structure.coord_format == 'cartesian'
     frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
     vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, VACUUM_GAP_ANG)
-    return structure.lattice, structure_io.species_list(structure), vacuum_axes
+    return structure.lattice, structure_io.species_list(structure), vacuum_axes, structure
+
+
+def check_declared_atom_counts(structure):
+    """Compares the .fdf header's declared NumberOfAtoms/NumberOfSpecies
+    (if present) against what the %block contents actually contain -- catches
+    a stale header left over from hand-editing. read_fdf() itself never
+    parses these two header lines (only the actual blocks), so this scans
+    `structure.raw_lines` directly. Returns a list of warning strings (empty
+    if both headers are absent, unparsable, or consistent -- this is a bonus
+    consistency check, not a required header)."""
+    declared = {}
+    for line in structure.raw_lines:
+        cleaned = line.split("#", 1)[0].strip()
+        if not cleaned:
+            continue
+        parts = cleaned.split()
+        lower = parts[0].lower() if parts else ""
+        if lower in ("numberofatoms", "numberofspecies") and len(parts) >= 2:
+            try:
+                declared[lower] = int(parts[1])
+            except ValueError:
+                continue
+
+    warnings = []
+    n_atoms = len(structure.atoms)
+    n_species = len(structure_io.species_list(structure))
+    if "numberofatoms" in declared and declared["numberofatoms"] != n_atoms:
+        warnings.append(
+            f"[WARNING] Declared NumberOfAtoms ({declared['numberofatoms']}) does not "
+            f"match the {n_atoms} atom(s) actually found in %block "
+            "AtomicCoordinatesAndAtomicSpecies -- check for a stale header."
+        )
+    if "numberofspecies" in declared and declared["numberofspecies"] != n_species:
+        warnings.append(
+            f"[WARNING] Declared NumberOfSpecies ({declared['numberofspecies']}) does not "
+            f"match the {n_species} species actually found in %block "
+            "ChemicalSpeciesLabel -- check for a stale header."
+        )
+    return warnings
 
 def copy_pseudopotentials(species_list, pp_path, f_out=None):
     """
@@ -1043,7 +1091,7 @@ def copy_pseudopotentials(species_list, pp_path, f_out=None):
     return warnings
 
 # --- Main Generation Logic Function ---
-def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
+def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, pp_path, f_out=None):
     """
     Main function that executes the file generation logic.
     """
@@ -1066,41 +1114,101 @@ def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
         print_section("[1] TEMPLATE SELECTION", f_out)
         # --- Select Template ---
         template_string = ""
-        if chosen_mode in ['relax', 'relax+d3']:
+        if chosen_mode == 'relax':
             template_string = CALC_RELAX_TEMPLATE
             print_dual("Template : Relax", f_out)
-        elif chosen_mode in ['total_energy', 'total_energy+d3']:
+        elif chosen_mode == 'total_energy':
             template_string = CALC_TOTAL_ENERGY_TEMPLATE
             print_dual("Template : Total Energy", f_out)
-        elif chosen_mode in ['aimd', 'aimd+d3']:
+        elif chosen_mode == 'aimd':
             template_string = CALC_AIMD_TEMPLATE
             print_dual("Template : AIMD", f_out)
-        elif chosen_mode in ['bands', 'bands+d3']:
+        elif chosen_mode == 'bands':
             template_string = CALC_BANDS_TEMPLATE
             print_dual("Template : Bands", f_out)
 
         # --- Set D3 flag ---
-        d3_flag = ".false."
-        if chosen_mode in ['relax+d3', 'total_energy+d3', 'aimd+d3', 'bands+d3']:
-            d3_flag = ".true."
-            print_dual("DFT-D3 (van der Waals) correction : ENABLED", f_out)
-        else:
-            # 'relax', 'total_energy', 'aimd', or 'bands'
-            print_dual("DFT-D3 (van der Waals) correction : DISABLED", f_out)
+        d3_flag = ".true." if d3_enabled else ".false."
+        print_dual(
+            f"DFT-D3 (van der Waals) correction : {'ENABLED' if d3_enabled else 'DISABLED'}",
+            f_out
+        )
 
         d3_line_new = f"DFTD3                   {d3_flag}"
+
+        # --- Set Spin flag ---
+        spin_value = "polarized" if spin_polarized else "non-polarized"
+        print_dual(f"Spin polarization : {spin_value.upper()}", f_out)
+        spin_line_new = f"Spin                {spin_value}"
+
         template_lines = template_string.splitlines(keepends=True)
 
         # Parse structure and get species
-        lattice, species, vacuum_axes = parse_structure_fdf(struct_file)
+        lattice, species, vacuum_axes, fdf_structure = parse_structure_fdf(struct_file)
         print_dual(f"Species found : {', '.join(species)}", f_out)
 
-        print_section("[2] K-GRID", f_out)
+        print_section("[2] STRUCTURE VALIDATION", f_out)
+        try:
+            pmg_structure = structure_io.to_pymatgen(fdf_structure)
+            validation_warnings = []
+
+            # --- Malformation checks ---
+            min_dist = structure_io.min_pairwise_distance(pmg_structure)
+            if min_dist is not None and min_dist < MIN_ATOM_DISTANCE_ANG:
+                validation_warnings.append(
+                    f"[WARNING] Some atoms are unusually close ({min_dist:.3f} Ang) -- "
+                    "check the input structure."
+                )
+
+            volume = np.linalg.det(lattice)
+            if volume < 0:
+                validation_warnings.append(
+                    "[WARNING] Lattice is left-handed (negative cell volume/determinant) "
+                    "-- check the order/sign of the lattice vectors."
+                )
+
+            if sum(vacuum_axes) == 0 and abs(volume) > 0:
+                # Density is only a meaningful sanity metric for a genuine 3D
+                # bulk cell -- a vacuum-padded structure's volume is dominated
+                # by the artificial vacuum by design, not the real material.
+                # (A zero/degenerate volume is handled separately, as a hard
+                # error, by the k-grid section right after this one.)
+                density = len(fdf_structure.atoms) / abs(volume)
+                if not (MIN_DENSITY_ATOMS_PER_ANG3 <= density <= MAX_DENSITY_ATOMS_PER_ANG3):
+                    validation_warnings.append(
+                        f"[WARNING] Unusual atomic density ({density:.4f} atoms/Ang^3) -- "
+                        "check for a unit mismatch (e.g. Bohr vs Angstrom in LatticeConstant)."
+                    )
+
+            validation_warnings.extend(check_declared_atom_counts(fdf_structure))
+
+            if validation_warnings:
+                for w in validation_warnings:
+                    print_dual(color_text(w, 'yellow'), f_out)
+            else:
+                print_dual("No malformation issues detected.", f_out)
+
+            # --- Symmetry analysis ---
+            sg_label = core_symmetry.space_group_label(pmg_structure)
+            print_dual(f"Space group : {sg_label}", f_out)
+            if len(pmg_structure) >= 2:
+                crystal_sys, point_group = core_symmetry.crystal_system(pmg_structure)
+                print_dual(f"Crystal system : {crystal_sys} (point group {point_group})", f_out)
+            if sum(vacuum_axes) > 0:
+                print_dual(color_text(
+                    "[WARNING] Structure has a vacuum-padded axis -- the space group above "
+                    "treats it as an ordinary periodic direction and may not reflect the "
+                    "true symmetry. Use stb-symmetry (code 3.5) for a dimension-aware "
+                    "layer-group/point-group analysis.", 'yellow'), f_out)
+        except Exception as e:
+            print_dual(color_text(f"[WARNING] Structure validation could not complete: {e}", 'yellow'), f_out)
+
+        print_section("[3] K-GRID", f_out)
         # --- K-Grid Conditional Logic ---
         replace_kgrid = False
         kgrid_line_new = ""  # Initialize
 
-        if chosen_mode in ['aimd', 'aimd+d3']:
+        if chosen_mode == 'aimd':
             # For AIMD, do nothing, keep the K-grid from the template
             replace_kgrid = False
             print_dual("AIMD mode selected -- K-grid will NOT be modified.", f_out)
@@ -1116,7 +1224,7 @@ def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
         # Use only the base file name for the include
         include_line_new = f"%include {os.path.basename(struct_file)}"
 
-        print_section("[3] WRITING INPUT FILE", f_out)
+        print_section("[4] WRITING INPUT FILE", f_out)
         # Process the template and replace lines
         output_lines = []
         for line in template_lines:
@@ -1138,6 +1246,10 @@ def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
             elif line_stripped_lower.startswith('dftd3'):
                 output_lines.append(d3_line_new + '\n')
 
+            # Replace the Spin flag
+            elif line_stripped_lower.startswith('spin') and not line_stripped_lower.startswith('spin.'):
+                output_lines.append(spin_line_new + '\n')
+
             else:
                 # Keep the original template line
                 output_lines.append(line)
@@ -1148,7 +1260,7 @@ def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
 
         print_dual(color_text(f"[OK] File '{output_file}' generated successfully.", 'green'), f_out)
 
-        print_section("[4] REFERENCES", f_out)
+        print_section("[5] REFERENCES", f_out)
         pseudo_bank = detect_pseudo_bank(pp_path)
         bib_entries = build_bib_entries(chosen_mode, d3_flag == ".true.", pseudo_bank)
         write_bib_file(BIB_FILE, bib_entries)
@@ -1161,15 +1273,15 @@ def generate_calculation(struct_file, chosen_mode, pp_path, f_out=None):
         # --- 5. Copy Pseudopotentials ---
         pp_warnings = []
         if pp_path:
-            print_section("[5] PSEUDOPOTENTIALS", f_out)
+            print_section("[6] PSEUDOPOTENTIALS", f_out)
             pp_warnings = copy_pseudopotentials(species, pp_path, f_out)
 
         if pp_warnings:
-            print_section("[5b] PSEUDOPOTENTIAL WARNINGS", f_out)
+            print_section("[6b] PSEUDOPOTENTIAL WARNINGS", f_out)
             for warning in pp_warnings:
                 print_dual(color_text(warning, 'yellow'), f_out)
 
-        print_section("[6] SUMMARY & FILES", f_out)
+        print_section("[7] SUMMARY & FILES", f_out)
         print_dual("Status       : OK", f_out)
         print_dual(f"Input file   : {output_file}", f_out)
         print_dual(f"References   : {BIB_FILE}", f_out)
@@ -1187,30 +1299,25 @@ def main():
     Processes the command-line arguments and calls the generation logic.
     """
     # --- Definition of valid modes ---
-    mode_list = [
-        'total_energy', 'total_energy+d3',
-        'relax', 'relax+d3',
-        'aimd', 'aimd+d3',
-        'bands', 'bands+d3'
-    ]
+    mode_list = ['total_energy', 'relax', 'aimd', 'bands']
 
     # --- Configure argparse ---
     parser = argparse.ArgumentParser(
         description="Script to prepare a Siesta input file (.fdf).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Usage examples:\n"
-               "  %(prog)s struct.fdf -t relax+d3 -p /path/to/pps\n"
+               "  %(prog)s struct.fdf -t relax -d3 -p /path/to/pps\n"
                "  %(prog)s system.fdf -t bands\n"
-               "  %(prog)s system.fdf --type aimd\n"
+               "  %(prog)s system.fdf --type aimd -s\n"
     )
-    
+
     # Argument 1: Structure File (Required, Positional)
     parser.add_argument(
         "structure_file",
         type=str,
         help="Path to the structure file (e.g., struct.fdf)"
     )
-    
+
     # Argument 2: Calculation Mode (Required, with Flag)
     parser.add_argument(
         "-t", "--type",
@@ -1220,8 +1327,25 @@ def main():
         dest="calc_type", # The value will be stored in 'args.calc_type'
         help=f"Calculation mode. Valid choices: {', '.join(mode_list)}"
     )
-    
-    # Argument 3: PPs Path (Optional, with flag)
+
+    # Argument 3: DFT-D3 correction (optional, independent of the mode)
+    parser.add_argument(
+        "-d3", "--d3",
+        dest="d3",
+        action="store_true",
+        help="Enable the DFT-D3 (Grimme) van der Waals dispersion correction, "
+             "on top of any calculation mode."
+    )
+
+    # Argument 3b: Spin polarization (optional, independent of the mode)
+    parser.add_argument(
+        "-s", "--spin-polarized",
+        dest="spin_polarized",
+        action="store_true",
+        help="Enable spin polarization. Default: non-polarized."
+    )
+
+    # Argument 4: PPs Path (Optional, with flag)
     parser.add_argument(
         "-p", "--pp-path",
         type=str,
@@ -1231,9 +1355,12 @@ def main():
              "or a folder path."
     )
 
-    
+
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="Open an interactive 3D view of the structure (via ASE) "
+                             "after generating calc.fdf. Needs a display. Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-inputfile {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -1261,13 +1388,23 @@ def main():
     print_dual(color_text("===== STB-INPUTFILE REPORT =====", 'magenta'), f_out)
 
     # Call the main logic function with the processed arguments
-    ok = generate_calculation(args.structure_file, args.calc_type, args.pp_path, f_out)
+    ok = generate_calculation(
+        args.structure_file, args.calc_type, args.d3, args.spin_polarized, args.pp_path, f_out
+    )
 
     if report_path:
         print_dual(f"Report       : {report_path}", f_out)
 
     if f_out:
         f_out.close()
+
+    # --view runs last, after every check/report section above has already
+    # printed, so a blocking GUI window never delays or hides them.
+    if ok and args.view:
+        from pymatgen.io.ase import AseAtomsAdaptor
+        _, _, _, fdf_structure = parse_structure_fdf(args.structure_file)
+        atoms = AseAtomsAdaptor.get_atoms(structure_io.to_pymatgen(fdf_structure))
+        view_structure_interactive(atoms)
 
     if not ok:
         sys.exit(1)

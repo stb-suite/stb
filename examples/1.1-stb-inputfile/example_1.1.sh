@@ -44,10 +44,20 @@ The four calculation modes, and what each is for:
   aimd           ab initio molecular dynamics
   bands          total_energy + a k-path and PDOS block, for band structure
 
-Any mode also accepts a "+d3" suffix (e.g. "relax+d3") to switch on the
-DFT-D3 dispersion correction. "-p dojo" pulls pseudopotentials from a bank
-bundled with stb_suite instead of a local folder -- used throughout this
-example so every generated folder is immediately runnable.
+DFT-D3 (dispersion correction) and spin polarization are separate,
+independent flags: -d3/--d3 and -s/--spin-polarized, each combinable with
+any of the four modes above (e.g. "-t relax -d3 -s"). Spin defaults to
+non-polarized if -s isn't given. "-p dojo" pulls pseudopotentials from a
+bank bundled with stb_suite instead of a local folder -- used throughout
+this example so every generated folder is immediately runnable.
+
+Before writing calc.fdf, it also always runs a structure validation pass
+(symmetry + malformation checks -- atoms too close, a left-handed cell, an
+implausible density, a stale atom-count header) and reports whatever it
+finds as [WARNING] lines -- never fatal, just a heads-up. Watch for the
+"[2] STRUCTURE VALIDATION" section in every run below. --view (not used in
+this unattended script, but try it yourself) opens the structure in ASE's
+interactive 3D viewer right before the tool exits.
 EOF
 pause
 
@@ -63,9 +73,10 @@ B -- interactive stb-suite menu, same questions as guided prompts:
   Select an option (0-6, or a tool code like 4.1.2): 1.1
 
 "1.1" jumps straight to this tool. It asks, one at a time: which structure
-file, which mode (numbered list), an optional pseudopotential source,
-whether to save a report -- then runs the exact same stb-inputfile command
-underneath. Proven identical to the CLI further below.
+file, which mode (numbered list), whether to enable DFT-D3, whether to
+enable spin polarization, an optional pseudopotential source, whether to
+save a report -- then runs the exact same stb-inputfile command underneath.
+Proven identical to the CLI further below.
 EOF
 pause
 
@@ -83,6 +94,33 @@ grep "MD.TypeOfRun" "$OUT/relax/calc.fdf"
 echo
 echo "Folder contents (self-contained, ready for SIESTA):"
 ls "$OUT/relax"
+pause
+
+echo "=================================================================="
+echo " output/relax_d3/  --  -t relax -d3"
+echo "=================================================================="
+echo "-d3 is independent of the mode: same 'relax' template, DFT-D3 switched on."
+mkdir -p "$OUT/relax_d3"
+cp structure.fdf "$OUT/relax_d3/"
+echo
+echo "\$ stb-inputfile structure.fdf -t relax -d3 -p dojo --no-intro"
+(cd "$OUT/relax_d3" && stb-inputfile structure.fdf -t relax -d3 -p dojo --no-intro > /dev/null)
+echo "Only the DFTD3 line differs from output/relax/calc.fdf:"
+diff <(grep -v "^#" "$OUT/relax/calc.fdf") <(grep -v "^#" "$OUT/relax_d3/calc.fdf") || true
+pause
+
+echo "=================================================================="
+echo " output/relax_spin/  --  -t relax -s"
+echo "=================================================================="
+echo "-s is also independent of the mode -- and of -d3. Non-polarized (the"
+echo "default) is what every other folder in this example uses."
+mkdir -p "$OUT/relax_spin"
+cp structure.fdf "$OUT/relax_spin/"
+echo
+echo "\$ stb-inputfile structure.fdf -t relax -s -p dojo --no-intro"
+(cd "$OUT/relax_spin" && stb-inputfile structure.fdf -t relax -s -p dojo --no-intro > /dev/null)
+echo "Only the Spin line differs from output/relax/calc.fdf:"
+diff <(grep -v "^#" "$OUT/relax/calc.fdf") <(grep -v "^#" "$OUT/relax_spin/calc.fdf") || true
 pause
 
 echo "=================================================================="
@@ -115,8 +153,8 @@ echo "output folder is kept for this, it's just a check."
 TMP="$(mktemp -d)"
 cp structure.fdf "$TMP/"
 echo
-echo "\$ printf '1.1\\nstructure.fdf\\n3\\n\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.1\nstructure.fdf\n3\n\nn\n\n0\n' | stb-suite > /dev/null 2>&1)
+echo "\$ printf '1.1\\nstructure.fdf\\n2\\nn\\nn\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.1\nstructure.fdf\n2\nn\nn\n\nn\nn\n\n0\n' | stb-suite > /dev/null 2>&1)
 if diff -q "$OUT/relax/calc.fdf" "$TMP/calc.fdf" > /dev/null; then
     echo "Confirmed: identical to output/relax/calc.fdf."
 else
@@ -140,46 +178,46 @@ as vacuum instead of periodic when computing the k-grid -- no flag needed,
 it just reads the geometry. The next 4 folders run the exact same command
 against structures that only differ in how many axes are periodic:
 
-  0D  structure_0D.fdf   CH4 molecule       -- 0 periodic axes
-  1D  structure_1D.fdf   carbon chain       -- 1 periodic axis
-  2D  structure_2D.fdf   graphene monolayer -- 2 periodic axes
-  3D  structure.fdf      bulk silicon       -- 3 periodic axes
+  molecule/  structure_molecule.fdf   CH4, isolated       -- 0D, 0 periodic axes
+  chain/     structure_chain.fdf      carbon chain        -- 1D, 1 periodic axis
+  graphene/  structure_graphene.fdf   graphene monolayer  -- 2D, 2 periodic axes
+  silicon/   structure.fdf            bulk silicon        -- 3D, 3 periodic axes
 EOF
 pause
 
-for dim in 0D 1D 2D 3D; do
-    case "$dim" in
-        0D) struct="structure_0D.fdf"; label="0D -- isolated molecule (CH4)" ;;
-        1D) struct="structure_1D.fdf"; label="1D -- carbon chain" ;;
-        2D) struct="structure_2D.fdf"; label="2D -- graphene monolayer" ;;
-        3D) struct="structure.fdf";    label="3D -- bulk silicon" ;;
+for case in molecule chain graphene silicon; do
+    case "$case" in
+        molecule) struct="structure_molecule.fdf"; label="molecule/ -- CH4, isolated (0D)" ;;
+        chain)    struct="structure_chain.fdf";    label="chain/ -- carbon chain (1D)" ;;
+        graphene) struct="structure_graphene.fdf"; label="graphene/ -- graphene monolayer (2D)" ;;
+        silicon)  struct="structure.fdf";          label="silicon/ -- bulk silicon (3D)" ;;
     esac
 
     echo "=================================================================="
-    echo " output/$dim/  --  $label"
+    echo " output/$case  --  $label"
     echo "=================================================================="
-    mkdir -p "$OUT/$dim"
-    cp "$struct" "$OUT/$dim/"
+    mkdir -p "$OUT/$case"
+    cp "$struct" "$OUT/$case/"
     echo "\$ stb-inputfile $struct -t total_energy -p dojo --no-intro"
-    (cd "$OUT/$dim" && stb-inputfile "$struct" -t total_energy -p dojo --no-intro > /dev/null)
-    grep "kgrid.MonkhorstPack" "$OUT/$dim/calc.fdf"
-    ls "$OUT/$dim"
+    (cd "$OUT/$case" && stb-inputfile "$struct" -t total_energy -p dojo --no-intro > /dev/null)
+    grep "kgrid.MonkhorstPack" "$OUT/$case/calc.fdf"
+    ls "$OUT/$case"
     pause
 done
 
 echo "=================================================================="
 echo " Side by side"
 echo "=================================================================="
-for dim in 0D 1D 2D 3D; do
-    printf "  %-3s " "$dim"
-    grep "kgrid.MonkhorstPack" "$OUT/$dim/calc.fdf"
+for case in molecule chain graphene silicon; do
+    printf "  %-10s " "$case"
+    grep "kgrid.MonkhorstPack" "$OUT/$case/calc.fdf"
 done
 cat <<'EOF'
 
-  0D: 1 1 1     -- no periodic axis        -> single k-point everywhere
-  1D: N 1 1     -- periodic along a only   -> real grid on a, 1 elsewhere
-  2D: N N 1     -- periodic along a and b  -> real grid in-plane, 1 out-of-plane
-  3D: N N N     -- fully periodic          -> real grid on all 3 axes
+  molecule (0D): 1 1 1     -- no periodic axis        -> single k-point everywhere
+  chain    (1D): N 1 1     -- periodic along a only   -> real grid on a, 1 elsewhere
+  graphene (2D): N N 1     -- periodic along a and b  -> real grid in-plane, 1 out-of-plane
+  silicon  (3D): N N N     -- fully periodic          -> real grid on all 3 axes
 EOF
 
 echo
@@ -187,8 +225,9 @@ echo "=================================================================="
 echo " Done"
 echo "=================================================================="
 cat <<EOF
-Six self-contained, SIESTA-ready folders were generated under output/:
-  relax/   bands/   0D/   1D/   2D/   3D/
+Eight self-contained, SIESTA-ready folders were generated under output/:
+  relax/   relax_d3/   relax_spin/   bands/
+  molecule/   chain/   graphene/   silicon/
 
 Each one already has its structure file, calc.fdf, and pseudopotentials
 (plus kpath_bs.fdf for bands/) -- hand any of them to SIESTA as-is.
@@ -196,5 +235,5 @@ Each one already has its structure file, calc.fdf, and pseudopotentials
 As a next step, try on your own:
   stb-inputfile structure.fdf -t total_energy -p dojo
   stb-inputfile structure.fdf -t aimd -p dojo
-  stb-inputfile structure.fdf -t relax+d3 -p dojo   # any mode + "+d3" adds DFT-D3
+  stb-inputfile structure.fdf -t bands -d3 -s -p dojo   # -d3 and -s combine with any mode
 EOF

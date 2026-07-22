@@ -12,6 +12,13 @@ hand-assembling a `.fdf` file from scratch (and re-deriving the k-grid by
 hand every time your cell changes), you answer one question — "what am I
 calculating?" — and get a working input file back.
 
+Before writing `calc.fdf`, it also always runs a quick structure validation
+pass — symmetry (space group / crystal system) plus a handful of
+malformation checks (atoms too close together, a left-handed cell, an
+implausible density, a stale atom-count header) — and reports whatever it
+finds as `[WARNING]` lines. This never blocks generation; it's a heads-up,
+not a gate.
+
 ## When you'd reach for it
 
 Any time you have a structure file (freshly built with `stb-slab`,
@@ -38,11 +45,13 @@ stb-suite
 
 `1.1` jumps straight past the category menus (`1` = Inputs, item `1` =
 Input File Generator) to this tool. It then asks you, one at a time: which
-structure file, which calculation mode (numbered list), an optional
-pseudopotential source, and whether to save a text report — building the
-exact same `stb-inputfile ... -t ... -p ...` command underneath and running
-it for you. Good for exploring what a tool can do before you've memorized
-its flags; the CLI is faster once you have.
+structure file, which calculation mode (numbered list), whether to enable
+DFT-D3, whether to enable spin polarization, an optional pseudopotential
+source, whether to save a text report, and whether to open the interactive
+3D viewer — building the exact same `stb-inputfile ... -t ... -d3 -s -p
+... --view` command underneath and running it for you. Good for exploring
+what a tool can do before you've memorized its flags; the CLI is faster
+once you have.
 
 Both paths run the identical underlying tool and produce byte-identical
 output — `example_1.1.sh` demonstrates this directly, running the same
@@ -52,8 +61,9 @@ output — `example_1.1.sh` demonstrates this directly, running the same
 
 - `structure.fdf` — bulk-silicon example structure (conventional cubic
   diamond cell, 8 atoms, 3D/fully periodic).
-- `structure_0D.fdf` / `structure_1D.fdf` / `structure_2D.fdf` — an isolated
-  CH4 molecule, an infinite carbon chain, and a graphene monolayer.
+- `structure_molecule.fdf` / `structure_chain.fdf` / `structure_graphene.fdf` —
+  an isolated CH4 molecule (0D), an infinite carbon chain (1D), and a
+  graphene monolayer (2D).
 - `example_1.1.sh` — the guided walkthrough (**not** an automated test —
   see `test/1-inputs/1-input_file/test.sh` for that). Pauses between
   sections so you can read before moving on; safe to re-run.
@@ -72,19 +82,54 @@ its **own folder** under `output/` — each one already self-contained
 (structure file + `calc.fdf` + pseudopotentials, and `kpath_bs.fdf` for
 `bands/`) and ready to run in SIESTA as-is, no extra assembly needed:
 
-| Folder           | Command (conceptually)                              |
-|-------------------|------------------------------------------------------|
-| `output/relax/`   | `stb-inputfile structure.fdf -t relax -p dojo`       |
-| `output/bands/`   | `stb-inputfile structure.fdf -t bands -p dojo`, then `stb-kpath -f structure.fdf` to generate the `kpath_bs.fdf` that `bands` mode references |
-| `output/0D/`      | `stb-inputfile structure_0D.fdf -t total_energy -p dojo` |
-| `output/1D/`      | `stb-inputfile structure_1D.fdf -t total_energy -p dojo` |
-| `output/2D/`      | `stb-inputfile structure_2D.fdf -t total_energy -p dojo` |
-| `output/3D/`      | `stb-inputfile structure.fdf -t total_energy -p dojo`    |
+| Folder                | Command (conceptually)                              |
+|------------------------|------------------------------------------------------|
+| `output/relax/`        | `stb-inputfile structure.fdf -t relax -p dojo`       |
+| `output/relax_d3/`     | `stb-inputfile structure.fdf -t relax -d3 -p dojo` — same mode, DFT-D3 switched on |
+| `output/relax_spin/`   | `stb-inputfile structure.fdf -t relax -s -p dojo` — same mode, spin-polarized |
+| `output/bands/`        | `stb-inputfile structure.fdf -t bands -p dojo`, then `stb-kpath -f structure.fdf` to generate the `kpath_bs.fdf` that `bands` mode references |
+| `output/molecule/`     | `stb-inputfile structure_molecule.fdf -t total_energy -p dojo` |
+| `output/chain/`        | `stb-inputfile structure_chain.fdf -t total_energy -p dojo`    |
+| `output/graphene/`     | `stb-inputfile structure_graphene.fdf -t total_energy -p dojo` |
+| `output/silicon/`      | `stb-inputfile structure.fdf -t total_energy -p dojo`          |
 
 The script also drives the exact same `relax` case through the interactive
 `stb-suite` menu (non-interactively, via a piped `printf`, no folder kept
 for it) and diffs the result against `output/relax/calc.fdf` — proving the
 CLI and the menu produce identical output.
+
+### Structure validation (always on, every case above)
+
+Every run prints a `[2] STRUCTURE VALIDATION` section before the k-grid is
+even computed. Two parts:
+
+- **Symmetry**: space group + crystal system (via the same read-only
+  accessors `stb-elasticInputs` already uses to report symmetry). For a
+  vacuum-padded structure (`molecule/`, `chain/`, `graphene/` below), it
+  also prints a `[WARNING]` noting the ordinary 3D space group treats the
+  vacuum as an extra periodic direction and may not be the true symmetry --
+  pointing at `stb-symmetry` (code 3.5) for a proper layer-group/point-group
+  analysis instead.
+- **Malformation checks**: atoms closer than 0.5 Ang, a left-handed
+  (negative-determinant) cell, an implausible atomic density for a genuine
+  3D bulk cell (catches a Bohr/Angstrom `LatticeConstant` mixup -- skipped
+  for vacuum-padded structures, where cell volume isn't a meaningful
+  density metric), and a `.fdf` header `NumberOfAtoms`/`NumberOfSpecies`
+  that doesn't match what's actually in the structure blocks. All reported
+  as `[WARNING]`s, never fatal -- run `stb-inputfile structure.fdf -t
+  total_energy -p dojo` yourself and look for `[2] STRUCTURE VALIDATION` in
+  the output.
+
+### Visualizing the structure (`--view`)
+
+`--view` opens the structure in ASE's interactive 3D viewer right before
+the tool exits (needs a local display, or `ssh -X`/`-Y`). Off by default --
+not used in this script (an unattended walkthrough shouldn't pop a GUI
+window), but try it yourself:
+
+```bash
+stb-inputfile structure.fdf -t relax -p dojo --view
+```
 
 ### Why `bands/` needs an extra command
 
@@ -101,12 +146,12 @@ lattice vector and, above a threshold (10 Ang), treats that axis as vacuum
 instead of periodic when computing the k-grid — automatically, from the
 geometry alone, no flag needed:
 
-| Dimensionality | Structure                          | Periodic axes | Typical k-grid shape   |
-|-----------------|-------------------------------------|:---:|-------------------------|
-| 0D              | `structure_0D.fdf` (CH4 molecule)   | 0 | `1  1  1`   (isolated)   |
-| 1D              | `structure_1D.fdf` (carbon chain)   | 1 | `N  1  1`   (a wire)     |
-| 2D              | `structure_2D.fdf` (graphene)       | 2 | `N  N  1`   (a slab)     |
-| 3D              | `structure.fdf` (bulk silicon)      | 3 | `N  N  N`   (a crystal)  |
+| Folder       | Structure                             | Dimensionality | Periodic axes | Typical k-grid shape  |
+|---------------|-----------------------------------------|:---:|:---:|-------------------------|
+| `molecule/`   | `structure_molecule.fdf` (CH4)          | 0D | 0 | `1  1  1`   (isolated)   |
+| `chain/`      | `structure_chain.fdf` (carbon chain)    | 1D | 1 | `N  1  1`   (a wire)     |
+| `graphene/`   | `structure_graphene.fdf` (graphene)     | 2D | 2 | `N  N  1`   (a slab)     |
+| `silicon/`    | `structure.fdf` (bulk silicon)          | 3D | 3 | `N  N  N`   (a crystal)  |
 
 This is why the same `stb-inputfile <structure> -t total_energy` command
 works unchanged whether the structure is a molecule, a wire, a slab, or a
@@ -120,7 +165,7 @@ Once you've read through the walkthrough, experiment directly:
 ```bash
 stb-inputfile structure.fdf -t total_energy -p dojo
 stb-inputfile structure.fdf -t aimd -p dojo
-stb-inputfile structure.fdf -t relax+d3 -p dojo   # any mode + "+d3" adds a DFT-D3 correction
+stb-inputfile structure.fdf -t bands -d3 -s -p dojo   # -d3 and -s combine with any mode
 ```
 
 Open each generated `calc.fdf` and compare it against `structure.fdf` and
@@ -130,14 +175,22 @@ mode adds.
 ## Flag reference
 
 ```
-stb-inputfile <structure_file> -t <mode> [-p <pseudo-source>]
+stb-inputfile <structure_file> -t <mode> [-d3] [-s] [-p <pseudo-source>] [--view]
 ```
 
-- `-t/--type` (required): `total_energy`, `relax`, `aimd`, or `bands` — each
-  also accepts a `+d3` suffix (e.g. `relax+d3`) to enable the DFT-D3
-  dispersion correction.
+- `-t/--type` (required): `total_energy`, `relax`, `aimd`, or `bands`.
+- `-d3/--d3` (optional): enable the DFT-D3 (Grimme) dispersion correction,
+  independent of and combinable with any mode above.
+- `-s/--spin-polarized` (optional): enable spin polarization, also
+  independent of and combinable with any mode above. Defaults to
+  non-polarized when omitted.
 - `-p/--pp-path` (optional): a bundled bank name (`dojo`, ...) or a path to a
   folder containing `.psml`/`.psf` pseudopotential files.
+- `--view` (optional): open the structure in ASE's interactive 3D viewer
+  after generation. Off by default; needs a display.
+
+Structure validation (symmetry + malformation warnings, see below) always
+runs before generation -- there's no flag for it, it's always on.
 
 Run `stb-inputfile --help` for the full list of options.
 

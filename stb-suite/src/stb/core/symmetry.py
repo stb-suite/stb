@@ -1,10 +1,15 @@
-"""Shared symmetry-based cell reduction, used by stb-unitcell and stb-fetch.
+"""Shared symmetry-based cell reduction and group-label lookups.
 
 Wraps pymatgen's SpacegroupAnalyzer to reduce a structure to its primitive
-cell, its conventional cell, or a symmetry-refined version of the input cell.
+cell, its conventional cell, or a symmetry-refined version of the input cell
+(used by stb-unitcell and stb-fetch), plus thin space/layer/point-group
+label accessors (used by stb-fetch and stb-translate) that report just the
+detected group's symbol -- the full per-site/operations analysis lives in
+stb-symmetry instead.
 """
 
 import numpy as np
+import spglib
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 UNITCELL_MODES = ("primitive", "conventional", "refined")
@@ -50,6 +55,56 @@ def space_group_label(pmg_structure, symprec=1e-3) -> str:
     instead of always P1)."""
     dataset = SpacegroupAnalyzer(pmg_structure, symprec=symprec).get_symmetry_dataset()
     return f"{dataset.international} (No. {dataset.number})"
+
+
+def layer_group_label(pmg_structure, aperiodic_dir, symprec=1e-3):
+    """Returns e.g. "p31m (No. 78)" for a genuinely 2D-periodic structure
+    (periodic along the 2 axes other than `aperiodic_dir`, vacuum-padded
+    along it) -- just the label, no operations/sites/Wyckoff table. Same
+    "international symbol (No. number)" format as space_group_label above,
+    via spglib.get_layergroup() directly (needs spglib >= 2.1.0; pymatgen's
+    SpacegroupAnalyzer doesn't wrap this). Returns None if the installed
+    spglib predates this function or layer-group detection fails (e.g. not
+    genuinely 2D-periodic within symprec).
+
+    A thin, label-only sibling of stb.symmetry's own compute_layer_group
+    (which additionally computes sites/orbits/distortion for stb-symmetry's
+    full report) -- extracted here once stb-fetch became a second consumer
+    that only ever wants the label, not the full analysis.
+    """
+    if not hasattr(spglib, "get_layergroup"):
+        return None
+    cell = (pmg_structure.lattice.matrix, pmg_structure.frac_coords,
+            [site.specie.Z for site in pmg_structure])
+    ds = spglib.get_layergroup(cell, aperiodic_dir=aperiodic_dir, symprec=symprec)
+    if ds is None:
+        return None
+    return f"{ds.international} (No. {ds.number})"
+
+
+def point_group_label(pmg_structure, tolerance=0.3):
+    """Returns e.g. "Oh" for a genuinely isolated (0D) structure -- vacuum
+    -padded on all 3 axes -- via pymatgen's PointGroupAnalyzer (a separate,
+    non-periodic detector; neither spglib nor SpacegroupAnalyzer handle this
+    case). `tolerance` is in Angstrom (molecular point-group convention),
+    deliberately not tied to a crystallographic symprec. Returns None on any
+    failure (e.g. a single-atom "molecule").
+
+    A thin, label-only sibling of stb.symmetry's own compute_point_group
+    (which additionally computes equivalent-atom groups/distortion for
+    stb-symmetry's full report) -- extracted here once stb-fetch became a
+    second consumer that only ever wants the label, not the full analysis.
+    """
+    from pymatgen.core import Molecule
+    from pymatgen.symmetry.analyzer import PointGroupAnalyzer
+
+    species = [str(site.specie.symbol) for site in pmg_structure]
+    mol = Molecule(species, pmg_structure.cart_coords)
+    try:
+        pga = PointGroupAnalyzer(mol, tolerance=tolerance)
+        return str(pga.get_pointgroup())
+    except Exception:
+        return None
 
 
 def equivalent_cartesian_axes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):

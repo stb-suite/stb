@@ -2881,7 +2881,17 @@ def run_fetch_generator() -> None:
     output_file = get_input("\nOutput file name [default: fetched.fdf]: ").strip()
     if not output_file:
         output_file = "fetched.fdf"
-    args.extend(["--output", output_file, "--no-intro"])
+    args.extend(["--output", output_file])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
+    args.append("--no-intro")
 
     run_tool("stb-fetch", args)
 

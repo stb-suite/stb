@@ -6,17 +6,20 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 
 import sys
 import argparse
+import numpy as np
 import requests
 from pymatgen.core import Composition, Structure
 from pymatgen.io.cif import CifParser
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from stb.core import structure_io
-from stb.core.cli import COLORS, color_text, get_input, show_intro
-from stb.core.symmetry import UNITCELL_MODES, reduce_to_unitcell
+from stb.core import citations, kspace, structure_io
+from stb.core.ase_view import view_structure_interactive
+from stb.core.cli import color_text, get_input, print_dual, print_section, show_intro
+from stb.core.symmetry import (
+    UNITCELL_MODES, layer_group_label, point_group_label, reduce_to_unitcell, space_group_label,
+)
 
 COD_BASE_URL = "https://www.crystallography.net/cod"
 
@@ -40,6 +43,78 @@ CURATED_OPTIMADE_PROVIDERS = [
     ("mcloud.2dtopo", "Materials Cloud 2D Topological Database"),
     ("cmr", "DTU Computational Materials Repository, incl. C2DB -- currently unreliable, endpoint may be stale"),
 ]
+
+REPORT_FILE = "stb_fetch_report.txt"
+BIB_FILE = "references.bib"
+
+# Same thresholds as stb-inputfile's [2] STRUCTURE VALIDATION section (and,
+# for MIN_ATOM_DISTANCE_ANG, stb-crystalbuilder/stb-crystalcast) -- a fetched
+# database entry deserves the exact same sanity checks as a hand-built/
+# converted one before it's trusted as a SIESTA input.
+MIN_ATOM_DISTANCE_ANG = 0.5
+MIN_DENSITY_ATOMS_PER_ANG3 = 0.01
+MAX_DENSITY_ATOMS_PER_ANG3 = 0.15
+
+# Same default as stb-kgrid/stb-symmetry/etc. (core/kspace.py's other callers).
+VACUUM_GAP_ANG = 10.0
+
+# Source-specific citations -- kept local since stb-fetch is currently the
+# only consumer of any of these (same "extract on second use" policy as the
+# rest of core/citations.py's own docstring). Always cited alongside
+# citations.SIESTA/SIESTA_RECENT (the output is a SIESTA .fdf) and
+# _BIB_SPGLIB (space/layer/point-group detection now always runs, see [3]
+# STRUCTURE VALIDATION below).
+_BIB_COD = ("Grazulis2009", """@article{Grazulis2009,
+  author  = {Gra\\v{z}ulis, Saulius and Chateigner, Daniel and Downs, Robert T. and Yokochi, A. F. T. and Quir\\'os, Miguel and Lutterotti, Luca and Manakova, Elena and Butkus, Justas and Moeck, Peter and Le Bail, Armel},
+  title   = {Crystallography {Open} {Database} -- an open-access collection of crystal structures},
+  journal = {Journal of Applied Crystallography},
+  year    = {2009},
+  volume  = {42},
+  number  = {4},
+  pages   = {726--729},
+  doi     = {10.1107/S0021889809016690}
+}""")
+
+_BIB_MATERIALS_PROJECT = ("Jain2013", """@article{Jain2013,
+  author  = {Jain, Anubhav and Ong, Shyue Ping and Hautier, Geoffroy and Chen, Wei and Richards, William Davidson and Dacek, Stephen and Cholia, Shreyas and Gunter, Dan and Skinner, David and Ceder, Gerbrand and Persson, Kristin A.},
+  title   = {Commentary: The {Materials} {Project}: A materials genome approach to accelerating materials innovation},
+  journal = {APL Materials},
+  year    = {2013},
+  volume  = {1},
+  number  = {1},
+  pages   = {011002},
+  doi     = {10.1063/1.4812323}
+}""")
+
+_BIB_OPTIMADE = ("Andersen2021", """@article{Andersen2021,
+  author  = {Andersen, Casper W. and Armiento, Rickard and Blokhin, Evgeny and Conduit, Gareth J. and Dwaraknath, Shyam and Evans, Matthew L. and Fekete, {\\'A}d{\\'a}m and Gopakumar, Abhijith and Gu{\\v{n}}de, Sa{\\v{s}}o and Merkys, Andrius and Mohanakrishnan, Chandra and Oses, Corey and Peronio, Alessandro and Persson, Kristin A. and Ratcliff, Rickard and Ricci, Federico and Rignanese, Gian-Marco and Rose, Fabian and Sc'heidgen, Markus and Talirz, Leopold and Tomat, Rossella and Winston, Donald and Xie, Cormac D. and Ziletti, Angelo},
+  title   = {{OPTIMADE}, an {API} for exchanging materials data},
+  journal = {Scientific Data},
+  year    = {2021},
+  volume  = {8},
+  pages   = {217},
+  doi     = {10.1038/s41597-021-00974-z}
+}""")
+
+_BIB_SPGLIB = ("Togo2018", """@misc{Togo2018,
+  author = {Togo, Atsushi and Tanaka, Isao},
+  title  = {Spglib: a software library for crystal symmetry search},
+  year   = {2018},
+  eprint = {1808.01590},
+  archivePrefix = {arXiv},
+  primaryClass  = {cond-mat.mtrl-sci}
+}""")
+
+
+def _fail(message, f_out):
+    """Prints a red [ERROR] line, closes the report file if one is open,
+    and exits with status 1 -- the single error exit point every check in
+    main() (after the report has started) funnels through, same pattern as
+    dftu.py's own _fail()."""
+    print_dual(color_text(f"[ERROR] {message}", 'red'), f_out)
+    if f_out:
+        f_out.close()
+    sys.exit(1)
 
 
 def to_hill_formula(formula):
@@ -221,6 +296,11 @@ Look it up by exact id, or search by formula and pick a candidate.""",
 
     parser.add_argument("-o", "--output", type=str, default="fetched.fdf",
                         help="Output .fdf file name (default: fetched.fdf).")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="Open an interactive 3D view of the structure (via ASE) "
+                             "after writing the .fdf. Needs a display. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-fetch {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -277,9 +357,18 @@ Look it up by exact id, or search by formula and pick a candidate.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("Fetch a structure from an online database:", 'bold'))
-    print("-" * 60)
-    print(f"  {color_text('Source:', 'cyan')} {args.source}")
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_dual(color_text("===== STB-FETCH REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Source         : {args.source}", f_out)
+    if args.source == "optimade":
+        print_dual(f"Provider       : {args.provider}", f_out)
+    query_desc = (f"formula '{args.formula}'" if args.formula else
+                  f"exact id '{args.material_id or args.cod_id or args.optimade_id}'")
+    print_dual(f"Query          : {query_desc}", f_out)
 
     material_id = args.material_id
     cod_id = args.cod_id
@@ -292,11 +381,10 @@ Look it up by exact id, or search by formula and pick a candidate.""",
         try:
             mpr = MPRester(api_key=args.api_key)
         except ValueError as e:
-            print(color_text(f"Error: {e}", 'red'))
-            sys.exit(1)
+            _fail(str(e), f_out)
 
     if args.formula:
-        print(f"  {color_text('Formula search:', 'cyan')} {args.formula}")
+        print_section("[1] CANDIDATE SEARCH", f_out)
         try:
             if args.source == "cod":
                 all_rows = fetch_cod_candidates(args.formula)
@@ -305,52 +393,50 @@ Look it up by exact id, or search by formula and pick a candidate.""",
             else:
                 all_rows = fetch_optimade_candidates(args.provider, args.formula)
         except requests.exceptions.RequestException as e:
-            print(color_text(f"Error: network request failed: {e}", 'red'))
-            sys.exit(1)
+            _fail(f"network request failed: {e}", f_out)
         except Exception as e:  # pymatgen's MPRestError, or any decode issue
-            print(color_text(f"Error: {e}", 'red'))
-            sys.exit(1)
+            _fail(str(e), f_out)
 
         total = len(all_rows)
         if total == 0:
-            print(color_text(f"Error: no {args.source} entries found for formula '{args.formula}'.", 'red'))
-            sys.exit(1)
+            _fail(f"no {args.source} entries found for formula '{args.formula}'.", f_out)
 
         # --most-stable ranks over every match found; the --limit cap below is
         # purely a display/interactive-pick concern, not a search restriction.
         rows = all_rows[:args.limit]
 
-        print(f"\n  {color_text('Found', 'cyan')} {total} candidate(s)"
-              f"{' (showing first ' + str(len(rows)) + ')' if total > len(rows) else ''}:")
+        print_dual(f"Found {total} candidate(s)"
+                   f"{' (showing first ' + str(len(rows)) + ')' if total > len(rows) else ''}:", f_out)
         if args.source == "cod":
             for i, row in enumerate(rows):
-                print(f"    {color_text(f'[{i + 1}]', 'cyan'):<5} COD {row['file']:<10} {row['formula']:<16} "
-                      f"sg={row.get('sg', '?'):<14} a={row.get('a', '?')}")
+                print_dual(f"  [{i + 1}] COD {row['file']:<10} {row['formula']:<16} "
+                           f"sg={row.get('sg', '?'):<14} a={row.get('a', '?')}", f_out)
         elif args.source == "materials-project":
             for i, row in enumerate(rows):
                 symmetry = row.get("symmetry") or {}
                 sg_symbol = symmetry.get("symbol", "?") if isinstance(symmetry, dict) else "?"
-                print(f"    {color_text(f'[{i + 1}]', 'cyan'):<5} {row['material_id']:<12} "
-                      f"{row.get('formula_pretty', '?'):<16} sg={sg_symbol:<14} "
-                      f"E_above_hull={row.get('energy_above_hull', '?')}")
+                print_dual(f"  [{i + 1}] {row['material_id']:<12} "
+                           f"{row.get('formula_pretty', '?'):<16} sg={sg_symbol:<14} "
+                           f"E_above_hull={row.get('energy_above_hull', '?')}", f_out)
         else:
             for i, row in enumerate(rows):
-                print(f"    {color_text(f'[{i + 1}]', 'cyan'):<5} {row['id']:<16} {row['formula']:<16} "
-                      f"{row['natoms']} atoms")
+                print_dual(f"  [{i + 1}] {row['id']:<16} {row['formula']:<16} "
+                           f"{row['natoms']} atoms", f_out)
 
         if total > 1:
             if args.source == "materials-project" and args.most_stable:
                 best = min(all_rows, key=lambda r: r.get("energy_above_hull", float("inf")))
                 material_id = best["material_id"]
-                print(f"\n  {color_text('--most-stable selected:', 'yellow')} {material_id}"
-                      f" (E_above_hull={best.get('energy_above_hull', '?')}, out of all {total} matches)")
+                print_dual(color_text(
+                    f"--most-stable selected: {material_id} "
+                    f"(E_above_hull={best.get('energy_above_hull', '?')}, out of all {total} matches)",
+                    'yellow'), f_out)
             elif sys.stdin.isatty():
                 selected = None
                 while selected is None:
                     choice = get_input(f"\nPick a candidate [1-{len(rows)}] (blank to cancel): ").strip()
                     if not choice:
-                        print(color_text("Cancelled.", 'red'))
-                        sys.exit(1)
+                        _fail("cancelled by user.", f_out)
                     if choice.isdigit() and 1 <= int(choice) <= len(rows):
                         selected = rows[int(choice) - 1]
                     else:
@@ -365,10 +451,8 @@ Look it up by exact id, or search by formula and pick a candidate.""",
             else:
                 flag = {"materials-project": "--material-id", "cod": "--cod-id",
                         "optimade": "--optimade-id"}[args.source]
-                print(color_text(
-                    f"\nError: multiple candidates found; rerun with {flag} to pick one"
-                    + (" or add --most-stable." if args.source == "materials-project" else "."), 'red'))
-                sys.exit(1)
+                _fail(f"multiple candidates found; rerun with {flag} to pick one"
+                      + (" or add --most-stable." if args.source == "materials-project" else "."), f_out)
         else:
             row = rows[0]
             if args.source == "materials-project":
@@ -379,66 +463,156 @@ Look it up by exact id, or search by formula and pick a candidate.""",
                 optimade_id = row["id"]
                 pending_structure = row["_structure"]
 
-    print(f"\n  {color_text('Fetching...', 'yellow')}")
+    print_section("[2] FETCHED STRUCTURE", f_out)
+    print_dual("Fetching...", f_out)
     try:
         if args.source == "materials-project":
             try:
                 structure = mpr.get_structure_by_material_id(material_id)
             except (MPRestError, IndexError) as e:
-                print(color_text(f"Error: could not fetch '{material_id}': {e}", 'red'))
-                sys.exit(1)
+                _fail(f"could not fetch '{material_id}': {e}", f_out)
         elif args.source == "cod":
             structure = fetch_cod_structure(cod_id)
         else:
             structure = pending_structure if pending_structure is not None \
                 else fetch_optimade_structure(args.provider, optimade_id)
     except requests.exceptions.RequestException as e:
-        print(color_text(f"Error: network request failed: {e}", 'red'))
-        sys.exit(1)
+        _fail(f"network request failed: {e}", f_out)
     except ValueError as e:
-        print(color_text(f"Error: {e}", 'red'))
-        sys.exit(1)
+        _fail(str(e), f_out)
 
     fetched_id = {"materials-project": material_id, "cod": cod_id, "optimade": optimade_id}[args.source]
 
     try:
         structure, was_collapsed = resolve_disorder_or_fail(structure, args.source, fetched_id)
     except ValueError as e:
-        print(color_text(f"Error: {e}", 'red'))
-        sys.exit(1)
+        _fail(str(e), f_out)
     if was_collapsed:
-        print(color_text(
-            "  Note: entry had oxidation-state-only disorder (e.g. Fe2+/Fe3+ on the same "
-            "site) -- collapsed to a single element per site.", 'yellow'))
+        print_dual(color_text(
+            "Note: entry had oxidation-state-only disorder (e.g. Fe2+/Fe3+ on the same "
+            "site) -- collapsed to a single element per site.", 'yellow'), f_out)
 
-    sga = SpacegroupAnalyzer(structure, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
-    print(f"\n  {color_text('Fetched:', 'cyan')} {args.source} {fetched_id}")
-    print(f"  {color_text('Formula:', 'cyan')} {structure.composition.reduced_formula}")
-    print(f"  {color_text('Atoms:', 'cyan')} {len(structure)}")
-    print(f"  {color_text('Space group:', 'cyan')} {sga.get_space_group_symbol()} (No. {sga.get_space_group_number()})")
+    print_dual(f"Fetched        : {args.source} {fetched_id}", f_out)
+    print_dual(f"Formula        : {structure.composition.reduced_formula}", f_out)
+    print_dual(f"Atoms          : {len(structure)}", f_out)
+
+    print_section("[3] STRUCTURE VALIDATION", f_out)
+    try:
+        validation_warnings = []
+
+        min_dist = structure_io.min_pairwise_distance(structure)
+        if min_dist is not None and min_dist < MIN_ATOM_DISTANCE_ANG:
+            validation_warnings.append(
+                f"[WARNING] Some atoms are unusually close ({min_dist:.3f} Ang) -- "
+                "check the fetched structure.")
+
+        det = np.linalg.det(structure.lattice.matrix)
+        if det < 0:
+            validation_warnings.append(
+                "[WARNING] Lattice is left-handed (negative cell volume/determinant) "
+                "-- check the order/sign of the lattice vectors.")
+
+        vacuum_axes = kspace.detect_vacuum_axes(
+            structure.frac_coords, structure.lattice.matrix, VACUUM_GAP_ANG)
+
+        if sum(vacuum_axes) == 0 and abs(det) > 0:
+            # Density is only a meaningful sanity metric for a genuine 3D
+            # bulk cell -- a vacuum-padded structure's volume is dominated
+            # by the artificial vacuum by design, not the real material.
+            density = len(structure) / abs(det)
+            if not (MIN_DENSITY_ATOMS_PER_ANG3 <= density <= MAX_DENSITY_ATOMS_PER_ANG3):
+                validation_warnings.append(
+                    f"[WARNING] Unusual atomic density ({density:.4f} atoms/Ang^3) -- "
+                    "check for a unit mismatch or a spuriously large/small fetched cell.")
+
+        if validation_warnings:
+            for w in validation_warnings:
+                print_dual(color_text(w, 'yellow'), f_out)
+        else:
+            print_dual("No malformation issues detected.", f_out)
+
+        print_dual(f"Dimensionality : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+        print_dual(f"Space group    : {space_group_label(structure, args.symprec)}", f_out)
+
+        if sum(vacuum_axes) == 1:
+            layer_label = layer_group_label(structure, vacuum_axes.index(True), args.symprec)
+            if layer_label:
+                print_dual(f"Layer group    : {layer_label}", f_out)
+            else:
+                print_dual(color_text(
+                    "[WARNING] Layer group could not be determined (needs spglib >= 2.1.0, "
+                    "or the structure isn't cleanly 2D-periodic at this --symprec).", 'yellow'), f_out)
+        elif sum(vacuum_axes) == 2:
+            print_dual(
+                "Note: wire-like (1D) structure -- no rod-group analogue is available "
+                "(same limitation as stb-symmetry).", f_out)
+        elif sum(vacuum_axes) == 3:
+            point_label = point_group_label(structure)
+            if point_label:
+                print_dual(f"Point group    : {point_label}", f_out)
+            else:
+                print_dual(color_text(
+                    "[WARNING] Point group could not be determined.", 'yellow'), f_out)
+
+        print_dual(
+            "(Only the group label is shown here -- use stb-symmetry, code 3.5, for the full "
+            "operations/Wyckoff-site analysis.)", f_out)
+    except Exception as e:
+        print_dual(color_text(f"[WARNING] Structure validation could not complete: {e}", 'yellow'), f_out)
 
     if args.unitcell:
+        print_section("[4] UNIT CELL REDUCTION", f_out)
         fetched_atoms = len(structure)
         try:
-            structure, sga = reduce_to_unitcell(
+            structure, _ = reduce_to_unitcell(
                 structure, args.unitcell, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
         except ValueError as e:
-            print(color_text(f"Error: {e}", 'red'))
-            sys.exit(1)
-        print(f"\n  {color_text('Unit cell mode:', 'cyan')} {args.unitcell}")
-        print(f"  {color_text('Output atoms:', 'cyan')} {len(structure)}")
+            _fail(str(e), f_out)
+        print_dual(f"Unit cell mode : {args.unitcell}", f_out)
+        print_dual(f"Output atoms   : {len(structure)}", f_out)
         if args.unitcell != "refined" and len(structure) == fetched_atoms:
-            print(color_text(
-                f"  Note: fetched structure is already the {args.unitcell} cell at this "
-                "symprec (no reduction).", 'yellow'))
+            print_dual(color_text(
+                f"Note: fetched structure is already the {args.unitcell} cell at this "
+                "symprec (no reduction).", 'yellow'), f_out)
 
+    print_section("[5] WRITING OUTPUT FILE", f_out)
     species_meta = {}
     for symbol in dict.fromkeys(site.specie.symbol for site in structure):
         species_meta = structure_io.ensure_species_id(species_meta, symbol)
 
     new_structure = structure_io.from_pymatgen(structure, species_meta=species_meta)
     structure_io.write_fdf(new_structure, args.output)
-    print(f"\n{color_text('Success:', 'green')} Structure written to '{color_text(args.output, 'bold')}'")
+    print_dual(color_text(f"[OK] Structure written to '{args.output}'.", 'green'), f_out)
+
+    print_section("[6] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, _BIB_SPGLIB]
+    bib_entries.append({
+        "cod": _BIB_COD,
+        "materials-project": _BIB_MATERIALS_PROJECT,
+        "optimade": _BIB_OPTIMADE,
+    }[args.source])
+    citations.write_bib_file(BIB_FILE, bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
+        f"({len(bib_entries)} entries).", 'green'), f_out)
+
+    print_section("[7] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    print_dual(f"Fetched        : {args.source} {fetched_id}", f_out)
+    print_dual(f"Output file    : {args.output}", f_out)
+    print_dual(f"References     : {BIB_FILE}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after every check/report section above has already
+    # printed, so a blocking GUI window never delays or hides them.
+    if args.view:
+        from pymatgen.io.ase import AseAtomsAdaptor
+        atoms = AseAtomsAdaptor.get_atoms(structure)
+        view_structure_interactive(atoms)
 
 
 if __name__ == "__main__":

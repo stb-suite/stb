@@ -53,3 +53,4 @@ This puts every `stb-*` command (and `stb-suite` itself) on your PATH.
 | 1.1  | `stb-inputfile` | [`1.1-stb-inputfile/`](1.1-stb-inputfile/)  |
 | 1.2  | `stb-kgrid`     | [`1.2-stb-kgrid/`](1.2-stb-kgrid/)          |
 | 1.3  | `stb-kpath`     | [`1.3-stb-kpath/`](1.3-stb-kpath/)          |
+| 1.4  | `stb-dftu`      | [`1.4-stb-dftu/`](1.4-stb-dftu/)            |

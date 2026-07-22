@@ -125,7 +125,7 @@ EOF
 echo "Testing: --fdf detects species; --species Fe restricts to it; --use-reference fills U"
 stb-dftu --fdf sc_fe_o.fdf --species Fe --use-reference --no-intro > log_fdf_fe.txt 2>&1
 check_exit_code $? 0
-check_contains "Species found in 'sc_fe_o.fdf': Sc, Fe, O" log_fdf_fe.txt
+check_contains "Species found in 'sc_fe_o.fdf' : Sc, Fe, O" log_fdf_fe.txt
 check_contains "Using tabulated Materials Project reference U values" log_fdf_fe.txt
 check_contains "Fe   1" log_fdf_fe.txt
 check_contains "5.300    0.000" log_fdf_fe.txt
@@ -160,7 +160,7 @@ check_contains "not found in 'sc_fe_o.fdf'" log_fdf_unknown.txt
 echo "Testing: --fdf on a nonexistent file is a clean error"
 stb-dftu --fdf does_not_exist.fdf --use-reference --no-intro > log_fdf_notfound.txt 2>&1
 check_exit_code $? 1
-check_contains "Error reading 'does_not_exist.fdf'" log_fdf_notfound.txt
+check_contains "\[ERROR\] Reading 'does_not_exist.fdf'" log_fdf_notfound.txt
 
 
 # --- 4. --list-reference and --suggest ---
@@ -197,7 +197,7 @@ echo -e "\n--- Testing error and robustness cases ---"
 
 echo "Testing: --u never used silently -- --species alone is rejected"
 stb-dftu --species Mn --no-intro > log_no_u.txt 2>&1
-check_exit_code $? 2
+check_exit_code $? 1
 
 echo "Testing: mismatched --species/--u length"
 stb-dftu --species Mn Fe --u 3.9 --no-intro > log_mismatch_u.txt 2>&1
@@ -227,12 +227,49 @@ echo "Testing: --version"
 stb-dftu --version > log_version.txt 2>&1
 check_contains "stb-dftu" log_version.txt
 
-echo "Testing: --help documents species/u/j/shell/list-reference/suggest"
+echo "Testing: --help documents species/u/j/shell/list-reference/suggest/save-report"
 stb-dftu --help > log_help.txt 2>&1
 check_contains "species" log_help.txt
 check_contains "list-reference" log_help.txt
 check_contains "suggest" log_help.txt
 check_contains "linear-response" log_help.txt
+check_contains "save-report" log_help.txt
+
+
+# --- 5b. --save-report and references.bib ---
+echo -e "\n--- Testing --save-report and references.bib ---"
+
+echo "Testing: --save-report writes stb_dftu_report.txt matching the console output"
+rm -f stb_dftu_report.txt
+stb-dftu --species Mn --u 3.9 --save-report --no-intro > log_save_report_console.txt 2>&1
+check_success stb_dftu_report.txt
+check_contains "U=3.900 eV, J=0.000 eV" stb_dftu_report.txt
+check_contains "Report" log_save_report_console.txt
+
+echo "Testing: references.bib always written, with SIESTA citations"
+rm -f references.bib
+stb-dftu --species Si --u 2.0 --shell 3d --no-intro > /dev/null 2>&1
+check_success references.bib
+check_contains "@article{Soler2002," references.bib
+check_contains "@article{Garcia2020," references.bib
+
+echo "Testing: references.bib also gets the Wang/Maxisch/Ceder citation when the reference table is touched (Mn is tabulated)"
+rm -f references.bib
+stb-dftu --species Mn --u 3.9 --no-intro > /dev/null 2>&1
+check_contains "@article{WangMaxischCeder2006," references.bib
+
+echo "Testing: --list-reference and --suggest also write references.bib (Wang/Maxisch/Ceder only)"
+rm -f references.bib
+stb-dftu --list-reference --no-intro > /dev/null 2>&1
+check_success references.bib
+check_contains "@article{WangMaxischCeder2006," references.bib
+if grep -q "@article{Soler2002," references.bib; then
+    echo -e "   -> ${RED}Failed:${NC} SIESTA citation should not appear for a pure reference-table lookup"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} SIESTA citation absent (no SIESTA-related output was generated)"
+    PASS=$((PASS+1))
+fi
 
 
 # --- 6. Interactive path (stb-suite, shortcut 1.4) ---
@@ -262,20 +299,20 @@ AtomicCoordinatesFormat  Fractional
 EOF
 
 echo "Testing: navigate 1.4 -> verify .fdf + tabulated U path (option 1)"
-printf '1.4\n1\nfe_only.fdf\n\n\n0\n' | timeout 20 stb-suite > log_menu_fdf.txt 2>&1
+printf '1.4\n1\nfe_only.fdf\n\n\n\n0\n' | timeout 20 stb-suite > log_menu_fdf.txt 2>&1
 check_exit_code $? 0
-check_contains "Species found in 'fe_only.fdf': Fe" log_menu_fdf.txt
+check_contains "Species found in 'fe_only.fdf' : Fe" log_menu_fdf.txt
 check_contains "Using tabulated Materials Project reference U values" log_menu_fdf.txt
 check_contains "Fe   1" log_menu_fdf.txt
 
 echo "Testing: navigate 1.4 -> blank mode choice defaults to option 1 (Materials Project table)"
-printf '1.4\n\nfe_only.fdf\n\n\n0\n' | timeout 20 stb-suite > log_menu_default.txt 2>&1
+printf '1.4\n\nfe_only.fdf\n\n\n\n0\n' | timeout 20 stb-suite > log_menu_default.txt 2>&1
 check_exit_code $? 0
-check_contains "Species found in 'fe_only.fdf': Fe" log_menu_default.txt
+check_contains "Species found in 'fe_only.fdf' : Fe" log_menu_default.txt
 check_contains "Using tabulated Materials Project reference U values" log_menu_default.txt
 
 echo "Testing: navigate 1.4 -> generate by hand (option 2) -> Mn -> U=3.9 -> J default -> auto shell -> finish -> no save -> quit"
-printf '1.4\n2\nMn\n3.9\n0.0\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+printf '1.4\n2\nMn\n3.9\n0.0\n\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "shell=3d (n=3, l=2)" log_menu.txt
 check_contains "%block LDAU.proj" log_menu.txt

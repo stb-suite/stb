@@ -5208,9 +5208,12 @@ def run_dftu_generator() -> None:
             fdf_path = get_input(".fdf file to read species from: ").strip()
 
         args = ["--fdf", fdf_path, "--use-reference", "--no-intro"]
-        output = get_input("\nAlso save to a file? [optional, press Enter to skip]: ").strip()
+        output = get_input("\nAlso save the block to a file? [optional, press Enter to skip]: ").strip()
         if output:
             args.extend(["--output", output])
+        save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+        if save_report == 'y':
+            args.append("--save-report")
         run_tool("stb-dftu", args)
         return
 
@@ -5243,9 +5246,13 @@ def run_dftu_generator() -> None:
         else:
             args.extend(["--shell", *shells])
 
-    output = get_input("\nAlso save to a file? [optional, press Enter to skip]: ").strip()
+    output = get_input("\nAlso save the block to a file? [optional, press Enter to skip]: ").strip()
     if output:
         args.extend(["--output", output])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
 
     run_tool("stb-dftu", args)
 

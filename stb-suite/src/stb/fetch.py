@@ -543,8 +543,23 @@ Look it up by exact id, or search by formula and pick a candidate.""",
     for symbol in dict.fromkeys(site.specie.symbol for site in structure):
         species_meta = structure_io.ensure_species_id(species_meta, symbol)
 
+    source_desc = {
+        "materials-project": f"Materials Project (id: {fetched_id})",
+        "cod": f"Crystallography Open Database (COD id: {fetched_id})",
+        "optimade": f"OPTIMADE provider '{args.provider}' (id: {fetched_id})",
+    }[args.source]
+    header_comment = [
+        f"Structure fetched by stb-fetch from {source_desc}.",
+        f"Formula: {structure.composition.reduced_formula} ({len(structure)} atoms).",
+    ]
+    if was_collapsed:
+        header_comment.append(
+            "Note: oxidation-state-only disorder was collapsed to a single element per site.")
+    if args.unitcell:
+        header_comment.append(f"Reduced to the {args.unitcell} unit cell after fetching.")
+
     new_structure = structure_io.from_pymatgen(structure, species_meta=species_meta)
-    structure_io.write_fdf(new_structure, args.output)
+    structure_io.write_fdf(new_structure, args.output, header_comment=header_comment)
     print_dual(color_text(f"[OK] Structure written to '{args.output}'.", 'green'), f_out)
 
     print_section("[6] REFERENCES", f_out)

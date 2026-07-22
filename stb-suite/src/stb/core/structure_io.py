@@ -369,7 +369,7 @@ def from_pymatgen(
     )
 
 
-def write_fdf(structure: FdfStructure, path: str) -> None:
+def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str] | None = None) -> None:
     """Writes a fresh .fdf file from scratch, built from an FdfStructure.
 
     Species with zero atoms in structure.atoms are omitted (mirrors the old
@@ -378,6 +378,13 @@ def write_fdf(structure: FdfStructure, path: str) -> None:
     not convert between the two -- build the FdfStructure already in the
     desired format (e.g. via a fractional/cartesian conversion done by the
     caller) before calling this.
+
+    `header_comment`, if given, overrides the default single-line
+    "# automatic create using stb-translate..." header -- a string (one
+    line) or a list of strings (one comment line each), for a caller that
+    wants to record its own provenance (e.g. stb-mlrelax noting the
+    structure was MACE-relaxed, with a couple of convergence details).
+    Each line is prefixed with "# " unless it's already commented.
     """
     atoms_by_species: dict[str, list[np.ndarray]] = {}
     for symbol, pos in structure.atoms:
@@ -391,8 +398,16 @@ def write_fdf(structure: FdfStructure, path: str) -> None:
     coord_label = "Fractional" if structure.coord_format == "fractional" else "Ang"
     total_atoms = sum(len(atoms_by_species[s]) for s in species_with_atoms)
 
+    if header_comment is None:
+        header_lines = ["# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)\n"]
+    else:
+        raw_header = [header_comment] if isinstance(header_comment, str) else header_comment
+        header_lines = [line if line.startswith("#") else f"# {line}" for line in raw_header]
+        header_lines = [f"{line}\n" for line in header_lines]
+
     lines = [
-        "# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)\n\n",
+        *header_lines,
+        "\n",
         f"NumberOfSpecies    {len(species_with_atoms)}\n",
         f"NumberofAtoms      {total_atoms}\n\n",
         "%block ChemicalSpeciesLabel\n",

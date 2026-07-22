@@ -47,22 +47,65 @@ structure you hand it, at the cost of being a generalist, not a specialist
 `stb-mlffAnalysis`, trades that generality for accuracy on your specific
 system — usable here via `--custom-model`).
 
-### The optimizer: FIRE and the `fmax` convergence criterion
+### Convergence methods: FIRE, BFGS, LBFGS, and the `fmax` criterion
 
 Once MACE can predict a force on every atom (`F = -dE/dR`, the same physics
-as DFT's Hellmann-Feynman forces), an ordinary geometry optimizer can use it
-to walk downhill in energy. The default here is **FIRE** (Fast Inertial
-Relaxation Engine): it treats the atoms like a damped mechanical system —
-move along the force direction as inertia would carry it, but adaptively
-reset/dampen the "velocity" whenever it stops pointing downhill. It's
-simple, needs no matrix inversion (unlike BFGS, also available via
-`--optimizer`), and is a common default for MLIP-driven relaxation.
+as DFT's Hellmann-Feynman forces), an ordinary geometry optimizer walks
+"downhill" in energy, one step at a time, until the structure stops moving
+appreciably. `--optimizer` picks *which* algorithm does that walk — all
+three converge to the same kind of answer (a local energy minimum), they
+just take different-shaped paths to get there, with different costs per
+step:
 
-Convergence is judged by **`fmax`**: the largest force component on any
-single atom, in eV/Ang (default target `0.05`, tunable via `--fmax`) — the
-same style of criterion SIESTA's own relaxation uses, so "relaxed enough for
-`stb-mlrelax`" and "relaxed enough for SIESTA" mean the same physical thing,
-just possibly at different thresholds.
+- **`FIRE`** (Fast Inertial Relaxation Engine, the default) — treats the
+  atoms like a damped mechanical system: move along the force direction as
+  inertia would carry it, accelerating while the motion keeps pointing
+  downhill, and adaptively resetting/damping the "velocity" whenever it
+  doesn't. Each step only needs the current forces (no extra bookkeeping,
+  no matrix), so it's cheap and very robust even from a badly-guessed
+  starting geometry — but because it only ever looks at the local force
+  direction, it can need more steps to fully settle once it's already close
+  to the minimum.
+- **`BFGS`** (Broyden-Fletcher-Goldfarb-Shanno) — a *quasi-Newton* method:
+  instead of only following the current force, it builds up an approximate
+  curvature (Hessian) of the energy surface from the history of positions
+  and forces seen so far, and uses that curvature to jump more directly
+  toward the minimum. This typically needs noticeably fewer steps once the
+  structure is already reasonably close to equilibrium (superlinear
+  convergence), at the cost of maintaining a full curvature matrix --
+  memory that grows with the *square* of the number of degrees of freedom
+  (3 x atoms, +6 more if `--relax-cell`), and a per-step cost that grows
+  with it too.
+- **`LBFGS`** (Limited-memory BFGS) — the same curvature-based idea as
+  BFGS, but keeps only a short rolling history of recent position/force
+  changes instead of the full curvature matrix. Nearly all of BFGS's
+  fast, few-steps-to-converge behavior, at a memory/step cost that stays
+  small regardless of system size -- the practical choice once a system is
+  too large for full BFGS to be cheap.
+
+Convergence itself is judged by **`fmax`**: the largest force component on
+any single atom, in eV/Ang (default target `0.05`, tunable via `--fmax`) —
+the same style of criterion SIESTA's own relaxation uses, so "relaxed
+enough for `stb-mlrelax`" and "relaxed enough for SIESTA" mean the same
+physical thing, just possibly at different thresholds. All three optimizers
+above are judged by the exact same `fmax` target -- `--optimizer` only
+changes *how fast* that target is reached, never what "converged" means.
+
+Measured live on the same 8-atom `si_defect.fdf` (see
+`output/optimizer-comparison/` below):
+
+| `--optimizer` | Steps to converge | Wall time | Final energy |
+|----------------|-------------------:|----------:|--------------:|
+| `FIRE` (default) | 24 | 1.2 s | -42.952733 eV |
+| `BFGS`         | 11 | 0.7 s | -42.953736 eV |
+| `LBFGS`        | 11 | 0.7 s | -42.953736 eV |
+
+BFGS/LBFGS needed under half the steps here -- the expected quasi-Newton
+advantage once already reasonably close to a minimum. BFGS and LBFGS land
+on identical numbers for this tiny 8-atom case: with so few degrees of
+freedom, "limited memory" isn't actually limiting anything yet -- the gap
+between them only opens up on much larger structures, where full BFGS's
+curvature matrix becomes expensive to build and store.
 
 ## When you'd reach for it
 
@@ -203,6 +246,7 @@ entirely with your own fine-tuned model.
 | `output/relax-cell/`         | `stb-mlrelax -f si_wrong_a.fdf --relax-cell`                    | a=5.00 Ang recovers to ~5.46 Ang                  |
 | `output/bad-structure/`      | `stb-mlrelax -f si_too_close.fdf`                               | pre-relax `[WARNING]`, clean post-relax check     |
 | `output/model-comparison/`   | `stb-mlrelax -f si_defect.fdf --model {small,medium,large}`     | the speed/accuracy table above, measured live     |
+| `output/optimizer-comparison/` | `stb-mlrelax -f si_defect.fdf --optimizer {FIRE,BFGS,LBFGS}`  | the FIRE/BFGS/LBFGS table above, measured live    |
 | `output/full-report/`        | `stb-mlrelax -f si_defect.fdf --save-report --save-data`        | full report, `references.bib`, convergence files  |
 
 ### `bad-structure/` — the structure check catching a real problem
@@ -231,6 +275,7 @@ stb-mlrelax -f your_structure.fdf --view
 stb-mlrelax -f your_slab.fdf --relax-cell   # vacuum axis stays exactly fixed
 stb-mlrelax -f your_structure.fdf --custom-model my_finetuned.model
 stb-mlrelax -f your_structure.fdf --model large   # slower, usually more accurate
+stb-mlrelax -f your_structure.fdf --optimizer BFGS   # fewer steps once already close
 ```
 
 ## Flag reference

@@ -241,6 +241,61 @@ EOF
 pause
 
 echo "=================================================================="
+echo " output/optimizer-comparison/  --  FIRE vs. BFGS vs. LBFGS"
+echo "=================================================================="
+cat <<'EOF'
+--optimizer picks the ALGORITHM that walks downhill in energy, not the
+target it walks toward -- all three below are judged by the exact same
+--fmax (0.05 eV/Ang default). They differ in HOW they use the forces MACE
+gives them each step:
+
+  FIRE   -- only the current force (damped-inertia walk); cheap per step,
+            robust from a bad starting guess, but no curvature information.
+  BFGS   -- builds an approximate curvature (Hessian) from step history,
+            jumping more directly toward the minimum once already close
+            (quasi-Newton, superlinear convergence) -- at the cost of a
+            full curvature matrix that grows with the SQUARE of the
+            degrees of freedom.
+  LBFGS  -- the same curvature idea as BFGS, but from a short rolling
+            history instead of the full matrix -- nearly the same
+            few-steps convergence, at a cost that stays small regardless
+            of system size (the practical choice for large systems).
+
+Same si_defect.fdf, same --fmax, only --optimizer changes:
+EOF
+mkdir -p "$OUT/optimizer-comparison"
+cp si_defect.fdf "$OUT/optimizer-comparison/"
+for opt in FIRE BFGS LBFGS; do
+    echo
+    echo "\$ stb-mlrelax -f si_defect.fdf --optimizer $opt -o ${opt}_relaxed.fdf --no-intro"
+    (cd "$OUT/optimizer-comparison" && stb-mlrelax -f si_defect.fdf --optimizer "$opt" \
+        -o "${opt}_relaxed.fdf" --no-intro > "console_$opt.log")
+    grep -E "^Steps used|^Wall time" "$OUT/optimizer-comparison/console_$opt.log" | sed "s/^/  /"
+done
+echo
+echo "Side by side:"
+printf "  %-8s %10s %10s %14s\n" "optimizer" "steps" "wall time" "final E (eV)"
+for opt in FIRE BFGS LBFGS; do
+    log="$OUT/optimizer-comparison/console_$opt.log"
+    steps=$(grep "^Steps used" "$log" | sed -E 's/Steps used\s*:\s*([0-9]+).*/\1/')
+    wtime=$(grep "^Wall time" "$log" | sed 's/.*: //')
+    efinal=$(grep "^Energy (eV)" "$log" | awk -F'|' '{gsub(/ /, "", $3); print $3}')
+    printf "  %-8s %10s %10s %14s\n" "$opt" "$steps" "$wtime" "$efinal"
+done
+cat <<'EOF'
+
+BFGS/LBFGS typically converge in noticeably fewer steps than FIRE once
+already reasonably close to a minimum -- the quasi-Newton advantage. BFGS
+and LBFGS land on identical numbers for this tiny 8-atom structure (so few
+degrees of freedom that "limited memory" isn't limiting anything yet) --
+the gap between them only opens up on much larger structures, where full
+BFGS's curvature matrix becomes expensive to build and store. FIRE (the
+default) stays the more robust choice from a badly-guessed starting
+geometry, e.g. output/relax-cell/'s deliberately wrong lattice constant.
+EOF
+pause
+
+echo "=================================================================="
 echo " output/full-report/  --  --save-report, --save-data, references.bib"
 echo "=================================================================="
 cat <<'EOF'
@@ -307,9 +362,9 @@ echo "=================================================================="
 echo " Done"
 echo "=================================================================="
 cat <<EOF
-Five self-contained folders were generated under output/:
+Six self-contained folders were generated under output/:
   positions-only/   relax-cell/   bad-structure/
-  model-comparison/   full-report/
+  model-comparison/   optimizer-comparison/   full-report/
 
 Each has references.bib; full-report/ additionally has stb_mlrelax_report.txt
 and the *_relax_convergence.dat/.png convergence trace.
@@ -317,7 +372,9 @@ and the *_relax_convergence.dat/.png convergence trace.
 Recap of what this walkthrough covered:
   - what a foundation MLIP (MACE-MP-0) is and why it's cheap enough to be a
     useful DFT pre-relaxation step
-  - FIRE + the fmax force-convergence criterion
+  - the fmax force-convergence criterion, and the FIRE/BFGS/LBFGS
+    convergence methods -- what each one does differently and why, with a
+    real measured steps/wall-time/energy comparison
   - positions-only vs. --relax-cell (and how a vacuum axis stays fixed)
   - structure validation catching (and confirming the fix of) a real
     malformed input, and why the repulsive energy there is so large

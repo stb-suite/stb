@@ -372,6 +372,7 @@ that distribution.""",
     # Best-effort only: a custom fine-tuned model may lack a stress head
     # (mace_run_train can be run without stress targets), so a failure here
     # is reported and skipped, never fatal.
+    max_stress_after = None
     try:
         from ase import units
         atoms_before.calc = calc
@@ -404,7 +405,16 @@ that distribution.""",
     print_section("[7] WRITING OUTPUT FILE", f_out)
     new_pmg = AseAtomsAdaptor.get_structure(atoms)
     new_structure = structure_io.from_pymatgen(new_pmg, species_meta=structure.species_meta)
-    structure_io.write_fdf(new_structure, args.output)
+    model_desc = f"a custom model ({args.custom_model})" if args.custom_model else f"MACE-MP-0 ({args.model})"
+    stress_desc = f"{max_stress_after:.4f} GPa" if max_stress_after is not None else "not available"
+    header_comment = [
+        f"Structure relaxed by stb-mlrelax using {model_desc}.",
+        f"Optimizer: {args.optimizer}, {steps_used} step(s), "
+        f"{'converged' if converged else 'NOT converged (hit step cap)'}.",
+        f"Convergence: max stress = {stress_desc}.",
+        f"Energy: {e1:.6f} eV (delta {e1 - e0:+.6f} eV from the input structure).",
+    ]
+    structure_io.write_fdf(new_structure, args.output, header_comment=header_comment)
     print_dual(color_text(f"[OK] Structure written to '{args.output}'.", 'green'), f_out)
 
     print_section("[8] REFERENCES", f_out)

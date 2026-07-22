@@ -1,0 +1,32 @@
+# 0D system: an isolated CH4 molecule in a vacuum box.
+# The molecule sits in a 20x20x20 Ang box; the largest empty gap between
+# atoms is close to 19 Ang in every direction, far above stb-inputfile's
+# vacuum-detection threshold (10 Ang), so all 3 axes are correctly detected
+# as vacuum -- no real periodicity in any direction.
+# (Same fixture used by test/1-inputs/3-k-path/example_0D_molecule.fdf.)
+
+NumberOfSpecies    2
+NumberofAtoms      5
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Ang
+
+%block LatticeVectors
+ 20.0000000000    0.0000000000    0.0000000000
+  0.0000000000   20.0000000000    0.0000000000
+  0.0000000000    0.0000000000   20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 10.0000000000   10.0000000000   10.0000000000   1
+ 10.6293203910   10.6293203910   10.6293203910   2
+ 10.6293203910    9.3706796090    9.3706796090   2
+  9.3706796090   10.6293203910    9.3706796090   2
+  9.3706796090    9.3706796090   10.6293203910   2
+%endblock AtomicCoordinatesAndAtomicSpecies

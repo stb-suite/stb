@@ -29,11 +29,22 @@ check_success() {
 
 # Checks that file $2 contains (grep -q) pattern $1
 check_contains() {
-    if grep -q "$1" "$2" 2>/dev/null; then
+    if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
         PASS=$((PASS+1))
     else
         echo -e "   -> ${RED}Failed:${NC} '$1' NOT found in '$2'"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that file $2 does NOT contain (grep -q) pattern $1
+check_not_contains() {
+    if ! grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent from '$2' (as expected)"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' (should not be there)"
         FAIL=$((FAIL+1))
     fi
 }
@@ -82,11 +93,13 @@ EOF
 # --- 2. Dimensionality matrix (0D/1D/2D/3D) ---
 echo -e "\n--- Testing dimensionality detection ---"
 
-echo "Testing: 0D (isolated CH4 molecule) -> no periodic direction, no file written"
+echo "Testing: 0D (isolated CH4 molecule) -> now a hard error (exit 1), no file written"
 rm -f kpath_bs.fdf
 stb-kpath --file example_0D_molecule.fdf --no-intro > log_0d.txt 2>&1
+check_exit_code $? 1
 check_contains "0D (isolated molecule)" log_0d.txt
-check_contains "Skipping file generation" log_0d.txt
+check_contains "\[ERROR\] No periodic direction detected" log_0d.txt
+check_contains "No output file written" log_0d.txt
 if [ ! -s kpath_bs.fdf ]; then
     echo -e "   -> ${GREEN}Verified:${NC} kpath_bs.fdf was not created"
     PASS=$((PASS+1))
@@ -95,41 +108,49 @@ else
     FAIL=$((FAIL+1))
 fi
 
-echo "Testing: 1D (linear carbon chain) -> expected path Gamma-X"
+echo "Testing: 1D (linear carbon chain) -> expected path Gamma-X, space group P4/mmm"
 rm -f kpath_bs.fdf
 stb-kpath --file example_1D_chain.fdf --no-intro > log_1d.txt 2>&1
-check_contains "Dimensionality:.*1D" log_1d.txt
+check_exit_code $? 0
+check_contains "Dimensionality : 1D" log_1d.txt
 check_contains "LINE" log_1d.txt
-check_contains "Path:.*Gamma-X" log_1d.txt
+check_contains "Path : .*Gamma-X" log_1d.txt
+check_contains "Space group : P4/mmm (No. 123)" log_1d.txt
+check_contains "may not reflect the true symmetry" log_1d.txt
 check_success kpath_bs.fdf
 mv kpath_bs.fdf kpath_1d.fdf
 
-echo "Testing: 2D (primitive graphene, 2 atoms) -> expected path Gamma-M-K-Gamma"
+echo "Testing: 2D (primitive graphene, 2 atoms) -> expected path Gamma-M-K-Gamma, space group P6/mmm"
 rm -f kpath_bs.fdf
 stb-kpath --file example_2D_graphene.fdf --no-intro > log_2d.txt 2>&1
-check_contains "Dimensionality:.*2D" log_2d.txt
+check_exit_code $? 0
+check_contains "Dimensionality : 2D" log_2d.txt
 check_contains "HEX2D" log_2d.txt
-check_contains "Path:.*Gamma-M-K-.Gamma" log_2d.txt
+check_contains "Path : .*Gamma-M-K-.Gamma" log_2d.txt
 check_contains "not a 3D space group" log_2d.txt
+check_contains "Space group : P6/mmm (No. 191)" log_2d.txt
+check_contains "may not reflect the true symmetry" log_2d.txt
 check_success kpath_bs.fdf
 mv kpath_bs.fdf kpath_2d.fdf
 
-echo "Testing: 2D real-world fixture structure.fdf (10-atom supercell) -> same Gamma-M-K-Gamma, no primitive-cell warning"
+echo "Testing: 2D real-world fixture structure.fdf (10-atom supercell) -> same Gamma-M-K-Gamma, space group P-62m"
 rm -f kpath_bs.fdf
 stb-kpath --file structure.fdf --no-intro > log_2d_real.txt 2>&1
-check_contains "Dimensionality:.*2D" log_2d_real.txt
+check_contains "Dimensionality : 2D" log_2d_real.txt
 check_contains "HEX2D" log_2d_real.txt
-check_contains "Path:.*Gamma-M-K-.Gamma" log_2d_real.txt
+check_contains "Path : .*Gamma-M-K-.Gamma" log_2d_real.txt
+check_contains "Space group : P-62m (No. 189)" log_2d_real.txt
 check_success kpath_bs.fdf
 mv kpath_bs.fdf kpath_2d_real.fdf
 
-echo "Testing: 3D (simple-cubic Si fixture) -> expected path Gamma-X-M-Gamma-R-X | M-R"
+echo "Testing: 3D (synthetic cubic-lattice Si fixture) -> expected path Gamma-X-M-Gamma-R-X | M-R, no vacuum caveat"
 rm -f kpath_bs.fdf
 stb-kpath --file example_3D_silicon.fdf --no-intro > log_3d.txt 2>&1
-check_contains "Dimensionality:.*3D" log_3d.txt
+check_contains "Dimensionality : 3D" log_3d.txt
 check_contains "CUB" log_3d.txt
-check_contains "Path:.*Gamma-X-M-.Gamma-R-X | M-R" log_3d.txt
+check_contains "Path : .*Gamma-X-M-.Gamma-R-X | M-R" log_3d.txt
 check_contains "Disjointed path detected" log_3d.txt
+check_contains "Space group :" log_3d.txt
 check_success kpath_bs.fdf
 mv kpath_bs.fdf kpath_3d.fdf
 
@@ -148,7 +169,8 @@ echo -e "\n--- Testing the --vacuum-gap threshold override ---"
 echo "Testing: raising --vacuum-gap above the 20 Ang vacuum -> falls back to full 3D (old behavior)"
 rm -f kpath_bs.fdf
 stb-kpath --file example_2D_graphene.fdf --vacuum-gap 25 --no-intro > log_vacuum_gap_override.txt 2>&1
-check_contains "Dimensionality:.*3D" log_vacuum_gap_override.txt
+check_contains "Dimensionality : 3D" log_vacuum_gap_override.txt
+check_not_contains "may not reflect the true symmetry" log_vacuum_gap_override.txt
 check_success kpath_bs.fdf
 rm -f kpath_bs.fdf
 
@@ -161,10 +183,10 @@ stb-kpath --file does_not_exist.fdf --no-intro > log_missing.txt 2>&1
 check_exit_code $? 1
 check_contains "not found" log_missing.txt
 
-echo "Testing: malformed fdf (missing ChemicalSpeciesLabel) -> handled, no crash"
+echo "Testing: malformed fdf (missing ChemicalSpeciesLabel) -> now a hard error (exit 1)"
 rm -f kpath_bs.fdf
 stb-kpath --file malformed.fdf --no-intro > log_malformed.txt 2>&1
-check_exit_code $? 0
+check_exit_code $? 1
 check_contains "ChemicalSpeciesLabel not found" log_malformed.txt
 if [ ! -s kpath_bs.fdf ]; then
     echo -e "   -> ${GREEN}Verified:${NC} kpath_bs.fdf was not created after a parse error"
@@ -182,11 +204,13 @@ echo "Testing: -v/--version"
 stb-kpath --version > log_version.txt 2>&1
 check_contains "stb-kpath" log_version.txt
 
-echo "Testing: --help documents --vacuum-gap and -p/--prec defaults"
+echo "Testing: --help documents --vacuum-gap, -p/--prec, --symprec, --angle-tolerance defaults"
 stb-kpath --help > log_help.txt 2>&1
 check_contains "vacuum-gap" log_help.txt
 check_contains "Default: 10.0" log_help.txt
 check_contains "Default: 0.0002" log_help.txt
+check_contains "symprec" log_help.txt
+check_contains "angle-tolerance" log_help.txt
 
 
 # --- 5b. -o/--output custom filename ---
@@ -204,16 +228,46 @@ fi
 rm -f my_kpath.fdf
 
 
+# --- 5c. --save-report and references.bib ---
+echo -e "\n--- Testing --save-report and references.bib ---"
+
+echo "Testing: --save-report writes stb_kpath_report.txt matching the console output"
+rm -f kpath_bs.fdf stb_kpath_report.txt
+stb-kpath --file example_2D_graphene.fdf --save-report --no-intro > log_save_report_console.txt 2>&1
+check_success stb_kpath_report.txt
+check_contains "Path : .*Gamma-M-K-.Gamma" stb_kpath_report.txt
+check_contains "Report" log_save_report_console.txt
+rm -f kpath_bs.fdf
+
+echo "Testing: references.bib always written (SIESTA + Setyawan-Curtarolo citations)"
+rm -f references.bib kpath_bs.fdf
+stb-kpath --file example_2D_graphene.fdf --no-intro > /dev/null 2>&1
+check_success references.bib
+check_contains "@article{Soler2002," references.bib
+check_contains "@article{Garcia2020," references.bib
+check_contains "@article{SetyawanCurtarolo2010," references.bib
+rm -f kpath_bs.fdf
+
+
 # --- 6. Interactive path (stb-suite, shortcut 1.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.3) ---"
 
-echo "Testing: navigate 1.3 -> invalid file then valid -> press Enter for precision (default 0.0002) -> quit"
+echo "Testing: navigate 1.3 -> invalid file then valid -> skip advanced settings (N) -> quit"
 rm -f kpath_bs.fdf
-printf '1.3\ndoes_not_exist.fdf\nexample_2D_graphene.fdf\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '1.3\ndoes_not_exist.fdf\nexample_2D_graphene.fdf\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
-check_contains "Dimensionality:.*2D" log_interactive.txt
-check_contains "Path:.*Gamma-M-K-.Gamma" log_interactive.txt
+check_contains "Dimensionality : 2D" log_interactive.txt
+check_contains "Path : .*Gamma-M-K-.Gamma" log_interactive.txt
 check_success kpath_bs.fdf
+rm -f kpath_bs.fdf
+
+echo "Testing: navigate 1.3 -> valid file -> open advanced settings (y) -> custom vacuum-gap/eps/symprec/angle -> quit"
+printf '1.3\nexample_2D_graphene.fdf\ny\n15\n0.001\n0.01\n2.0\n\n0\n' | stb-suite > log_interactive_advanced.txt 2>&1
+check_contains "Vacuum-gap threshold : 15.0 Ang" log_interactive_advanced.txt
+check_contains "Bravais-lattice tolerance (eps) : 0.001" log_interactive_advanced.txt
+check_contains "Symmetry tolerance : symprec=0.01, angle=2.0 deg" log_interactive_advanced.txt
+check_success kpath_bs.fdf
+rm -f kpath_bs.fdf
 
 
 popd > /dev/null

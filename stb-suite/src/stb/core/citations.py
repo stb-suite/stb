@@ -1,0 +1,83 @@
+"""Shared BibTeX citation entries and writer, used by every stb tool that
+writes a references.bib alongside its output (currently stb-inputfile,
+stb-kgrid, and stb-kpath). Each entry is a (key, bibtex-entry-string) tuple;
+tool-specific entries (DFT-D3, Nose thermostat, pseudopotential banks,
+Setyawan-Curtarolo, ...) stay local to their own tool module.
+"""
+
+import os
+import re
+
+SIESTA = ("Soler2002", """@article{Soler2002,
+  author  = {Soler, Jos\\'e M. and Artacho, Emilio and Gale, Julian D. and Garc\\'ia, Alberto and Junquera, Javier and Ordej\\'on, Pablo and S\\'anchez-Portal, Daniel},
+  title   = {The {SIESTA} method for ab initio order-{N} materials simulation},
+  journal = {Journal of Physics: Condensed Matter},
+  year    = {2002},
+  volume  = {14},
+  number  = {11},
+  pages   = {2745--2779},
+  doi     = {10.1088/0953-8984/14/11/302}
+}""")
+
+SIESTA_RECENT = ("Garcia2020", """@article{Garcia2020,
+  author  = {Garc\\'ia, Alberto and Papior, Nick and Akhtar, Arsalan and Nordstr\\"om, Emilio and Ordej\\'on, Pablo and Blum, Volker and Sanchez-Portal, Daniel},
+  title   = {Siesta: Recent developments and applications},
+  journal = {The Journal of Chemical Physics},
+  year    = {2020},
+  volume  = {152},
+  number  = {20},
+  pages   = {204108},
+  doi     = {10.1063/5.0005077}
+}""")
+
+MONKHORST_PACK = ("MonkhorstPack1976", """@article{MonkhorstPack1976,
+  author  = {Monkhorst, Hendrik J. and Pack, James D.},
+  title   = {Special points for {Brillouin-zone} integrations},
+  journal = {Physical Review B},
+  year    = {1976},
+  volume  = {13},
+  number  = {12},
+  pages   = {5188--5192},
+  doi     = {10.1103/PhysRevB.13.5188}
+}""")
+
+
+def _read_existing_entries(bib_path):
+    """Returns {key: full_entry_text} already in `bib_path`, or {} if the
+    file doesn't exist -- parsed back from the same blank-line-separated
+    `@type{KEY, ...}` blocks write_bib_file itself writes."""
+    if not os.path.exists(bib_path):
+        return {}
+    with open(bib_path) as f_bib:
+        content = f_bib.read()
+    entries = {}
+    for block in content.split("\n\n"):
+        block = block.strip()
+        match = re.match(r"@\w+\{([^,]+),", block)
+        if match:
+            entries[match.group(1)] = block
+    return entries
+
+
+def write_bib_file(bib_path, entries):
+    """Writes a plain .bib file with one blank-line-separated entry per
+    reference -- a standard BibTeX file, importable as-is into any reference
+    manager (Zotero, JabRef, LaTeX's own bibtex/biber).
+
+    Merges with whatever is already at `bib_path` (by citation key) instead
+    of overwriting it -- multiple stb tools are often run in the same
+    directory against complementary outputs (e.g. stb-inputfile's calc.fdf
+    and stb-kpath's kpath_bs.fdf, for a 'bands' calculation), and each
+    should be able to add its own citations without erasing the other's.
+    Found live: stb-kpath's own write was silently dropping stb-inputfile's
+    PBE/Monkhorst-Pack entries when both ran in the same output/bands/
+    folder in examples/1.1-stb-inputfile/example_1.1.sh.
+    """
+    combined = _read_existing_entries(bib_path)
+    for key, entry in entries:
+        combined[key] = entry
+    with open(bib_path, "w") as f_bib:
+        f_bib.write("% References for the SIESTA-related calculation(s) run in this directory.\n")
+        f_bib.write("% Cite these alongside the SIESTA code itself.\n\n")
+        for entry in combined.values():
+            f_bib.write(entry + "\n\n")

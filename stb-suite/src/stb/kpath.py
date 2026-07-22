@@ -6,79 +6,77 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "2.0.0"
 
-from time import sleep
 import numpy as np
 from ase.cell import Cell
 from ase.dft.kpoints import parse_path_string
 from stb.core import structure_io, kspace
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core import symmetry as core_symmetry
+from stb.core import citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section
 import sys
 import os
 import argparse
 
-def parse_fdf_to_structure(fdf_file="struct.fdf"):
-    """Reads a SIESTA .fdf file and returns its FdfStructure."""
-    try:
-        return structure_io.read_fdf(fdf_file)
-    except FileNotFoundError:
-        print(color_text(f"Error: File '{fdf_file}' not found.", 'red'))
-        return None
-    except ValueError as e:
-        print(color_text(f"Error: {e}", 'red'))
-        return None
+REPORT_FILE = "stb_kpath_report.txt"
+BIB_FILE = "references.bib"
+
+# The actual band-path convention ASE's Cell.bandpath implements (extended to
+# 1D/2D via its periodic-axes mask) -- kept local since this is currently the
+# only consumer (extract-on-second-use, same policy as core/citations.py).
+_BIB_SETYAWAN_CURTAROLO = ("SetyawanCurtarolo2010", """@article{SetyawanCurtarolo2010,
+  author  = {Setyawan, Wahyu and Curtarolo, Stefano},
+  title   = {High-throughput electronic band structure calculations: Challenges and tools},
+  journal = {Computational Materials Science},
+  year    = {2010},
+  volume  = {49},
+  number  = {2},
+  pages   = {299--312},
+  doi     = {10.1016/j.commatsci.2010.05.010}
+}""")
 
 
-def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50, output_filename="kpath_bs.fdf"):
+def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50,
+                             output_filename="kpath_bs.fdf", f_out=None):
     """
     Writes the k-path to a SIESTA-formatted FDF file for band structure.
-
-    This function now writes ALL suggested path segments, even if disjointed.
+    Writes ALL suggested path segments, even if disjointed. Returns True on
+    success, False if the file could not be written (already reported).
     """
-
-    # 1. Determine the full sequence of k-points in order
     if not path_segments:
-        print(f"  {color_text('Warning: No k-path segments found. File will not be written.', 'yellow')}")
-        return
+        print_dual(color_text("Warning: No k-path segments found. File will not be written.", 'yellow'), f_out)
+        return False
 
-    # --- START OF CORRECTION ---
     # Rebuilds the 'path_sequence' based on the correct data structure
     # (which is a list of paths, e.g: [['A', 'B', 'C'], ['D', 'E']])
-
     path_sequence = []
-
-    for i, segment_list in enumerate(path_segments): # ex: segment_list = ['\Gamma', 'Y', 'H']
+    for i, segment_list in enumerate(path_segments):  # ex: segment_list = ['\Gamma', 'Y', 'H']
         if not segment_list:
-            continue # Skip if segment is empty
+            continue
 
         if i == 0:
-            # For the first path, simply add all points
             path_sequence.extend(segment_list)
         else:
-            # For subsequent paths
             last_point_in_sequence = path_sequence[-1]
             first_point_of_new_segment = segment_list[0]
 
             if last_point_in_sequence == first_point_of_new_segment:
-                # The path is continuous (e.g., ends in Z, starts in Z)
-                # Add all points, *except* the first one (which is duplicated)
+                # Continuous path (e.g., ends in Z, starts in Z) -- skip the duplicate.
                 path_sequence.extend(segment_list[1:])
             else:
-                # The path is disjoint (it's a "jump", e.g., ends in H_1, starts in M)
-                print(f"  {color_text(f'Note: Disjointed path detected (jump from {last_point_in_sequence} to {first_point_of_new_segment}). Including full segment.', 'cyan')}")
-                # Add ALL points from the new segment
+                # Disjoint path (a "jump", e.g., ends in H_1, starts in M).
+                print_dual(color_text(
+                    f"Note: Disjointed path detected (jump from {last_point_in_sequence} "
+                    f"to {first_point_of_new_segment}). Including full segment.", 'cyan'), f_out)
                 path_sequence.extend(segment_list)
 
-    # --- END OF CORRECTION ---
-
     if not path_sequence:
-        print(f"  {color_text('Error: Could not determine path sequence.', 'red')}")
-        return
+        print_dual(color_text("[ERROR] Could not determine path sequence.", 'red'), f_out)
+        return False
 
-    # This line will now print the full path, including jumps
     path_str_display = '-'.join([r'\Gamma' if p == 'GAMMA' else p for p in path_sequence])
-    print(f"  {color_text('SIESTA Path to be written:', 'cyan')} {path_str_display}")
+    print_dual(f"SIESTA path to be written : {path_str_display}", f_out)
 
     try:
         with open(output_filename, 'w') as f:
@@ -86,52 +84,47 @@ def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50, output_f
             f.write(" BandLinesScale  ReciprocalLatticeVectors\n\n")
             f.write("%block BandLines\n")
 
-            # 2. Write the first point (with '1' point)
             first_label = path_sequence[0]
             first_coords = kpoints_dict[first_label]
             coord_str = " ".join([f"{c:14.10f}" for c in first_coords])
-            # Fix 'GAMMA' to '\Gamma' label in file
             f_label = r'\Gamma' if first_label == 'GAMMA' else first_label
             f.write(f"1   {coord_str}   {f_label}\n")
 
-            # 3. Write the rest of the points
             for label in path_sequence[1:]:
                 coords = kpoints_dict[label]
                 coord_str = " ".join([f"{c:14.10f}" for c in coords])
-                # Fix 'GAMMA' to '\Gamma' label in file
                 f_label = r'\Gamma' if label == 'GAMMA' else label
-                # Use the number of points (ex: 50) for all following segments
                 f.write(f"{num_points}   {coord_str}   {f_label}\n")
 
             f.write("%endblock BandLines\n")
 
-        print(f"  {color_text('Success:', 'green')} SIESTA file '{color_text(output_filename, 'bold')}' has been created.")
+        print_dual(color_text(
+            f"[OK] SIESTA file '{output_filename}' has been created.", 'green'), f_out)
+        return True
 
     except KeyError as e:
-        # This error happens if a label in the path (ex: '\Gamma') has a
-        # different name in the dictionary (ex: 'GAMMA')
-
-        # Tries to substitute '\Gamma' with 'GAMMA' if 'GAMMA' exists
+        # A label in the path (e.g. '\Gamma') has a different name in the
+        # dictionary (e.g. 'GAMMA') -- retry once with that substitution.
         if str(e) == r"'\Gamma'" and 'GAMMA' in kpoints_dict:
-            print("  " + color_text("Warning: Found '\\Gamma' label, attempting to use 'GAMMA' internally.", 'yellow'))
-            # Recreate the sequence, substituting \Gamma with GAMMA
+            print_dual(color_text(
+                "Warning: Found '\\Gamma' label, attempting to use 'GAMMA' internally.", 'yellow'), f_out)
             path_sequence_fixed = ['GAMMA' if label == r'\Gamma' else label for label in path_sequence]
-            # Try to write the file AGAIN
-            write_siesta_kpath_file_fixed(kpoints_dict, path_sequence_fixed, num_points, output_filename)
-        else:
-             print(f"  {color_text(f'Error writing file: K-point label {e} found in path but not in k-points list.', 'red')}")
-             print(f"  {color_text(f'Available labels: {list(kpoints_dict.keys())}', 'red')}")
+            return _write_siesta_kpath_file_fixed(
+                kpoints_dict, path_sequence_fixed, num_points, output_filename, f_out
+            )
+        print_dual(color_text(
+            f"[ERROR] K-point label {e} found in path but not in k-points list.", 'red'), f_out)
+        print_dual(color_text(f"Available labels: {list(kpoints_dict.keys())}", 'red'), f_out)
+        return False
 
     except Exception as e:
-        print(f"  {color_text(f'Error writing {output_filename}: {e}', 'red')}")
+        print_dual(color_text(f"[ERROR] Writing {output_filename}: {e}", 'red'), f_out)
+        return False
 
-# --- HELPER FUNCTION TO FIX LABEL NAMES ---
-def write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, output_filename):
-    """
-    Emergency "helper" function to write the file if the KeyError
-    for '\Gamma' vs 'GAMMA' occurs.
-    """
-    print("  " + color_text("Retrying file write with 'GAMMA' label...", 'cyan'))
+
+def _write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, output_filename, f_out=None):
+    """Retries the write after substituting '\\Gamma' -> 'GAMMA' in the path sequence."""
+    print_dual(color_text("Retrying file write with 'GAMMA' label...", 'cyan'), f_out)
     try:
         with open(output_filename, 'w') as f:
             f.write("### BANDS\n")
@@ -152,20 +145,41 @@ def write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, outpu
 
             f.write("%endblock BandLines\n")
 
-        print(f"  {color_text('Success:', 'green')} SIESTA file '{color_text(output_filename, 'bold')}' has been created (with label fix).")
+        print_dual(color_text(
+            f"[OK] SIESTA file '{output_filename}' has been created (with label fix).", 'green'), f_out)
+        return True
     except Exception as e:
-        print(f"  {color_text(f'Error during retry: {e}', 'red')}")
-# --- END OF SIESTA WRITE FUNCTIONS ---
+        print_dual(color_text(f"[ERROR] During retry: {e}", 'red'), f_out)
+        return False
 
 
-def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002, output_filename="kpath_bs.fdf"):
+def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filename, f_out=None):
     """
-    Takes an FdfStructure, detects its dimensionality from vacuum-padded axes
-    (see kspace.detect_vacuum_axes), and prints/writes its high-symmetry
-    k-path using ASE's dimension-aware Bravais-lattice path finder
-    (ase.cell.Cell.bandpath), then writes it to `output_filename`.
+    Core logic: reads `filename`, analyzes its dimensionality and symmetry,
+    computes its high-symmetry k-path (dimension-aware, via ASE's
+    Cell.bandpath), and writes it to `output_filename`. Returns True on
+    success, False on any handled failure (missing file, parse error, a 0D
+    structure -- a k-path needs at least one periodic direction -- or an
+    exception during detection).
     """
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Structure file : {filename}", f_out)
+    print_dual(f"Vacuum-gap threshold : {vacuum_gap} Ang", f_out)
+    print_dual(f"Bravais-lattice tolerance (eps) : {eps}", f_out)
+    print_dual(f"Symmetry tolerance : symprec={symprec}, angle={angle_tolerance} deg", f_out)
+
+    if not os.path.exists(filename):
+        print_dual(color_text(f"[ERROR] Structure file '{filename}' not found.", 'red'), f_out)
+        return False
+
     try:
+        fdf_structure = structure_io.read_fdf(filename)
+    except Exception as e:
+        print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+        return False
+
+    try:
+        print_section("[1] STRUCTURE ANALYSIS", f_out)
         lattice = fdf_structure.lattice
         positions = np.array([pos for _, pos in fdf_structure.atoms])
         is_cartesian = fdf_structure.coord_format == 'cartesian'
@@ -174,30 +188,40 @@ def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002, output_
         dimension = 3 - sum(vacuum_axes)
 
         pymatgen_structure = structure_io.to_pymatgen(fdf_structure)
-
-        print(color_text("--- 1. Structure Analysis ---", 'bold'))
-        print(f"  {color_text('Formula:', 'cyan')} {pymatgen_structure.composition.reduced_formula}")
+        print_dual(f"Formula : {pymatgen_structure.composition.reduced_formula}", f_out)
 
         if dimension == 0:
-            print(f"  {color_text('Dimensionality:', 'cyan')} {color_text('0D (isolated molecule)', 'bold')}")
-            print("\n" + color_text(
-                "No periodic direction detected (every axis is vacuum-padded) -- a k-path\n"
-                "is not physically meaningful for an isolated molecule. Skipping file generation.",
-                'yellow'))
-            return
+            print_dual(color_text("Dimensionality : 0D (isolated molecule)", 'bold'), f_out)
+            print_dual(color_text(
+                "[ERROR] No periodic direction detected (every axis is vacuum-padded) -- "
+                "a k-path is not physically meaningful for an isolated molecule (0D). "
+                "No output file written.", 'red'), f_out)
+            return False
 
         pbc = tuple(not v for v in vacuum_axes)
         cell = Cell(lattice)
         bravais = cell.get_bravais_lattice(eps=eps, pbc=pbc)
 
         dim_label = {1: "1D", 2: "2D", 3: "3D"}[dimension]
-        print(f"  {color_text('Dimensionality:', 'cyan')} {color_text(dim_label, 'bold')}")
-        print(f"  {color_text('Bravais Lattice:', 'cyan')} {color_text(f'{bravais.longname} ({bravais.name})', 'bold')}")
+        print_dual(f"Dimensionality : {dim_label}", f_out)
+        print_dual(f"Bravais lattice : {bravais.longname} ({bravais.name})", f_out)
         if dimension < 3:
-            print(color_text(
-                "  Note: this reflects only the periodic axes (vacuum-padded axes excluded);\n"
-                "  it is not a 3D space group.", 'yellow'))
-        print(f"  {color_text('Using vacuum gap threshold:', 'yellow')} {vacuum_gap} Ang")
+            print_dual(color_text(
+                "Note: the Bravais lattice above reflects only the periodic axes "
+                "(vacuum-padded axes excluded); it is not a 3D space group.", 'yellow'), f_out)
+
+        sg_label = core_symmetry.space_group_label(pymatgen_structure, symprec=symprec)
+        crystal_sys, point_group = core_symmetry.crystal_system(
+            pymatgen_structure, symprec=symprec, angle_tolerance=angle_tolerance
+        )
+        print_dual(f"Space group : {sg_label}", f_out)
+        print_dual(f"Crystal system : {crystal_sys} (point group {point_group})", f_out)
+        if dimension < 3:
+            print_dual(color_text(
+                "Note: this space group treats the vacuum-padded axis/axes as an "
+                "ordinary periodic direction and may not reflect the true symmetry. "
+                "Use stb-symmetry (code 3.5) for a dimension-aware layer-group/"
+                "point-group analysis.", 'yellow'), f_out)
 
         bp = cell.bandpath(pbc=pbc, npoints=0, eps=eps)
 
@@ -208,65 +232,65 @@ def get_kpath_from_structure(fdf_structure, vacuum_gap=10.0, eps=0.0002, output_
         path_segments = [[('GAMMA' if label == 'G' else label) for label in segment]
                          for segment in parse_path_string(bp.path)]
 
-        print("\n" + color_text("--- 2. High-Symmetry K-Points (Fractional Coordinates) ---", 'bold'))
+        print_section("[2] HIGH-SYMMETRY K-POINTS", f_out)
         for label, coords in kpoints_dict.items():
             coord_str = ", ".join([f"{c:8.5f}" for c in coords])
             display_label = r'\Gamma' if label == 'GAMMA' else label
-            print(f"  {color_text(f'{display_label:<5}:', 'green')} ({coord_str})")
+            print_dual(f"  {display_label:<5}: ({coord_str})", f_out)
 
-        print("\n" + color_text("--- 3. Suggested K-Path ---", 'bold'))
+        print_section("[3] SUGGESTED K-PATH", f_out)
         path_segments_str_list = []
         for segment_list in path_segments:
             display_segment = [r'\Gamma' if label == 'GAMMA' else label for label in segment_list]
             path_segments_str_list.append("-".join(display_segment))
+        path_str = ' | '.join(path_segments_str_list)
+        print_dual(f"Path : {path_str}", f_out)
+        print_dual(
+            "Methodology : ASE's dimension-aware Bravais-lattice convention, extending "
+            "the Setyawan & Curtarolo (2010) 3D scheme to 1D/2D systems via their "
+            "periodic-axes mask (pbc).", f_out)
 
-        print(f"  Path: {color_text(color_text(' | '.join(path_segments_str_list), 'bold'), 'green')}")
+        print_section("[4] WRITING OUTPUT FILE", f_out)
+        if not write_siesta_kpath_file(kpoints_dict, path_segments, 50, output_filename, f_out):
+            return False
 
-        # --- METHODOLOGY ---
-        print("\n" + color_text("Methodology:", 'cyan'))
-        print(f"  The path follows ASE's dimension-aware Bravais-lattice convention,")
-        print(f"  which extends the Setyawan & Curtarolo (2010) 3D scheme to 1D/2D")
-        print(f"  systems via their periodic-axes mask (pbc).")
-        # --- END OF METHODOLOGY ---
+        print_section("[5] REFERENCES", f_out)
+        bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, _BIB_SETYAWAN_CURTAROLO]
+        citations.write_bib_file(BIB_FILE, bib_entries)
+        print_dual(color_text(
+            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
+            f"({len(bib_entries)} entries).", 'green'), f_out)
 
-        num_points_per_segment = 50
-
-        # --- FILE GENERATION ---
-        print("\n" + color_text("--- 4. Output File Generation ---", 'bold'))
-
-        write_siesta_kpath_file(
-            kpoints_dict,
-            path_segments,
-            num_points_per_segment,
-            output_filename
-        )
-        # --- END OF GENERATION ---
+        print_section("[6] SUMMARY & FILES", f_out)
+        print_dual("Status         : OK", f_out)
+        print_dual(f"Path           : {path_str}", f_out)
+        print_dual(f"Output file    : {output_filename}", f_out)
+        print_dual(f"References     : {BIB_FILE}", f_out)
+        return True
 
     except Exception as e:
-        print("\n" + color_text(f"An error occurred while analyzing the structure: {e}", 'red'))
-        print(color_text(f"It might be necessary to adjust the 'vacuum_gap' or 'eps' parameters (current: {vacuum_gap} Ang, {eps}).", 'yellow'))
-        print(color_text("This often happens if the input structure is distorted or the FDF parse failed.", 'yellow'))
+        print_dual(color_text(f"[ERROR] An error occurred while analyzing the structure: {e}", 'red'), f_out)
+        print_dual(color_text(
+            f"It might be necessary to adjust 'vacuum_gap' or 'eps' (current: "
+            f"{vacuum_gap} Ang, {eps}). This often happens if the input structure "
+            "is distorted or the parse failed.", 'yellow'), f_out)
+        return False
 
 
 def main():
-
-    # 1. Configure ArgParse
     parser = argparse.ArgumentParser(
-        description=f"""{color_text("Finds the high-symmetry k-path for FDF (SIESTA) files.", 'bold')}
-Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
+        description="Finds the high-symmetry k-path for a SIESTA structure file (.fdf). "
+                    "Dimension-aware (1D/2D/3D) via ASE's Bravais-lattice path finder.",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    # Argument 1: Filename (now a required flag)
     parser.add_argument(
         "-f", "--file",
-        dest="filename", # Stores the value in 'args.filename'
+        dest="filename",
         type=str,
-        required=True,  # Makes this flag mandatory
+        required=True,
         help="The structure file name (e.g., struct.fdf)."
     )
-
-    # Argument 2: Precision (optional)
     parser.add_argument(
         "-p", "--prec",
         dest="eps",
@@ -275,8 +299,6 @@ Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
         help="Tolerance (ase.cell.Cell's 'eps') for Bravais-lattice/symmetry detection.\n"
              "Default: 0.0002"
     )
-
-    # Argument 3: Vacuum gap threshold (optional)
     parser.add_argument(
         "--vacuum-gap",
         type=float,
@@ -285,22 +307,36 @@ Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
              "periodically, to treat that axis as vacuum-padded (non-periodic) when "
              "detecting the system's dimensionality. Default: 10.0"
     )
-
+    parser.add_argument(
+        "--symprec",
+        type=float,
+        default=1e-3,
+        help="Symmetry-detection tolerance for the crystallographic space-group "
+             "analysis. Default: 0.001"
+    )
+    parser.add_argument(
+        "--angle-tolerance",
+        type=float,
+        default=5.0,
+        help="Symmetry angle tolerance (degrees) for the crystallographic space-group "
+             "analysis. Default: 5.0"
+    )
     parser.add_argument(
         "-o", "--output",
         type=str,
         default="kpath_bs.fdf",
         help="Output .fdf file name (default: kpath_bs.fdf)."
     )
-
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-kpath {VERSION}")
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    parser.add_argument("--no-intro", dest="intro", action="store_false",
+                        help="Do not show the introduction")
 
     args = parser.parse_args()
 
-
-    if args.intro == True:
+    if args.intro:
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
@@ -308,40 +344,25 @@ Dimension-aware (0D/1D/2D/3D) via ASE's Bravais-lattice path finder.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("Suggested k-path from structure:", 'bold'))
-    print("-"*60)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
+    print_dual(color_text("===== STB-KPATH REPORT =====", 'magenta'), f_out)
 
-    # Read the arguments provided on the command line
-    args = parser.parse_args()
+    ok = run_kpath(
+        args.filename, args.vacuum_gap, args.eps, args.symprec, args.angle_tolerance,
+        args.output, f_out
+    )
 
-    # 2. Process the arguments
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
 
-    filename = args.filename
-    eps = args.eps
-    vacuum_gap = args.vacuum_gap
+    if f_out:
+        f_out.close()
 
-    # Check if the file exists
-    if not os.path.exists(filename):
-        print(color_text(f"Error: File '{filename}' not found.", 'red'))
+    if not ok:
         sys.exit(1)
 
-    print(color_text(f"Reading file: {filename} (Type: fdf)", 'cyan') + "\n")
-
-    # 3. Load the Structure object
-
-    try:
-        structure_obj = parse_fdf_to_structure(filename)
-    except Exception as e:
-        print(color_text(f"An error occurred while READING the file '{filename}':", 'red'))
-        print(f"{e}")
-        sys.exit(1)
-
-    # 4. Run the analysis (if loading was successful)
-    if structure_obj:
-        get_kpath_from_structure(structure_obj, vacuum_gap=vacuum_gap, eps=eps, output_filename=args.output)
-    else:
-        print(color_text("Error: Could not create the structure object from the file.", 'red'))
 
 if __name__ == "__main__":
     main()

@@ -11,6 +11,8 @@ import math
 
 import numpy as np
 
+from stb.core.cli import print_dual
+
 
 def compute_monkhorts(cella, cellb, cellc, k_density: float, vacuum_axes=None) -> list[int]:
     """Computes the reciprocal lattice vectors and Monkhorst-Pack divisions.
@@ -110,18 +112,24 @@ def dimensionality_label(vacuum_axes) -> str:
     return "3D (bulk material)"
 
 
-def analyze_dimensionality(vacuum_axes) -> None:
-    """Prints the system's dimensionality plus stb-kgrid-specific guidance
-    about what the vacuum-padded axes mean for the k-grid divisions.
-    """
-    vacuum_count = sum(vacuum_axes)
+def print_density_recommendation(f_out=None) -> None:
+    """Prints a k-point density recommendation table -- shared by stb-kgrid's
+    own report and stb-suite's interactive 1.2 wrapper (which shows it BEFORE
+    prompting for a density, so the choice is informed). Moved here once the
+    interactive wrapper became a second consumer, alongside stb-kgrid's own
+    CLI report, of what used to be a kgrid.py-local helper.
 
-    print("--- Dimensionality Analysis ---")
-    print(f"System appears to be {dimensionality_label(vacuum_axes)}.")
-    if vacuum_count == 3:
-        print("A 1x1x1 grid (Gamma point) is typically sufficient.")
-    elif vacuum_count == 2:
-        print("The '1's in the grid correspond to the vacuum-padded directions.")
-    elif vacuum_count == 1:
-        print("The '1' in the grid corresponds to the vacuum-padded direction.")
-    print("---------------------------------\n")
+    Uses print_dual so it participates correctly in --save-report when a
+    caller passes f_out; the interactive wrapper calls it with no f_out for
+    a plain console-only display.
+    """
+    print_dual("\nK-Point Density Recommendation Guide", f_out)
+    print_dual("-" * 60, f_out)
+    print_dual("  Density (1/Ang)        Accuracy Level", f_out)
+    print_dual("  ---------------      --------------------------", f_out)
+    print_dual("  0.05 - 0.1           High precision", f_out)
+    print_dual("  0.10 - 0.30          Medium precision", f_out)
+    print_dual("  0.30 - 0.50          Low precision", f_out)
+    print_dual("", f_out)
+    print_dual("  Tip: for most systems, a density between 0.2 and 0.3 is", f_out)
+    print_dual("  generally accurate enough while keeping cost reasonable.", f_out)

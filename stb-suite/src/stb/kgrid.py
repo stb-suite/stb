@@ -5,152 +5,42 @@
 # Developed by Dr. Carlos M. O. Bastos          #
 #      bastoscmo.github.io                      #
 #################################################
-    
-VERSION = "1.9.1"    
 
-from time import sleep
+VERSION = "2.0.0"
+
 import argparse
-import numpy as np
 import sys
-import os
-from stb.core import structure_io, kspace
-from stb.core.cli import COLORS, color_text, show_intro
-# Try to import ASE, required only for .cif files
-try:
-    import ase.io
-except ImportError:
-    pass
+import numpy as np
+from stb.core import structure_io, kspace, citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section
+
+REPORT_FILE = "stb_kgrid_report.txt"
+BIB_FILE = "references.bib"
 
 
-def parse_poscar(filename):
-    """Reads a POSCAR file and returns (lattice, positions, is_cartesian).
+def build_bib_entries():
+    """stb-kgrid always computes a genuine Monkhorst-Pack grid -- unlike
+    stb-inputfile (which skips it for AIMD), there's no mode here where the
+    k-grid isn't actually the point of the run."""
+    return [citations.SIESTA, citations.SIESTA_RECENT, citations.MONKHORST_PACK]
 
-    positions are as literally written (fractional under 'Direct', Cartesian
-    Angstrom -- pre-scale -- under 'Cartesian'), one row per atom across all
-    species, in file order.
-    """
-    with open(filename, 'r') as f:
-        lines = [l.strip() for l in f if l.strip()]
-    scale = float(lines[1])
-    vecs = []
-    for i in range(2, 5):
-        parts = lines[i].split()
-        vec = [float(p) for p in parts]
-        vecs.append(vec)
-    lattice = np.array(vecs) * scale
-
-    counts = [int(x) for x in lines[6].split()]
-    n_atoms = sum(counts)
-    coord_type = lines[7].strip().lower()
-    is_cartesian = coord_type.startswith(('c', 'k'))  # Cartesian, or old VASP 'Kartesian'
-
-    positions = []
-    for i in range(8, 8 + n_atoms):
-        parts = lines[i].split()
-        positions.append([float(parts[0]), float(parts[1]), float(parts[2])])
-    positions = np.array(positions)
-
-    return lattice, positions, is_cartesian
-
-def parse_cif(filename):
-    """Reads a CIF file using ASE and returns (lattice, fractional_positions, is_cartesian=False)."""
-    try:
-        atoms = ase.io.read(filename)
-        lattice = atoms.get_cell()
-        positions = atoms.get_scaled_positions()
-        return lattice, positions, False
-    except NameError:
-        print("Error: The 'ase' library is required to read .cif files.")
-        print("Please install it using: pip install ase")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error reading CIF file '{filename}': {e}")
-        sys.exit(1)
-
-def parse_fhi(filename):
-    """Reads a geometry.in (FHI-aims) file and returns (lattice, positions, is_cartesian).
-
-    is_cartesian reflects whichever atom keyword ('atom_frac' vs 'atom') was
-    actually used in the file; mixing both in the same file isn't supported.
-    """
-    vecs = []
-    positions = []
-    is_cartesian = False
-    with open(filename, 'r') as f:
-        for line in f:
-            # Remove comments and whitespace
-            cleaned_line = line.split('#', 1)[0].strip()
-            if not cleaned_line:
-                continue
-            keyword = cleaned_line.split()[0]
-
-            if keyword == 'lattice_vector':
-                parts = cleaned_line.split()
-                if len(parts) >= 4:
-                    try:
-                        # Extract x, y, z values (indices 1, 2, 3)
-                        vec = [float(parts[1]), float(parts[2]), float(parts[3])]
-                        vecs.append(vec)
-                    except ValueError:
-                        print(f"Error: 'lattice_vector' line malformed in {filename}: {line}")
-                        sys.exit(1)
-            elif keyword in ('atom_frac', 'atom'):
-                parts = cleaned_line.split()
-                if len(parts) >= 4:
-                    try:
-                        positions.append([float(parts[1]), float(parts[2]), float(parts[3])])
-                        is_cartesian = (keyword == 'atom')
-                    except ValueError:
-                        print(f"Error: '{keyword}' line malformed in {filename}: {line}")
-                        sys.exit(1)
-
-    # Check if we found exactly 3 vectors
-    if len(vecs) != 3:
-        print(f"Error: Could not find 3 'lattice_vector' lines in file {filename}.")
-        print(f"Found: {len(vecs)}")
-        sys.exit(1)
-
-    if not positions:
-        print(f"Error: Could not find any 'atom_frac'/'atom' lines in file {filename}.")
-        sys.exit(1)
-
-    lattice = np.array(vecs)
-    positions = np.array(positions)
-    return lattice, positions, is_cartesian
-
-def print_density_recommendation():
-    """Prints a friendly k-point density recommendation table."""
-    print("\n" + "="*65)
-    print("              📐 K-Point Density Recommendation Guide              ")
-    print("="*65)
-    print("  Density (1/Å⁻¹)        Accuracy Level")
-    print("  ---------------      --------------------------")
-    print("  0.05 – 0.1           High precision")
-    print("  0.10 – 0.30          Medium precision")
-    print("  0.30 – 0.50          Low precision")
-    print()
-    print("  ⚠️  Tip: For most systems, a density between 0.2 and 0.3 is")
-    print("     generally accurate enough while keeping cost reasonable.")
-    print("="*65 + "\n")
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Compute the Monkhorst-Pack grid based on desired k-point density and a structure file."
+        description="Compute a Monkhorst-Pack k-point grid from a SIESTA "
+                    "structure file (.fdf) and a target k-point density.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Usage examples:\n"
+               "  %(prog)s -f structure.fdf -d 0.2\n"
+               "  %(prog)s -f slab.fdf -d 0.2 --vacuum-gap 15\n"
     )
     parser.add_argument(
-        "--density", "-d", type=float, required=True,
-        help="Target k-point density (in 1/Å). Example: 0.03"
+        "-f", "--file", type=str, required=True, dest="structure_file",
+        help="Path to the SIESTA structure file (.fdf)."
     )
     parser.add_argument(
-        "--file", "-f", type=str, required=True,
-        help="Path to the structure file."
-    )
-    
-    parser.add_argument(
-        "--type", "-t", type=str, required=True,
-        # Changed 'geometry' to 'fhi'
-        choices=['poscar', 'cif', 'fhi', 'fdf'],
-        help="Type of the structure file. Currently supports: 'poscar', 'cif', 'fhi', 'fdf'."
+        "-d", "--density", type=float, required=True,
+        help="Target k-point density (in 1/Ang). Example: 0.2"
     )
     parser.add_argument(
         "--vacuum-gap", type=float, default=10.0,
@@ -158,16 +48,16 @@ def main():
              "periodically, to treat that axis as vacuum-padded (non-periodic) and force "
              "a single k-point there regardless of density. Default: 10.0"
     )
-
-
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-kgrid {VERSION}")
-    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    parser.add_argument("--no-intro", dest="intro", action="store_false",
+                        help="Do not show the introduction")
 
     args = parser.parse_args()
 
-
-    if args.intro == True:
+    if args.intro:
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
@@ -175,60 +65,80 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("Suggested Monkhorst-Pack k-grid from structure :", 'bold'))
-    print("-"*60)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-    args = parser.parse_args()
+    print_dual(color_text("===== STB-KGRID REPORT =====", 'magenta'), f_out)
 
-    filename = args.file
-    file_type = args.type.lower()
-    
+    ok = True
     try:
-        # --- Updated Decision Logic ---
-        if file_type == 'cif':
-            print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (using ASE)...")
-            lattice, positions, is_cartesian = parse_cif(filename)
+        print_section("[0] RUN METADATA", f_out)
+        print_dual(f"Structure file : {args.structure_file}", f_out)
+        print_dual(f"Target density : {args.density} 1/Ang", f_out)
+        print_dual(f"Vacuum-gap threshold : {args.vacuum_gap} Ang", f_out)
 
-        elif file_type == 'poscar':
-            print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice, positions, is_cartesian = parse_poscar(filename)
+        structure = structure_io.read_fdf(args.structure_file)
+        positions = np.array([pos for _, pos in structure.atoms])
+        is_cartesian = structure.coord_format == 'cartesian'
 
-        elif file_type == 'fhi': # Changed from 'geometry'
-            print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            lattice, positions, is_cartesian = parse_fhi(filename) # Renamed function call
+        print_section("[1] K-POINT DENSITY GUIDE", f_out)
+        kspace.print_density_recommendation(f_out)
 
-        elif file_type == 'fdf':
-            print(f"ℹ️  Reading file '{filename}' as type '{file_type}' (native method)...")
-            structure = structure_io.read_fdf(filename)
-            lattice = structure.lattice
-            positions = np.array([pos for _, pos in structure.atoms])
-            is_cartesian = structure.coord_format == 'cartesian'
-        # --- End of Update ---
+        print_section("[2] K-GRID CALCULATION", f_out)
+        frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
+        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, args.vacuum_gap)
+        print_dual(f"Dimensionality : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+
+        divisions = kspace.compute_monkhorts(
+            structure.lattice[0], structure.lattice[1], structure.lattice[2],
+            args.density, vacuum_axes
+        )
+        print_dual(
+            f"Suggested Monkhorst-Pack grid : {divisions[0]} {divisions[1]} {divisions[2]}",
+            f_out
+        )
+
+        vacuum_count = sum(vacuum_axes)
+        if vacuum_count > 0:
+            axis_word = "axis" if vacuum_count == 1 else "axes"
+            print_dual(
+                f"The '1' division(s) above correspond to the {vacuum_count} vacuum-padded "
+                f"{axis_word} detected -- no real periodicity there, so a single k-point "
+                "is enough.",
+                f_out
+            )
+
+        print_section("[3] REFERENCES", f_out)
+        bib_entries = build_bib_entries()
+        citations.write_bib_file(BIB_FILE, bib_entries)
+        print_dual(color_text(
+            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
+            f"({len(bib_entries)} entries).", 'green'), f_out)
+
+        print_section("[4] SUMMARY & FILES", f_out)
+        print_dual("Status         : OK", f_out)
+        print_dual(f"Suggested grid : {divisions[0]} {divisions[1]} {divisions[2]}", f_out)
+        print_dual(f"References     : {BIB_FILE}", f_out)
 
     except FileNotFoundError:
-        print(f"Error: File '{filename}' not found.")
-        return
+        print_dual(
+            color_text(f"[ERROR] Structure file '{args.structure_file}' not found.", 'red'),
+            f_out
+        )
+        ok = False
     except Exception as e:
-        print(f"An unexpected error occurred while reading the file: {e}")
-        return
+        print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+        ok = False
 
-    # Detect vacuum-padded axes from the actual atomic layout, then compute divisions
-    try:
-        frac_coords = kspace.to_fractional(positions, lattice, is_cartesian)
-        vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice, args.vacuum_gap)
-        divisions = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.density, vacuum_axes)
-    except ValueError as e:
-        print(f"Error: {e}")
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    if not ok:
         sys.exit(1)
 
-    # Print recommendation table
-    print_density_recommendation()
-
-    # Print the suggested grid
-    print(f"✅ Suggested Monkhorst-Pack grid: {divisions[0]} {divisions[1]} {divisions[2]}\n")
-
-    # Analyze and print dimensionality
-    kspace.analyze_dimensionality(vacuum_axes)
 
 if __name__ == "__main__":
     main()

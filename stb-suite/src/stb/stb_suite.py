@@ -2185,25 +2185,15 @@ def run_kgrid_generator() -> None:
     print("\n" + "="*60)
     print(color_text("K-GRID GENERATOR (stb-kgrid)", 'bold').center(60))
     print("="*60 + "\n")
-    
+
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input structure file (fdf/poscar/cif/fhi): ")
+    input_file = get_input("Input structure file (.fdf): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
 
-    type_list = ['fdf', 'poscar', 'cif', 'fhi']
-    print(f"\n{color_text('Available file types:', 'yellow')}")
-    for i, t in enumerate(type_list, 1):
-        print(f"  {color_text(str(i)+'.', 'yellow')} {t}")
-
-    max_choice = len(type_list)
-    type_choice = get_int_input(f"\nSelect file type (1-{max_choice}) [default: 1 = fdf]: ", 1)
-    while not (1 <= type_choice <= max_choice):
-        print(color_text(f"Invalid choice! Please select between 1 and {max_choice}.", 'red'))
-        type_choice = get_int_input(f"Select file type (1-{max_choice}) [default: 1 = fdf]: ", 1)
-    file_type = type_list[type_choice - 1]
-    print(f"Selected type: {color_text(file_type, 'cyan')}")
+    # Show the density recommendation guide BEFORE asking, so the choice is informed.
+    kspace.print_density_recommendation()
 
     density = get_float_input("\nK-point density (e.g., 0.2) [default: 0.2]: ", 0.2)
     while density <= 0:
@@ -2212,11 +2202,10 @@ def run_kgrid_generator() -> None:
 
     args = [
         "--file", input_file,
-        "--type", file_type,
         "--density", str(density),
         "--no-intro"
     ]
-    
+
     run_tool("stb-kgrid", args)
 
 def run_kpath_generator() -> None:
@@ -2231,11 +2220,26 @@ def run_kpath_generator() -> None:
         print(color_text("File not found!", 'red'))
         input_file = get_input("Input structure file: ")
 
-    precision = get_float_input("\nBravais-lattice detection tolerance / eps (default: 0.0002): ", 0.0002)
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    vacuum_gap, eps, symprec, angle_tolerance = 10.0, 0.0002, 1e-3, 5.0
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap, Bravais-lattice tolerance, "
+        "symmetry tolerances)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
+            "(default: 10.0): ", 10.0)
+        eps = get_float_input("Bravais-lattice detection tolerance / eps (default: 0.0002): ", 0.0002)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
 
     args = [
         "--file", input_file,
-        "--prec", str(precision),
+        "--vacuum-gap", str(vacuum_gap),
+        "--prec", str(eps),
+        "--symprec", str(symprec),
+        "--angle-tolerance", str(angle_tolerance),
         "--no-intro"
     ]
 

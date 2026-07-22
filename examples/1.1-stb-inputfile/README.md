@@ -100,25 +100,61 @@ CLI and the menu produce identical output.
 
 ### Structure validation (always on, every case above)
 
-Every run prints a `[2] STRUCTURE VALIDATION` section before the k-grid is
-even computed. Two parts:
+Every run prints a `[2] STRUCTURE VALIDATION` section, right after parsing
+the structure and before the k-grid is even computed. It always runs --
+there's no flag to turn it on, and it never blocks generation. It checks
+five specific things:
 
-- **Symmetry**: space group + crystal system (via the same read-only
-  accessors `stb-elasticInputs` already uses to report symmetry). For a
-  vacuum-padded structure (`molecule/`, `chain/`, `graphene/` below), it
-  also prints a `[WARNING]` noting the ordinary 3D space group treats the
-  vacuum as an extra periodic direction and may not be the true symmetry --
-  pointing at `stb-symmetry` (code 3.5) for a proper layer-group/point-group
-  analysis instead.
-- **Malformation checks**: atoms closer than 0.5 Ang, a left-handed
-  (negative-determinant) cell, an implausible atomic density for a genuine
-  3D bulk cell (catches a Bohr/Angstrom `LatticeConstant` mixup -- skipped
-  for vacuum-padded structures, where cell volume isn't a meaningful
-  density metric), and a `.fdf` header `NumberOfAtoms`/`NumberOfSpecies`
-  that doesn't match what's actually in the structure blocks. All reported
-  as `[WARNING]`s, never fatal -- run `stb-inputfile structure.fdf -t
-  total_energy -p dojo` yourself and look for `[2] STRUCTURE VALIDATION` in
-  the output.
+1. **Atoms too close together** -- any two atoms closer than 0.5 Ang
+   (minimum-image distance). Usually means two overlapping/duplicate atoms
+   from a bad edit or a bad supercell/merge operation.
+2. **Left-handed cell** -- the lattice vectors' determinant is negative
+   (negative cell volume). A silent geometry bug: SIESTA will still run,
+   but stress/chirality-sensitive downstream analysis can pick up sign
+   errors from it.
+3. **Implausible atomic density** -- atoms-per-Ang^3 outside roughly
+   `[0.01, 0.15]`, a deliberately generous band covering everything from
+   light/loosely-packed solids to dense covalent ones. The classic trigger
+   is a `LatticeConstant` given in the wrong unit (e.g. Bohr instead of
+   Angstrom) -- the cell ends up ~6.7x too large or too small in volume.
+   **Only checked for a genuine 3D bulk structure** (see the vacuum note
+   below) -- a vacuum-padded cell's volume is dominated by the artificial
+   vacuum by design, so this metric would be meaningless (and would
+   false-positive) there.
+4. **Stale atom-count header** -- the `.fdf` file's own declared
+   `NumberOfAtoms`/`NumberOfSpecies` line doesn't match what's actually in
+   `%block AtomicCoordinatesAndAtomicSpecies`/`%block
+   ChemicalSpeciesLabel`. Catches a header left un-updated after hand-editing
+   the structure. Silently skipped if the header lines aren't present at all
+   (they're not required).
+5. **Symmetry** -- space group and crystal system, always printed
+   (informational, not a warning by itself). **This is where dimensionality
+   matters**: an ordinary space group only means what it says for a fully
+   3D-periodic structure. `molecule/`, `chain/`, and `graphene/` below are
+   each vacuum-padded along one or more axes, so `stb-inputfile` still
+   reports *a* space group (spglib will happily analyze the padded cell as
+   if the vacuum were just another periodic direction), but appends this
+   extra `[WARNING]`:
+
+   ```
+   [WARNING] Structure has a vacuum-padded axis -- the space group above
+   treats it as an ordinary periodic direction and may not reflect the
+   true symmetry. Use stb-symmetry (code 3.5) for a dimension-aware
+   layer-group/point-group analysis.
+   ```
+
+   In other words: for `silicon/` (fully 3D) the printed space group is the
+   real, physically meaningful answer. For `molecule/`/`chain/`/`graphene/`
+   (0D/1D/2D) it's only a rough approximation of a real 3D crystal that
+   doesn't actually exist -- the vacuum thickness itself can even change
+   which "space group" comes out, since spglib has nothing else to base a
+   3D classification on. If you need the *correct* symmetry for a
+   non-3D structure (a proper 2D layer group, or a 0D point group),
+   run `stb-symmetry` (code 3.5) directly instead of trusting this
+   quick check.
+
+Run `stb-inputfile structure.fdf -t total_energy -p dojo` yourself and look
+for `[2] STRUCTURE VALIDATION` in the output to see all of this live.
 
 ### Visualizing the structure (`--view`)
 

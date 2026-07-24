@@ -66,18 +66,19 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing vacancy by --index ---"
 rm -f vac.fdf
 stb-defect -f structure.fdf --type vacancy --index 1 -o vac.fdf --no-intro > log_vacancy.txt 2>&1
-check_contains "Selected site:.*#1 (Si)" log_vacancy.txt
-check_contains "Output atoms:.*1" log_vacancy.txt
+check_contains "Selected site.*#1 (Si)" log_vacancy.txt
+check_contains "Output atoms.*1" log_vacancy.txt
 check_success vac.fdf
 check_contains "NumberofAtoms      1" vac.fdf
+check_contains "Vacancy defect introduced by stb-defect" vac.fdf
 
 
 # --- 3. Substitution by index ---
 echo -e "\n--- Testing substitution by --index (Si -> Ge) ---"
 rm -f sub.fdf
 stb-defect -f structure.fdf --type substitution --index 2 --new-species Ge -o sub.fdf --no-intro > log_substitution.txt 2>&1
-check_contains "Substitution:.*-> Ge" log_substitution.txt
-check_contains "Output formula:.*SiGe" log_substitution.txt
+check_contains "Substitution.*-> Ge" log_substitution.txt
+check_contains "Output formula.*SiGe" log_substitution.txt
 check_success sub.fdf
 check_contains " 2   32   Ge" sub.fdf
 
@@ -86,7 +87,7 @@ check_contains " 2   32   Ge" sub.fdf
 echo -e "\n--- Testing interstitial ---"
 rm -f inter.fdf
 stb-defect -f structure.fdf --type interstitial --position 0.5 0.5 0.5 --species N -o inter.fdf --no-intro > log_interstitial.txt 2>&1
-check_contains "Output atoms:.*3" log_interstitial.txt
+check_contains "Output atoms.*3" log_interstitial.txt
 check_success inter.fdf
 check_contains " 2   7   N" inter.fdf
 check_contains "0.50000000   0.50000000   0.50000000   2" inter.fdf
@@ -96,7 +97,7 @@ check_contains "0.50000000   0.50000000   0.50000000   2" inter.fdf
 echo -e "\n--- Testing --nearest (graphene.fdf, target just outside the cell) ---"
 rm -f vac_near.fdf
 stb-defect -f graphene.fdf --type vacancy --nearest 1.05 0.02 0.5 -o vac_near.fdf --no-intro > log_nearest.txt 2>&1
-check_contains "Selected site:.*#1 (C)" log_nearest.txt
+check_contains "Selected site.*#1 (C)" log_nearest.txt
 check_success vac_near.fdf
 
 echo -e "\n--- Testing --nearest with --filter-species (no match found) ---"
@@ -112,18 +113,19 @@ echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe (expect 2 s
 rm -f magvac_site*.fdf
 stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Fe \
     -o magvac.fdf --no-intro > log_all_sites_fe.txt 2>&1
-check_contains "Space group:.*Fd-3m" log_all_sites_fe.txt
-check_contains "Symmetrically distinct sites found:.*2" log_all_sites_fe.txt
+check_contains "Space group.*Fd-3m" log_all_sites_fe.txt
+check_contains "Symmetrically distinct sites found: 2" log_all_sites_fe.txt
 check_contains "2 structure(s) written" log_all_sites_fe.txt
 check_success magvac_site1.fdf
 check_success magvac_site5.fdf
 check_contains "NumberofAtoms      13" magvac_site1.fdf
+check_contains "Vacancy defect at site #1 (Fe, Wyckoff" magvac_site1.fdf
 
 echo "Testing: substitution, --all-inequivalent-sites, no filter (expect 3 sites: 2 Fe + 1 O)"
 rm -f magsub_site*.fdf
 stb-defect -f magnetite.fdf --type substitution --new-species Ni --all-inequivalent-sites \
     -o magsub.fdf --no-intro > log_all_sites_all.txt 2>&1
-check_contains "Symmetrically distinct sites found:.*3" log_all_sites_all.txt
+check_contains "Symmetrically distinct sites found: 3" log_all_sites_all.txt
 check_contains "3 structure(s) written" log_all_sites_all.txt
 check_success magsub_site1.fdf
 check_success magsub_site5.fdf
@@ -156,6 +158,12 @@ stb-defect -f magnetite.fdf --type vacancy --index 1 --ml-rank --no-intro > log_
 check_exit_code $? 2
 check_contains "only valid with --all-inequivalent-sites" log_ml_rank_mutex.txt
 
+echo "Testing: --ml-rank and --ml-relax together (mutually exclusive, doesn't need mace)"
+stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --ml-rank --ml-relax --no-intro \
+    > log_ml_rank_relax_mutex.txt 2>&1
+check_exit_code $? 2
+check_contains "mutually exclusive" log_ml_rank_relax_mutex.txt
+
 if python3 -c "import mace" 2>/dev/null; then
     echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe --ml-rank (site #1 ranked above #5)"
     rm -f magrank_site*.fdf
@@ -169,6 +177,51 @@ if python3 -c "import mace" 2>/dev/null; then
     check_success magrank_site5.fdf
 else
     echo -e "${YELLOW}Skipped:${NC} the optional 'ml' extra is not installed (pip install stb_suite[ml])."
+fi
+
+
+# --- 5d. Numbered report, before/after symmetry table, --save-report ---
+echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
+rm -f stb_defect_report.txt vac.fdf
+stb-defect -f structure.fdf --type vacancy --index 1 --save-report --no-intro > log_report.txt 2>&1
+check_success stb_defect_report.txt
+check_contains "===== STB-DEFECT REPORT =====" stb_defect_report.txt
+check_contains "\[5\] STRUCTURE VALIDATION, SYMMETRY & WRITING OUTPUT FILE" stb_defect_report.txt
+check_contains "Property.*Before.*After" stb_defect_report.txt
+check_contains "Report         : stb_defect_report.txt" log_report.txt
+rm -f stb_defect_report.txt vac.fdf
+
+
+# --- 5e. --ml-relax (needs the optional 'ml' extra): single defect and multi-site paths ---
+echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
+
+if python3 -c "import mace" 2>/dev/null; then
+    echo "Testing: single defect, --ml-relax --ml-relax-cell"
+    rm -f vacrelax.fdf stb_defect_report.txt
+    stb-defect -f structure.fdf --type vacancy --index 1 --ml-relax --ml-relax-cell --save-report \
+        -o vacrelax.fdf --no-intro > log_ml_relax.txt 2>&1
+    check_exit_code $? 0
+    check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_defect_report.txt
+    check_success vacrelax.fdf
+    check_contains "ML pre-relaxed with MACE-MP-0" vacrelax.fdf
+    rm -f vacrelax.fdf stb_defect_report.txt
+
+    echo "Testing: --all-inequivalent-sites, --ml-relax (no ranking table)"
+    rm -f magrelax_site*.fdf
+    stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Fe --ml-relax \
+        -o magrelax.fdf --no-intro > log_ml_relax_multi.txt 2>&1
+    check_exit_code $? 0
+    check_contains "\[4\] ML PRE-RELAXATION (MACE)" log_ml_relax_multi.txt
+    check_success magrelax_site1.fdf
+    check_contains "ML pre-relaxed with MACE-MP-0" magrelax_site1.fdf
+
+    echo "Testing: --ml-relax-cell without --ml-relax is rejected"
+    stb-defect -f structure.fdf --type vacancy --index 1 --ml-relax-cell --no-intro \
+        > log_ml_relax_cell_only.txt 2>&1
+    check_exit_code $? 2
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: the optional 'ml' extra is not installed "
+    echo "      (pip install stb_suite[ml] to also exercise --ml-relax)."
 fi
 
 
@@ -223,27 +276,30 @@ check_contains "all-inequivalent-sites" log_help.txt
 check_contains "ml-rank" log_help.txt
 
 
-# --- 7. Interactive path (stb-suite, shortcut 1.8) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.8) ---"
+# --- 7. Interactive path (stb-suite, menu 2.5) ---
+echo -e "\n--- Testing the interactive path via stb-suite (menu 2.5) ---"
 
-echo "Testing: navigate 1.8 -> invalid file then valid -> vacancy -> by index '1' -> default output -> quit"
+echo "Testing: navigate 2.5 -> invalid file then valid -> vacancy -> by index '1' -> default output ->"
+echo "         no ml-relax -> no save-report -> no view -> quit"
 rm -f defect.fdf
-printf '2.5\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.5\ndoes_not_exist.fdf\nstructure.fdf\n1\n1\n1\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
-check_contains "Success" log_menu.txt
+check_contains "Structure written to" log_menu.txt
 check_success defect.fdf
 
-echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> no ml-rank -> default output -> quit"
+echo "Testing: navigate 2.5 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe ->"
+echo "         no ml-rank -> no ml-relax -> no save-report -> no view -> default output -> quit"
 rm -f defect_site1.fdf defect_site5.fdf
-printf '2.5\nmagnetite.fdf\n1\n3\nFe\nn\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
-check_contains "Symmetrically distinct sites found:.*2" log_menu_all_sites.txt
+printf '2.5\nmagnetite.fdf\n1\n3\nFe\nn\n\n\n\n\n0\n' | stb-suite > log_menu_all_sites.txt 2>&1
+check_contains "Symmetrically distinct sites found: 2" log_menu_all_sites.txt
 check_success defect_site1.fdf
 check_success defect_site5.fdf
 
 if python3 -c "import mace" 2>/dev/null; then
-    echo "Testing: navigate 1.8 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe -> ml-rank yes -> default output -> quit"
+    echo "Testing: navigate 2.5 -> magnetite.fdf -> vacancy -> every inequivalent site -> filter Fe ->"
+    echo "         ml-rank yes -> default output -> no save-report -> no view -> quit"
     rm -f defect_site1.fdf defect_site5.fdf
-    printf '2.5\nmagnetite.fdf\n1\n3\nFe\ny\n\n0\n' | stb-suite > log_menu_ml_rank.txt 2>&1
+    printf '2.5\nmagnetite.fdf\n1\n3\nFe\ny\n\n\n\n0\n' | stb-suite > log_menu_ml_rank.txt 2>&1
     check_contains "ML-ranked sites" log_menu_ml_rank.txt
     check_success defect_site1.fdf
     check_success defect_site5.fdf

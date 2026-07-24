@@ -56,6 +56,7 @@ rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/structure.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/rocksalt.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/si_bulk.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -65,22 +66,32 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing default termination selection (structure.fdf, hkl 1 0 0) ---"
 rm -f slab.fdf
 stb-slab -f structure.fdf --hkl 1 0 0 --no-intro > log_default.txt 2>&1
-check_contains "Terminations found:.*2" log_default.txt
-check_contains "Slab Thickness.*9.50 Ang" log_default.txt
-check_contains "Vacuum Thickness.*17.65 Ang" log_default.txt
+check_contains "Terminations found: 2" log_default.txt
+check_contains "Slab thickness.*9.50 Ang" log_default.txt
+check_contains "Vacuum thickness.*17.65 Ang" log_default.txt
 check_success slab.fdf
 check_contains "NumberofAtoms      4" slab.fdf
+check_contains "Slab cut by stb-slab" slab.fdf
 
 
-# --- 2b. --passivate (cut + passivate in one step, reuses core/passivation.py) ---
-echo -e "\n--- Testing --passivate (structure.fdf, hkl 1 1 1) ---"
+# --- 2b. --passivate: genuinely successful case (real diamond-cubic Si) ---
+echo -e "\n--- Testing --passivate on real diamond-cubic Si (si_bulk.fdf, hkl 1 1 1) ---"
 rm -f slab_passivated.fdf
-stb-slab -f structure.fdf --hkl 1 1 1 --passivate -o slab_passivated.fdf --no-intro \
+stb-slab -f si_bulk.fdf --hkl 1 1 1 --passivate -o slab_passivated.fdf --no-intro \
     > log_passivate.txt 2>&1
-check_contains "Dangling bonds found:" log_passivate.txt
-check_contains "Auto-passivated:.* with H" log_passivate.txt
+check_contains "Dangling bonds found" log_passivate.txt
+check_contains "Auto-passivated      : 8 with H" log_passivate.txt
 check_success slab_passivated.fdf
 check_contains " 2   1   H" slab_passivated.fdf
+check_contains "Passivated 8 dangling bond" slab_passivated.fdf
+
+echo "Testing: --passivate on a degenerate coordination (structure.fdf) is reported, not crashed"
+rm -f slab_degenerate.fdf
+stb-slab -f structure.fdf --hkl 1 1 1 --passivate -o slab_degenerate.fdf --no-intro \
+    > log_passivate_degenerate.txt 2>&1
+check_exit_code $? 0
+check_contains "missing 2+ bonds -- left unpassivated" log_passivate_degenerate.txt
+check_success slab_degenerate.fdf
 
 echo "Testing: --passivant rejected without --passivate"
 stb-slab -f structure.fdf --hkl 1 0 0 --passivant F --no-intro > log_passivant_bad.txt 2>&1
@@ -108,19 +119,19 @@ check_success slab.fdf
 
 # --- 5. Round-trip: output is valid, 2D-detected input for another tool ---
 echo -e "\n--- Verifying the generated slab is valid, vacuum-padded input for stb-kgrid ---"
-stb-kgrid --file slab.fdf --type fdf --density 0.2 --no-intro > log_roundtrip.txt 2>&1
-check_contains "System appears to be 2D" log_roundtrip.txt
+stb-kgrid --file slab.fdf --density 0.2 --no-intro > log_roundtrip.txt 2>&1
+check_contains "Dimensionality : 2D" log_roundtrip.txt
 
 
 # --- 6. Two-species fixture: --symmetrize changes the termination set ---
 echo -e "\n--- Testing rocksalt.fdf (hkl 1 1 1), with and without --symmetrize ---"
 rm -f slab.fdf sym_term0.fdf sym_term1.fdf
 stb-slab -f rocksalt.fdf --hkl 1 1 1 --no-intro > log_rocksalt.txt 2>&1
-check_contains "Terminations found:.*1" log_rocksalt.txt
+check_contains "Terminations found: 1" log_rocksalt.txt
 check_success slab.fdf
 
 stb-slab -f rocksalt.fdf --hkl 1 1 1 --symmetrize --all -o sym.fdf --no-intro > log_rocksalt_sym.txt 2>&1
-check_contains "Terminations found:.*2" log_rocksalt_sym.txt
+check_contains "Terminations found: 2" log_rocksalt_sym.txt
 check_contains "Symmetric.*Yes" log_rocksalt_sym.txt
 check_success sym_term0.fdf
 check_success sym_term1.fdf
@@ -134,7 +145,42 @@ check_contains "Select a termination ID" log_interactive_sel.txt
 check_success slab.fdf
 
 
-# --- 8. Error and robustness cases ---
+# --- 8. Numbered report, before/after symmetry table, --save-report ---
+echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
+rm -f stb_slab_report.txt slab.fdf
+stb-slab -f si_bulk.fdf --hkl 1 1 1 --save-report --no-intro > log_report.txt 2>&1
+check_success stb_slab_report.txt
+check_contains "===== STB-SLAB REPORT =====" stb_slab_report.txt
+check_contains "\[5\] STRUCTURE VALIDATION, SYMMETRY & WRITING OUTPUT FILE(S)" stb_slab_report.txt
+check_contains "Property.*Bulk (before).*Slab (after)" stb_slab_report.txt
+check_contains "Layer Group.*N/A (not 2D-periodic)" stb_slab_report.txt
+check_contains "Report                    : stb_slab_report.txt" log_report.txt
+rm -f stb_slab_report.txt slab.fdf
+
+
+# --- 9. --ml-relax (needs the optional 'ml' extra) ---
+echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
+
+if python3 -c "import mace" 2>/dev/null; then
+    rm -f slab.fdf stb_slab_report.txt
+    stb-slab -f si_bulk.fdf --hkl 1 1 1 --ml-relax --ml-relax-cell --save-report --no-intro \
+        > log_ml_relax.txt 2>&1
+    check_exit_code $? 0
+    check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_slab_report.txt
+    check_success slab.fdf
+    check_contains "ML pre-relaxed with MACE-MP-0" slab.fdf
+    rm -f slab.fdf stb_slab_report.txt
+
+    echo "Testing: --ml-relax-cell without --ml-relax is rejected"
+    stb-slab -f structure.fdf --hkl 1 0 0 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1
+    check_exit_code $? 2
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: the optional 'ml' extra is not installed "
+    echo "      (pip install stb_suite[ml] to also exercise --ml-relax)."
+fi
+
+
+# --- 10. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: missing structure file"
@@ -175,20 +221,21 @@ check_contains "vacuum" log_help.txt
 check_contains "passivate" log_help.txt
 
 
-# --- 9. Interactive path (stb-suite, shortcut 1.6) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
+# --- 11. Interactive path (stb-suite, menu 2.3) ---
+echo -e "\n--- Testing the interactive path via stb-suite (menu 2.3) ---"
 
-echo "Testing: navigate 1.6 -> invalid file then valid -> hkl '1 0 0' -> defaults -> mode 1 -> default output -> quit"
+echo "Testing: navigate 2.3 -> invalid file then valid -> hkl '1 0 0' -> defaults -> mode 1 ->"
+echo "         no passivate -> default output -> no ml-relax -> no save-report -> no view -> quit"
 rm -f slab.fdf
-printf '2.3\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.3\ndoes_not_exist.fdf\nstructure.fdf\n1 0 0\n\n\nn\nn\nn\n1\nn\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
-check_contains "Slab Summary" log_menu.txt
+check_contains "Slab written to" log_menu.txt
 check_success slab.fdf
 
 
 popd > /dev/null
 
-# --- 10. Summary ---
+# --- 12. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

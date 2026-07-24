@@ -84,7 +84,18 @@ def passivate_dangling_bonds(structure, passivant="H", cutoff=None, bond_length=
 
         vectors = [(n.coords - site.coords) / np.linalg.norm(n.coords - site.coords) for n in neighbors]
         missing_dir = -np.sum(vectors, axis=0)
-        missing_dir /= np.linalg.norm(missing_dir)
+        missing_dir_norm = np.linalg.norm(missing_dir)
+        if missing_dir_norm < 1e-6:
+            # The existing neighbor directions cancel out (near-)exactly, e.g. an
+            # atypical/non-physical coordination geometry -- the missing-bond
+            # direction is undetermined from local geometry alone, same as the
+            # deficit >= 2 case above. Reporting this instead of dividing by
+            # ~0 avoids silently placing the passivant at a NaN position, which
+            # otherwise crashes downstream symmetry analysis (spglib segfaults
+            # on NaN coordinates rather than raising a catchable exception).
+            report["unresolved"].append((i, site.specie.symbol, site.coords, deficit))
+            continue
+        missing_dir /= missing_dir_norm
 
         length = bond_length if bond_length is not None else _auto_bond_length(site.specie.symbol, passivant)
         new_pos = site.coords + missing_dir * length

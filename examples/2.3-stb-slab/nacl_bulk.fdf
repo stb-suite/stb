@@ -1,0 +1,36 @@
+# Tutorial fixture for example 2.3 (stb-slab): bulk NaCl, real rocksalt
+# structure (FCC Bravais lattice, 2-atom basis), conventional 8-atom cubic
+# cell (a = 5.64 Ang, space group Fm-3m No. 225). Ionic, not covalent --
+# used for the polar-vs-non-polar surface demo: NaCl(100) is non-polar
+# (each atomic layer along [100] has equal Na/Cl), NaCl(111) is the
+# textbook POLAR surface (alternating pure-Na and pure-Cl layers along
+# [111], Tasker's "Type III" classification).
+
+NumberOfSpecies    2
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   11   Na
+ 2   17   Cl
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.6400000000   0.0000000000   0.0000000000
+ 0.0000000000   5.6400000000   0.0000000000
+ 0.0000000000   0.0000000000   5.6400000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.500000000   0.500000000   2
+ 0.000000000   0.000000000   0.500000000   2
+ 0.000000000   0.500000000   0.000000000   2
+ 0.500000000   0.000000000   0.000000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

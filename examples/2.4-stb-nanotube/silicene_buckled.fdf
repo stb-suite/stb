@@ -1,0 +1,24 @@
+# Tutorial fixture for example 2.4 (stb-nanotube): a synthetic buckled
+# honeycomb monolayer (silicene-like, a = 3.87 Ang, buckling amplitude
+# 0.22 Ang between the 2 basis atoms) -- unlike graphene.fdf, the 2 basis
+# atoms sit at slightly different heights (a real structural feature of
+# silicene/germanene, where sp3-like rehybridization favors a puckered
+# sheet over graphene's perfectly flat one). Used to demonstrate that
+# stb-nanotube correctly rolls a corrugated sheet into a corrugated tube
+# (the two sublattices end up at two different radii), not just flat ones.
+NumberOfSpecies    1
+NumberofAtoms      2
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+AtomicCoordinatesFormat  Fractional
+%block LatticeVectors
+ 3.8700000000   0.0000000000   0.0000000000
+ -1.9350000000   3.3515183126   0.0000000000
+ 0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.4945000000   1
+ 0.333333333   0.666666667   0.5055000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

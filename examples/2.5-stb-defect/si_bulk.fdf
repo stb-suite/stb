@@ -1,0 +1,35 @@
+# Tutorial fixture for example 2.5 (stb-defect): bulk silicon, diamond
+# cubic, the real conventional 8-atom cell (a = 5.431 Ang, space group
+# Fd-3m No. 227). A clean, highly symmetric structure on purpose: it makes
+# the before/after symmetry table's main lesson unambiguous -- introducing
+# a single point defect into the periodic cell always breaks most of the
+# crystal's symmetry, and a highly symmetric starting point makes that
+# drop obvious and easy to read.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.4310000000   0.0000000000   0.0000000000
+ 0.0000000000   5.4310000000   0.0000000000
+ 0.0000000000   0.0000000000   5.4310000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.250000000   0.250000000   0.250000000   1
+ 0.250000000   0.750000000   0.750000000   1
+ 0.750000000   0.250000000   0.750000000   1
+ 0.750000000   0.750000000   0.250000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

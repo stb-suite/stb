@@ -22,12 +22,11 @@ import argparse
 import textwrap
 import numpy as np
 from time import sleep
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from stb.core import citations, kspace, mace_relax, structure_checks, structure_io
+from stb.core import symmetry as core_symmetry
 from stb.core.ase_view import view_structure_interactive
 from stb.core.deps import require_mace
 from stb.core.heterostructure import find_zsl_match, build_stacked_structure
-from stb.core.symmetry import layer_group_label
 
 # Suppress Pymatgen warnings for cleaner CLI output
 warnings.filterwarnings("ignore")
@@ -127,38 +126,9 @@ def analyze_and_report_symmetry(layer1, layer2, hetero, symprec=0.01, f_out=None
     main numbered report (f_out), never a separate file, via the shared
     core.cli.print_table (same convention as core/structure_checks.py's
     validation checklist and stb-mlrelax's before/after table)."""
-    def get_details(struct):
-        try:
-            sga = SpacegroupAnalyzer(struct, symprec=symprec)
-            details = {
-                "Space Group": f"{sga.get_space_group_symbol()} ({sga.get_space_group_number()})",
-                "Point Group": sga.get_point_group_symbol(),
-                "Crystal System": str(sga.get_crystal_system()).title(),
-                "Hall Symbol": sga.get_hall(),
-            }
-        except Exception as e:
-            return {"Error": f"Analysis failed ({e})"}
-
-        # Space Group above is the 3D space group of the vacuum-padded cell --
-        # valid, but not the physically correct classification for a genuinely
-        # 2D-periodic structure. Layer Group (spglib's get_layergroup(), same
-        # call stb-fetch already uses) accounts for the vacuum direction
-        # properly. Additive: never replaces Space Group above.
-        try:
-            vacuum_axes = kspace.detect_vacuum_axes(struct.frac_coords, struct.lattice.matrix, VACUUM_GAP_ANG)
-            if sum(vacuum_axes) == 1:
-                label = layer_group_label(struct, vacuum_axes.index(True), symprec)
-                details["Layer Group"] = label if label else "N/A (needs spglib >= 2.1.0)"
-            else:
-                details["Layer Group"] = "N/A (not 2D-periodic)"
-        except Exception:
-            details["Layer Group"] = "N/A"
-
-        return details
-
-    l1_info = get_details(layer1)
-    l2_info = get_details(layer2)
-    het_info = get_details(hetero)
+    l1_info = core_symmetry.symmetry_summary(layer1, symprec, VACUUM_GAP_ANG)
+    l2_info = core_symmetry.symmetry_summary(layer2, symprec, VACUUM_GAP_ANG)
+    het_info = core_symmetry.symmetry_summary(hetero, symprec, VACUUM_GAP_ANG)
 
     print_dual(f"Detailed symmetry analysis (Tolerance: {symprec} Ang):", f_out)
 

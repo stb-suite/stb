@@ -1067,7 +1067,12 @@ def run_2d_stacker() -> None:
     sm_map = {'1': 'top', '2': 'bottom', '3': 'sym'}
     strain_mode = sm_map.get(sm_choice, 'top')
 
-    # 6. Build Command and Execute ONCE
+    # 6. Output file name
+    output_file = get_input("\nOutput file name [default: stacked_structure.fdf]: ").strip()
+    if not output_file:
+        output_file = "stacked_structure.fdf"
+
+    # 7. Build Command and Execute ONCE
     args = [
         "-l1", layer1,
         "-l2", layer2,
@@ -1075,6 +1080,7 @@ def run_2d_stacker() -> None:
         "-a", str(max_area),
         "-s", str(max_strain),
         "-sm", strain_mode,
+        "-o", output_file,
         "--no-intro"
     ]
 
@@ -1086,6 +1092,41 @@ def run_2d_stacker() -> None:
         args.append("--batch_sym")
     else:
         args.extend(["-t", str(twist), "-tx", str(shift_x), "-ty", str(shift_y)])
+
+    ml_relax = get_input(
+        "\nPre-relax the final structure(s) with a MACE ML potential before writing? "
+        "(needs the optional 'ml' extra) (y/N): "
+    ).strip().lower()
+    if ml_relax == 'y':
+        args.append("--ml-relax")
+
+        ml_relax_cell = get_input(
+            "Also relax the in-plane cell? The vacuum axis (c) always stays fixed (y/N): "
+        ).strip().lower()
+        if ml_relax_cell == 'y':
+            args.append("--ml-relax-cell")
+
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     print(color_text(f"\n--- Running 2D Stacker ---", 'green'))
     run_tool("stb-2Dstacking", args)
@@ -2275,6 +2316,41 @@ def run_supercell_generator() -> None:
         "--output", output_file,
         "--no-intro"
     ]
+
+    ml_relax = get_input(
+        "\nPre-relax the built supercell with a MACE ML potential before writing? "
+        "(needs the optional 'ml' extra) (y/N): "
+    ).strip().lower()
+    if ml_relax == 'y':
+        args.append("--ml-relax")
+
+        ml_relax_cell = get_input(
+            "Also relax the cell? Any vacuum-padded axis always stays fixed (y/N): "
+        ).strip().lower()
+        if ml_relax_cell == 'y':
+            args.append("--ml-relax-cell")
+
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-supercell", args)
 

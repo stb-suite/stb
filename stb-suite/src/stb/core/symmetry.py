@@ -82,6 +82,54 @@ def layer_group_label(pmg_structure, aperiodic_dir, symprec=1e-3):
     return f"{ds.international} (No. {ds.number})"
 
 
+def symmetry_summary(pmg_structure, symprec=0.01, vacuum_gap_ang=10.0) -> dict:
+    """Crystal system / (3D) space group / layer group (if genuinely
+    2D-periodic) / point group / Hall symbol for one structure, as a dict
+    of ready-to-print string values -- the exact per-structure detail
+    stb-2dstacking's own symmetry table needs for each of its 3 structures
+    (layer 1, layer 2, heterostructure). Extracted from stacking2D.py's
+    private get_details() closure once stb-supercell became a second
+    consumer needing the identical per-structure summary for its own
+    before/after comparison table.
+
+    Space Group is always the 3D space group of the (possibly
+    vacuum-padded) cell as given -- valid, but not the physically correct
+    classification for a genuinely 2D-periodic structure, which Layer
+    Group (spglib's get_layergroup(), via layer_group_label above)
+    accounts for properly; Layer Group is additive, never a replacement
+    for Space Group.
+
+    Returns {"Error": "..."} instead of raising if symmetry analysis fails
+    outright (e.g. a degenerate structure) -- every value is a plain string,
+    ready to drop straight into a core.cli.print_table row.
+    """
+    from stb.core import kspace
+
+    try:
+        sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec)
+        details = {
+            "Space Group": f"{sga.get_space_group_symbol()} ({sga.get_space_group_number()})",
+            "Point Group": sga.get_point_group_symbol(),
+            "Crystal System": str(sga.get_crystal_system()).title(),
+            "Hall Symbol": sga.get_hall(),
+        }
+    except Exception as e:
+        return {"Error": f"Analysis failed ({e})"}
+
+    try:
+        vacuum_axes = kspace.detect_vacuum_axes(
+            pmg_structure.frac_coords, pmg_structure.lattice.matrix, vacuum_gap_ang)
+        if sum(vacuum_axes) == 1:
+            label = layer_group_label(pmg_structure, vacuum_axes.index(True), symprec)
+            details["Layer Group"] = label if label else "N/A (needs spglib >= 2.1.0)"
+        else:
+            details["Layer Group"] = "N/A (not 2D-periodic)"
+    except Exception:
+        details["Layer Group"] = "N/A"
+
+    return details
+
+
 def point_group_label(pmg_structure, tolerance=0.3):
     """Returns e.g. "Oh" for a genuinely isolated (0D) structure -- vacuum
     -padded on all 3 axes -- via pymatgen's PointGroupAnalyzer (a separate,

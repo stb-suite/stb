@@ -1,0 +1,34 @@
+# Tutorial fixture for example 2.2 (stb-supercell): bulk silicon, diamond
+# cubic, CONVENTIONAL 8-atom cell (a = 5.431 Ang, the real experimental
+# lattice constant) -- space group Fd-3m (No. 227), point group m-3m. A
+# clean, textbook, highly symmetric structure on purpose: it makes the
+# before/after symmetry table's main lesson unambiguous (a well-formed
+# supercell re-describes the same crystal, it does not create a new one).
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.4310000000   0.0000000000   0.0000000000
+ 0.0000000000   5.4310000000   0.0000000000
+ 0.0000000000   0.0000000000   5.4310000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.250000000   0.250000000   0.250000000   1
+ 0.250000000   0.750000000   0.750000000   1
+ 0.750000000   0.250000000   0.750000000   1
+ 0.750000000   0.750000000   0.250000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

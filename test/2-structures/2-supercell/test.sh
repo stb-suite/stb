@@ -82,18 +82,19 @@ echo -e "\n--- Testing diagonal supercells ---"
 echo "Testing: 2x2x2 diagonal (2 atoms -> 16 atoms, lattice doubled to 10.86 Ang)"
 rm -f supercell.fdf
 stb-supercell -f structure.fdf -d 2 2 2 --no-intro > log_2x2x2.txt 2>&1
-check_contains "Output atoms:.*16" log_2x2x2.txt
-check_contains "Determinant (cell multiplication factor):.*8" log_2x2x2.txt
+check_contains "Output atoms.*16" log_2x2x2.txt
+check_contains "Determinant (cell multiplication factor): 8" log_2x2x2.txt
 check_success supercell.fdf
 check_contains "NumberofAtoms      16" supercell.fdf
 check_contains "10.86000000" supercell.fdf
+check_contains "Supercell built by stb-supercell" supercell.fdf
 mv supercell.fdf supercell_2x2x2.fdf
 
 echo "Testing: non-uniform diagonal 1x2x3 (2 atoms -> 12 atoms, determinant 6)"
 rm -f supercell.fdf
 stb-supercell -f structure.fdf -d 1 2 3 --no-intro > log_1x2x3.txt 2>&1
-check_contains "Output atoms:.*12" log_1x2x3.txt
-check_contains "Determinant (cell multiplication factor):.*6" log_1x2x3.txt
+check_contains "Output atoms.*12" log_1x2x3.txt
+check_contains "Determinant (cell multiplication factor): 6" log_1x2x3.txt
 check_success supercell.fdf
 rm -f supercell.fdf
 
@@ -103,16 +104,16 @@ echo -e "\n--- Testing the full row-major 3x3 matrix path ---"
 
 echo "Testing: sqrt(3)xsqrt(3) reconstruction on graphene (2 atoms -> 6 atoms, determinant 3)"
 stb-supercell -f graphene.fdf -d 1 1 0 -1 2 0 0 0 1 --no-intro > log_sqrt3.txt 2>&1
-check_contains "Output atoms:.*6" log_sqrt3.txt
-check_contains "Determinant (cell multiplication factor):.*3" log_sqrt3.txt
+check_contains "Output atoms.*6" log_sqrt3.txt
+check_contains "Determinant (cell multiplication factor): 3" log_sqrt3.txt
 check_success supercell.fdf
 mv supercell.fdf supercell_sqrt3.fdf
 
 
 # --- 4. Round-trip: output is valid, readable fdf ---
 echo -e "\n--- Verifying the generated supercell is valid input for another tool ---"
-stb-kgrid --file supercell_2x2x2.fdf --type fdf --density 0.2 --no-intro > log_roundtrip.txt 2>&1
-check_contains "Suggested Monkhorst-Pack grid: 3 3 3" log_roundtrip.txt
+stb-kgrid --file supercell_2x2x2.fdf --density 0.2 --no-intro > log_roundtrip.txt 2>&1
+check_contains "Suggested Monkhorst-Pack grid.*3 3 3" log_roundtrip.txt
 
 
 # --- 5. Error and robustness cases ---
@@ -174,20 +175,55 @@ check_contains "diagonal supercell" log_help.txt
 check_contains "row-major" log_help.txt
 
 
-# --- 6. Interactive path (stb-suite, shortcut 1.5) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.5) ---"
+# --- 6. Report / symmetry analysis / --save-report ---
+echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
 
-echo "Testing: navigate 1.5 -> invalid file then valid -> dims '2 2 2' -> default output -> quit"
+rm -f stb_supercell_report.txt supercell.fdf
+stb-supercell -f structure.fdf -d 2 2 2 --save-report --no-intro > log_report.txt 2>&1
+check_success stb_supercell_report.txt
+check_contains "===== STB-SUPERCELL REPORT =====" stb_supercell_report.txt
+check_contains "\[6\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_supercell_report.txt
+check_contains "Property.*Before.*After" stb_supercell_report.txt
+check_contains "Report         : stb_supercell_report.txt" log_report.txt
+rm -f stb_supercell_report.txt supercell.fdf
+
+
+# --- 7. --ml-relax (needs the optional 'ml' extra) ---
+echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
+
+if python3 -c "import mace" 2>/dev/null; then
+    rm -f supercell.fdf stb_supercell_report.txt
+    stb-supercell -f graphene.fdf -d 2 2 1 --ml-relax --save-report --no-intro > log_ml_relax.txt 2>&1
+    check_exit_code $? 0
+    check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_supercell_report.txt
+    check_success supercell.fdf
+    check_contains "ML pre-relaxed with MACE-MP-0" supercell.fdf
+    rm -f supercell.fdf stb_supercell_report.txt
+
+    echo "Testing: --ml-relax-cell without --ml-relax is rejected"
+    stb-supercell -f structure.fdf -d 2 2 2 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1
+    check_exit_code $? 2
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: the optional 'ml' extra is not installed "
+    echo "      (pip install stb_suite[ml] to also exercise --ml-relax)."
+fi
+
+
+# --- 8. Interactive path (stb-suite, menu 2.2) ---
+echo -e "\n--- Testing the interactive path via stb-suite (menu 2.2) ---"
+
+echo "Testing: navigate 2.2 -> invalid file then valid -> dims '2 2 2' -> default output -> "
+echo "         no ml-relax -> no save-report -> no view -> quit"
 rm -f supercell.fdf
-printf '2.2\ndoes_not_exist.fdf\nstructure.fdf\n2 2 2\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '2.2\ndoes_not_exist.fdf\nstructure.fdf\n2 2 2\n\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
-check_contains "Output atoms:.*16" log_interactive.txt
+check_contains "Output atoms.*16" log_interactive.txt
 check_success supercell.fdf
 
 
 popd > /dev/null
 
-# --- 7. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

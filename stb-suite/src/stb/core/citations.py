@@ -66,6 +66,19 @@ MACE_MP = ("Batatia2023foundation", """@misc{Batatia2023foundation,
   primaryClass  = {physics.chem-ph}
 }""")
 
+# icet, the cluster-expansion library stb-sqs uses for its SQS search
+# (Monte Carlo or enumeration).
+ICET = ("Angqvist2019icet", """@article{Angqvist2019icet,
+  author  = {\\AA ngqvist, Magnus and Mu\\~{n}oz, William A. and Rahm, J. Magnus and Fransson, Erik and Durniak, C\\'eline and Rozyczko, Piotr and Rod, Thomas H. and Erhart, Paul},
+  title   = {{ICET} -- A {P}ython Library for Constructing and Sampling Alloy Cluster Expansions},
+  journal = {Advanced Theory and Simulations},
+  year    = {2019},
+  volume  = {2},
+  number  = {7},
+  pages   = {1900015},
+  doi     = {10.1002/adts.201900015}
+}""")
+
 
 def _read_existing_entries(bib_path):
     """Returns {key: full_entry_text} already in `bib_path`, or {} if the

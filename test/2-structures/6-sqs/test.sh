@@ -64,21 +64,67 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing NiFe SQS (monte_carlo, --mc-steps 1000) ---"
 rm -f sqs.fdf
 stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 4 --mc-steps 1000 -o sqs.fdf --no-intro > log_sqs.txt 2>&1
-check_contains "Sublattice:.*Ni (4 site" log_sqs.txt
-check_contains "Output atoms:.*4" log_sqs.txt
-check_contains "Objective function:" log_sqs.txt
+check_contains "\[3\] DISORDERED SUBLATTICE" log_sqs.txt
+check_contains "Species            : Ni" log_sqs.txt
+check_contains "Sites              : 4 (of 4 atoms" log_sqs.txt
+check_contains "\[4\] SUPERCELL SIZING (icet)" log_sqs.txt
+check_contains "Minimal valid scaling  : 2" log_sqs.txt
+check_contains "\[5\] SQS SEARCH" log_sqs.txt
+check_contains "Output atoms       : 4" log_sqs.txt
+check_contains "Objective function :" log_sqs.txt
+check_contains "\[8\] SYMMETRY ANALYSIS (BEFORE / AFTER)" log_sqs.txt
+check_contains "Property.*Before.*After" log_sqs.txt
 check_success sqs.fdf
+check_contains "SQS structure built by stb-sqs" sqs.fdf
+check_contains "Disordered sublattice: Ni (4 site" sqs.fdf
 check_contains "NumberOfSpecies    2" sqs.fdf
 check_contains " 2   26   Fe" sqs.fdf
+
+echo "Testing: stb_sqs_report.txt is NOT written unless --save-report is given"
+[ ! -f stb_sqs_report.txt ] && { echo -e "   -> ${GREEN}Verified:${NC} stb_sqs_report.txt absent by default"; PASS=$((PASS+1)); } \
+    || { echo -e "   -> ${RED}Failed:${NC} stb_sqs_report.txt was written without --save-report"; FAIL=$((FAIL+1)); }
 
 
 # --- 3. Round-trip: output is a valid, readable fdf ---
 echo -e "\n--- Verifying the generated SQS is valid input for another tool ---"
-stb-kgrid --file sqs.fdf --type fdf --density 0.3 --no-intro > log_roundtrip.txt 2>&1
+stb-kgrid --file sqs.fdf --density 0.3 --no-intro > log_roundtrip.txt 2>&1
 check_contains "Suggested Monkhorst-Pack grid" log_roundtrip.txt
 
 
-# --- 4. Error and robustness cases ---
+# --- 4. --save-report ---
+echo -e "\n--- Testing --save-report ---"
+rm -f sqs.fdf stb_sqs_report.txt
+stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 4 --mc-steps 1000 -o sqs.fdf --save-report --no-intro > log_report.txt 2>&1
+check_exit_code $? 0
+check_success stb_sqs_report.txt
+check_contains "\[8\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_sqs_report.txt
+check_contains "Report         : stb_sqs_report.txt" log_report.txt
+rm -f stb_sqs_report.txt sqs.fdf
+
+
+# --- 5. --ml-relax (needs the optional 'ml' extra) ---
+echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
+
+if python3 -c "import mace" 2>/dev/null; then
+    rm -f sqs.fdf stb_sqs_report.txt
+    stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 4 --mc-steps 500 \
+        -o sqs.fdf --ml-relax --save-report --no-intro > log_ml_relax.txt 2>&1
+    check_exit_code $? 0
+    check_contains "\[6\] ML PRE-RELAXATION (MACE)" stb_sqs_report.txt
+    check_success sqs.fdf
+    check_contains "ML pre-relaxed with MACE-MP-0" sqs.fdf
+    rm -f sqs.fdf stb_sqs_report.txt
+
+    echo "Testing: --ml-relax-cell without --ml-relax is rejected"
+    stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 4 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1
+    check_exit_code $? 2
+else
+    echo -e "   -> ${YELLOW}SKIPPED${NC}: the optional 'ml' extra is not installed "
+    echo "      (pip install stb_suite[ml] to also exercise --ml-relax)."
+fi
+
+
+# --- 6. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: --sublattice not present in structure"
@@ -125,20 +171,21 @@ check_contains "sublattice" log_help.txt
 check_contains "composition" log_help.txt
 
 
-# --- 5. Interactive path (stb-suite, shortcut 1.9) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.9) ---"
+# --- 7. Interactive path (stb-suite, menu 2.6) ---
+echo -e "\n--- Testing the interactive path via stb-suite (menu 2.6) ---"
 
-echo "Testing: navigate 1.9 -> invalid file then valid -> Ni -> Ni:0.5,Fe:0.5 -> scaling 2 -> defaults -> quit"
+echo "Testing: navigate 2.6 -> invalid file then valid -> Ni -> Ni:0.5,Fe:0.5 -> scaling 2 -> Monte Carlo ->"
+echo "         default temperature -> default output -> no ml-relax -> no save-report -> no view -> quit"
 rm -f sqs.fdf
-printf '2.6\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n2\n1\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.6\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n2\n1\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
-check_contains "Success" log_menu.txt
+check_contains "Structure written to" log_menu.txt
 check_success sqs.fdf
 
 
 popd > /dev/null
 
-# --- 6. Summary ---
+# --- 8. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

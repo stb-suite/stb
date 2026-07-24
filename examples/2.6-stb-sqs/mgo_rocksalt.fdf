@@ -1,0 +1,36 @@
+# Example fixture: MgO, rocksalt (NaCl-type) structure, conventional cubic
+# cell (8-atom basis: 4 Mg + 4 O, a = 4.246 Ang, space group Fm-3m No. 225 --
+# same space group number as fcc_ni.fdf, a deliberate parallel). Unlike
+# fcc_ni.fdf, this fixture already has TWO species -- used to show that
+# --sublattice disorders only the ONE species you name (here Mg, into a
+# (Mg,Ni)O solid solution, a real system studied for catalysis/
+# electrocatalysis), leaving the O sublattice's role in the crystal alone.
+
+NumberOfSpecies    2
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   12   Mg
+ 2    8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 4.2460000000   0.0000000000   0.0000000000
+ 0.0000000000   4.2460000000   0.0000000000
+ 0.0000000000   0.0000000000   4.2460000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.000000000   0.000000000   2
+ 0.000000000   0.500000000   0.000000000   2
+ 0.000000000   0.000000000   0.500000000   2
+ 0.500000000   0.500000000   0.500000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

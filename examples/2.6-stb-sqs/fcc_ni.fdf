@@ -1,0 +1,30 @@
+# Example fixture: FCC nickel, conventional cubic cell (4-atom basis, a =
+# 3.52 Ang, space group Fm-3m No. 225). A single-species metal on purpose --
+# stb-sqs disorders it into a binary Ni-Fe alloy, so the "before" structure
+# should start as simple as possible. Real neighbor shells (not a toy
+# lattice), needed for icet's cluster-cutoff based SQS search to mean
+# anything physically.
+
+NumberOfSpecies    1
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   28   Ni
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.5200000000   0.0000000000   0.0000000000
+ 0.0000000000   3.5200000000   0.0000000000
+ 0.0000000000   0.0000000000   3.5200000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

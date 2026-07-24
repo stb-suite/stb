@@ -2725,6 +2725,41 @@ def run_sqs_generator() -> None:
     if scaling is not None:
         args.extend(["--scaling", str(scaling)])
 
+    ml_relax = get_input(
+        "\nPre-relax the SQS structure found with a MACE ML potential before writing? "
+        "(needs the optional 'ml' extra) (y/N): "
+    ).strip().lower()
+    if ml_relax == 'y':
+        args.append("--ml-relax")
+
+        ml_relax_cell = get_input(
+            "Also relax the cell? Any vacuum-padded axis always stays fixed (y/N): "
+        ).strip().lower()
+        if ml_relax_cell == 'y':
+            args.append("--ml-relax-cell")
+
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
     run_tool("stb-sqs", args)
 
 

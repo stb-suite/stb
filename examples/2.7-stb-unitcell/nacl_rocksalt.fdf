@@ -1,0 +1,35 @@
+# Example fixture: NaCl, rocksalt structure, conventional cubic cell
+# (8-atom basis: 4 Na + 4 Cl, a = 5.64 Ang, space group Fm-3m No. 225 --
+# same space group number as fcc_ni.fdf, a deliberate parallel). Unlike
+# fcc_ni.fdf, this has TWO species -- used to show that primitive-cell
+# reduction preserves BOTH species' exact ratio (4:4 -> 1:1), not just a
+# single-species metal's atom count.
+
+NumberOfSpecies    2
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   11   Na
+ 2   17   Cl
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.6400000000   0.0000000000   0.0000000000
+ 0.0000000000   5.6400000000   0.0000000000
+ 0.0000000000   0.0000000000   5.6400000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+ 0.500000000   0.000000000   0.000000000   2
+ 0.000000000   0.500000000   0.000000000   2
+ 0.000000000   0.000000000   0.500000000   2
+ 0.500000000   0.500000000   0.500000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

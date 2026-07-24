@@ -1,0 +1,36 @@
+# Example fixture: NaCl rocksalt, same as nacl_rocksalt.fdf but with a
+# small (~2e-5 Ang) asymmetric perturbation added to each atomic position --
+# e.g. residual noise from a DFT relaxation or a hand-typed/CIF-derived
+# structure. Small enough that spglib still detects Fm-3m (No. 225) at the
+# default --symprec 1e-3, but --mode refined snaps the positions back to
+# their exact symmetry-consistent values; a much tighter --symprec (below
+# the noise amplitude) instead fails to see the symmetry at all.
+
+NumberOfSpecies    2
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   11   Na
+ 2   17   Cl
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.6400000000   0.0000000000   0.0000000000
+ 0.0000000000   5.6400000000   0.0000000000
+ 0.0000000000   0.0000000000   5.6400000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ -0.000016948   0.000011197   -0.000002464   1
+ 0.500008939   0.500019120   0.000001540   1
+ 0.500000045   -0.000017118   0.499990738   1
+ -0.000000005   0.500007169   0.500012150   1
+ 0.499995238   -0.000017363   -0.000008474   2
+ 0.000016384   0.499988535   -0.000001915   2
+ 0.000017248   -0.000019004   0.500004022   2
+ 0.500018005   0.499989212   0.500001940   2
+%endblock AtomicCoordinatesAndAtomicSpecies

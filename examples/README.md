@@ -85,8 +85,9 @@ Every example follows the same shape:
 ## Conventions shared across examples
 
 Several conventions recur across the newer input-generating tools (see
-`1.1-stb-inputfile/`, `1.4-stb-dftu/`, `1.5-stb-fetch/`, `1.6-stb-mlrelax/`)
-and are worth knowing once, rather than re-discovering per example:
+`1.1-stb-inputfile/`, `1.4-stb-dftu/`, `1.5-stb-fetch/`, `1.6-stb-mlrelax/`,
+`2.1-stb-2Dstacking/`) and are worth knowing once, rather than
+re-discovering per example:
 
 - **A numbered, sectioned report** (`[0] RUN METADATA`, `[1] ...`, ...)
   printed to the console and, with `--save-report`, also saved to
@@ -141,6 +142,7 @@ through.
 | 1.4  | `stb-dftu`      | [`1.4-stb-dftu/`](1.4-stb-dftu/)            |
 | 1.5  | `stb-fetch`     | [`1.5-stb-fetch/`](1.5-stb-fetch/)          |
 | 1.6  | `stb-mlrelax`   | [`1.6-stb-mlrelax/`](1.6-stb-mlrelax/)      |
+| 2.1  | `stb-2Dstacking`| [`2.1-stb-2Dstacking/`](2.1-stb-2Dstacking/)|
 
 ## Adding another example
 

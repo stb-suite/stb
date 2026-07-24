@@ -79,12 +79,11 @@ EOF
 # --- 2. Basic stacking (graphene + h-BN, ~1.8% lattice mismatch) ---
 echo -e "\n--- Testing basic stacking (mismatched pair: graphene + h-BN) ---"
 
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --no-intro > log_basic.txt 2>&1
 check_contains "Selected Match ID 0" log_basic.txt
 check_contains "BC2N" log_basic.txt
 check_success stacked_structure.fdf
-check_success symmetry_report.txt
 check_contains "%block LatticeVectors" stacked_structure.fdf
 check_contains "%block AtomicCoordinatesAndAtomicSpecies" stacked_structure.fdf
 mv stacked_structure.fdf stacked_basic.fdf
@@ -93,7 +92,7 @@ mv stacked_structure.fdf stacked_basic.fdf
 # --- 3. Identical-layer bilayer (perfect lattice match, 0% strain) ---
 echo -e "\n--- Testing identical-layer bilayer (expected 0% strain) ---"
 
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 stb-2Dstacking -l1 graphene.fdf -l2 graphene.fdf --no-intro > log_identical.txt 2>&1
 check_contains "Max Applied Linear Strain" log_identical.txt
 check_contains "0.00%" log_identical.txt
@@ -104,30 +103,29 @@ mv stacked_structure.fdf stacked_identical.fdf
 # --- 4. --batch_sym (hexagonal high-symmetry stackings) ---
 echo -e "\n--- Testing --batch_sym (hexagonal detection -> 6 configurations) ---"
 
-rm -f stacked_structure_*.fdf symmetry_report_*.txt
+rm -f stacked_structure_*.fdf
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --batch_sym --no-intro > log_batch_sym.txt 2>&1
 check_contains "Hexagonal lattice detected" log_batch_sym.txt
 for name in AA Bridge_X Bridge_Y Center Hex_AB Hex_BA; do
     check_success "stacked_structure_${name}.fdf"
-    check_success "symmetry_report_${name}.txt"
 done
 
 echo "Testing: --batch_sym ignores custom shifts with a warning"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --batch_sym -tx 0.1 --no-intro > log_batch_sym_shift.txt 2>&1
 check_contains "Custom shifts .* are IGNORED" log_batch_sym_shift.txt
-rm -f stacked_structure_*.fdf symmetry_report_*.txt
+rm -f stacked_structure_*.fdf
 
 
 # --- 5. --gap_range (energy-curve mode) ---
 echo -e "\n--- Testing --gap_range (energy-curve mode, 3 points) ---"
 
-rm -f stacked_structure_*.fdf symmetry_report_*.txt
+rm -f stacked_structure_*.fdf
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --gap_range 3.0 4.0 3 --no-intro > log_gap_range.txt 2>&1
 check_contains "Generating 3 distance points" log_gap_range.txt
 check_success stacked_structure_Custom_gap_3.00.fdf
 check_success stacked_structure_Custom_gap_3.50.fdf
 check_success stacked_structure_Custom_gap_4.00.fdf
-rm -f stacked_structure_*.fdf symmetry_report_*.txt
+rm -f stacked_structure_*.fdf
 
 
 # --- 6. Geometric controls (twist, shifts, strain mode, vacuum, custom output) ---
@@ -137,7 +135,7 @@ echo "Testing: -t/--twist"
 rm -f stacked_structure.fdf
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -t 5.0 --no-intro > log_twist.txt 2>&1
 check_contains "Applying initial twist angle of 5.0" log_twist.txt
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 echo "Testing: -sm bottom / -sm sym change the applied strain"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -sm top --no-intro > log_sm_top.txt 2>&1
@@ -153,23 +151,22 @@ else
     echo -e "   -> ${RED}Failed:${NC} strain modes did not produce distinct values"
     FAIL=$((FAIL+1))
 fi
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 echo "Testing: --vacuum custom value"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf --vacuum 15.0 --no-intro > log_vacuum.txt 2>&1
 check_contains "Vacuum Corrected" log_vacuum.txt
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
-echo "Testing: -o/--output and --sym_out custom filenames"
-stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -o my_hetero.fdf --sym_out my_symmetry.txt --no-intro > log_custom_names.txt 2>&1
+echo "Testing: -o/--output custom filename"
+stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -o my_hetero.fdf --no-intro > log_custom_names.txt 2>&1
 check_success my_hetero.fdf
-check_success my_symmetry.txt
-rm -f my_hetero.fdf my_symmetry.txt
+rm -f my_hetero.fdf
 
 echo "Testing: -sp/--symprec custom tolerance"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -sp 0.5 --no-intro > log_symprec.txt 2>&1
 check_contains "Tolerance: 0.5" log_symprec.txt
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 
 # --- 7. Match selection (-id, -i) ---
@@ -178,7 +175,7 @@ echo -e "\n--- Testing match selection ---"
 echo "Testing: -id/--match_id direct selection"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --no-intro > log_match_id.txt 2>&1
 check_contains "Selected Match ID 0" log_match_id.txt
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 echo "Testing: -id out of range (genuinely, beyond the ~4481 ZSL matches for this pair)"
 stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 999999 --no-intro > log_match_id_bad.txt 2>&1
@@ -186,11 +183,11 @@ check_exit_code $? 1
 check_contains "is out of range" log_match_id_bad.txt
 
 echo "Testing: -i/--interactive with piped selection (single-process, no nesting)"
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 printf '0\n' | stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -i --no-intro > log_interactive_cli.txt 2>&1
 check_contains "ZSL Commensurate Supercells Found" log_interactive_cli.txt
 check_success stacked_structure.fdf
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 echo "Testing: -i/--interactive quitting with 'q'"
 printf 'q\n' | stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -i --no-intro > log_interactive_quit.txt 2>&1
@@ -246,8 +243,8 @@ check_contains "batch_sym" log_help.txt
 check_contains "gap_range" log_help.txt
 
 
-# --- 9. Interactive path (stb-suite, shortcut 1.4) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.4) ---"
+# --- 9. Interactive path (stb-suite, shortcut 2.1) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.1) ---"
 # Note: run_2d_stacker() always passes '-i' to stb-2Dstacking, so it launches
 # a SECOND, nested interactive prompt inside the subprocess. Piping enough
 # stdin for both layers of prompts does not work reliably here: Python's
@@ -259,11 +256,11 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.4) ---"
 # check only verifies navigation, file validation, and that the wrapper
 # builds/launches the command correctly -- not the nested prompt itself.
 
-echo "Testing: navigate 1.4 -> invalid layer1 then valid -> valid layer2 -> defaults -> subprocess launches"
-printf '2.1\ndoes_not_exist.fdf\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n0\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+echo "Testing: navigate 2.1 -> invalid layer1 then valid -> valid layer2 -> defaults -> subprocess launches"
+printf '2.1\ndoes_not_exist.fdf\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "File not found" log_interactive.txt
 check_contains "Searching for commensurate supercells" log_interactive.txt
-rm -f stacked_structure.fdf symmetry_report.txt
+rm -f stacked_structure.fdf
 
 
 popd > /dev/null

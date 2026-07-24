@@ -12,32 +12,67 @@ Reads two Siesta .fdf files, finds a commensurate supercell using the ZSL algori
 and stacks them into a van der Waals heterostructure.
 """
 
-VERSION = "1.9.1"
+VERSION = "2.2.0"
 
 import os
 import sys
+import time
 import warnings
 import argparse
 import textwrap
 import numpy as np
 from time import sleep
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from stb.core import structure_io
+from stb.core import citations, kspace, mace_relax, structure_checks, structure_io
+from stb.core.ase_view import view_structure_interactive
+from stb.core.deps import require_mace
 from stb.core.heterostructure import find_zsl_match, build_stacked_structure
+from stb.core.symmetry import layer_group_label
 
 # Suppress Pymatgen warnings for cleaner CLI output
 warnings.filterwarnings("ignore")
 
 # ANSI Colors for terminal
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, print_dual, print_section, print_table, show_intro
 
-def parse_fdf_to_pymatgen(filepath):
+REPORT_FILE = "stb_2dstacking_report.txt"
+BIB_FILE = "references.bib"
+
+# Same default vacuum-gap threshold as stb-fetch/stb-kgrid (core/kspace.py's
+# other callers) -- used to detect the out-of-plane vacuum axis for the
+# structure-validation checklist below.
+VACUUM_GAP_ANG = 10.0
+
+# Only consumer of this citation in the suite so far -- kept local rather
+# than moved into core/citations.py (same "extract on 2nd/3rd use" policy
+# documented there).
+_BIB_ZSL = ("Zur1984", """@article{Zur1984,
+  author  = {Zur, A. and McGill, T. C.},
+  title   = {Lattice match: An application to heteroepitaxy},
+  journal = {Journal of Applied Physics},
+  year    = {1984},
+  volume  = {55},
+  number  = {2},
+  pages   = {378--386},
+  doi     = {10.1063/1.333084}
+}""")
+
+
+def _fail(message, f_out):
+    """Prints a red [ERROR] line, closes the report file if one is open,
+    and exits with status 1 -- same single error-exit pattern as
+    dftu.py/fetch.py's own _fail()."""
+    print_dual(color_text(f"[ERROR] {message}", 'red'), f_out)
+    if f_out:
+        f_out.close()
+    sys.exit(1)
+
+def parse_fdf_to_pymatgen(filepath, f_out=None):
     """Parses a Siesta .fdf file and returns a Pymatgen Structure object."""
     try:
         return structure_io.to_pymatgen(structure_io.read_fdf(filepath))
     except Exception as e:
-        print(color_text(f"[ERROR] Error parsing {filepath}: {e}", 'red'))
-        sys.exit(1)
+        _fail(f"Error parsing {filepath}: {e}", f_out)
 
 def stack_heterostructure(layer1, layer2, gaps, target_vacuum, max_area, max_strain, shift_x=0.0, shift_y=0.0, twist_angle=0.0, strain_mode='top', match_id=0, interactive=False, batch_sym=False):
     """Matches lattices, handles selection, and generates heterostructures.
@@ -85,13 +120,17 @@ def stack_heterostructure(layer1, layer2, gaps, target_vacuum, max_area, max_str
 
     return results
 
-def analyze_and_report_symmetry(layer1, layer2, hetero, filename="symmetry_report.txt", symprec=0.01,
-                                 print_stdout=True, save_report=False):
-    """Analyzes symmetry for both layers and the heterostructure, printing a formatted table."""
+def analyze_and_report_symmetry(layer1, layer2, hetero, symprec=0.01, f_out=None):
+    """Prints a symmetry comparison table (crystal system, 3D space group of
+    the vacuum-padded cell, layer group, point group, Hall symbol) for
+    layer1/layer2/the heterostructure -- always folded into the tool's own
+    main numbered report (f_out), never a separate file, via the shared
+    core.cli.print_table (same convention as core/structure_checks.py's
+    validation checklist and stb-mlrelax's before/after table)."""
     def get_details(struct):
         try:
             sga = SpacegroupAnalyzer(struct, symprec=symprec)
-            return {
+            details = {
                 "Space Group": f"{sga.get_space_group_symbol()} ({sga.get_space_group_number()})",
                 "Point Group": sga.get_point_group_symbol(),
                 "Crystal System": str(sga.get_crystal_system()).title(),
@@ -100,106 +139,40 @@ def analyze_and_report_symmetry(layer1, layer2, hetero, filename="symmetry_repor
         except Exception as e:
             return {"Error": f"Analysis failed ({e})"}
 
+        # Space Group above is the 3D space group of the vacuum-padded cell --
+        # valid, but not the physically correct classification for a genuinely
+        # 2D-periodic structure. Layer Group (spglib's get_layergroup(), same
+        # call stb-fetch already uses) accounts for the vacuum direction
+        # properly. Additive: never replaces Space Group above.
+        try:
+            vacuum_axes = kspace.detect_vacuum_axes(struct.frac_coords, struct.lattice.matrix, VACUUM_GAP_ANG)
+            if sum(vacuum_axes) == 1:
+                label = layer_group_label(struct, vacuum_axes.index(True), symprec)
+                details["Layer Group"] = label if label else "N/A (needs spglib >= 2.1.0)"
+            else:
+                details["Layer Group"] = "N/A (not 2D-periodic)"
+        except Exception:
+            details["Layer Group"] = "N/A"
+
+        return details
+
     l1_info = get_details(layer1)
     l2_info = get_details(layer2)
     het_info = get_details(hetero)
 
-    # Define table properties
-    properties = ["Crystal System", "Space Group", "Point Group", "Hall Symbol"]
-    
-    # Build the formatted table as a single string
-    table_lines = []
-    separator = "=" * 72
-    thin_separator = "-" * 72
-    
-    table_lines.append(separator)
-    table_lines.append(f"  DETAILED SYMMETRY ANALYSIS (Tolerance: {symprec} Å)")
-    table_lines.append(separator)
-    
-    # Table Header
-    header = f"{'Property':<17} | {'Layer 1':<16} | {'Layer 2':<16} | {'Heterostructure':<16}"
-    table_lines.append(header)
-    table_lines.append(thin_separator)
-    
-    # Table Rows
+    print_dual(f"Detailed symmetry analysis (Tolerance: {symprec} Ang):", f_out)
+
     if "Error" in l1_info or "Error" in l2_info or "Error" in het_info:
-        table_lines.append("  [!] Error encountered during symmetry analysis.")
-        table_lines.append(f"  L1: {l1_info.get('Error', 'OK')} | L2: {l2_info.get('Error', 'OK')} | Het: {het_info.get('Error', 'OK')}")
-    else:
-        for prop in properties:
-            l1_val = l1_info.get(prop, "N/A")
-            l2_val = l2_info.get(prop, "N/A")
-            het_val = het_info.get(prop, "N/A")
-            row = f"{prop:<17} | {str(l1_val):<16} | {str(l2_val):<16} | {str(het_val):<16}"
-            table_lines.append(row)
-            
-    table_lines.append(separator)
-    report_text = "\n".join(table_lines)
+        print_dual(color_text("[WARNING] Symmetry analysis failed for at least one structure.", 'yellow'), f_out)
+        print_dual(f"  Layer 1        : {l1_info.get('Error', 'OK')}", f_out)
+        print_dual(f"  Layer 2        : {l2_info.get('Error', 'OK')}", f_out)
+        print_dual(f"  Heterostructure: {het_info.get('Error', 'OK')}", f_out)
+        return
 
-    # Print to Terminal with STB Colors
-    if print_stdout: 
-        print(f"\n{color_text(separator, 'blue')}")
-        print(color_text(f"  DETAILED SYMMETRY ANALYSIS (Tolerance: {symprec} Å)", 'bold'))
-        print(color_text(separator, 'blue'))
-        print(color_text(header, 'cyan'))
-        print(thin_separator)
-        
-        if "Error" not in table_lines[5]: # Check if error occurred
-            for prop in properties:
-                l1_val = l1_info.get(prop, "N/A")
-                l2_val = l2_info.get(prop, "N/A")
-                het_val = het_info.get(prop, "N/A")
-                
-                # Highlight the Heterostructure column in yellow to make it stand out
-                het_colored = color_text(f"{str(het_val):<16}", 'yellow')
-                row_colored = f"{prop:<17} | {str(l1_val):<16} | {str(l2_val):<16} | {het_colored}"
-                print(row_colored)
-        else:
-            print(table_lines[5])
-            print(table_lines[6])
-            
-        print(color_text(separator, 'blue'))
-        if save_report:
-            print(color_text(f"[INFO] Symmetry report saved to: {filename}", 'green'))
-
-    # Save to text file (opt-in)
-    if save_report:
-        with open(filename, 'w') as f:
-            f.write(report_text + "\n")
-
-def export_to_fdf(structure, filename="stacked_structure.fdf"):
-    with open(filename, 'w') as f:
-        f.write("# Generated by STB Monolayer Stacker\n\n")
-        
-        unique_species = list(set([site.specie.symbol for site in structure]))
-        num_atoms = len(structure)
-        
-        f.write(f"NumberOfSpecies    {len(unique_species)}\n")
-        f.write(f"NumberOfAtoms      {num_atoms}\n\n")
-        
-        f.write("%block ChemicalSpeciesLabel\n")
-        from pymatgen.core.periodic_table import Element
-        for i, symbol in enumerate(unique_species, start=1):
-            z = Element(symbol).Z
-            f.write(f" {i}   {z}   {symbol}\n")
-        f.write("%endblock ChemicalSpeciesLabel\n\n")
-        
-        f.write("LatticeConstant 1.00 Ang\n\n")
-        f.write("AtomicCoordinatesFormat  Fractional\n\n")
-        
-        f.write("%block LatticeVectors\n")
-        for vec in structure.lattice.matrix:
-            f.write(f" {vec[0]:.8f}   {vec[1]:.8f}   {vec[2]:.8f}\n")
-        f.write("%endblock LatticeVectors\n\n")
-        
-        f.write("%block AtomicCoordinatesAndAtomicSpecies\n")
-        species_id_map = {symbol: i for i, symbol in enumerate(unique_species, start=1)}
-        for site in structure:
-            specie_id = species_id_map[site.specie.symbol]
-            f.write(f"  {site.frac_coords[0]:.8f}   {site.frac_coords[1]:.8f}   {site.frac_coords[2]:.8f}   {specie_id}\n")
-        f.write("%endblock AtomicCoordinatesAndAtomicSpecies\n")
-
-    print(color_text(f"[INFO] Structure exported to: {filename}", 'green'))
+    properties = ["Crystal System", "Space Group", "Layer Group", "Point Group", "Hall Symbol"]
+    rows = [([prop, str(l1_info.get(prop, "N/A")), str(l2_info.get(prop, "N/A")), str(het_info.get(prop, "N/A"))], None)
+            for prop in properties]
+    print_table(["Property", "Layer 1", "Layer 2", "Heterostructure"], rows, f_out)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -233,15 +206,38 @@ def main():
     parser.add_argument("-sm", "--strain_mode", choices=['top', 'bottom', 'sym'], default='top', help="Strain distribution mode (default: top)")
     
     parser.add_argument("-o", "--output", default="stacked_structure.fdf", help="Output .fdf base file name")
-    parser.add_argument("--sym_out", default="symmetry_report.txt", help="Output text file for symmetry analysis")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also persist the symmetry analysis to --sym_out. Off by default.")
+                        help=f"Also persist the full run report (including the symmetry analysis) "
+                             f"to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="Open an interactive 3D view of the final heterostructure(s) (via ASE) "
+                             "after writing the output file(s). Needs a display. Off by default.")
+
+    parser.add_argument("--ml-relax", action="store_true",
+                        help="Pre-relax each generated heterostructure with a MACE potential "
+                             "(needs the optional 'ml' extra: pip install stb_suite[ml]) before "
+                             "writing it out -- positions only by default. Off by default.")
+    parser.add_argument("--ml-relax-cell", action="store_true",
+                        help="With --ml-relax, also relax the in-plane cell -- the vacuum axis "
+                             "(c) always stays exactly fixed. Only valid together with --ml-relax.")
+    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
+                        help="MACE-MP-0 foundation model size for --ml-relax (default: small).")
+    parser.add_argument("--custom-model", default=None, metavar="PATH",
+                        help="Path to a custom fine-tuned .model file for --ml-relax, instead of "
+                             "a MACE-MP-0 foundation size.")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-2Dstacking {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+
+    if args.ml_relax_cell and not args.ml_relax:
+        parser.error("--ml-relax-cell is only valid together with --ml-relax.")
+    if (args.custom_model or args.model != "small") and not args.ml_relax:
+        parser.error("--model/--custom-model are only valid together with --ml-relax.")
+    if args.ml_relax:
+        require_mace()
 
     if args.intro:
         show_intro([
@@ -251,19 +247,49 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("STACKING PROCESS:", 'bold'))
-    print("-" * 60)
+    report_path = REPORT_FILE if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-    print(color_text("[INFO] Parsing FDF files...", 'cyan'))
-    layer1 = parse_fdf_to_pymatgen(args.layer1)
-    layer2 = parse_fdf_to_pymatgen(args.layer2)
+    print_dual(color_text("===== STB-2DSTACKING REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Layer 1 (bottom): {args.layer1}", f_out)
+    print_dual(f"Layer 2 (top)   : {args.layer2}", f_out)
+    print_dual(f"Max area        : {args.max_area} A^2", f_out)
+    print_dual(f"Max strain      : {args.max_strain:.2%}", f_out)
+    if args.gap_range:
+        print_dual(f"Gap             : range {args.gap_range[0]}-{args.gap_range[1]} A, "
+                   f"{int(args.gap_range[2])} point(s)", f_out)
+    else:
+        print_dual(f"Gap             : {args.gap} A", f_out)
+    if args.batch_sym:
+        stacking_desc = "batch high-symmetry configurations (--batch_sym)"
+    else:
+        stacking_desc = f"custom (twist={args.twist} deg, shift=({args.shift_x}, {args.shift_y}))"
+    print_dual(f"Stacking mode   : {stacking_desc}", f_out)
+    print_dual(f"Strain mode     : {args.strain_mode}", f_out)
+
+    print_section("[1] PARSING INPUT STRUCTURES", f_out)
+    layer1 = parse_fdf_to_pymatgen(args.layer1, f_out)
+    layer2 = parse_fdf_to_pymatgen(args.layer2, f_out)
+    print_dual(f"Layer 1 formula : {layer1.composition.reduced_formula} ({len(layer1)} atoms)", f_out)
+    print_dual(f"Layer 2 formula : {layer2.composition.reduced_formula} ({len(layer2)} atoms)", f_out)
 
     if args.gap_range:
         gaps = np.linspace(args.gap_range[0], args.gap_range[1], int(args.gap_range[2]))
-        print(color_text(f"[INFO] Energy Curve Mode detected. Generating {len(gaps)} distance points.", 'cyan'))
+        print_dual(color_text(
+            f"[INFO] Energy Curve Mode detected. Generating {len(gaps)} distance points.", 'cyan'), f_out)
     else:
         gaps = [args.gap]
 
+    print_section("[2] LATTICE MATCHING & HETEROSTRUCTURE CONSTRUCTION (ZSL)", f_out)
+    print_dual(f"Searching commensurate supercells (max_area={args.max_area} A^2, "
+               f"max_strain={args.max_strain:.2%})...", f_out)
+    # find_zsl_match()/build_stacked_structure() (via stack_heterostructure()) print their
+    # own colored progress/match-table output directly to the console -- shared with
+    # stackingfault.py, so it isn't threaded through f_out here (out of scope for this
+    # tool alone to change). The parameters and final per-result outcome are still
+    # captured in the report via the summary lines below.
     results = stack_heterostructure(
         layer1, layer2, gaps=gaps, target_vacuum=args.vacuum,
         max_area=args.max_area, max_strain=args.max_strain,
@@ -271,51 +297,146 @@ def main():
         strain_mode=args.strain_mode, match_id=args.match_id,
         interactive=args.interactive, batch_sym=args.batch_sym
     )
+    print_dual(f"Heterostructure(s) built: {len(results)}", f_out)
+
+    model_desc = f"a custom model ({args.custom_model})" if args.custom_model else f"MACE-MP-0 ({args.model})"
+    ml_relax_info = {}
+    if args.ml_relax:
+        print_section("[3] ML PRE-RELAXATION (MACE)", f_out)
+        print_dual(f"Model           : {model_desc}", f_out)
+        print_dual(f"Cell relaxation : "
+                   f"{'in-plane only (vacuum axis fixed)' if args.ml_relax_cell else 'positions only'}", f_out)
+        from pymatgen.io.ase import AseAtomsAdaptor
+        model_arg = args.custom_model if args.custom_model else args.model
+        calc = mace_relax.get_calculator(model_arg)
+        for line in mace_relax.describe_model(model_arg, calc):
+            print_dual(line, f_out)
+
+        for name, (hetero, applied_strain) in results.items():
+            print_dual(f"\n{color_text(f'--- [{name}] ---', 'bold')}", f_out)
+            vacuum_axes = kspace.detect_vacuum_axes(hetero.frac_coords, hetero.lattice.matrix, VACUUM_GAP_ANG)
+            n_atoms = len(hetero)
+            atoms = AseAtomsAdaptor.get_atoms(hetero)
+            atoms.calc = calc
+            e0 = atoms.get_potential_energy()
+            f0 = float(np.abs(atoms.get_forces()).max())
+            a0, b0, c0, _, _, gamma0 = atoms.cell.cellpar()
+
+            cell_mask = mace_relax.build_cell_mask(vacuum_axes) if args.ml_relax_cell else None
+            t0 = time.time()
+            converged, steps_used = mace_relax.relax(atoms, calc, cell_mask=cell_mask, fmax=0.05, max_steps=200)
+            wall_time = time.time() - t0
+
+            e1 = atoms.get_potential_energy()
+            f1 = float(np.abs(atoms.get_forces()).max())
+            a1, b1, c1, _, _, gamma1 = atoms.cell.cellpar()
+            relaxed = AseAtomsAdaptor.get_structure(atoms)
+
+            results[name] = (relaxed, applied_strain)
+            ml_relax_info[name] = (converged, steps_used, e1, e1 - e0)
+
+            print_dual(f"Steps used : {steps_used} "
+                       f"({'converged' if converged else 'hit step cap, NOT converged'})", f_out)
+            print_dual(f"Wall time  : {wall_time:.1f} s", f_out)
+
+            # Before/after table, same convention as stb-mlrelax's own
+            # [5] BEFORE / AFTER COMPARISON section.
+            rows = [
+                (["Energy (eV)", f"{e0:.6f}", f"{e1:.6f}",
+                  f"{e1 - e0:+.6f} ({(e1 - e0) / n_atoms:+.6f}/atom)"], None),
+                (["Max force (eV/Ang)", f"{f0:.4f}", f"{f1:.4f}", f"{f1 - f0:+.4f}"], None),
+            ]
+            if args.ml_relax_cell:
+                rel_change = max(abs(a1 - a0) / a0, abs(b1 - b0) / b0)
+                rows.append((["Lattice a, b (Ang)", f"{a0:.4f}, {b0:.4f}", f"{a1:.4f}, {b1:.4f}",
+                              f"max {100 * rel_change:+.2f}%"], None))
+                rows.append((["Lattice gamma (deg)", f"{gamma0:.2f}", f"{gamma1:.2f}",
+                              f"{gamma1 - gamma0:+.2f}"], None))
+                rows.append((["Vacuum axis c (Ang)", f"{c0:.4f}", f"{c1:.4f}",
+                              "fixed" if c1 == c0 else f"{c1 - c0:+.4f} (SHOULD be 0)"], None))
+            print_table(["Quantity", "Before", "After", "Change"], rows, f_out)
 
     base_out_name = args.output[:-4] if args.output.endswith('.fdf') else args.output
-    base_sym_name = args.sym_out[:-4] if args.sym_out.endswith('.txt') else args.sym_out
-
     is_multi_output = args.batch_sym or len(gaps) > 1
 
-    for name, (hetero, applied_strain) in results.items():
-        print("\n" + color_text("=" * 60, 'blue'))
-        print(color_text(f"  Final Heterostructure Summary: [{name}]", 'bold'))
-        print(color_text("=" * 60, 'blue'))
-        
-        # Extrai a simetria rapidamente para o sumário
-        try:
-            sga_het = SpacegroupAnalyzer(hetero, symprec=args.symprec)
-            het_sg = f"{sga_het.get_space_group_symbol()} ({sga_het.get_space_group_number()})"
-            het_pg = sga_het.get_point_group_symbol()
-            sym_str = f"{het_sg} | Point Group: {het_pg}"
-        except Exception as e:
-            sym_str = f"Analysis failed ({e})"
+    print_section("[4] STRUCTURE VALIDATION & WRITING OUTPUT FILE(S)", f_out)
+    output_files = []
+    hetero_atoms = []
 
-        # Formatação com padding para alinhamento vertical perfeito
-        print(f"{'Formula':<26}: {color_text(hetero.composition.reduced_formula, 'yellow')}")
-        print(f"{'Total Atoms':<26}: {color_text(str(len(hetero)), 'yellow')}")
-        print(f"{'Lattice C Parameter':<26}: {color_text(f'{hetero.lattice.c:.2f} Å', 'yellow')} (Vacuum Corrected)")
-        print(f"{'Max Applied Linear Strain':<26}: {color_text(f'{applied_strain:.2%}', 'yellow')}")
-        print(f"{'Hetero Symmetry':<26}: {color_text(sym_str, 'cyan')}")
-        print(color_text("-" * 60, 'blue'))
-        
+    for name, (hetero, applied_strain) in results.items():
+        print_dual(f"\n{color_text(f'--- [{name}] ---', 'bold')}", f_out)
+
+        print_dual(f"Formula                  : {hetero.composition.reduced_formula}", f_out)
+        print_dual(f"Total atoms              : {len(hetero)}", f_out)
+        print_dual(f"Lattice C Parameter      : {hetero.lattice.c:.4f} Ang (Vacuum Corrected)", f_out)
+        print_dual(f"Max Applied Linear Strain: {applied_strain:.2%}", f_out)
+
+        # Run the full shared validation checklist and the full symmetry table for
+        # EVERY generated structure, not just a representative one -- both are short
+        # enough (a handful of rows each) that showing them for every --batch_sym/
+        # --gap_range result is more useful than a suppressed/summarized view.
+        vacuum_axes = kspace.detect_vacuum_axes(hetero.frac_coords, hetero.lattice.matrix, VACUUM_GAP_ANG)
+        structure_checks.run_malformation_checks(hetero, vacuum_axes, f_out)
+        analyze_and_report_symmetry(layer1, layer2, hetero, symprec=args.symprec, f_out=f_out)
+
         if is_multi_output:
             out_filename = f"{base_out_name}_{name}.fdf"
-            sym_filename = f"{base_sym_name}_{name}.txt"
         else:
             out_filename = args.output
-            sym_filename = args.sym_out
-        
-        export_to_fdf(hetero, out_filename)
-        
-        # Evita poluir o terminal com várias tabelas grandes no modo batch
-        print_to_stdout = not is_multi_output
-        analyze_and_report_symmetry(layer1, layer2, hetero, filename=sym_filename, symprec=args.symprec,
-                                     print_stdout=print_to_stdout, save_report=args.save_report)
 
-    print("\n" + color_text("[INFO] Complete job!", 'green')) 
-    print("-" * 60)
-    print(color_text("Stacking successful! Let's hope your supercell doesn't break the cluster.\n", 'bold'))
+        header_comment = [
+            "Heterostructure built by stb-2Dstacking (ZSL lattice matching).",
+            f"Layer 1 (bottom): {args.layer1}",
+            f"Layer 2 (top)   : {args.layer2}",
+            f"Stacking configuration: {name} (twist={args.twist} deg, strain_mode={args.strain_mode}).",
+            f"Max applied linear strain: {applied_strain:.4%}.",
+        ]
+        if name in ml_relax_info:
+            converged, steps_used, energy, delta_e = ml_relax_info[name]
+            header_comment.append(
+                f"ML pre-relaxed with {model_desc} "
+                f"({'converged' if converged else 'NOT converged'} in {steps_used} step(s), "
+                f"E = {energy:.6f} eV, delta E = {delta_e:+.6f} eV)."
+            )
+        new_structure = structure_io.from_pymatgen(hetero)
+        structure_io.write_fdf(new_structure, out_filename, header_comment=header_comment)
+        print_dual(color_text(f"[OK] Structure written to '{out_filename}'.", 'green'), f_out)
+        output_files.append(out_filename)
+        hetero_atoms.append(hetero)
+
+    print_section("[5] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, _BIB_ZSL]
+    if args.ml_relax:
+        bib_entries.append(citations.MACE)
+        if not args.custom_model:
+            bib_entries.append(citations.MACE_MP)
+    citations.write_bib_file(BIB_FILE, bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
+        f"({len(bib_entries)} entries).", 'green'), f_out)
+
+    print_section("[6] SUMMARY & FILES", f_out)
+    print_dual("Status                    : OK", f_out)
+    print_dual(f"Heterostructures generated: {len(results)}", f_out)
+    shown_files = output_files[:5]
+    for of in shown_files:
+        print_dual(f"Output file               : {of}", f_out)
+    if len(output_files) > len(shown_files):
+        print_dual(f"                            ... and {len(output_files) - len(shown_files)} more", f_out)
+    print_dual(f"References                : {BIB_FILE}", f_out)
+    if report_path:
+        print_dual(f"Report                    : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after every check/report section above has already printed, so
+    # a blocking GUI window never delays or hides them.
+    if args.view:
+        from pymatgen.io.ase import AseAtomsAdaptor
+        atoms_list = [AseAtomsAdaptor.get_atoms(h) for h in hetero_atoms]
+        view_structure_interactive(atoms_list)
+
 
 if __name__ == "__main__":
     main()

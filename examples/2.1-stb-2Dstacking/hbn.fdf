@@ -1,0 +1,28 @@
+# Tutorial fixture for example 2.1 (stb-2Dstacking): hexagonal boron
+# nitride (h-BN) monolayer, primitive 2-atom hexagonal cell (a = 2.504
+# Ang). Paired with graphene.fdf (a = 2.46 Ang, ~1.8% lattice mismatch) as
+# the classic van der Waals heterostructure demo for the ZSL
+# commensurate-supercell algorithm.
+
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   5   B
+ 2   7   N
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  2.5040000000   0.0000000000   0.0000000000
+ -1.2520000000   2.1685276111   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

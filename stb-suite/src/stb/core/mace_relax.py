@@ -65,6 +65,30 @@ def get_calculator(model="small", device="cpu", dtype="float64"):
     return mace_mp(model=model, device=device, default_dtype=dtype)
 
 
+def describe_model(model_arg, calc):
+    """Best-effort extra detail about a loaded MACE model (approximate
+    parameter count, cutoff radius) -- purely informational, so any failure
+    to introspect internal attributes (these aren't part of MACE's public
+    API and can differ across mace-torch versions/calculator classes) is
+    swallowed silently rather than breaking the run. Moved here from
+    mlrelax.py once stacking2D.py's --ml-relax became a second consumer of
+    the exact same introspection.
+    """
+    lines = []
+    try:
+        models = getattr(calc, "models", None) or [getattr(calc, "model")]
+        n_params = sum(p.numel() for p in models[0].parameters())
+        lines.append(f"MACE model parameters : ~{n_params:,}")
+    except Exception:
+        pass
+    try:
+        r_max = float(models[0].r_max)
+        lines.append(f"MACE cutoff radius     : {r_max:.2f} Ang")
+    except Exception:
+        pass
+    return lines
+
+
 def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=200,
           step_history=None):
     """Relaxes `atoms` in place (positions, plus cell if `cell_mask` is

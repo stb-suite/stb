@@ -34,52 +34,6 @@ OPTIMIZERS = ["FIRE", "BFGS", "LBFGS"]
 REPORT_FILE = "stb_mlrelax_report.txt"
 BIB_FILE = "references.bib"
 
-# The MACE architecture itself -- always cited, regardless of whether the
-# foundation checkpoint or a custom fine-tuned model is used (a fine-tuned
-# model is still this architecture).
-_BIB_MACE = ("Batatia2022mace", """@inproceedings{Batatia2022mace,
-  author    = {Batatia, Ilyes and Kov\\'acs, D\\'avid P\\'eter and Simm, Gregor N. C. and Ortner, Christoph and Cs\\'anyi, G\\'abor},
-  title     = {{MACE}: Higher Order Equivariant Message Passing Neural Networks for Fast and Accurate Force Fields},
-  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
-  year      = {2022},
-  eprint    = {2206.07697},
-  archivePrefix = {arXiv},
-  primaryClass  = {stat.ML}
-}""")
-
-# The MACE-MP-0 foundation model/training-data paper -- only cited when the
-# foundation checkpoint is actually used (not --custom-model).
-_BIB_MACE_MP = ("Batatia2023foundation", """@misc{Batatia2023foundation,
-  author = {Batatia, Ilyes and Benner, Philipp and Chiang, Yuan and Elena, Alin M. and Kov\\'acs, D\\'avid P\\'eter and Riebesell, Janosh and Advincula, Xavier R. and Asta, Mark and Baldwin, William J. and Bernstein, Noam and Bhowmik, Arghya and Blau, Samuel M. and C\\u{a}rare, Vlad and Darby, James P. and De, Sandip and Della Pia, Flaviano and Deringer, Volker L. and Elijo\\v{s}ius, Rokas and El-Machachi, Zakariya and Fako, Edvin and Ferrari, Andrea C. and Genreith-Schriever, Annalena and George, Janine and Goodall, Rhys E. A. and Grey, Clare P. and Han, Shuang and Handley, Will and Heenen, Hendrik H. and Hermansson, Kersti and Holm, Christian and Jaafar, Jad and Hofmann, Stephan and Jakob, Konstantin S. and Jung, Hyunwook and Kapil, Venkat and Kaplan, Aaron D. and Karimitari, Nima and Kroupa, Namu and Kullgren, Jolla and Kuner, Matthew C. and Kuryla, Domantas and Liepuoniute, Guoda and Margraf, Johannes T. and others},
-  title  = {A foundation model for atomistic materials chemistry},
-  year   = {2023},
-  eprint = {2401.00096},
-  archivePrefix = {arXiv},
-  primaryClass  = {physics.chem-ph}
-}""")
-
-
-def _describe_model(model_arg, calc):
-    """Best-effort extra detail about the loaded MACE model (approximate
-    parameter count, cutoff radius) -- purely informational, so any failure
-    to introspect internal attributes (these aren't part of MACE's public
-    API and can differ across mace-torch versions/calculator classes) is
-    swallowed silently rather than breaking the run.
-    """
-    lines = []
-    try:
-        models = getattr(calc, "models", None) or [getattr(calc, "model")]
-        n_params = sum(p.numel() for p in models[0].parameters())
-        lines.append(f"MACE model parameters : ~{n_params:,}")
-    except Exception:
-        pass
-    try:
-        r_max = float(models[0].r_max)
-        lines.append(f"MACE cutoff radius     : {r_max:.2f} Ang")
-    except Exception:
-        pass
-    return lines
-
 
 def _structure_validation(pmg_structure, vacuum_axes, f_out):
     """The shared malformation checklist (core.structure_checks, also used by
@@ -252,7 +206,7 @@ that distribution.""",
     print_dual(f"Mode           : {'positions + cell' if cell_mask is not None else 'positions only'}", f_out)
     model_arg = args.custom_model if args.custom_model else args.model
     calc = mace_relax.get_calculator(model=model_arg, device=args.device)
-    for line in _describe_model(model_arg, calc):
+    for line in mace_relax.describe_model(model_arg, calc):
         print_dual(line, f_out)
     atoms.calc = calc
 
@@ -418,9 +372,9 @@ that distribution.""",
     print_dual(color_text(f"[OK] Structure written to '{args.output}'.", 'green'), f_out)
 
     print_section("[8] REFERENCES", f_out)
-    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, _BIB_MACE]
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.MACE]
     if not args.custom_model:
-        bib_entries.append(_BIB_MACE_MP)
+        bib_entries.append(citations.MACE_MP)
     citations.write_bib_file(BIB_FILE, bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "

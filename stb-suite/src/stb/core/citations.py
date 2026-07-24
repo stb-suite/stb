@@ -41,6 +41,31 @@ MONKHORST_PACK = ("MonkhorstPack1976", """@article{MonkhorstPack1976,
   doi     = {10.1103/PhysRevB.13.5188}
 }""")
 
+# The MACE architecture itself -- cite regardless of whether the foundation
+# checkpoint or a custom fine-tuned model is used (a fine-tuned model is
+# still this architecture). Moved here from mlrelax.py once stacking2D.py's
+# --ml-relax became a second consumer of the exact same entry.
+MACE = ("Batatia2022mace", """@inproceedings{Batatia2022mace,
+  author    = {Batatia, Ilyes and Kov\\'acs, D\\'avid P\\'eter and Simm, Gregor N. C. and Ortner, Christoph and Cs\\'anyi, G\\'abor},
+  title     = {{MACE}: Higher Order Equivariant Message Passing Neural Networks for Fast and Accurate Force Fields},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2022},
+  eprint    = {2206.07697},
+  archivePrefix = {arXiv},
+  primaryClass  = {stat.ML}
+}""")
+
+# The MACE-MP-0 foundation model/training-data paper -- only cite when the
+# foundation checkpoint is actually used (not a --custom-model).
+MACE_MP = ("Batatia2023foundation", """@misc{Batatia2023foundation,
+  author = {Batatia, Ilyes and Benner, Philipp and Chiang, Yuan and Elena, Alin M. and Kov\\'acs, D\\'avid P\\'eter and Riebesell, Janosh and Advincula, Xavier R. and Asta, Mark and Baldwin, William J. and Bernstein, Noam and Bhowmik, Arghya and Blau, Samuel M. and C\\u{a}rare, Vlad and Darby, James P. and De, Sandip and Della Pia, Flaviano and Deringer, Volker L. and Elijo\\v{s}ius, Rokas and El-Machachi, Zakariya and Fako, Edvin and Ferrari, Andrea C. and Genreith-Schriever, Annalena and George, Janine and Goodall, Rhys E. A. and Grey, Clare P. and Han, Shuang and Handley, Will and Heenen, Hendrik H. and Hermansson, Kersti and Holm, Christian and Jaafar, Jad and Hofmann, Stephan and Jakob, Konstantin S. and Jung, Hyunwook and Kapil, Venkat and Kaplan, Aaron D. and Karimitari, Nima and Kroupa, Namu and Kullgren, Jolla and Kuner, Matthew C. and Kuryla, Domantas and Liepuoniute, Guoda and Margraf, Johannes T. and others},
+  title  = {A foundation model for atomistic materials chemistry},
+  year   = {2023},
+  eprint = {2401.00096},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.chem-ph}
+}""")
+
 
 def _read_existing_entries(bib_path):
     """Returns {key: full_entry_text} already in `bib_path`, or {} if the

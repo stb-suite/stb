@@ -2838,8 +2838,14 @@ def run_crystalbuilder_generator() -> None:
     print("\n" + "="*60)
     print(color_text("CRYSTAL BUILDER (stb-crystalbuilder)", 'bold').center(60))
     print("="*60 + "\n")
+    print(color_text(
+        "Bulk (3D periodic) structures only -- the 230 space groups accepted "
+        "below are the international classification for 3D crystals, with no "
+        "2D/1D analog. For a slab, monolayer, nanotube, or wire: build the 3D "
+        "bulk crystal here first, then cut it down with stb-slab/stb-nanotube/"
+        "stb-2Dstacking.", 'yellow'))
 
-    spacegroup = get_input("Space group (symbol e.g. 'Fm-3m' or number e.g. '225'): ").strip()
+    spacegroup = get_input("\nSpace group (symbol e.g. 'Fm-3m' or number e.g. '225'): ").strip()
 
     a = get_float_input("\nLattice constant a (Ang): ")
     b_str = get_input("Lattice constant b (Ang) [default: same as a]: ").strip()
@@ -2873,6 +2879,51 @@ def run_crystalbuilder_generator() -> None:
     if "--site" not in args:
         print(color_text("No sites given -- aborting.", 'red'))
         return
+
+    print(f"\n{color_text('Reduce to a smaller cell?', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = No reduction [Default]")
+    print(f"  {color_text('2', 'cyan')} = Primitive (smallest cell)")
+    print(f"  {color_text('3', 'cyan')} = Conventional (standardized, usually larger)")
+    print(f"  {color_text('4', 'cyan')} = Refined (conventional cell, positions snapped to symmetry)")
+    reduce_choice = get_input("Select option (1-4) [default: 1]: ").strip()
+    reduce_mode = {'2': 'primitive', '3': 'conventional', '4': 'refined'}.get(reduce_choice)
+    if reduce_mode:
+        args.extend(["--reduce", reduce_mode])
+
+    ml_relax = get_input(
+        "\nPre-relax the final structure with a MACE ML potential before writing? "
+        "(needs the optional 'ml' extra) (y/N): "
+    ).strip().lower()
+    if ml_relax == 'y':
+        args.append("--ml-relax")
+
+        ml_relax_cell = get_input(
+            "Also relax the cell? (y/N): "
+        ).strip().lower()
+        if ml_relax_cell == 'y':
+            args.append("--ml-relax-cell")
+
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     output_file = get_input("\nOutput file name [default: crystal.fdf]: ").strip()
     if not output_file:

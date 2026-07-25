@@ -278,7 +278,10 @@ def min_pairwise_distance(structure) -> float | None:
     distance for a Molecule -- so callers don't need to special-case a
     non-periodic cluster housed in an artificial box (its own `distance_matrix`
     would otherwise pick up the box's periodic images as false neighbors).
-    Shared by stb-crystalbuilder and stb-crystalcast's post-build overlap check.
+    Shared by stb-crystalcast's post-build overlap check and (via
+    core/structure_checks.py's run_malformation_checks) every tool's own
+    [2]/[6] STRUCTURE VALIDATION atom-proximity row, including
+    stb-crystalbuilder.
     """
     if len(structure) < 2:
         return None

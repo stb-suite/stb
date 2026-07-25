@@ -65,9 +65,9 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing default passivation (si111_slab.fdf, 8 deficit-1 sites) ---"
 rm -f passivated.fdf
 stb-passivate -f si111_slab.fdf -o passivated.fdf --no-intro > log_happy.txt 2>&1
-check_contains "Dangling bonds found:.*8" log_happy.txt
-check_contains "Auto-passivated:.*8" log_happy.txt
-check_contains "Output atoms:.*40" log_happy.txt
+check_contains "Dangling bonds found : 8" log_happy.txt
+check_contains "Auto-passivated      : 8 with H" log_happy.txt
+check_contains "Output atoms   : 40" log_happy.txt
 check_success passivated.fdf
 check_contains "NumberofAtoms      40" passivated.fdf
 check_contains " 2   1   H" passivated.fdf
@@ -87,10 +87,10 @@ echo -e "\n--- Testing the deficit-3 termination (needs-manual-attention path) -
 rm -f passivated_bad.fdf
 stb-passivate -f si111_slab_bad_termination.fdf -o passivated_bad.fdf --no-intro \
     > log_bad_termination.txt 2>&1
-check_contains "Dangling bonds found:.*8" log_bad_termination.txt
-check_contains "Auto-passivated:.*0" log_bad_termination.txt
+check_contains "Dangling bonds found : 8" log_bad_termination.txt
+check_contains "Auto-passivated      : 0 with H" log_bad_termination.txt
 check_contains "missing 2+ bonds" log_bad_termination.txt
-check_contains "Output atoms:.*32" log_bad_termination.txt
+check_contains "Output atoms   : 32" log_bad_termination.txt
 check_success passivated_bad.fdf
 check_contains "NumberofAtoms      32" passivated_bad.fdf
 
@@ -146,20 +146,64 @@ check_contains "cutoff" log_help.txt
 check_contains "bond-length" log_help.txt
 
 
-# --- 6. Interactive path (stb-suite, shortcut 2.9) ---
+# --- 6. stb-standard report: full symmetry, --save-report, --ml-relax, fdf header ---
+echo -e "\n--- Testing the standardized report (full symmetry, --save-report, provenance header) ---"
+
+echo "Testing: --save-report writes the full symmetry report to file"
+rm -f stb_passivate_report.txt
+stb-passivate -f si111_slab.fdf --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
+check_success stb_passivate_report.txt
+check_contains "\[6\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_passivate_report.txt
+check_contains "Layer Group" stb_passivate_report.txt
+check_contains "Point Group" stb_passivate_report.txt
+check_contains "Hall Symbol" stb_passivate_report.txt
+
+echo "Testing: provenance header written into the output .fdf"
+check_contains "# Dangling bonds passivated by stb-passivate" report_test.fdf
+check_contains "# Passivant: H. Dangling bonds found: 8, auto-passivated: 8, unresolved (2+ missing bonds): 0." report_test.fdf
+
+echo "Testing: --ml-relax pre-relaxes the passivated structure with MACE-MP-0, vacuum axis fixed"
+stb-passivate -f si111_slab.fdf --ml-relax --ml-relax-cell -o ml_relaxed.fdf --no-intro > log_ml_relax.txt 2>&1
+check_exit_code $? 0
+check_contains "\[4\] ML PRE-RELAXATION (MACE)" log_ml_relax.txt
+check_success ml_relaxed.fdf
+check_contains "ML pre-relaxed with" ml_relaxed.fdf
+python3 - <<'EOF'
+from stb.core import structure_io
+before = structure_io.to_pymatgen(structure_io.read_fdf("si111_slab.fdf"))
+after = structure_io.to_pymatgen(structure_io.read_fdf("ml_relaxed.fdf"))
+assert abs(before.lattice.c - after.lattice.c) < 1e-6, \
+    f"vacuum axis (c) should stay exactly fixed, got {before.lattice.c} -> {after.lattice.c}"
+print("OK: vacuum axis (c) unchanged by --ml-relax-cell")
+EOF
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} vacuum axis stayed exactly fixed under --ml-relax-cell"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} vacuum axis changed under --ml-relax-cell"
+    FAIL=$((FAIL+1))
+fi
+
+
+# --- 7. Interactive path (stb-suite, shortcut 2.9) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.9) ---"
 
-echo "Testing: navigate 2.9 -> invalid file then valid -> default passivant/cutoff/bond-length -> default output -> quit"
+echo "Testing: navigate 2.9 -> invalid file then valid -> default passivant/cutoff/bond-length -> no ml-relax/save-report/view -> default output -> quit"
 rm -f passivated.fdf
-printf '2.9\ndoes_not_exist.fdf\nsi111_slab.fdf\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+menu_inputs=(
+    "2.9" "does_not_exist.fdf" "si111_slab.fdf" "" "" ""
+    "" "" "" ""
+    "0"
+)
+printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
-check_contains "Auto-passivated:.*8" log_menu.txt
+check_contains "Auto-passivated      : 8 with H" log_menu.txt
 check_success passivated.fdf
 
 
 popd > /dev/null
 
-# --- 7. Summary ---
+# --- 8. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

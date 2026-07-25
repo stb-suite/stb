@@ -1,7 +1,7 @@
 #!/bin/bash
 # Guided example: stb-mlrelax (code 1.6 in the stb-suite menu)
 #
-# Not an automated test (see test/2-structures/12-mlrelax/test.sh for that)
+# Not an automated test (see test/1-inputs/6-mlrelax/test.sh for that)
 # -- a commented walk-through: it runs real commands, one group at a time,
 # and shows you the piece of output that proves what just happened. It
 # pauses between sections so you can read before moving on.

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-fetch (Structure Fetcher, item 2.9)
+# Smoke test for stb-fetch (Structure Fetcher, item 1.5)
 #
 # COD and OPTIMADE (via the twodmatpedia provider) cases run for real (no
 # API key needed, live network access confirmed reachable from this
@@ -57,7 +57,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Fetch (item 2.9) ---"
+echo "--- Starting tester for STB-Fetch (item 1.5) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 echo "Test directory '$TEST_DIR' prepared."
@@ -256,18 +256,18 @@ else
 fi
 
 
-# --- 7. Interactive path (stb-suite, shortcut 1.12) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.12) ---"
+# --- 7. Interactive path (stb-suite, shortcut 1.5) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.5) ---"
 
-echo "Testing: navigate 1.12 -> COD [default] -> by id [default] -> cod-id 1010369 -> default output -> quit"
+echo "Testing: navigate 1.5 -> COD [default] -> by id [default] -> cod-id 1010369 -> default output -> quit"
 rm -f fetched.fdf
-printf '2.9\n\n\n1010369\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '1.5\n\n\n1010369\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Formula:.*Fe3O4" log_menu.txt
 check_success fetched.fdf
 
-echo "Testing: navigate 1.12 -> OPTIMADE -> twodmatpedia [default] -> by id -> 2dm-2127 -> default output -> quit"
+echo "Testing: navigate 1.5 -> OPTIMADE -> twodmatpedia [default] -> by id -> 2dm-2127 -> default output -> quit"
 rm -f fetched.fdf
-printf '2.9\n3\n1\n1\n2dm-2127\n\n\n0\n' | stb-suite > log_menu_optimade.txt 2>&1
+printf '1.5\n3\n1\n1\n2dm-2127\n\n\n0\n' | stb-suite > log_menu_optimade.txt 2>&1
 check_contains "Fetched:.*optimade 2dm-2127" log_menu_optimade.txt
 check_contains "Formula:.*MoS" log_menu_optimade.txt
 check_success fetched.fdf

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-crystalcast (Random Crystal Generator, item 2.14)
+# Smoke test for stb-crystalcast (Random Crystal Generator, item 2.12)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Crystalcast (item 2.14) ---"
+echo "--- Starting tester for STB-Crystalcast (item 2.12) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 echo "Test directory '$TEST_DIR' prepared."
@@ -452,51 +452,51 @@ check_contains "supergroup" log_help.txt
 check_contains "ml-rank" log_help.txt
 
 
-# --- 19. Interactive path (stb-suite, shortcut 1.17) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.17) ---"
+# --- 19. Interactive path (stb-suite, shortcut 2.12) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.12) ---"
 
-echo "Testing: navigate 1.17 -> generate (default) -> dim 3 (default) -> molecular? n -> group 225 -> species 'Ni 4', 'O 8', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> default output -> quit"
+echo "Testing: navigate 2.12 -> generate (default) -> dim 3 (default) -> molecular? n -> group 225 -> species 'Ni 4', 'O 8', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> default output -> quit"
 rm -f crystalcast.fdf
-printf '2.14\n\n\nn\n225\nNi 4\nO 8\n\n\n\n\n\n\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.12\n\n\nn\n225\nNi 4\nO 8\n\n\n\n\n\n\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "space group Fm-3m (No. 225)" log_menu.txt
 check_success crystalcast.fdf
 
-echo "Testing: navigate 1.17 -> generate (default) -> dim 3 (default) -> molecular? y -> group 19 -> species 'H2O 4', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> default output -> quit"
+echo "Testing: navigate 2.12 -> generate (default) -> dim 3 (default) -> molecular? y -> group 19 -> species 'H2O 4', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> default output -> quit"
 rm -f crystalcast.fdf
-printf '2.14\n\n\ny\n19\nH2O 4\n\n\n\n\n\n\nn\n\n\n0\n' | stb-suite > log_menu_molecular.txt 2>&1
+printf '2.12\n\n\ny\n19\nH2O 4\n\n\n\n\n\n\nn\n\n\n0\n' | stb-suite > log_menu_molecular.txt 2>&1
 check_exit_code $? 0
 check_contains "space group P2_12_12_1 (No. 19)" log_menu_molecular.txt
 check_success crystalcast.fdf
 
-echo "Testing: navigate 1.17 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Na 4', 'Cl 4' -> lattice '5.64 5.64 5.64 90 90 90' -> sites '4a 4b' -> defaults -> ml-rank? n -> output -> quit"
+echo "Testing: navigate 2.12 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Na 4', 'Cl 4' -> lattice '5.64 5.64 5.64 90 90 90' -> sites '4a 4b' -> defaults -> ml-rank? n -> output -> quit"
 rm -f menu_lattice.fdf
-printf '2.14\n\n\nn\n225\nNa 4\nCl 4\n\n5.64 5.64 5.64 90 90 90\n4a 4b\n\n\n\nn\nmenu_lattice.fdf\n\n0\n' | stb-suite > log_menu_lattice.txt 2>&1
+printf '2.12\n\n\nn\n225\nNa 4\nCl 4\n\n5.64 5.64 5.64 90 90 90\n4a 4b\n\n\n\nn\nmenu_lattice.fdf\n\n0\n' | stb-suite > log_menu_lattice.txt 2>&1
 check_exit_code $? 0
 check_contains "Fixed lattice:.*a=5.64" log_menu_lattice.txt
 check_contains "Na -> 4a" log_menu_lattice.txt
 check_success menu_lattice.fdf
 
-echo "Testing: navigate 1.17 -> analyze -> nio.fdf -> quit"
-printf '2.14\nanalyze\nnio.fdf\n\n0\n' | stb-suite > log_menu_analyze.txt 2>&1
+echo "Testing: navigate 2.12 -> analyze -> nio.fdf -> quit"
+printf '2.12\nanalyze\nnio.fdf\n\n0\n' | stb-suite > log_menu_analyze.txt 2>&1
 check_exit_code $? 0
 check_contains "--site Ni" log_menu_analyze.txt
 
-echo "Testing: navigate 1.17 -> substitute -> nio.fdf -> 'Ni:Co', blank to finish -> output -> quit"
-printf '2.14\nsubstitute\nnio.fdf\nNi:Co\n\nmenu_sub.fdf\n\n0\n' | stb-suite > log_menu_substitute.txt 2>&1
+echo "Testing: navigate 2.12 -> substitute -> nio.fdf -> 'Ni:Co', blank to finish -> output -> quit"
+printf '2.12\nsubstitute\nnio.fdf\nNi:Co\n\nmenu_sub.fdf\n\n0\n' | stb-suite > log_menu_substitute.txt 2>&1
 check_exit_code $? 0
 check_contains "Substituting:.*Ni -> Co" log_menu_substitute.txt
 check_success menu_sub.fdf
 
-echo "Testing: navigate 1.17 -> subgroup -> nacl_lattice.fdf -> auto target -> eps default -> count 2 -> output -> quit"
+echo "Testing: navigate 2.12 -> subgroup -> nacl_lattice.fdf -> auto target -> eps default -> count 2 -> output -> quit"
 rm -f menu_subgroup.fdf menu_subgroup_*.fdf
-printf '2.14\nsubgroup\nnacl_lattice.fdf\n\n\n2\nmenu_subgroup.fdf\n\n0\n' | stb-suite > log_menu_subgroup.txt 2>&1
+printf '2.12\nsubgroup\nnacl_lattice.fdf\n\n\n2\nmenu_subgroup.fdf\n\n0\n' | stb-suite > log_menu_subgroup.txt 2>&1
 check_exit_code $? 0
 check_contains "Subgroup candidates found:" log_menu_subgroup.txt
 check_success menu_subgroup_1.fdf
 
-echo "Testing: navigate 1.17 -> supergroup -> distorted_1.fdf -> target 225 -> d-tol default -> count 1 -> output -> quit (no candidates is still a clean exit from the menu wrapper)"
-printf '2.14\nsupergroup\ndistorted_1.fdf\n225\n\n1\nmenu_super.fdf\n\n0\n' | stb-suite > log_menu_supergroup.txt 2>&1
+echo "Testing: navigate 2.12 -> supergroup -> distorted_1.fdf -> target 225 -> d-tol default -> count 1 -> output -> quit (no candidates is still a clean exit from the menu wrapper)"
+printf '2.12\nsupergroup\ndistorted_1.fdf\n225\n\n1\nmenu_super.fdf\n\n0\n' | stb-suite > log_menu_supergroup.txt 2>&1
 check_exit_code $? 0
 check_contains "Target space group:.*225" log_menu_supergroup.txt
 

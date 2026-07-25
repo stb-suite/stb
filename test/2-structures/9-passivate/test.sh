@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-passivate (Surface Passivator, item 2.10)
+# Smoke test for stb-passivate (Surface Passivator, item 2.9)
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -51,7 +51,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Passivate (item 2.10) ---"
+echo "--- Starting tester for STB-Passivate (item 2.9) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/si111_slab.fdf" "$TEST_DIR/"
@@ -146,12 +146,12 @@ check_contains "cutoff" log_help.txt
 check_contains "bond-length" log_help.txt
 
 
-# --- 6. Interactive path (stb-suite, shortcut 1.13) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.13) ---"
+# --- 6. Interactive path (stb-suite, shortcut 2.9) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.9) ---"
 
-echo "Testing: navigate 1.13 -> invalid file then valid -> default passivant/cutoff/bond-length -> default output -> quit"
+echo "Testing: navigate 2.9 -> invalid file then valid -> default passivant/cutoff/bond-length -> default output -> quit"
 rm -f passivated.fdf
-printf '2.10\ndoes_not_exist.fdf\nsi111_slab.fdf\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '2.9\ndoes_not_exist.fdf\nsi111_slab.fdf\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Auto-passivated:.*8" log_menu.txt
 check_success passivated.fdf

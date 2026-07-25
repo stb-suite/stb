@@ -5,7 +5,7 @@
 #
 # Needs the optional 'ml' extra (pip install stb_suite[ml]). The whole file
 # is skipped with a clear message if `mace` isn't importable, same gating
-# pattern as test/2-structures/12-mlrelax/test.sh. si_bulk.fdf is the same
+# pattern as test/1-inputs/6-mlrelax/test.sh. si_bulk.fdf is the same
 # 64-atom Ge:Si substitutional-defect fixture used there (bulk, 3D
 # periodic -- suitable for NVE/NVT/NPT alike).
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

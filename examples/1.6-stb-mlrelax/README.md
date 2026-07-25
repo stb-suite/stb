@@ -247,7 +247,7 @@ entirely with your own fine-tuned model.
   its neighbor — deliberately malformed, to demonstrate structure
   validation actually catching a real problem.
 - `example_1.6.sh` — the guided walkthrough (**not** an automated test —
-  see `test/2-structures/12-mlrelax/test.sh` for that). Pauses between
+  see `test/1-inputs/6-mlrelax/test.sh` for that). Pauses between
   sections so you can read before moving on; safe to re-run.
 - `output/` — created by `example_1.6.sh` when you run it (git-ignored, not
   checked in). See below.

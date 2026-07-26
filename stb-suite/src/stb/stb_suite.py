@@ -6011,6 +6011,10 @@ def run_bands_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
     run_tool("stb-bands", args)
 
 def run_fatbands_analyzer() -> None:

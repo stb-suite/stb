@@ -6,15 +6,20 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "2.0.0"
 
 import argparse
 import os
 from datetime import datetime
 import matplotlib.pyplot as plt
-from stb.core.cli import color_text, show_intro
+from stb.core import citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.deps import require_sisl
 from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm
+
+REPORT_FILE = "stb_bands_report.txt"
+BIB_FILE = "references.bib"
+
 
 def plot_gnuplot(high_sym, nspin, output_dir="."):
 ######################### PDF Plot
@@ -145,163 +150,34 @@ def mesh_k_formatter(kpoints):
     return fmt
 
 # --- Report formatting -----------------------------------------------
-# Plain-text report, but laid out like a short write-up: a title block,
-# then one category per physically distinct source of data (line vs.
-# mesh), a comparison section only when both are available, and a
-# one-line summary at the end that states the headline result plainly.
+# Same numbered-section report style as the rest of the suite's newer
+# tools ([0] RUN METADATA ... [N] SUMMARY & FILES via print_section/
+# print_dual/print_table) -- replaces the old ad hoc plain-text layout.
+# The underlying numbers/physics are unchanged; only how they're printed.
 
-_WIDTH = 74
-_LABEL_W = 14
-
-def _rule(char="-"):
-    return char * _WIDTH
-
-def _kv(label, value, width=_LABEL_W):
-    return f"{label:<{width}}: {value}"
-
-def _extrema_lines(combined, k_format, indent=""):
+def extrema_rows(combined, k_format):
+    """Returns print_table rows for one (vbm, cbm, vbm_k, cbm_k,
+    indirect_gap, gap_type, direct_gap, direct_k) tuple from cbm_vbm()."""
     vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k = combined
     return [
-        indent + _kv("VBM", f"{vbm:.6f} eV  (k = {k_format(vbm_k)})"),
-        indent + _kv("CBM", f"{cbm:.6f} eV  (k = {k_format(cbm_k)})"),
-        indent + _kv("Indirect gap", f"{indirect_gap:.6f} eV  (fundamental: CBM - VBM, any k)"),
-        indent + _kv("Direct gap", f"{direct_gap:.6f} eV  (same-k minimum, k = {k_format(direct_k)})"),
-        indent + _kv("Gap type", gap_type),
+        (["VBM", f"{vbm:.6f} eV (k = {k_format(vbm_k)})"], None),
+        (["CBM", f"{cbm:.6f} eV (k = {k_format(cbm_k)})"], None),
+        (["Indirect gap", f"{indirect_gap:.6f} eV (fundamental: CBM - VBM, any k)"], None),
+        (["Direct gap", f"{direct_gap:.6f} eV (same-k minimum, k = {k_format(direct_k)})"], None),
+        (["Gap type", gap_type], 'yellow' if gap_type == "Metallic" else None),
     ]
 
-def _spin_block(result, k_format):
-    lines = []
+
+def print_spin_channels(result, k_format, f_out):
+    """Prints one extrema table per spin channel plus the half-metallic
+    flag -- shared by the line ([3]) and mesh ([4]) sections."""
     for s, spin_result in enumerate(result["spins"]):
         spin_name = "Spin up" if s == 0 else "Spin down"
-        lines.append(f"{spin_name}:")
-        lines.extend(_extrema_lines(spin_result, k_format, indent="  "))
-        lines.append("")
-    lines.append(_kv("Half-metallic", "Yes" if result["half_metallic"] else "No"))
-    return lines
-
-def write_analysis_report(fermi_energy, result, nspin, mesh_result=None, gap_tol=0.01,
-                           mesh_warnings=None, input_file=None, eig_file=None, kp_file=None,
-                           output_dir="."):
-    combined = result["combined"]
-    k_format = result["k_format"]
-    indirect_gap, gap_type = combined[4], combined[5]
-
-    lines = []
-    lines.append(_rule("="))
-    lines.append("BAND STRUCTURE ANALYSIS REPORT - STB Suite".center(_WIDTH))
-    lines.append(_rule("="))
-    lines.append("")
-    lines.append(_kv("Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), width=16))
-    lines.append(_kv("Fermi energy", f"{fermi_energy:.6f} eV", width=16))
-    lines.append(_kv("Spin channels", f"{nspin} ({'non-polarized' if nspin == 1 else 'polarized'})", width=16))
-    lines.append(_kv("Gap tolerance", f"{gap_tol:.6f} eV", width=16))
-
-    lines.append("")
-    lines.append(_rule())
-    lines.append("LINE (K-PATH) RESULTS")
-    lines.append(_rule())
-    if input_file:
-        lines.append(_kv("Source file", input_file))
-        lines.append("")
-    lines.extend(_extrema_lines(combined, k_format))
-    if nspin == 2:
-        lines.append("")
-        lines.extend(_spin_block(result, k_format))
-
-    lines.append("")
-    lines.append(_rule())
-    lines.append("MESH (K-GRID) RESULTS")
-    lines.append(_rule())
-    if mesh_result is None:
-        lines.append("Not available -- no k-mesh eigenvalues were given (--eig-file, or")
-        lines.append("<label>.EIG auto-detected next to --label). The indirect gap above")
-        lines.append("may be an overestimate if the true VBM/CBM lie off the high-symmetry path.")
-    else:
-        m_combined = mesh_result["combined"]
-        m_k_format = mesh_result["k_format"]
-        if eig_file:
-            lines.append(_kv("Source file", eig_file))
-        if kp_file:
-            lines.append(_kv("k-points file", kp_file))
-        else:
-            lines.append("k-points file : not given -- mesh k-points shown by mesh index only.")
-        lines.append("")
-        lines.extend(_extrema_lines(m_combined, m_k_format))
-        if mesh_result["spins"]:
-            lines.append("")
-            lines.extend(_spin_block(mesh_result, m_k_format))
-
-    if mesh_result is not None:
-        m_indirect, m_gap_type = mesh_result["combined"][4], mesh_result["combined"][5]
-        diff = m_indirect - indirect_gap
-        lines.append("")
-        lines.append(_rule())
-        lines.append("MESH vs LINE COMPARISON")
-        lines.append(_rule())
-        for w in (mesh_warnings or []):
-            lines.append(f"[WARNING] {w}")
-        lines.append(_kv("Indirect gap diff", f"{diff:.6f} eV  (mesh - line)", width=20))
-        if abs(diff) < gap_tol:
-            lines.append("Line and mesh indirect gaps agree within tolerance.")
-        elif diff < 0:
-            lines.append("[WARNING] Mesh gap is smaller than the line gap: the true VBM/CBM "
-                          "likely lie off the high-symmetry path. Trust the mesh value for the "
-                          "fundamental gap.")
-        else:
-            lines.append("[WARNING] Mesh gap is larger than the line gap: the k-mesh may be too "
-                          "coarse to capture the extrema found on the path. Consider a denser "
-                          "--eig-file mesh.")
-
-    lines.append("")
-    lines.append(_rule())
-    lines.append("SUMMARY")
-    lines.append(_rule())
-    if mesh_result is not None:
-        best_indirect, best_type = mesh_result["combined"][4], mesh_result["combined"][5]
-        best_source = "the k-mesh (denser sampling than the path)"
-        half_metallic = mesh_result["half_metallic"] if nspin == 2 else False
-    else:
-        best_indirect, best_type = indirect_gap, gap_type
-        best_source = "the k-path (no k-mesh was provided)"
-        half_metallic = result["half_metallic"] if nspin == 2 else False
-    lines.append(f"Best fundamental (indirect) gap estimate: {best_indirect:.6f} eV ({best_type}), from {best_source}.")
-    if nspin == 2 and half_metallic:
-        lines.append("Half-metallic character detected (one spin channel metallic, the other has a gap).")
-    lines.append(_rule("="))
-
-    content = "\n".join(lines) + "\n"
-    with open(os.path.join(output_dir, "bands_analysis.txt"), "w") as f:
-        f.write(content)
-    return content
-
-def plot(dic, custom_ticks, nspin):
-    # Organize the data
-    x_values = sorted(dic.keys())
-    nbands = next(iter(dic.values())).shape[1]
-    # Organize the high symmetries points
-    tick_positions = [float(t[0]) for t in custom_ticks]
-    tick_labels = ["Γ" if _is_gamma(t[1]) else t[1] for t in custom_ticks]
-    # plot: spin channels overlaid in a single panel (up: solid blue,
-    # down: dashed red), one legend entry per channel rather than per band.
-    spin_styles = [("blue", "-", "Spin Up"), ("red", "--", "Spin Down")]
-    plt.figure(figsize=(8, 6))
-    plt.xticks(tick_positions, tick_labels)
-    for s in range(nspin):
-        color, linestyle, label = spin_styles[s]
-        for i in range(nbands):
-            y_vals = [dic[x][s][i] for x in x_values]
-            plt.plot(x_values, y_vals, color=color, linestyle=linestyle,
-                     label=label if (nspin == 2 and i == 0) else None)
-    # vertical lines in High Symmetries
-    for pos in tick_positions:
-        plt.axvline(x=pos, color='gray', linestyle='--', linewidth=1)
-    # plot limits
-    plt.ylim(-20, 20)
-    plt.ylabel("Energy")
-    plt.grid(True)
-    if nspin == 2:
-        plt.legend()
-    plt.show()
+        print_dual(f"{spin_name}:", f_out)
+        print_table(["Quantity", "Value"], extrema_rows(spin_result, k_format), f_out)
+    half_metallic = result["half_metallic"]
+    line = f"Half-metallic : {'Yes' if half_metallic else 'No'}"
+    print_dual(color_text(line, 'green') if half_metallic else line, f_out)
 
 
 def main():
@@ -312,7 +188,8 @@ def main():
                "  stb_bands --file siesta.bands --shift fermi\n"
                "  stb_bands --file siesta.bands --shift manual --manual-value 0.5\n"
                "  stb_bands --file siesta.bands --shift fermi --gap-tol 0.05\n"
-               "  stb_bands --file siesta.bands --shift fermi --eig-file siesta.EIG",
+               "  stb_bands --file siesta.bands --shift fermi --eig-file siesta.EIG\n"
+               "  stb_bands --file siesta.bands --shift fermi --save-report",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -354,9 +231,12 @@ def main():
                              "reported as (kx, ky, kz) instead of a bare mesh index. Requires --eig-file.")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write bands_analysis.txt, bands_gnuplot.dat, and "
-                             "bands.gplot into (default: current directory). Created if it "
-                             "doesn't exist.")
+                        help="Directory to write bands_gnuplot.dat and bands.gplot into "
+                             "(and stb_bands_report.txt/references.bib, with --save-report) "
+                             "(default: current directory). Created if it doesn't exist.")
+
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
 
@@ -375,42 +255,83 @@ def main():
             parser.error("--label cannot be combined with --file/--eig-file/--kp-file.")
         args.input_file = f"{args.label}.bands"
         eig_candidate = f"{args.label}.EIG"
+        eig_auto_note = None
         if os.path.isfile(eig_candidate):
             args.eig_file = eig_candidate
             kp_candidate = f"{args.label}.KP"
             if os.path.isfile(kp_candidate):
                 args.kp_file = kp_candidate
             else:
-                print(f"[INFO] No '{kp_candidate}' found next to the label; "
-                      "mesh VBM/CBM/direct-gap k-points will be reported by mesh index only.")
+                eig_auto_note = (f"No '{kp_candidate}' found next to the label; mesh "
+                                  "VBM/CBM/direct-gap k-points will be reported by mesh index only.")
         else:
-            print(f"[INFO] No '{eig_candidate}' found next to the label; "
-                  "mesh (k-grid) gap comparison will be skipped.")
-    elif not args.input_file:
-        parser.error("one of --label or --file is required.")
-    elif args.kp_file and not args.eig_file:
-        parser.error("--kp-file requires --eig-file.")
+            eig_auto_note = f"No '{eig_candidate}' found next to the label; mesh (k-grid) gap comparison will be skipped."
+    else:
+        eig_auto_note = None
+        if not args.input_file:
+            parser.error("one of --label or --file is required.")
+        elif args.kp_file and not args.eig_file:
+            parser.error("--kp-file requires --eig-file.")
 
     if args.intro == True:
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("BANDS:", 'bold'))
-    print("-"*60)
+    shift_desc = args.shift if args.shift != "manual" else f"manual ({args.manual_value} eV)"
 
-    # Condition to shift the band structure
-    print("[INFO] Reading band structure data ...")
-    fermi_energy,high_sym,dic_bands,nspin=read_data(args.input_file)
+    # Read (and validate) the input data BEFORE creating --output-dir or
+    # opening the report file, so a bad input file doesn't leave an empty
+    # directory/empty report behind (same fix as dos.py's -o). Everything
+    # printed below -- including [0] RUN METADATA -- only happens once
+    # this has already succeeded.
+    fermi_energy, high_sym, dic_bands, nspin = read_data(args.input_file)
     result = cbm_vbm(fermi_energy, dic_bands, nspin, args.gap_tol)
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_dual(color_text("===== STB-BANDS REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Input file     : {args.input_file}", f_out)
+    print_dual(f"Shift mode     : {shift_desc}", f_out)
+    print_dual(f"Gap tolerance  : {args.gap_tol} eV", f_out)
+    if args.eig_file:
+        print_dual(f"Mesh file      : {args.eig_file}" + (f" (k-points: {args.kp_file})" if args.kp_file else " (no --kp-file: mesh index only)"), f_out)
+    elif eig_auto_note:
+        print_dual(color_text(f"[INFO] {eig_auto_note}", 'yellow'), f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+
+    nk = len(dic_bands)
+    nbands = next(iter(dic_bands.values())).shape[1]
+
+    print_section("[1] INPUT DATA", f_out)
+    print_dual(f"Fermi energy   : {fermi_energy:.6f} eV", f_out)
+    print_dual(f"Spin channels  : {nspin} ({'non-polarized' if nspin == 1 else 'polarized'})", f_out)
+    print_dual(f"Bands x k-points: {nbands} x {nk}", f_out)
+    print_table(["k", "Label"], [([f"{float(k):.6f}", label], None) for k, label in high_sym], f_out)
+
+    print_section("[2] BAND GAP ANALYSIS (k-path)", f_out)
+    print_table(["Quantity", "Value"], extrema_rows(result["combined"], result["k_format"]), f_out)
+
+    if nspin == 2:
+        print_section("[3] SPIN-POLARIZED ANALYSIS (k-path)", f_out)
+        print_spin_channels(result, result["k_format"], f_out)
 
     mesh_result = None
     mesh_warnings = []
-    if args.eig_file:
-        print("[INFO] Reading k-mesh eigenvalues (--eig-file) ...")
+    print_section("[4] MESH VS LINE COMPARISON", f_out)
+    if not args.eig_file:
+        print_dual("Not available -- no k-mesh eigenvalues were given (--eig-file, or "
+                   "<label>.EIG auto-detected next to --label). The indirect gap above "
+                   "may be an overestimate if the true VBM/CBM lie off the high-symmetry path.", f_out)
+    else:
         fermi_mesh, dic_mesh, nspin_mesh, mesh_kpoints = read_eig_mesh(args.eig_file, args.kp_file)
         if abs(fermi_mesh - fermi_energy) > 1e-3:
             mesh_warnings.append(
@@ -422,19 +343,31 @@ def main():
                 f"nspin mismatch between --file (nspin={nspin}) and --eig-file "
                 f"(nspin={nspin_mesh}); mesh comparison uses combined values only."
             )
+        for w in mesh_warnings:
+            print_dual(color_text(f"[WARNING] {w}", 'yellow'), f_out)
         mesh_result = cbm_vbm(fermi_mesh, dic_mesh, nspin_mesh, args.gap_tol,
                                k_format=mesh_k_formatter(mesh_kpoints))
+        print_dual(f"Mesh k-points  : {len(dic_mesh)}"
+                   + ("" if args.kp_file else " (no --kp-file: mesh index only)"), f_out)
+        print_table(["Quantity", "Value"], extrema_rows(mesh_result["combined"], mesh_result["k_format"]), f_out)
+        if mesh_result["spins"]:
+            print_spin_channels(mesh_result, mesh_result["k_format"], f_out)
 
-    # Only create --output-dir once there's valid data to write, so a bad
-    # input file doesn't leave an empty directory behind (same fix as
-    # dos.py's -o).
-    os.makedirs(args.output_dir, exist_ok=True)
+        m_indirect = mesh_result["combined"][4]
+        line_indirect = result["combined"][4]
+        diff = m_indirect - line_indirect
+        print_dual(f"Indirect gap diff (mesh - line): {diff:.6f} eV", f_out)
+        if abs(diff) < args.gap_tol:
+            print_dual(color_text("[OK] Line and mesh indirect gaps agree within tolerance.", 'green'), f_out)
+        elif diff < 0:
+            print_dual(color_text(
+                "[NOTE] Mesh gap is smaller than the line gap: the true VBM/CBM likely lie "
+                "off the high-symmetry path. Trust the mesh value for the fundamental gap.", 'yellow'), f_out)
+        else:
+            print_dual(color_text(
+                "[WARNING] Mesh gap is larger than the line gap: the k-mesh may be too coarse "
+                "to capture the extrema found on the path. Consider a denser --eig-file mesh.", 'yellow'), f_out)
 
-    report = write_analysis_report(fermi_energy, result, nspin, mesh_result, args.gap_tol, mesh_warnings,
-                                    input_file=args.input_file, eig_file=args.eig_file, kp_file=args.kp_file,
-                                    output_dir=args.output_dir)
-    print("\n" + report)
-    print(f"[INFO] Full report saved to {os.path.join(args.output_dir, 'bands_analysis.txt')}")
     vbm, cbm, vbm_k, cbm_k, indirect_gap, gap_type, direct_gap, direct_k = result["combined"]
 
     if args.shift == "vbm":
@@ -445,17 +378,82 @@ def main():
         rshift = fermi_energy
     elif args.shift == "manual":
         rshift = args.manual_value
-    print("[INFO] Write files...")
-    print("[WARNING] \n")
 
     shifted_bands = shift_bands(dic_bands, rshift)
     write_gnuplot_bands(shifted_bands, nspin, args.output_dir)
-    plot(shifted_bands, high_sym, nspin)
     plot_gnuplot(high_sym, nspin, args.output_dir)
 
-    print("\n[INFO] Complete job!") 
-    print("\n"+"-"*60)
-    print(color_text("Bands found! But still no sign of Metallica.\n\n", 'bold'))
+    print_section("[5] WRITING OUTPUT FILES", f_out)
+    print_dual(color_text(
+        f"[OK] Gnuplot data written to '{os.path.join(args.output_dir, 'bands_gnuplot.dat')}' "
+        f"and '{os.path.join(args.output_dir, 'bands.gplot')}' (run gnuplot on the latter for a PDF plot).",
+        'green'), f_out)
+
+    print_section("[6] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+
+    if mesh_result is not None:
+        best_indirect, best_type = mesh_result["combined"][4], mesh_result["combined"][5]
+        best_source = "the k-mesh (denser sampling than the path)"
+        half_metallic = mesh_result["half_metallic"] if nspin == 2 else False
+    else:
+        best_indirect, best_type = indirect_gap, gap_type
+        best_source = "the k-path (no k-mesh was provided)"
+        half_metallic = result["half_metallic"] if nspin == 2 else False
+
+    print_section("[7] SUMMARY & FILES", f_out)
+    print_dual(f"Status         : OK", f_out)
+    print_dual(f"Best fundamental (indirect) gap: {best_indirect:.6f} eV ({best_type}), from {best_source}.", f_out)
+    if nspin == 2 and half_metallic:
+        print_dual(color_text(
+            "Half-metallic character detected (one spin channel metallic, the other has a gap).",
+            'green'), f_out)
+    print_dual(f"Gnuplot data   : {os.path.join(args.output_dir, 'bands_gnuplot.dat')}", f_out)
+    print_dual(f"Gnuplot script : {os.path.join(args.output_dir, 'bands.gplot')}", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # Interactive matplotlib preview runs last, after every report/file
+    # write above, so a blocking GUI window never delays or hides them.
+    plot(shifted_bands, high_sym, nspin)
+
+def plot(dic, custom_ticks, nspin):
+    # Organize the data
+    x_values = sorted(dic.keys())
+    nbands = next(iter(dic.values())).shape[1]
+    # Organize the high symmetries points
+    tick_positions = [float(t[0]) for t in custom_ticks]
+    tick_labels = ["Γ" if _is_gamma(t[1]) else t[1] for t in custom_ticks]
+    # plot: spin channels overlaid in a single panel (up: solid blue,
+    # down: dashed red), one legend entry per channel rather than per band.
+    spin_styles = [("blue", "-", "Spin Up"), ("red", "--", "Spin Down")]
+    plt.figure(figsize=(8, 6))
+    plt.xticks(tick_positions, tick_labels)
+    for s in range(nspin):
+        color, linestyle, label = spin_styles[s]
+        for i in range(nbands):
+            y_vals = [dic[x][s][i] for x in x_values]
+            plt.plot(x_values, y_vals, color=color, linestyle=linestyle,
+                     label=label if (nspin == 2 and i == 0) else None)
+    # vertical lines in High Symmetries
+    for pos in tick_positions:
+        plt.axvline(x=pos, color='gray', linestyle='--', linewidth=1)
+    # plot limits
+    plt.ylim(-20, 20)
+    plt.ylabel("Energy")
+    plt.grid(True)
+    if nspin == 2:
+        plt.legend()
+    plt.show()
+
 
 if __name__ == "__main__":
     main()

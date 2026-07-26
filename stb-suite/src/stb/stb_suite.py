@@ -5786,11 +5786,29 @@ def run_dos_parser() -> None:
             print(color_text("Input contains invalid types. Using default.", 'yellow'))
             dos_types = ['total', 'atom', 'species']
 
-    shift = get_input(
-        "\nEnergy shift ('fermi', 'vbm', 'cbm', '0.0', or a number, default: fermi): "
-    )
-    if not shift.strip():
-        shift = 'fermi'
+    shift_options = {
+        '1': ('fermi', "Fermi level"),
+        '2': ('vbm', "Valence Band Maximum"),
+        '3': ('cbm', "Conduction Band Minimum"),
+        '4': ('manual', "Custom value"),
+    }
+
+    print(f"\n{color_text('Energy shift reference:', 'yellow')}")
+    for key, (_, desc) in shift_options.items():
+        print(f"  {color_text(key, 'yellow')}. {desc}" + (" [Default]" if key == '1' else ""))
+
+    choice = get_input("\nSelect reference (1-4) [default: 1]: ").strip()
+    if not choice:
+        choice = '1'
+    while choice not in shift_options:
+        print(color_text("Invalid choice! Please select 1-4.", 'red'))
+        choice = get_input("Select reference (1-4) [default: 1]: ").strip() or '1'
+
+    shift_key, _ = shift_options[choice]
+    if shift_key == 'manual':
+        shift = str(get_float_input("Enter custom shift value (eV): "))
+    else:
+        shift = shift_key
 
     estimate_from_dos = False
     if shift.strip().lower() in ('vbm', 'cbm'):
@@ -5828,7 +5846,11 @@ def run_dos_parser() -> None:
 
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     save_gnuplot = get_input(
-        "Also save a gnuplot (.gplot) script for each output file? (y/N): "
+        "Also save a gnuplot (.gplot) script for each output category "
+        "(total/atom/species)? (y/N): "
+    ).strip().lower()
+    view_plot = get_input(
+        "Show an interactive matplotlib preview of the DOS before exiting? (y/N): "
     ).strip().lower()
 
     args = [
@@ -5846,6 +5868,8 @@ def run_dos_parser() -> None:
         args.append("--save-report")
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
+    if view_plot == 'y':
+        args.append("--view")
     args.append("--no-intro")
 
     run_tool("stb-dos", args)

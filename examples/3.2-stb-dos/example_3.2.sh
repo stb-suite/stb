@@ -184,9 +184,10 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
 --save-report additionally persists it to stb_dos_report.txt, and
---save-gnuplot writes a .gplot script next to every .dat file generated
--- both off by default, so a plain run only ever writes the .dat files
-and references.bib:
+--save-gnuplot writes ONE .gplot script per output category (total,
+atom, species) -- one overlay plot per category instead of one file per
+individual atom/species -- both off by default, so a plain run only ever
+writes the .dat files and references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp example.PDOS.xml "$OUT/full-report/"
@@ -202,7 +203,8 @@ echo "\$ stb-dos example.PDOS.xml --shift fermi --save-report --save-gnuplot --n
 echo "Report sections written to stb_dos_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_dos_report.txt"
 echo
-echo "Gnuplot scripts, one per .dat file, all sharing the same generic template:"
+echo "Gnuplot scripts, one per output category (dos_total.gplot uses columnheader() per"
+echo "orbital column; dos_per_atom/species.gplot overlay one summed curve per atom/species):"
 find "$OUT/full-report" -name "*.gplot" | sed "s#$OUT/##" | sort
 echo
 echo "references.bib -- SIESTA (every stb-dos run is post-processing a SIESTA output):"
@@ -225,8 +227,8 @@ EOF
 TMP="$(mktemp -d)"
 cp example.PDOS.xml example.bands example.EIG "$TMP/"
 echo
-echo "\$ printf '3.2\\nexample\\n\\nvbm\\n\\n\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift vbm"
-(cd "$TMP" && printf '3.2\nexample\n\nvbm\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '3.2\\nexample\\n\\n2\\n\\n\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift menu choice 2 = VBM"
+(cd "$TMP" && printf '3.2\nexample\n\n2\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Using VBM shift" "$OUT/vbm-hierarchy/console_bands.log")
 MENU_LINE=$(grep "Using VBM shift" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -254,12 +256,14 @@ Recap of what this walkthrough covered:
   - why the DOS-estimate fallback needs an explicit --estimate-from-dos
     opt-in, and prints an explicit approximation warning
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
-  - the numbered [0]...[5] report, --save-report, --save-gnuplot
-    (a generic columnheader-based .gplot template), and references.bib
+  - the numbered [0]...[5] report, --save-report, --save-gnuplot (one
+    .gplot per output category: total/atom/species), and references.bib
   - CLI and the interactive stb-suite menu building the same command
+    (--view is offered in the menu too, as its own y/N prompt)
 
 Not exercised by this script (needs a display): the interactive
-matplotlib preview (--view) -- try it yourself without MPLBACKEND=Agg:
+matplotlib preview (--view, one figure per category) -- try it yourself
+without MPLBACKEND=Agg:
   stb-dos example.PDOS.xml --shift fermi --view
 
 As a next step, try on your own with a real SIESTA calculation:

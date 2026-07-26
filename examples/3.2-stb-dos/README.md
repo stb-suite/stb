@@ -104,20 +104,30 @@ newer tool in this suite uses:
 `stb_dos_report.txt` — off by default, so a plain run only ever writes the
 `.dat` files and `references.bib`, no text report file.
 
-`--save-gnuplot` writes a `.gplot` script next to **every** `.dat` file
-the run generates (`dos_total.dat`, each `dos_per_atom/*.dat`, each
-`dos_per_species/*.dat`) — off by default. The script is generic: it uses
-gnuplot's own `columnheader(i)` to read column names straight from the
-`.dat` file's own `#Energy(eV)  s  p  ...` header line and plots every
-non-energy column, so the exact same template works regardless of how
-many orbital/spin columns a given file happens to have. Run `gnuplot
-<name>.gplot` for a PDF.
+`--save-gnuplot` writes one `.gplot` script **per output category** — off
+by default:
 
-`--view` opens an interactive matplotlib preview of the total DOS (one
-curve per orbital/spin column) right before the tool exits — off by
-default, and always the very last thing a run does, after every report
-line and file has already been written, so a blocking preview window
-never delays or hides them.
+- `dos_total.gplot` (next to `dos_total.dat`) — plots every orbital/spin
+  column of the total DOS, using gnuplot's own `columnheader(i)` to read
+  column names straight from the `.dat` file's own
+  `#Energy(eV)  s  p  ...` header line. Since there's only ever one
+  `total` file, this is the most useful single-file view.
+- `dos_per_atom/dos_per_atom.gplot` — ONE script overlaying every atom's
+  own total DOS (that atom's orbital/spin columns collapsed into a
+  single curve via gnuplot's `sum [i=2:N] column(i)`), so atoms can be
+  compared against each other in one plot instead of opening one file
+  per atom.
+- `dos_per_species/dos_per_species.gplot` — the same idea, one curve per
+  chemical species.
+
+Run `gnuplot <name>.gplot` (from inside the same folder as the script)
+for a PDF.
+
+`--view` opens an interactive matplotlib preview right before the tool
+exits — off by default, one figure per output category actually written
+(`total`/`atom`/`species`, mirroring `--save-gnuplot`'s own grouping),
+shown together only after every report line and file has already been
+written, so a blocking preview window never delays or hides them.
 
 ## When you'd reach for it
 
@@ -198,8 +208,8 @@ stb-dos --label my_calc --shift cbm --estimate-from-dos
 | `--projection`          | Orbital detail: `l` (s/p/d/f, default) or `ml` (individual m sub-orbitals). |
 | `-o/--output-dir`       | Where to write the output files (default: current directory).            |
 | `--save-report`         | Persist the full numbered report to `stb_dos_report.txt`. Off by default. |
-| `--save-gnuplot`        | Write a `.gplot` script next to every `.dat` file generated. Off by default. |
-| `--view`                | Show an interactive matplotlib preview of the total DOS. Off by default. |
+| `--save-gnuplot`        | Write one `.gplot` script per output category (total/atom/species). Off by default. |
+| `--view`                | Show an interactive matplotlib preview, one figure per output category. Off by default. |
 
 ## What's next
 

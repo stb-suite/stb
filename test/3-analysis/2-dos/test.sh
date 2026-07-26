@@ -281,21 +281,36 @@ check_contains "\[4\] REFERENCES" stb_dos_report.txt
 check_contains "\[5\] SUMMARY & FILES" stb_dos_report.txt
 check_success references.bib
 
-echo "Testing: --save-gnuplot writes a .gplot next to every generated .dat"
+echo "Testing: --save-gnuplot writes one .gplot for 'total' (per-orbital) and one per category (one curve per atom/species)"
 rm -rf dos_total.dat dos_per_atom dos_per_species
 stb-dos siesta.PDOS.xml --shift fermi --save-gnuplot --no-intro > log_save_gnuplot.txt 2>&1
 check_exit_code $? 0
 check_success dos_total.gplot
-check_success dos_per_atom/Sn_1.gplot
-check_success dos_per_species/dos_Sn.gplot
+check_success dos_per_atom/dos_per_atom.gplot
+check_success dos_per_species/dos_per_species.gplot
+if [ -e dos_per_atom/Sn_1.gplot ] || [ -e dos_per_species/dos_Sn.gplot ]; then
+    echo -e "   -> ${RED}Failed:${NC} a per-file .gplot was written inside dos_per_atom/dos_per_species (should be one per category, not one per file)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no per-file .gplot inside dos_per_atom/dos_per_species, only the one per-category script"
+    PASS=$((PASS+1))
+fi
 check_contains 'plot for \[i=2:' dos_total.gplot
 check_contains 'columnheader(i)' dos_total.gplot
+check_contains 'sum \[i=2:' dos_per_atom/dos_per_atom.gplot
+check_contains 'sum \[i=2:' dos_per_species/dos_per_species.gplot
+check_contains 'Sn_1' dos_per_atom/dos_per_atom.gplot
+check_contains 'Sn' dos_per_species/dos_per_species.gplot
 if command -v gnuplot > /dev/null 2>&1; then
-    echo "Testing: the saved .gplot actually renders with a real gnuplot"
+    echo "Testing: the saved .gplot files actually render with a real gnuplot"
     (gnuplot dos_total.gplot > /dev/null 2>&1)
     check_success dos_total.pdf
+    (cd dos_per_atom && gnuplot dos_per_atom.gplot > /dev/null 2>&1)
+    check_success dos_per_atom/dos_per_atom.pdf
+    (cd dos_per_species && gnuplot dos_per_species.gplot > /dev/null 2>&1)
+    check_success dos_per_species/dos_per_species.pdf
 else
-    echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed, cannot render dos_total.gplot"
+    echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed, cannot render the .gplot files"
 fi
 
 echo "Testing: --view (matplotlib preview) runs to completion under MPLBACKEND=Agg"
@@ -336,36 +351,53 @@ check_contains "stb-dos" log_version.txt
 # --- 10. Interactive path (stb-suite, shortcut 2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.2) ---"
 
-echo "Testing: navigate 2.2 -> siesta.PDOS.xml -> defaults (incl. new save-report/save-gnuplot prompts)"
+echo "Testing: navigate 2.2 -> siesta.PDOS.xml -> defaults (incl. save-report/save-gnuplot/view prompts)"
 rm -rf dos_total.dat dos_per_atom dos_per_species
-printf '3.2\nsiesta.PDOS.xml\n\n\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n\n\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_total.dat
 
 echo "Testing: interactive path surfaces a tool failure (malformed XML -> non-zero exit -> run_tool reports it)"
-printf '3.2\nmalformed.PDOS.xml\n\n\n\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
+printf '3.2\nmalformed.PDOS.xml\n\n\n\n\n\n\n\n' | stb-suite > log_menu_fail.txt 2>&1
 check_contains "Error running stb-dos" log_menu_fail.txt
 
 echo "Testing: interactive path forwards a custom output directory"
 rm -rf menu_out
-printf '3.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n\n\n' | stb-suite > log_menu_outdir.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n\n\n\n' | stb-suite > log_menu_outdir.txt 2>&1
 check_success menu_out/dos_total.dat
 
-echo "Testing: interactive path answering y/y saves a report and gnuplot scripts"
+echo "Testing: interactive path answering y/y/n saves a report and per-category gnuplot scripts, skips --view"
 rm -rf dos_total.dat dos_per_atom dos_per_species stb_dos_report.txt
-printf '3.2\nsiesta.PDOS.xml\n\n\n\n\ny\ny\n' | stb-suite > log_menu_saveflags.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n\n\n\ny\ny\nn\n' | stb-suite > log_menu_saveflags.txt 2>&1
 check_success stb_dos_report.txt
 check_success dos_total.gplot
 
-echo "Testing: interactive path with just a label, --shift vbm resolved via .bands"
+echo "Testing: interactive path, numbered shift menu choice '4' (custom value)"
 rm -rf dos_total.dat dos_per_atom dos_per_species dos_total.gplot stb_dos_report.txt
-printf '3.2\nsiesta\n\nvbm\n\n\n\n\n\n0\n' | stb-suite > log_menu_vbm.txt 2>&1
+printf '3.2\nsiesta.PDOS.xml\n\n4\n-1.5\n\n\n\n\n\n' | stb-suite > log_menu_manual.txt 2>&1
+check_contains "Using manual energy shift: -1.5 eV" log_menu_manual.txt
+
+echo "Testing: interactive path, invalid shift menu choice is rejected and re-prompted"
+rm -rf dos_total.dat dos_per_atom dos_per_species dos_total.gplot stb_dos_report.txt
+printf '3.2\nsiesta.PDOS.xml\n\n9\n2\n\n\n\n\n\n' | stb-suite > log_menu_invalid_choice.txt 2>&1
+check_contains "Invalid choice! Please select 1-4." log_menu_invalid_choice.txt
+check_contains "Using VBM shift from './siesta.bands' (k-path .bands): -4.471500 eV" log_menu_invalid_choice.txt
+
+echo "Testing: interactive path answering y to the --view prompt runs to completion (MPLBACKEND=Agg)"
+rm -rf dos_total.dat dos_per_atom dos_per_species dos_total.gplot stb_dos_report.txt
+printf '3.2\nsiesta.PDOS.xml\n\n\n\n\n\n\ny\n' | stb-suite > log_menu_view.txt 2>&1
+check_success dos_total.dat
+check_not_contains "Error running stb-dos" log_menu_view.txt
+
+echo "Testing: interactive path with just a label, numbered shift menu choice '2' (VBM) resolved via .bands"
+rm -rf dos_total.dat dos_per_atom dos_per_species dos_total.gplot stb_dos_report.txt
+printf '3.2\nsiesta\n\n2\n\n\n\n\n\n\n0\n' | stb-suite > log_menu_vbm.txt 2>&1
 check_contains "Will use 'siesta.bands' to compute VBM" log_menu_vbm.txt
 check_contains "Using VBM shift from './siesta.bands' (k-path .bands): -4.471500 eV" log_menu_vbm.txt
 
-echo "Testing: interactive path, --shift vbm with no .bands/.EIG -> falls back to fermi with a warning"
+echo "Testing: interactive path, numbered shift choice '2' (VBM) with no .bands/.EIG -> falls back to fermi with a warning"
 mv siesta.bands siesta.bands.bak
 mv siesta.EIG siesta.EIG.bak
-printf '3.2\nsiesta\n\nvbm\nn\n\n\n\n\n0\n' | stb-suite > log_menu_vbm_none.txt 2>&1
+printf '3.2\nsiesta\n\n2\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu_vbm_none.txt 2>&1
 check_contains "No '.bands'/'.EIG' found. Estimate VBM/CBM from the DOS itself instead?" log_menu_vbm_none.txt
 check_contains "Falling back to --shift fermi" log_menu_vbm_none.txt
 mv siesta.bands.bak siesta.bands

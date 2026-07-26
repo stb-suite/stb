@@ -1,0 +1,25 @@
+================================================================================
+NON-EQUIVALENT SITES / BSSE REFERENCE REPORT
+================================================================================
+Structure file                             : structure.fdf
+Symmetry tolerance (--symprec)              : 0.001
+BSSE ghost-neighbor cutoff (--bsse-cutoff)  : 4.0 Ang
+BSSE convergence check (--bsse-convergence-check): ON (check cutoff 6.0 Ang)
+Multi-site BSSE (--bsse-multi-site)         : ON
+
+Space group(s) detected (per species, same structure -- should agree):
+  C: P-62m (No. 189)
+
+--------------------------------------------------------------------------------
+Species   Wyckoff   Mult.   Fractional coordinates          Used   Ghost nb.
+--------------------------------------------------------------------------------
+C         k         6       0.776380  0.288110  0.500000    yes    16
+C         b         1       0.000000  0.000000  0.500000    yes    15
+C         g         3       0.000000  0.251800  0.500000    yes    19
+--------------------------------------------------------------------------------
+
+BSSE reference directories:
+  C, site k (x6): atoms_bsse/C/site_k_x6/  (check: atoms_bsse_check/C/site_k_x6/)
+  C, site b (x1): atoms_bsse/C/site_b_x1/  (check: atoms_bsse_check/C/site_b_x1/)
+  C, site g (x3): atoms_bsse/C/site_g_x3/  (check: atoms_bsse_check/C/site_g_x3/)
+

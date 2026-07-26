@@ -438,11 +438,12 @@ def write_total_dos(output_dir, energies_shifted, columns):
 
 
 def write_per_atom_dos(output_dir, energies_shifted, parsed, columns):
-    """Writes one .dat per atom, and also returns `totals` -- an ordered
-    {label: 1D array} of each atom's OWN total DOS (summed across every
-    orbital/spin column of that atom alone) -- used by the 'atom' category
-    view/gnuplot below to overlay one curve per atom for comparison,
-    instead of the full per-orbital breakdown each individual .dat has."""
+    """Writes one .dat per atom, and also returns `curves` -- an ordered
+    {label: {col_name: 1D array}} of each atom's OWN per-orbital/spin
+    breakdown (the exact same columns its own .dat has, e.g. 's', 'p',
+    'd' -- NOT summed together) -- used by the 'atom' category view/
+    gnuplot below to overlay every atom's every orbital as its own curve,
+    so e.g. a 3-orbital atom contributes 3 separate lines, not 1."""
     output_dir_atoms = os.path.join(output_dir, "dos_per_atom")
     os.makedirs(output_dir_atoms, exist_ok=True)
     atom_data = parsed['atom_data']
@@ -451,7 +452,7 @@ def write_per_atom_dos(output_dir, energies_shifted, parsed, columns):
     spin_suffixes = parsed['spin_suffixes']
 
     paths = []
-    totals = {}
+    curves = {}
     for atom_index in sorted(atom_data.keys()):
         species = atom_data[atom_index]['species']
         atom_dos_data = {}
@@ -463,16 +464,16 @@ def write_per_atom_dos(output_dir, energies_shifted, parsed, columns):
         path = os.path.join(output_dir_atoms, f"{label}.dat")
         _save_dat(path, energies_shifted, atom_dos_data, columns['all_df_columns'], columns['header_str'])
         paths.append(path)
-        totals[label] = np.sum(list(atom_dos_data.values()), axis=0)
-    return paths, totals
+        curves[label] = atom_dos_data
+    return paths, curves
 
 
 def write_per_species_dos(output_dir, energies_shifted, parsed, columns):
-    """Writes one .dat per species, and also returns `totals` -- an
-    ordered {label: 1D array} of each species' OWN total DOS (summed
-    across every orbital/spin column) -- same purpose as
-    write_per_atom_dos's own `totals`, one level up (per species instead
-    of per atom)."""
+    """Writes one .dat per species, and also returns `curves` -- an
+    ordered {label: {col_name: 1D array}} of each species' OWN
+    per-orbital/spin breakdown (summed over its atoms, but NOT over
+    orbitals) -- same purpose as write_per_atom_dos's own `curves`, one
+    level up (per species instead of per atom)."""
     output_dir_species = os.path.join(output_dir, "dos_per_species")
     os.makedirs(output_dir_species, exist_ok=True)
     atom_data = parsed['atom_data']
@@ -492,13 +493,13 @@ def write_per_species_dos(output_dir, energies_shifted, parsed, columns):
                     species_dos[species][f"{col}{suf}"] += arr[:, s]
 
     paths = []
-    totals = {}
+    curves = {}
     for species_name in species_dos:
         path = os.path.join(output_dir_species, f"dos_{species_name}.dat")
         _save_dat(path, energies_shifted, species_dos[species_name], columns['all_df_columns'], columns['header_str'])
         paths.append(path)
-        totals[species_name] = np.sum(list(species_dos[species_name].values()), axis=0)
-    return paths, totals
+        curves[species_name] = species_dos[species_name]
+    return paths, curves
 
 
 def write_dos_gnuplot(dat_path, all_df_columns):
@@ -529,21 +530,23 @@ def write_dos_gnuplot(dat_path, all_df_columns):
     return gplot_path
 
 
-def write_category_gnuplot(dat_paths, labels, all_df_columns, gplot_path):
+def write_category_gnuplot(dat_paths, labels, spin_columns, gplot_path):
     """Writes ONE gnuplot script for a whole category (dos_per_atom/ or
-    dos_per_species/) -- one curve per file, each collapsed to that
-    file's own total DOS via gnuplot's `sum [i=2:N] column(i)` (every
-    .dat in this suite shares the same column count, so one sum range
-    works for every file). Placed inside the category's own folder,
-    referencing each .dat by its bare basename (assumes gnuplot is run
-    from that same folder, the same convention write_dos_gnuplot/
-    bands.py's plot_gnuplot already use)."""
-    ncols = len(all_df_columns)
-    sum_expr = f"(sum [i=2:{ncols}] column(i))"
+    dos_per_species/) -- one curve per (file, orbital/spin column) pair,
+    e.g. a 3-orbital atom contributes 3 separate curves ('Sn_1: s',
+    'Sn_1: p', 'Sn_1: d'), NOT one curve summed across its orbitals.
+    Column positions are looked up by index (every .dat in this suite
+    shares the same `spin_columns` order, column 1 is Energy) rather than
+    gnuplot's own columnheader(), so each curve's title can combine both
+    the file's label and that column's name. Placed inside the category's
+    own folder, referencing each .dat by its bare basename (assumes
+    gnuplot is run from that same folder, the same convention
+    write_dos_gnuplot/bands.py's plot_gnuplot already use)."""
     stem = os.path.splitext(os.path.basename(gplot_path))[0]
     plot_entries = ", \\\n     ".join(
-        f'"{os.path.basename(p)}" using 1:{sum_expr} with lines lw 2 title "{label}"'
+        f'"{os.path.basename(p)}" using 1:{col_idx} with lines lw 2 title "{label}: {col_name}"'
         for p, label in zip(dat_paths, labels)
+        for col_idx, col_name in enumerate(spin_columns, start=2)
     )
     lines = [
         'set terminal pdfcairo enhanced font "Arial,14" size 8,6\n',
@@ -563,12 +566,12 @@ def plot_category_matplotlib(energies_shifted, curves, title):
     """One matplotlib figure, one curve per (label, 1D array) in `curves`
     -- shared by the 'total' category (one curve per orbital/spin column
     of the grand total) and the 'atom'/'species' categories (one curve
-    per atom/species, already collapsed to that entity's own total).
-    Does NOT call plt.show() itself -- main() opens one figure per active
-    category, then shows them all at once at the very end, after every
-    report line and file has already been written, so a blocking GUI
-    window never delays or hides them (same ordering as bands.py's own
-    interactive preview)."""
+    per (entity, orbital/spin column) pair, e.g. 'Sn_1: s'/'Sn_1: p' --
+    never summed across orbitals). Does NOT call plt.show() itself --
+    main() opens one figure per active category, then shows them all at
+    once at the very end, after every report line and file has already
+    been written, so a blocking GUI window never delays or hides them
+    (same ordering as bands.py's own interactive preview)."""
     plt.figure(figsize=(8, 6))
     for label, curve in curves.items():
         plt.plot(energies_shifted, curve, label=label)
@@ -779,31 +782,35 @@ def main():
             print_dual(color_text(f"[OK] Gnuplot script written to '{gplot_path}'", 'green'), f_out)
 
     if 'atom' in args.type:
-        atom_paths, atom_totals = write_per_atom_dos(args.output_dir, energies_shifted, parsed, columns)
+        atom_paths, atom_curves = write_per_atom_dos(args.output_dir, energies_shifted, parsed, columns)
         written_files.extend(atom_paths)
         output_dir_atoms = os.path.join(args.output_dir, "dos_per_atom")
         print_dual(color_text(f"[OK] Saved DOS per atom to '{output_dir_atoms}' directory "
                                f"({len(atom_paths)} files).", 'green'), f_out)
-        category_curves['atom'] = atom_totals
+        category_curves['atom'] = {
+            f"{label}: {col}": arr for label, cols in atom_curves.items() for col, arr in cols.items()
+        }
         if args.save_gnuplot:
             gplot_path = os.path.join(output_dir_atoms, "dos_per_atom.gplot")
-            write_category_gnuplot(atom_paths, list(atom_totals.keys()), columns['all_df_columns'], gplot_path)
+            write_category_gnuplot(atom_paths, list(atom_curves.keys()), columns['spin_columns'], gplot_path)
             gplot_files.append(gplot_path)
-            print_dual(color_text(f"[OK] Gnuplot script (one curve per atom) written to "
+            print_dual(color_text(f"[OK] Gnuplot script (one curve per atom/orbital) written to "
                                    f"'{gplot_path}'.", 'green'), f_out)
 
     if 'species' in args.type:
-        species_paths, species_totals = write_per_species_dos(args.output_dir, energies_shifted, parsed, columns)
+        species_paths, species_curves = write_per_species_dos(args.output_dir, energies_shifted, parsed, columns)
         written_files.extend(species_paths)
         output_dir_species = os.path.join(args.output_dir, "dos_per_species")
         print_dual(color_text(f"[OK] Saved DOS per species to '{output_dir_species}' directory "
                                f"({len(species_paths)} files).", 'green'), f_out)
-        category_curves['species'] = species_totals
+        category_curves['species'] = {
+            f"{label}: {col}": arr for label, cols in species_curves.items() for col, arr in cols.items()
+        }
         if args.save_gnuplot:
             gplot_path = os.path.join(output_dir_species, "dos_per_species.gplot")
-            write_category_gnuplot(species_paths, list(species_totals.keys()), columns['all_df_columns'], gplot_path)
+            write_category_gnuplot(species_paths, list(species_curves.keys()), columns['spin_columns'], gplot_path)
             gplot_files.append(gplot_path)
-            print_dual(color_text(f"[OK] Gnuplot script (one curve per species) written to "
+            print_dual(color_text(f"[OK] Gnuplot script (one curve per species/orbital) written to "
                                    f"'{gplot_path}'.", 'green'), f_out)
 
     print_section("[4] REFERENCES", f_out)

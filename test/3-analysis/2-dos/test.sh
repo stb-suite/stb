@@ -281,7 +281,7 @@ check_contains "\[4\] REFERENCES" stb_dos_report.txt
 check_contains "\[5\] SUMMARY & FILES" stb_dos_report.txt
 check_success references.bib
 
-echo "Testing: --save-gnuplot writes one .gplot for 'total' (per-orbital) and one per category (one curve per atom/species)"
+echo "Testing: --save-gnuplot writes one .gplot for 'total' (per-orbital) and one per category (one curve per atom/orbital, not summed)"
 rm -rf dos_total.dat dos_per_atom dos_per_species
 stb-dos siesta.PDOS.xml --shift fermi --save-gnuplot --no-intro > log_save_gnuplot.txt 2>&1
 check_exit_code $? 0
@@ -297,10 +297,11 @@ else
 fi
 check_contains 'plot for \[i=2:' dos_total.gplot
 check_contains 'columnheader(i)' dos_total.gplot
-check_contains 'sum \[i=2:' dos_per_atom/dos_per_atom.gplot
-check_contains 'sum \[i=2:' dos_per_species/dos_per_species.gplot
-check_contains 'Sn_1' dos_per_atom/dos_per_atom.gplot
-check_contains 'Sn' dos_per_species/dos_per_species.gplot
+check_not_contains 'sum \[i=2:' dos_per_atom/dos_per_atom.gplot
+check_not_contains 'sum \[i=2:' dos_per_species/dos_per_species.gplot
+check_contains 'Sn_1: s' dos_per_atom/dos_per_atom.gplot
+check_contains 'Sn_1: p' dos_per_atom/dos_per_atom.gplot
+check_contains 'Sn: s' dos_per_species/dos_per_species.gplot
 if command -v gnuplot > /dev/null 2>&1; then
     echo "Testing: the saved .gplot files actually render with a real gnuplot"
     (gnuplot dos_total.gplot > /dev/null 2>&1)

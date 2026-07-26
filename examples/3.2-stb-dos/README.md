@@ -5,7 +5,8 @@
 `stb-dos` reads a SIESTA `<label>.PDOS.xml` file (the projected density of
 states) and writes it out as plain-text, per-orbital data ready to plot:
 
-- `dos_total.dat` — the DOS summed over every atom and orbital.
+- `dos_total.dat` — the DOS summed over every atom, still split into one
+  column per orbital (never summed across orbitals — see below).
 - `dos_per_atom/<species>_<index>.dat` — one file per atom.
 - `dos_per_species/dos_<species>.dat` — one file per chemical species.
 
@@ -105,29 +106,30 @@ newer tool in this suite uses:
 `.dat` files and `references.bib`, no text report file.
 
 `--save-gnuplot` writes one `.gplot` script **per output category** — off
-by default:
+by default. Every column is plotted as its **own curve, never summed**
+together (a 3-orbital atom contributes 3 separate lines, not 1):
 
 - `dos_total.gplot` (next to `dos_total.dat`) — plots every orbital/spin
   column of the total DOS, using gnuplot's own `columnheader(i)` to read
   column names straight from the `.dat` file's own
   `#Energy(eV)  s  p  ...` header line. Since there's only ever one
   `total` file, this is the most useful single-file view.
-- `dos_per_atom/dos_per_atom.gplot` — ONE script overlaying every atom's
-  own total DOS (that atom's orbital/spin columns collapsed into a
-  single curve via gnuplot's `sum [i=2:N] column(i)`), so atoms can be
-  compared against each other in one plot instead of opening one file
-  per atom.
+- `dos_per_atom/dos_per_atom.gplot` — ONE script overlaying **every
+  atom's every orbital/spin column** as its own curve (e.g. `Sn_1: s`,
+  `Sn_1: p`, `Sn_2: s`, ...), so every atom's full orbital breakdown can
+  be compared in one plot instead of opening one file per atom.
 - `dos_per_species/dos_per_species.gplot` — the same idea, one curve per
-  chemical species.
+  (species, orbital/spin column) pair (e.g. `Si: s`, `Si: p`, `O: s`).
 
 Run `gnuplot <name>.gplot` (from inside the same folder as the script)
 for a PDF.
 
 `--view` opens an interactive matplotlib preview right before the tool
 exits — off by default, one figure per output category actually written
-(`total`/`atom`/`species`, mirroring `--save-gnuplot`'s own grouping),
-shown together only after every report line and file has already been
-written, so a blocking preview window never delays or hides them.
+(`total`/`atom`/`species`, mirroring `--save-gnuplot`'s own grouping and
+its same never-summed, one-curve-per-column convention), shown together
+only after every report line and file has already been written, so a
+blocking preview window never delays or hides them.
 
 ## When you'd reach for it
 
@@ -168,12 +170,14 @@ matching CLI flag.
 - `example.bands` / `example.EIG` — a matching "same calculation" trio
   (same Fermi energy), with known-by-hand VBM/CBM at each level of the
   `--shift vbm/cbm` hierarchy.
-- `multi.PDOS.xml` — a second fixture, 3 atoms (`Si_1`, `Si_2`, `O_3`,
-  2 species), same energy grid/"gap" shape as `example.PDOS.xml` but each
-  atom's DOS scaled differently (`x1`/`x2`/`x0.5`) so the three curves
-  are visibly distinct — used to demonstrate `--save-gnuplot`/`--view`
-  actually overlaying multiple atoms/species in one script/figure
-  (`example.PDOS.xml`'s own single atom can't show that).
+- `multi.PDOS.xml` — a second fixture, 3 atoms/2 species (`Si_1`/`Si_2`,
+  each with an `s` AND a `p` orbital; `O_3` with only `s`), same energy
+  grid/"gap" shape as `example.PDOS.xml` but each orbital scaled
+  differently so every curve is visually distinct and hand-checkable —
+  used to demonstrate `--save-gnuplot`/`--view` overlaying multiple
+  atoms/species AND multiple orbitals, all as separate curves, never
+  summed together (`example.PDOS.xml`'s own single atom/orbital can't
+  show that).
 - `example_3.2.sh` — the guided walkthrough (**not** an automated test —
   see `test/3-analysis/2-dos/test.sh` for that, which additionally covers
   a real ~22 MB reference PDOS.xml this example deliberately skips).
@@ -194,7 +198,7 @@ by wiping its own `output/`. Five self-contained cases are generated:
 | `basic-run/`           | The three output types (`dos_total.dat`, `dos_per_atom/`, `dos_per_species/`) |
 | `vbm-hierarchy/`       | `--shift vbm`'s `.bands` → `.EIG` → `--estimate-from-dos` hierarchy, live  |
 | `label-shorthand/`     | `--label` resolving both the `PDOS.xml` and its `.bands` in one go        |
-| `multi-atom-plots/`    | `--save-gnuplot`/`--view` overlaying 3 atoms/2 species in one script/figure each, rendered with a real `gnuplot` |
+| `multi-atom-plots/`    | `--save-gnuplot`/`--view` overlaying every atom's/species' own orbitals as separate curves (never summed), rendered with a real `gnuplot` |
 | `full-report/`         | Default (no report/`.gplot` files) vs. `--save-report --save-gnuplot`     |
 
 ## Try it yourself

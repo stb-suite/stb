@@ -205,7 +205,8 @@ echo "Report sections written to stb_dos_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_dos_report.txt"
 echo
 echo "Gnuplot scripts, one per output category (dos_total.gplot uses columnheader() per"
-echo "orbital column; dos_per_atom/species.gplot overlay one summed curve per atom/species):"
+echo "orbital column; dos_per_atom/species.gplot overlay one curve per (atom/species, orbital)"
+echo "pair -- orbitals are never summed together, even when grouped into one script):"
 find "$OUT/full-report" -name "*.gplot" | sed "s#$OUT/##" | sort
 echo
 echo "references.bib -- SIESTA (every stb-dos run is post-processing a SIESTA output):"
@@ -213,20 +214,24 @@ grep "^@" "$OUT/full-report/references.bib"
 pause
 
 echo "=================================================================="
-echo " output/multi-atom-plots/  --  --save-gnuplot/--view are PER CATEGORY, not per file"
+echo " output/multi-atom-plots/  --  --save-gnuplot/--view are PER CATEGORY, and NEVER sum orbitals"
 echo "=================================================================="
 cat <<'EOF'
-multi.PDOS.xml: 3 atoms (Si_1, Si_2, O_3), same energy grid and "gap"
-shape as example.PDOS.xml, but each atom's s-orbital DOS scaled
-differently -- Si_1 x1, Si_2 x2, O_3 x0.5 -- so their curves are
-trivially distinguishable and the total is hand-checkable:
-  DOS_total(far from E_F) = 5.0 + 10.0 + 2.5 = 17.5 states/eV
+multi.PDOS.xml: 3 atoms, 2 species -- Si_1 and Si_2 each with an s AND a
+p orbital, O_3 with only an s orbital (a realistic difference: not every
+species has the same orbitals in its basis). Same energy grid/"gap"
+shape as example.PDOS.xml, but each orbital scaled differently so every
+curve is visually distinct and hand-checkable:
+  Si_1: s x3, p x1     Si_2: s x6, p x2     O_3: s x2.5 (no p)
 
-With 3 atoms (2 species: Si, O), --save-gnuplot/--view being PER
-CATEGORY actually matters: instead of opening 3 separate dos_per_atom/
-*.dat files (or 2 dos_per_species/*.dat files) one at a time, ONE script/
-figure overlays every atom's (or species') own collapsed total DOS --
-so you can directly compare which one contributes most, and where:
+--save-gnuplot/--view are PER CATEGORY (one script/figure for the whole
+dos_per_atom/ or dos_per_species/ folder, not one per individual file)
+-- but crucially they NEVER sum an atom's/species' orbitals together:
+each orbital/spin column gets its OWN curve, e.g. Si_1 contributes TWO
+curves ("Si_1: s" and "Si_1: p"), not one. This is true of dos_total.dat
+too, which already keeps 's' and 'p' as separate columns -- the s-only
+total is 3.0+6.0+2.5=11.5, the p-only total is 1.0+2.0=3.0, and the two
+are never added into one number anywhere in this tool:
 EOF
 mkdir -p "$OUT/multi-atom-plots"
 cp multi.PDOS.xml "$OUT/multi-atom-plots/"
@@ -234,13 +239,17 @@ echo
 echo "\$ stb-dos multi.PDOS.xml --shift fermi --save-gnuplot --no-intro"
 (cd "$OUT/multi-atom-plots" && stb-dos multi.PDOS.xml --shift fermi --save-gnuplot \
     --no-intro > console.log 2>&1)
-echo "dos_total.dat, far from the gap -- confirms the hand-checked sum above:"
+echo "dos_total.dat, far from the gap -- s and p stay separate columns (11.5, 3.0), never summed:"
 grep "^ -3" "$OUT/multi-atom-plots/dos_total.dat"
 echo
-echo "dos_per_atom/dos_per_atom.gplot -- ONE curve per atom, in ONE script:"
+echo "dos_per_atom/dos_per_atom.gplot -- ONE script for the whole folder, but ONE curve per"
+echo "(atom, orbital) pair -- Si_1/Si_2 each contribute an 's' AND a 'p' curve; O_3's own 'p'"
+echo "curve is included too (flat at zero -- O_3 simply has no p orbital in this basis):"
 cat "$OUT/multi-atom-plots/dos_per_atom/dos_per_atom.gplot"
 echo
-echo "dos_per_species/dos_per_species.gplot -- ONE curve per species (Si_1+Si_2 combined, O_3 alone):"
+echo "dos_per_species/dos_per_species.gplot -- same idea, one curve per (species, orbital) pair"
+echo "(Si's own s/p already sum over its 2 atoms -- Si:s=3+6=9, Si:p=1+2=3 -- but still never"
+echo "mixes s into p):"
 cat "$OUT/multi-atom-plots/dos_per_species/dos_per_species.gplot"
 echo
 if command -v gnuplot > /dev/null 2>&1; then
@@ -310,9 +319,10 @@ Recap of what this walkthrough covered:
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
   - the numbered [0]...[5] report, --save-report, and references.bib
   - --save-gnuplot/--view are PER OUTPUT CATEGORY (total/atom/species),
-    not per individual .dat file: on a real 3-atom/2-species fixture,
-    ONE script/figure per category overlays every atom's (or species')
-    own collapsed total DOS, rendered live with a real gnuplot
+    not per individual .dat file, but NEVER sum orbitals together: on a
+    3-atom/2-species/2-orbital fixture, ONE script/figure per category
+    overlays every atom's (or species') own orbital columns as separate
+    curves (e.g. "Si_1: s", "Si_1: p"), rendered live with a real gnuplot
   - CLI and the interactive stb-suite menu building the same command
     (the menu's --shift is a numbered 1-4 retry-on-invalid menu, and it
     also offers --save-report/--save-gnuplot/--view as y/N prompts)

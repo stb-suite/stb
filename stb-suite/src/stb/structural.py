@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "2.0.0"
 
 import os
 import sys
@@ -17,8 +17,11 @@ import numpy as np
 from scipy.spatial import ConvexHull, QhullError
 from pymatgen.analysis.local_env import (
     MinimumDistanceNN, CrystalNN, BrunnerNNRelative, EconNN)
-from stb.core import structure_io
-from stb.core.cli import color_text, show_intro
+from stb.core import structure_io, citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
+
+REPORT_FILE = "stb_structural_report.txt"
+BIB_FILE = "references.bib"
 
 def warn_handler(message, category, filename, lineno, file=None, line=None):
     """Prints any warning that reaches here directly to the console -- no
@@ -446,173 +449,167 @@ def _compute_ecn_impl(structure, mode, atoms_position=None):
     return results
 
 # --- Report formatting --------------------------------------------------
-_WIDTH = 74
+# Same numbered-section report style as the rest of the suite's newer
+# tools ([0] RUN METADATA ... [N] SUMMARY & FILES via print_section/
+# print_dual/print_table) -- replaces the old ad hoc plain-text layout.
+# The underlying numbers/physics (compute_ecn/compute_rdf and friends,
+# above) are unchanged; only how they're printed.
 
-def _rule(char="-"):
-    return char * _WIDTH
+def _fmt(value, prec=3):
+    return f"{value:.{prec}f}" if value is not None else "N/A"
 
-def _fmt(value, width=7, prec=3):
-    return f"{value:{width}.{prec}f}" if value is not None else "N/A".rjust(width)
 
-def format_report(results, source_file, fmt, rdf_summary=None):
+def _cn_rows(values_dict):
+    return [([method, _fmt(val)], None) for method, val in values_dict.items()]
+
+
+def print_report(results, source_file, fmt, args, rdf_summary, report_path, f_out):
     lat = results["lattice"]
-    lines = []
-    lines.append(_rule("="))
-    lines.append("STRUCTURAL PROPERTIES REPORT - STB Suite".center(_WIDTH))
-    lines.append(_rule("="))
-    lines.append("")
-    lines.append(f"Generated        : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"Source file      : {source_file}  (format: {fmt})")
-    lines.append(f"Analysis mode    : {results['mode']}")
 
-    lines.append("")
-    lines.append(_rule())
-    lines.append("LATTICE")
-    lines.append(_rule())
-    lines.append(f"a = {lat['a']:.3f} Å   b = {lat['b']:.3f} Å   c = {lat['c']:.3f} Å")
-    lines.append(f"alpha = {lat['alpha']:.2f}°   beta = {lat['beta']:.2f}°   gamma = {lat['gamma']:.2f}°")
-    lines.append(f"Volume = {lat['volume']:.3f} Å³   Density = {lat['density']:.3f} g/cm³")
-    lines.append("")
-    lines.append("Lattice vectors (Å):")
+    print_dual(color_text("===== STB-STRUCTURAL REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Input file     : {source_file} (format: {fmt})", f_out)
+    mode_desc = results["mode"]
+    if results["mode"] == "list":
+        atom_ids = ", ".join(str(a["atom_id"]) for a in results["cn_per_atom"])
+        mode_desc += f" (atoms: {atom_ids})"
+    print_dual(f"Analysis mode  : {mode_desc}", f_out)
+    if rdf_summary is not None:
+        print_dual(f"RDF            : enabled (r_max = {rdf_summary['r_max']:.1f} Å, "
+                   f"bin width = {rdf_summary['dr']:.2f} Å)", f_out)
+    else:
+        print_dual("RDF            : disabled (--no-rdf)", f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+
+    print_section("[1] LATTICE", f_out)
+    print_table(["Quantity", "Value"], [
+        (["a", f"{lat['a']:.3f} Å"], None),
+        (["b", f"{lat['b']:.3f} Å"], None),
+        (["c", f"{lat['c']:.3f} Å"], None),
+        (["alpha", f"{lat['alpha']:.2f}°"], None),
+        (["beta", f"{lat['beta']:.2f}°"], None),
+        (["gamma", f"{lat['gamma']:.2f}°"], None),
+        (["Volume", f"{lat['volume']:.3f} Å³"], None),
+        (["Density", f"{lat['density']:.3f} g/cm³"], None),
+    ], f_out)
+    print_dual("Lattice vectors (Å):", f_out)
     for i, vec in enumerate(lat["vectors"]):
-        lines.append(f"  a_{i+1}: {vec[0]:12.6f}  {vec[1]:12.6f}  {vec[2]:12.6f}")
+        print_dual(f"  a_{i+1}: {vec[0]:12.6f}  {vec[1]:12.6f}  {vec[2]:12.6f}", f_out)
 
+    print_section("[2] EFFECTIVE COORDINATION NUMBER (weighted)", f_out)
     if results["mode"] == "mean":
-        lines.append("")
-        lines.append(_rule())
-        lines.append("EFFECTIVE COORDINATION NUMBER (weighted), PER SPECIES")
-        lines.append(_rule())
         for sp, data in results["cn_per_species"].items():
-            lines.append(f"{sp} ({data['n_atoms']} atoms):")
-            for method, avg in data["values"].items():
-                lines.append(f"  {method:<15}: {_fmt(avg)}")
-            lines.append("")
-        lines.append("Overall average:")
-        for method, avg in results["cn_overall"].items():
-            lines.append(f"  {method:<15}: {_fmt(avg)}")
-
-    elif results["mode"] == "list":
-        lines.append("")
-        lines.append(_rule())
-        lines.append("EFFECTIVE COORDINATION NUMBER (weighted), SPECIFIED ATOMS")
-        lines.append(_rule())
+            print_dual(f"{sp} ({data['n_atoms']} atoms):", f_out)
+            print_table(["Method", "CN"], _cn_rows(data["values"]), f_out)
+        print_dual("Overall average:", f_out)
+        print_table(["Method", "CN"], _cn_rows(results["cn_overall"]), f_out)
+    else:
         for atom in results["cn_per_atom"]:
             pos = atom["position"]
-            lines.append(f"Atom {atom['atom_id']} ({atom['species']}), position: "
-                         f"{pos[0]:.6f}  {pos[1]:.6f}  {pos[2]:.6f}")
-            for method, val in atom["values"].items():
-                lines.append(f"  {method:<15}: {_fmt(val)}")
-            lines.append("")
+            print_dual(f"Atom {atom['atom_id']} ({atom['species']}), position: "
+                       f"{pos[0]:.6f}  {pos[1]:.6f}  {pos[2]:.6f}", f_out)
+            print_table(["Method", "CN"], _cn_rows(atom["values"]), f_out)
 
-    lines.append(_rule())
-    lines.append("AVERAGE BOND DISTANCE, PER SPECIES PAIR")
-    lines.append(_rule())
+    print_section("[3] BOND DISTANCES, PER SPECIES PAIR", f_out)
     if results["bond_distances_overall"] is not None:
-        for pair in sorted(results["bond_distances_by_pair"]):
-            avg, n = results["bond_distances_by_pair"][pair]
-            label = f"{pair[0]}-{pair[1]}"
-            lines.append(f"  {label:<10}: {avg:.4f} Å  (n={n})")
+        rows = [([f"{pair[0]}-{pair[1]}", f"{avg:.4f}", str(n)], None)
+                for pair, (avg, n) in sorted(results["bond_distances_by_pair"].items())]
         overall_avg, overall_n = results["bond_distances_overall"]
-        lines.append(f"  {'Overall':<10}: {overall_avg:.4f} Å  (n={overall_n})")
+        rows.append((["Overall", f"{overall_avg:.4f}", str(overall_n)], 'yellow'))
+        print_table(["Pair", "Avg distance (Å)", "N"], rows, f_out)
     else:
-        lines.append("  No distances could be computed.")
+        print_dual("No distances could be computed.", f_out)
 
-    lines.append("")
-    lines.append(_rule())
-    lines.append("AVERAGE BOND ANGLE, PER LIGAND-CENTER-LIGAND TRIPLET")
-    lines.append(_rule())
+    print_section("[4] BOND ANGLES, PER LIGAND-CENTER-LIGAND TRIPLET", f_out)
     if results["bond_angles_overall"] is not None:
-        for triplet in sorted(results["bond_angles_by_triplet"]):
-            avg, n = results["bond_angles_by_triplet"][triplet]
-            label = f"{triplet[0]}-{triplet[1]}-{triplet[2]}"
-            lines.append(f"  {label:<12}: {avg:7.3f}°  (n={n})")
+        rows = [([f"{t[0]}-{t[1]}-{t[2]}", f"{avg:.3f}", str(n)], None)
+                for t, (avg, n) in sorted(results["bond_angles_by_triplet"].items())]
         overall_avg, overall_n = results["bond_angles_overall"]
-        lines.append(f"  {'Overall':<12}: {overall_avg:7.3f}°  (n={overall_n})")
+        rows.append((["Overall", f"{overall_avg:.3f}", str(overall_n)], 'yellow'))
+        print_table(["Triplet", "Avg angle (°)", "N"], rows, f_out)
     else:
-        lines.append("  No angles could be computed (fewer than 2 neighbors per site).")
+        print_dual("No angles could be computed (fewer than 2 neighbors per site).", f_out)
 
-    lines.append("")
-    lines.append(_rule())
-    lines.append("COORDINATION POLYHEDRON DISTORTION")
-    lines.append(_rule())
-    lines.append("BLD: bond-length distortion (%, Baur). BAV: bond-angle variance (deg²),")
-    lines.append("from ALL ligand-center-ligand angles (not just Robinson's 12 'cis' angles")
-    lines.append("for an ideal octahedron -- there's no general cis/trans split for an")
-    lines.append("arbitrary/fractional CN), around the site's own mean angle (not a")
-    lines.append("theoretical ideal) -- not directly comparable to textbook BAV values, but")
-    lines.append("self-consistent for comparing sites/species within this report. Volume:")
-    lines.append("convex hull of the neighbor positions (Å³, needs >= 4 non-coplanar neighbors).")
-    lines.append("")
+    print_section("[5] COORDINATION POLYHEDRON DISTORTION", f_out)
+    print_dual("BLD: bond-length distortion (%, Baur). BAV: bond-angle variance (deg²),", f_out)
+    print_dual("from ALL ligand-center-ligand angles (not just Robinson's 12 'cis' angles", f_out)
+    print_dual("for an ideal octahedron -- there's no general cis/trans split for an", f_out)
+    print_dual("arbitrary/fractional CN), around the site's own mean angle (not a", f_out)
+    print_dual("theoretical ideal) -- not directly comparable to textbook BAV values, but", f_out)
+    print_dual("self-consistent for comparing sites/species within this report. Volume:", f_out)
+    print_dual("convex hull of the neighbor positions (Å³, needs >= 4 non-coplanar neighbors).", f_out)
     if results["mode"] == "mean":
-        for sp, data in results["distortion_per_species"].items():
-            lines.append(f"{sp} ({data['n_atoms']} atoms):")
-            lines.append(f"  BLD   : {_fmt(data['bld'])} %")
-            lines.append(f"  BAV   : {_fmt(data['bav'])} deg²")
-            lines.append(f"  Volume: {_fmt(data['volume'])} Å³")
-            lines.append("")
+        rows = [([sp, str(data["n_atoms"]), _fmt(data["bld"]), _fmt(data["bav"]), _fmt(data["volume"])], None)
+                for sp, data in results["distortion_per_species"].items()]
+        print_table(["Species", "N atoms", "BLD (%)", "BAV (deg²)", "Volume (Å³)"], rows, f_out)
     else:
-        for atom in results["distortion_per_atom"]:
-            lines.append(f"Atom {atom['atom_id']} ({atom['species']}):")
-            lines.append(f"  BLD   : {_fmt(atom['bld'])} %")
-            lines.append(f"  BAV   : {_fmt(atom['bav'])} deg²")
-            lines.append(f"  Volume: {_fmt(atom['volume'])} Å³")
-            lines.append("")
+        rows = [([str(a["atom_id"]), a["species"], _fmt(a["bld"]), _fmt(a["bav"]), _fmt(a["volume"])], None)
+                for a in results["distortion_per_atom"]]
+        print_table(["Atom", "Species", "BLD (%)", "BAV (deg²)", "Volume (Å³)"], rows, f_out)
 
-    lines.append(_rule())
-    lines.append("SAME-SPECIES MINIMUM DISTANCE (whole structure, independent of --mode)")
-    lines.append(_rule())
+    print_section("[6] SAME-SPECIES MINIMUM DISTANCE (whole structure, independent of --mode)", f_out)
     if results["same_species_min_distance"]:
-        for sp in sorted(results["same_species_min_distance"]):
-            label = f"{sp}-{sp}"
-            lines.append(f"  {label:<10}: {results['same_species_min_distance'][sp]:.4f} Å")
+        rows = [([f"{sp}-{sp}", f"{d:.4f}"], None)
+                for sp, d in sorted(results["same_species_min_distance"].items())]
+        print_table(["Pair", "Min distance (Å)"], rows, f_out)
     else:
-        lines.append("  Fewer than 2 atoms of any single species -- nothing to compare.")
+        print_dual("Fewer than 2 atoms of any single species -- nothing to compare.", f_out)
 
-    lines.append("")
-    lines.append(_rule())
-    lines.append("COORDINATION POLYHEDRON CONNECTIVITY (shared ligands between same-")
-    lines.append("species centers; whole structure, independent of --mode)")
-    lines.append(_rule())
+    print_section("[7] COORDINATION POLYHEDRON CONNECTIVITY (shared ligands, whole structure)", f_out)
     if results["connectivity_by_species"]:
-        for sp, counts in results["connectivity_by_species"].items():
-            lines.append(f"{sp}-{sp}:")
-            lines.append(f"  corner-sharing: {counts['corner-sharing']} pair(s)")
-            lines.append(f"  edge-sharing  : {counts['edge-sharing']} pair(s)")
-            lines.append(f"  face-sharing  : {counts['face-sharing']} pair(s)")
-            lines.append("")
+        rows = [([f"{sp}-{sp}", str(c["corner-sharing"]), str(c["edge-sharing"]), str(c["face-sharing"])], None)
+                for sp, c in results["connectivity_by_species"].items()]
+        print_table(["Species pair", "Corner-sharing", "Edge-sharing", "Face-sharing"], rows, f_out)
     else:
-        lines.append("  Not available.")
-        lines.append("")
+        print_dual("Not available.", f_out)
 
     if rdf_summary is not None:
-        lines.append(_rule())
-        lines.append("RADIAL DISTRIBUTION FUNCTION g(r)")
-        lines.append(_rule())
-        lines.append(f"Full curve written to {rdf_summary['rdf_file']} "
-                     f"(r_max = {rdf_summary['r_max']:.1f} Å, bin width = {rdf_summary['dr']:.2f} Å).")
-        lines.append("First peak (highest g(r) in this range):")
+        print_section("[8] RADIAL DISTRIBUTION FUNCTION g(r)", f_out)
+        print_dual(f"Full curve written to {rdf_summary['rdf_file']} "
+                   f"(r_max = {rdf_summary['r_max']:.1f} Å, bin width = {rdf_summary['dr']:.2f} Å).", f_out)
+        rows = []
         for label, (r, g) in rdf_summary["peaks"].items():
             if r is None:
-                lines.append(f"  {label:<10}: no pair found within r_max")
+                rows.append(([label, "N/A", "no pair found within r_max"], 'yellow'))
             else:
-                lines.append(f"  {label:<10}: r = {r:6.3f} Å   g(r) = {g:8.3f}")
-        lines.append("")
+                rows.append(([label, f"{r:.3f}", f"{g:.3f}"], None))
+        print_table(["Pair", "First peak r (Å)", "g(r)"], rows, f_out)
 
-    lines.append(_rule())
-    lines.append("ATOMIC POSITIONS (Cartesian, Å)")
-    lines.append(_rule())
-    for atom_id, species, coords in results["atomic_positions"]:
-        lines.append(f"{atom_id:>4}  {species:<3}  {coords[0]:12.6f}  {coords[1]:12.6f}  {coords[2]:12.6f}")
+    print_section("[9] ATOMIC POSITIONS (Cartesian, Å)", f_out)
+    rows = [([str(atom_id), species, f"{c[0]:.6f}", f"{c[1]:.6f}", f"{c[2]:.6f}"], None)
+            for atom_id, species, c in results["atomic_positions"]]
+    print_table(["Atom", "Species", "x", "y", "z"], rows, f_out)
 
-    lines.append(_rule("="))
-    return "\n".join(lines) + "\n"
+    print_section("[10] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+    print_dual("Coordination-number/distortion methods used above (see the example README", f_out)
+    print_dual("for the full theory/formula and limitations of each): Hoppe (1979) for ECoN;", f_out)
+    print_dual("Baur (1974) for BLD; Robinson et al. (1971) for BAV (modified here, see [5]);", f_out)
+    print_dual("Zimmermann & Jain for CrystalNN; Brunner & Schwarzenbach for the Brunner", f_out)
+    print_dual("relative-gap method.", f_out)
+
+    print_section("[11] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    if rdf_summary is not None:
+        print_dual(f"RDF data       : {rdf_summary['rdf_file']}", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
 
 def main():
     parser = argparse.ArgumentParser(
         description="Compute ECN and structural properties from a SIESTA structure file.",
         epilog="Example usage:\n"
                "  stb-structural --file structure.fdf --format fdf --mode mean\n"
-               "  stb-structural --file siesta.STRUCT_OUT --format struct_out --mode list --list 1,4,5",
+               "  stb-structural --file siesta.STRUCT_OUT --format struct_out --mode list --list 1,4,5\n"
+               "  stb-structural --file structure.fdf --format fdf --mode mean --save-report",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--file", required=True, help="Path to structure file.")
@@ -623,13 +620,16 @@ def main():
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write structural_information.dat and rdf.dat into "
-                             "(default: current directory). Created if it doesn't exist.")
+                        help="Directory to write rdf.dat and references.bib into (and "
+                             f"{REPORT_FILE}, with --save-report) (default: current "
+                             "directory). Created if it doesn't exist.")
     parser.add_argument("--no-rdf", dest="rdf", action="store_false",
                         help="Skip the radial distribution function g(r) (rdf.dat is not written).")
     parser.add_argument("--rdf-rmax", type=float, default=10.0,
                         help="Cutoff radius for g(r), in Å (default: 10.0). Larger values capture "
                              "more coordination shells but take longer for large structures.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -640,17 +640,9 @@ def main():
     if args.rdf_rmax <= 0:
         parser.error("--rdf-rmax must be positive.")
 
-    os.makedirs(args.output_dir, exist_ok=True)
-
     # No warnings.log: warnings print straight to the console via
     # warn_handler instead of being written to disk.
     warnings.showwarning = warn_handler
-
-    # Remove a stale warnings.log from a previous version of this tool (it
-    # used to always write one) so it can't be mistaken for output of this run.
-    stale_log = os.path.join(args.output_dir, "warnings.log")
-    if os.path.exists(stale_log):
-        os.remove(stale_log)
 
     if args.intro:
         show_intro([
@@ -663,9 +655,11 @@ def main():
     print("\n" + color_text("STRUCTURAL PROPERTIES:", 'bold'))
     print("-"*60)
 
-    print("\n[INFO] Reading structure file...")
     atoms_position = list(map(int, args.list.strip('[]').split(','))) if args.list else None
 
+    # Read (and validate) the input BEFORE creating --output-dir or opening
+    # the report file, so a bad input file doesn't leave an empty
+    # directory/empty report behind (same convention as bands.py/dos.py).
     try:
         structure = structure_io.read_siesta_structure(args.file, args.format)
     except FileNotFoundError:
@@ -682,13 +676,24 @@ def main():
                               f"(structure has {len(structure)} atoms, 1-based).", 'red'))
             sys.exit(1)
 
-    print("[INFO] Computing coordination numbers and bond distances...")
     results = compute_ecn(structure, args.mode, atoms_position)
 
+    rdf_data = compute_rdf(structure, r_max=args.rdf_rmax) if args.rdf else None
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Remove stale files from an older version of this tool (which always
+    # wrote warnings.log and structural_information.dat unconditionally,
+    # and could leave a stale rdf.dat behind when re-run with --no-rdf) so
+    # none of them can be mistaken for output of this run.
+    for stale_name in ("warnings.log", "structural_information.dat"):
+        stale_path = os.path.join(args.output_dir, stale_name)
+        if os.path.exists(stale_path):
+            os.remove(stale_path)
+
     rdf_summary = None
-    if args.rdf:
-        print(f"[INFO] Computing radial distribution function g(r) (r_max = {args.rdf_rmax:.1f} Å)...")
-        r_centers, g_total, g_by_pair = compute_rdf(structure, r_max=args.rdf_rmax)
+    if rdf_data is not None:
+        r_centers, g_total, g_by_pair = rdf_data
         rdf_path = os.path.join(args.output_dir, "rdf.dat")
         write_rdf_file(rdf_path, r_centers, g_total, g_by_pair)
         peaks = {"Total": _first_peak(r_centers, g_total)}
@@ -696,21 +701,18 @@ def main():
             peaks[f"{pair[0]}-{pair[1]}"] = _first_peak(r_centers, g_by_pair[pair])
         rdf_summary = {"rdf_file": rdf_path, "r_max": args.rdf_rmax, "dr": 0.05, "peaks": peaks}
     else:
-        # Remove a stale rdf.dat from a previous (non-"--no-rdf") run in
-        # this same directory, so it can't be mistaken for output of this run.
         stale_rdf = os.path.join(args.output_dir, "rdf.dat")
         if os.path.exists(stale_rdf):
             os.remove(stale_rdf)
 
-    report = format_report(results, args.file, args.format, rdf_summary)
-    print("\n" + report)
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-    out_path = os.path.join(args.output_dir, "structural_information.dat")
-    with open(out_path, "w") as f:
-        f.write(report)
+    print_report(results, args.file, args.format, args, rdf_summary, report_path, f_out)
 
-    print(f"[INFO] Job complete! Results saved to {out_path}")
-    print("-"*60)
+    if f_out:
+        f_out.close()
+
 
 if __name__ == "__main__":
     main()

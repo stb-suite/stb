@@ -89,7 +89,8 @@ Several conventions recur across the newer input-generating tools (see
 `2.1-stb-2Dstacking/`, `2.2-stb-supercell/`, `2.3-stb-slab/`,
 `2.4-stb-nanotube/`, `2.5-stb-defect/`, `2.6-stb-sqs/`, `2.7-stb-unitcell/`,
 `2.8-stb-crystalbuilder/`, `2.9-stb-passivate/`, `2.10-stb-molecule/`,
-`2.11-stb-amorphize/`, `2.12-stb-crystalcast/`, `3.1-stb-bands/`, `3.2-stb-dos/`) and are worth knowing once, rather than
+`2.11-stb-amorphize/`, `2.12-stb-crystalcast/`, `3.1-stb-bands/`, `3.2-stb-dos/`,
+`3.4-stb-structural/`) and are worth knowing once, rather than
 re-discovering per example:
 
 - **A numbered, sectioned report** (`[0] RUN METADATA`, `[1] ...`, ...)
@@ -159,6 +160,7 @@ through.
 | 2.12 | `stb-crystalcast` | [`2.12-stb-crystalcast/`](2.12-stb-crystalcast/) |
 | 3.1  | `stb-bands`     | [`3.1-stb-bands/`](3.1-stb-bands/)          |
 | 3.2  | `stb-dos`       | [`3.2-stb-dos/`](3.2-stb-dos/)              |
+| 3.4  | `stb-structural`| [`3.4-stb-structural/`](3.4-stb-structural/) |
 
 ## Adding another example
 

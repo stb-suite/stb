@@ -6271,6 +6271,10 @@ def run_structure_analyzer() -> None:
             rdf_rmax = get_float_input("RDF cutoff radius in Ang (default: 10.0): ", 10.0)
         args.extend(["--rdf-rmax", str(rdf_rmax)])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
     run_tool("stb-structural", args)
 
 def run_xrd_analyzer() -> None:

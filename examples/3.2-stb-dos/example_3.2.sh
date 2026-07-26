@@ -8,12 +8,13 @@
 # before moving on. Safe to re-run any time -- it always starts by wiping
 # its own output/.
 #
-# Fixtures here are small, purpose-built synthetic files (example.PDOS.xml
-# + a matching example.bands/example.EIG "same calculation" trio), not a
-# real SIESTA PDOS.xml: a real one is easily tens of MB (broadened DOS on
-# a fine energy grid, one <orbital> block per basis function per atom),
-# far too heavy for a lightweight example. These were built by hand with
-# known VBM/CBM values so every number below can be checked directly.
+# Fixtures here are small, purpose-built synthetic files -- example.PDOS.xml
+# + a matching example.bands/example.EIG "same calculation" trio, and a
+# second, 3-atom multi.PDOS.xml -- not a real SIESTA PDOS.xml: a real one
+# is easily tens of MB (broadened DOS on a fine energy grid, one <orbital>
+# block per basis function per atom), far too heavy for a lightweight
+# example. These were built by hand with known VBM/CBM/DOS values so every
+# number below can be checked directly.
 
 set -e
 
@@ -212,6 +213,53 @@ grep "^@" "$OUT/full-report/references.bib"
 pause
 
 echo "=================================================================="
+echo " output/multi-atom-plots/  --  --save-gnuplot/--view are PER CATEGORY, not per file"
+echo "=================================================================="
+cat <<'EOF'
+multi.PDOS.xml: 3 atoms (Si_1, Si_2, O_3), same energy grid and "gap"
+shape as example.PDOS.xml, but each atom's s-orbital DOS scaled
+differently -- Si_1 x1, Si_2 x2, O_3 x0.5 -- so their curves are
+trivially distinguishable and the total is hand-checkable:
+  DOS_total(far from E_F) = 5.0 + 10.0 + 2.5 = 17.5 states/eV
+
+With 3 atoms (2 species: Si, O), --save-gnuplot/--view being PER
+CATEGORY actually matters: instead of opening 3 separate dos_per_atom/
+*.dat files (or 2 dos_per_species/*.dat files) one at a time, ONE script/
+figure overlays every atom's (or species') own collapsed total DOS --
+so you can directly compare which one contributes most, and where:
+EOF
+mkdir -p "$OUT/multi-atom-plots"
+cp multi.PDOS.xml "$OUT/multi-atom-plots/"
+echo
+echo "\$ stb-dos multi.PDOS.xml --shift fermi --save-gnuplot --no-intro"
+(cd "$OUT/multi-atom-plots" && stb-dos multi.PDOS.xml --shift fermi --save-gnuplot \
+    --no-intro > console.log 2>&1)
+echo "dos_total.dat, far from the gap -- confirms the hand-checked sum above:"
+grep "^ -3" "$OUT/multi-atom-plots/dos_total.dat"
+echo
+echo "dos_per_atom/dos_per_atom.gplot -- ONE curve per atom, in ONE script:"
+cat "$OUT/multi-atom-plots/dos_per_atom/dos_per_atom.gplot"
+echo
+echo "dos_per_species/dos_per_species.gplot -- ONE curve per species (Si_1+Si_2 combined, O_3 alone):"
+cat "$OUT/multi-atom-plots/dos_per_species/dos_per_species.gplot"
+echo
+if command -v gnuplot > /dev/null 2>&1; then
+    echo "Rendering both category scripts with a real gnuplot:"
+    (cd "$OUT/multi-atom-plots/dos_per_atom" && gnuplot dos_per_atom.gplot)
+    (cd "$OUT/multi-atom-plots/dos_per_species" && gnuplot dos_per_species.gplot)
+    find "$OUT/multi-atom-plots" -name "*.pdf" | sed "s#$OUT/##" | sort
+else
+    echo "(gnuplot not installed -- skipping the actual render, the .gplot files above are still valid)"
+fi
+echo
+echo "\$ stb-dos multi.PDOS.xml --shift fermi --view --no-intro   # one matplotlib figure per category"
+(cd "$OUT/multi-atom-plots" && stb-dos multi.PDOS.xml --shift fermi --view --no-intro > console_view.log 2>&1)
+echo "Ran to completion with 3 open figures (total/atom/species) -- MPLBACKEND=Agg above makes"
+echo "--view's plt.show() a no-op instead of blocking on a GUI window here; try it yourself with"
+echo "a real display, see the end of this script."
+pause
+
+echo "=================================================================="
 echo " Two ways to run it"
 echo "=================================================================="
 cat <<'EOF'
@@ -223,6 +271,10 @@ B -- interactive stb-suite menu:
   Select an option (0-6, or a tool code like 4.1.2): 3.2
 
 Both paths call the exact same underlying tool -- proven directly below.
+The menu additionally offers --shift as a NUMBERED menu (1 Fermi / 2 VBM
+/ 3 CBM / 4 Custom value) instead of typing the keyword, re-prompting on
+an invalid choice, plus separate y/N prompts for --save-report/
+--save-gnuplot/--view -- the printf sequence below drives '2' for VBM.
 EOF
 TMP="$(mktemp -d)"
 cp example.PDOS.xml example.bands example.EIG "$TMP/"
@@ -244,8 +296,8 @@ echo "=================================================================="
 echo " Done"
 echo "=================================================================="
 cat <<EOF
-Four self-contained folders were generated under output/:
-  basic-run/         vbm-hierarchy/
+Five self-contained folders were generated under output/:
+  basic-run/         vbm-hierarchy/     multi-atom-plots/
   label-shorthand/   full-report/
 
 Recap of what this walkthrough covered:
@@ -256,10 +308,14 @@ Recap of what this walkthrough covered:
   - why the DOS-estimate fallback needs an explicit --estimate-from-dos
     opt-in, and prints an explicit approximation warning
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
-  - the numbered [0]...[5] report, --save-report, --save-gnuplot (one
-    .gplot per output category: total/atom/species), and references.bib
+  - the numbered [0]...[5] report, --save-report, and references.bib
+  - --save-gnuplot/--view are PER OUTPUT CATEGORY (total/atom/species),
+    not per individual .dat file: on a real 3-atom/2-species fixture,
+    ONE script/figure per category overlays every atom's (or species')
+    own collapsed total DOS, rendered live with a real gnuplot
   - CLI and the interactive stb-suite menu building the same command
-    (--view is offered in the menu too, as its own y/N prompt)
+    (the menu's --shift is a numbered 1-4 retry-on-invalid menu, and it
+    also offers --save-report/--save-gnuplot/--view as y/N prompts)
 
 Not exercised by this script (needs a display): the interactive
 matplotlib preview (--view, one figure per category) -- try it yourself

@@ -152,7 +152,12 @@ $ stb-suite
 Select an option (0-6, or a tool code like 4.1.2): 3.2
 ```
 Both paths call the exact same underlying tool and produce the exact same
-output — `example_3.2.sh` proves this directly at the end.
+output — `example_3.2.sh` proves this directly at the end. The menu
+additionally offers `--shift` as a **numbered menu** (`1` Fermi level,
+`2` VBM, `3` CBM, `4` custom value — re-prompting on an invalid choice)
+instead of typing the keyword, plus separate `y/N` prompts for
+`--save-report`/`--save-gnuplot`/`--view`, each mapped straight onto the
+matching CLI flag.
 
 ## Files in this folder
 
@@ -163,6 +168,12 @@ output — `example_3.2.sh` proves this directly at the end.
 - `example.bands` / `example.EIG` — a matching "same calculation" trio
   (same Fermi energy), with known-by-hand VBM/CBM at each level of the
   `--shift vbm/cbm` hierarchy.
+- `multi.PDOS.xml` — a second fixture, 3 atoms (`Si_1`, `Si_2`, `O_3`,
+  2 species), same energy grid/"gap" shape as `example.PDOS.xml` but each
+  atom's DOS scaled differently (`x1`/`x2`/`x0.5`) so the three curves
+  are visibly distinct — used to demonstrate `--save-gnuplot`/`--view`
+  actually overlaying multiple atoms/species in one script/figure
+  (`example.PDOS.xml`'s own single atom can't show that).
 - `example_3.2.sh` — the guided walkthrough (**not** an automated test —
   see `test/3-analysis/2-dos/test.sh` for that, which additionally covers
   a real ~22 MB reference PDOS.xml this example deliberately skips).
@@ -176,14 +187,15 @@ cd examples/3.2-stb-dos
 ```
 
 It pauses between sections (`[Press Enter to continue]`) and always starts
-by wiping its own `output/`. Three self-contained cases are generated:
+by wiping its own `output/`. Five self-contained cases are generated:
 
-| Folder              | What it shows                                                              |
-|----------------------|-----------------------------------------------------------------------------|
-| `basic-run/`         | The three output types (`dos_total.dat`, `dos_per_atom/`, `dos_per_species/`) |
-| `vbm-hierarchy/`     | `--shift vbm`'s `.bands` → `.EIG` → `--estimate-from-dos` hierarchy, live  |
-| `label-shorthand/`   | `--label` resolving both the `PDOS.xml` and its `.bands` in one go        |
-| `full-report/`       | Default (no report/`.gplot` files) vs. `--save-report --save-gnuplot`     |
+| Folder                | What it shows                                                              |
+|-------------------------|-----------------------------------------------------------------------------|
+| `basic-run/`           | The three output types (`dos_total.dat`, `dos_per_atom/`, `dos_per_species/`) |
+| `vbm-hierarchy/`       | `--shift vbm`'s `.bands` → `.EIG` → `--estimate-from-dos` hierarchy, live  |
+| `label-shorthand/`     | `--label` resolving both the `PDOS.xml` and its `.bands` in one go        |
+| `multi-atom-plots/`    | `--save-gnuplot`/`--view` overlaying 3 atoms/2 species in one script/figure each, rendered with a real `gnuplot` |
+| `full-report/`         | Default (no report/`.gplot` files) vs. `--save-report --save-gnuplot`     |
 
 ## Try it yourself
 

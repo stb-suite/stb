@@ -16,19 +16,6 @@ same guided-walkthrough format 2.x already uses, applied to a tool that
 *analyzes* an existing SIESTA output rather than building/transforming a
 structure.
 
-## Manual code + physics review (this session)
-
-Before touching anything, `bands.py` and its shared parsing/physics
-module (`core/siesta_bands.py`) were read in full and checked line by
-line. **No bugs were found** — the parsing, VBM/CBM search, direct/
-indirect classification, metal detection, and spin-channel handling are
-all correct (see below for exactly what was checked). The one real gap
-found was **presentation**, not physics: unlike almost every other
-`*_analysis.py` tool in the suite, `bands.py` used to write
-`bands_analysis.txt` *unconditionally*, with no `--save-report` opt-in
-and no numbered `[0]...[N]` report — both fixed in this pass, with the
-underlying numbers completely unchanged.
-
 ## Why this matters (a bit of theory)
 
 ### The `.bands` file format
@@ -99,6 +86,30 @@ never larger. So:
 case directly, with a synthetic 3-point mesh whose extrema are known by
 hand (`mesh.EIG`/`mesh.KP`).
 
+### `--shift`: which energy reference the plotted bands are drawn against
+
+A `.bands` file's raw eigenvalues are absolute (whatever zero the SCF
+calculation happened to use) — not very readable on a plot. `--shift`
+subtracts a reference energy from every eigenvalue before writing
+`bands_gnuplot.dat`/plotting, so the reference itself sits at 0 eV:
+
+- `fermi` — the Fermi energy itself. The most common choice: occupied
+  states end up at negative energy, empty states at positive energy,
+  regardless of whether the material is a metal or an insulator.
+- `vbm` — the Valence Band Maximum. Common for semiconductors/
+  insulators specifically, since it puts the top of the occupied
+  manifold exactly at 0 eV — convenient when comparing gaps or
+  band-edge positions across different materials.
+- `cbm` — the Conduction Band Minimum, the mirror choice of `vbm`.
+- `manual` — any value you choose yourself (`--manual-value`), e.g. to
+  match a reference used in a paper or a previous plot.
+
+This only affects the *plotted*/written bands (`bands_gnuplot.dat`,
+`bands.gplot`) — the VBM/CBM/gap analysis in the report itself is always
+computed from the raw, unshifted eigenvalues against the file's own
+Fermi energy, so `--shift` never changes any reported physics, only
+where the plot's zero line ends up.
+
 ## When you'd reach for it
 
 - Getting the band gap and its direct/indirect character from a finished
@@ -133,8 +144,8 @@ output — `example_3.1.sh` proves this directly at the end.
 ## Optional (off by default)
 
 - **`--save-report`** — also persists the full numbered report to
-  `stb_bands_report.txt`. The old, always-on `bands_analysis.txt` is
-  gone entirely — no flag brings it back under that name.
+  `stb_bands_report.txt`. Without it, only the plot data and
+  `references.bib` are written — no text report file at all.
 - **`--eig-file`** (+ `--kp-file`) — k-mesh vs. k-path gap comparison.
 - **`--gap-tol`** — the Metallic/Indirect-or-Direct threshold (default
   `0.01` eV).

@@ -60,12 +60,11 @@ stb-bands parses this directly (no SIESTA re-run needed) and reports:
   - (for spin-polarized calculations) each spin channel separately, and
     whether the material is HALF-METALLIC
 
-This walkthrough's manual code+physics review found no bugs in any of
-this (see the session notes) -- the numbers were already correct. What
-changed here is how the report is presented: a numbered [0]...[7] report
-like every 1.x/2.x tool now has, and an opt-in --save-report instead of
-always writing bands_analysis.txt (removed) whether you wanted a file or
-not.
+Every run prints a numbered [0]...[7] report, the same style every
+1.x/2.x tool in this suite uses. --save-report additionally persists
+that report to stb_bands_report.txt -- off by default, so a plain run
+only ever writes the plot data (bands_gnuplot.dat/bands.gplot) and
+references.bib, no text report file.
 EOF
 pause
 
@@ -95,9 +94,9 @@ echo " output/metallic-threshold/  --  --gap-tol decides Metallic vs. Indirect"
 echo "=================================================================="
 cat <<'EOF'
 A "gap" can never be negative (bands crossing the Fermi level just means
-CBM < VBM at the global level, clamped to exactly 0.0 -- see the review
-notes), but a small POSITIVE gap and a true metal look identical without
-a threshold. --gap-tol (default 0.01 eV) is that threshold: below it, the
+CBM < VBM at the global level, clamped to exactly 0.0), but a small
+POSITIVE gap and a true metal look identical without a threshold.
+--gap-tol (default 0.01 eV) is that threshold: below it, the
 material is classified "Metallic" instead of "Indirect"/"Direct". Same
 file, only --gap-tol changes -- watch the classification flip live:
 EOF
@@ -178,8 +177,8 @@ B -- interactive stb-suite menu:
 Every run always writes bands_gnuplot.dat + bands.gplot (the actual
 plot data -- run gnuplot on the .gplot for a PDF) and references.bib
 (SIESTA). --save-report additionally persists the full numbered console
-report to stb_bands_report.txt -- off by default, and (this session's
-change) bands_analysis.txt is never written anymore, under any flag.
+report to stb_bands_report.txt -- off by default, so a plain run writes
+no text report file at all.
 EOF
 mkdir -p "$OUT/full-report"
 cp semiconductor.bands "$OUT/full-report/"
@@ -242,8 +241,7 @@ Recap of what this walkthrough covered:
   - --eig-file/--kp-file: why a k-mesh can catch a true VBM/CBM a 1-D
     k-path misses, and why the comparison can only go one direction
   - bands_gnuplot.dat/bands.gplot/references.bib always written;
-    --save-report (opt-in) for the full numbered text report; the old
-    always-on bands_analysis.txt is gone
+    --save-report (opt-in) for the full numbered text report
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): the interactive

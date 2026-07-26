@@ -3419,13 +3419,12 @@ def run_amorphize_generator() -> None:
     quench_temp = get_float_input("Quench target temperature, K [default: 300]: ", 300.0)
     quench_steps = get_int_input("Quench steps [default: 1000]: ", 1000)
 
-    final_relax = get_input(
-        "\nDo a final static relax after the quench? (Y/n): "
+    save_data = get_input(
+        "\nSave simulation data (.dat + gnuplot) for energy/temperature vs. time? (y/N): "
     ).strip().lower()
-
-    output_file = get_input("\nOutput file name [default: amorphous.fdf]: ").strip()
-    if not output_file:
-        output_file = "amorphous.fdf"
+    save_traj = get_input(
+        "Save a trajectory to view the atoms in OVITO/VMD? (y/N): "
+    ).strip().lower()
 
     args = [
         "--file", input_file,
@@ -3433,11 +3432,53 @@ def run_amorphize_generator() -> None:
         "--melt-steps", str(melt_steps),
         "--quench-temp", str(quench_temp),
         "--quench-steps", str(quench_steps),
-        "--output", output_file,
         "--no-intro"
     ]
+
+    if save_data == 'y':
+        args.append("--save-data")
+    if save_traj == 'y':
+        args.append("--save-traj")
+        traj_format = get_input("Trajectory format, xsf/pdb/xyz [default: xsf]: ").strip()
+        if not traj_format:
+            traj_format = "xsf"
+        args.extend(["--traj-format", traj_format])
+    if save_data == 'y' or save_traj == 'y':
+        stride = get_int_input("Sample every N MD steps [default: 10]: ", 10)
+        args.extend(["--stride", str(stride)])
+
+    final_relax = get_input(
+        "\nDo a final static relax after the quench? (Y/n): "
+    ).strip().lower()
     if final_relax in ('n', 'no'):
         args.append("--no-final-relax")
+
+    custom_model = get_input(
+        "\nUse a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+        "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+    if custom_model:
+        while not os.path.isfile(custom_model):
+            print(color_text("File not found!", 'red'))
+            custom_model = get_input("Custom model path: ").strip()
+        args.extend(["--custom-model", custom_model])
+    else:
+        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        if not model:
+            model = "small"
+        args.extend(["--model", model])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the input and final structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
+    output_file = get_input("\nOutput file name [default: amorphous.fdf]: ").strip()
+    if not output_file:
+        output_file = "amorphous.fdf"
+    args.extend(["--output", output_file])
 
     run_tool("stb-amorphize", args)
 

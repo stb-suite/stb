@@ -6176,17 +6176,37 @@ def run_dos_convolution() -> None:
     print("\n" + "="*60)
     print(color_text("DOS PROCESSOR (CONVOLUTION) (stb-convdos)", 'bold').center(60))
     print("="*60 + "\n")
-    
-    # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input DOS file (e.g., dos_total.dat): ")
-    while not os.path.isfile(input_file):
-        print(color_text("File not found!", 'red'))
-        input_file = get_input("Input DOS file: ")
-    
-    # Esta linha agora terá Tab-completion!
-    out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
 
-    broadening_choice = get_input("Specify broadening as (1) sigma or (2) FWHM, in meV [default: 1]: ").strip()
+    print(f"{color_text('Process:', 'yellow')}")
+    print(f"  {color_text('1.', 'yellow')} A single file [Default]")
+    print(f"  {color_text('2.', 'yellow')} A whole folder, recursively (e.g. a stb-dos output folder)")
+    mode_choice = get_input("\nSelect (1-2) [default: 1]: ").strip()
+
+    args = []
+    if mode_choice == '2':
+        # Esta linha agora terá Tab-completion!
+        input_dir = get_input("Input folder (e.g. the output of stb-dos): ")
+        while not os.path.isdir(input_dir):
+            print(color_text("Folder not found!", 'red'))
+            input_dir = get_input("Input folder: ")
+        output_dir = get_input(
+            "Output folder [default: '<folder>_filtered']: "
+        ).strip()
+        args.extend(["--dir", input_dir])
+        if output_dir:
+            args.extend(["--output-dir", output_dir])
+    else:
+        # Esta linha agora terá Tab-completion!
+        input_file = get_input("Input DOS file (e.g., dos_total.dat): ")
+        while not os.path.isfile(input_file):
+            print(color_text("File not found!", 'red'))
+            input_file = get_input("Input DOS file: ")
+
+        # Esta linha agora terá Tab-completion!
+        out_file = get_input("Output file (default: dos_filtered.dat): ", 'green') or "dos_filtered.dat"
+        args.extend(["--file", input_file, "--out", out_file])
+
+    broadening_choice = get_input("\nSpecify broadening as (1) sigma or (2) FWHM, in meV [default: 1]: ").strip()
     if broadening_choice == '2':
         fwhm = get_float_input("FWHM, in meV (default: 118): ", 118.0)
         while fwhm <= 0:
@@ -6199,22 +6219,23 @@ def run_dos_convolution() -> None:
             print(color_text("Sigma must be positive!", 'red'))
             sigma = get_float_input("Sigma in meV (default: 50): ", 50.0)
         broadening_flag, broadening_value = "--sigma", sigma
+    args.extend([broadening_flag, str(broadening_value)])
 
     size_str = get_input("Kernel size in samples (optional, blank = auto-sized from broadening): ").strip()
-
-    plot_choice = get_input("Show before/after plot? (Y/n): ").strip().lower()
-
-    args = [
-        "--file", input_file,
-        broadening_flag, str(broadening_value),
-        "--out", out_file,
-        "--no-intro"
-    ]
-
     if size_str:
         args.extend(["--size", size_str])
+
+    plot_prompt = ("Show before/after plot of the first processed file? (Y/n): " if mode_choice == '2'
+                    else "Show before/after plot? (Y/n): ")
+    plot_choice = get_input(plot_prompt).strip().lower()
     if plot_choice in ['n', 'no']:
         args.append("--no-plot")
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    args.append("--no-intro")
 
     run_tool("stb-convdos", args)
 

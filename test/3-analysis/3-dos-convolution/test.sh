@@ -83,6 +83,7 @@ echo "--- Starting tester for STB-ConvDOS (item 3.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/dos_total.dat" "$TEST_DIR/"
+cp "$FIXTURE_DIR/multi.PDOS.xml" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -92,14 +93,26 @@ pushd "$TEST_DIR" > /dev/null
 #     energy grid spacing 0.01 eV) -- --sigma is in meV and --size is
 #     auto-computed (not given here) ---
 echo -e "\n--- Testing default run (real fixture, --sigma in meV, auto --size, --no-plot) ---"
-rm -f filtered.dat
+rm -f filtered.dat references.bib
 stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success filtered.dat
 check_line_count filtered.dat 6002
 
+echo "Verifying the numbered [0]-[6] report sections"
+check_contains "\[0\] RUN METADATA" log_default.txt
+check_contains "\[1\] INPUT DATA" log_default.txt
+check_contains "\[2\] BROADENING PARAMETERS" log_default.txt
+check_contains "\[3\] CONSERVATION CHECK" log_default.txt
+check_contains "\[4\] WRITING OUTPUT FILES" log_default.txt
+check_contains "\[5\] REFERENCES" log_default.txt
+check_contains "\[6\] SUMMARY & FILES" log_default.txt
+check_contains "Mode           : single file" log_default.txt
+
 echo "Verifying --sigma (meV) is converted using the file's own energy spacing, and --size is auto-sized"
-check_contains "Energy grid spacing: 0.010000 eV -> sigma = 50.000 meV = 5.000 samples, kernel size = 31" log_default.txt
+check_contains "Grid spacing  | 0.010000 eV" log_default.txt
+check_contains "Sigma       | 50.000 meV (5.000 samples)" log_default.txt
+check_contains "Kernel size | 31 samples" log_default.txt
 
 echo "Verifying the header lists every actual DOS column (used to be hardcoded 'Energy DOS_filtered' regardless of column count)"
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" filtered.dat
@@ -111,11 +124,36 @@ echo "Verifying a known filtered data point (sigma=50 meV -> 5 samples, auto siz
 check_contains "13.188850 0.010066 0.788188 1.782186 0.000000" filtered.dat
 
 echo "Verifying the runtime DOS conservation check is printed"
-check_contains "DOS conservation check (integral before -> after broadening)" log_default.txt
-check_contains "s           :" log_default.txt
+check_contains "Integrated DOS (trapezoidal) before -> after broadening" log_default.txt
+check_contains "s      | 8.0246  | 8.0226" log_default.txt
 
 echo "Verifying no non-uniform-grid warning on the real (uniformly sampled) fixture"
 check_not_contains "energy grid spacing varies" log_default.txt
+
+echo "Verifying references.bib is written with the SIESTA citation"
+check_success references.bib
+check_contains "@article{Soler2002," references.bib
+
+
+# --- 2a. --save-report persists the exact same report to disk ---
+echo -e "\n--- Testing --save-report ---"
+rm -f stb_convdos_report.txt
+stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --save-report --no-intro > log_saved.txt 2>&1
+check_exit_code $? 0
+check_success stb_convdos_report.txt
+check_contains "\[6\] SUMMARY & FILES" stb_convdos_report.txt
+check_contains "Report         : ./stb_convdos_report.txt" stb_convdos_report.txt
+
+echo "Verifying no report file without --save-report"
+rm -f stb_convdos_report.txt
+stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > /dev/null 2>&1
+if [ -e stb_convdos_report.txt ]; then
+    echo -e "   -> ${RED}Failed:${NC} stb_convdos_report.txt exists without --save-report"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no stb_convdos_report.txt without --save-report"
+    PASS=$((PASS+1))
+fi
 
 
 # --- 2b. Explicit --size overrides the auto-computed default ---
@@ -123,7 +161,7 @@ echo -e "\n--- Testing an explicit --size override ---"
 rm -f filtered_explicit.dat
 stb-convdos --file dos_total.dat --sigma 50 --size 41 --out filtered_explicit.dat --no-plot --no-intro > log_explicit_size.txt 2>&1
 check_exit_code $? 0
-check_contains "kernel size = 41" log_explicit_size.txt
+check_contains "Kernel size | 41 samples" log_explicit_size.txt
 
 
 # --- 2c. --fwhm is an alternative to --sigma (FWHM = 2.3548 * sigma) ---
@@ -131,7 +169,7 @@ echo -e "\n--- Testing --fwhm as an alternative to --sigma ---"
 rm -f filtered_fwhm.dat
 stb-convdos --file dos_total.dat --fwhm 117.741 --out filtered_fwhm.dat --no-plot --no-intro > log_fwhm.txt 2>&1
 check_exit_code $? 0
-check_contains "sigma = 50.000 meV" log_fwhm.txt
+check_contains "Sigma       | 50.000 meV" log_fwhm.txt
 
 echo "Testing: --sigma and --fwhm together are rejected"
 stb-convdos --file dos_total.dat --sigma 50 --fwhm 100 --out f.dat --no-intro > log_both.txt 2>&1
@@ -242,6 +280,8 @@ echo -e "\n--- Testing error cases ---"
 echo "Testing: nonexistent input file"
 stb-convdos --file does_not_exist.dat --sigma 50 --out f.dat --no-intro > log_missing.txt 2>&1
 check_exit_code $? 1
+check_contains "File not found" log_missing.txt
+check_not_contains "Traceback" log_missing.txt
 
 echo "Testing: single-column input file (no DOS columns to filter)"
 printf "1.0\n2.0\n3.0\n" > single_col.dat
@@ -276,25 +316,122 @@ stb-convdos --version > log_version.txt 2>&1
 check_contains "stb-convdos" log_version.txt
 
 
-# --- 7. Interactive path (stb-suite, shortcut 2.3) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
+# --- 7. --dir: recursive processing of a whole folder ---
+echo -e "\n--- Testing --dir (recursive processing of a whole folder) ---"
 
-echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot"
-rm -f dos_filtered.dat
-printf '3.3\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
+echo "Generating a real stb-dos output tree (dos_total.dat + dos_per_atom/*.dat + dos_per_species/*.dat) from multi.PDOS.xml"
+rm -rf dos_output dos_output_filtered
+mkdir dos_output
+(cd dos_output && stb-dos ../multi.PDOS.xml --shift fermi --no-intro > /dev/null 2>&1)
+check_success dos_output/dos_total.dat
+check_success dos_output/dos_per_atom/Si_1.dat
+
+echo "Testing: --dir processes every .dat file, preserving subfolder structure and filenames in --output-dir"
+stb-convdos --dir dos_output --sigma 50 --no-plot --no-intro > log_dir.txt 2>&1
+check_exit_code $? 0
+check_success dos_output_filtered/dos_total.dat
+check_success dos_output_filtered/dos_per_atom/Si_1.dat
+check_success dos_output_filtered/dos_per_species/dos_Si.dat
+check_contains "Mode           : directory (recursive)" log_dir.txt
+check_contains "\[1\] INPUT DATA" log_dir.txt
+check_contains "dos_total.dat" log_dir.txt
+check_contains "dos_per_atom/Si_1.dat" log_dir.txt
+
+echo "Testing: --dir output is numerically identical to running the same file individually via --file"
+stb-convdos --file dos_output/dos_per_atom/Si_1.dat --sigma 50 --out single_sn1.dat --no-plot --no-intro > /dev/null 2>&1
+diff -q dos_output_filtered/dos_per_atom/Si_1.dat single_sn1.dat > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} --dir and --file give byte-identical output for the same file"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} --dir output differs from the equivalent --file run"
+    FAIL=$((FAIL+1))
+fi
+
+echo "Testing: --output-dir overrides the default '<dir>_filtered' location"
+rm -rf custom_out
+stb-convdos --dir dos_output --sigma 50 --output-dir custom_out --no-plot --no-intro > log_dir_customout.txt 2>&1
+check_exit_code $? 0
+check_success custom_out/dos_total.dat
+
+echo "Testing: an invalid file inside the folder is skipped with a warning, not fatal to the batch"
+printf "1.0\n2.0\n" > dos_output/bad_single_col.dat
+rm -rf dos_output_filtered
+stb-convdos --dir dos_output --sigma 50 --no-plot --no-intro > log_dir_skip.txt 2>&1
+check_exit_code $? 0
+check_success dos_output_filtered/dos_total.dat
+check_contains "Skipped (Input file needs at least 2 columns" log_dir_skip.txt
+check_contains "Skipped        : 1 of" log_dir_skip.txt
+if [ -e dos_output_filtered/bad_single_col.dat ]; then
+    echo -e "   -> ${RED}Failed:${NC} the invalid file was written to output despite failing validation"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} the invalid file was skipped, not written to output"
+    PASS=$((PASS+1))
+fi
+rm -f dos_output/bad_single_col.dat
+
+echo "Testing: --dir with --save-report"
+rm -rf dos_output_filtered
+stb-convdos --dir dos_output --sigma 50 --no-plot --save-report --no-intro > log_dir_report.txt 2>&1
+check_exit_code $? 0
+check_success dos_output_filtered/stb_convdos_report.txt
+check_contains "\[6\] SUMMARY & FILES" dos_output_filtered/stb_convdos_report.txt
+
+echo "Testing: --dir with --out is rejected"
+stb-convdos --dir dos_output --out f.dat --sigma 50 --no-intro > log_dir_bad1.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: --file with --output-dir is rejected"
+stb-convdos --file dos_total.dat --out f.dat --output-dir foo --sigma 50 --no-intro > log_dir_bad2.txt 2>&1
+check_exit_code $? 2
+
+echo "Testing: --dir pointing to a nonexistent folder"
+stb-convdos --dir does_not_exist_dir --sigma 50 --no-intro > log_dir_missing.txt 2>&1
+check_exit_code $? 1
+check_contains "Directory not found" log_dir_missing.txt
+
+echo "Testing: --dir pointing to a folder with no .dat files"
+mkdir -p empty_dir
+stb-convdos --dir empty_dir --sigma 50 --no-intro > log_dir_empty.txt 2>&1
+check_exit_code $? 1
+check_contains "No .dat files found" log_dir_empty.txt
+
+
+# --- 8. Interactive path (stb-suite, shortcut 3.3) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.3) ---"
+
+echo "Testing: navigate 3.3 -> single file -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot -> save-report=N"
+rm -f dos_filtered.dat stb_convdos_report.txt
+printf '3.3\n1\ndos_total.dat\n\n\n50\n\nn\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
+if [ -e stb_convdos_report.txt ]; then
+    echo -e "   -> ${RED}Failed:${NC} a report file was created despite the default (N) save-report answer"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no report file created (default save-report answer is N)"
+    PASS=$((PASS+1))
+fi
 
-echo "Testing: navigate 2.3 -> dos_total.dat -> default output -> FWHM 117.741 meV -> auto size -> no plot"
+echo "Testing: navigate 3.3 -> single file -> dos_total.dat -> default output -> FWHM 117.741 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '3.3\ndos_total.dat\n\n2\n117.741\n\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
+printf '3.3\n1\ndos_total.dat\n\n2\n117.741\n\nn\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
 check_success dos_filtered.dat
-check_contains "sigma = 50.000 meV" log_menu_fwhm.txt
+check_contains "Sigma       | 50.000 meV" log_menu_fwhm.txt
+
+echo "Testing: navigate 3.3 -> folder -> dos_output -> default output dir -> sigma 50 meV -> auto size -> no plot -> save-report=y"
+rm -rf dos_output_filtered
+printf '3.3\n2\ndos_output\n\n\n50\n\nn\ny\n' | stb-suite > log_menu_dir.txt 2>&1
+check_success dos_output_filtered/dos_total.dat
+check_success dos_output_filtered/stb_convdos_report.txt
+check_contains "Process:" log_menu_dir.txt
+check_contains "Mode           : directory (recursive)" dos_output_filtered/stb_convdos_report.txt
 
 
 popd > /dev/null
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

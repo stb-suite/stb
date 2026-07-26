@@ -72,6 +72,8 @@ cp "$FIXTURE_DIR/nspin_missing.PDOS.xml" "$TEST_DIR/"
 cp "$FIXTURE_DIR/no_energy_values.PDOS.xml" "$TEST_DIR/"
 cp "$FIXTURE_DIR/no_orbitals.PDOS.xml" "$TEST_DIR/"
 cp "$FIXTURE_DIR/malformed.PDOS.xml" "$TEST_DIR/"
+cp "$FIXTURE_DIR/siesta.bands" "$TEST_DIR/"
+cp "$FIXTURE_DIR/siesta.EIG" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -124,6 +126,60 @@ check_contains "Using manual energy shift: 0.0 eV" log_shift_zero.txt
 stb-dos siesta.PDOS.xml --shift notanumber --no-intro > log_shift_bad.txt 2>&1
 check_exit_code $? 1
 check_contains "Invalid shift value" log_shift_bad.txt
+
+
+# --- 4a. --shift vbm/cbm hierarchy: .bands -> .EIG -> DOS estimate.
+# siesta.bands/siesta.EIG are the SAME real SIESTA calculation as
+# siesta.PDOS.xml (matching Fermi energy), so the VBM/CBM reported here
+# must match exactly what stb-bands itself reports for these files. ---
+echo -e "\n--- Testing --shift vbm/cbm hierarchy (.bands -> .EIG -> DOS estimate) ---"
+
+echo "Testing: both siesta.bands and siesta.EIG present -> .bands wins"
+stb-dos siesta.PDOS.xml --shift vbm --no-intro > log_shift_vbm_bands.txt 2>&1
+check_exit_code $? 0
+check_contains "Using VBM shift from './siesta.bands' (k-path .bands): -4.471500 eV" log_shift_vbm_bands.txt
+
+stb-dos siesta.PDOS.xml --shift cbm --no-intro > log_shift_cbm_bands.txt 2>&1
+check_exit_code $? 0
+check_contains "Using CBM shift from './siesta.bands' (k-path .bands): -2.333400 eV" log_shift_cbm_bands.txt
+
+echo "Testing: only siesta.EIG present (no .bands) -> falls back to .EIG"
+mv siesta.bands siesta.bands.bak
+stb-dos siesta.PDOS.xml --shift vbm --no-intro > log_shift_vbm_eig.txt 2>&1
+check_exit_code $? 0
+check_contains "Using VBM shift from './siesta.EIG' (k-mesh .EIG): -4.474676 eV" log_shift_vbm_eig.txt
+
+echo "Testing: neither .bands nor .EIG present, no --estimate-from-dos -> clear error"
+mv siesta.EIG siesta.EIG.bak
+stb-dos siesta.PDOS.xml --shift vbm --no-intro > log_shift_vbm_none.txt 2>&1
+check_exit_code $? 1
+check_contains "no 'siesta.bands' or 'siesta.EIG' found" log_shift_vbm_none.txt
+
+echo "Testing: neither present, with --estimate-from-dos -> approximation + warning"
+stb-dos siesta.PDOS.xml --shift vbm --estimate-from-dos --no-intro > log_shift_vbm_estimate.txt 2>&1
+check_exit_code $? 0
+check_contains "estimating VBM directly from the DOS" log_shift_vbm_estimate.txt
+check_contains "This is an approximation" log_shift_vbm_estimate.txt
+
+# Restore for later tests / cleanliness.
+mv siesta.bands.bak siesta.bands
+mv siesta.EIG.bak siesta.EIG
+
+echo "Testing: --label alone (no positional filename) resolves <label>.PDOS.xml"
+rm -rf dos_total.dat dos_per_atom dos_per_species
+stb-dos --label siesta --no-intro > log_label_only.txt 2>&1
+check_exit_code $? 0
+check_success dos_total.dat
+
+echo "Testing: neither filename nor --label given -> argparse error"
+stb-dos --no-intro > log_no_filename_no_label.txt 2>&1
+check_exit_code $? 2
+check_contains "one of filename or --label is required" log_no_filename_no_label.txt
+
+echo "Testing: explicit filename (no --label) still auto-derives the label for .bands/.EIG lookup"
+stb-dos siesta.PDOS.xml --shift vbm --no-intro > log_derived_label.txt 2>&1
+check_exit_code $? 0
+check_contains "Using VBM shift from './siesta.bands' (k-path .bands): -4.471500 eV" log_derived_label.txt
 
 
 # --- 4b. --output-dir: writes into (and creates) a nested directory ---
@@ -235,6 +291,21 @@ echo "Testing: interactive path forwards a custom output directory"
 rm -rf menu_out
 printf '3.2\nsiesta.PDOS.xml\n\n\n\nmenu_out\n' | stb-suite > log_menu_outdir.txt 2>&1
 check_success menu_out/dos_total.dat
+
+echo "Testing: interactive path with just a label, --shift vbm resolved via .bands"
+rm -rf dos_total.dat dos_per_atom dos_per_species
+printf '3.2\nsiesta\n\nvbm\n\n\n\n0\n' | stb-suite > log_menu_vbm.txt 2>&1
+check_contains "Will use 'siesta.bands' to compute VBM" log_menu_vbm.txt
+check_contains "Using VBM shift from './siesta.bands' (k-path .bands): -4.471500 eV" log_menu_vbm.txt
+
+echo "Testing: interactive path, --shift vbm with no .bands/.EIG -> falls back to fermi with a warning"
+mv siesta.bands siesta.bands.bak
+mv siesta.EIG siesta.EIG.bak
+printf '3.2\nsiesta\n\nvbm\nn\n\n\n0\n' | stb-suite > log_menu_vbm_none.txt 2>&1
+check_contains "No '.bands'/'.EIG' found. Estimate VBM/CBM from the DOS itself instead?" log_menu_vbm_none.txt
+check_contains "Falling back to --shift fermi" log_menu_vbm_none.txt
+mv siesta.bands.bak siesta.bands
+mv siesta.EIG.bak siesta.EIG
 
 
 popd > /dev/null

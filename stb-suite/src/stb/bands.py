@@ -14,8 +14,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from stb.core import citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.deps import require_sisl
-from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm
+from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm, read_eig_mesh
 
 REPORT_FILE = "stb_bands_report.txt"
 BIB_FILE = "references.bib"
@@ -93,36 +92,6 @@ def plot_gnuplot(high_sym, nspin, output_dir="."):
     with open(os.path.join(output_dir, 'bands.gplot'), 'w') as file:
         file.writelines(fileout)
     return
-
-def read_eig_mesh(eig_file, kp_file=None):
-    # A SIESTA .EIG file holds the eigenvalues at every k-point of the SCF
-    # k-mesh (not just the high-symmetry path in .bands), which is what a
-    # gap comparison against the path needs. Reuse sisl's own reader
-    # (sisl/io/siesta/eig.py) instead of hand-rolling a second parser --
-    # it already returns exactly (ns, nk, nb), Ef-shifted.
-    sisl = require_sisl()
-    sile = sisl.get_sile(eig_file)
-    fermi_energy = sile.read_fermi_level()
-    eigs = sile.read_data()
-    nspin = eigs.shape[0]
-    nk = eigs.shape[1]
-    # Same (nspin, nbands)-per-k convention as read_data(); add Ef back so
-    # values are absolute eV, matching the rest of this module.
-    dic_mesh = {ik: eigs[:, ik, :] + fermi_energy for ik in range(nk)}
-
-    kpoints = None
-    if kp_file:
-        # The .EIG file itself has no k-vectors, only a bare mesh index --
-        # the .KP file (same calculation) holds the actual Cartesian
-        # (kx, ky, kz), in 1/Ang (sisl converts from the file's raw 1/Bohr).
-        kp_sile = sisl.get_sile(kp_file)
-        kpoints, _weights = kp_sile.read_data()
-        if kpoints.shape[0] != nk:
-            raise ValueError(
-                f"--kp-file '{kp_file}' has {kpoints.shape[0]} k-points but "
-                f"'{eig_file}' has {nk} -- they must be from the same calculation."
-            )
-    return fermi_energy, dic_mesh, nspin, kpoints
 
 def write_gnuplot_bands(dic_bands, nspin, output_dir="."):
     # define initial key

@@ -9,6 +9,7 @@ report-formatting here, those stay tool-specific in bands.py/fatbands.py.
 
 import re
 import numpy as np
+from stb.core.deps import require_sisl
 
 
 def _is_gamma(label):
@@ -68,6 +69,42 @@ def read_data(file_path="siesta.bands"):
 
 def shift_bands(dic, val):
     return {k: arr - val for k, arr in dic.items()}
+
+
+def read_eig_mesh(eig_file, kp_file=None):
+    """Reads a SIESTA .EIG file (eigenvalues at every k-point of the SCF
+    k-mesh, not just a high-symmetry path) via sisl. Returns (fermi_energy,
+    dic_mesh, nspin, kpoints) in the same (nspin, nbands)-per-k shape as
+    read_data() above, so cbm_vbm() works on either source unchanged.
+
+    Extracted from bands.py (--eig-file mesh-vs-line gap comparison) once
+    stb-dos became a second consumer, needing the same reader to resolve a
+    --shift vbm/cbm reference from a companion .EIG when no .bands file is
+    available.
+    """
+    sisl = require_sisl()
+    sile = sisl.get_sile(eig_file)
+    fermi_energy = sile.read_fermi_level()
+    eigs = sile.read_data()
+    nspin = eigs.shape[0]
+    nk = eigs.shape[1]
+    # Same (nspin, nbands)-per-k convention as read_data(); add Ef back so
+    # values are absolute eV, matching the rest of this module.
+    dic_mesh = {ik: eigs[:, ik, :] + fermi_energy for ik in range(nk)}
+
+    kpoints = None
+    if kp_file:
+        # The .EIG file itself has no k-vectors, only a bare mesh index --
+        # the .KP file (same calculation) holds the actual Cartesian
+        # (kx, ky, kz), in 1/Ang (sisl converts from the file's raw 1/Bohr).
+        kp_sile = sisl.get_sile(kp_file)
+        kpoints, _weights = kp_sile.read_data()
+        if kpoints.shape[0] != nk:
+            raise ValueError(
+                f"--kp-file '{kp_file}' has {kpoints.shape[0]} k-points but "
+                f"'{eig_file}' has {nk} -- they must be from the same calculation."
+            )
+    return fermi_energy, dic_mesh, nspin, kpoints
 
 
 def _band_extrema(values_by_k, fermi_energy, gap_tol):

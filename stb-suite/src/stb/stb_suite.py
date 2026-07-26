@@ -5740,12 +5740,40 @@ def run_dos_parser() -> None:
     print("\n" + "="*60)
     print(color_text("PDOS XML PARSER (stb-dos)", 'bold').center(60))
     print("="*60 + "\n")
-    
+
     # Esta linha agora terá Tab-completion!
-    input_file = get_input("Input PDOS.xml file: ")
-    while not os.path.isfile(input_file):
-        print(color_text("File not found!", 'red'))
-        input_file = get_input("Input PDOS.xml file: ")
+    label_or_path = get_input(
+        "SIESTA label (e.g. 'siesta' for siesta.PDOS.xml [+ auto-detected "
+        "siesta.bands/siesta.EIG]), or a direct .xml path: "
+    )
+    while True:
+        if label_or_path.endswith(".xml") and os.path.isfile(label_or_path):
+            input_file = label_or_path
+            label = os.path.basename(input_file)
+            if label.endswith(".PDOS.xml"):
+                label = label[:-len(".PDOS.xml")]
+            elif label.endswith(".xml"):
+                label = label[:-len(".xml")]
+            break
+        elif os.path.isfile(f"{label_or_path}.PDOS.xml"):
+            input_file = f"{label_or_path}.PDOS.xml"
+            label = label_or_path
+            break
+        else:
+            print(color_text(f"Neither '{label_or_path}' nor "
+                              f"'{label_or_path}.PDOS.xml' was found!", 'red'))
+            label_or_path = get_input("SIESTA label (or .xml path): ")
+
+    has_bands = os.path.isfile(f"{label}.bands")
+    has_eig = os.path.isfile(f"{label}.EIG")
+    if has_bands:
+        print(color_text(f"-> Found '{label}.bands', available as a VBM/CBM reference.", 'green'))
+    elif has_eig:
+        print(color_text(f"-> Found '{label}.EIG' (no '{label}.bands'), available as a "
+                          "VBM/CBM reference.", 'green'))
+    else:
+        print(color_text(f"-> No '{label}.bands'/'{label}.EIG' found; --shift vbm/cbm would "
+                          "need --estimate-from-dos.", 'yellow'))
 
     type_list = ['total', 'atom', 'species']
     print(f"\n{color_text('Available types:', 'yellow')} {', '.join(type_list)}")
@@ -5758,10 +5786,28 @@ def run_dos_parser() -> None:
             print(color_text("Input contains invalid types. Using default.", 'yellow'))
             dos_types = ['total', 'atom', 'species']
 
-    shift = get_input("\nEnergy shift ('fermi', '0.0', or a number, default: fermi): ")
+    shift = get_input(
+        "\nEnergy shift ('fermi', 'vbm', 'cbm', '0.0', or a number, default: fermi): "
+    )
     if not shift.strip():
         shift = 'fermi'
-    
+
+    estimate_from_dos = False
+    if shift.strip().lower() in ('vbm', 'cbm'):
+        if has_bands:
+            print(color_text(f"-> Will use '{label}.bands' to compute {shift.strip().upper()}.", 'green'))
+        elif has_eig:
+            print(color_text(f"-> Will use '{label}.EIG' to compute {shift.strip().upper()}.", 'green'))
+        else:
+            answer = get_input(
+                "No '.bands'/'.EIG' found. Estimate VBM/CBM from the DOS itself instead? (y/N): "
+            ).strip().lower()
+            if answer == 'y':
+                estimate_from_dos = True
+            else:
+                print(color_text("Falling back to --shift fermi.", 'yellow'))
+                shift = 'fermi'
+
     print(f"\n{color_text('Select projection mode:', 'yellow')}")
     print(f"  {color_text('1.', 'yellow')} l (s, p, d, f) [Default]")
     print(f"  {color_text('2.', 'yellow')} ml (s, px, py, pz, dxy...)")
@@ -5769,10 +5815,10 @@ def run_dos_parser() -> None:
     choice = 0
     while not (1 <= choice <= 2):
         # Usamos get_int_input com default = 1
-        choice = get_int_input(f"\nSelect mode (1-2) [default: 1]: ", 1) 
+        choice = get_int_input(f"\nSelect mode (1-2) [default: 1]: ", 1)
         if not (1 <= choice <= 2):
             print(color_text(f"Invalid choice! Please select 1 or 2.", 'red'))
-            
+
     projection_mode = 'l' if choice == 1 else 'ml'
     print(f"Selected mode: {color_text(projection_mode, 'cyan')}")
 
@@ -5789,6 +5835,8 @@ def run_dos_parser() -> None:
     args.extend(dos_types)
     args.extend(["--projection", projection_mode])
     args.extend(["--output-dir", output_dir])
+    if estimate_from_dos:
+        args.append("--estimate-from-dos")
     args.append("--no-intro")
 
     run_tool("stb-dos", args)

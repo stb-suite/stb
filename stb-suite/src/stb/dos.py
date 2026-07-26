@@ -17,6 +17,7 @@ import sys
 
 from stb.core.cli import color_text, show_intro
 from stb.core.orbitals import ORBITAL_MAP, ORBITAL_ORDER, get_orbital_name, get_detailed_orbital_name
+from stb.core.siesta_bands import read_data as read_bands_data, read_eig_mesh, cbm_vbm
 
 
 def parse_data_string(data_str):
@@ -32,7 +33,104 @@ def parse_data_string(data_str):
         print(f"Warning: Could not parse data string. Error: {e}", file=sys.stderr)
         return np.array([])
 
-def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_dir='.'):
+
+def resolve_label_and_dir(filename, label_arg):
+    """Returns (label, dirname) used to locate a companion <label>.bands/
+    <label>.EIG next to `filename`, for --shift vbm/cbm. If `label_arg` is
+    given, it's used directly; otherwise the label is derived from
+    `filename`'s own basename (stripping a trailing '.PDOS.xml' or '.xml'),
+    so --label is never strictly required when the PDOS.xml already
+    follows SIESTA's own <label>.PDOS.xml naming.
+    """
+    dirname = os.path.dirname(filename) or "."
+    if label_arg:
+        return label_arg, dirname
+    base = os.path.basename(filename)
+    if base.endswith(".PDOS.xml"):
+        label = base[:-len(".PDOS.xml")]
+    elif base.endswith(".xml"):
+        label = base[:-len(".xml")]
+    else:
+        label = base
+    return label, dirname
+
+
+def find_vbm_cbm_source(label, dirname):
+    """Returns ('bands', path) or ('eig', path) or (None, None) -- the
+    hierarchy requested for --shift vbm/cbm: <label>.bands first (the same
+    k-path file stb-bands itself defaults to), <label>.EIG only if no
+    .bands is present (the fuller SCF k-mesh, same fallback stb-bands
+    --eig-file already relies on for the cases a k-path alone misses).
+    """
+    bands_path = os.path.join(dirname, f"{label}.bands")
+    if os.path.isfile(bands_path):
+        return "bands", bands_path
+    eig_path = os.path.join(dirname, f"{label}.EIG")
+    if os.path.isfile(eig_path):
+        return "eig", eig_path
+    return None, None
+
+
+def vbm_cbm_from_source(source_kind, source_path):
+    """Returns (fermi_source, nspin_source, vbm, cbm) for a companion
+    <label>.bands or <label>.EIG file, via the exact same
+    core.siesta_bands parsing/physics (read_data/read_eig_mesh + cbm_vbm)
+    stb-bands itself uses -- so the VBM/CBM value used here to shift the
+    DOS plot always matches what `stb-bands --shift vbm/cbm` would report
+    for the same file, not a second, potentially-diverging computation.
+    """
+    if source_kind == "bands":
+        fermi_source, _high_sym, dic_bands, nspin_source = read_bands_data(source_path)
+    else:
+        fermi_source, dic_bands, nspin_source, _kpoints = read_eig_mesh(source_path)
+    result = cbm_vbm(fermi_source, dic_bands, nspin_source)
+    vbm, cbm = result["combined"][0], result["combined"][1]
+    return fermi_source, nspin_source, vbm, cbm
+
+
+def estimate_vbm_cbm_from_dos(energies, dos_total, fermi_energy, threshold_frac):
+    """Heuristic VBM/CBM estimate directly from the (broadened) total DOS
+    curve, for when no companion .bands/.EIG file is available: walks
+    outward from the Fermi energy on each side until the DOS first rises
+    above `threshold_frac * max(dos_total)` -- the point where the curve
+    leaves the near-zero gap region. Deliberately less precise than a
+    .bands/.EIG-derived VBM/CBM (the true band edge is blurred by the
+    PDOS's own energy broadening/smearing), which is why this is only ever
+    used as an explicit, opt-in (--estimate-from-dos) fallback -- never
+    silently substituted for the real thing.
+
+    `energies` must be ascending (SIESTA's own PDOS.xml energy grid
+    convention); `dos_total` is the DOS summed over every atom, orbital,
+    and spin channel, same length as `energies`.
+    """
+    energies = np.asarray(energies)
+    dos_total = np.asarray(dos_total)
+    threshold = threshold_frac * dos_total.max()
+    idx_ef = int(np.searchsorted(energies, fermi_energy))
+
+    vbm = None
+    for i in range(idx_ef - 1, -1, -1):
+        if dos_total[i] > threshold:
+            vbm = energies[i]
+            break
+    cbm = None
+    for i in range(idx_ef, len(energies)):
+        if dos_total[i] > threshold:
+            cbm = energies[i]
+            break
+
+    if vbm is None or cbm is None:
+        side = ("either side" if vbm is None and cbm is None
+                else "the occupied side" if vbm is None else "the empty side")
+        raise ValueError(
+            f"Could not estimate a VBM/CBM from the DOS: no energy point with DOS "
+            f"above {threshold_frac} * max(DOS) was found on {side} of the Fermi "
+            "energy. Try a smaller --dos-threshold-frac."
+        )
+    return vbm, cbm
+
+def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_dir='.',
+                      label=None, allow_dos_estimate=False, dos_threshold_frac=0.01):
     """
     Main function to parse the PDOS.xml file and generate output files.
     """
@@ -77,20 +175,9 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
                   "as total/Mx/My/Mz); consult your SIESTA documentation for the exact "
                   "convention.", file=sys.stderr)
 
-        # --- 2. Determine Energy Shift ---
-        shift_value = 0.0
-        if shift_str.lower() == 'fermi':
-            shift_value = e_fermi
-            print(f"Using automatic Fermi energy shift: {shift_value} eV")
-        else:
-            try:
-                shift_value = float(shift_str)
-                print(f"Using manual energy shift: {shift_value} eV")
-            except ValueError:
-                print(f"Error: Invalid shift value '{shift_str}'. Must be 'fermi' or a number.", file=sys.stderr)
-                sys.exit(1)
-
-        # --- 3. Get Energy Values ---
+        # --- 2. Get Energy Values (shift is resolved later, at step 4b,
+        # once atom_data exists -- --shift vbm/cbm's own DOS-estimate
+        # fallback needs the parsed total DOS, not just the raw grid) ---
         energy_values_element = root.find('energy_values')
         if energy_values_element is None:
             print("Error: <energy_values> tag not found. Cannot proceed.", file=sys.stderr)
@@ -98,8 +185,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
 
         energies_str = energy_values_element.text.strip()
         energy_values = parse_data_string(energies_str)
-        energies_shifted = energy_values - shift_value
-        num_energy_points = len(energies_shifted)
+        num_energy_points = len(energy_values)
 
         if num_energy_points == 0:
             print("Error: No energy points found. Cannot proceed.", file=sys.stderr)
@@ -107,7 +193,7 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
 
         print(f"Found {num_energy_points} energy points.")
 
-        # --- 4. Find and Process Orbital Data ---
+        # --- 3. Find and Process Orbital Data ---
         all_orbital_tags = root.findall('orbital')
 
         if not all_orbital_tags:
@@ -197,6 +283,61 @@ def process_pdos_xml(input_file, dos_types, shift_str, projection_mode, output_d
             print(f"Warning: skipped {skipped_lm_orbitals} orbital(s) with l={sorted(skipped_l_values)} "
                   "(l > 3, i.e. g-orbitals or beyond, are not supported) or an unrecognized m -- "
                   "excluded from all output DOS.", file=sys.stderr)
+
+        # --- 4. Determine Energy Shift ---
+        shift_key = shift_str.strip().lower()
+        if shift_key == 'fermi':
+            shift_value = e_fermi
+            print(f"Using automatic Fermi energy shift: {shift_value} eV")
+        elif shift_key in ('vbm', 'cbm'):
+            label_resolved, dirname = resolve_label_and_dir(input_file, label)
+            source_kind, source_path = find_vbm_cbm_source(label_resolved, dirname)
+            if source_kind is not None:
+                fermi_source, nspin_source, vbm, cbm = vbm_cbm_from_source(source_kind, source_path)
+                shift_value = vbm if shift_key == 'vbm' else cbm
+                print(f"Using {shift_key.upper()} shift from '{source_path}' "
+                      f"({'k-path .bands' if source_kind == 'bands' else 'k-mesh .EIG'}): "
+                      f"{shift_value:.6f} eV")
+                if abs(fermi_source - e_fermi) > 1e-3:
+                    print(f"Warning: Fermi energy mismatch between '{input_file}' ({e_fermi:.6f} eV) "
+                          f"and '{source_path}' ({fermi_source:.6f} eV); the two files may be from "
+                          "different calculations.", file=sys.stderr)
+                if nspin_source != nspin:
+                    print(f"Warning: nspin mismatch between '{input_file}' (nspin={nspin}) and "
+                          f"'{source_path}' (nspin={nspin_source}).", file=sys.stderr)
+            elif allow_dos_estimate:
+                grand_total = np.zeros(num_energy_points)
+                for idx in atom_data:
+                    for key, arr in atom_data[idx].items():
+                        if key != 'species':
+                            grand_total += arr.sum(axis=1)
+                try:
+                    vbm_est, cbm_est = estimate_vbm_cbm_from_dos(
+                        energy_values, grand_total, e_fermi, dos_threshold_frac)
+                except ValueError as e:
+                    print(f"Error: {e}", file=sys.stderr)
+                    sys.exit(1)
+                shift_value = vbm_est if shift_key == 'vbm' else cbm_est
+                print(f"Warning: no '{label_resolved}.bands' or '{label_resolved}.EIG' found next to "
+                      f"'{input_file}' -- estimating {shift_key.upper()} directly from the DOS "
+                      f"(--estimate-from-dos): {shift_value:.6f} eV. This is an approximation, blurred "
+                      "by the PDOS's own energy broadening -- prefer a companion .bands/.EIG file when "
+                      "available.", file=sys.stderr)
+            else:
+                print(f"Error: no '{label_resolved}.bands' or '{label_resolved}.EIG' found next to "
+                      f"'{input_file}' -- cannot compute an exact {shift_key.upper()}. Pass "
+                      "--estimate-from-dos to fall back to an approximation from the DOS itself, or "
+                      "provide a matching .bands/.EIG file (see --label).", file=sys.stderr)
+                sys.exit(1)
+        else:
+            try:
+                shift_value = float(shift_str)
+                print(f"Using manual energy shift: {shift_value} eV")
+            except ValueError:
+                print(f"Error: Invalid shift value '{shift_str}'. Must be 'fermi', 'vbm', 'cbm', or a number.", file=sys.stderr)
+                sys.exit(1)
+
+        energies_shifted = energy_values - shift_value
 
         # --- 5. Prepare and Write Output Data ---
 
@@ -356,9 +497,23 @@ def main():
     parser.add_argument(
         "filename",
         type=str,
-        help="The input .PDOS.xml file to process. Give this before --type (see epilog)."
+        nargs='?',
+        default=None,
+        help="The input .PDOS.xml file to process. Give this before --type (see epilog). "
+             "Optional if --label is given (resolves to '<label>.PDOS.xml')."
     )
-    
+
+    parser.add_argument(
+        "--label",
+        type=str,
+        default=None,
+        help="SIESTA label. Shorthand for filename='<label>.PDOS.xml' if filename isn't "
+             "given directly, and (with --shift vbm/cbm) used to locate a companion "
+             "'<label>.bands'/'<label>.EIG' next to it. One of filename or --label is "
+             "required. If filename is given explicitly without --label, the label is "
+             "still derived automatically from its own name for --shift vbm/cbm."
+    )
+
     parser.add_argument(
         "--type",
         nargs='+',
@@ -377,8 +532,28 @@ def main():
         default='fermi',
         help="Energy shift to apply. \n"
              "  'fermi': Automatically shift by the Fermi energy (default).\n"
+             "  'vbm'/'cbm': Shift by the Valence Band Maximum / Conduction Band\n"
+             "    Minimum, computed from a companion '<label>.bands' (preferred) or\n"
+             "    '<label>.EIG' file -- see --label. Falls back to an approximate\n"
+             "    estimate from the DOS itself only with --estimate-from-dos.\n"
              "  '0.0':   Use an absolute energy scale (no shift).\n"
              "  '-1.23': Apply a manual shift of -1.23 eV."
+    )
+
+    parser.add_argument(
+        "--estimate-from-dos", action="store_true",
+        help="With --shift vbm/cbm: if no companion '<label>.bands'/'<label>.EIG' is "
+             "found, fall back to an approximate VBM/CBM estimated directly from the "
+             "DOS itself (blurred by its own energy broadening -- less precise than a "
+             "real .bands/.EIG). Off by default: without it, a missing .bands/.EIG is "
+             "a clear error, not a silent approximation."
+    )
+
+    parser.add_argument(
+        "--dos-threshold-frac", type=float, default=0.01,
+        help="Only used by --shift vbm/cbm's --estimate-from-dos fallback: fraction of "
+             "the peak total DOS above which the curve is considered 'occupied'/'empty' "
+             "again past the gap region (default: 0.01)."
     )
 
     parser.add_argument(
@@ -402,6 +577,10 @@ def main():
 
     args = parser.parse_args()
 
+    if not args.filename and not args.label:
+        parser.error("one of filename or --label is required.")
+    if not args.filename:
+        args.filename = f"{args.label}.PDOS.xml"
 
     if args.intro == True:
         show_intro([
@@ -414,7 +593,9 @@ def main():
     print("\n" + color_text("Density of States:", 'bold'))
     print("-"*60)
 
-    process_pdos_xml(args.filename, args.type, args.shift, args.projection, args.output_dir)
+    process_pdos_xml(args.filename, args.type, args.shift, args.projection, args.output_dir,
+                      label=args.label, allow_dos_estimate=args.estimate_from_dos,
+                      dos_threshold_frac=args.dos_threshold_frac)
     
 if __name__ == "__main__":
     main()

@@ -63,8 +63,9 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing --name H2O ---"
 rm -f h2o.fdf
 stb-molecule --name H2O -o h2o.fdf --no-intro > log_h2o.txt 2>&1
-check_contains "Formula:.*H2O" log_h2o.txt
-check_contains "Atoms:.*3" log_h2o.txt
+check_contains "Formula        : H2O" log_h2o.txt
+check_contains "Atoms          : 3" log_h2o.txt
+check_contains "Point group    : C2v" log_h2o.txt
 check_success h2o.fdf
 check_contains "NumberofAtoms      3" h2o.fdf
 check_contains "NumberOfSpecies    2" h2o.fdf
@@ -74,7 +75,7 @@ check_contains "NumberOfSpecies    2" h2o.fdf
 echo -e "\n--- Testing --name CH3OH (3 species: C, O, H) ---"
 rm -f ch3oh.fdf
 stb-molecule --name CH3OH -o ch3oh.fdf --no-intro > log_ch3oh.txt 2>&1
-check_contains "Atoms:.*6" log_ch3oh.txt
+check_contains "Atoms          : 6" log_ch3oh.txt
 check_success ch3oh.fdf
 check_contains "NumberOfSpecies    3" ch3oh.fdf
 check_contains "NumberofAtoms      6" ch3oh.fdf
@@ -134,19 +135,49 @@ check_contains "\-\-list" log_help.txt
 check_contains "vacuum" log_help.txt
 
 
-# --- 7. Interactive path (stb-suite, shortcut 2.10) ---
+# --- 7. stb-standard report: point-group symmetry, --save-report, --ml-relax, fdf header ---
+echo -e "\n--- Testing the standardized report (point-group symmetry, --save-report, provenance header) ---"
+
+echo "Testing: --save-report writes the full symmetry report to file"
+rm -f stb_molecule_report.txt
+stb-molecule --name H2O --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
+check_success stb_molecule_report.txt
+check_contains "\[5\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_molecule_report.txt
+check_contains "Point Group" stb_molecule_report.txt
+check_contains "Before/After match exactly" stb_molecule_report.txt
+
+echo "Testing: provenance header written into the output .fdf"
+check_contains "# Reference molecule built by stb-molecule from ASE's G2 database." report_test.fdf
+check_contains "# Point group: C2v." report_test.fdf
+
+echo "Testing: --ml-relax pre-relaxes the molecule's geometry with MACE-MP-0 (positions only)"
+stb-molecule --name H2O --ml-relax -o ml_relaxed.fdf --no-intro > log_ml_relax.txt 2>&1
+check_exit_code $? 0
+check_contains "\[3\] ML PRE-RELAXATION (MACE)" log_ml_relax.txt
+check_contains "Cell relaxation : n/a (isolated molecule, positions only)" log_ml_relax.txt
+check_success ml_relaxed.fdf
+check_contains "ML pre-relaxed with" ml_relaxed.fdf
+
+echo "Testing: --custom-model rejected without --ml-relax"
+stb-molecule --name H2O --custom-model does_not_exist.model --no-intro > log_bad_custom.txt 2>&1
+check_exit_code $? 2
+check_contains "only valid together with --ml-relax" log_bad_custom.txt
+
+
+# --- 8. Interactive path (stb-suite, shortcut 2.10) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.10) ---"
 
-echo "Testing: navigate 2.10 -> H2O -> default vacuum -> default output -> quit"
+echo "Testing: navigate 2.10 -> H2O -> default vacuum -> no ml-relax/save-report/view -> default output -> quit"
 rm -f molecule.fdf
-printf '2.10\nH2O\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
-check_contains "Formula:.*H2O" log_menu.txt
+menu_inputs=("2.10" "H2O" "" "" "" "" "" "0")
+printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu.txt 2>&1
+check_contains "Formula        : H2O" log_menu.txt
 check_success molecule.fdf
 
 
 popd > /dev/null
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

@@ -3300,11 +3300,41 @@ def run_molecule_generator() -> None:
 
     vacuum = get_float_input("\nVacuum padding in Ang [default: 10.0]: ", 10.0)
 
+    args = ["--name", name, "--vacuum", str(vacuum), "--no-intro"]
+
+    ml_relax = get_input(
+        "\nPre-relax the molecule's geometry with a MACE ML potential before writing? "
+        "(needs the optional 'ml' extra) (y/N): "
+    ).strip().lower()
+    if ml_relax == 'y':
+        args.append("--ml-relax")
+
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the molecule interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
     output_file = get_input("\nOutput file name [default: molecule.fdf]: ").strip()
     if not output_file:
         output_file = "molecule.fdf"
-
-    args = ["--name", name, "--vacuum", str(vacuum), "--output", output_file, "--no-intro"]
+    args.extend(["--output", output_file])
 
     run_tool("stb-molecule", args)
 

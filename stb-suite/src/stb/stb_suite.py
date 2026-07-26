@@ -2940,16 +2940,8 @@ def run_crystalcast_generator() -> None:
     print("="*60 + "\n")
 
     mode = get_input(
-        "Mode: generate / analyze / substitute / subgroup / supergroup "
+        "Mode: generate / substitute / subgroup / supergroup "
         "[default: generate]: ").strip().lower()
-
-    if mode == "analyze":
-        input_file = get_input("Structure file to analyze (.fdf): ").strip()
-        if not input_file:
-            print(color_text("No file given -- aborting.", 'red'))
-            return
-        run_tool("stb-crystalcast", ["--analyze", "-f", input_file, "--no-intro"])
-        return
 
     if mode == "substitute":
         input_file = get_input("Structure file to modify (.fdf): ").strip()
@@ -2967,9 +2959,16 @@ def run_crystalcast_generator() -> None:
         if not subs:
             print(color_text("No substitutions given -- aborting.", 'red'))
             return
+        args = ["--substitute", *subs, "-f", input_file]
+        save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+        if save_report == 'y':
+            args.append("--save-report")
+        view_choice = get_input("View the input and final structure interactively via ASE before finishing? (y/N): ").strip().lower()
+        if view_choice == 'y':
+            args.append("--view")
         output_file = get_input("Output file name [default: crystalcast.fdf]: ").strip() or "crystalcast.fdf"
-        run_tool("stb-crystalcast", ["--substitute", *subs, "-f", input_file,
-                                      "-o", output_file, "--no-intro"])
+        args.extend(["-o", output_file, "--no-intro"])
+        run_tool("stb-crystalcast", args)
         return
 
     if mode in ("subgroup", "supergroup"):
@@ -3007,6 +3006,12 @@ def run_crystalcast_generator() -> None:
             args.extend(["--eps", str(eps)])
         count = get_int_input("Number of candidates to keep [default: 1]: ", 1)
         args.extend(["--count", str(count)])
+        save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+        if save_report == 'y':
+            args.append("--save-report")
+        view_choice = get_input("View the input and final structure(s) interactively via ASE before finishing? (y/N): ").strip().lower()
+        if view_choice == 'y':
+            args.append("--view")
         output_file = get_input("Output file name [default: crystalcast.fdf]: ").strip() or "crystalcast.fdf"
         args.extend(["--output", output_file, "--no-intro"])
         run_tool("stb-crystalcast", args)
@@ -3108,10 +3113,31 @@ def run_crystalcast_generator() -> None:
         args.extend(["--seed", seed_str])
 
     ml_rank_str = get_input(
-        "Rank candidates by MACE-MP-0 relaxed energy? Needs the optional 'ml' extra (y/n) "
+        "Rank candidates by MACE relaxed energy? Needs the optional 'ml' extra (y/n) "
         "[default: n]: ").strip().lower()
     if ml_rank_str == "y":
         args.append("--ml-rank")
+        custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if custom_model:
+            while not os.path.isfile(custom_model):
+                print(color_text("File not found!", 'red'))
+                custom_model = get_input("Custom model path: ").strip()
+            args.extend(["--custom-model", custom_model])
+        else:
+            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            if not model:
+                model = "small"
+            args.extend(["--model", model])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the final structure(s) interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     output_file = get_input("\nOutput file name [default: crystalcast.fdf]: ").strip()
     if not output_file:
@@ -6632,7 +6658,7 @@ STRUCTURE_TOOLS = {
     12: {'title': "Random Crystal Generator (stb-crystalcast)",
          'description': "Cast random bulk/layer/rod/cluster structures (atomic or molecular, "
                          "optionally ML-ranked) from a symmetry group and composition; or "
-                         "analyze/substitute/subgroup/supergroup an existing structure.",
+                         "substitute/subgroup/supergroup an existing structure.",
          'func': run_crystalcast_generator},
         }
 

@@ -79,6 +79,19 @@ ICET = ("Angqvist2019icet", """@article{Angqvist2019icet,
   doi     = {10.1002/adts.201900015}
 }""")
 
+# pyxtal, the random symmetry-constrained structure generation/search
+# library stb-crystalcast uses for every one of its modes (generate,
+# --substitute, --subgroup, --supergroup).
+PYXTAL = ("Fredericks2021pyxtal", """@article{Fredericks2021pyxtal,
+  author  = {Fredericks, Scott and Parrish, Kevin and Sayre, Dean and Zhu, Qiang},
+  title   = {{PyXtal}: A {P}ython library for crystal structure generation and symmetry analysis},
+  journal = {Computer Physics Communications},
+  year    = {2021},
+  volume  = {261},
+  pages   = {107810},
+  doi     = {10.1016/j.cpc.2020.107810}
+}""")
+
 
 def _read_existing_entries(bib_path):
     """Returns {key: full_entry_text} already in `bib_path`, or {} if the

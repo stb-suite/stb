@@ -84,6 +84,41 @@ broadening, so the estimated value can differ meaningfully from the exact
 one a `.bands`/`.EIG` would give. `stb-dos` always prints an explicit
 warning when this path is used, rather than presenting it as exact.
 
+## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+
+Every run prints a numbered report — the same `[0]...[5]` style every
+newer tool in this suite uses:
+
+- `[0] RUN METADATA` — input file, resolved label, requested `--type`(s),
+  projection mode, shift mode, output directory.
+- `[1] INPUT DATA` — Fermi energy, spin channels, energy grid, orbitals/
+  atoms/species found, plus any non-fatal parsing warnings.
+- `[2] ENERGY SHIFT` — which reference was used and why (the `--shift
+  vbm/cbm` hierarchy messages above live here).
+- `[3] WRITING OUTPUT FILES` — one `[OK]` line per `.dat`/directory
+  actually written.
+- `[4] REFERENCES` — SIESTA citations, written to `references.bib`.
+- `[5] SUMMARY & FILES` — every file this run produced.
+
+`--save-report` additionally persists that exact report to
+`stb_dos_report.txt` — off by default, so a plain run only ever writes the
+`.dat` files and `references.bib`, no text report file.
+
+`--save-gnuplot` writes a `.gplot` script next to **every** `.dat` file
+the run generates (`dos_total.dat`, each `dos_per_atom/*.dat`, each
+`dos_per_species/*.dat`) — off by default. The script is generic: it uses
+gnuplot's own `columnheader(i)` to read column names straight from the
+`.dat` file's own `#Energy(eV)  s  p  ...` header line and plots every
+non-energy column, so the exact same template works regardless of how
+many orbital/spin columns a given file happens to have. Run `gnuplot
+<name>.gplot` for a PDF.
+
+`--view` opens an interactive matplotlib preview of the total DOS (one
+curve per orbital/spin column) right before the tool exits — off by
+default, and always the very last thing a run does, after every report
+line and file has already been written, so a blocking preview window
+never delays or hides them.
+
 ## When you'd reach for it
 
 - Plotting a projected density of states from a finished SIESTA
@@ -138,6 +173,7 @@ by wiping its own `output/`. Three self-contained cases are generated:
 | `basic-run/`         | The three output types (`dos_total.dat`, `dos_per_atom/`, `dos_per_species/`) |
 | `vbm-hierarchy/`     | `--shift vbm`'s `.bands` → `.EIG` → `--estimate-from-dos` hierarchy, live  |
 | `label-shorthand/`   | `--label` resolving both the `PDOS.xml` and its `.bands` in one go        |
+| `full-report/`       | Default (no report/`.gplot` files) vs. `--save-report --save-gnuplot`     |
 
 ## Try it yourself
 
@@ -161,6 +197,9 @@ stb-dos --label my_calc --shift cbm --estimate-from-dos
 | `--dos-threshold-frac`  | Threshold (fraction of peak DOS) used only by `--estimate-from-dos` (default `0.01`). |
 | `--projection`          | Orbital detail: `l` (s/p/d/f, default) or `ml` (individual m sub-orbitals). |
 | `-o/--output-dir`       | Where to write the output files (default: current directory).            |
+| `--save-report`         | Persist the full numbered report to `stb_dos_report.txt`. Off by default. |
+| `--save-gnuplot`        | Write a `.gplot` script next to every `.dat` file generated. Off by default. |
+| `--view`                | Show an interactive matplotlib preview of the total DOS. Off by default. |
 
 ## What's next
 

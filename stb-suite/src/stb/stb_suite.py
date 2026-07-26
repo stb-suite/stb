@@ -5826,6 +5826,11 @@ def run_dos_parser() -> None:
     if not output_dir:
         output_dir = "."
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    save_gnuplot = get_input(
+        "Also save a gnuplot (.gplot) script for each output file? (y/N): "
+    ).strip().lower()
+
     args = [
         input_file, # Positional argument
         "--shift", shift,
@@ -5837,6 +5842,10 @@ def run_dos_parser() -> None:
     args.extend(["--output-dir", output_dir])
     if estimate_from_dos:
         args.append("--estimate-from-dos")
+    if save_report == 'y':
+        args.append("--save-report")
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
     args.append("--no-intro")
 
     run_tool("stb-dos", args)

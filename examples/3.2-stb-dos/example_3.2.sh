@@ -20,6 +20,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+# --view opens an interactive matplotlib preview at the very end of a run
+# -- MPLBACKEND=Agg makes that a no-op instead of blocking on a GUI
+# window, same convention test.sh and example_3.1.sh already use.
+export MPLBACKEND=Agg
+
 OUT="$DIR/output"
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -143,7 +148,7 @@ echo
 echo "\$ stb-dos example.PDOS.xml --shift vbm --estimate-from-dos --no-intro"
 (cd "$OUT/vbm-hierarchy" && stb-dos example.PDOS.xml --shift vbm --estimate-from-dos \
     --no-intro > console_estimate.log 2>&1)
-grep "^Warning:" "$OUT/vbm-hierarchy/console_estimate.log"
+grep "\[WARNING\]" "$OUT/vbm-hierarchy/console_estimate.log"
 echo
 echo "Compare: -1.500000 eV (DOS estimate) vs. -1.000000 eV (real .bands VBM"
 echo "above) vs. -0.500000 eV (real .EIG VBM) -- all in the same right"
@@ -174,6 +179,37 @@ ls "$OUT/label-shorthand" | grep -v console
 pause
 
 echo "=================================================================="
+echo " output/full-report/  --  --save-report/--save-gnuplot (both off by default)"
+echo "=================================================================="
+cat <<'EOF'
+Every run always prints the numbered [0]...[5] report to the console.
+--save-report additionally persists it to stb_dos_report.txt, and
+--save-gnuplot writes a .gplot script next to every .dat file generated
+-- both off by default, so a plain run only ever writes the .dat files
+and references.bib:
+EOF
+mkdir -p "$OUT/full-report"
+cp example.PDOS.xml "$OUT/full-report/"
+echo
+echo "\$ stb-dos example.PDOS.xml --shift fermi --no-intro   # default: no report file, no .gplot"
+(cd "$OUT/full-report" && stb-dos example.PDOS.xml --shift fermi --no-intro > console_default.log 2>&1)
+ls "$OUT/full-report/" | grep -v "\.PDOS\.xml$\|console"
+echo "(no stb_dos_report.txt, no .gplot files -- only the .dat files + references.bib)"
+echo
+echo "\$ stb-dos example.PDOS.xml --shift fermi --save-report --save-gnuplot --no-intro"
+(cd "$OUT/full-report" && stb-dos example.PDOS.xml --shift fermi --save-report --save-gnuplot \
+    --no-intro > console_saved.log 2>&1)
+echo "Report sections written to stb_dos_report.txt:"
+grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_dos_report.txt"
+echo
+echo "Gnuplot scripts, one per .dat file, all sharing the same generic template:"
+find "$OUT/full-report" -name "*.gplot" | sed "s#$OUT/##" | sort
+echo
+echo "references.bib -- SIESTA (every stb-dos run is post-processing a SIESTA output):"
+grep "^@" "$OUT/full-report/references.bib"
+pause
+
+echo "=================================================================="
 echo " Two ways to run it"
 echo "=================================================================="
 cat <<'EOF'
@@ -189,8 +225,8 @@ EOF
 TMP="$(mktemp -d)"
 cp example.PDOS.xml example.bands example.EIG "$TMP/"
 echo
-echo "\$ printf '3.2\\nexample\\n\\nvbm\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift vbm"
-(cd "$TMP" && printf '3.2\nexample\n\nvbm\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '3.2\\nexample\\n\\nvbm\\n\\n\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift vbm"
+(cd "$TMP" && printf '3.2\nexample\n\nvbm\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Using VBM shift" "$OUT/vbm-hierarchy/console_bands.log")
 MENU_LINE=$(grep "Using VBM shift" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -208,7 +244,7 @@ echo "=================================================================="
 cat <<EOF
 Four self-contained folders were generated under output/:
   basic-run/         vbm-hierarchy/
-  label-shorthand/   (a scratch dir for the CLI/menu comparison, removed)
+  label-shorthand/   full-report/
 
 Recap of what this walkthrough covered:
   - what a PDOS.xml is, and the three output types stb-dos writes
@@ -218,9 +254,15 @@ Recap of what this walkthrough covered:
   - why the DOS-estimate fallback needs an explicit --estimate-from-dos
     opt-in, and prints an explicit approximation warning
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
+  - the numbered [0]...[5] report, --save-report, --save-gnuplot
+    (a generic columnheader-based .gplot template), and references.bib
   - CLI and the interactive stb-suite menu building the same command
 
+Not exercised by this script (needs a display): the interactive
+matplotlib preview (--view) -- try it yourself without MPLBACKEND=Agg:
+  stb-dos example.PDOS.xml --shift fermi --view
+
 As a next step, try on your own with a real SIESTA calculation:
-  stb-dos --label my_calc --shift vbm
+  stb-dos --label my_calc --shift vbm --save-report
   stb-dos --label my_calc --shift cbm --estimate-from-dos   # no .bands/.EIG
 EOF

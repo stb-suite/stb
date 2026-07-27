@@ -6669,6 +6669,14 @@ def run_symmetry_analyzer() -> None:
     if write_refined_path:
         args.extend(["--write-refined", write_refined_path])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
     run_tool("stb-symmetry", args)
 
 def run_wantibexos_interface() -> None:

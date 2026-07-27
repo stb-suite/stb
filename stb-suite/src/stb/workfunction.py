@@ -6,21 +6,26 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.20.0"
+VERSION = "2.0.0"
 
 import os
 import sys
 import argparse
+from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 from stb.core import siesta_log
 from stb.core import kspace
+from stb.core import citations
 
 from stb.core.deps import require_sisl, read_sisl_geometry_xv_or_fdf
 sisl = require_sisl()
 
 # ANSI Colors for terminal
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
+
+REPORT_FILE = "stb_workfunction_report.txt"
+BIB_FILE = "references.bib"
 
 VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded --
                         # matches the same constant used by stb-kgrid/stb-mlrelax/etc.
@@ -277,12 +282,28 @@ def slab_and_vacuum_extent(geometry, axis, cell_length, plateaus, point_width):
     extreme atom positions along the axis, or None if no geometry is
     available. A quick sanity-check number for "is my vacuum gap actually
     generous:" one glance, not a substitute for checking the real structure.
+
+    Wraparound-aware: a real slab is very commonly centered near z=0 (i.e.
+    straddling the periodic boundary, e.g. fractional z of 0.93 and 0.07 for
+    the two faces of a thin layer) -- a naive max()-min() on the raw wrapped
+    fractional coordinates would then read this as spanning almost the whole
+    cell instead of the true, narrow thickness. Fixed the same way
+    _circular_mean_index/_unwrap_plateau_positions above handle the
+    identical issue for a vacuum plateau: shift into a frame centered on the
+    atoms' own circular mean position before taking the span. Verified live
+    on a real CrS monolayer (2D-fetched structure, atoms at fractional
+    z = 0, 0, 0.0659, 0.9341): the old naive calculation reported a
+    slab thickness of ~21.8 Ang (the full cell minus the true ~1.5 Ang
+    buckling), the fixed one correctly reports ~3.1 Ang.
     """
     vacuum_size = sum(p['size'] for p in plateaus) * point_width
     slab_thickness = None
     if geometry is not None:
-        cart = (geometry.fxyz[:, axis] % 1.0) * cell_length
-        slab_thickness = float(cart.max() - cart.min())
+        frac = geometry.fxyz[:, axis] % 1.0
+        angles = 2 * np.pi * frac
+        mean_frac = (np.arctan2(np.mean(np.sin(angles)), np.mean(np.cos(angles))) / (2 * np.pi)) % 1.0
+        shifted = ((frac - mean_frac + 0.5) % 1.0 - 0.5) * cell_length
+        slab_thickness = float(shifted.max() - shifted.min())
     return slab_thickness, vacuum_size
 
 
@@ -397,9 +418,12 @@ def annotate_plateaus(plateaus, z_vals, E_f):
     return plateaus
 
 
-def write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, label):
-    """Generates a .gplot file and a data file for plotting."""
-    data_filename = "workfunction_data.dat"
+def write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, label, output_dir):
+    """Generates a .gplot file and a data file for plotting, both inside
+    `output_dir`. Returns (data_path, gplot_path), or (None, None) if either
+    write failed."""
+    data_filename = os.path.join(output_dir, "workfunction_data.dat")
+    gplot_filename = os.path.join(output_dir, "workfunction.gplot")
 
     try:
         with open(data_filename, 'w') as f:
@@ -412,7 +436,7 @@ def write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, label):
                 f.write(f"{z:.6f}     {v:.6f}\n")
     except OSError as e:
         print(color_text(f"[ERROR] Could not write '{data_filename}': {e}", 'red'))
-        return
+        return None, None
 
     fileout = []
     fileout.append('# Set terminal and output\n')
@@ -443,17 +467,20 @@ def write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, label):
                         'center font ",14"\n')
 
     fileout.append('\n')
-    fileout.append(f'plot "{data_filename}" using 1:2 with lines lw 3 lc rgb "navy" title "Planar Avg"\n')
+    # Relative to the .gplot file's own location (gnuplot is run from
+    # output_dir), not the full joined path -- matches dos.py's own
+    # dat_base/stem convention for the same reason.
+    data_basename = os.path.basename(data_filename)
+    fileout.append(f'plot "{data_basename}" using 1:2 with lines lw 3 lc rgb "navy" title "Planar Avg"\n')
 
     try:
-        with open('workfunction.gplot', 'w') as file:
+        with open(gplot_filename, 'w') as file:
             file.writelines(fileout)
     except OSError as e:
-        print(color_text(f"[ERROR] Could not write 'workfunction.gplot': {e}", 'red'))
-        return
+        print(color_text(f"[ERROR] Could not write '{gplot_filename}': {e}", 'red'))
+        return data_filename, None
 
-    print(f"[INFO] Gnuplot script saved to 'workfunction.gplot'")
-    print(f"[INFO] Data saved to '{data_filename}'")
+    return data_filename, gplot_filename
 
 
 def plot_matplotlib(z_vals, v_planar, E_f, plateaus, label, axis, cell_length):
@@ -506,7 +533,7 @@ missing dipole correction) rather than being genuinely flat.""",
         epilog="Example usage:\n"
                "  stb-workfunction -l graphene\n"
                "  stb-workfunction -l slab --axis 2\n"
-               "  stb-workfunction -l slab --fermi -4.5 --no-plot",
+               "  stb-workfunction -l slab --fermi -4.5 --save-report --save-gnuplot",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -522,7 +549,20 @@ missing dipole correction) rather than being genuinely flat.""",
                          help=f"Vacuum levels within this many eV of each other are treated as the "
                               f"same physical plateau rather than a genuinely asymmetric slab "
                               f"(default: {MERGE_LEVEL_TOL})")
-    parser.add_argument("--no-plot", action="store_true", help="Disable automatic plotting.")
+
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                         help="Directory to write references.bib into (and the report/data+gnuplot "
+                              "files, with --save-report/--save-gnuplot) (default: current "
+                              "directory). Created if it doesn't exist.")
+    parser.add_argument("--save-report", action="store_true",
+                         help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                         help="Also write workfunction_data.dat and workfunction.gplot (the planar"
+                              "-averaged potential profile, annotated with the detected vacuum "
+                              "level(s)/work function(s)). Off by default.")
+    parser.add_argument("--view", action="store_true",
+                         help="Show an interactive matplotlib preview of the potential profile "
+                              "before exiting. Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-workfunction {VERSION}")
@@ -535,6 +575,7 @@ missing dipole correction) rather than being genuinely flat.""",
     # Filenames
     out_file = args.file if args.file else f"{args.label}.out"
     grid_file = args.grid if args.grid else f"{args.label}.VT"
+    fermi_source = None
 
     if args.intro:
         show_intro([
@@ -547,6 +588,16 @@ missing dipole correction) rather than being genuinely flat.""",
     print("\n" + color_text("WORK FUNCTION CALCULATOR:", 'bold'))
     print("-" * 60)
 
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Remove stale workfunction_data.dat/workfunction.gplot left by an older
+    # version of this tool (which always wrote them unconditionally to the
+    # current directory -- there was no --output-dir/--save-gnuplot concept
+    # before this migration) so they're never mistaken for current output.
+    for stale_name in ("workfunction_data.dat", "workfunction.gplot"):
+        if os.path.exists(stale_name):
+            os.remove(stale_name)
+
     # --- 1. Fermi Energy ---
     print(f"\n[INFO] Detecting Fermi Energy...")
     E_f = args.fermi
@@ -554,8 +605,11 @@ missing dipole correction) rather than being genuinely flat.""",
     if E_f is None:
         if os.path.exists(out_file):
             E_f = siesta_log.get_fermi_energy(out_file)
+            fermi_source = out_file
         else:
             print(f"{COLORS['yellow']}[WARNING] File {out_file} not found. Cannot auto-detect Fermi.{COLORS['reset']}")
+    else:
+        fermi_source = "--fermi (manual override)"
 
     if E_f is None:
         print("\n" + color_text("FATAL ERROR: Could not determine Fermi Energy.", 'red'))
@@ -576,20 +630,21 @@ missing dipole correction) rather than being genuinely flat.""",
     # --- 3. Axis (cross-checked against the grid actually being read, not just the
     # geometry file in isolation) ---
     axis, vacuum_axes, geometry = detect_vacuum_axis(args.label, args.axis, grid.cell)
+    axis_note = None
     if args.axis is None:
         if vacuum_axes is not None and sum(vacuum_axes) == 1:
-            print(f"[INFO] Auto-detected vacuum axis: {axis} (from {args.label}.XV/.fdf)")
+            axis_note = f"auto-detected from {args.label}.XV/.fdf"
         else:
-            print(color_text(
-                f"   [WARNING] Could not auto-detect a unique vacuum axis (no usable geometry "
-                f"file found, or {'more than one' if vacuum_axes and sum(vacuum_axes) > 1 else 'no'} "
-                f"axis looks vacuum-padded) -- defaulting to axis {axis}. Pass --axis explicitly "
-                "if this is wrong.", 'yellow'))
+            axis_note = color_text(
+                f"could not auto-detect a unique vacuum axis (no usable geometry file found, or "
+                f"{'more than one' if vacuum_axes and sum(vacuum_axes) > 1 else 'no'} axis looks "
+                f"vacuum-padded) -- defaulting to axis {axis}. Pass --axis explicitly if this is "
+                "wrong.", 'yellow')
     elif vacuum_axes is not None and not vacuum_axes[axis]:
-        print(color_text(
-            f"   [WARNING] Axis {axis} doesn't look vacuum-padded in {args.label}.XV/.fdf "
-            f"(no >= {VACUUM_GAP_ANG} Ang gap found there) -- the work function on a genuinely "
-            "periodic direction isn't physically meaningful. Double-check --axis.", 'yellow'))
+        axis_note = color_text(
+            f"axis {axis} doesn't look vacuum-padded in {args.label}.XV/.fdf (no >= "
+            f"{VACUUM_GAP_ANG} Ang gap found there) -- the work function on a genuinely periodic "
+            "direction isn't physically meaningful. Double-check --axis.", 'yellow')
 
     # --- 4. Planar Average ---
     print(f"[INFO] Calculating planar average along axis {axis}...")
@@ -605,78 +660,132 @@ missing dipole correction) rather than being genuinely flat.""",
     annotate_plateaus(plateaus, z_vals, E_f)
 
     point_width = cell_length / len(z_vals)
+    plateau_notes = {}
     for p in plateaus:
+        notes = []
         n_atoms_in = atoms_in_plateau(p, geometry, axis, len(z_vals))
         if n_atoms_in:
-            print(color_text(
-                f"   [WARNING] {n_atoms_in} atom(s) project into the vacuum region near "
-                f"z={p['z']:.2f} Ang -- this may not be genuine vacuum (e.g. an adsorbate) "
-                "rather than a real, empty plateau.", 'yellow'))
+            notes.append(color_text(
+                f"[WARNING] {n_atoms_in} atom(s) project into this vacuum region -- may not be "
+                "genuine vacuum (e.g. an adsorbate) rather than a real, empty plateau.", 'yellow'))
 
         slope_result = detect_plateau_slope(p, v_planar, len(z_vals), point_width)
         if slope_result is not None:
             slope, variation = slope_result
             if abs(variation) > SLOPE_WARN_TOL:
-                print(color_text(
-                    f"   [WARNING] Vacuum region near z={p['z']:.2f} Ang shows a systematic "
-                    f"slope (~{variation:+.3f} eV across the plateau, {slope*1000:+.2f} meV/Ang) "
-                    "instead of a flat plateau -- a common symptom of a missing dipole "
-                    "correction on an asymmetric slab (SIESTA's SlabDipoleCorrection) or a "
-                    "real applied field. Treat this region's vacuum level as approximate.",
-                    'yellow'))
-
-    # --- 6. Reporting ---
-    print("-" * 40)
-    print(color_text(f"RESULTS for {args.label}:", 'cyan'))
-    print(f"  Fermi Level    = {E_f:8.4f} eV")
+                notes.append(color_text(
+                    f"[WARNING] Systematic slope (~{variation:+.3f} eV across the plateau, "
+                    f"{slope*1000:+.2f} meV/Ang) instead of a flat plateau -- a common symptom of "
+                    "a missing dipole correction (SIESTA's SlabDipoleCorrection) or a real applied "
+                    "field. Treat this region's vacuum level as approximate.", 'yellow'))
+        if p['std'] > NOISY_PLATEAU_STD_TOL:
+            notes.append(color_text(
+                f"[WARNING] Noisy plateau (std={p['std']:.3f} eV) -- results might be inaccurate.",
+                'yellow'))
+        plateau_notes[id(p)] = notes
 
     slab_thickness, vacuum_size = slab_and_vacuum_extent(geometry, axis, cell_length, plateaus, point_width)
-    print(f"  Vacuum size (axis {axis}) ~ {vacuum_size:6.2f} Ang", end="")
-    if slab_thickness is not None:
-        print(f"   |  Slab thickness ~ {slab_thickness:6.2f} Ang")
-    else:
-        print()
 
-    if len(plateaus) == 1:
-        print(f"  Vacuum Level   = {plateaus[0]['mean']:8.4f} eV")
-        print(color_text(f"  Work Function  = {plateaus[0]['wf']:8.4f} eV", 'green'))
-        if plateaus[0]['std'] > NOISY_PLATEAU_STD_TOL:
-            print(f"{COLORS['yellow']}[WARNING] Vacuum plateau is noisy (std={plateaus[0]['std']:.3f} "
-                  f"eV). Results might be inaccurate.{COLORS['reset']}")
+    # --- 6. Data + gnuplot (opt-in) ---
+    data_path = gplot_path = None
+    if args.save_gnuplot:
+        data_path, gplot_path = write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, args.label, args.output_dir)
+
+    # --- 7. Report ---
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_dual(color_text("===== STB-WORKFUNCTION REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Label          : {args.label}", f_out)
+    print_dual(f"Fermi source   : {fermi_source}", f_out)
+    print_dual(f"Grid file      : {grid_file}", f_out)
+    print_dual(f"Axis           : {axis}" + (f" ({axis_note})" if axis_note else ""), f_out)
+    print_dual(f"Asymmetric tol : {args.asymmetric_tol} eV", f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+    print_dual(f"Save gnuplot   : {'yes' if args.save_gnuplot else 'no'}", f_out)
+    print_dual(f"View (matplotlib): {'yes' if args.view else 'no'}", f_out)
+
+    print_section("[1] FERMI ENERGY", f_out)
+    print_dual(f"E_F = {E_f:.6f} eV (source: {fermi_source})", f_out)
+
+    print_section("[2] VACUUM AXIS DETECTION", f_out)
+    print_dual(f"Axis used: {axis} ({'x' if axis == 0 else 'y' if axis == 1 else 'z'})", f_out)
+    if axis_note:
+        print_dual(axis_note, f_out)
     else:
-        print(color_text(
-            f"  {len(plateaus)} distinct vacuum levels detected -- this looks like an "
-            "asymmetric slab (different terminations on each side); reporting each "
-            "separately instead of one averaged (and physically meaningless) value.",
-            'yellow'))
+        print_dual("Requested axis matches the geometry's own detected vacuum-padded direction.", f_out)
+
+    print_section("[3] VACUUM PLATEAU DETECTION", f_out)
+    rows = []
+    for i, p in enumerate(plateaus, start=1):
+        rows.append(([str(i), f"{p['z']:.4f}", f"{p['mean']:.6f}", f"{p['std']:.6f}",
+                      "yes" if p['std'] > NOISY_PLATEAU_STD_TOL else "no"], None))
+    print_table(["Region", "z (Å)", "Mean potential (eV)", "Std (eV)", "Noisy?"], rows, f_out)
+    for i, p in enumerate(plateaus, start=1):
+        for note in plateau_notes[id(p)]:
+            print_dual(f"Region {i}: {note}", f_out)
+
+    print_section("[4] WORK FUNCTION RESULTS", f_out)
+    print_dual(f"Vacuum size (axis {axis}) ~ {vacuum_size:.2f} Å"
+               + (f"  |  Slab thickness ~ {slab_thickness:.2f} Å" if slab_thickness is not None else ""),
+               f_out)
+    if len(plateaus) == 1:
+        rows = [(["Vacuum level", f"{plateaus[0]['mean']:.4f} eV"], None),
+                (["Work Function", f"{plateaus[0]['wf']:.4f} eV"], 'green')]
+        print_table(["Quantity", "Value"], rows, f_out)
+    else:
+        print_dual(color_text(
+            f"{len(plateaus)} distinct vacuum levels detected -- this looks like an asymmetric "
+            "slab (different terminations on each side); reporting each separately instead of "
+            "one averaged (and physically meaningless) value.", 'yellow'), f_out)
+        rows = []
         for i, p in enumerate(plateaus, start=1):
-            print(f"  Vacuum Level {i} (near z={p['z']:6.2f} Ang) = {p['mean']:8.4f} eV")
-            print(color_text(f"  Work Function {i}                    = {p['wf']:8.4f} eV", 'green'))
-            if p['std'] > NOISY_PLATEAU_STD_TOL:
-                print(f"{COLORS['yellow']}[WARNING] Vacuum region {i} is noisy (std={p['std']:.3f} "
-                      f"eV). Results might be inaccurate.{COLORS['reset']}")
-        print(f"  Average Work Function              = {np.mean([p['wf'] for p in plateaus]):8.4f} eV")
+            rows.append(([f"Vacuum level {i} (z={p['z']:.2f} Å)", f"{p['mean']:.4f} eV"], None))
+            rows.append(([f"Work Function {i}", f"{p['wf']:.4f} eV"], 'green'))
+        rows.append((["Average Work Function", f"{np.mean([p['wf'] for p in plateaus]):.4f} eV"], 'green'))
+        print_table(["Quantity", "Value"], rows, f_out)
         if len(plateaus) == 2:
             delta_v = plateaus[1]['mean'] - plateaus[0]['mean']
-            print(color_text(
-                f"  Vacuum level difference (dV)        = {delta_v:+8.4f} eV  "
-                "(proportional to the surface dipole moment, dV ~ 4*pi*mu/A -- this tool "
-                "reports dV directly rather than converting to an absolute dipole moment "
-                "in e*Ang, since that needs a convention-specific prefactor; see e.g. "
-                "Bengtsson, PRB 59, 12301 (1999))",
-                'cyan'))
-    print("-" * 40)
+            print_dual(color_text(
+                f"Vacuum level difference (dV) = {delta_v:+.4f} eV (proportional to the surface "
+                "dipole moment, dV ~ 4*pi*mu/A -- reported directly rather than converting to an "
+                "absolute dipole moment in e*Ang, since that needs a convention-specific prefactor; "
+                "see e.g. Bengtsson, PRB 59, 12301 (1999)).", 'cyan'), f_out)
 
-    # --- 7. Output Files & Plotting ---
-    print(f"[INFO] Writing output files...")
-    write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, args.label)
+    print_section("[5] OUTPUT DATA & PLOTS", f_out)
+    if data_path:
+        print_dual(color_text(f"[OK] Data written to '{data_path}'.", 'green'), f_out)
+        print_dual(color_text(f"[OK] Gnuplot script written to '{gplot_path}'.", 'green'), f_out)
+    else:
+        print_dual("Not written (off by default -- pass --save-gnuplot to write "
+                   "workfunction_data.dat/workfunction.gplot).", f_out)
 
-    if not args.no_plot:
+    print_section("[6] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+
+    print_section("[7] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if data_path:
+        print_dual(f"Data           : {data_path}", f_out)
+        print_dual(f"Gnuplot script : {gplot_path}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after the report is fully printed/closed, so a
+    # blocking matplotlib window never delays or hides it.
+    if args.view:
         plot_matplotlib(z_vals, v_planar, E_f, plateaus, args.label, axis, cell_length)
-
-    print("\n[INFO] Complete job!")
-    print("\n"+"-"*60)
-    print(color_text("Work Function calculated. Now I need a vacation.\n\n", 'bold'))
 
 if __name__ == "__main__":
     main()

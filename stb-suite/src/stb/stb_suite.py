@@ -1835,6 +1835,18 @@ def run_workfunction_calculator() -> None:
         # Nota: O workfunction.py usa --fdf para ler o arquivo de saída (Fermi)
         args.extend(["--file", fermi_file])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
     print(color_text("\nRunning Work Function analysis...", 'green'))
     run_tool("stb-workfunction", args)
 

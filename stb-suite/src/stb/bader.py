@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.17.0"
+VERSION = "2.0.0"
 
 import os
 import sys
@@ -14,6 +14,7 @@ import argparse
 import warnings
 import statistics
 import multiprocessing
+from datetime import datetime
 import numpy as np
 from pymatgen.core import Lattice, Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -29,7 +30,11 @@ PyBaderCalc = require_pybader().Bader
 from pybader.io import cube as cube_io
 
 # ================= ANSI COLORS =================
-from stb.core.cli import COLORS, color_text, show_intro
+from stb.core import citations
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
+
+REPORT_FILE = "stb_bader_report.txt"
+BIB_FILE = "references.bib"
 
 # ================= SCIENTIFIC DATA =================
 
@@ -239,15 +244,20 @@ def find_symmetry_groups(geometry, physical_idx, symprec=1e-3, angle_tolerance=5
 
 # ================= MAIN LOGIC =================
 
-def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
-                 threads=None, vacuum_tol=None, keep_cube=True, export_volumes=False):
-
+def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
+                          threads=None, vacuum_tol=None, keep_cube=True, export_volumes=False):
+    """Reads <label>.RHO + <label>.XV/.fdf, converts to a .cube file via sisl,
+    and partitions it into atomic (Bader) basins with PyBader. Pure
+    computation plus the step-by-step progress narration (SISL/PyBader are
+    slow, I/O-bound steps -- printing live as they run is useful feedback,
+    same convention as other tools' "[INFO] Reading structure file..."
+    lines); the actual formatted report is built separately by
+    print_bader_report() from the results dict returned here. Aborts (exit 1)
+    on any unrecoverable error, same fail-fast behavior as before.
+    """
     file_rho = f"{label}.RHO"
-    file_cube = f"{label}.cube"
-    file_spin_cube = f"{label}_spin.cube"
-
-    if not output_file:
-        output_file = f"{label}_BADER.txt"
+    file_cube = os.path.join(output_dir, f"{label}.cube")
+    file_spin_cube = os.path.join(output_dir, f"{label}_spin.cube")
 
     if not os.path.exists(file_rho):
         print(color_text(f"[ERROR] Grid file '{file_rho}' not found.", 'red'))
@@ -292,6 +302,8 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
     valence_source = {**FALLBACK_VALENCE, **detected_valence}
 
     cube_files = []
+    fallback_syms = []
+    dummy_count = 0
     try:
         # --- STEP 1: SISL ---
         try:
@@ -332,9 +344,11 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
             density, lattice, cube_atoms, file_info = cube_io.read(file_cube)
 
             spin_density = read_spin_density(file_rho, geometry, file_spin_cube)
+            has_spin_grid = False
             if spin_density is not None and spin_density.shape == density['charge'].shape:
                 density['spin'] = spin_density
                 cube_files.append(file_spin_cube)
+                has_spin_grid = True
                 print(f"   {color_text('[INFO]', 'cyan')} Spin-polarized grid detected -- "
                       "reporting per-atom net spin (magnetic moment) too.")
             elif spin_density is not None:
@@ -388,12 +402,18 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
         extra_kwargs.update(get_speed_kwargs(speed_mode))
         if 'spin' in density:
             extra_kwargs['spin_flag'] = True
+        n_exported = 0
         if export_volumes:
             # 'atoms' (not 'volumes') so this stays valid even under --speed fast, which
             # deletes bader_volumes but keeps atoms_volumes (see PyBader's own __call__).
             # [-2] is PyBader's own sentinel for "every atom, plus the vacuum bucket if
-            # vacuum_tol is set".
+            # vacuum_tol is set". 'prefix' routes the exported Bader-atoms-<N>.cube files
+            # into --output-dir instead of always landing in the current directory --
+            # PyBader's own writer just string-concatenates prefix + filename, so a
+            # trailing separator is required.
             extra_kwargs['export_mode'] = ('atoms', [-2])
+            extra_kwargs['prefix'] = os.path.join(output_dir, '')
+            n_exported = len(cube_atoms) + (1 if vacuum_tol else 0)
 
         try:
             bader_job = PyBaderCalc(density, lattice, cube_atoms, file_info, **extra_kwargs)
@@ -408,9 +428,9 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
 
         if export_volumes:
             print(f"   {color_text('[INFO]', 'cyan')} Exported {len(cube_atoms)} per-atom "
-                  f"Bader volume(s) as 'Bader-atoms-<N>.cube' in the current directory.")
+                  f"Bader volume(s) as 'Bader-atoms-<N>.cube' in {output_dir}.")
 
-        # --- STEP 3 & 4: Analysis and Output ---
+        # --- STEP 3: Analysis ---
         try:
             print("3. [Analysis] compiling results...")
 
@@ -515,73 +535,8 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                         f"(spread > {SYMMETRY_CHARGE_TOL} e-) -- these sites should be identical "
                         "by symmetry; investigate before trusting either value.", 'red'))
 
-            # --- STEP 4: Output ---
-            has_spin = raw_spins is not None
+            total_final = sum(d['pop_raw'] * correction_factor for d in atoms_data)
 
-            has_volume = raw_volumes is not None
-
-            out_lines = []
-            out_lines.append(f"BADER CHARGE ANALYSIS REPORT - STB Suite v{VERSION}")
-            out_lines.append(f"System: {label}")
-            out_lines.append(f"Z_val Source: {source_name}")
-            out_lines.append(f"PyBader: method={bader_job.method}, refine_method={bader_job.refine_method}, "
-                              f"threads={bader_job.threads}, vacuum_tol={bader_job.vacuum_tol}")
-
-            vol_header = f" {'Vol(A^3)':<10} {'SurfD(A)':<10}" if has_volume else ""
-            spin_header = f" {'Spin (µB)':<10}" if has_spin else ""
-            header = (f"{'Idx':<4} {'Elem':<5} {'Pop(e-)':<12} {'Z_val':<8} {'Net Charge':<12} "
-                      f"{'State':<15}{vol_header}{spin_header}")
-            sep = "-" * len(header)
-            eq = "=" * len(header)
-
-            out_lines.append(eq)
-            out_lines.append(header)
-            out_lines.append(sep)
-
-            print("\n" + header)
-            print(sep)
-
-            total_final = 0.0
-
-            for data in atoms_data:
-                pop = data['pop_raw'] * correction_factor
-                total_final += pop
-
-                if data['z_val'] is None:
-                    z_str = f"{'N/A':<8}"
-                    net_str = f"{'N/A':<12}"
-                    state, color = "Unknown Z_val", 'yellow'
-                else:
-                    net = data['z_val'] - pop
-                    z_str = f"{data['z_val']:<8.2f}"
-                    net_str = f"{net:<+12.4f}"
-                    if net > 0.05: state, color = "Donor (+)", 'red'
-                    elif net < -0.05: state, color = "Acceptor (-)", 'blue'
-                    else: state, color = "Neutral", 'reset'
-
-                vol_str = f" {data['volume']:<10.4f} {data['surf_dist']:<10.4f}" if has_volume else ""
-                spin_str = f" {data['spin']:<+10.4f}" if has_spin else ""
-
-                line = (f"{data['id']:<4} {data['sym']:<5} {pop:<12.4f} {z_str} {net_str} "
-                        f"{state:<15}{vol_str}{spin_str}")
-                out_lines.append(line)
-                print(f"{data['id']:<4} {data['sym']:<5} {pop:<12.4f} {z_str} "
-                      f"{color_text(net_str, 'bold')} {color_text(state, color)}{vol_str}{spin_str}")
-
-            theory_note = "" if not unknown_syms else \
-                f" (excludes {len(unknown_syms)} unknown element(s): {', '.join(sorted(unknown_syms))})"
-            footer = [
-                sep,
-                f"Total Integrated: {total_final:.4f} (Target: {total_theory:.2f}{theory_note})",
-                eq,
-            ]
-            out_lines.extend(footer)
-            for l in footer: print(l)
-
-            # Per-species summary -- a quick way to spot a species whose charge is wildly
-            # inconsistent across the cell without reading every row (population standard
-            # deviation only, since a single outlier atom is exactly what this is meant to
-            # surface -- a full statistical treatment isn't the point here).
             by_species = {}
             for data in atoms_data:
                 if data['z_val'] is None:
@@ -589,62 +544,187 @@ def solve_bader(label, output_file=None, speed_mode='normal', ref_file=None,
                 net = data['z_val'] - data['pop_raw'] * correction_factor
                 by_species.setdefault(data['sym'], []).append(net)
 
-            if by_species:
-                species_header = f"{'Elem':<5} {'N':<4} {'Mean(e-)':<12} {'Std(e-)':<10}"
-                species_sep = "-" * len(species_header)
-                species_lines = ["", "Per-species net charge summary:", species_header, species_sep]
-                for sym in sorted(by_species):
-                    values = by_species[sym]
-                    mean = statistics.mean(values)
-                    std = statistics.pstdev(values) if len(values) > 1 else 0.0
-                    species_lines.append(f"{sym:<5} {len(values):<4} {mean:<+12.4f} {std:<10.4f}")
-                out_lines.extend(species_lines)
-                print("\n" + "\n".join(species_lines))
-
-            if suspicious_zero_ids:
-                ids_str = ', '.join(str(i) for i in suspicious_zero_ids)
-                out_lines.append(
-                    f"\nWARN: Atom(s) {ids_str} got essentially zero Bader population (< "
-                    f"{ZERO_POPULATION_TOL} e-) -- treat with suspicion, see console output "
-                    "for likely causes."
-                )
-
-            if inconsistent_groups:
-                for ids, charges in inconsistent_groups:
-                    pairs = ', '.join(f"#{i}={c:+.3f}" for i, c in zip(ids, charges))
-                    out_lines.append(
-                        f"WARN: Symmetry-equivalent atoms disagree on net charge: {pairs} "
-                        f"(spread > {SYMMETRY_CHARGE_TOL} e-)."
-                    )
-
-            limitations_note = (
-                "Note: Bader analysis has known limitations this tool cannot detect or correct "
-                "for -- non-nuclear attractors (basins not centered on any atom, common in "
-                "ionic/metallic systems) are always folded into the nearest atom by PyBader; "
-                "Z_val is only as accurate as the .out parse or the FALLBACK_VALENCE table "
-                "(semicore-inclusive pseudopotentials can differ from the 'standard valence' "
-                "assumed there); and --speed fast trades basin-boundary accuracy for speed."
-            )
-            out_lines.append(limitations_note)
-            print(color_text("\n  " + limitations_note, 'yellow'))
-
         except Exception as e:
-            print(color_text(f"[ERROR] Analysis/report generation failed: {e}", 'red'))
+            print(color_text(f"[ERROR] Analysis failed: {e}", 'red'))
             sys.exit(1)
-
-        try:
-            with open(output_file, "w") as f:
-                f.write("\n".join(out_lines))
-            print(f"\n{color_text('[OK]', 'green')} Results saved to: {color_text(output_file, 'bold')}")
-        except IOError:
-            print(color_text(f"[ERROR] Could not save file {output_file}", 'red'))
-            sys.exit(1)
-
     finally:
         if not keep_cube:
             for f in cube_files:
                 if os.path.exists(f):
                     os.remove(f)
+
+    return {
+        'label': label, 'output_dir': output_dir, 'speed_mode': speed_mode, 'ref_file': ref_file,
+        'keep_cube': keep_cube, 'export_volumes': export_volumes, 'n_exported': n_exported,
+        'source_name': source_name, 'detected_valence': detected_valence,
+        'fallback_syms': fallback_syms, 'dummy_count': dummy_count,
+        'method': bader_job.method, 'refine_method': bader_job.refine_method,
+        'threads': bader_job.threads, 'vacuum_tol': bader_job.vacuum_tol,
+        'has_spin': raw_spins is not None, 'has_volume': raw_volumes is not None,
+        'atoms_data': atoms_data, 'unknown_syms': unknown_syms,
+        'suspicious_zero_ids': suspicious_zero_ids, 'inconsistent_groups': inconsistent_groups,
+        'total_theory': total_theory, 'total_final': total_final,
+        'correction_factor': correction_factor, 'by_species': by_species,
+        'cube_files': cube_files if keep_cube else [],
+    }
+
+
+# --- Report formatting --------------------------------------------------
+# Same numbered-section report style as the rest of the suite's newer tools
+# ([0] RUN METADATA ... [N] SUMMARY & FILES via print_section/print_dual/
+# print_table) -- replaces the old ad hoc out_lines/print() duplication.
+# The underlying numbers/physics (compute_bader_charges, above) are
+# unchanged; only how they're printed -- and several diagnostics that used
+# to be console-only (Z_val source detail, dummy-atom exclusion, unit
+# -correction factor) are now also persisted to the report file itself.
+
+def _fmt(value, prec=4):
+    return f"{value:.{prec}f}" if value is not None else "N/A"
+
+
+def print_bader_report(results, args, report_path, f_out):
+    print_dual(color_text("===== STB-BADER REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Label          : {results['label']}", f_out)
+    print_dual(f"Output dir     : {results['output_dir']}", f_out)
+    print_dual(f"Speed mode     : {results['speed_mode']}"
+               + (" (CAUTION: trades basin-boundary accuracy for speed)"
+                  if results['speed_mode'] == 'fast' else ""), f_out)
+    print_dual(f"Reference file : {results['ref_file'] if results['ref_file'] else results['label']+'.out (default)'}", f_out)
+    print_dual(f"Vacuum tol.    : {results['vacuum_tol'] if results['vacuum_tol'] else 'disabled'}", f_out)
+    print_dual(f"Threads        : {results['threads']}", f_out)
+    print_dual(f"Keep .cube     : {'yes' if results['keep_cube'] else 'no'}", f_out)
+    print_dual(f"Export volumes : {'yes (' + str(results['n_exported']) + ' file(s))' if results['export_volumes'] else 'no'}", f_out)
+
+    print_section("[1] VALENCE (Z_val) SETUP", f_out)
+    print_dual(f"Source: {results['source_name']}", f_out)
+    if results['dummy_count']:
+        print_dual(f"{results['dummy_count']} dummy/no-element site(s) (Z<=0) excluded from "
+                   "the cube file and this analysis.", f_out)
+    species_zval = sorted({d['sym']: d['z_val'] for d in results['atoms_data']}.items())
+    rows = []
+    for sym, z_val in species_zval:
+        if z_val is None:
+            rows.append(([sym, "N/A", "unknown"], 'red'))
+        elif sym in results['detected_valence']:
+            rows.append(([sym, f"{z_val:.2f}", "detected (.out)"], None))
+        elif sym in results['fallback_syms']:
+            rows.append(([sym, f"{z_val:.2f}", "hardcoded fallback"], 'yellow'))
+        else:
+            rows.append(([sym, f"{z_val:.2f}", "hardcoded default"], None))
+    print_table(["Species", "Z_val", "Source"], rows, f_out)
+    if results['unknown_syms']:
+        print_dual(color_text(
+            f"[WARNING] Element(s) {', '.join(sorted(results['unknown_syms']))} not found in "
+            "the Z_val dictionary -- their net charge cannot be computed; excluded from the "
+            "correction-factor/total below. Use --ref to point at a matching .out file.", 'red'), f_out)
+
+    print_section("[2] PYBADER CONFIGURATION", f_out)
+    print_table(["Setting", "Value"], [
+        (["Method", results['method']], None),
+        (["Refine method", results['refine_method']], None),
+        (["Threads", str(results['threads'])], None),
+        (["Vacuum tolerance", str(results['vacuum_tol']) if results['vacuum_tol'] else "disabled"], None),
+        (["Spin-polarized", "yes" if results['has_spin'] else "no"], None),
+    ], f_out)
+
+    print_section("[3] PER-ATOM BADER POPULATIONS", f_out)
+    headers = ["Idx", "Elem", "Pop(e-)", "Z_val", "Net Charge", "State"]
+    if results['has_volume']:
+        headers += ["Vol(Å³)", "SurfD(Å)"]
+    if results['has_spin']:
+        headers += ["Spin(µB)"]
+    inconsistent_ids = {i for ids, _ in results['inconsistent_groups'] for i in ids}
+    rows = []
+    for data in results['atoms_data']:
+        pop = data['pop_raw'] * results['correction_factor']
+        if data['z_val'] is None:
+            z_str, net_str, state = "N/A", "N/A", "Unknown Z_val"
+        else:
+            net = data['z_val'] - pop
+            z_str, net_str = f"{data['z_val']:.2f}", f"{net:+.4f}"
+            state = "Donor (+)" if net > 0.05 else "Acceptor (-)" if net < -0.05 else "Neutral"
+        cells = [str(data['id']), data['sym'], f"{pop:.4f}", z_str, net_str, state]
+        if results['has_volume']:
+            cells += [_fmt(data['volume']), _fmt(data['surf_dist'])]
+        if results['has_spin']:
+            cells.append(f"{data['spin']:+.4f}" if data['spin'] is not None else "N/A")
+        color = 'red' if data['id'] in results['suspicious_zero_ids'] else \
+                'yellow' if data['id'] in inconsistent_ids else None
+        rows.append((cells, color))
+    print_table(headers, rows, f_out)
+    theory_note = "" if not results['unknown_syms'] else \
+        f" (excludes {len(results['unknown_syms'])} unknown element(s): " \
+        f"{', '.join(sorted(results['unknown_syms']))})"
+    print_dual(f"Total Integrated: {results['total_final']:.4f} "
+               f"(Target: {results['total_theory']:.2f}{theory_note})", f_out)
+
+    print_section("[4] PER-SPECIES SUMMARY", f_out)
+    if results['by_species']:
+        rows = []
+        for sym in sorted(results['by_species']):
+            values = results['by_species'][sym]
+            mean = statistics.mean(values)
+            std = statistics.pstdev(values) if len(values) > 1 else 0.0
+            rows.append(([sym, str(len(values)), f"{mean:+.4f}", f"{std:.4f}"], None))
+        print_table(["Elem", "N", "Mean(e-)", "Std(e-)"], rows, f_out)
+    else:
+        print_dual("No species with a known Z_val -- nothing to summarize.", f_out)
+
+    print_section("[5] DIAGNOSTICS & WARNINGS", f_out)
+    if results['correction_factor'] != 1.0:
+        print_dual(f"[INFO] Unit mismatch corrected. Factor: {results['correction_factor']:.4f} "
+                   "(applied uniformly to every atom -- a single global scalar; if the real "
+                   "deviation is spatially localized, this smears it evenly across every atom's "
+                   "reported charge instead of fixing it exactly).", f_out)
+    if results['suspicious_zero_ids']:
+        ids_str = ', '.join(str(i) for i in results['suspicious_zero_ids'])
+        print_dual(color_text(
+            f"[WARNING] Atom(s) {ids_str} got essentially zero Bader population "
+            f"(< {ZERO_POPULATION_TOL} e-) -- treat with suspicion (common causes: a "
+            "pseudopotential with no resolvable density near the nucleus, or the atom's "
+            "region folded into a neighbor's basin).", 'red'), f_out)
+    if results['inconsistent_groups']:
+        for ids, charges in results['inconsistent_groups']:
+            pairs = ', '.join(f"#{i}={c:+.3f}" for i, c in zip(ids, charges))
+            print_dual(color_text(
+                f"[WARNING] Symmetry-equivalent atoms disagree on net charge: {pairs} "
+                f"(spread > {SYMMETRY_CHARGE_TOL} e-) -- these sites should be identical by "
+                "symmetry; investigate before trusting either value.", 'red'), f_out)
+    print_dual(
+        "Bader analysis has known limitations this tool cannot detect or correct for: "
+        "non-nuclear attractors (basins not centered on any atom, common in ionic/metallic "
+        "systems) are always folded into the nearest atom by PyBader; Z_val is only as "
+        "accurate as the .out parse or the FALLBACK_VALENCE table (semicore-inclusive "
+        "pseudopotentials can differ from the 'standard valence' assumed there); and "
+        "--speed fast trades basin-boundary accuracy for speed. See the example README "
+        "for the underlying theory and a fuller discussion of each limitation.", f_out)
+
+    print_section("[6] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+    print_dual("Bader charge partitioning via PyBader, implementing the grid-based algorithm "
+               "of Tang, Sanville & Henkelman (2009); underlying theory: Bader's Atoms-in-"
+               "Molecules (AIM) quantum theory (1990) -- see the example README for both.", f_out)
+
+    print_section("[7] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    if results['cube_files']:
+        print_dual(f"Cube file(s)   : {', '.join(results['cube_files'])}", f_out)
+    else:
+        print_dual("Cube file(s)   : deleted (--no-cube)", f_out)
+    if results['export_volumes']:
+        print_dual(f"Exported vols. : {results['n_exported']} Bader-atoms-<N>.cube file(s) in "
+                   f"{results['output_dir']}", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
 
 # ================= EXECUTION =================
 
@@ -667,13 +747,18 @@ low (near-zero) population.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --label siesta\n"
-               "  %(prog)s --label siesta --ref relax/siesta.out -o siesta_bader.txt\n"
+               "  %(prog)s --label siesta --ref relax/siesta.out --save-report\n"
                "  %(prog)s --label siesta --speed fast --threads 8\n"
                "  %(prog)s --label slab --vacuum-tol 1e-3\n"
                "  %(prog)s --label siesta --export-volumes\n"
     )
     parser.add_argument("-l", "--label", required=True, help="SystemLabel used in Siesta")
-    parser.add_argument("-o", "--output", required=False, help="Output filename (default: <label>_BADER.txt)")
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write the .cube file(s)/references.bib into (and "
+                             f"{REPORT_FILE}, with --save-report; also any --export-volumes "
+                             "files) (default: current directory). Created if it doesn't exist.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
     parser.add_argument("--ref", required=False, default=None,
                          help="Path to a specific .out file to read Z_val from (overrides <label>.out)")
     parser.add_argument("--speed", choices=['normal', 'fast'], default='normal',
@@ -695,8 +780,9 @@ low (near-zero) population.""",
     parser.add_argument("--export-volumes", action="store_true",
                          help="Also write each atom's individual Bader volume as its own "
                               "'Bader-atoms-<N>.cube' file (plus a vacuum one if --vacuum-tol "
-                              "is set), for visual inspection in VESTA/VMD -- one file per atom, "
-                              "each as large as the main grid, so this is opt-in (default: off)")
+                              "is set) inside --output-dir, for visual inspection in VESTA/VMD "
+                              "-- one file per atom, each as large as the main grid, so this is "
+                              "opt-in (default: off)")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-bader {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -709,9 +795,28 @@ low (near-zero) population.""",
     if args.intro:
         show_intro(["Siesta ToolBox Suite - Bader Analysis", f"Version {VERSION} | University of Brasilia"])
 
-    solve_bader(args.label, args.output, args.speed, args.ref,
-                threads=args.threads, vacuum_tol=args.vacuum_tol, keep_cube=args.keep_cube,
-                export_volumes=args.export_volumes)
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Remove a stale <label>_BADER.txt left by an older version of this tool
+    # -- it always wrote this unconditionally to the current directory (there
+    # was no --output-dir concept before this migration), so that's where a
+    # leftover one would be, regardless of --output-dir now.
+    stale_path = f"{args.label}_BADER.txt"
+    if os.path.exists(stale_path):
+        os.remove(stale_path)
+
+    results = compute_bader_charges(
+        args.label, args.output_dir, args.speed, args.ref,
+        threads=args.threads, vacuum_tol=args.vacuum_tol, keep_cube=args.keep_cube,
+        export_volumes=args.export_volumes)
+
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_bader_report(results, args, report_path, f_out)
+
+    if f_out:
+        f_out.close()
 
     print("\n" + "-" * 60)
     print(color_text("Electron counting is like accounting, but the currency is negative.\n", 'bold'))

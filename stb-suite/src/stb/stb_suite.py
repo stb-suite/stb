@@ -1852,8 +1852,8 @@ def run_bader_calculator() -> None:
         label = get_input("Enter the Siesta SystemLabel: ")
 
     # 2. Configurações de Arquivos
-    output_file = get_input(f"Output filename (default: {label}_BADER.txt): ").strip()
-    
+    output_dir = get_input("Output directory [default: current directory]: ").strip() or "."
+
     # --- NOVO: Pergunta sobre o arquivo de referência (.out) ---
     print(f"\n{color_text('Reference Output File (for Z_val detection):', 'cyan')}")
     print("If your .out file has a different name or path, specify it below.")
@@ -1883,12 +1883,10 @@ def run_bader_calculator() -> None:
         "Export each atom's Bader volume as its own .cube file, for VESTA/VMD? (y/N): ", 'green'
     ).strip().lower()
 
-    # Argumentos básicos
-    args = ["--label", label, "--speed", speed_mode, "--no-intro"]
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
 
-    # Argumentos opcionais
-    if output_file:
-        args.extend(["--output", output_file])
+    # Argumentos básicos
+    args = ["--label", label, "--speed", speed_mode, "--output-dir", output_dir, "--no-intro"]
 
     # --- NOVO: Adiciona a flag --ref se o usuário digitou algo ---
     if ref_file:
@@ -1902,6 +1900,8 @@ def run_bader_calculator() -> None:
         args.append("--no-cube")
     if export_volumes_choice == 'y':
         args.append("--export-volumes")
+    if save_report == 'y':
+        args.append("--save-report")
 
     run_tool("stb-bader", args)
     

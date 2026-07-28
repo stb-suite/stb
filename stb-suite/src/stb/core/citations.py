@@ -93,6 +93,21 @@ TERSOFF_HAMANN = ("Tersoff1985", """@article{Tersoff1985,
   doi     = {10.1103/PhysRevB.31.805}
 }""")
 
+# The generalized Inverse Participation Ratio (IPR) paper -- the same
+# citation sisl's own EigenstateElectron.ipr() docstring points to
+# (":cite:`Murphy2011`") for the Anderson-localization criterion stb-ipr
+# reports.
+IPR_MURPHY = ("Murphy2011", """@article{Murphy2011,
+  author  = {Murphy, N. C. and Wortis, R. and Atkinson, W. A.},
+  title   = {Generalized inverse participation ratio as a possible measure of localization for interacting systems},
+  journal = {Physical Review B},
+  year    = {2011},
+  volume  = {83},
+  number  = {18},
+  pages   = {184206},
+  doi     = {10.1103/PhysRevB.83.184206}
+}""")
+
 # The original Crystal Orbital Overlap Population (COOP) paper -- the
 # bonding/antibonding curve stb-coop's --quantity coop reproduces.
 COOP_HUGHBANKS = ("Hughbanks1983coop", """@article{Hughbanks1983coop,

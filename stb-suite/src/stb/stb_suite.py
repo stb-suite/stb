@@ -1877,11 +1877,28 @@ def run_ipr_analyzer() -> None:
         print(color_text(f"-> No '{label}.bands.WFSX'/'{label}.WFSX'/'{label}.selected.WFSX' "
                           "found -- stb-ipr will fail without one.", 'yellow'))
 
-    if os.path.isfile(f"{label}.HSX"):
-        print(color_text(f"-> Found '{label}.HSX', overlap-aware (accurate) IPR will be used.", 'green'))
+    args = ["--label", label, "--no-intro"]
+
+    default_hsx = f"{label}.HSX"
+    if os.path.isfile(default_hsx):
+        hsx_file = get_input(
+            f"Path to the .HSX file for overlap-aware (accurate) IPR "
+            f"[default: {default_hsx}]: ").strip() or default_hsx
+        args.extend(["--hsx-file", hsx_file])
     else:
-        print(color_text(f"-> No '{label}.HSX' found -- IPR will use an approximate "
-                          "orthogonal-basis fallback.", 'yellow'))
+        print(color_text(f"-> No '{default_hsx}' found -- IPR will use an approximate "
+                          "orthogonal-basis fallback unless you point at one below.", 'yellow'))
+        hsx_file = get_input(
+            "Path to the .HSX file (blank to use the approximate fallback): ").strip()
+        if hsx_file:
+            args.extend(["--hsx-file", hsx_file])
+        else:
+            default_fdf = f"{label}.fdf"
+            geometry_file = get_input(
+                f"Path to the .fdf geometry for the fallback [default: {default_fdf}, "
+                "blank for auto-detect]: ").strip()
+            if geometry_file:
+                args.extend(["--geometry-file", geometry_file])
 
     shift_options = {
         '1': ('vbm', "Valence Band Maximum"),
@@ -1900,17 +1917,27 @@ def run_ipr_analyzer() -> None:
         choice = get_input("Select reference (1-4): ")
 
     shift_type, _ = shift_options[choice]
-    args = ["--label", label, "--shift", shift_type, "--no-intro"]
+    args.extend(["--shift", shift_type])
 
     if shift_type == "manual":
         manual_value = get_float_input("Enter custom shift value: ")
         args.extend(["--manual-value", str(manual_value)])
 
-    q = get_int_input("IPR order parameter q (default: 2): ", 2)
+    q = get_int_input("IPR order parameter q (default: 2, must be >= 2): ", 2)
     args.extend(["--q", str(q)])
 
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-ipr", args)
 

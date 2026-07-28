@@ -1407,8 +1407,13 @@ def run_density_plotter() -> None:
         if contour_choice == 'y':
             args.append("--contour")
 
-    # Densidade de spin ou diferença de densidade (mutuamente com o modo acima)
-    spin_choice = get_input("Plot the spin density instead of total charge? (y/N): ", 'green').strip().lower()
+    # Densidade de spin: agora detectada e reportada automaticamente sempre que o
+    # .RHO for spin-polarizado -- esta pergunta só decide se o usuário quer ver
+    # APENAS o spin (pulando a carga), não se o spin é ou não processado.
+    spin_choice = get_input(
+        "Process ONLY the spin density, skipping charge (only if the .RHO is "
+        "spin-polarized -- otherwise spin is detected and shown automatically "
+        "alongside charge)? (y/N): ", 'green').strip().lower()
     if spin_choice == 'y':
         args.append("--spin")
 
@@ -1430,6 +1435,22 @@ def run_density_plotter() -> None:
             vmax_str = get_input("Colorbar maximum (e/Ang^3), blank to leave auto: ").strip()
             if vmax_str:
                 args.extend(["--vmax", vmax_str])
+
+    output_dir = get_input("\nOutput directory [default: current directory]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    save_gnuplot = get_input("Also save the data + gnuplot script(s)? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+
+    view_choice = get_input("Show the matplotlib preview(s) before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     print(color_text("\nProcessing Density...", 'green'))
     run_tool("stb-density", args)

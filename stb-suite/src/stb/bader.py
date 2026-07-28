@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 import os
 import sys
@@ -193,19 +193,33 @@ def resolve_threads(requested):
 
 
 def read_spin_density(file_rho, geometry, cube_path):
-    """Returns a PyBader-ready spin-density array for a spin-polarized .RHO
-    file (its second grid component), or None for a non-spin-polarized run
-    OR if anything about processing the spin component fails -- this is an
+    """Returns a PyBader-ready NET SPIN (magnetization) density array for a
+    spin-polarized .RHO file, or None for a non-spin-polarized run OR if
+    anything about processing the spin component fails -- this is an
     optional add-on to the main charge analysis, so any failure here just
     degrades to "no spin reported" rather than aborting the whole run.
-    sisl raises when the second grid component doesn't exist, which is how
-    the two cases are told apart; there is no separate flag/header field
-    for it. Re-uses PyBader's own cube reader (via a real round-trip
-    through sisl's cube writer) instead of hand-rolling the bohr/angstrom
-    and charge-density unit conversions PyBader's Bader object expects.
+
+    Uses sisl's own `index='z'` combination (== up - down) -- NOT
+    `index=1` directly. **Real, verified bug fixed here**: for a
+    genuinely spin-polarized (nspin=2) SIESTA .RHO, sisl's raw
+    `read_grid(index=1)` returns the DOWN-spin channel alone, not a
+    "spin density" -- confirmed against a real spin-polarized O2
+    calculation (test/6-utils/3-cube/o2.RHO, a textbook triplet ground
+    state where SIESTA's own log reports `|S| = 2.0`): the old
+    `index=1` reading integrates to 5.0 e (the down channel alone)
+    instead of the correct 2.0 e net moment. `index='z'` (sisl's own
+    up-minus-down combination) is the same convention already used
+    correctly by stb-cube's own `SPIN_INDEX` and by stb-density's
+    analogous fix. `index='z'` raises (not `index=1`'s silent wrong
+    answer) on a non-spin-polarized file (only 1 component, sisl needs 2
+    to form the [1, -1] combination), which is how the two cases are
+    told apart -- there is no separate flag/header field for it.
+    Re-uses PyBader's own cube reader (via a real round-trip through
+    sisl's cube writer) instead of hand-rolling the bohr/angstrom and
+    charge-density unit conversions PyBader's Bader object expects.
     """
     try:
-        spin_grid = sisl.get_sile(file_rho).read_grid(index=1)
+        spin_grid = sisl.get_sile(file_rho).read_grid(index='z')
     except Exception:
         return None
     try:
@@ -336,7 +350,16 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
                         ".out parse -- using the hardcoded fallback Z_val for them instead "
                         "(may not match the actual pseudopotential used).", 'yellow'))
 
-            rho_grid = sisl.get_sile(file_rho).read_grid()
+            # index='total' (sisl's own up+down combination for a spin
+            # -polarized .RHO, or just the single component for a
+            # non-polarized one) -- NOT the default read_grid() (index=0),
+            # which for a genuinely spin-polarized file is only the raw
+            # UP-spin channel, not the total charge. Same fix/verification
+            # as read_spin_density's index='z' above and stb-density's
+            # analogous one: on a real spin-polarized O2 run, the old
+            # index=0 reading integrated to 7.0 e (up channel alone)
+            # instead of the correct 12.0 e (2 O atoms x 6 valence e- each).
+            rho_grid = sisl.get_sile(file_rho).read_grid(index='total')
             rho_cell = rho_grid.cell.copy()
             rho_grid.set_geometry(geometry)
             rho_grid.write(file_cube)

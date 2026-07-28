@@ -132,6 +132,26 @@ looking at any single atom's row on its own.
   calculation, but neither can catch a same-cell, same-atom-order
   mismatch — a `.RHO` grid carries no independent atomic-position record
   to compare against.
+- **A spin-polarized `.RHO` has 2 raw components — up-spin and
+  down-spin — not "total" and "spin".** An earlier version of this tool
+  read them directly (`index=0`/`index=1`) as if they already were the
+  total charge and the net spin; both were wrong (verified against a real
+  spin-polarized O₂ calculation, a textbook triplet with SIESTA's own
+  reported `|S| = 2.0`: the old reading integrated to ~7 e "charge" — the
+  up channel alone — instead of the correct 12 e). Fixed by using sisl's
+  own combination convention (`index='total'` = up+down, `index='z'` =
+  up−down), the same one `stb-density` (3.8) independently needed the
+  identical fix for.
+- **PyBader's own cube reader has a separate, pre-existing bug with
+  mixed-sign (negative-valued) cube files** — its fixed-line-width
+  buffered read desyncs whenever a value's sign character shifts a
+  line's length (confirmed with a minimal, stb-suite-independent
+  reproduction: an all-positive synthetic cube reads fine, the same grid
+  with negative values doesn't). A net spin/magnetization density is
+  exactly this kind of mixed-sign data, so `--spin`-resolved analysis can
+  hit this and gracefully fall back to charge-only (a `[WARN]`, not a
+  crash) — unrelated to the up/down fix above, and outside this suite's
+  own code to fix (it's inside the third-party `pybader` package).
 
 ## The report: console output, `--save-report`
 

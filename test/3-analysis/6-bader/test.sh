@@ -193,6 +193,52 @@ else
 fi
 
 
+# --- 9b. Real bug fix, verified: a spin-polarized .RHO's charge density is
+#     computed from sisl's index='total' (up+down), not the raw index=0
+#     component (up-spin ONLY -- an earlier version's bug). Synthetic
+#     2-atom fixture (a genuine SIESTA .RHO only has 1 or 2 components, and
+#     this repo has no committed spin-polarized SIESTA fixture -- same
+#     "generate a small synthetic-but-realistic one" approach as
+#     test/3-analysis/7-workfunction/test.sh). Verified independently
+#     against a REAL spin-polarized SIESTA run too (test/6-utils/3-cube/
+#     o2.RHO, a textbook O2 triplet, SIESTA's own log reporting |S| = 2.0):
+#     the old index=0 reading integrated to 7.0 e (up channel alone)
+#     instead of the correct 12.0 e (2 O atoms x 6 valence e- each) -- not
+#     re-run here since PyBader's own cube reader has a separate,
+#     pre-existing bug of its own on mixed-sign (negative-valued) cube
+#     files (confirmed unrelated to this fix: reproduces identically
+#     writing/reading a plain synthetic mixed-sign cube with no SIESTA/
+#     stb-suite code involved at all), which the real O2 case's spin
+#     channel triggers -- gracefully degrades to "spin-polarized: no"
+#     with a [WARN], not a crash (see the fixture below, chosen to avoid
+#     it, for a full end-to-end confirmation instead). ---
+echo -e "\n--- Testing the spin up/down-vs-total/spin fix (charge = up+down, not up alone) ---"
+python3 -c "
+import sisl
+import numpy as np
+
+lattice = sisl.Lattice([[8.0, 0, 0], [0, 8.0, 0], [0, 0, 8.0]])
+nx, ny, nz = 24, 24, 24
+rng = np.random.default_rng(1)
+up = np.abs(rng.normal(0.5, 0.1, (nx, ny, nz)))
+down = np.abs(rng.normal(0.3, 0.08, (nx, ny, nz)))
+
+g_up = sisl.Grid([nx, ny, nz], lattice=lattice)
+g_up.grid[:] = up
+g_down = sisl.Grid([nx, ny, nz], lattice=lattice)
+g_down.grid[:] = down
+sisl.get_sile('spinfix.RHO', mode='w').write_grid(g_up, g_down)
+
+geom = sisl.Geometry([[2.0, 4.0, 4.0], [6.0, 4.0, 4.0]], atoms=[sisl.Atom(8), sisl.Atom(8)],
+                     lattice=lattice)
+geom.write('spinfix.fdf')
+"
+timeout 120 stb-bader --label spinfix --no-intro > log_spinfix.txt 2>&1
+check_exit_code $? 0
+echo "Verifying the total (up+down) integrates to the correct 12.0 e (2 O atoms x Z_val=6), not ~7-8 e (up channel alone)"
+check_contains "Total Integrated: 12.0000 (Target: 12.00)" log_spinfix.txt
+
+
 # --- 10. Robustness / --help / --version ---
 echo -e "\n--- Testing error and robustness cases ---"
 

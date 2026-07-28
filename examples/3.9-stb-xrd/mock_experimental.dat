@@ -1,0 +1,17 @@
+# Synthetic mock experimental pattern for the stb-xrd --compare-to demo.
+# Built by adding small angle jitter + intensity noise to the real,
+# simulated CrS pattern itself (not independent experimental data).
+3.8081 0.862007
+7.5638 0.186690
+11.3988 0.052931
+15.2508 0.018742
+18.9882 0.005345
+28.3167 0.005438
+30.1977 0.006344
+40.1454 0.007023
+41.7977 0.009484
+43.8687 0.009453
+46.1145 0.009967
+48.6586 0.008929
+51.4624 0.005955
+53.2318 0.006392

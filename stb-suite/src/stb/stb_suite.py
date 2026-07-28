@@ -6370,19 +6370,22 @@ def run_xrd_analyzer() -> None:
         compare_to = get_input(
             "Compare to an experimental pattern file [default: skip]: ").strip()
 
-    plot_choice = get_input("Show an interactive plot? (y/N): ").strip().lower()
-
-    output_file = get_input("Output data file name [default: xrd_pattern.dat]: ").strip() or "xrd_pattern.dat"
-
     args = ["--file", input_file, "--format", format_type, "--wavelength", wavelength,
-            "--two-theta-range", str(two_theta_min), str(two_theta_max),
-            "--output", output_file, "--no-intro"]
+            "--two-theta-range", str(two_theta_min), str(two_theta_max), "--no-intro"]
     if top_str:
         args.extend(["--top", top_str])
     if compare_to:
         args.extend(["--compare-to", compare_to])
-    if plot_choice == "y":
-        args.append("--plot")
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib preview before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-xrd", args)
 

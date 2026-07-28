@@ -9,6 +9,8 @@ and experimental-file-reading logic, per this repo's own extract-on-second
 applied to format readers).
 """
 
+import os
+
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.diffraction.xrd import WAVELENGTHS
@@ -83,3 +85,30 @@ def compute_pattern(structure, wavelength=1.54184, two_theta_range=(0.0, 90.0)):
     if len(xrd.pxrd) == 0:
         raise ValueError("no peaks found in the given two-theta range -- try widening it.")
     return xrd
+
+
+def write_xrd_gnuplot(dat_path, gplot_path, formula, wavelength_label):
+    """Writes a .gplot script plotting the simulated stick pattern (2-theta
+    vs. intensity -- columns 1 and 6 of the .dat file pyxtal's own
+    XRD.save() writes, per its documented 2theta/d/h/k/l/intensity column
+    order) as impulses, the standard powder-XRD "stick pattern" convention.
+
+    Companion to XRD.save() (called directly by stb-xrd, no wrapper needed
+    here since pyxtal's own writer already matches this suite's plain
+    -text-data-file convention) -- extracted alongside it once stb-xrd
+    needed a gnuplot script to go with the data file it already writes.
+    """
+    dat_basename = os.path.basename(dat_path)
+    lines = [
+        'set terminal pdfcairo enhanced font "Arial,14" size 8,6\n',
+        'set output "xrd_pattern.pdf"\n',
+        'set xlabel "2{/Symbol Q} (deg)" font "Arial,16"\n',
+        'set ylabel "Intensity (a.u.)" font "Arial,16"\n',
+        f'set title "Simulated XRD pattern: {formula} ({wavelength_label})"\n',
+        'set grid xtics ytics lt 0 lw 1 lc rgb "#bbbbbb"\n',
+        'unset key\n',
+        '\n',
+        f'plot "{dat_basename}" using 1:6 with impulses lw 2 lc rgb "navy"\n',
+    ]
+    with open(gplot_path, "w") as f:
+        f.writelines(lines)

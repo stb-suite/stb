@@ -5,6 +5,14 @@
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
+# Non-interactive matplotlib backend: --view calls plt.show(), which would
+# otherwise block forever waiting for a GUI event loop that doesn't exist here.
+# Under Agg, plt.show() just warns and returns immediately -- verified directly
+# before writing this test (a plain plt.show() under MPLBACKEND=Agg returned in
+# ~0.006s) -- so, unlike some other tools' test.sh in this suite, --view itself
+# is exercised directly below rather than only documented via --help.
+export MPLBACKEND=Agg
+
 # Output colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -24,6 +32,17 @@ check_success() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that file $1 does NOT exist (or is empty)
+check_absent() {
+    if [ -s "$1" ]; then
+        echo -e " ... ${RED}FAIL${NC} (file '$1' exists but shouldn't have been written)"
+        FAIL=$((FAIL+1))
+    else
+        echo -e " ... ${GREEN}OK${NC} (file '$1' correctly not written)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -64,31 +83,78 @@ stb-crystalcast --group 225 --species Na Cl --num-ions 4 4 \
     --lattice 5.64 5.64 5.64 90 90 90 -o nacl.fdf --no-intro > /dev/null 2>&1
 
 
-# --- 2. Basic run (default wavelength/range) ---
+# --- 2. Basic run: numbered report, no unconditional data file ---
 echo -e "\n--- Testing a basic run (--file nacl.fdf --format fdf) ---"
 
-rm -f xrd_pattern.dat
+rm -f xrd_pattern.dat xrd_pattern.gplot references.bib
 stb-xrd --file nacl.fdf --format fdf --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "Formula:.*NaCl" log_basic.txt
-check_contains "Wavelength:.*CuKa" log_basic.txt
-check_contains "2-theta" log_basic.txt
+check_contains "\[0\] RUN METADATA" log_basic.txt
+check_contains "\[1\] STRUCTURE" log_basic.txt
+check_contains "\[2\] DIFFRACTION PATTERN" log_basic.txt
+check_contains "\[4\] OUTPUT DATA & PLOTS" log_basic.txt
+check_contains "\[5\] REFERENCES" log_basic.txt
+check_contains "\[6\] SUMMARY & FILES" log_basic.txt
+check_contains "Formula.*NaCl" log_basic.txt
+check_contains "Wavelength.*CuKa" log_basic.txt
+check_contains "Space Group" log_basic.txt
+check_contains "Crystal System" log_basic.txt
+check_contains "Peaks found in range" log_basic.txt
+check_contains "Strongest peak" log_basic.txt
+
+echo "Testing: without --save-gnuplot, no .dat/.gplot is written (used to be unconditional)"
+check_absent xrd_pattern.dat
+check_absent xrd_pattern.gplot
+
+echo "Testing: references.bib is always written (SIESTA + pyxtal)"
+check_success references.bib
+check_contains "Soler2002" references.bib
+check_contains "Garcia2020" references.bib
+check_contains "Fredericks2021pyxtal" references.bib
+
+echo "Testing: no text report without --save-report"
+check_absent stb_xrd_report.txt
+
+
+# --- 3. --save-report / --save-gnuplot ---
+echo -e "\n--- Testing --save-report / --save-gnuplot ---"
+
+rm -f xrd_pattern.dat xrd_pattern.gplot stb_xrd_report.txt
+stb-xrd --file nacl.fdf --format fdf --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
+check_exit_code $? 0
+check_success stb_xrd_report.txt
+check_contains "\[0\] RUN METADATA" stb_xrd_report.txt
 check_success xrd_pattern.dat
 check_contains "wavelength/thetas" xrd_pattern.dat
+check_success xrd_pattern.gplot
+check_contains "using 1:6 with impulses" xrd_pattern.gplot
+check_contains "\[OK\] Data written to" log_saved.txt
+check_contains "\[OK\] Gnuplot script written to" log_saved.txt
 
 
-# --- 3. --wavelength (named source and numeric) ---
+# --- 4. -o/--output-dir ---
+echo -e "\n--- Testing -o/--output-dir ---"
+
+rm -rf out_subdir
+stb-xrd --file nacl.fdf --format fdf --output-dir out_subdir --save-report --save-gnuplot \
+    --no-intro > log_outdir.txt 2>&1
+check_exit_code $? 0
+check_success out_subdir/references.bib
+check_success out_subdir/stb_xrd_report.txt
+check_success out_subdir/xrd_pattern.dat
+check_success out_subdir/xrd_pattern.gplot
+
+
+# --- 5. --wavelength (named source and numeric) ---
 echo -e "\n--- Testing --wavelength ---"
 
-stb-xrd --file nacl.fdf --format fdf --wavelength MoKa --no-intro -o mo.dat > log_wl_named.txt 2>&1
+stb-xrd --file nacl.fdf --format fdf --wavelength MoKa --no-intro > log_wl_named.txt 2>&1
 check_exit_code $? 0
-check_contains "Wavelength:.*MoKa" log_wl_named.txt
-check_success mo.dat
+check_contains "Wavelength.*MoKa" log_wl_named.txt
 
-stb-xrd --file nacl.fdf --format fdf --wavelength 1.5406 --no-intro -o numeric.dat > log_wl_numeric.txt 2>&1
+stb-xrd --file nacl.fdf --format fdf --wavelength 1.5406 --no-intro > log_wl_numeric.txt 2>&1
 check_exit_code $? 0
 check_contains "1.54060 Ang" log_wl_numeric.txt
-check_success numeric.dat
 
 echo "Testing: unknown --wavelength name"
 stb-xrd --file nacl.fdf --format fdf --wavelength NotASource --no-intro > log_wl_bad.txt 2>&1
@@ -96,13 +162,12 @@ check_exit_code $? 1
 check_contains "not a known source name" log_wl_bad.txt
 
 
-# --- 4. --two-theta-range ---
+# --- 6. --two-theta-range ---
 echo -e "\n--- Testing --two-theta-range ---"
 
-stb-xrd --file nacl.fdf --format fdf --two-theta-range 20 60 --no-intro -o narrow.dat > log_range.txt 2>&1
+stb-xrd --file nacl.fdf --format fdf --two-theta-range 20 60 --no-intro > log_range.txt 2>&1
 check_exit_code $? 0
 check_contains "20.0 - 60.0 deg" log_range.txt
-check_success narrow.dat
 
 echo "Testing: --two-theta-range MIN >= MAX is rejected"
 stb-xrd --file nacl.fdf --format fdf --two-theta-range 60 20 --no-intro > log_range_bad.txt 2>&1
@@ -115,32 +180,34 @@ check_exit_code $? 1
 check_contains "no peaks found" log_range_empty.txt
 
 
-# --- 5. --top ---
+# --- 7. --top ---
 echo -e "\n--- Testing --top ---"
 
 stb-xrd --file nacl.fdf --format fdf --top 3 --no-intro > log_top.txt 2>&1
 check_exit_code $? 0
-check_contains "Peaks (3 of" log_top.txt
+check_contains "Showing top 3 of" log_top.txt
 
 
-# --- 6. struct_out format ---
+# --- 8. struct_out format ---
 echo -e "\n--- Testing --format struct_out ---"
 
-stb-xrd --file siesta.STRUCT_OUT --format struct_out --no-intro -o struct_out.dat > log_struct_out.txt 2>&1
+stb-xrd --file siesta.STRUCT_OUT --format struct_out --no-intro > log_struct_out.txt 2>&1
 check_exit_code $? 0
-check_success struct_out.dat
+check_contains "\[1\] STRUCTURE" log_struct_out.txt
 
 
-# --- 7. --plot (interactive; only check it doesn't crash) ---
-echo -e "\n--- Testing --plot (headless, only checking exit code) ---"
+# --- 9. --view (renamed from --plot; MPLBACKEND=Agg above makes this safe/non-blocking) ---
+echo -e "\n--- Testing --view (headless via MPLBACKEND=Agg, only checking exit code) ---"
 
-timeout 20 stb-xrd --file nacl.fdf --format fdf --plot --no-intro -o plot_test.dat > log_plot.txt 2>&1
+timeout 20 stb-xrd --file nacl.fdf --format fdf --view --no-intro > log_view.txt 2>&1
 check_exit_code $? 0
-check_success plot_test.dat
 
 
-# --- 8. --compare-to ---
+# --- 10. --compare-to ---
 echo -e "\n--- Testing --compare-to (pyxtal's Similarity() is genuinely slow, ~20-30s -- generous timeouts below) ---"
+
+rm -f xrd_pattern.dat
+stb-xrd --file nacl.fdf --format fdf --save-gnuplot --no-intro > /dev/null 2>&1
 
 # Build a synthetic "experimental" file from this structure's own simulated
 # peaks (2theta + intensity columns only) -- not a perfect broadened profile,
@@ -148,11 +215,16 @@ echo -e "\n--- Testing --compare-to (pyxtal's Similarity() is genuinely slow, ~2
 awk 'NR>1 {print $1, $6}' xrd_pattern.dat > experimental.dat
 
 timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat \
-    --no-intro -o compare_test.dat > log_compare.txt 2>&1
+    --no-intro > log_compare.txt 2>&1
 check_exit_code $? 0
-check_contains "Compared to:.*experimental.dat" log_compare.txt
-check_contains "Similarity score:" log_compare.txt
-check_success compare_test.dat
+check_contains "\[3\] EXPERIMENTAL COMPARISON" log_compare.txt
+check_contains "Experimental file.*experimental.dat" log_compare.txt
+check_contains "Similarity score" log_compare.txt
+
+echo "Testing: --compare-to combined with --view (overlay branch, headless)"
+timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat --view \
+    --no-intro > log_compare_view.txt 2>&1
+check_exit_code $? 0
 
 echo "Testing: --compare-to with a nonexistent file"
 stb-xrd --file nacl.fdf --format fdf --compare-to does_not_exist.dat --no-intro > log_compare_missing.txt 2>&1
@@ -172,7 +244,7 @@ check_exit_code $? 1
 check_contains "at least 4 are needed" log_compare_sparse.txt
 
 
-# --- 9. Error and robustness cases ---
+# --- 11. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: nonexistent structure file"
@@ -192,31 +264,37 @@ echo "Testing: --version"
 stb-xrd --version > log_version.txt 2>&1
 check_contains "stb-xrd" log_version.txt
 
-echo "Testing: --help documents --file, --format, --wavelength, --two-theta-range, --top, --plot, --compare-to"
+echo "Testing: --help documents --file, --format, --wavelength, --two-theta-range, --top, --compare-to, --output-dir, --save-report, --save-gnuplot, --view"
 stb-xrd --help > log_help.txt 2>&1
 check_contains "file" log_help.txt
 check_contains "format" log_help.txt
 check_contains "wavelength" log_help.txt
 check_contains "two-theta-range" log_help.txt
 check_contains "top" log_help.txt
-check_contains "plot" log_help.txt
 check_contains "compare-to" log_help.txt
+check_contains "output-dir" log_help.txt
+check_contains "save-report" log_help.txt
+check_contains "save-gnuplot" log_help.txt
+check_contains "\-\-view" log_help.txt
 
 
-# --- 10. Interactive path (stb-suite, shortcut 2.9) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.9) ---"
+# --- 12. Interactive path (stb-suite, shortcut 3.9) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.9) ---"
 
-echo "Testing: navigate 2.9 -> nacl.fdf -> format fdf (1) -> default wavelength -> default range -> no top -> no compare-to -> no plot -> output -> quit"
-rm -f menu_xrd.dat
-printf '3.9\nnacl.fdf\n1\n\n\n\n\n\nn\nmenu_xrd.dat\n\n0\n' | stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 3.9 -> nacl.fdf -> format fdf (1) -> default wavelength -> default range -> no top -> no compare-to -> no save-report -> no save-gnuplot -> no view -> quit"
+rm -rf menu_test && mkdir menu_test && cp nacl.fdf menu_test/
+pushd menu_test > /dev/null
+printf '3.9\nnacl.fdf\n1\n\n\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
-check_contains "Formula:.*NaCl" log_menu.txt
-check_success menu_xrd.dat
+check_contains "Formula.*NaCl" log_menu.txt
+check_success references.bib
+check_absent xrd_pattern.dat
+popd > /dev/null
 
 
 popd > /dev/null
 
-# --- 11. Summary ---
+# --- 13. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

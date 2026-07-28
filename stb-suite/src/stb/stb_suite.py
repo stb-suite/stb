@@ -1637,14 +1637,42 @@ def run_sts_analyzer() -> None:
     print(color_text("STS SPECTROSCOPY SIMULATOR (stb-sts)", 'bold').center(60))
     print("="*60 + "\n")
 
-    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file (not a band-path one) "
-          f"and a {color_text('.fdf', 'yellow')} geometry (with its .ion/.ion.xml files alongside it).")
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file (not a band-path one, "
+          f"found via the SystemLabel) and a {color_text('.fdf', 'yellow')} geometry (with its "
+          ".ion/.ion.xml files alongside it) -- asked separately below, since the real fdf is "
+          "very often NOT named <label>.fdf (e.g. SystemLabel 'siesta' with the actual input "
+          "file called calc.fdf).")
+    label = get_input("Enter the Siesta SystemLabel (used to find <label>.WFSX etc.): ").strip()
     while not label:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
 
-    args = ["--label", label, "--no-intro"]
+    if os.path.isfile(f"{label}.WFSX"):
+        print(color_text(f"-> Found '{label}.WFSX'.", 'green'))
+    elif os.path.isfile(f"{label}.selected.WFSX"):
+        print(color_text(f"-> Found '{label}.selected.WFSX'.", 'green'))
+    elif os.path.isfile(f"{label}.bands.WFSX"):
+        print(color_text(f"-> Found '{label}.bands.WFSX'.", 'green'))
+    else:
+        print(color_text(f"-> No '{label}.WFSX'/'{label}.selected.WFSX'/'{label}.bands.WFSX' "
+                          "found -- stb-sts will fail without one.", 'yellow'))
+
+    default_fdf = f"{label}.fdf"
+    fdf_prompt_default = default_fdf if os.path.isfile(default_fdf) else None
+    if fdf_prompt_default:
+        geometry_file = get_input(
+            f"Path to the .fdf structure (with its .ion/.ion.xml files alongside it) "
+            f"[default: {default_fdf}]: ").strip() or default_fdf
+    else:
+        print(color_text(f"-> No '{default_fdf}' found -- enter the real input file's path below "
+                          "(e.g. calc.fdf).", 'yellow'))
+        geometry_file = get_input(
+            "Path to the .fdf structure (with its .ion/.ion.xml files alongside it): ").strip()
+        while not geometry_file:
+            print(color_text("A geometry file is required!", 'red'))
+            geometry_file = get_input("Path to the .fdf structure: ").strip()
+
+    args = ["--label", label, "--geometry-file", geometry_file, "--no-intro"]
 
     print(f"\n{color_text('Tip position:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = X,Y + height above the topmost surface atom (slab-style)")
@@ -1670,8 +1698,47 @@ def run_sts_analyzer() -> None:
     sigma = get_float_input("Gaussian broadening sigma, in meV (default: 50): ", 50.0)
     args.extend(["--sigma", str(sigma)])
 
+    print(f"\n{color_text('Energy reference:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Raw eigenvalues, no shift [default]")
+    print(f"  {color_text('2', 'cyan')} = Shift by the Fermi energy")
+    print(f"  {color_text('3', 'cyan')} = Shift by a custom value")
+    shift_choice = get_input("Select (1-3) [default: 1]: ").strip()
+
+    if shift_choice == '2':
+        args.extend(["--shift", "fermi"])
+        print(f"\n{color_text('Fermi energy source:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Enter a value directly")
+        print(f"  {color_text('2', 'cyan')} = Read from a .bands file")
+        print(f"  {color_text('3', 'cyan')} = Read from a SIESTA .out log (any filename, not just <label>.out)")
+        print(f"  {color_text('4', 'cyan')} = Auto-detect a .out in this directory [default]")
+        fermi_choice = get_input("Select (1-4) [default: 4]: ").strip() or '4'
+        if fermi_choice == '1':
+            fermi = get_float_input("Fermi energy (eV): ")
+            args.extend(["--fermi", str(fermi)])
+        elif fermi_choice == '2':
+            bands_file = get_input("Path to the .bands file: ").strip()
+            args.extend(["--bands-file", bands_file])
+        elif fermi_choice == '3':
+            out_file = get_input("Path to the .out log (any filename): ").strip()
+            args.extend(["--fermi-file", out_file])
+        # fermi_choice == '4': pass nothing, stb-sts auto-detects a .out itself.
+    elif shift_choice == '3':
+        args.extend(["--shift", "manual"])
+        manual_value = get_float_input("Custom shift value (eV): ")
+        args.extend(["--manual-value", str(manual_value)])
+
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the sts.dat data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-sts", args)
 

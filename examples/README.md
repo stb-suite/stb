@@ -170,6 +170,7 @@ through.
 | 3.10 | `stb-fatbands`  | [`3.10-stb-fatbands/`](3.10-stb-fatbands/)  |
 | 3.11 | `stb-stm`       | [`3.11-stm/`](3.11-stm/)                    |
 | 3.12 | `stb-wfdensity` | [`3.12-wfdensity/`](3.12-wfdensity/)        |
+| 3.13 | `stb-sts`       | [`3.13-sts/`](3.13-sts/)                    |
 
 ## Adding another example
 

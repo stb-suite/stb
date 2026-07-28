@@ -1749,22 +1749,32 @@ def run_coop_analyzer() -> None:
     print(color_text("COOP/COHP BONDING ANALYSIS (stb-coop)", 'bold').center(60))
     print("="*60 + "\n")
 
-    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file and a "
-          f"{color_text('.HSX', 'yellow')} file (mandatory -- no approximate fallback).")
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file (found via the "
+          f"SystemLabel) and a {color_text('.HSX', 'yellow')} file (mandatory -- no approximate "
+          "fallback) -- asked separately below, since the real file is very often NOT named "
+          "<label>.HSX.")
+    label = get_input("Enter the Siesta SystemLabel (used to find <label>.WFSX etc.): ").strip()
     while not label:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
 
-    if not os.path.isfile(f"{label}.HSX"):
-        print(color_text(f"-> No '{label}.HSX' found -- stb-coop will fail without one.", 'yellow'))
+    default_hsx = f"{label}.HSX"
+    if os.path.isfile(default_hsx):
+        hsx_file = get_input(f"Path to the .HSX file [default: {default_hsx}]: ").strip() or default_hsx
+    else:
+        print(color_text(f"-> No '{default_hsx}' found -- enter the real .HSX path below.", 'yellow'))
+        hsx_file = get_input("Path to the .HSX file: ").strip()
+        while not hsx_file:
+            print(color_text("An .HSX file is required!", 'red'))
+            hsx_file = get_input("Path to the .HSX file: ").strip()
 
     print(f"\n{color_text('Quantity:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = COOP (overlap population)")
     print(f"  {color_text('2', 'cyan')} = COHP (Hamilton population)")
     q_choice = get_input("Select (1-2) [default: 1]: ").strip()
 
-    args = ["--label", label, "--quantity", "cohp" if q_choice == '2' else "coop", "--no-intro"]
+    args = ["--label", label, "--hsx-file", hsx_file,
+            "--quantity", "cohp" if q_choice == '2' else "coop", "--no-intro"]
 
     print(f"\n{color_text('Atom pair selection:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = By atom index (e.g. 0 1)")
@@ -1787,8 +1797,61 @@ def run_coop_analyzer() -> None:
     sigma = get_float_input("Gaussian broadening sigma, in meV (default: 200): ", 200.0)
     args.extend(["--sigma", str(sigma)])
 
+    print(f"\n{color_text('Energy reference:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Raw eigenvalues, no shift [default]")
+    print(f"  {color_text('2', 'cyan')} = Shift by the Fermi energy")
+    print(f"  {color_text('3', 'cyan')} = Shift by a custom value")
+    shift_choice = get_input("Select (1-3) [default: 1]: ").strip()
+
+    if shift_choice == '2':
+        args.extend(["--shift", "fermi"])
+        print(f"\n{color_text('Fermi energy source:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Enter a value directly")
+        print(f"  {color_text('2', 'cyan')} = Read from a .bands file")
+        print(f"  {color_text('3', 'cyan')} = Read from a SIESTA .out log (any filename, not just <label>.out)")
+        print(f"  {color_text('4', 'cyan')} = Auto-detect a .out in this directory [default]")
+        fermi_choice = get_input("Select (1-4) [default: 4]: ").strip() or '4'
+        if fermi_choice == '1':
+            fermi = get_float_input("Fermi energy (eV): ")
+            args.extend(["--fermi", str(fermi)])
+        elif fermi_choice == '2':
+            bands_file = get_input("Path to the .bands file: ").strip()
+            args.extend(["--bands-file", bands_file])
+        elif fermi_choice == '3':
+            out_file = get_input("Path to the .out log (any filename): ").strip()
+            args.extend(["--fermi-file", out_file])
+        # fermi_choice == '4': pass nothing, stb-coop auto-detects a .out itself.
+    elif shift_choice == '3':
+        args.extend(["--shift", "manual"])
+        manual_value = get_float_input("Custom shift value (eV): ")
+        args.extend(["--manual-value", str(manual_value)])
+
+    bond_order = get_input("\nAlso compute the Mulliken bond order cross-check? (y/N): ").strip().lower()
+    if bond_order == 'y':
+        args.append("--bond-order")
+        default_dm = f"{label}.DM"
+        if os.path.isfile(default_dm):
+            dm_file = get_input(f"Path to the .DM density matrix [default: {default_dm}]: ").strip() or default_dm
+        else:
+            print(color_text(f"-> No '{default_dm}' found -- enter the real .DM path below.", 'yellow'))
+            dm_file = get_input("Path to the .DM density matrix: ").strip()
+        if dm_file and dm_file != default_dm:
+            args.extend(["--dm-file", dm_file])
+        # dm_file blank or matching the default: let stb-coop's own <label>.DM
+        # auto-detect (or its clean error if none is found) handle it.
+
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the coop/cohp.dat data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-coop", args)
 

@@ -93,6 +93,32 @@ TERSOFF_HAMANN = ("Tersoff1985", """@article{Tersoff1985,
   doi     = {10.1103/PhysRevB.31.805}
 }""")
 
+# The original Crystal Orbital Overlap Population (COOP) paper -- the
+# bonding/antibonding curve stb-coop's --quantity coop reproduces.
+COOP_HUGHBANKS = ("Hughbanks1983coop", """@article{Hughbanks1983coop,
+  author  = {Hughbanks, Timothy and Hoffmann, Roald},
+  title   = {Chains of trans-edge-sharing molybdenum octahedra: metal-metal bonding in extended systems},
+  journal = {Journal of the American Chemical Society},
+  year    = {1983},
+  volume  = {105},
+  number  = {11},
+  pages   = {3528--3537},
+  doi     = {10.1021/ja00349a027}
+}""")
+
+# The Crystal Orbital Hamilton Population (COHP) paper -- stb-coop's
+# --quantity cohp.
+COHP_DRONSKOWSKI = ("Dronskowski1993cohp", """@article{Dronskowski1993cohp,
+  author  = {Dronskowski, Richard and Bl\\"ochl, Peter E.},
+  title   = {Crystal Orbital Hamilton Populations ({COHP}): Energy-Resolved Visualization of Chemical Bonding in Solids Based on Density-Functional Calculations},
+  journal = {The Journal of Physical Chemistry},
+  year    = {1993},
+  volume  = {97},
+  number  = {33},
+  pages   = {8617--8624},
+  doi     = {10.1021/j100135a014}
+}""")
+
 # pyxtal, the random symmetry-constrained structure generation/search
 # library stb-crystalcast uses for every one of its modes (generate,
 # --substitute, --subgroup, --supergroup).

@@ -171,6 +171,7 @@ through.
 | 3.11 | `stb-stm`       | [`3.11-stm/`](3.11-stm/)                    |
 | 3.12 | `stb-wfdensity` | [`3.12-wfdensity/`](3.12-wfdensity/)        |
 | 3.13 | `stb-sts`       | [`3.13-sts/`](3.13-sts/)                    |
+| 3.14 | `stb-coop`      | [`3.14-coop/`](3.14-coop/)                  |
 
 ## Adding another example
 

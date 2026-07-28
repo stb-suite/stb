@@ -1948,17 +1948,27 @@ def run_effmass_analyzer() -> None:
     print(color_text("EFFECTIVE MASS / VELOCITY (stb-effmass)", 'bold').center(60))
     print("="*60 + "\n")
 
-    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file and a "
-          f"{color_text('.HSX', 'yellow')} file (mandatory -- no approximate fallback).")
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    print(f"This tool needs a full-BZ {color_text('.WFSX', 'yellow')} file (found via the "
+          f"SystemLabel) and a {color_text('.HSX', 'yellow')} file (mandatory -- no approximate "
+          "fallback) -- asked separately below, since the real file is very often NOT named "
+          "<label>.HSX.")
+    label = get_input("Enter the Siesta SystemLabel (used to find <label>.WFSX etc.): ").strip()
     while not label:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
 
-    if not os.path.isfile(f"{label}.HSX"):
-        print(color_text(f"-> No '{label}.HSX' found -- stb-effmass will fail without one.", 'yellow'))
+    default_hsx = f"{label}.HSX"
+    if os.path.isfile(default_hsx):
+        hsx_file = get_input(f"Path to the .HSX file [default: {default_hsx}]: ").strip() or default_hsx
+    else:
+        print(color_text(f"-> No '{default_hsx}' found -- enter the real .HSX path below "
+                          "(stb-effmass needs a real Hamiltonian, no approximate fallback).", 'yellow'))
+        hsx_file = get_input("Path to the .HSX file: ").strip()
+        while not hsx_file:
+            print(color_text("An .HSX file is required!", 'red'))
+            hsx_file = get_input("Path to the .HSX file: ").strip()
 
-    args = ["--label", label, "--no-intro"]
+    args = ["--label", label, "--hsx-file", hsx_file, "--no-intro"]
 
     print(f"\n{color_text('Band selection:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Band index N at a chosen k-index")
@@ -1968,8 +1978,22 @@ def run_effmass_analyzer() -> None:
 
     if choice in ('2', '3'):
         args.extend(["--band", "vbm" if choice == '2' else "cbm"])
-        fermi = get_float_input("Fermi energy (eV): ")
-        args.extend(["--fermi", str(fermi)])
+        print(f"\n{color_text('Fermi energy source:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Enter a value directly")
+        print(f"  {color_text('2', 'cyan')} = Read from a .bands file")
+        print(f"  {color_text('3', 'cyan')} = Read from a SIESTA .out log (any filename, not just <label>.out)")
+        print(f"  {color_text('4', 'cyan')} = Auto-detect a .out in this directory [default]")
+        fermi_choice = get_input("Select (1-4) [default: 4]: ").strip() or '4'
+        if fermi_choice == '1':
+            fermi = get_float_input("Fermi energy (eV): ")
+            args.extend(["--fermi", str(fermi)])
+        elif fermi_choice == '2':
+            bands_file = get_input("Path to the .bands file: ").strip()
+            args.extend(["--bands-file", bands_file])
+        elif fermi_choice == '3':
+            out_file = get_input("Path to the .out log (any filename): ").strip()
+            args.extend(["--fermi-file", out_file])
+        # fermi_choice == '4': pass nothing, stb-effmass auto-detects a .out itself.
     else:
         k_index = get_int_input("k-index (0-based) [default: 0]: ", 0)
         args.extend(["--k-index", str(k_index)])
@@ -1978,6 +2002,16 @@ def run_effmass_analyzer() -> None:
 
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-effmass", args)
 

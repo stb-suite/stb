@@ -42,19 +42,112 @@ Known limitations:
    Angstrom from every atom (unlike a plane-wave/Gaussian basis), so an
    overly large grid mostly shows empty space by construction, not a
    numerical artifact.
+
+Output/report style rewritten (v1.0.0 -> v2.0.0) to match the rest of the
+Analysis category (stb-density/stb-fatbands): a numbered [0]...[6] report,
+--save-report, --save-gnuplot (--cube-only removed -- the slice/profile
+.dat file used to be written unconditionally unless --cube-only opted out;
+now it's off by default and opted INTO, and it now also gets a real
+.gplot script via core/grid_export.py's write_gnuplot_script, which this
+tool never actually called before despite its own docstring calling this
+"gnuplot output" -- a real gap: only a bare .dat file was ever written).
+--view is new -- this tool previously had no matplotlib option at all;
+reuses core/grid_export.py's plot_matplotlib_slice/plot_matplotlib_profile
+(extracted from density.py, now a second consumer of the identical
+slice/profile preview code, same "extract on second use" policy as the
+rest of this suite).
+
+Also adds --fermi-file and .out auto-detection for --band vbm/cbm's
+Fermi-energy requirement, alongside the pre-existing --fermi/--bands-file:
+many real workflows never keep a separate .bands file around, but every
+finished SIESTA run already has a .out log with the Fermi energy printed
+in it. Deliberately reuses core/siesta_log.find_out_file (shared with
+stb-status/stb-archive) rather than assuming <label>.out -- many real
+SIESTA jobs redirect stdout to a generic name like calc.out instead, and
+the previous design had no way to point this tool at a log file that
+wasn't literally the WFSX's own SystemLabel.
+
+v2.1.0: --label + --geometry-file together used to be rejected outright
+("--label cannot be combined with --wfsx/--geometry-file"), forcing
+--wfsx to be given explicitly too just to override the geometry file --
+found live from a real user report: SystemLabel "siesta" with the actual
+fdf named calc.fdf (the same common mismatch already documented for
+--fermi-file/.out above) meant --label alone couldn't resolve a geometry
+at all. load_parent() already prefers an explicit geometry_file over
+<label>.fdf on its own -- the CLI validation was simply stricter than it
+needed to be. --label + --wfsx together is still rejected (wfsx IS what
+--label auto-detects, so giving both is just ambiguous). The interactive
+stb-suite menu now asks for the label and the fdf path separately for the
+same reason -- it used to only ask for one label and assume it named
+everything.
+
+v2.2.0: --mode slice used to always cut at the geometric center of the
+cell along --axis (dim_size // 2), with no way to change it. Found live
+on the same real structure above (a CrS monolayer, atoms clustered near
+the cell boundary, real vacuum in the middle of the cell): the geometric
+center landed squarely in that vacuum -- ~1000x less dense than the true
+peak, which sits right at the atoms -- so the slice showed essentially
+nothing. Default is now the plane where the planar-averaged |psi|^2 is
+largest (find_density_peak_index), a far more useful guess for a single,
+often sharply localized wavefunction than a bulk charge density's own
+"center of cell" convention (which stb-density still uses, correctly, for
+its own different kind of quantity). --pos (Angstrom along --axis, same
+name/semantics as stb-density's own flag) overrides it manually. --mode
+profile is unaffected -- it already averages over the whole axis, so it
+was never blind to where the density actually is.
 """
 
-VERSION = "1.0.0"
+VERSION = "2.2.0"
 
 import argparse
 import os
+import sys
+from datetime import datetime
+
 import numpy as np
 
-from stb.core.cli import color_text, show_intro
+from stb.core import citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.deps import require_sisl
-from stb.core.siesta_bands import read_data as read_bands_data, select_band_vbm_cbm
+from stb.core.siesta_bands import select_band_vbm_cbm, resolve_fermi_energy_hierarchy
 from stb.core.siesta_wfsx import resolve_wfsx_path, load_parent, read_wfsx_states
-from stb.core.grid_export import write_data_file, write_profile_data_file, check_planar_orthogonality
+from stb.core.grid_export import (
+    write_data_file, write_profile_data_file, write_gnuplot_script,
+    check_planar_orthogonality, plot_matplotlib_slice, plot_matplotlib_profile,
+)
+
+REPORT_FILE = "stb_wfdensity_report.txt"
+BIB_FILE = "references.bib"
+
+DENSITY_UNITS = "1/Ang^3"  # |psi|^2 is a probability density (sum*dvol ~ 1), not a charge
+                            # density in e/Ang^3 like stb-density's own .RHO-based quantity.
+
+
+def find_density_peak_index(density, axis):
+    """Index along `axis` where the planar-averaged |psi|^2 (averaged over
+    the other two axes) is largest -- the default --mode slice position
+    when --pos isn't given.
+
+    A single wavefunction's density is often sharply localized near
+    specific atoms rather than spread evenly through the cell, unlike a
+    bulk charge density (stb-density's own default of the geometric
+    center is a more reasonable guess there). Verified live on a real
+    structure whose atoms sit clustered near the cell boundary with the
+    real vacuum in the middle: the geometric center landed squarely in
+    that vacuum (~1000x less dense than the true peak, which sits right
+    at the atoms) -- this function picks the atoms' side instead.
+    """
+    avg_axes = tuple(a for a in (0, 1, 2) if a != axis)
+    profile = density.mean(axis=avg_axes)
+    return int(np.argmax(profile))
+
+
+def resolve_fermi_energy(args):
+    """Resolves the Fermi energy for --band vbm/cbm -- thin wrapper around
+    core.siesta_bands.resolve_fermi_energy_hierarchy (see the module
+    docstring for the priority order); kept as a local helper here so the
+    call sites below don't need to know the individual arg names."""
+    return resolve_fermi_energy_hierarchy(args.fermi, args.bands_file, args.fermi_file, args.label)
 
 
 def main():
@@ -63,22 +156,29 @@ def main():
                     "SIESTA .WFSX file -> Gaussian .cube.",
         epilog="Example usage:\n"
                "  stb-wfdensity --label siesta --k-index 0 --band 1\n"
-               "  stb-wfdensity --label siesta --band vbm --fermi -4.2\n",
+               "  stb-wfdensity --label siesta --band vbm --fermi -4.2\n"
+               "  stb-wfdensity --label siesta --band cbm --save-report --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
     parser.add_argument("--label", type=str, default=None,
                         help="SIESTA output label. Auto-detects <label>.WFSX, falling back to "
                              "<label>.selected.WFSX (written by WriteWaveFunctions T + %%block "
-                             "WaveFuncKPoints) then <label>.bands.WFSX, with a note -- and "
-                             "<label>.fdf (with its .ion/.ion.xml files alongside it -- NOT "
-                             "<label>.XV/.HSX, neither of which carries real orbital shapes). "
-                             "Mutually exclusive with --wfsx/--geometry-file.")
+                             "WaveFuncKPoints) then <label>.bands.WFSX, with a note -- and, unless "
+                             "--geometry-file overrides it, <label>.fdf (with its .ion/.ion.xml "
+                             "files alongside it -- NOT <label>.XV/.HSX, neither of which carries "
+                             "real orbital shapes). Mutually exclusive with --wfsx (not "
+                             "--geometry-file -- see its own help: the real fdf is very often NOT "
+                             "named <label>.fdf).")
     parser.add_argument("--wfsx", type=str, default=None,
                         help="Explicit path to the .WFSX file (alternative to --label).")
     parser.add_argument("--geometry-file", type=str, default=None,
                         help="Explicit .fdf geometry path (must have the basis's .ion/.ion.xml "
-                             "files alongside it). Required if --wfsx is used instead of --label.")
+                             "files alongside it). Required if --wfsx is used instead of --label; "
+                             "optional (and common) together WITH --label too, since the real fdf "
+                             "is often not literally named <label>.fdf (e.g. SystemLabel 'siesta' "
+                             "with the actual input file called calc.fdf) -- --label still "
+                             "auto-detects the .WFSX in that case, only the geometry source changes.")
 
     k_group = parser.add_mutually_exclusive_group()
     k_group.add_argument("--k-index", type=int, default=None,
@@ -92,15 +192,18 @@ def main():
                              "calculation).")
     parser.add_argument("--band", type=str, default=None, required=True,
                         help="Which band at the chosen k: an integer N (1-based), or 'vbm'/'cbm' "
-                             "(requires --fermi or --bands-file).")
+                             "(requires --fermi, --bands-file, --fermi-file, or an auto-detected "
+                             ".out log -- see below).")
 
     parser.add_argument("--fermi", type=float, default=None,
-                        help="Fermi energy (eV), required if --band is vbm/cbm and "
-                             "--bands-file isn't given.")
+                        help="Fermi energy (eV) for --band vbm/cbm. Highest-priority source if given.")
     parser.add_argument("--bands-file", type=str, default=None,
-                        help="Optional companion .bands file to read the Fermi energy from "
-                             "automatically, for --band vbm/cbm. Convenience only -- no "
-                             "correspondence guard against --wfsx like stb-fatbands has.")
+                        help="Companion .bands file to read the Fermi energy from, for --band "
+                             "vbm/cbm. No correspondence guard against --wfsx like stb-fatbands has.")
+    parser.add_argument("--fermi-file", type=str, default=None,
+                        help="Explicit SIESTA .out log to read the Fermi energy from, for --band "
+                             "vbm/cbm -- an alternative to --bands-file for a run with no saved "
+                             ".bands file. Not assumed to be named after --label (see below).")
     parser.add_argument("--gap-tol", type=float, default=0.01,
                         help="Energy tolerance in eV for VBM/CBM classification (default: 0.01). "
                              "Same meaning as stb-bands/stb-fatbands.")
@@ -112,31 +215,55 @@ def main():
     grid_group.add_argument("--shape", type=int, nargs=3, default=None, metavar=("NX", "NY", "NZ"),
                         help="Explicit grid shape (voxel counts), alternative to --spacing.")
 
-    parser.add_argument("--cube-only", action="store_true",
-                        help="Skip the optional 2D-slice/1D-profile gnuplot output, write only "
-                             "the .cube file.")
     parser.add_argument("--axis", type=int, default=2, choices=[0, 1, 2],
-                        help="Axis for the optional gnuplot slice/profile (default: 2).")
+                        help="Axis for the optional --save-gnuplot slice/profile (default: 2).")
     parser.add_argument("--profile", action="store_true",
                         help="Write a planar-averaged 1D profile instead of a 2D slice, for the "
-                             "optional gnuplot output.")
+                             "optional --save-gnuplot output.")
+    parser.add_argument("-p", "--pos", type=float, default=None,
+                        help="Position (Angstrom) along --axis of the 2D slice (ignored in "
+                             "--profile mode). Default: auto-detected at the plane where the "
+                             "planar-averaged |psi|^2 is largest -- NOT the geometric center of "
+                             "the cell, which can land in empty vacuum for a structure whose atoms "
+                             "aren't centered along --axis (verified live: a real structure with "
+                             "atoms clustered near the cell boundary and vacuum in the middle had "
+                             "its default slice land on a point with ~1000x less density than the "
+                             "real peak, right at the atoms).")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the .cube (and optional slice/profile) into "
-                             "(default: current directory). Created if it doesn't exist.")
+                        help="Directory to write the .cube (and, with --save-gnuplot, the slice/"
+                             "profile data + report/references.bib) into (default: current "
+                             "directory). Created if it doesn't exist.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also write a 2D-slice or (with --profile) 1D-profile .dat + .gplot "
+                             "pair of the |psi|^2 density. Off by default -- this tool used to "
+                             "write the .dat file (but never a .gplot script) unconditionally, "
+                             "opted out of via the old --cube-only flag (now removed).")
+    parser.add_argument("--view", action="store_true",
+                        help="Show an interactive matplotlib preview (2D slice or 1D profile, "
+                             "matching --profile) before finishing. Off by default -- this tool "
+                             "previously had no matplotlib option at all.")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-wfdensity {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
 
     if args.label:
-        if args.wfsx or args.geometry_file:
-            parser.error("--label cannot be combined with --wfsx/--geometry-file.")
+        if args.wfsx:
+            parser.error("--label cannot be combined with --wfsx.")
         args.wfsx = resolve_wfsx_path(args.label, suffixes=(".WFSX", ".selected.WFSX", ".bands.WFSX"))
     elif not args.wfsx:
         parser.error("one of --label or --wfsx is required.")
     elif not args.geometry_file:
         parser.error("--geometry-file is required when using --wfsx instead of --label.")
+    # --label + --geometry-file together is valid and common: --label auto-detects the
+    # .WFSX, but the real fdf is very often NOT named <label>.fdf (e.g. SystemLabel
+    # "siesta" with the actual input file called calc.fdf) -- load_parent() below
+    # already prefers an explicit geometry_file over <label>.fdf on its own, this just
+    # stops that combination from being rejected outright before it gets there.
 
     if args.wfsx is None or not os.path.isfile(args.wfsx):
         tried = (f"'{args.label}.WFSX', '{args.label}.selected.WFSX' and "
@@ -151,10 +278,18 @@ def main():
                 raise ValueError
         except ValueError:
             parser.error("--band must be a positive integer (1-based), or 'vbm'/'cbm'.")
-    if band_vbm_cbm and args.fermi is None and not args.bands_file:
-        parser.error("--band vbm/cbm requires --fermi or --bands-file.")
     if args.k_point is not None and band_vbm_cbm:
         parser.error("--band vbm/cbm searches the whole k-mesh; --k-index/--k-point don't apply.")
+
+    fermi_energy = fermi_source = None
+    if band_vbm_cbm:
+        fermi_energy, fermi_source = resolve_fermi_energy(args)
+        if fermi_energy is None:
+            parser.error(
+                "--band vbm/cbm needs a Fermi energy -- none found. Pass --fermi <value>, "
+                "--bands-file <path>, --fermi-file <path>, or leave a SIESTA .out log "
+                "(<label>.out, or the sole *.out) in the current directory."
+            )
 
     if args.intro:
         show_intro([
@@ -164,7 +299,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("WAVEFUNCTION DENSITY:", 'bold'))
+    print("\n" + color_text("WFDENSITY: reading input data", 'bold'))
     print("-" * 60)
 
     sisl = require_sisl()
@@ -190,11 +325,8 @@ def main():
     nspin = sizes.nspin if sizes.nspin == 2 else 1
 
     if band_vbm_cbm:
-        fermi_energy = args.fermi
-        if fermi_energy is None:
-            fermi_energy, _, _, _ = read_bands_data(args.bands_file)
         print(f"[INFO] Searching whole k-mesh for the global {args.band.upper()} "
-              f"(Fermi = {fermi_energy:.6f} eV) ...")
+              f"(Fermi = {fermi_energy:.6f} eV, source: {fermi_source}) ...")
         k_index, spin, band_index = select_band_vbm_cbm(
             states_by_k, nspin, fermi_energy, args.gap_tol, args.band.lower()
         )
@@ -228,9 +360,9 @@ def main():
             parser.error(f"--band {band_n} out of range (1-{nbands_here}) at this k-point.")
 
     es_one = full_state.sub(band_index, inplace=False)
-    k_vec = es_one.info.get("k", (0.0, 0.0, 0.0))
+    k_vec = np.asarray(es_one.info.get("k", (0.0, 0.0, 0.0)))
     eig = float(np.asarray(es_one.eig).reshape(-1)[0])
-    print(f"[INFO] Selected state: k={np.asarray(k_vec)}, spin={spin}, "
+    print(f"[INFO] Selected state: k={k_vec}, spin={spin}, "
           f"band={band_index + 1}, eigenvalue={eig:.6f} eV.")
 
     shape_or_spacing = tuple(args.shape) if args.shape else args.spacing
@@ -242,12 +374,6 @@ def main():
 
     density = np.abs(grid.grid) ** 2
     norm_check = float(density.sum() * grid.dvolume)
-    print(f"[INFO] Normalization check (sum|psi|^2 * dvol, should be ~1): {norm_check:.6f}")
-    if abs(norm_check - 1.0) > 0.05:
-        print(color_text(
-            "[WARNING] Normalization deviates from 1 by more than 5% -- the grid may be too "
-            "coarse (orbitals clipped) or the geometry/basis may not match the .WFSX. Consider "
-            "a finer --spacing.", 'yellow'))
 
     os.makedirs(args.output_dir, exist_ok=True)
     label_tag = f"k{k_index}_b{band_index + 1}"
@@ -255,30 +381,137 @@ def main():
     grid.grid = density
     grid.set_geometry(geometry)
     grid.write(cube_path)
-    print(f"[INFO] Cube file saved to '{color_text(cube_path, 'green')}' "
-          "(open in VESTA/VMD/Avogadro for real 3D isosurfaces)")
 
-    if not args.cube_only:
-        lattice = geometry.cell
-        origin = grid.origin
-        if args.profile:
-            out_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}_profile.dat")
-            write_profile_data_file(density, lattice, args.axis, out_path)
-        else:
-            dim_size = density.shape[args.axis]
-            slice_idx = dim_size // 2
-            angle = check_planar_orthogonality(lattice, args.axis)
-            if abs(angle - 90.0) > 1.0:
+    mode = "profile" if args.profile else "slice"
+    lattice = geometry.cell
+    origin = grid.origin
+    dat_path = gplot_path = None
+    slice_idx = pos_val = plane_angle_deg = None
+    slice_source = None
+    if (args.save_gnuplot or args.view) and mode != "profile":
+        dim_size = density.shape[args.axis]
+        axis_len = float(np.linalg.norm(lattice[args.axis]))
+        if args.pos is not None:
+            slice_idx = int(round((args.pos / axis_len) * dim_size))
+            if slice_idx < 0 or slice_idx >= dim_size:
                 print(color_text(
-                    f"[WARNING] The cut plane is skewed ({angle:.1f} deg) -- see stb-density's "
-                    "own note on hexagonal/skewed cells.", 'yellow'))
-            out_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}_slice.dat")
-            write_data_file(density, lattice, origin, out_path, mode='slice',
-                            slice_idx=slice_idx, axis=args.axis)
-        print(f"[INFO] Wrote {out_path}")
+                    f"[ERROR] --pos {args.pos} Ang is out of bounds for axis {args.axis} "
+                    f"(0-{axis_len:.3f} Ang).", 'red'))
+                sys.exit(1)
+            pos_val = args.pos
+            slice_source = "--pos"
+        else:
+            slice_idx = find_density_peak_index(density, args.axis)
+            pos_val = (slice_idx / dim_size) * axis_len
+            slice_source = "auto-detected |psi|^2 peak"
+        plane_angle_deg = check_planar_orthogonality(lattice, args.axis)
 
-    print("\n[INFO] Complete job!")
-    print("\n" + "-" * 60)
+    # --- From here on: the numbered, save-able report --------------------
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_dual(color_text("\n===== STB-WFDENSITY REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Label          : {args.label}" if args.label else f"Label          : (explicit --wfsx/--geometry-file)", f_out)
+    print_dual(f"WFSX file      : {args.wfsx}", f_out)
+    print_dual(f"Geometry source: {geo_source}", f_out)
+    print_dual(f"Band selection : {args.band}" + (f" (Fermi source: {fermi_source})" if band_vbm_cbm else ""), f_out)
+    print_dual(f"Grid           : " + (f"shape {tuple(args.shape)}" if args.shape else f"spacing {args.spacing} Ang"), f_out)
+    print_dual(f"Save-gnuplot mode: {mode} (axis {args.axis})"
+               + (f", position {pos_val:.3f} Ang ({slice_source})" if slice_source else ""), f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+    print_dual(f"Save gnuplot   : {'yes' if args.save_gnuplot else 'no'}", f_out)
+    print_dual(f"View (matplotlib): {'yes' if args.view else 'no'}", f_out)
+
+    print_section("[1] INPUT DATA", f_out)
+    print_table(["Quantity", "Value"], [
+        (["Orbitals (basis)", f"{geometry.no}"], None),
+        (["k-points in .WFSX", f"{sizes.nk}"], None),
+        (["Spin channels", f"{nspin} ({'non-polarized' if nspin == 1 else 'polarized'})"], None),
+    ], f_out)
+
+    print_section("[2] STATE SELECTION", f_out)
+    print_table(["Quantity", "Value"], [
+        (["k-index", f"{k_index}"], None),
+        (["k-vector", f"{k_vec}"], None),
+        (["Spin", f"{spin}"], None),
+        (["Band (1-based)", f"{band_index + 1}"], None),
+        (["Eigenvalue", f"{eig:.6f} eV"], None),
+    ], f_out)
+    if band_vbm_cbm:
+        print_dual(f"Selected via global {args.band.upper()} search "
+                   f"(Fermi = {fermi_energy:.6f} eV, source: {fermi_source}, "
+                   f"--gap-tol {args.gap_tol} eV).", f_out)
+
+    print_section("[3] WAVEFUNCTION DENSITY", f_out)
+    print_dual(f"Grid shape      : {density.shape[0]} x {density.shape[1]} x {density.shape[2]}", f_out)
+    print_dual(f"Normalization   : integral |psi|^2 dV = {norm_check:.6f} (should be ~1)", f_out)
+    if abs(norm_check - 1.0) > 0.05:
+        print_dual(color_text(
+            "[WARNING] Normalization deviates from 1 by more than 5% -- the grid may be too "
+            "coarse (orbitals clipped) or the geometry/basis may not match the .WFSX. Consider "
+            "a finer --spacing.", 'yellow'), f_out)
+    else:
+        print_dual(color_text("[OK] Normalization within 5% of the expected value.", 'green'), f_out)
+
+    print_section("[4] OUTPUT DATA & PLOTS", f_out)
+    print_dual(color_text(f"[OK] Cube file saved to '{cube_path}' (open in VESTA/VMD/Avogadro "
+               "for real 3D isosurfaces).", 'green'), f_out)
+    if args.save_gnuplot:
+        if mode == "profile":
+            dat_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}_profile.dat")
+            write_profile_data_file(density, lattice, args.axis, dat_path)
+            gplot_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}_profile.gplot")
+            write_gnuplot_script(dat_path, dat_path, "profile", "|psi|^2", False, args.axis,
+                                 generator_name="wfdensity.py", units=DENSITY_UNITS)
+        else:
+            dat_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}_slice.dat")
+            write_data_file(density, lattice, origin, dat_path, mode='slice',
+                            slice_idx=slice_idx, axis=args.axis)
+            gplot_path = dat_path.rsplit('.', 1)[0] + ".gplot"
+            if abs(plane_angle_deg - 90.0) > 1.0:
+                print_dual(color_text(
+                    f"[WARNING] The cut plane is skewed ({plane_angle_deg:.1f} deg) -- see "
+                    "stb-density's own note on hexagonal/skewed cells.", 'yellow'), f_out)
+            write_gnuplot_script(dat_path, dat_path, "slice", "|psi|^2", False, args.axis,
+                                 pos_val, plane_angle_deg, generator_name="wfdensity.py",
+                                 units=DENSITY_UNITS)
+        print_dual(color_text(f"[OK] Data written to '{dat_path}'.", 'green'), f_out)
+        print_dual(color_text(f"[OK] Gnuplot script written to '{gplot_path}'.", 'green'), f_out)
+    else:
+        print_dual(f"Slice/profile data not written (off by default -- pass --save-gnuplot "
+                   f"to write wfdensity_{label_tag}_{mode}.dat/.gplot).", f_out)
+
+    print_section("[5] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+
+    print_section("[6] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    print_dual(f"Cube file      : {cube_path}", f_out)
+    if dat_path:
+        print_dual(f"Data           : {dat_path}", f_out)
+        print_dual(f"Gnuplot script : {gplot_path}", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after the report is fully printed/closed, so a
+    # blocking matplotlib window never delays or hides it.
+    if args.view:
+        if mode == "profile":
+            plot_matplotlib_profile(lattice, args.axis, density, "|psi|^2", False, units=DENSITY_UNITS)
+        else:
+            plot_matplotlib_slice(lattice, origin, density, args.axis, slice_idx, "|psi|^2",
+                                  False, None, pos_val, False, units=DENSITY_UNITS)
 
 
 if __name__ == "__main__":

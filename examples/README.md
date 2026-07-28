@@ -169,6 +169,7 @@ through.
 | 3.9  | `stb-xrd`       | [`3.9-stb-xrd/`](3.9-stb-xrd/)              |
 | 3.10 | `stb-fatbands`  | [`3.10-stb-fatbands/`](3.10-stb-fatbands/)  |
 | 3.11 | `stb-stm`       | [`3.11-stm/`](3.11-stm/)                    |
+| 3.12 | `stb-wfdensity` | [`3.12-wfdensity/`](3.12-wfdensity/)        |
 
 ## Adding another example
 

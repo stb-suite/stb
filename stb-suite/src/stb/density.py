@@ -24,6 +24,7 @@ from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_secti
 from stb.core.grid_export import (
     NON_ORTHOGONAL_WARN_DEG, check_planar_orthogonality, write_gnuplot_script,
     integrated_charge, write_profile_data_file, write_data_file,
+    plot_matplotlib_slice, plot_matplotlib_profile,
 )
 
 REPORT_FILE = "stb_density_report.txt"
@@ -102,56 +103,6 @@ def compute_colorbar_range(data_vmin, data_vmax, is_signed, vmin_arg=None, vmax_
     if cb_max > cb_min:
         return (cb_min, cb_max)
     return None
-
-
-def plot_matplotlib_slice(lattice, origin, grid_data, axis, slice_idx, quantity_label,
-                          is_signed, cb_range, pos_val, contour):
-    """2D heatmap preview of one slice, in real-space coordinates -- same
-    blue-white-red (signed) / white-yellow-red (non-negative) convention
-    as the gnuplot palette in write_gnuplot_script, so the two views read
-    as the same plot."""
-    nx, ny, nz = grid_data.shape
-    if axis == 2:
-        arr, u_n, v_n, ulab, vlab = grid_data[:, :, slice_idx], nx, ny, "X", "Y"
-    elif axis == 1:
-        arr, u_n, v_n, ulab, vlab = grid_data[:, slice_idx, :], nx, nz, "X", "Z"
-    else:
-        arr, u_n, v_n, ulab, vlab = grid_data[slice_idx, :, :], ny, nz, "Y", "Z"
-
-    cmap = "RdBu_r" if is_signed else "YlOrRd"
-    vmin, vmax = cb_range if cb_range else (None, None)
-
-    fig, ax = plt.subplots(figsize=(7, 6))
-    im = ax.imshow(arr.T, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
-    if contour:
-        ax.contour(arr.T, colors="k", linewidths=0.5, levels=10)
-    fig.colorbar(im, ax=ax, label=f"{quantity_label} (e/Ang^3)")
-    ax.set_xlabel(f"{ulab} (grid index, {u_n} pts)")
-    ax.set_ylabel(f"{vlab} (grid index, {v_n} pts)")
-    ax.set_title(f"{quantity_label} slice ({'XYZ'[axis]}={pos_val:.2f} Ang)")
-    fig.tight_layout()
-    plt.show()
-
-
-def plot_matplotlib_profile(lattice, axis, grid_data, quantity_label, is_signed):
-    """Line plot of the planar-averaged profile along `axis` -- same
-    convention as stb-workfunction's own plot_matplotlib."""
-    avg_axes = tuple(a for a in (0, 1, 2) if a != axis)
-    profile = grid_data.mean(axis=avg_axes)
-    n = profile.shape[0]
-    axis_len = np.linalg.norm(lattice[axis])
-    positions = (np.arange(n) / n) * axis_len
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(positions, profile, color="#cc5522", linewidth=2)
-    if is_signed:
-        ax.axhline(0.0, color="gray", linestyle="--", linewidth=1)
-    ax.set_xlabel(f"{'XYZ'[axis]} (Ang)")
-    ax.set_ylabel(f"{quantity_label} (e/Ang^3)")
-    ax.set_title(f"Planar-averaged {quantity_label} along {'XYZ'[axis]}")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    plt.show()
 
 
 def plot_matplotlib_3d(lattice, origin, grid_data, quantity_label, is_signed, cb_range, iso_min):

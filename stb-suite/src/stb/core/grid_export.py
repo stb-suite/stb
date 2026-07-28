@@ -5,10 +5,12 @@ check. Extracted from density.py once stb-wfdensity became a second consumer
 code path density.py already uses for .RHO grids).
 """
 
+import os
 import sys
 import time
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from stb.core.cli import color_text
 
@@ -58,9 +60,21 @@ def write_gnuplot_script(data_filename, output_filename, mode, quantity_label,
     (charge/spin density) for backward compatibility; a caller plotting a
     different quantity (e.g. an energy landscape) should pass its own,
     e.g. units="eV".
+
+    `gplot_name` (the actual path this function opens and writes to) keeps
+    any directory from `output_filename` -- it has to, to land in the
+    right place. But the filenames written INSIDE the script itself
+    (`set output "..."`, `plot`/`splot "..."`) are always bare basenames,
+    never carrying that same directory prefix -- a real, verified bug
+    fixed here: the user is expected to `cd` into --output-dir and run
+    `gnuplot <name>.gplot` directly from there (same convention every
+    other tool's .gplot script in this suite follows), so an embedded
+    directory prefix pointed at the wrong place relative to that cwd (the
+    exact bug found and fixed in stb-stm's own writer).
     """
     gplot_name = output_filename.rsplit('.', 1)[0] + ".gplot"
-    pdf_name = output_filename.rsplit('.', 1)[0] + ".pdf"
+    pdf_name = os.path.basename(output_filename).rsplit('.', 1)[0] + ".pdf"
+    data_filename = os.path.basename(data_filename)
 
     axis_labels = ['X', 'Y', 'Z']
     fixed_axis = axis_labels[axis_idx]
@@ -301,3 +315,66 @@ def write_data_file(grid_data, lattice, origin, output_file, mode='3d', slice_id
     elapsed = time.time() - start_time
     print(f"[INFO] Write completed in {elapsed:.2f} seconds.")
     return vmin, vmax
+
+
+def plot_matplotlib_slice(lattice, origin, grid_data, axis, slice_idx, quantity_label,
+                          is_signed, cb_range, pos_val, contour, units="e/Ang^3"):
+    """2D heatmap preview of one slice, in real-space coordinates -- same
+    blue-white-red (signed) / white-yellow-red (non-negative) convention
+    as the gnuplot palette in write_gnuplot_script, so the two views read
+    as the same plot.
+
+    Extracted from density.py once stb-wfdensity became a second consumer
+    (its own |psi|^2 grid uses the exact same slice-preview code path a
+    .RHO charge/spin density does) -- `units` defaults to density.py's own
+    original hardcoded "e/Ang^3" for backward compatibility; a caller
+    plotting a different quantity should pass its own (e.g. wfdensity's
+    |psi|^2 is a probability density, "1/Ang^3", not a charge density).
+    """
+    nx, ny, nz = grid_data.shape
+    if axis == 2:
+        arr, u_n, v_n, ulab, vlab = grid_data[:, :, slice_idx], nx, ny, "X", "Y"
+    elif axis == 1:
+        arr, u_n, v_n, ulab, vlab = grid_data[:, slice_idx, :], nx, nz, "X", "Z"
+    else:
+        arr, u_n, v_n, ulab, vlab = grid_data[slice_idx, :, :], ny, nz, "Y", "Z"
+
+    cmap = "RdBu_r" if is_signed else "YlOrRd"
+    vmin, vmax = cb_range if cb_range else (None, None)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    im = ax.imshow(arr.T, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
+    if contour:
+        ax.contour(arr.T, colors="k", linewidths=0.5, levels=10)
+    fig.colorbar(im, ax=ax, label=f"{quantity_label} ({units})")
+    ax.set_xlabel(f"{ulab} (grid index, {u_n} pts)")
+    ax.set_ylabel(f"{vlab} (grid index, {v_n} pts)")
+    ax.set_title(f"{quantity_label} slice ({'XYZ'[axis]}={pos_val:.2f} Ang)")
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_matplotlib_profile(lattice, axis, grid_data, quantity_label, is_signed, units="e/Ang^3"):
+    """Line plot of the planar-averaged profile along `axis` -- same
+    convention as stb-workfunction's own plot_matplotlib.
+
+    Extracted from density.py once stb-wfdensity became a second consumer
+    -- see plot_matplotlib_slice's own docstring for why `units` is a
+    parameter here too.
+    """
+    avg_axes = tuple(a for a in (0, 1, 2) if a != axis)
+    profile = grid_data.mean(axis=avg_axes)
+    n = profile.shape[0]
+    axis_len = np.linalg.norm(lattice[axis])
+    positions = (np.arange(n) / n) * axis_len
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(positions, profile, color="#cc5522", linewidth=2)
+    if is_signed:
+        ax.axhline(0.0, color="gray", linestyle="--", linewidth=1)
+    ax.set_xlabel(f"{'XYZ'[axis]} (Ang)")
+    ax.set_ylabel(f"{quantity_label} ({units})")
+    ax.set_title(f"Planar-averaged {quantity_label} along {'XYZ'[axis]}")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    plt.show()

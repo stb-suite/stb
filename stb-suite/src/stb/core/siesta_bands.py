@@ -10,6 +10,36 @@ report-formatting here, those stay tool-specific in bands.py/fatbands.py.
 import re
 import numpy as np
 from stb.core.deps import require_sisl
+from stb.core.siesta_log import find_out_file, get_fermi_energy
+
+
+def resolve_fermi_energy_hierarchy(fermi, bands_file, fermi_file, label, dirname="."):
+    """Resolves a Fermi energy in priority order: an explicit value >
+    a companion .bands file > an explicit .out log > an auto-detected .out
+    log in `dirname` (via find_out_file, NOT assumed to be <label>.out --
+    many real SIESTA jobs redirect stdout to a generic name instead).
+    Returns (fermi_energy, source_description) or (None, None) if nothing
+    was found.
+
+    First written for stb-wfdensity's --band vbm/cbm; extracted here once
+    stb-sts's --shift fermi became a second consumer of the identical
+    hierarchy, so both tools resolve a Fermi energy the same way instead
+    of stb-sts only ever accepting an explicit --fermi value.
+    """
+    if fermi is not None:
+        return fermi, "--fermi (explicit value)"
+    if bands_file:
+        fermi_energy, _, _, _ = read_data(bands_file)
+        return fermi_energy, f"'{bands_file}' (--bands-file)"
+    if fermi_file:
+        fermi_energy = get_fermi_energy(fermi_file)
+        return fermi_energy, f"'{fermi_file}' (--fermi-file)"
+    out_file = find_out_file(dirname, label)
+    if out_file:
+        fermi_energy = get_fermi_energy(out_file)
+        if fermi_energy is not None:
+            return fermi_energy, f"'{out_file}' (auto-detected .out)"
+    return None, None
 
 
 def _is_gamma(label):

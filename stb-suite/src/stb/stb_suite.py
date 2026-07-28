@@ -1525,9 +1525,11 @@ def run_wfdensity_analyzer() -> None:
     print(color_text("WAVEFUNCTION DENSITY (stb-wfdensity)", 'bold').center(60))
     print("="*60 + "\n")
 
-    print(f"This tool needs a {color_text('.WFSX', 'yellow')} file and a {color_text('.fdf', 'yellow')} "
-          "geometry (with its .ion/.ion.xml files alongside it).")
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    print(f"This tool needs a {color_text('.WFSX', 'yellow')} file (found via the SystemLabel) and a "
+          f"{color_text('.fdf', 'yellow')} geometry (with its .ion/.ion.xml files alongside it) -- "
+          "asked separately below, since the real fdf is very often NOT named <label>.fdf (e.g. "
+          "SystemLabel 'siesta' with the actual input file called calc.fdf).")
+    label = get_input("Enter the Siesta SystemLabel (used to find <label>.WFSX etc.): ").strip()
     while not label:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
@@ -1541,10 +1543,21 @@ def run_wfdensity_analyzer() -> None:
     else:
         print(color_text(f"-> No '{label}.WFSX'/'{label}.selected.WFSX'/'{label}.bands.WFSX' "
                           "found -- stb-wfdensity will fail without one.", 'yellow'))
-    if not os.path.isfile(f"{label}.fdf"):
-        print(color_text(f"-> No '{label}.fdf' found -- if your input file has a different name, "
-                          "you'll need --geometry-file (not available in this menu; use the CLI "
-                          "directly).", 'yellow'))
+
+    default_fdf = f"{label}.fdf"
+    fdf_prompt_default = default_fdf if os.path.isfile(default_fdf) else None
+    if fdf_prompt_default:
+        geometry_file = get_input(
+            f"Path to the .fdf structure (with its .ion/.ion.xml files alongside it) "
+            f"[default: {default_fdf}]: ").strip() or default_fdf
+    else:
+        print(color_text(f"-> No '{default_fdf}' found -- enter the real input file's path below "
+                          "(e.g. calc.fdf).", 'yellow'))
+        geometry_file = get_input(
+            "Path to the .fdf structure (with its .ion/.ion.xml files alongside it): ").strip()
+        while not geometry_file:
+            print(color_text("A geometry file is required!", 'red'))
+            geometry_file = get_input("Path to the .fdf structure: ").strip()
 
     print(f"\n{color_text('Band selection:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Band index N at a chosen k-index")
@@ -1552,12 +1565,26 @@ def run_wfdensity_analyzer() -> None:
     print(f"  {color_text('3', 'cyan')} = CBM (needs Fermi energy)")
     choice = get_input("Select (1-3) [default: 1]: ").strip()
 
-    args = ["--label", label, "--no-intro"]
+    args = ["--label", label, "--geometry-file", geometry_file, "--no-intro"]
 
     if choice in ('2', '3'):
         args.extend(["--band", "vbm" if choice == '2' else "cbm"])
-        fermi = get_float_input("Fermi energy (eV): ")
-        args.extend(["--fermi", str(fermi)])
+        print(f"\n{color_text('Fermi energy source:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Enter a value directly")
+        print(f"  {color_text('2', 'cyan')} = Read from a .bands file")
+        print(f"  {color_text('3', 'cyan')} = Read from a SIESTA .out log (any filename, not just <label>.out)")
+        print(f"  {color_text('4', 'cyan')} = Auto-detect a .out in this directory [default]")
+        fermi_choice = get_input("Select (1-4) [default: 4]: ").strip() or '4'
+        if fermi_choice == '1':
+            fermi = get_float_input("Fermi energy (eV): ")
+            args.extend(["--fermi", str(fermi)])
+        elif fermi_choice == '2':
+            bands_file = get_input("Path to the .bands file: ").strip()
+            args.extend(["--bands-file", bands_file])
+        elif fermi_choice == '3':
+            out_file = get_input("Path to the .out log (any filename): ").strip()
+            args.extend(["--fermi-file", out_file])
+        # fermi_choice == '4': pass nothing, stb-wfdensity auto-detects a .out itself.
     else:
         k_index = get_int_input("k-index (0-based) [default: 0]: ", 0)
         args.extend(["--k-index", str(k_index)])
@@ -1567,8 +1594,39 @@ def run_wfdensity_analyzer() -> None:
     spacing = get_float_input("Grid spacing in Angstrom (default: 0.3): ", 0.3)
     args.extend(["--spacing", str(spacing)])
 
+    print(f"\n{color_text('Cut axis (for the 2D slice / 1D profile):', 'yellow')}")
+    print(f"  {color_text('0', 'cyan')} = a   {color_text('1', 'cyan')} = b   "
+          f"{color_text('2', 'cyan')} = c [default]")
+    axis = get_input("Select (0-2) [default: 2]: ").strip() or "2"
+    args.extend(["--axis", axis])
+
+    print(f"\n{color_text('Cut mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = 2D slice (perpendicular to the cut axis) [default]")
+    print(f"  {color_text('2', 'cyan')} = 1D profile (planar-averaged along the cut axis)")
+    mode_choice = get_input("Select (1-2) [default: 1]: ").strip()
+    if mode_choice == '2':
+        args.append("--profile")
+    else:
+        print(f"\n{color_text('Slice position along the cut axis:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Auto-detect the |psi|^2 density peak [default]")
+        print(f"  {color_text('2', 'cyan')} = Enter a position manually (Angstrom)")
+        pos_choice = get_input("Select (1-2) [default: 1]: ").strip()
+        if pos_choice == '2':
+            pos = get_float_input("Position along the cut axis (Ang): ")
+            args.extend(["--pos", str(pos)])
+
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the slice/profile data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-wfdensity", args)
 

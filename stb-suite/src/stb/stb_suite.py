@@ -2024,16 +2024,26 @@ def run_spintexture_analyzer() -> None:
 
     print(f"This tool only makes sense for a {color_text('non-collinear/spin-orbit', 'yellow')} "
           "calculation (nspin=4 or 8).")
-    label = get_input("Enter the Siesta SystemLabel (e.g., siesta): ").strip()
+    label = get_input("Enter the Siesta SystemLabel (used to find <label>.WFSX etc.): ").strip()
     while not label:
         print(color_text("Label cannot be empty!", 'red'))
         label = get_input("Enter the Siesta SystemLabel: ")
 
-    if os.path.isfile(f"{label}.HSX"):
-        print(color_text(f"-> Found '{label}.HSX', overlap-aware (accurate) spin moments will be used.", 'green'))
+    args = ["--label", label, "--no-intro"]
+
+    default_hsx = f"{label}.HSX"
+    if os.path.isfile(default_hsx):
+        hsx_file = get_input(
+            f"Path to the .HSX file for overlap-aware (accurate) spin moments "
+            f"[default: {default_hsx}]: ").strip() or default_hsx
+        args.extend(["--hsx-file", hsx_file])
     else:
-        print(color_text(f"-> No '{label}.HSX' found -- spin moments will use an approximate "
-                          "orthogonal-basis fallback.", 'yellow'))
+        print(color_text(f"-> No '{default_hsx}' found -- spin moments will use an approximate "
+                          "orthogonal-basis fallback unless you point at one below.", 'yellow'))
+        hsx_file = get_input(
+            "Path to the .HSX file (blank to use the approximate fallback): ").strip()
+        if hsx_file:
+            args.extend(["--hsx-file", hsx_file])
 
     shift_options = {
         '1': ('none', "Raw eigenvalues (no shift)"),
@@ -2051,17 +2061,41 @@ def run_spintexture_analyzer() -> None:
         choice = get_input("Select reference (1-5) [default: 1]: ").strip() or '1'
 
     shift_type, _ = shift_options[choice]
-    args = ["--label", label, "--shift", shift_type, "--no-intro"]
+    args.extend(["--shift", shift_type])
 
     if shift_type == "manual":
         manual_value = get_float_input("Enter custom shift value: ")
         args.extend(["--manual-value", str(manual_value)])
     elif shift_type in ("fermi", "vbm", "cbm"):
-        fermi = get_float_input("Fermi energy (eV): ")
-        args.extend(["--fermi", str(fermi)])
+        print(f"\n{color_text('Fermi energy source:', 'yellow')}")
+        print(f"  {color_text('1', 'cyan')} = Enter a value directly")
+        print(f"  {color_text('2', 'cyan')} = Read from a .bands file")
+        print(f"  {color_text('3', 'cyan')} = Read from a SIESTA .out log (any filename, not just <label>.out)")
+        print(f"  {color_text('4', 'cyan')} = Auto-detect a .out in this directory [default]")
+        fermi_choice = get_input("Select (1-4) [default: 4]: ").strip() or '4'
+        if fermi_choice == '1':
+            fermi = get_float_input("Fermi energy (eV): ")
+            args.extend(["--fermi", str(fermi)])
+        elif fermi_choice == '2':
+            bands_file = get_input("Path to the .bands file: ").strip()
+            args.extend(["--bands-file", bands_file])
+        elif fermi_choice == '3':
+            out_file = get_input("Path to the .out log (any filename): ").strip()
+            args.extend(["--fermi-file", out_file])
+        # fermi_choice == '4': pass nothing, stb-spintexture auto-detects a .out itself.
 
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-spintexture", args)
 

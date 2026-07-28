@@ -1,0 +1,10 @@
+output/
+spintexture_Sx.dat
+spintexture_Sy.dat
+spintexture_Sz.dat
+spintexture.gplot
+spintexture.pdf
+stb_spintexture_report.txt
+references.bib
+calc.HSX
+calc.out

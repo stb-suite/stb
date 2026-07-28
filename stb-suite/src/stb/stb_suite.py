@@ -6160,20 +6160,20 @@ def run_fatbands_analyzer() -> None:
                           "orthogonal-basis fallback.", 'yellow'))
 
     shift_options = {
-        '1': ('vbm', "Valence Band Maximum"),
-        '2': ('cbm', "Conduction Band Minimum"),
-        '3': ('fermi', "Fermi level"),
+        '1': ('fermi', "Fermi level"),
+        '2': ('vbm', "Valence Band Maximum"),
+        '3': ('cbm', "Conduction Band Minimum"),
         '4': ('manual', "Custom value")
     }
 
     print("\nEnergy reference options:")
     for key, (_, desc) in shift_options.items():
-        print(f" {color_text(key, 'yellow')}. {desc}")
+        print(f" {color_text(key, 'yellow')}. {desc}" + (" [Default]" if key == '1' else ""))
 
-    choice = get_input("\nSelect reference (1-4): ")
+    choice = get_input("\nSelect reference (1-4) [default: 1]: ").strip() or '1'
     while choice not in shift_options:
         print(color_text("Invalid choice!", 'red'))
-        choice = get_input("Select reference (1-4): ")
+        choice = get_input("Select reference (1-4) [default: 1]: ").strip() or '1'
 
     shift_type, _ = shift_options[choice]
     args = ["--label", label, "--shift", shift_type, "--no-intro"]
@@ -6187,20 +6187,32 @@ def run_fatbands_analyzer() -> None:
         '2': "ml",
         '3': "atom",
         '4': "species",
+        '5': "species_l",
     }
     print("\nOrbital projection options:")
     print(f" {color_text('1', 'yellow')}. l (s, p, d, f)")
     print(f" {color_text('2', 'yellow')}. ml (s, px, py, pz, dxy, ...)")
     print(f" {color_text('3', 'yellow')}. atom")
     print(f" {color_text('4', 'yellow')}. species")
-    proj_choice = get_input("Select projection (1-4) [default: 1]: ").strip() or '1'
+    print(f" {color_text('5', 'yellow')}. species_l (species AND s/p/d/f combined, e.g. 'Sn-s', 'O-p') [Default]")
+    proj_choice = get_input("Select projection (1-5) [default: 5]: ").strip() or '5'
     while proj_choice not in projection_options:
         print(color_text("Invalid choice!", 'red'))
-        proj_choice = get_input("Select projection (1-4) [default: 1]: ").strip() or '1'
+        proj_choice = get_input("Select projection (1-5) [default: 5]: ").strip() or '5'
     args.extend(["--projection", projection_options[proj_choice]])
 
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-fatbands", args)
 

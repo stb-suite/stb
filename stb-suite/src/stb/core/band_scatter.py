@@ -81,7 +81,8 @@ def write_scalar_gplot(output_dir, gplot_name, pdf_name, high_sym, names, ps_sca
     return path
 
 
-def plot_scalar_on_bands(high_sym, k_pos, energy, value, value_label, is_gamma_fn, is_signed=False):
+def plot_scalar_on_bands(high_sym, k_pos, energy, value, value_label, is_gamma_fn,
+                          is_signed=False, size_base=10.0, size_scale=200.0):
     """Single continuous scalar (e.g. IPR, fatbands' single-category case,
     or a signed quantity like a spin-texture component) scattered onto the
     band structure: marker size and color both encode `value` (same
@@ -94,7 +95,13 @@ def plot_scalar_on_bands(high_sym, k_pos, energy, value, value_label, is_gamma_f
     weights are never negative so this never came up before a signed
     quantity, e.g. spin_moment's Sx/Sy/Sz in [-1, 1], was plotted this
     way), and when True the color uses a diverging colormap centered at
-    zero instead of a sequential one, so sign is visually legible."""
+    zero instead of a sequential one, so sign is visually legible.
+
+    `size_base`/`size_scale` default to this function's original values
+    (matching stb-ipr/stb-stm's existing, unchanged plots) -- pass smaller
+    values for a denser scatter (e.g. stb-fatbands, which plots every
+    (k, band) point at once and gets visually cluttered at the default
+    size)."""
     tick_positions = [float(t[0]) for t in high_sym]
     tick_labels = ["Γ" if is_gamma_fn(t[1]) else t[1] for t in high_sym]
 
@@ -104,7 +111,7 @@ def plot_scalar_on_bands(high_sym, k_pos, energy, value, value_label, is_gamma_f
         plt.axvline(x=pos, color='gray', linestyle='--', linewidth=1)
 
     value = np.asarray(value)
-    size = 10 + 200 * np.abs(value)
+    size = size_base + size_scale * np.abs(value)
     if is_signed:
         vmax = float(np.max(np.abs(value))) if value.size else 1.0
         vmax = vmax if vmax > 0 else 1.0
@@ -119,10 +126,14 @@ def plot_scalar_on_bands(high_sym, k_pos, energy, value, value_label, is_gamma_f
     plt.show()
 
 
-def plot_multi_series_on_bands(high_sym, series, is_gamma_fn):
+def plot_multi_series_on_bands(high_sym, series, is_gamma_fn, size_base=10.0, size_scale=200.0):
     """Multiple named series (fatbands' multi-category case): one
     scatter per series, discrete color, shared legend. `series` is a dict
-    name -> list of (k_pos, energy, value)."""
+    name -> list of (k_pos, energy, value).
+
+    `size_base`/`size_scale` default to this function's original values --
+    see `plot_scalar_on_bands`'s own docstring for why a caller might pass
+    smaller ones."""
     tick_positions = [float(t[0]) for t in high_sym]
     tick_labels = ["Γ" if is_gamma_fn(t[1]) else t[1] for t in high_sym]
 
@@ -141,7 +152,7 @@ def plot_multi_series_on_bands(high_sym, series, is_gamma_fn):
         # negative marker size crashes matplotlib. Dormant for
         # stb-fatbands' current values (orbital weights, always >= 0),
         # but a latent crash for any future signed-quantity consumer.
-        plt.scatter(k_pos, energy, s=10 + 200 * np.abs(value), c=color,
+        plt.scatter(k_pos, energy, s=size_base + size_scale * np.abs(value), c=color,
                     alpha=0.6, label=name)
     plt.legend()
 

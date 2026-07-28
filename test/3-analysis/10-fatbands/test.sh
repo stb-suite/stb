@@ -68,17 +68,62 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Basic run: --label auto-detect (.bands.WFSX + .HSX), --projection l (default) ---
-echo -e "\n--- Testing a basic run (--label Sn3O4, default --projection l) ---"
+# --- 2. Basic run: --label auto-detect (.bands.WFSX + .HSX), default --projection (species_l) ---
+echo -e "\n--- Testing a basic run (--label Sn3O4, default --projection species_l) ---"
 
 timeout 120 stb-fatbands --label Sn3O4 --shift fermi --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Using 'Sn3O4.HSX' for overlap-aware orbital weights" log_basic.txt
 check_contains "bands / .WFSX correspondence check passed" log_basic.txt
+check_contains "\[0\] RUN METADATA" log_basic.txt
+check_contains "\[1\] INPUT DATA" log_basic.txt
+check_contains "\[2\] BAND GAP ANALYSIS" log_basic.txt
+check_contains "\[3\] ORBITAL PROJECTION" log_basic.txt
+check_contains "\[4\] WRITING OUTPUT FILES" log_basic.txt
+check_contains "\[5\] REFERENCES" log_basic.txt
+check_contains "\[6\] SUMMARY & FILES" log_basic.txt
+check_contains "VBM" log_basic.txt
+echo "Testing: default projection (no --projection given) is species_l, not plain l"
+check_contains "Projection      : species_l" log_basic.txt
+check_contains "Categories found : 6 (O-s, O-p, O-d, Sn-s, Sn-p, Sn-d)" log_basic.txt
+
+echo "Testing: without --save-gnuplot, no .dat/.gplot is written (used to be unconditional)"
+if [ -e fatbands_Sn-s.dat ] || [ -e fatbands.gplot ]; then
+    echo -e " ... ${RED}FAIL${NC} (fatbands_Sn-s.dat/fatbands.gplot should not have been written)"
+    FAIL=$((FAIL+1))
+else
+    echo -e " ... ${GREEN}OK${NC} (fatbands_Sn-s.dat/fatbands.gplot correctly absent)"
+    PASS=$((PASS+1))
+fi
+check_contains "Not written (off by default" log_basic.txt
+
+echo "Testing: no text report without --save-report"
+if [ -e stb_fatbands_report.txt ]; then
+    echo -e " ... ${RED}FAIL${NC} (stb_fatbands_report.txt should not have been written)"
+    FAIL=$((FAIL+1))
+else
+    echo -e " ... ${GREEN}OK${NC} (stb_fatbands_report.txt correctly absent)"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: references.bib is always written (SIESTA)"
+check_success references.bib
+
+
+# --- 2b. --save-report / --save-gnuplot (explicit --projection l, the pre-2.1.0 default) ---
+echo -e "\n--- Testing --save-report / --save-gnuplot (--projection l) ---"
+
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection l \
+    --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
+check_exit_code $? 0
+check_success stb_fatbands_report.txt
+check_contains "\[0\] RUN METADATA" stb_fatbands_report.txt
 check_success fatbands_s.dat
 check_success fatbands_p.dat
 check_success fatbands_d.dat
 check_success fatbands.gplot
+check_contains "\[OK\] Data written" log_saved.txt
+check_contains "\[OK\] Gnuplot script written to" log_saved.txt
 
 echo "Testing: --projection l category files carry (k, energy, weight) columns"
 check_contains "k_position" fatbands_s.dat
@@ -87,16 +132,101 @@ check_contains "k_position" fatbands_s.dat
 # --- 3. --projection species ---
 echo -e "\n--- Testing --projection species ---"
 
-timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection species --no-intro > log_species.txt 2>&1
+rm -f fatbands_Sn.dat fatbands_O.dat
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection species --save-gnuplot --no-intro > log_species.txt 2>&1
 check_exit_code $? 0
 check_success fatbands_Sn.dat
 check_success fatbands_O.dat
 
 
+# --- 3b. --projection species_l (species AND s/p/d/f combined) ---
+echo -e "\n--- Testing --projection species_l ---"
+
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection species_l --save-gnuplot --no-intro > log_species_l.txt 2>&1
+check_exit_code $? 0
+check_contains "Categories found : 6 (O-s, O-p, O-d, Sn-s, Sn-p, Sn-d)" log_species_l.txt
+check_success fatbands_Sn-s.dat
+check_success fatbands_Sn-p.dat
+check_success fatbands_Sn-d.dat
+check_success fatbands_O-s.dat
+check_success fatbands_O-p.dat
+check_success fatbands_O-d.dat
+
+echo "Testing: --projection species_l with --category filtering"
+rm -f fatbands_Sn-s.dat fatbands_Sn-p.dat fatbands_Sn-d.dat \
+      fatbands_O-s.dat fatbands_O-p.dat fatbands_O-d.dat
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection species_l --category Sn-s O-p \
+    --save-gnuplot --no-intro > log_species_l_cat.txt 2>&1
+check_exit_code $? 0
+check_success fatbands_Sn-s.dat
+check_success fatbands_O-p.dat
+if [ -e fatbands_Sn-p.dat ]; then
+    echo -e " ... ${RED}FAIL${NC} (fatbands_Sn-p.dat should not have been written -- not in --category)"
+    FAIL=$((FAIL+1))
+else
+    echo -e " ... ${GREEN}OK${NC} (fatbands_Sn-p.dat correctly absent)"
+    PASS=$((PASS+1))
+fi
+
+
+# --- 3c. Spin-polarized (nspin=2): categories must split per spin ---
+# Fixture note: Ospin.bands/.bands.WFSX/.HSX are a REAL SIESTA run (not
+# synthetic) -- a single O atom in a large vacuum box, Spin polarized,
+# seeded via %block DM.InitSpin to converge to its physical 2 Bohr-magneton
+# triplet ground state (verified in Ospin.out: "spin moment ... |S| = 2.0").
+# This is the fixture that caught a real bug: the original weight loop
+# merged both spin channels into one category with no spin label at all,
+# silently combining two very different band sets (here, spin-up/spin-down
+# CBM differ by ~29 eV) into one indistinguishable series.
+echo -e "\n--- Testing --projection species_l on a real spin-polarized (nspin=2) calculation ---"
+
+rm -rf spin_test && mkdir spin_test
+cp "$FIXTURE_DIR"/spin/Ospin.fdf "$FIXTURE_DIR"/spin/Ospin.bands "$FIXTURE_DIR"/spin/Ospin.bands.WFSX \
+   "$FIXTURE_DIR"/spin/Ospin.HSX "$FIXTURE_DIR"/spin/O.ion "$FIXTURE_DIR"/spin/O.ion.xml spin_test/
+pushd spin_test > /dev/null
+
+timeout 120 stb-fatbands --label Ospin --shift fermi --projection species_l \
+    --save-gnuplot --no-intro > log_spin.txt 2>&1
+check_exit_code $? 0
+check_contains "Spin channels" log_spin.txt
+check_contains "2 (polarized)" log_spin.txt
+check_contains "Spin up:" log_spin.txt
+check_contains "Spin down:" log_spin.txt
+echo "Testing: each category is split into <category>_up/<category>_down for nspin=2"
+check_contains "Spin-resolved    : yes -- each category split into <category>_up/<category>_down (6 series total)." log_spin.txt
+check_success fatbands_O-s_up.dat
+check_success fatbands_O-s_down.dat
+check_success fatbands_O-p_up.dat
+check_success fatbands_O-p_down.dat
+check_success fatbands_O-d_up.dat
+check_success fatbands_O-d_down.dat
+
+echo "Testing: spin-up and spin-down data for the same category cover different energy ranges"
+echo "(a real, physically-expected spin splitting -- not a bug if these numbers differ)"
+UP_LINES=$(grep -vc "^#" fatbands_O-s_up.dat)
+DOWN_LINES=$(grep -vc "^#" fatbands_O-s_down.dat)
+if [ "$UP_LINES" -eq "$DOWN_LINES" ] && [ "$UP_LINES" -gt 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} fatbands_O-s_up.dat and fatbands_O-s_down.dat both have "
+    echo -e "      $UP_LINES data lines each (13 bands x 6 k-points, one spin channel each --"
+    echo -e "      not merged into one 2x-length file anymore)."
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected equal, nonzero line counts (got up=$UP_LINES, down=$DOWN_LINES)"
+    FAIL=$((FAIL+1))
+fi
+
+echo "Testing: --view on a spin-polarized run (multi-series plot path, headless)"
+timeout 120 stb-fatbands --label Ospin --shift fermi --projection species_l --view \
+    --no-intro > log_spin_view.txt 2>&1
+check_exit_code $? 0
+
+popd > /dev/null
+
+
 # --- 4. --projection ml ---
 echo -e "\n--- Testing --projection ml ---"
 
-timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection ml --no-intro > log_ml.txt 2>&1
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection ml --save-gnuplot --no-intro > log_ml.txt 2>&1
 check_exit_code $? 0
 check_success fatbands_px.dat
 check_success fatbands_dxy.dat
@@ -106,7 +236,8 @@ check_success fatbands_dxy.dat
 echo -e "\n--- Testing --projection atom with --category filtering ---"
 
 rm -f fatbands_0.dat fatbands_1.dat
-timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection atom --category 0 1 --no-intro > log_atom.txt 2>&1
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection atom --category 0 1 \
+    --save-gnuplot --no-intro > log_atom.txt 2>&1
 check_exit_code $? 0
 check_success fatbands_0.dat
 check_success fatbands_1.dat
@@ -123,11 +254,22 @@ rm -f fatbands_2.dat fatbands_3.dat fatbands_4.dat fatbands_5.dat fatbands_6.dat
       fatbands_12.dat fatbands_13.dat
 
 
+# --- 5b. --view (headless via MPLBACKEND=Agg) ---
+echo -e "\n--- Testing --view (headless via MPLBACKEND=Agg, only checking exit code) ---"
+
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --view --no-intro > log_view.txt 2>&1
+check_exit_code $? 0
+
+echo "Testing: --view with a multi-category projection (plot_multi_series_on_bands path)"
+timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection species --view --no-intro > log_view_multi.txt 2>&1
+check_exit_code $? 0
+
+
 # --- 6. Explicit --file/--wfsx/--hsx-file path (no --label) ---
 echo -e "\n--- Testing explicit --file/--wfsx/--hsx-file (no --label) ---"
 
 timeout 120 stb-fatbands --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
-    --shift fermi --projection species -o explicit_out --no-intro > log_explicit.txt 2>&1
+    --shift fermi --projection species -o explicit_out --save-gnuplot --no-intro > log_explicit.txt 2>&1
 check_exit_code $? 0
 check_success explicit_out/fatbands_Sn.dat
 
@@ -148,7 +290,7 @@ check_contains "No geometry/Hamiltonian could be resolved" log_approx.txt
 echo -e "\n--- Testing the --geometry-file fallback (no .HSX, approximate weights) ---"
 
 timeout 120 stb-fatbands --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --geometry-file calc.fdf \
-    --shift fermi --projection l -o approx_out2 --no-intro > log_approx2.txt 2>&1
+    --shift fermi --projection l -o approx_out2 --save-gnuplot --no-intro > log_approx2.txt 2>&1
 check_exit_code $? 0
 check_contains "No .HSX found" log_approx2.txt
 check_success approx_out2/fatbands_s.dat
@@ -198,16 +340,39 @@ check_contains "wfsx" log_help.txt
 check_contains "hsx-file" log_help.txt
 check_contains "geometry-file" log_help.txt
 check_contains "projection" log_help.txt
+check_contains "species_l" log_help.txt
 check_contains "category" log_help.txt
 check_contains "output-dir" log_help.txt
+check_contains "save-report" log_help.txt
+check_contains "save-gnuplot" log_help.txt
+check_contains "\-\-view" log_help.txt
 
 
 # --- 11. Interactive path (stb-suite, shortcut 3.10) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.10) ---"
 
-echo "Testing: navigate 3.10 -> label Sn3O4 -> shift fermi -> projection l -> default output"
-rm -f fatbands_s.dat fatbands_p.dat fatbands_d.dat
-printf '3.10\nSn3O4\n3\n1\n\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 3.10 -> label Sn3O4 -> shift left blank (defaults to fermi) -> projection"
+echo "left blank (defaults to species_l) -> default output -> no save-report -> save-gnuplot=y -> no view"
+rm -f fatbands_Sn-s.dat fatbands_Sn-p.dat fatbands_Sn-d.dat \
+      fatbands_O-s.dat fatbands_O-p.dat fatbands_O-d.dat fatbands.gplot stb_fatbands_report.txt
+printf '3.10\nSn3O4\n\n\n\nn\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+check_exit_code $? 0
+check_contains "Shift mode      : fermi" log_menu.txt
+check_contains "Projection      : species_l" log_menu.txt
+check_success fatbands_Sn-s.dat
+check_success fatbands_O-p.dat
+check_success fatbands.gplot
+if [ -e stb_fatbands_report.txt ]; then
+    echo -e " ... ${RED}FAIL${NC} (stb_fatbands_report.txt should not have been written -- save-report was 'n')"
+    FAIL=$((FAIL+1))
+else
+    echo -e " ... ${GREEN}OK${NC} (stb_fatbands_report.txt correctly absent)"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: navigate 3.10 -> projection l (option 1, non-default choice)"
+rm -f fatbands_s.dat
+printf '3.10\nSn3O4\n1\n1\n\nn\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu_l.txt 2>&1
 check_exit_code $? 0
 check_success fatbands_s.dat
 

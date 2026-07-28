@@ -162,6 +162,12 @@ through.
 | 3.2  | `stb-dos`       | [`3.2-stb-dos/`](3.2-stb-dos/)              |
 | 3.3  | `stb-convdos`   | [`3.3-stb-convdos/`](3.3-stb-convdos/)      |
 | 3.4  | `stb-structural`| [`3.4-stb-structural/`](3.4-stb-structural/) |
+| 3.5  | `stb-symmetry`  | [`3.5-stb-symmetry/`](3.5-stb-symmetry/)    |
+| 3.6  | `stb-bader`     | [`3.6-stb-bader/`](3.6-stb-bader/)          |
+| 3.7  | `stb-workfunction` | [`3.7-stb-workfunction/`](3.7-stb-workfunction/) |
+| 3.8  | `stb-density`   | [`3.8-stb-density/`](3.8-stb-density/)      |
+| 3.9  | `stb-xrd`       | [`3.9-stb-xrd/`](3.9-stb-xrd/)              |
+| 3.10 | `stb-fatbands`  | [`3.10-stb-fatbands/`](3.10-stb-fatbands/)  |
 
 ## Adding another example
 

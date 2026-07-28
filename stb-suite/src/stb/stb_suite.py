@@ -6363,12 +6363,26 @@ def run_xrd_analyzer() -> None:
     top_str = get_input("Show only the N strongest peaks [default: show all]: ").strip()
 
     compare_to = get_input(
-        "Compare to an experimental pattern file (2theta, intensity columns) [default: skip]: "
+        "Compare to an experimental pattern file (2theta first column, intensity LAST "
+        "column -- e.g. stb-xrd's own xrd_pattern.dat works directly) [default: skip]: "
     ).strip()
     while compare_to and not os.path.isfile(compare_to):
         print(color_text("File not found!", 'red'))
         compare_to = get_input(
             "Compare to an experimental pattern file [default: skip]: ").strip()
+
+    raw_experimental = False
+    if compare_to:
+        print(color_text(
+            "\nNote: computing the similarity score can take ~20-30s "
+            "(pyxtal's own comparison routine has no faster path).", 'yellow'))
+        print("A sparse discrete peak list (not a continuous scan) is normally "
+              "auto-detected and Gaussian-broadened before comparing, so it's on "
+              "the same footing as the simulated pattern.")
+        raw_choice = get_input(
+            "Force comparing it exactly as-is instead, with no auto-broadening? "
+            "(y/N): ").strip().lower()
+        raw_experimental = raw_choice == 'y'
 
     args = ["--file", input_file, "--format", format_type, "--wavelength", wavelength,
             "--two-theta-range", str(two_theta_min), str(two_theta_max), "--no-intro"]
@@ -6376,6 +6390,8 @@ def run_xrd_analyzer() -> None:
         args.extend(["--top", top_str])
     if compare_to:
         args.extend(["--compare-to", compare_to])
+        if raw_experimental:
+            args.append("--raw-experimental")
 
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':

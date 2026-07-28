@@ -997,6 +997,56 @@ there once `archive.py` became a second consumer needing to locate a generically
 -named log like `calc.out`, not just `<label>.out`) and
 `core.structure_io.find_fdf_system_label` (same "extract on second use" pattern).
 
+**`stb-xrd`** (Analysis, item 3.9, `xrd.py`/`core/xrd.py`, v2.1.0) simulates a powder
+X-ray diffraction pattern from a structure using pyxtal's diffraction engine (not
+pymatgen's — pyxtal is already a hard dependency for `stb-crystalcast`, and its
+`Similarity` class has no pymatgen equivalent). Reports space group/crystal
+system/lattice info and a diffraction-pattern summary (peak count, strongest peak,
+resolution); the full peak-by-peak table (2theta, d, h, k, l, intensity) is never
+printed to the console/report, only ever written to `xrd_pattern.dat`
+(`--save-gnuplot`, with a complete header) alongside a stick-pattern `.gplot` script.
+`--compare-to <path>` scores the simulated pattern against an experimental one via
+`pyxtal.XRD.Similarity` (cosine-weighted, 0-1). `stb-xrdsearch`/`stb-xrdrank`
+(Workflow item 6, XRD structure solution) reuse this same `core/xrd.py` pattern
+-computation/experimental-reading machinery to drive a structure search against a
+real experimental pattern, rather than just reporting one structure's own pattern.
+
+**Two real, compounding bugs found and fixed in `--compare-to` (verified live)**:
+comparing a structure's own simulated pattern against ITSELF — a natural
+self-consistency sanity check — used to score only 0.32-0.46 similarity instead of
+the expected ~1.0.
+- **Bug 1 (silent column misread)**: `read_experimental_pattern` always read
+  intensity from column index 1. That's correct for a plain 2-column file, but
+  `stb-xrd`'s own `--save-gnuplot` output (`xrd_pattern.dat`) has 6 columns (`2theta
+  d h k l intensity`), so column 1 there is `d` (the d-spacing in Ang) — silently
+  fed into the similarity metric as if it were intensity, no error. Fixed by always
+  reading intensity from the LAST column instead (identical behavior for a 2-column
+  file, correct for `xrd_pattern.dat`'s 6 columns, and for any other convention that
+  keeps intensity last).
+- **Bug 2 (broadening mismatch, the deeper physics issue)**: even after fixing the
+  column, the score was still only ~0.32 for the identical structure. The simulated
+  side of the comparison (`xrd.get_profile()`) is always a Gaussian-broadened
+  CONTINUOUS profile (FWHM=0.1 deg); a raw peak list (stb-xrd's own stick-pattern
+  output, or any literature-reported indexed peak table) has no peak width at all.
+  `pyxtal.XRD.Similarity`'s cubic interpolation draws a spurious curve through the
+  empty gaps between sparse peaks, which does not match the broadened profile's true
+  near-zero baseline there — comparing the two representations directly is
+  apples-to-oranges regardless of which column is read. Fixed with a new
+  `core/xrd.py::looks_like_peak_list` heuristic (coefficient of variation of the
+  spacing between sorted 2-theta points: ~0 for a real, evenly-stepped continuous
+  scan, ~1.7 for a genuine sparse peak list — verified on both a real 386-peak
+  pattern and a synthetic uniform 0.02-deg-step scan) that auto-detects a peak-list
+  -shaped `--compare-to` file and Gaussian-broadens it the same way
+  (`core/xrd.py::broaden_peak_list`, same FWHM=0.1/res=0.01 defaults as the
+  simulated side) before computing the similarity. `--raw-experimental` opts back
+  out of this (compares exactly as read) for anyone who explicitly wants the old
+  behavior. Verified live on Sn3O4: self-comparison via its own `xrd_pattern.dat`
+  went from 0.4583 (both bugs) / 0.3204 (column fixed, still unbroadened) to
+  1.0000 (both fixed); a genuinely different structure (NaCl/KBr) compared against
+  the same pattern still scored well below 1.0, confirming the fix doesn't just
+  collapse every comparison to 1.0; and a genuinely continuous, densely/evenly
+  -sampled scan is correctly left un-broadened (still scores 1.0 against itself).
+
 ## Domain conventions worth knowing
 
 - Structure file formats handled throughout: POSCAR (VASP), CIF, FDF (SIESTA), XYZ

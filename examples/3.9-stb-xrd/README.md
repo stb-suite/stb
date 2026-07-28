@@ -61,6 +61,46 @@ similar) — a quick, single-number check of "does this candidate structure
 plausibly match the measured pattern", useful e.g. for narrowing down
 candidate phases before a full Rietveld refinement.
 
+**Required column format for the `--compare-to` file**: 2-theta (degrees)
+in the **first** column, intensity in the **last** column — whitespace- or
+comma-separated, blank lines and `#` comments skipped. Any columns in
+between are ignored, so this accepts both a plain 2-column file AND
+stb-xrd's own `--save-gnuplot` output (`xrd_pattern.dat`, 6 columns:
+`2theta d h k l intensity`) directly, without needing to strip the
+`d`/`h`/`k`/`l` columns out yourself first.
+
+**Peak lists are auto-broadened before comparing.** A real, continuously
+-scanned diffractogram (many closely and roughly evenly spaced points) is
+compared as-is. But a *discrete peak list* — e.g. a literature-reported
+indexed peak table, or stb-xrd's own stick-pattern `xrd_pattern.dat` — has
+no peak width at all, while the simulated pattern `--compare-to` compares
+it against is always a Gaussian-broadened continuous profile (FWHM=0.1
+deg). Comparing the two representations directly is apples-to-oranges:
+pyxtal's cubic interpolation draws a spurious curve through the empty gaps
+between sparse peaks, which does NOT match the broadened profile's true
+near-zero baseline there — even for the exact same structure. stb-xrd
+detects this (a peak list has a highly uneven spacing between consecutive
+2-theta points — measured via the coefficient of variation of that
+spacing — vs. a real scan's near-constant step) and automatically
+Gaussian-broadens a detected peak list the same way before computing the
+similarity. `--raw-experimental` disables this and compares the file
+exactly as read, for the rare case you want that instead.
+
+**Real bug found and fixed (verified live)**: feeding stb-xrd's own
+`xrd_pattern.dat` for a structure back into `--compare-to` **for that same
+structure** used to score as low as 0.32-0.46 similarity instead of ~1.0,
+from two compounding issues: (1) `--compare-to` used to always read
+intensity from column index 1, which in a 6-column `xrd_pattern.dat` is
+`d` (the d-spacing in Ang), not intensity; and (2) even after fixing that,
+comparing the raw, un-broadened stick pattern against the broadened
+simulated profile still only scored ~0.32, for the reason explained above.
+Fixed by reading intensity from the last column always, and by
+auto-broadening peak-list-shaped input before comparing — verified live
+that the exact same self-comparison now scores 1.0000, that a genuinely
+different structure's pattern still scores well below 1.0 (so the fix
+doesn't just make everything score 1.0), and that a genuine dense/uniform
+continuous scan is correctly left un-broadened.
+
 ## Limitations
 
 - **This is an ideal, simulated powder pattern** — no peak broadening, no
@@ -91,7 +131,7 @@ Every run prints a numbered report to the console:
 | `[0] RUN METADATA` | input file/format, wavelength, 2-theta range, `--top` setting, output dir, active options |
 | `[1] STRUCTURE` | formula, site count, space group/crystal system/point group/Hall symbol/layer group, lattice parameters, cell volume, density |
 | `[2] DIFFRACTION PATTERN` | peak count, strongest peak, resolution (min d-spacing) — a compact summary only, no peak-by-peak table |
-| `[3] EXPERIMENTAL COMPARISON` | (conditional — `--compare-to`) file used, point count, similarity score |
+| `[3] EXPERIMENTAL COMPARISON` | (conditional — `--compare-to`) file used, point count, whether a peak list was detected/auto-broadened, similarity score |
 | `[4] OUTPUT DATA & PLOTS` | whether `xrd_pattern.dat`/`.gplot` were written |
 | `[5] REFERENCES` | writes `references.bib` (SIESTA + pyxtal) |
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
@@ -189,6 +229,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `basic/`              | A real structure's (CrS) space group/lattice info and pattern summary |
 | `save-gnuplot/`       | `--save-gnuplot`: the stick-pattern `.dat`/`.gplot` pair, only with the flag |
 | `compare/`            | `--compare-to` a synthetic mock-experimental pattern, similarity score |
+| `self-check/`         | `--compare-to` the structure's OWN `xrd_pattern.dat` — the fixed column/peak-list-broadening bug, and `--raw-experimental` to see the old (wrong) score |
 | `full-report/`        | Default (no report/gnuplot files) vs. `--save-report`, `references.bib` |
 
 ## Try it yourself
@@ -212,7 +253,8 @@ stb-xrd --file structure.fdf --format fdf --compare-to experimental.dat --view
 | `--wavelength`      | X-ray source name or a wavelength in Ang (default: CuKa).              |
 | `--two-theta-range` | 2-theta range to scan, in degrees (default: 0-90).                    |
 | `--top`             | Only include the N strongest peaks in the saved data file (`--save-gnuplot`). |
-| `--compare-to`      | Experimental pattern file; prints a similarity score.                  |
+| `--compare-to`      | Experimental pattern file (2-theta first column, intensity last column); prints a similarity score. |
+| `--raw-experimental` | With `--compare-to`, never auto-broaden a peak-list-looking experimental file — compare it exactly as read. |
 | `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
 | `--save-report`     | Persist the full report to `stb_xrd_report.txt`.                       |
 | `--save-gnuplot`    | Also write `xrd_pattern.dat`/`xrd_pattern.gplot`.                      |

@@ -40,11 +40,16 @@ def resolve_wavelength(spec):
 
 
 def read_experimental_pattern(path):
-    """Reads a plain 2-column (2theta, intensity) text file: whitespace- or
-    comma-separated, blank lines and '#' comments skipped. Returns a (2, N)
-    array -- the same shape pyxtal.XRD.Similarity expects for both patterns
-    it compares (it interpolates internally, so this doesn't need to share
-    a grid with a simulated pattern).
+    """Reads a 2-theta/intensity text file: whitespace- or comma-separated,
+    blank lines and '#' comments skipped. Intensity is always taken from the
+    LAST column, 2-theta from the first -- for a plain 2-column file that's
+    the same thing, but it also makes stb-xrd's own `--save-gnuplot` output
+    (`xrd_pattern.dat`, 6 columns: 2theta d h k l intensity) a valid
+    `--compare-to` input directly, instead of silently reading its `d`
+    column (Ang, index 1) as intensity. Returns a (2, N) array -- the same
+    shape pyxtal.XRD.Similarity expects for both patterns it compares (it
+    interpolates internally, so this doesn't need to share a grid with a
+    simulated pattern).
     """
     two_theta, intensity = [], []
     with open(path) as f:
@@ -57,7 +62,7 @@ def read_experimental_pattern(path):
                 continue
             try:
                 two_theta.append(float(parts[0]))
-                intensity.append(float(parts[1]))
+                intensity.append(float(parts[-1]))
             except ValueError:
                 raise ValueError(f"'{path}' line {lineno}: expected two numbers, got '{line}'.")
     if len(two_theta) < MIN_EXPERIMENTAL_POINTS:
@@ -65,6 +70,49 @@ def read_experimental_pattern(path):
             f"'{path}' has only {len(two_theta)} data point(s) -- at least "
             f"{MIN_EXPERIMENTAL_POINTS} are needed for the similarity comparison.")
     return np.array([two_theta, intensity])
+
+
+def looks_like_peak_list(two_theta, cv_threshold=0.3):
+    """Heuristic: does `two_theta` look like a sparse list of discrete peak
+    positions (e.g. an indexed/literature peak table, or stb-xrd's own
+    stick-pattern `--save-gnuplot` output) rather than a densely,
+    ~evenly-sampled continuous scan (a real diffractometer trace)?
+
+    Real continuous scans have a near-constant step between consecutive
+    (sorted) 2-theta points -- coefficient of variation (std/mean) of the
+    spacing is close to 0. A peak list has a highly UNEVEN spacing instead:
+    near-zero gaps between peaks that happen to sit close together, and
+    large empty gaps everywhere else -- verified on stb-xrd's own 386-peak
+    Sn3O4 pattern (CV ~1.7) vs. a synthetic uniform 0.02-deg-step scan over
+    the same range (CV ~2e-13). `cv_threshold=0.3` sits well below the
+    former and well above ordinary instrumental step-size jitter.
+    """
+    sorted_theta = np.sort(np.asarray(two_theta))
+    diffs = np.diff(sorted_theta)
+    if len(diffs) < 2 or diffs.mean() == 0:
+        return True
+    return (diffs.std() / diffs.mean()) > cv_threshold
+
+
+def broaden_peak_list(two_theta, intensity, two_theta_range, res=0.01, fwhm=0.1):
+    """Converts a discrete (2theta, intensity) peak list into a continuously
+    sampled Gaussian-broadened profile, using the same defaults
+    `pyxtal.XRD.XRD.get_profile()` applies to the simulated pattern
+    (method='gaussian', res=0.01 deg, FWHM=0.1 deg) -- so a peak-list
+    experimental input becomes directly comparable to the simulated profile
+    instead of forcing pyxtal.XRD.Similarity to cubic-interpolate straight
+    through the zero-intensity gaps between peaks (which is not the same
+    shape as a real broadened line and drags the similarity score down even
+    when both patterns come from the exact same structure -- verified live:
+    comparing stb-xrd's own stick output for a structure against its own
+    simulated pattern for that SAME structure scored only ~0.32-0.46
+    unbroadened, vs. ~1.0 once both sides are broadened the same way).
+    """
+    from pyxtal.XRD import Profile
+
+    lo, hi = two_theta_range
+    profile = Profile(method="gaussian", res=res, user_kwargs={"FWHM": fwhm})
+    return profile.get_profile(np.asarray(two_theta), np.asarray(intensity), lo, hi)
 
 
 def compute_pattern(structure, wavelength=1.54184, two_theta_range=(0.0, 90.0)):

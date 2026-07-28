@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 import os
 import sys
@@ -103,11 +103,22 @@ already needed by stb-crystalcast covers this too.""",
                              "--save-gnuplot -- there's no console/report peak table anymore, see "
                              "[2] DIFFRACTION PATTERN for a summary instead.")
     parser.add_argument("--compare-to", type=str, default=None, metavar="PATH",
-                        help="Compare the simulated pattern against an experimental one: a plain "
-                             "text file with two columns (2theta intensity), whitespace- or "
-                             "comma-separated, '#' comments and blank lines allowed. Prints a "
+                        help="Compare the simulated pattern against an experimental one: a text "
+                             "file with 2-theta in the first column and intensity in the LAST "
+                             "column (any columns in between, e.g. d/h/k/l, are ignored -- so "
+                             "stb-xrd's own --save-gnuplot xrd_pattern.dat is a valid input too), "
+                             "whitespace- or comma-separated, '#' comments and blank lines "
+                             "allowed. If the file looks like a sparse list of discrete peaks "
+                             "rather than a continuous scan (e.g. a literature peak table, or "
+                             "this tool's own stick-pattern output), it is automatically "
+                             "Gaussian-broadened before comparing -- pass --raw-experimental to "
+                             "disable this and compare it unbroadened instead. Prints a "
                              "similarity score (pyxtal's cosine-weighted metric, 0-1, higher is "
                              "more similar); combine with --view for a visual overlay.")
+    parser.add_argument("--raw-experimental", action="store_true",
+                        help="With --compare-to, never auto-broaden a peak-list-looking "
+                             "experimental file -- compare it exactly as read. Off by default "
+                             "(auto-detection normally handles this correctly).")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write references.bib into (and the report/data+gnuplot "
                              "files, with --save-report/--save-gnuplot) (default: current "
@@ -173,6 +184,9 @@ already needed by stb-crystalcast covers this too.""",
     similarity = None
     sim_profile = None
     experimental = None
+    experimental_n_points = None
+    is_peak_list = False
+    experimental_broadened = False
     if args.compare_to:
         from pyxtal.XRD import Similarity
 
@@ -183,6 +197,17 @@ already needed by stb-crystalcast covers this too.""",
             sys.exit(1)
 
         sim_profile = xrd.get_profile()
+        experimental_n_points = experimental.shape[1]
+        is_peak_list = xrd_core.looks_like_peak_list(experimental[0])
+
+        if is_peak_list and not args.raw_experimental:
+            experimental = xrd_core.broaden_peak_list(
+                experimental[0], experimental[1], (lo, hi))
+            experimental_broadened = True
+
+        print(color_text(
+            "Note: computing the similarity score can take ~20-30s (pyxtal's own "
+            "comparison routine has no faster path) -- elapsed time below.", 'yellow'))
         similarity = run_with_spinner(
             lambda: Similarity(sim_profile, experimental).value, label="Computing similarity")
 
@@ -249,7 +274,17 @@ already needed by stb-crystalcast covers this too.""",
     if args.compare_to:
         print_section("[3] EXPERIMENTAL COMPARISON", f_out)
         print_dual(f"Experimental file  : {args.compare_to}", f_out)
-        print_dual(f"Experimental points: {experimental.shape[1]}", f_out)
+        print_dual(f"Experimental points: {experimental_n_points}", f_out)
+        if experimental_broadened:
+            print_dual("Peak-list detected : yes -- auto-broadened (Gaussian, FWHM=0.1 deg) "
+                       "before comparing, so it's on the same footing as the simulated "
+                       "profile's own broadening (pass --raw-experimental to disable).", f_out)
+        elif is_peak_list:
+            print_dual("Peak-list detected : yes -- but --raw-experimental was given, so it "
+                       "was compared unbroadened (a low similarity score may just reflect "
+                       "that mismatch, not a real structural difference).", f_out)
+        else:
+            print_dual("Peak-list detected : no -- compared as a continuous scan, unbroadened.", f_out)
         print_dual(f"Similarity score   : {similarity:.4f} "
                    "(0-1, cosine-weighted, higher is more similar)", f_out)
 

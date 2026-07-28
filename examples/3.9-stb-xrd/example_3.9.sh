@@ -188,6 +188,47 @@ awk '/\[3\] EXPERIMENTAL/{flag=1} /\[4\] OUTPUT/{flag=0} flag' "$OUT/compare/con
 pause
 
 echo "=================================================================="
+echo " output/self-check/  --  comparing a structure against its OWN pattern"
+echo "=================================================================="
+cat <<'EOF'
+--compare-to expects 2-theta in the first column and intensity in the
+LAST column (any columns in between, e.g. d/h/k/l, are ignored) -- which
+makes stb-xrd's own --save-gnuplot output (xrd_pattern.dat) itself a
+valid --compare-to input. This also doubles as a real self-consistency
+check: comparing a structure's simulated pattern against ITSELF should
+score (near) 1.0.
+
+This USED to score as low as 0.32-0.46 instead, from two compounding
+bugs: (1) intensity was always read from column index 1, which in
+xrd_pattern.dat's 6 columns is "d" (the d-spacing in Ang), not intensity;
+(2) even reading the right column, xrd_pattern.dat is a discrete STICK
+pattern (no peak width), while the simulated side is always a
+Gaussian-broadened continuous profile -- comparing the two directly is
+apples-to-oranges (pyxtal's cubic interpolation invents a spurious curve
+through the empty gaps between sparse peaks). Fixed by reading intensity
+from the last column always, and by auto-detecting a peak-list-shaped
+--compare-to file (via how uneven its point spacing is) and
+Gaussian-broadening it the same way as the simulated side before
+comparing -- --raw-experimental disables that and reproduces the old,
+misleadingly low score:
+EOF
+mkdir -p "$OUT/self-check"
+cp crs_structure.fdf "$OUT/self-check/"
+(cd "$OUT/self-check" && stb-xrd --file crs_structure.fdf --format fdf \
+    --save-gnuplot --no-intro > console_gen.log 2>&1)
+echo
+echo "\$ stb-xrd --file crs_structure.fdf --format fdf --compare-to xrd_pattern.dat --no-intro"
+(cd "$OUT/self-check" && stb-xrd --file crs_structure.fdf --format fdf \
+    --compare-to xrd_pattern.dat --no-intro > console_auto.log 2>&1)
+awk '/\[3\] EXPERIMENTAL/{flag=1} /\[4\] OUTPUT/{flag=0} flag' "$OUT/self-check/console_auto.log"
+echo
+echo "\$ stb-xrd --file crs_structure.fdf --format fdf --compare-to xrd_pattern.dat --raw-experimental --no-intro"
+(cd "$OUT/self-check" && stb-xrd --file crs_structure.fdf --format fdf \
+    --compare-to xrd_pattern.dat --raw-experimental --no-intro > console_raw.log 2>&1)
+awk '/\[3\] EXPERIMENTAL/{flag=1} /\[4\] OUTPUT/{flag=0} flag' "$OUT/self-check/console_raw.log"
+pause
+
+echo "=================================================================="
 echo " output/full-report/  --  --save-report (off by default)"
 echo "=================================================================="
 cat <<'EOF'
@@ -264,10 +305,10 @@ echo "=================================================================="
 echo " Done"
 echo "=================================================================="
 cat <<EOF
-Four self-contained folders were generated under output/:
-  basic/          save-gnuplot/   compare/        full-report/
+Five self-contained folders were generated under output/:
+  basic/          save-gnuplot/   compare/        self-check/     full-report/
 
-Each has references.bib; save-gnuplot/ additionally has
+Each has references.bib; save-gnuplot/ and self-check/ additionally have
 xrd_pattern.dat/xrd_pattern.gplot, and full-report/ has
 stb_xrd_report.txt (only from its --save-report run).
 
@@ -281,7 +322,15 @@ Recap of what this walkthrough covered:
     xrd_pattern.dat (--save-gnuplot), now with a complete header instead
     of pyxtal's own terse one-liner
   - --top now trims that saved file, not a console table
-  - --compare-to's similarity score against an experimental pattern
+  - --compare-to's similarity score against an experimental pattern --
+    intensity read from the LAST column (2-theta first), so xrd_pattern.dat
+    itself is a valid --compare-to input
+  - self-check/: a real, verified bug where comparing a structure's own
+    pattern against itself scored only 0.32-0.46 instead of ~1.0 (wrong
+    intensity column + comparing an un-broadened stick pattern against a
+    broadened profile) -- fixed, now auto-detects and Gaussian-broadens a
+    peak-list-shaped --compare-to file before comparing (--raw-experimental
+    opts back out)
   - the fixed --view: a real, verified bug (the plot window disappearing
     immediately) traced to pyxtal's own plot_pxrd(), not just this tool's
     code, and fixed by building the preview independently

@@ -16,7 +16,7 @@ from stb.core import structure_io
 from stb.core import citations
 from stb.core import xrd as xrd_core
 from stb.core.symmetry import symmetry_summary
-from stb.core.cli import color_text, show_intro, run_with_spinner, print_dual, print_section, print_table
+from stb.core.cli import color_text, show_intro, run_with_spinner, print_dual, print_section
 from stb.core.deps import require_pyxtal
 
 REPORT_FILE = "stb_xrd_report.txt"
@@ -98,9 +98,10 @@ already needed by stb-crystalcast covers this too.""",
                         metavar=("MIN", "MAX"),
                         help="2-theta range in degrees to compute (default: 0 90).")
     parser.add_argument("--top", type=int, default=None,
-                        help="Only show the N strongest peaks in the printed table (default: "
-                             "show all of them). The saved data file (--save-gnuplot) always has "
-                             "all of them.")
+                        help="Only include the N strongest peaks in the saved data file "
+                             "(--save-gnuplot); default: include all of them. No effect without "
+                             "--save-gnuplot -- there's no console/report peak table anymore, see "
+                             "[2] DIFFRACTION PATTERN for a summary instead.")
     parser.add_argument("--compare-to", type=str, default=None, metavar="PATH",
                         help="Compare the simulated pattern against an experimental one: a plain "
                              "text file with two columns (2theta intensity), whitespace- or "
@@ -185,11 +186,15 @@ already needed by stb-crystalcast covers this too.""",
         similarity = run_with_spinner(
             lambda: Similarity(sim_profile, experimental).value, label="Computing similarity")
 
+    space_group_label = sym_info.get("Space Group", "N/A (symmetry analysis failed)")
+
     dat_path = gplot_path = None
     if args.save_gnuplot:
         dat_path = os.path.join(args.output_dir, "xrd_pattern.dat")
         gplot_path = os.path.join(args.output_dir, "xrd_pattern.gplot")
-        xrd.save(dat_path)
+        xrd_core.write_xrd_data(dat_path, shown, len(rows), args.file,
+                                 structure.composition.reduced_formula, space_group_label,
+                                 wavelength_label, wavelength, (lo, hi))
         xrd_core.write_xrd_gnuplot(dat_path, gplot_path, structure.composition.reduced_formula,
                                     wavelength_label)
 
@@ -203,7 +208,7 @@ already needed by stb-crystalcast covers this too.""",
     print_dual(f"Format          : {args.format}", f_out)
     print_dual(f"Wavelength      : {wavelength_label} ({wavelength:.5f} Ang)", f_out)
     print_dual(f"2-theta range   : {lo} - {hi} deg", f_out)
-    print_dual(f"Top peaks shown : {'all' if args.top is None else args.top}", f_out)
+    print_dual(f"Top peaks saved : {'all' if args.top is None else args.top}", f_out)
     print_dual(f"Output dir      : {args.output_dir}", f_out)
     print_dual(f"Save gnuplot    : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib): {'yes' if args.view else 'no'}", f_out)
@@ -234,15 +239,12 @@ already needed by stb-crystalcast covers this too.""",
                f"intensity={strongest[5]:.2f}", f_out)
     print_dual(f"Resolution (min d)   : {min_d_row[1]:.4f} Ang "
                f"(2theta={min_d_row[0]:.3f} deg)", f_out)
-    if args.top is not None and args.top < len(rows):
-        note = f"Showing top {len(shown)} of {len(rows)} peaks by intensity"
-        note += " (full list in the data file)." if args.save_gnuplot else "."
-        print_dual(note, f_out)
-    table_rows = [
-        ([f"{two_theta:.3f}", f"{d:.4f}", str(int(h)), str(int(k)), str(int(l)), f"{intensity:.2f}"], None)
-        for two_theta, d, h, k, l, intensity in shown
-    ]
-    print_table(["2-theta (deg)", "d (Ang)", "h", "k", "l", "Intensity"], table_rows, f_out)
+    if dat_path:
+        print_dual(f"Full peak list       : {len(shown)} of {len(rows)} peaks written to "
+                   f"'{dat_path}' (see its header for column details).", f_out)
+    else:
+        print_dual("Full peak list       : not saved -- pass --save-gnuplot to write it "
+                   "(with a complete header) to xrd_pattern.dat.", f_out)
 
     if args.compare_to:
         print_section("[3] EXPERIMENTAL COMPARISON", f_out)
@@ -253,7 +255,7 @@ already needed by stb-crystalcast covers this too.""",
 
     print_section("[4] OUTPUT DATA & PLOTS", f_out)
     if dat_path:
-        print_dual(color_text(f"[OK] Data written to '{dat_path}' ({len(rows)} peaks).", 'green'), f_out)
+        print_dual(color_text(f"[OK] Data written to '{dat_path}' ({len(shown)} of {len(rows)} peaks).", 'green'), f_out)
         print_dual(color_text(f"[OK] Gnuplot script written to '{gplot_path}'.", 'green'), f_out)
     else:
         print_dual("Not written (off by default -- pass --save-gnuplot to write "

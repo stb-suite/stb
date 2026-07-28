@@ -87,6 +87,40 @@ def compute_pattern(structure, wavelength=1.54184, two_theta_range=(0.0, 90.0)):
     return xrd
 
 
+def write_xrd_data(dat_path, rows, total_peaks, structure_label, formula, space_group,
+                    wavelength_label, wavelength, two_theta_range):
+    """Writes the peak list (2theta, d, h, k, l, intensity) to a plain text
+    file with a complete, human-readable header -- unlike pyxtal's own
+    XRD.save() (a single terse "wavelength/thetas ..." comment line), this
+    is meant to be the ONE place the full peak table lives: stb-xrd itself
+    no longer prints the (often huge) peak table to the console/report, on
+    the reasoning that it's redundant once it's saved here.
+
+    `rows` is the (already sorted/--top-filtered) subset actually written;
+    `total_peaks` is the full count found in range, for the header's own
+    "N of TOTAL" note when --top trimmed the list.
+    """
+    lo, hi = two_theta_range
+    header = [
+        "# ============================================================\n",
+        "# STB-XRD -- Simulated Powder Diffraction Pattern\n",
+        "# ============================================================\n",
+        f"# Structure       : {structure_label}\n",
+        f"# Formula         : {formula}\n",
+        f"# Space Group     : {space_group}\n",
+        f"# Wavelength      : {wavelength_label} ({wavelength:.5f} Ang)\n",
+        f"# 2-theta range   : {lo} - {hi} deg\n",
+        f"# Peaks           : {len(rows)} of {total_peaks} (sorted by intensity, descending)\n",
+        "# ------------------------------------------------------------\n",
+        "# Columns: 2-theta(deg)  d(Ang)  h  k  l  Intensity(normalized)\n",
+        "# ============================================================\n",
+    ]
+    with open(dat_path, "w") as f:
+        f.writelines(header)
+        for two_theta, d, h, k, l, intensity in rows:
+            f.write(f"{two_theta:12.6f} {d:12.6f} {int(h):3d} {int(k):3d} {int(l):3d} {intensity:12.6f}\n")
+
+
 def write_xrd_gnuplot(dat_path, gplot_path, formula, wavelength_label):
     """Writes a .gplot script plotting the simulated stick pattern (2-theta
     vs. intensity -- columns 1 and 6 of the .dat file pyxtal's own

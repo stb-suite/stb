@@ -125,7 +125,8 @@ check_exit_code $? 0
 check_success stb_xrd_report.txt
 check_contains "\[0\] RUN METADATA" stb_xrd_report.txt
 check_success xrd_pattern.dat
-check_contains "wavelength/thetas" xrd_pattern.dat
+check_contains "STB-XRD -- Simulated Powder Diffraction Pattern" xrd_pattern.dat
+check_contains "Columns: 2-theta(deg)  d(Ang)  h  k  l  Intensity" xrd_pattern.dat
 check_success xrd_pattern.gplot
 check_contains "using 1:6 with impulses" xrd_pattern.gplot
 check_contains "\[OK\] Data written to" log_saved.txt
@@ -181,11 +182,21 @@ check_contains "no peaks found" log_range_empty.txt
 
 
 # --- 7. --top ---
-echo -e "\n--- Testing --top ---"
+echo -e "\n--- Testing --top (now controls how many peaks are SAVED, no console table anymore) ---"
 
-stb-xrd --file nacl.fdf --format fdf --top 3 --no-intro > log_top.txt 2>&1
+rm -f xrd_pattern.dat
+stb-xrd --file nacl.fdf --format fdf --top 3 --save-gnuplot --no-intro > log_top.txt 2>&1
 check_exit_code $? 0
-check_contains "Showing top 3 of" log_top.txt
+check_contains "Peaks           : 3 of" xrd_pattern.dat
+echo "Testing: --top 3 writes exactly 3 data lines (12 header lines + 3 data lines)"
+n_lines=$(wc -l < xrd_pattern.dat)
+if [ "$n_lines" -eq 15 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} xrd_pattern.dat has 15 lines (12 header + 3 data)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} xrd_pattern.dat has $n_lines lines (expected 15)"
+    FAIL=$((FAIL+1))
+fi
 
 
 # --- 8. struct_out format ---
@@ -211,8 +222,10 @@ stb-xrd --file nacl.fdf --format fdf --save-gnuplot --no-intro > /dev/null 2>&1
 
 # Build a synthetic "experimental" file from this structure's own simulated
 # peaks (2theta + intensity columns only) -- not a perfect broadened profile,
-# but enough to exercise the full --compare-to code path end to end.
-awk 'NR>1 {print $1, $6}' xrd_pattern.dat > experimental.dat
+# but enough to exercise the full --compare-to code path end to end. Skips
+# the multi-line '#' header (write_xrd_data's complete header, not just a
+# single comment line).
+awk '!/^#/ {print $1, $6}' xrd_pattern.dat > experimental.dat
 
 timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat \
     --no-intro > log_compare.txt 2>&1

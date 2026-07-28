@@ -87,8 +87,9 @@ every set of lattice planes (hkl) that satisfies Bragg's law,
 produces a diffraction peak at the corresponding 2*theta angle, with an
 intensity set by the structure factor (how strongly that plane's atoms
 scatter in phase). A space group's symmetry can force some structure
-factors to vanish exactly -- "systematic absences" -- so a peak table is
-also a fingerprint of the crystal's symmetry, not just its cell size.
+factors to vanish exactly -- "systematic absences" -- so the resulting
+peak list is also a fingerprint of the crystal's symmetry, not just its
+cell size.
 
 See the README for the full theory (Bragg's law, structure factors and
 extinction, wavelength choice, and what the experimental-comparison
@@ -99,17 +100,24 @@ periodicity produces spurious low-angle (00l) peaks that don't correspond
 to any real bulk diffraction pattern -- worth knowing before trusting a
 low-angle peak from a vacuum-padded structure.
 
-Every run prints a numbered [0]...[6] report. --save-report additionally
-persists it to stb_xrd_report.txt -- off by default. --save-gnuplot
-writes xrd_pattern.dat (all peaks, pyxtal's own format) + a stick-pattern
-xrd_pattern.gplot together -- also off by default now (this tool used to
-write the data file UNCONDITIONALLY on every run; that's no longer the
-case). --view shows a matplotlib preview (renamed from the old --plot,
-same off-by-default behavior) -- and, unlike before, actually stays open
-until you close it: the old --plot delegated to a non-blocking call
-(fig.show(), or pyxtal's own plot_pxrd(), which uses the same non-blocking
-call internally) that made the window disappear as soon as the script
-exited.
+Every run prints a numbered [0]...[6] report -- the full peak table is
+NOT part of it anymore (it used to be printed in full, which could run to
+hundreds of lines for a low-symmetry structure over a wide 2-theta range);
+[2] DIFFRACTION PATTERN instead prints just a compact summary (peak
+count, strongest peak, resolution). --save-report persists the report to
+stb_xrd_report.txt -- off by default. --save-gnuplot writes the actual
+peak list to xrd_pattern.dat, now with a complete, human-readable header
+(structure/formula/space group/wavelength/range, not just pyxtal's own
+terse one-liner) plus a matching stick-pattern xrd_pattern.gplot -- also
+off by default (this tool used to write the data file UNCONDITIONALLY on
+every run; that's no longer the case). --top now controls how many peaks
+land in that saved file (it used to just trim the console table, which
+no longer exists). --view shows a matplotlib preview (renamed from the
+old --plot, same off-by-default behavior) -- and, unlike before, actually
+stays open until you close it: the old --plot delegated to a non-blocking
+call (fig.show(), or pyxtal's own plot_pxrd(), which uses the same
+non-blocking call internally) that made the window disappear as soon as
+the script exited.
 EOF
 pause
 
@@ -118,9 +126,10 @@ echo " output/basic/  --  a real structure (CrS monolayer)"
 echo "=================================================================="
 cat <<'EOF'
 Watch [1] report the real detected space group/crystal system/lattice
-(P4/nmm, tetragonal -- CrS's actual symmetry) and [2] the simulated peak
-table, including the strongest peak and the resolution (smallest d
--spacing) reached over the scanned range:
+(P4/nmm, tetragonal -- CrS's actual symmetry) and [2] the pattern summary
+-- peak count, strongest peak, and the resolution (smallest d-spacing)
+reached over the scanned range (the full peak-by-peak list only ever
+goes to xrd_pattern.dat, with --save-gnuplot -- see the next section):
 EOF
 mkdir -p "$OUT/basic"
 cp crs_structure.fdf "$OUT/basic/"
@@ -135,9 +144,11 @@ echo "=================================================================="
 echo " output/save-gnuplot/  --  --save-gnuplot (off by default)"
 echo "=================================================================="
 cat <<'EOF'
---save-gnuplot writes xrd_pattern.dat (every peak, pyxtal's own format --
-2theta, d, h, k, l, intensity) and a matching xrd_pattern.gplot stick
--pattern plot script, ready to render with a real gnuplot install:
+--save-gnuplot writes xrd_pattern.dat -- every peak (2theta, d, h, k, l,
+intensity), with a complete header (structure/formula/space group/
+wavelength/range) instead of just pyxtal's own terse one-liner -- and a
+matching xrd_pattern.gplot stick-pattern plot script, ready to render
+with a real gnuplot install:
 EOF
 mkdir -p "$OUT/save-gnuplot"
 cp crs_structure.fdf "$OUT/save-gnuplot/"
@@ -265,8 +276,11 @@ Recap of what this walkthrough covered:
     (systematic absences) -- CrS's own P4/nmm space group
   - the new [1] STRUCTURE section: space group/crystal system/lattice
     info that this tool didn't report at all before
-  - --save-gnuplot's stick-pattern script vs. the default (nothing
-    written unconditionally anymore)
+  - the peak table moved OUT of the console/report entirely -- [2] is now
+    just a compact summary, and the full list only lives in
+    xrd_pattern.dat (--save-gnuplot), now with a complete header instead
+    of pyxtal's own terse one-liner
+  - --top now trims that saved file, not a console table
   - --compare-to's similarity score against an experimental pattern
   - the fixed --view: a real, verified bug (the plot window disappearing
     immediately) traced to pyxtal's own plot_pxrd(), not just this tool's

@@ -2,12 +2,13 @@
 
 ## What this tool does
 
-`stb-xrd` simulates a powder X-ray diffraction pattern (peak table +
+`stb-xrd` simulates a powder X-ray diffraction pattern (peak list +
 optional plot) from a structure, using pyxtal's diffraction engine. It
 reports:
 
 - **Peak positions and intensities** — every reflection (`hkl`) that falls
-  inside a scanned 2-theta range, sorted by intensity.
+  inside a scanned 2-theta range, sorted by intensity — saved to
+  `xrd_pattern.dat` (`--save-gnuplot`), not printed to the console/report.
 - **Structure/symmetry info** — reduced formula, space group, crystal
   system, point group, lattice parameters, cell volume, density.
 - Optionally, a **similarity score** against an experimental pattern
@@ -89,17 +90,26 @@ Every run prints a numbered report to the console:
 |---|---|
 | `[0] RUN METADATA` | input file/format, wavelength, 2-theta range, `--top` setting, output dir, active options |
 | `[1] STRUCTURE` | formula, site count, space group/crystal system/point group/Hall symbol/layer group, lattice parameters, cell volume, density |
-| `[2] DIFFRACTION PATTERN` | peak count, strongest peak, resolution (min d-spacing), the peak table |
+| `[2] DIFFRACTION PATTERN` | peak count, strongest peak, resolution (min d-spacing) — a compact summary only, no peak-by-peak table |
 | `[3] EXPERIMENTAL COMPARISON` | (conditional — `--compare-to`) file used, point count, similarity score |
 | `[4] OUTPUT DATA & PLOTS` | whether `xrd_pattern.dat`/`.gplot` were written |
 | `[5] REFERENCES` | writes `references.bib` (SIESTA + pyxtal) |
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — persist the full report to `stb_xrd_report.txt`.
-- **`--save-gnuplot`** — also write `xrd_pattern.dat` (every peak, pyxtal's
-  own format) + `xrd_pattern.gplot` (a stick-pattern plot script) together
-  — off by default (this tool used to write the data file
-  **unconditionally** on every run; that's no longer the case).
+**The full peak-by-peak table is not printed anywhere** (console or
+`--save-report`'s file) — it used to be, in full, which could run to
+hundreds of lines for a low-symmetry structure over a wide 2-theta range.
+It only ever lives in `xrd_pattern.dat`.
+
+- **`--save-report`** — persist the (table-free) report to `stb_xrd_report.txt`.
+- **`--save-gnuplot`** — write `xrd_pattern.dat` (the actual peak list —
+  2theta, d, h, k, l, intensity — with a complete, human-readable header:
+  structure/formula/space group/wavelength/range, not just pyxtal's own
+  terse one-liner) + `xrd_pattern.gplot` (a stick-pattern plot script)
+  together — off by default (this tool used to write the data file
+  **unconditionally** on every run; that's no longer the case). `--top`
+  controls how many peaks land in this file (it used to just trim the
+  console table, which no longer exists).
 - **`--view`** — show an interactive matplotlib preview of the simulated
   stick pattern (or, with `--compare-to`, an overlay of both patterns).
   Renamed from the old `--plot`, same off-by-default behavior — but fixed:
@@ -116,8 +126,8 @@ Every run prints a numbered report to the console:
   should look like, before running a real diffraction experiment.
 - Narrowing down candidate phases against a measured pattern
   (`--compare-to`).
-- Sanity-checking a structure's symmetry: does the peak table show the
-  systematic absences you'd expect from its space group?
+- Sanity-checking a structure's symmetry: does the saved peak list show
+  the systematic absences you'd expect from its space group?
 
 ## Two ways to run it
 
@@ -176,7 +186,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 
 | Folder               | What it shows                                                              |
 |-----------------------|-----------------------------------------------------------------------------|
-| `basic/`              | A real structure's (CrS) space group/lattice info and simulated peak table |
+| `basic/`              | A real structure's (CrS) space group/lattice info and pattern summary |
 | `save-gnuplot/`       | `--save-gnuplot`: the stick-pattern `.dat`/`.gplot` pair, only with the flag |
 | `compare/`            | `--compare-to` a synthetic mock-experimental pattern, similarity score |
 | `full-report/`        | Default (no report/gnuplot files) vs. `--save-report`, `references.bib` |
@@ -201,7 +211,7 @@ stb-xrd --file structure.fdf --format fdf --compare-to experimental.dat --view
 | `--file`/`--format` | Structure file and its format (`fdf` or `struct_out`).                 |
 | `--wavelength`      | X-ray source name or a wavelength in Ang (default: CuKa).              |
 | `--two-theta-range` | 2-theta range to scan, in degrees (default: 0-90).                    |
-| `--top`             | Only show the N strongest peaks in the printed table.                  |
+| `--top`             | Only include the N strongest peaks in the saved data file (`--save-gnuplot`). |
 | `--compare-to`      | Experimental pattern file; prints a similarity score.                  |
 | `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
 | `--save-report`     | Persist the full report to `stb_xrd_report.txt`.                       |

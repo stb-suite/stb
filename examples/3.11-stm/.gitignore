@@ -1,0 +1,6 @@
+output/
+stm_*.dat
+stm_*.gplot
+stm_*.pdf
+stb_stm_report.txt
+references.bib

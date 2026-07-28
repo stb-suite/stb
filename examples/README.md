@@ -168,6 +168,7 @@ through.
 | 3.8  | `stb-density`   | [`3.8-stb-density/`](3.8-stb-density/)      |
 | 3.9  | `stb-xrd`       | [`3.9-stb-xrd/`](3.9-stb-xrd/)              |
 | 3.10 | `stb-fatbands`  | [`3.10-stb-fatbands/`](3.10-stb-fatbands/)  |
+| 3.11 | `stb-stm`       | [`3.11-stm/`](3.11-stm/)                    |
 
 ## Adding another example
 

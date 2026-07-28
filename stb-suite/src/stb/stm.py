@@ -38,20 +38,81 @@ Known limitations:
  - --iso is a relative LDOS threshold in the .LDOS file's own units
    (e/Bohr^3), not a calibrated absolute tunneling current -- Tersoff-Hamann
    is a proportionality, not an absolute current model.
+ - The .LDOS file itself carries no record of the Emin/Emax bias window
+   used to build it (that's a property of the SIESTA run, not the grid
+   file) -- know your own %block LocalDensityOfStates settings if you need
+   to report/reproduce the bias window.
+
+Output/report style rewritten (v1.0.0 -> v2.0.0) to match the rest of the
+Analysis category (stb-workfunction/stb-density): a numbered [0]...[6]
+report, --save-report, --save-gnuplot (the .dat/.gplot files used to be
+written unconditionally on every run), and --view (a matplotlib preview --
+this tool previously had none at all). --iso/--z now default to 0.001
+e/Bohr^3 / 3.0 Ang (a representative, literature-typical choice for each --
+see the module docstring above on why --iso is relative, not absolute)
+instead of being required with no default. The gnuplot script's own
+`set output`/`splot` filenames are now always bare basenames, never
+prefixed with --output-dir -- the user is expected to `cd` into that
+directory before running gnuplot there directly, so an embedded directory
+prefix pointed at the wrong place (a real, verified bug: with -o, the old
+`set output "<output-dir>/stm_current.pdf"` line was wrong relative to
+that convention).
+
+A second real bug (v2.0.0 -> v2.1.0), found while trying this tool on a
+real, externally-fetched CrS monolayer structure: the "topmost atom" used
+to be a naive `xyz[:, axis].max()`, silently picking the WRONG bounding
+atom whenever a structure's atoms straddle the periodic cell boundary with
+the real vacuum gap in the *middle* of the cell instead of padded after
+the atoms (this CrS cell's atoms sit at fractional z = 0, 0, 0.066, 0.934
+-- the real ~87%-of-cell vacuum gap is between the 0.066/0.934 atoms, but
+`.max()` picked the 0.934 one and searched into the tiny ~7% wraparound
+sliver beyond it instead, collapsing the whole search window to ~1.5 Ang
+instead of the genuine ~20 Ang vacuum region). Fixed with
+`core/kspace.py::find_surface_reference`, which locates the atom
+immediately below the LARGEST circular (wrap-aware) gap, the same gap
+-finding logic `detect_vacuum_axes` already uses to decide THAT an axis is
+vacuum-padded, now also used to find WHERE. Verified live: identical
+numbers as before on every existing (conventional) fixture, and a real,
+usable ~20 Ang search window (instead of a nonsensical, saturated ~1.5 Ang
+one) on the CrS structure.
 """
 
-VERSION = "1.0.0"
+VERSION = "2.1.0"
 
 import argparse
 import os
 import sys
-import numpy as np
+from datetime import datetime
 
-from stb.core.cli import color_text, show_intro
+import numpy as np
+import matplotlib.pyplot as plt
+
+from stb.core import citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.deps import require_sisl, read_sisl_geometry_xv_or_fdf
 from stb.core import kspace
 
+REPORT_FILE = "stb_stm_report.txt"
+BIB_FILE = "references.bib"
+
 VACUUM_GAP_ANG = 10.0  # same threshold used by stb-workfunction/stb-mlrelax
+
+# Defaults chosen to just work out of the box on a typical slab, not as a
+# universally "correct" value for every material/bias window:
+#  - DEFAULT_ISO (e/Bohr^3): --iso is a RELATIVE threshold in the .LDOS
+#    file's own units, not a calibrated absolute tunneling current (see the
+#    module docstring). 1e-3 sits comfortably inside the vacuum-decay tail
+#    for a typical slab LDOS grid (verified against this tool's own
+#    graphene test fixture: max LDOS ~0.65, with only ~0.1% of grid points
+#    above 0.44 -- 1e-3 is well past the near-atom, near-saturated region
+#    without being so small that noise/grid resolution dominates).
+#  - DEFAULT_Z (Ang): 3.0 Ang above the topmost atom is a commonly cited
+#    representative constant-height STM tip-sample separation in the
+#    Tersoff-Hamann literature -- close enough to the surface for real
+#    corrugation contrast, far enough to sit in the decaying vacuum tail
+#    rather than inside the atomic core region.
+DEFAULT_ISO = 0.001
+DEFAULT_Z = 3.0
 
 
 def _resolve_ldos_file(label):
@@ -108,10 +169,10 @@ def check_axis_alignment(lattice, axis):
     norm = np.linalg.norm(vec)
     dominant = np.max(np.abs(vec))
     if dominant < norm * 0.999:
-        print(color_text(
-            f"[WARNING] Lattice vector along --axis {axis} is not aligned with a single "
-            "Cartesian direction -- 'height above the surface' along this axis may not "
-            "mean what you expect for a sheared cell.", 'yellow'))
+        return (f"Lattice vector along --axis {axis} is not aligned with a single "
+                "Cartesian direction -- 'height above the surface' along this axis may not "
+                "mean what you expect for a sheared cell.")
+    return None
 
 
 def write_stm_data(output_file, u_vals, v_vals, data2d, value_label):
@@ -130,7 +191,20 @@ def write_stm_data(output_file, u_vals, v_vals, data2d, value_label):
 
 
 def write_stm_gplot(output_file, gplot_file, title, cb_label, u_label, v_label, is_signed=False):
-    pdf_name = gplot_file.rsplit('.', 1)[0] + ".pdf"
+    """Both filenames referenced INSIDE the script (the data file in
+    `splot`, and the PDF in `set output`) are stripped to bare basenames --
+    the user is expected to `cd` into --output-dir and run `gnuplot
+    <name>.gplot` directly from there (same convention every other tool's
+    .gplot script in this suite follows), so an embedded directory prefix
+    would point at the wrong place relative to that cwd. Verified live:
+    with -o some_dir, the old code left the directory prefix in the
+    `set output` line (but not in `splot`, an existing inconsistency) --
+    e.g. `set output "some_dir/stm_current.pdf"` while sitting inside
+    some_dir already, which gnuplot would try (and typically fail) to
+    write to some_dir/some_dir/stm_current.pdf."""
+    gplot_basename = os.path.basename(gplot_file)
+    pdf_name = gplot_basename.rsplit('.', 1)[0] + ".pdf"
+    data_basename = os.path.basename(output_file)
     lines = []
     lines.append('set terminal pdfcairo enhanced color font "Arial,14" size 6,5\n')
     lines.append(f'set output "{pdf_name}"\n')
@@ -146,9 +220,25 @@ def write_stm_gplot(output_file, gplot_file, title, cb_label, u_label, v_label, 
         lines.append('set palette defined (0 "#000099", 1 "#2255cc", 2 "#ffffff", 3 "#cc5522", 4 "#990000")\n')
     else:
         lines.append('set palette defined (0 "#000000", 1 "#4b0082", 2 "#b8860b", 3 "#ffd700", 4 "#ffffff")\n')
-    lines.append(f'splot "{os.path.basename(output_file)}" using 1:2:3 with pm3d\n')
+    lines.append(f'splot "{data_basename}" using 1:2:3 with pm3d\n')
     with open(gplot_file, 'w') as f:
         f.writelines(lines)
+
+
+def plot_matplotlib(u_vals, v_vals, image, u_label, v_label, cb_label, title):
+    """Interactive preview mirroring the .gplot's own pm3d map: a filled
+    2D color map, u/v axes in Angstrom, shared 'afmhot'-like sequential
+    palette convention (this tool has no signed quantity -- both LDOS and
+    height-above-surface are non-negative by construction)."""
+    fig, ax = plt.subplots(figsize=(7, 6))
+    mesh = ax.pcolormesh(u_vals, v_vals, image.T, shading='auto', cmap='afmhot')
+    fig.colorbar(mesh, ax=ax, label=cb_label)
+    ax.set_xlabel(u_label)
+    ax.set_ylabel(v_label)
+    ax.set_title(title)
+    ax.set_aspect('equal')
+    fig.tight_layout()
+    plt.show()
 
 
 def main():
@@ -157,7 +247,8 @@ def main():
                     "energy-integrated LDOS grid (<label>.LDOS).",
         epilog="Example usage:\n"
                "  stb-stm --label siesta --mode current --iso 0.001\n"
-               "  stb-stm --label siesta --mode height --z 3.0\n",
+               "  stb-stm --label siesta --mode height --z 3.0\n"
+               "  stb-stm --label siesta --save-report --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -181,30 +272,39 @@ def main():
                              "topography a tip follows to hold the LDOS at --iso. 'height': "
                              "constant-height LDOS map at --z above the surface.")
 
-    parser.add_argument("--z", type=float, default=None,
-                        help="Height (Ang) above the topmost surface atom for --mode height. "
-                             "Required for --mode height.")
-    parser.add_argument("--iso", type=float, default=None,
-                        help="LDOS threshold (same units as the .LDOS file, e/Bohr^3) defining "
-                             "the constant-current contour for --mode current. Required for "
-                             "--mode current.")
+    parser.add_argument("--z", type=float, default=DEFAULT_Z,
+                        help=f"Height (Ang) above the topmost surface atom for --mode height "
+                             f"(default: {DEFAULT_Z}, a commonly used representative constant-"
+                             "height tip-sample separation).")
+    parser.add_argument("--iso", type=float, default=DEFAULT_ISO,
+                        help=f"LDOS threshold (same units as the .LDOS file, e/Bohr^3) defining "
+                             f"the constant-current contour for --mode current (default: "
+                             f"{DEFAULT_ISO} -- a relative threshold, not a calibrated absolute "
+                             "current; tune it for your own system's LDOS magnitude if the "
+                             "default leaves too many/few points reaching it, see [3] in the "
+                             "report).")
     parser.add_argument("--z-max", type=float, default=None,
                         help="Upper bound (Ang above the topmost atom) of the search/plot "
                              "window along --axis. Default: distance to the cell boundary.")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write stm_<mode>.dat and stm_<mode>.gplot into "
-                             "(default: current directory). Created if it doesn't exist.")
+                        help="Directory to write stm_<mode>.dat/.gplot into (with --save-gnuplot) "
+                             "and stb_stm_report.txt/references.bib (default: current directory). "
+                             "Created if it doesn't exist.")
+
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also write stm_<mode>.dat + stm_<mode>.gplot together. Off by "
+                             "default -- this tool used to write both unconditionally on every run.")
+    parser.add_argument("--view", action="store_true",
+                        help="Show an interactive matplotlib preview of the STM image before "
+                             "finishing. Off by default.")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-stm {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
-
-    if args.mode == "height" and args.z is None:
-        parser.error("--z is required when --mode is 'height'.")
-    if args.mode == "current" and args.iso is None:
-        parser.error("--iso is required when --mode is 'current'.")
 
     if args.label:
         if args.ldos_file or args.geometry_file:
@@ -228,7 +328,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("STM SIMULATOR:", 'bold'))
+    print("\n" + color_text("STM SIMULATOR: reading input data", 'bold'))
     print("-" * 60)
 
     sisl = require_sisl()
@@ -253,12 +353,22 @@ def main():
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
     print(f"[INFO] Using axis {axis} (from '{geo_source}') as the surface normal.")
-    check_axis_alignment(lattice, axis)
+    axis_warning = check_axis_alignment(lattice, axis)
+    if axis_warning:
+        print(color_text(f"[WARNING] {axis_warning}", 'yellow'))
 
-    z_top = float(geometry.xyz[:, axis].max())
     axis_len = float(np.linalg.norm(lattice[axis]))
     n_axis = grid_data.shape[axis]
-    z_max_default = axis_len - z_top  # distance from the topmost atom to the far cell boundary
+    # frac_start is the atom immediately below the largest real vacuum gap --
+    # NOT necessarily the same as a naive xyz[:, axis].max() (see
+    # find_surface_reference's own docstring: a structure whose atoms
+    # straddle the periodic cell boundary, with the real vacuum in the
+    # middle of the cell instead of padded after the atoms, needs the gap
+    # -aware reference or the search window silently collapses to a tiny,
+    # wrong-direction sliver).
+    frac_start, gap_size_frac = kspace.find_surface_reference(geometry.fxyz[:, axis])
+    z_top = frac_start * axis_len
+    z_max_default = gap_size_frac * axis_len
     z_max = args.z_max if args.z_max is not None else z_max_default
     print(f"[INFO] Topmost surface atom at {z_top:.3f} Ang along axis {axis}; "
           f"search window up to {z_max:.3f} Ang above it.")
@@ -275,28 +385,23 @@ def main():
     z_positions = (np.arange(n_axis) / n_axis) * axis_len
     heights = z_positions - z_top  # height above the topmost atom, can be negative
 
-    os.makedirs(args.output_dir, exist_ok=True)
-
     axis_names = ['X', 'Y', 'Z']
     u_label = f"{axis_names[other_axes[0]]} (Angstrom)"
     v_label = f"{axis_names[other_axes[1]]} (Angstrom)"
 
+    print("[INFO] Computing the STM image ...")
+    image_stats = {}
     if args.mode == "height":
         idx = int(np.argmin(np.abs(heights - args.z)))
         actual_height = float(heights[idx])
-        print(f"[INFO] Mode: constant-height. Requested {args.z:.3f} Ang, using nearest grid "
-              f"height {actual_height:.3f} Ang (index {idx}/{n_axis}).")
         image = data[:, :, idx]
-        print(f"[INFO] LDOS at this height: min={image.min():.6e}, max={image.max():.6e}, "
-              f"mean={image.mean():.6e}")
-
-        out_data = os.path.join(args.output_dir, "stm_height.dat")
-        out_gplot = os.path.join(args.output_dir, "stm_height.gplot")
-        write_stm_data(out_data, u_vals, v_vals, image, "LDOS (e/Bohr^3)")
-        write_stm_gplot(out_data, out_gplot,
-                        f"STM constant-height image (z = {actual_height:.2f} Ang above surface)",
-                        "LDOS (e/Bohr^3)", u_label, v_label, is_signed=False)
-
+        cb_label = "LDOS (e/Bohr^3)"
+        title = f"STM constant-height image (z = {actual_height:.2f} Ang above surface)"
+        image_stats = {
+            "requested_z": args.z, "actual_height": actual_height, "idx": idx,
+            "min": float(image.min()), "max": float(image.max()), "mean": float(image.mean()),
+        }
+        n_missing = 0
     else:
         window_mask = (heights >= 0) & (heights <= z_max)
         if not window_mask.any():
@@ -314,36 +419,132 @@ def main():
         found = mask.any(axis=-1)
         first_idx = np.argmax(mask, axis=-1)  # first True along the outside-in order
 
-        height_map = np.full((nu, nv), np.nan)
+        image = np.full((nu, nv), np.nan)
         flat_heights = heights[window_idx_desc]
-        height_map[found] = flat_heights[first_idx[found]]
+        image[found] = flat_heights[first_idx[found]]
+        cb_label = "Height above surface (Angstrom)"
+        title = f"STM constant-current image (iso = {args.iso:.3e})"
 
         n_missing = int((~found).sum())
-        print(f"[INFO] Mode: constant-current (iso = {args.iso:.6e}).")
-        if n_missing:
-            pct = 100.0 * n_missing / found.size
-            print(color_text(
-                f"[WARNING] {n_missing}/{found.size} points ({pct:.1f}%) never reached --iso "
-                "within the search window -- consider a larger --z-max or a lower --iso. "
-                "These points are written as NaN.", 'yellow'))
-        valid = height_map[found]
+        valid = image[found]
+        image_stats = {
+            "iso": args.iso, "n_missing": n_missing, "n_total": int(found.size),
+        }
         if valid.size:
-            print(f"[INFO] Height map: min={valid.min():.3f} Ang, max={valid.max():.3f} Ang, "
-                  f"mean={valid.mean():.3f} Ang (corrugation: {valid.max() - valid.min():.3f} Ang)")
+            image_stats.update({
+                "min": float(valid.min()), "max": float(valid.max()), "mean": float(valid.mean()),
+                "corrugation": float(valid.max() - valid.min()),
+            })
 
-        out_data = os.path.join(args.output_dir, "stm_current.dat")
-        out_gplot = os.path.join(args.output_dir, "stm_current.gplot")
-        write_stm_data(out_data, u_vals, v_vals, height_map, "Height (Angstrom)")
-        write_stm_gplot(out_data, out_gplot,
-                        f"STM constant-current image (iso = {args.iso:.3e})",
-                        "Height above surface (Angstrom)", u_label, v_label, is_signed=False)
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_data = os.path.join(args.output_dir, f"stm_{args.mode}.dat")
+    out_gplot = os.path.join(args.output_dir, f"stm_{args.mode}.gplot")
 
-    print(f"[INFO] Data written to '{color_text(out_data, 'green')}'")
-    print(f"[INFO] Gnuplot script written to '{color_text(out_gplot, 'green')}'")
-    print(f"[INFO] To plot: {color_text(f'gnuplot {out_gplot}', 'cyan')}")
+    # --- From here on: the numbered, save-able report --------------------
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-    print("\n[INFO] Complete job!")
-    print("\n" + "-" * 60)
+    print_dual(color_text("\n===== STB-STM REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"LDOS file      : {args.ldos_file}", f_out)
+    print_dual(f"Geometry source: {geo_source}", f_out)
+    print_dual(f"Mode           : {args.mode}", f_out)
+    if args.mode == "height":
+        print_dual(f"Requested z    : {args.z} Ang", f_out)
+    else:
+        print_dual(f"Iso threshold  : {args.iso:.6e} e/Bohr^3", f_out)
+        print_dual(f"z-max (search) : {z_max:.3f} Ang above the topmost atom", f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+    print_dual(f"Save gnuplot   : {'yes' if args.save_gnuplot else 'no'}", f_out)
+    print_dual(f"View (matplotlib): {'yes' if args.view else 'no'}", f_out)
+
+    print_section("[1] INPUT DATA", f_out)
+    print_table(["Quantity", "Value"], [
+        (["Grid shape", f"{grid_data.shape[0]} x {grid_data.shape[1]} x {grid_data.shape[2]}"], None),
+        (["LDOS range", f"[{grid_data.min():.6e}, {grid_data.max():.6e}] e/Bohr^3"], None),
+        (["Surface-normal axis", f"{axis} ({axis_names[axis]})"], None),
+        (["Vacuum-padded axes", str(vacuum_axes)], None),
+        (["Topmost atom", f"{z_top:.3f} Ang along axis {axis}"], None),
+        (["Axis length", f"{axis_len:.3f} Ang"], None),
+    ], f_out)
+    if axis_warning:
+        print_dual(color_text(f"[WARNING] {axis_warning}", 'yellow'), f_out)
+    else:
+        print_dual("Requested/detected axis is Cartesian-aligned -- heights along it mean "
+                   "what you'd expect.", f_out)
+
+    print_section("[2] STM IMAGE", f_out)
+    if args.mode == "height":
+        print_table(["Quantity", "Value"], [
+            (["Requested height", f"{image_stats['requested_z']:.3f} Ang"], None),
+            (["Actual grid height used", f"{image_stats['actual_height']:.3f} Ang "
+              f"(index {image_stats['idx']}/{n_axis})"], None),
+            (["LDOS min", f"{image_stats['min']:.6e} e/Bohr^3"], None),
+            (["LDOS max", f"{image_stats['max']:.6e} e/Bohr^3"], None),
+            (["LDOS mean", f"{image_stats['mean']:.6e} e/Bohr^3"], None),
+        ], f_out)
+    else:
+        rows = [
+            (["Iso threshold", f"{image_stats['iso']:.6e} e/Bohr^3"], None),
+            (["Points reaching iso", f"{image_stats['n_total'] - image_stats['n_missing']}/"
+              f"{image_stats['n_total']}"], None),
+        ]
+        if image_stats["n_missing"]:
+            pct = 100.0 * image_stats["n_missing"] / image_stats["n_total"]
+            rows.append((["Points never reaching iso", f"{image_stats['n_missing']} ({pct:.1f}%)"], 'yellow'))
+        if "min" in image_stats:
+            rows.extend([
+                (["Height min", f"{image_stats['min']:.3f} Ang"], None),
+                (["Height max", f"{image_stats['max']:.3f} Ang"], None),
+                (["Height mean", f"{image_stats['mean']:.3f} Ang"], None),
+                (["Corrugation (max-min)", f"{image_stats['corrugation']:.3f} Ang"], 'green'),
+            ])
+        print_table(["Quantity", "Value"], rows, f_out)
+        if image_stats["n_missing"]:
+            pct = 100.0 * image_stats["n_missing"] / image_stats["n_total"]
+            print_dual(color_text(
+                f"[WARNING] {image_stats['n_missing']}/{image_stats['n_total']} points ({pct:.1f}%) "
+                "never reached --iso within the search window -- consider a larger --z-max or a "
+                "lower --iso. These points are written as NaN.", 'yellow'), f_out)
+
+    print_section("[3] OUTPUT DATA & PLOTS", f_out)
+    if args.save_gnuplot:
+        write_stm_data(out_data, u_vals, v_vals, image, cb_label)
+        write_stm_gplot(out_data, out_gplot, title, cb_label, u_label, v_label, is_signed=False)
+        print_dual(color_text(f"[OK] Data written to '{out_data}'.", 'green'), f_out)
+        print_dual(color_text(f"[OK] Gnuplot script written to '{out_gplot}' "
+                   "(run gnuplot from inside its own folder).", 'green'), f_out)
+    else:
+        print_dual(f"Not written (off by default -- pass --save-gnuplot to write "
+                   f"stm_{args.mode}.dat/stm_{args.mode}.gplot).", f_out)
+
+    print_section("[4] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.TERSOFF_HAMANN]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+
+    print_section("[5] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    if args.mode == "current" and "corrugation" in image_stats:
+        print_dual(f"Corrugation    : {image_stats['corrugation']:.3f} Ang", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if args.save_gnuplot:
+        print_dual(f"Data           : {out_data}", f_out)
+        print_dual(f"Gnuplot script : {out_gplot}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after the report is fully printed/closed, so a
+    # blocking matplotlib window never delays or hides it.
+    if args.view:
+        plot_matplotlib(u_vals, v_vals, image, u_label, v_label, cb_label, title)
 
 
 if __name__ == "__main__":

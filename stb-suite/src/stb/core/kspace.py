@@ -63,6 +63,63 @@ def _largest_circular_gap(fracs) -> float:
     return float(max(gaps.max(), wraparound))
 
 
+def find_surface_reference(fracs):
+    """Returns (frac_start, gap_size_frac): the fractional coordinate of the
+    atom immediately BELOW the largest circular (wrapped) gap along one
+    axis, and how far into it the search should go -- i.e. "where does the
+    real vacuum region start, and how far does it extend" along this axis.
+
+    Added for stb-stm, which (unlike `detect_vacuum_axes` above) needs to
+    know not just THAT an axis is vacuum-padded but WHERE the vacuum
+    actually is relative to the atoms, to correctly report "height above
+    the surface". A naive `xyz[:, axis].max()` (the previous approach)
+    silently picks the WRONG bounding atom whenever a structure's atoms are
+    stored straddling the periodic cell boundary with the real vacuum
+    gap in the middle of the cell instead of padded after the atoms (e.g.
+    some externally-fetched database structures, as opposed to ones this
+    suite's own stb-slab builds) -- verified live on a real fetched CrS
+    monolayer (atoms at fractional z = 0, 0, 0.066, 0.934): the largest
+    real gap (~87% of the cell, between the two z=0.066/0.934 atoms) was
+    silently missed in favor of the tiny ~7% wraparound sliver beyond the
+    naive "topmost" (z=0.934) atom, collapsing the whole search window to
+    ~1.5 Ang instead of the genuine ~20 Ang vacuum region.
+
+    `gap_size_frac` is always capped at HALF the identified gap's own
+    fractional size. A periodic cell's stacking axis is topologically a
+    ring: ANY single compact atomic region surrounded by one vacuum gap
+    has TWO faces exposed to that same gap (conventionally "top" and
+    "bottom" of the slab), not one -- searching the FULL gap risks the
+    outside-in scan eventually crossing into the far face's own LDOS tail
+    and reporting a nonsense mix of both surfaces as one. Verified live on
+    the same real CrS monolayer: searching the full ~20 Ang gap gave
+    wildly unphysical "corrugation" values (18-20 Ang, vs. real STM
+    corrugation of sub-Angstrom to a few Ang) at several representative
+    --iso values, all fixed by capping at half (~10 Ang) instead. This
+    matches this tool's own documented, pre-existing limitation ("only
+    images the surface exposed in the +axis direction... a slab with two
+    exposed faces only gets its 'top' one imaged this way") -- the cap
+    simply enforces that limitation numerically instead of relying on the
+    atom arrangement to accidentally already imply it (as a perfectly
+    centered single-plane structure like this suite's own graphene fixture
+    happens to).
+    """
+    fracs_sorted = np.sort(np.asarray(fracs, dtype=float) % 1.0)
+    if len(fracs_sorted) <= 1:
+        return (float(fracs_sorted[0]) if len(fracs_sorted) else 0.0), 0.5
+
+    if len(np.unique(np.round(fracs_sorted, 8))) == 1:
+        return float(fracs_sorted[0]), 0.5
+
+    gaps = np.diff(fracs_sorted)
+    wraparound = 1.0 - fracs_sorted[-1] + fracs_sorted[0]
+    idx = int(np.argmax(gaps))
+    if wraparound > gaps[idx]:
+        frac_start, gap_size = float(fracs_sorted[-1]), float(wraparound)
+    else:
+        frac_start, gap_size = float(fracs_sorted[idx]), float(gaps[idx])
+    return frac_start, min(gap_size, 0.5)
+
+
 def to_fractional(positions, lattice, is_cartesian: bool):
     """Converts atomic positions to fractional coordinates.
 

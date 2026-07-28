@@ -1484,15 +1484,19 @@ def run_stm_analyzer() -> None:
 
     args = ["--label", label, "--no-intro"]
 
+    # Defaults below must match stm.py's own DEFAULT_Z/DEFAULT_ISO.
     if mode_choice == '2':
         args.append("--mode")
         args.append("height")
-        z = get_float_input("Height above the topmost surface atom, in Angstrom: ")
+        z = get_float_input(
+            "Height above the topmost surface atom, in Angstrom [default: 3.0]: ", 3.0)
         args.extend(["--z", str(z)])
     else:
         args.append("--mode")
         args.append("current")
-        iso = get_float_input("LDOS threshold (e/Bohr^3) defining the constant-current contour: ")
+        iso = get_float_input(
+            "LDOS threshold (e/Bohr^3) defining the constant-current contour "
+            "[default: 0.001]: ", 0.001)
         args.extend(["--iso", str(iso)])
 
     axis_str = get_input("Surface-normal axis, 0/1/2 (blank = auto-detect from vacuum padding): ").strip()
@@ -1501,6 +1505,16 @@ def run_stm_analyzer() -> None:
 
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-stm", args)
 

@@ -79,6 +79,20 @@ ICET = ("Angqvist2019icet", """@article{Angqvist2019icet,
   doi     = {10.1002/adts.201900015}
 }""")
 
+# The Tersoff-Hamann approximation itself (tunneling current proportional
+# to the local density of states at the tip position) -- the physical
+# model stb-stm's simulated STM images are built on.
+TERSOFF_HAMANN = ("Tersoff1985", """@article{Tersoff1985,
+  author  = {Tersoff, J. and Hamann, D. R.},
+  title   = {Theory of the scanning tunneling microscope},
+  journal = {Physical Review B},
+  year    = {1985},
+  volume  = {31},
+  number  = {2},
+  pages   = {805--813},
+  doi     = {10.1103/PhysRevB.31.805}
+}""")
+
 # pyxtal, the random symmetry-constrained structure generation/search
 # library stb-crystalcast uses for every one of its modes (generate,
 # --substitute, --subgroup, --supergroup).

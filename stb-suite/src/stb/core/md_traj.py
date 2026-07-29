@@ -18,15 +18,25 @@ _MD_INITIAL_STEP_RE = re.compile(r"^\s*MD\.InitialTimeStep\s+(\d+)", re.IGNORECA
 _TIME_UNIT_TO_FS = {"fs": 1.0, "ps": 1.0e3, "ns": 1.0e6, "": 1.0}
 
 
-def read_static_lattice(label, f_out=None):
+def read_static_lattice(label, f_out=None, fdf_path=None):
     """Returns the (3, 3) cell matrix (Angstrom) for this SIESTA run, read
-    from <label>.XV (preferred -- SIESTA's own output geometry) or
-    <label>.fdf (fallback -- the input geometry). Used as-is for every
-    frame when a richer per-frame lattice (read_frame_lattices, from the
-    .out log) isn't available. Returns None if neither is readable."""
+    from <label>.XV (preferred -- SIESTA's own output geometry, always
+    named after SystemLabel regardless of how the input file itself was
+    named) or a .fdf (fallback -- the input geometry). Used as-is for
+    every frame when a richer per-frame lattice (read_frame_lattices, from
+    the .out log) isn't available. Returns None if neither is readable.
+
+    `fdf_path`, if given, overrides the auto-derived <label>.fdf guess for
+    the fallback -- unlike .XV/.ANI/.HSX/.WFSX (always literally named
+    after SystemLabel by SIESTA itself), the INPUT .fdf's filename is
+    chosen by the user and is very often NOT <label>.fdf (e.g. SystemLabel
+    'siesta' with the real input file called calc.fdf) -- the same gap
+    already closed elsewhere in this suite via --geometry-file (stb-sts/
+    stb-coop/stb-ipr/stb-effmass/stb-spintexture).
+    """
     sisl = require_sisl()
     xv_file = f"{label}.XV"
-    fdf_file = f"{label}.fdf"
+    fdf_file = fdf_path if fdf_path is not None else f"{label}.fdf"
 
     if os.path.exists(xv_file):
         try:
@@ -49,7 +59,7 @@ def read_static_lattice(label, f_out=None):
     return None
 
 
-def read_frame_lattices(label, nframes, f_out=None):
+def read_frame_lattices(label, nframes, f_out=None, fdf_path=None):
     """Returns (cells, steps): `cells` is a list of `nframes` (3, 3) cell
     matrices, one per .ANI frame (BEFORE --stride is applied -- the caller
     strides both lists together so they stay aligned); `steps` is the raw
@@ -63,6 +73,10 @@ def read_frame_lattices(label, nframes, f_out=None):
     (read_static_lattice, repeated for every frame) when '.out' is missing,
     has no MD steps at all (e.g. it's from an unrelated run), or doesn't
     have cell data for every one of the `nframes` frames.
+
+    `fdf_path`, if given, is passed straight through to read_static_lattice's
+    own fallback -- see its docstring for why the INPUT .fdf's filename
+    can't be reliably auto-derived from `label` the way .out/.XV/.ANI can.
     """
     out_file = f"{label}.out"
     if os.path.exists(out_file):
@@ -78,19 +92,24 @@ def read_frame_lattices(label, nframes, f_out=None):
                 f"every one of the {nframes} frame(s) -- falling back to a single "
                 f"static lattice.", 'yellow'), f_out)
 
-    static_cell = read_static_lattice(label, f_out)
+    static_cell = read_static_lattice(label, f_out, fdf_path=fdf_path)
     if static_cell is None:
         return None, None
     return [static_cell] * nframes, None
 
 
-def read_md_timestep_fs(label):
-    """Returns (initial_step, dt_fs) parsed from <label>.fdf's
+def read_md_timestep_fs(label, fdf_path=None):
+    """Returns (initial_step, dt_fs) parsed from a .fdf's
     MD.InitialTimeStep/MD.LengthTimeStep -- used to give each frame its real
     simulation time (fs) instead of a bare frame index, for correct-speed
-    playback in OVITO. (1, None) if <label>.fdf is missing or doesn't have
-    MD.LengthTimeStep (1 is SIESTA's own default MD.InitialTimeStep)."""
-    fdf_file = f"{label}.fdf"
+    playback in OVITO. (1, None) if the .fdf is missing or doesn't have
+    MD.LengthTimeStep (1 is SIESTA's own default MD.InitialTimeStep).
+
+    `fdf_path`, if given, overrides the auto-derived <label>.fdf guess --
+    see read_static_lattice's docstring for why this can't be reliably
+    auto-derived from `label` alone in general.
+    """
+    fdf_file = fdf_path if fdf_path is not None else f"{label}.fdf"
     if not os.path.exists(fdf_file):
         return 1, None
     try:

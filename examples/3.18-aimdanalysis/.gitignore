@@ -1,0 +1,13 @@
+output/
+aimd_*.dat
+aimd_*.gplot
+aimd_*.pdf
+aimd_disp_atom*.dat
+aimd_disp_atom*.gplot
+aimd_dist_*.dat
+aimd_dist_*.gplot
+siesta_*.dat
+siesta_*.gplot
+siesta_*.pdf
+stb_aimdAnalysis_report.txt
+references.bib

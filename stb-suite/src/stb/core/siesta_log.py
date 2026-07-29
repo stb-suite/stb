@@ -297,6 +297,60 @@ def get_md_trajectory(path: str) -> list[dict]:
     return steps
 
 
+def get_mde_trajectory(label: str) -> list[dict]:
+    """Per-MD-step thermodynamic data straight from SIESTA's own dedicated
+    '<SystemLabel>.MDE' file -- a small, clean table (one row per MD step:
+    Step, T (K), E_KS (eV), E_tot (eV), Vol (Ang^3), P (kBar)) SIESTA
+    already writes for exactly this purpose, instead of regex-scraping it
+    back out of scattered .out log lines the way get_md_trajectory() does
+    for the cell/E_KS/Temp_ion it needs. Always named after SystemLabel,
+    like .XV/.ANI/.HSX/.WFSX -- unlike the INPUT .fdf (see
+    core/md_traj.py::read_md_timestep_fs's own docstring), so no
+    --geometry-file-style override is needed here.
+
+    Returns a list of {'step': int, 'T': float, 'E_KS': float,
+    'E_tot': float|None, 'volume': float|None, 'pressure': float|None},
+    one per data row, in file order -- [] if '<label>.MDE' doesn't exist
+    or has no parseable rows. Vol/P are read positionally (columns 5/6)
+    rather than by matching the header text (whose column labels contain
+    embedded spaces, e.g. 'T (K)', making a naive whitespace-split
+    header-name match unreliable) but degrade to None row-by-row if a row
+    has fewer than 6 columns -- e.g. a fixed-shape-cell run without a
+    barostat can omit Vol/P in older SIESTA versions.
+    """
+    path = f"{label}.MDE"
+    if not os.path.exists(path):
+        return []
+    rows = []
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split()
+                try:
+                    step = int(parts[0])
+                    temp = float(parts[1])
+                    e_ks = float(parts[2])
+                except (IndexError, ValueError):
+                    continue
+                e_tot = None
+                volume = None
+                pressure = None
+                try:
+                    e_tot = float(parts[3])
+                    volume = float(parts[4])
+                    pressure = float(parts[5])
+                except (IndexError, ValueError):
+                    pass
+                rows.append({'step': step, 'T': temp, 'E_KS': e_ks, 'E_tot': e_tot,
+                             'volume': volume, 'pressure': pressure})
+    except Exception:
+        return []
+    return rows
+
+
 def get_stress_tensor(path: str) -> np.ndarray | None:
     """Stress tensor (3x3, eV/Angstrom^3) from a SIESTA .out file.
 

@@ -1257,21 +1257,57 @@ def run_aimd_analyzer() -> None:
             label = get_input("Enter the Siesta SystemLabel: ")
         args.extend(["--label", label])
 
+        print(f"{color_text('Note:', 'yellow')} the real .fdf input file is very often NOT "
+              f"named '{label}.fdf' (SystemLabel is chosen independently of the input "
+              "filename) -- needed here for the true MD timestep (falls back to 1 fs/frame "
+              "with a warning if not given).")
+        default_fdf = f"{label}.fdf"
+        if os.path.isfile(default_fdf):
+            geometry_file = get_input(
+                f"Path to the real .fdf input [default: {default_fdf}]: ").strip() or default_fdf
+        else:
+            geometry_file = get_input(
+                "Path to the real .fdf input (blank to skip, assumes 1 fs/frame): ").strip()
+        if geometry_file:
+            args.extend(["--geometry-file", geometry_file])
+
     stride = get_int_input("Keep every Nth frame (stride) [default: 1]: ", 1)
     skip = get_int_input("Discard the first N frames as equilibration (--skip) [default: 0]: ", 0)
 
     pair = get_input("Restrict the RDF to one species pair, e.g. 'O-H' (default: all pairs): ").strip()
 
-    save_data = get_input("Also save the raw plot data (.dat files)? (y/N): ").strip().lower()
+    list_atoms = get_input(
+        "List every atom's index/species/coordinates, to help pick --track-atom/"
+        "--track-pair? (y/N): ").strip().lower()
+    if list_atoms == 'y':
+        run_tool("stb-aimdAnalysis", args + ["--list-atoms"], pause=False)
+
+    track_atom = get_input(
+        "0-based atom index to track its own displacement over time (blank to skip): ").strip()
+    track_pair = get_input(
+        "Two 0-based atom indices to track their relative distance, e.g. '0-1' "
+        "(blank to skip): ").strip()
+
+    output_dir = get_input("Output directory (default: '.'): ") or "."
+    args.extend(["--output-dir", output_dir])
+
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    save_gnuplot = get_input("Also save the data + gnuplot scripts? (y/N): ").strip().lower()
+    view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
 
     args.extend(["--stride", str(stride), "--skip", str(skip)])
     if pair:
         args.extend(["--pair", pair])
-    if save_data == 'y':
-        args.append("--save-data")
+    if track_atom:
+        args.extend(["--track-atom", track_atom])
+    if track_pair:
+        args.extend(["--track-pair", track_pair])
     if save_report == 'y':
         args.append("--save-report")
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    if view_choice == 'y':
+        args.append("--view")
 
     print(color_text("\nAnalyzing AIMD trajectory...", 'green'))
     run_tool("stb-aimdAnalysis", args)

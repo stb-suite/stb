@@ -175,6 +175,7 @@ through.
 | 3.15 | `stb-ipr`       | [`3.15-ipr/`](3.15-ipr/)                    |
 | 3.16 | `stb-effmass`   | [`3.16-effmass/`](3.16-effmass/)            |
 | 3.17 | `stb-spintexture` | [`3.17-spintexture/`](3.17-spintexture/)  |
+| 3.18 | `stb-aimdAnalysis` | [`3.18-aimdanalysis/`](3.18-aimdanalysis/) |
 
 ## Adding another example
 

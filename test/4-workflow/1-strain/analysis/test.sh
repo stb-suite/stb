@@ -209,6 +209,61 @@ fi
 popd > /dev/null
 
 
+# --- 4b. Nested per-direction layout (stb-strain's own default output layout:
+#     one <direction>/ subfolder per strain direction, each holding that
+#     direction's own strain_<direction>_<pct> folders) -- own subdirectory,
+#     same reason as step 3/4. ---
+echo -e "\n--- Testing the nested <direction>/strain_<direction>_<pct> layout ---"
+mkdir -p nested_run/x nested_run/y
+pushd nested_run > /dev/null
+for pair in "x/strain_x_0.00:0" "x/strain_x_1.00:80" "x/strain_x_2.00:160"; do
+    folder="${pair%%:*}"
+    val="${pair##*:}"
+    mkdir -p "$folder"
+    cat > "$folder/calc.out" <<EOF
+outcell: Unit cell vectors (Ang):
+        5.000000    0.000000    0.000000
+        0.000000    5.000000    0.000000
+        0.000000    0.000000   20.000000
+
+siesta: Stress tensor Voigt (kbar):     ${val}.00      0.00      0.00      0.00      0.00      0.00
+EOF
+done
+for pair in "y/strain_y_0.00:0" "y/strain_y_1.00:60" "y/strain_y_2.00:120"; do
+    folder="${pair%%:*}"
+    val="${pair##*:}"
+    mkdir -p "$folder"
+    cat > "$folder/calc.out" <<EOF
+outcell: Unit cell vectors (Ang):
+        5.000000    0.000000    0.000000
+        0.000000    5.000000    0.000000
+        0.000000    0.000000   20.000000
+
+siesta: Stress tensor Voigt (kbar):     0.00      ${val}.00      0.00      0.00      0.00      0.00
+EOF
+done
+
+echo "Testing: --dir pointed at a single direction's own subfolder -- that direction alone"
+stb-strainAnalysis --file calc.out --dir x -o mech_x.dat --no-intro > log_nested_single.txt 2>&1
+check_exit_code $? 0
+check_contains "MECHANICAL STRESS REPORT" log_nested_single.txt
+check_contains "Direction       : X" log_nested_single.txt
+
+echo "Testing: --dir at the top level, no --compare -> clean error pointing at a subfolder"
+stb-strainAnalysis --file calc.out --dir . --no-intro > log_nested_nocompare.txt 2>&1
+check_exit_code $? 1
+check_contains "Multiple strain directions found (x, y)" log_nested_nocompare.txt
+check_contains "point --dir at one direction's own subfolder instead" log_nested_nocompare.txt
+
+echo "Testing: --dir at the top level with --compare -> reads every nested direction"
+stb-strainAnalysis --file calc.out --dir . --compare -o mech_nested.dat --no-intro > log_nested_compare.txt 2>&1
+check_exit_code $? 0
+check_contains "MECHANICAL STRESS COMPARISON" log_nested_compare.txt
+check_contains "800.00" log_nested_compare.txt
+check_contains "600.00" log_nested_compare.txt
+popd > /dev/null
+
+
 # --- 5. 1D mode (--1d / --cross-section), synthetic nanotube-like fixture:
 #     large in-plane vacuum (30x30 Ang), single periodic axis (z). ---
 echo -e "\n--- Testing --1d (Force in nN, auto cross-section) ---"

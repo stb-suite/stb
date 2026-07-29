@@ -1,0 +1,9 @@
+SystemName          Strain test (cubic Si)
+SystemLabel         siesta
+
+%include si_cubic.fdf
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+DM.MixingWeight     0.1
+MaxSCFIterations    200

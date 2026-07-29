@@ -6251,10 +6251,44 @@ def run_strain_generator() -> None:
         "to also generate their folders, for cross-validation.", 'cyan'))
     print()
 
-    input_file = get_input("Input FDF file: ")
-    while not os.path.isfile(input_file):
+    default_structure = "structure.fdf"
+    if os.path.isfile(default_structure):
+        structure_file = get_input(
+            f"Input structure.fdf -- lattice + atomic coordinates [default: {default_structure}]: "
+        ).strip() or default_structure
+    else:
+        structure_file = get_input("Input structure.fdf (lattice + atomic coordinates): ").strip()
+    while not os.path.isfile(structure_file):
         print(color_text("File not found!", 'red'))
-        input_file = get_input("Input FDF file: ")
+        structure_file = get_input("Input structure.fdf: ").strip()
+
+    default_calc = "calc.fdf"
+    if os.path.isfile(default_calc):
+        calc_file = get_input(
+            "Input calc.fdf -- SCF/basis/MD settings (normally %include-ing the structure file "
+            f"above) [default: {default_calc}]: ").strip() or default_calc
+    else:
+        print(color_text(f"-> No '{default_calc}' found -- enter the real calc.fdf path below.", 'yellow'))
+        calc_file = get_input(
+            "Input calc.fdf (SCF/basis/MD settings, normally %include-ing the structure file): "
+        ).strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Input calc.fdf: ").strip()
+
+    print(color_text(
+        "\nRelax mode -- how the cell responds to the imposed strain (via a %block "
+        "Geometry.Constraints written to config_extra.fdf):", 'cyan'))
+    print("  1) cell-fixed          -- cell locked at the imposed strain; only atomic positions relax")
+    print("  2) stress-constrained  -- only the imposed direction's stress fixed; other directions relax freely")
+    relax_mode = ""
+    while relax_mode not in ("cell-fixed", "stress-constrained"):
+        choice = get_input("Choose 1 or 2: ").strip()
+        relax_mode = {"1": "cell-fixed", "2": "stress-constrained"}.get(choice, choice)
+        if relax_mode not in ("cell-fixed", "stress-constrained"):
+            print(color_text("Invalid choice! Enter 1 or 2.", 'red'))
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
 
     # Advanced settings up front (rarely-touched tolerances -- gated so the
     # essential flow below stays short) -- collected here, not after the
@@ -6283,7 +6317,7 @@ def run_strain_generator() -> None:
     vacuum_axes = None
     dimensionality_label = "unknown (could not detect)"
     try:
-        structure = structure_io.read_fdf(input_file)
+        structure = structure_io.read_fdf(structure_file)
         positions = np.array([pos for _, pos in structure.atoms])
         is_cartesian = structure.coord_format == 'cartesian'
         frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
@@ -6339,21 +6373,29 @@ def run_strain_generator() -> None:
         print(color_text("Step must be positive!", 'red'))
         step = get_float_input("Step % (default 1): ", 1.0)
 
+    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
+
     # Recap -- always shown, no confirmation gate
     summary_rows = [
-        ("Structure file", input_file),
+        ("Structure file", structure_file),
+        ("Calc template", calc_file),
+        ("Relax mode", relax_mode),
+        ("Pseudo source", pseudo_dir or "(not given)"),
         ("Dimensionality", dimensionality_label),
         ("Direction(s) to generate", ", ".join(directions_to_run)),
         ("Strain range", f"{stmin}% to {stmax}%, step {step}%"),
         ("Output directory", output_dir),
         ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
         ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
+        ("Save report", "yes" if save_report else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     for d in directions_to_run:
         args = [
-            "--file", input_file,
+            "-s", structure_file,
+            "-c", calc_file,
+            "--relax-mode", relax_mode,
             "--stdir", d,
             "--stmin", str(stmin),
             "--stmax", str(stmax),
@@ -6364,6 +6406,10 @@ def run_strain_generator() -> None:
             "--angle-tolerance", str(angle_tolerance),
             "--no-intro",
         ]
+        if pseudo_dir:
+            args.extend(["-p", pseudo_dir])
+        if save_report:
+            args.append("--save-report")
         run_tool("stb-strain", args, pause=(d == directions_to_run[-1]))
 
 def run_strain_post_processor() -> None:

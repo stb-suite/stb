@@ -7,7 +7,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.9.1"
+VERSION = "1.10.0"
 
 import os
 import sys
@@ -164,6 +164,32 @@ def analyze_mechanics(data, direction, is_2d=False, z_height=20.0,
         result['cross_section'] = cross_section
 
     return result
+
+
+def find_strain_folders(base_dir):
+    """Finds every 'strain_*' run folder reachable from base_dir, supporting
+    2 layouts: flat (strain_<dir>_<pct> directly under base_dir -- what you
+    get by pointing base_dir at a single direction's own subfolder, e.g.
+    'strain_runs/x') and nested (stb-strain's own default output layout: one
+    <direction>/ subfolder per strain direction under base_dir, each holding
+    that direction's strain_<direction>_<pct> folders). This lets --dir point
+    at either a single direction's subfolder (this direction only) or the
+    top-level output directory (every direction found under it, e.g. for
+    --compare) without the caller needing to know which layout is present.
+    """
+    direct = [os.path.join(base_dir, d) for d in sorted(os.listdir(base_dir))
+              if os.path.isdir(os.path.join(base_dir, d)) and d.startswith('strain_')]
+    if direct:
+        return direct
+    nested = []
+    for d in sorted(os.listdir(base_dir)):
+        sub = os.path.join(base_dir, d)
+        if not os.path.isdir(sub):
+            continue
+        nested.extend(
+            os.path.join(sub, e) for e in sorted(os.listdir(sub))
+            if os.path.isdir(os.path.join(sub, e)) and e.startswith('strain_'))
+    return nested
 
 
 def _canonical_direction(direction):
@@ -454,8 +480,11 @@ def main():
     parser.add_argument("-f", "--file", required=True, help="Siesta output file (e.g., calc.out).")
     parser.add_argument("-o", "--output", default="mechanical_curve.dat", help="Output raw data file.")
     parser.add_argument("--dir", default="strain_runs",
-                        help="Directory containing the 'strain_*' run folders (default: strain_runs), "
-                             "same convention as stb-strain's --output-dir.")
+                        help="Directory to scan for 'strain_*' run folders (default: strain_runs). "
+                             "Accepts either stb-strain's own output layout -- point this at a single "
+                             "direction's own subfolder (e.g. strain_runs/x) for that direction alone, "
+                             "or at the top-level --output-dir itself (with --compare) to read every "
+                             "direction found under it -- or a flat directory of 'strain_*' folders.")
     parser.add_argument("--2d", dest="is2d", action="store_true", help="Enable 2D units (N/m).")
     parser.add_argument("--thickness", type=float, default=20.0, help="Vacuum height (Z) for 2D conversion (Angstrom).")
     parser.add_argument("--1d", dest="is1d", action="store_true",
@@ -499,8 +528,7 @@ def main():
     if not os.path.isdir(args.dir):
         sys.exit(color_text(f"[ERROR] Directory '{args.dir}' not found.", 'red'))
 
-    folders = [os.path.join(args.dir, d) for d in os.listdir(args.dir)
-               if os.path.isdir(os.path.join(args.dir, d)) and d.startswith('strain_')]
+    folders = find_strain_folders(args.dir)
     if not folders:
         sys.exit(color_text(f"[ERROR] No 'strain_*' folders found in '{args.dir}'.", 'red'))
 
@@ -521,8 +549,8 @@ def main():
         dirs_str = ", ".join(sorted(groups))
         sys.exit(color_text(
             f"[ERROR] Multiple strain directions found ({dirs_str}) in '{args.dir}'; "
-            "pass --compare to analyze all of them, or run from a directory with only one "
-            "direction's 'strain_*' folders.", 'red'))
+            "pass --compare to analyze all of them, or point --dir at one direction's own "
+            f"subfolder instead (e.g. '{args.dir}/{sorted(groups)[0]}').", 'red'))
 
     for direction, data in groups.items():
         if not _is_uniaxial(direction):

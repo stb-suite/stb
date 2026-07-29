@@ -176,6 +176,13 @@ through.
 | 3.16 | `stb-effmass`   | [`3.16-effmass/`](3.16-effmass/)            |
 | 3.17 | `stb-spintexture` | [`3.17-spintexture/`](3.17-spintexture/)  |
 | 3.18 | `stb-aimdAnalysis` | [`3.18-aimdanalysis/`](3.18-aimdanalysis/) |
+| 4.1  | `stb-strain` / `stb-strainAnalysis` | [`4.1-strain/`](4.1-strain/) |
+
+Workflow items (category `4`) get ONE folder per workflow, covering every
+stage (prep + analysis) together, instead of one folder per tool --
+`4.1-strain/` currently only covers Stage 1 (`stb-strain`, code `4.1.1`);
+Stage 2 (`stb-strainAnalysis`, code `4.1.2`) will be added to that same
+folder in a follow-up update.
 
 ## Adding another example
 

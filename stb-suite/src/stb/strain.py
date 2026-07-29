@@ -124,12 +124,26 @@ def normalize_direction(direction):
     return direction.lower()
 
 
+def _strip_fdf_comments(calc_text):
+    """Removes everything from the first '#' onward on every line (SIESTA's
+    own fdf comment convention -- also used for trailing inline comments
+    after a real value, e.g. 'DM.UseSaveDM .true.  #(...)'). Used before
+    scanning calc_text for a directive's CURRENT value -- otherwise a
+    plain-English comment merely mentioning a directive's name (e.g. '##
+    MD.VariableCell should stay true', a real, caught-live bug while
+    writing this tool's own example) could be misread as the actual value
+    if that comment happens to appear earlier in the file than the real
+    directive line."""
+    return "\n".join(line.split('#', 1)[0] for line in calc_text.splitlines())
+
+
 def _read_effective_steps(calc_text):
     """Returns (key_name, value) for the relaxation step count -- prefers
     'MD.Steps' (what a real relaxation calc.fdf and stb-inputfile's own
     generated template both use), falling back to 'MD.NumCGsteps' (an
     older/alternate spelling some templates may still use) if 'MD.Steps'
     is absent. (None, None) if neither is present."""
+    calc_text = _strip_fdf_comments(calc_text)
     steps_match = _MD_STEPS_VALUE_RE.search(calc_text)
     if steps_match:
         return 'MD.Steps', steps_match.group(1)
@@ -146,8 +160,9 @@ def _read_md_state(calc_text):
     for config_extra.fdf, so this is purely informational/advisory. A
     value is None when the tag is absent (a normal template, not a
     malformed one)."""
-    run_match = _MD_TYPEOFRUN_VALUE_RE.search(calc_text)
-    varcell_match = _MD_VARIABLECELL_VALUE_RE.search(calc_text)
+    stripped = _strip_fdf_comments(calc_text)
+    run_match = _MD_TYPEOFRUN_VALUE_RE.search(stripped)
+    varcell_match = _MD_VARIABLECELL_VALUE_RE.search(stripped)
     steps_key, steps_value = _read_effective_steps(calc_text)
     return {
         'typeofrun': run_match.group(1) if run_match else None,

@@ -1,0 +1,78 @@
+# The SAME calc.fdf used for the bulk Si structure's original relaxation
+# (structure.fdf, next to this file) -- same basis/k-points/XC/SCF, so the
+# physics stb-strain evaluates the deformed cell with is consistent with
+# whatever produced the reference geometry in the first place. This is
+# the file you pass as --calc; do not strip it down to "just SCF settings"
+# -- everything below (including the MD/relaxation block) is meant to be
+# reused exactly as-is.
+
+## ===================================================================
+## SYSTEM DEFINITION
+## ===================================================================
+SystemLabel      siesta
+SystemName       siesta
+
+## Include the structure file generated with STB-SUITE
+%include structure.fdf
+
+## ===================================================================
+## BASIS SET DEFINITION
+## ===================================================================
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+## ===================================================================
+## K-POINT SAMPLING (BRILLOUIN ZONE)
+## ===================================================================
+kgrid.MonkhorstPack   [8  8  8]
+Mesh.CutOff           250  Ry
+FilterCutoff          150  Ry
+
+## ===================================================================
+## EXCHANGE-CORRELATION (XC) FUNCTIONAL
+## ===================================================================
+XC.Functional       GGA
+XC.Authors          PBE
+
+## ===================================================================
+## SPIN POLARIZATION
+## ===================================================================
+Spin                non-polarized
+
+## ===================================================================
+## SELF-CONSISTENT-FIELD (SCF)
+## ===================================================================
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.DM.Tolerance        1.0d-5  eV
+SCF.Mixer.History       6
+ElectronicTemperature   300 K
+
+## ===================================================================
+## STRUCTURE RELAXATION (MOLECULAR DYNAMICS - MD)
+## ===================================================================
+## The 2 settings stb-strain's own [4] report section checks (and warns
+## about, never forces):
+##  - MD.VariableCell stays TRUE. stb-strain itself never disables cell
+##    relaxation -- that's done by the %block Geometry.Constraints it
+##    writes into config_extra.fdf (see the README), which only has any
+##    effect while the cell is actually variable in the first place.
+##  - MD.Steps stays NON-ZERO (the real SIESTA keyword -- stb-strain also
+##    recognizes the older MD.NumCGsteps spelling as a fallback). With 0
+##    steps, nothing relaxes regardless of --relax-mode.
+MD.TypeOfRun            CG
+MD.VariableCell         true
+MD.MaxForceTol          0.01 eV/Ang
+MD.Steps                100
+
+## ===================================================================
+## STARTING THE CALCULATION (Using previous results)
+## ===================================================================
+DM.UseSaveDM            .true.
+
+## ===================================================================
+## OUTPUT FILES
+## ===================================================================
+WriteCoorInitial        .true.
+WriteForces             .true.

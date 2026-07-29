@@ -100,7 +100,7 @@ pause
 
 
 echo "=================================================================="
-echo " A real bug found via a user's real run: --label mode's .fdf lookup"
+echo " A real-world gotcha: --label mode's .fdf lookup"
 echo "=================================================================="
 cat <<'EOF'
 --label mode used to silently assume the real SIESTA input file is named
@@ -127,7 +127,7 @@ pause
 
 
 echo "=================================================================="
-echo " NEW: --list-atoms -- find valid indices/coordinates before tracking anything"
+echo " --list-atoms -- find valid indices/coordinates before tracking anything"
 echo "=================================================================="
 cat <<'EOF'
 --track-atom/--track-pair need 0-based atom indices -- --list-atoms prints
@@ -147,7 +147,7 @@ pause
 
 
 echo "=================================================================="
-echo " output/tracking/  --  NEW: --track-atom / --track-pair"
+echo " output/tracking/  --  --track-atom / --track-pair"
 echo "=================================================================="
 cat <<'EOF'
 --track-atom N reports one atom's own Cartesian displacement from its
@@ -162,7 +162,7 @@ independent drift path.
 This fixture is a 2-atom O2 dimer, so atom 0 vs. atom 1 IS the O-O bond
 -- watch the tracked distance below land in the same ~1.0-1.3 Ang range
 as the RDF's own first peak (a real cross-check between two independent
-code paths, same spirit as this session's other tools' verification):
+code paths):
 EOF
 mkdir -p "$OUT/tracking"
 cp aimd.ANI aimd.fdf aimd.out aimd.XV "$OUT/tracking/"
@@ -194,14 +194,14 @@ pause
 
 
 echo "=================================================================="
-echo " output/thermo/  --  NEW: [7] THERMODYNAMIC TIME SERIES, on a REAL 500-step NVT run"
+echo " output/thermo/  --  [7] THERMODYNAMIC TIME SERIES, on a REAL 500-step NVT run"
 echo "=================================================================="
 cat <<'EOF'
 siesta.ANI/.XV/.MDE + calc.fdf/structure.fdf are a SECOND, real SIESTA run
 bundled with this example -- 500 MD steps, an 8-atom SiC supercell, Nose
 thermostat (NVT) at a 500 K target. SystemLabel 'siesta' but the real
-input is 'calc.fdf' -- the EXACT real-world mismatch --geometry-file
-fixes (demonstrated above), hit live by a user running this tool for real.
+input is 'calc.fdf' -- the exact real-world filename mismatch
+--geometry-file fixes (demonstrated above).
 
 [7] reads Energy/Temperature/Pressure straight from SIESTA's own small,
 dedicated <label>.MDE file (Step/T/E_KS/E_tot/Vol/P) -- no .out log
@@ -222,9 +222,9 @@ echo "=================================================================="
 cat <<'EOF'
 E_KS (SIESTA's own electronic/potential-like energy) trades with the
 ions' kinetic energy by design -- NOT the quantity to judge stability
-by. E_tot (kinetic+potential) is far more stable. Same lesson stb-mlmd
-learned live this session for its own NVE energy tracking, now
-confirmed here for a real SIESTA NVT run too. siesta_energy.dat's
+by. E_tot (kinetic+potential) is far more stable -- the same distinction
+stb-mlmd's own NVE energy tracking relies on, confirmed here for a real
+SIESTA NVT run too. siesta_energy.dat's
 columns 2/3 are the per-atom (eV/atom) values PLOTTED by both
 siesta_energy.gplot and siesta_thermo.gplot -- energy is an EXTENSIVE
 quantity (scales with atom count), so eV/atom (intensive, size-
@@ -330,7 +330,7 @@ B -- interactive stb-suite menu:
 Both paths call the exact same underlying tool -- proven directly below.
 The menu asks for the input source (label/generic trajectory), stride/
 skip, the RDF species pair -- then asks whether to list every atom's
-index/species/coordinates (y/N) right before the NEW --track-atom/
+index/species/coordinates (y/N) right before the --track-atom/
 --track-pair prompts, so you can check valid indices before being asked
 to pick one -- then the output directory, and save-report/save-gnuplot/
 view prompts.
@@ -369,24 +369,22 @@ at all (the generic --trajectory run and --list-atoms).
 
 Recap of what this walkthrough covered:
   - what stb-aimdAnalysis computes: RDF, MSD/diffusion, VACF-derived VDOS
-  - two NEW features: --track-atom (one atom's own displacement) and
-    --track-pair (minimum-image distance between two specific atoms),
-    cross-checked live against the RDF's independently-computed peak
-  - NEW --list-atoms: index/species/coordinates for every atom, fast
-    (first frame only), then exits -- off by default (hundreds of atoms
-    would make it unwieldy in every report); the interactive stb-suite
-    menu now asks (y/N) before showing it, right before the
-    --track-atom/--track-pair prompts
-  - a real bug fix: --geometry-file, for when the real .fdf isn't named
-    <label>.fdf (almost always the case in practice)
-  - NEW [7] THERMODYNAMIC TIME SERIES: energy/temperature/volume/pressure
+  - --track-atom (one atom's own displacement) and --track-pair
+    (minimum-image distance between two specific atoms), cross-checked
+    against the RDF's independently-computed peak
+  - --list-atoms: index/species/coordinates for every atom, fast (first
+    frame only), then exits -- off by default (hundreds of atoms would
+    make it unwieldy in every report); the interactive stb-suite menu
+    asks (y/N) before showing it, right before the --track-atom/
+    --track-pair prompts
+  - --geometry-file, for when the real .fdf isn't named <label>.fdf
+    (almost always the case in practice)
+  - [7] THERMODYNAMIC TIME SERIES: energy/temperature/volume/pressure
     (+ energy per atom) in one 4-panel figure, read from SIESTA's own
-    <label>.MDE file -- verified live on a real 500-step Nose (NVT) run
-    that E_tot is ~140x more stable than E_KS, the same E_pot-vs-E_total
-    lesson stb-mlmd learned live this session
-  - the numbered [0]...[10] report, --save-report, --save-gnuplot (now
-    opt-in, previously unconditional PNGs with no gnuplot output at all),
-    --view (now opt-in, previously always generated with no way to skip)
+    <label>.MDE file -- verified on a real 500-step Nose (NVT) run that
+    E_tot is ~140x more stable than E_KS
+  - the numbered [0]...[10] report, --save-report, --save-gnuplot
+    (off by default), --view (off by default)
   - --trajectory: generic ASE input independent of SIESTA, and how the
     REFERENCES section correctly adapts to that (no assumed SIESTA cite)
   - CLI and the interactive stb-suite menu building the same command

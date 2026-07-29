@@ -6,9 +6,8 @@ ASE-readable file (e.g. one written by `stb-mlmd`) -- into physics:
 structure (RDF), transport (MSD/diffusion), vibrations (VACF-derived
 VDOS), thermodynamics (energy/temperature/volume/pressure, from SIESTA's
 own `.MDE` file), and per-atom displacement/atom-pair relative-distance
-tracking (the last three new this session). It complements
-`stb-ani2traj`, which only converts a trajectory's file *format* for
-external viewers and computes nothing.
+tracking. It complements `stb-ani2traj`, which only converts a
+trajectory's file *format* for external viewers and computes nothing.
 
 ## 1. Theory
 
@@ -42,7 +41,7 @@ amplifies positional noise into the derivative, so the result is
 explicitly qualitative, not benchmark-grade -- useful for "where's the
 dominant vibrational frequency", not a publication-grade phonon DOS.
 
-### 1.4 NEW this session: single-atom displacement tracking
+### 1.4 Single-atom displacement tracking
 
 `--track-atom N` (0-based atom index) reports ONE specific atom's own
 Cartesian displacement from its initial position, frame by frame --
@@ -52,7 +51,7 @@ instead of resetting every time it crosses a periodic boundary. Useful
 for watching one diffusing adatom/dopant/defect directly, instead of
 only the species-averaged MSD.
 
-### 1.5 NEW this session: atom-pair relative-distance tracking
+### 1.5 Atom-pair relative-distance tracking
 
 `--track-pair I-J` (two 0-based atom indices, e.g. `0-5`) reports the
 relative separation between two SPECIFIC atoms every frame, using the
@@ -64,14 +63,14 @@ independently would not give this in general, since each atom can
 accumulate its own separate drift/unwrap path that doesn't cancel back
 down to the true short separation.
 
-### 1.6 NEW this session: thermodynamic time series (energy/temperature/volume/pressure)
+### 1.6 Thermodynamic time series (energy/temperature/volume/pressure)
 
 `[7] THERMODYNAMIC TIME SERIES` reports and plots four quantities in one
 4-panel figure. Volume is always available (computed directly from each
 frame's own cell, any input source). For a `--label` run, Energy/
 Temperature/Pressure are read straight from SIESTA's own dedicated
-`<label>.MDE` file (`core.siesta_log.get_mde_trajectory`, new) -- a
-small, clean per-step table (`Step T(K) E_KS(eV) E_tot(eV) Vol(Ang^3)
+`<label>.MDE` file (`core.siesta_log.get_mde_trajectory`) -- a small,
+clean per-step table (`Step T(K) E_KS(eV) E_tot(eV) Vol(Ang^3)
 P(kBar)`) SIESTA already writes for exactly this purpose, rather than
 re-scraping it back out of scattered `.out` log lines. Unlike the INPUT
 `.fdf`, `.MDE` is always named after `SystemLabel` (like `.XV`/`.ANI`),
@@ -79,15 +78,15 @@ so no `--geometry-file`-style override is needed for it.
 
 Both `E_tot` (total energy, kinetic+potential) and `E_KS` (the
 electronic/potential-like energy alone) are plotted together on the
-Energy panel when both are available -- the same "the potential energy
-is NOT the conserved quantity" distinction `stb-mlmd` was fixed for this
-session (`E_tot` trades between kinetic and potential by design; only
-the total is meaningful to check for stability/drift). For a generic
-`--trajectory` input, Energy/Temperature fall back to each frame's own
-embedded `Epot`/`Temp` info if present (e.g. from `stb-mlmd
---out-format xyz`); Pressure is never available there (no known source).
+Energy panel when both are available -- `E_tot` trades between kinetic
+and potential energy by design, so only the total is meaningful to
+check for stability/drift (the same distinction `stb-mlmd`'s own energy
+tracking relies on). For a generic `--trajectory` input, Energy/
+Temperature fall back to each frame's own embedded `Epot`/`Temp` info
+if present (e.g. from `stb-mlmd --out-format xyz`); Pressure is never
+available there (no known source).
 
-### 1.7 NEW this session: why energy is plotted per atom, not as an absolute total
+### 1.7 Why energy is plotted per atom, not as an absolute total
 
 Energy is an **extensive** quantity -- it scales with how many atoms
 are in the simulation cell. `-1029.53 eV` for an 8-atom cell and
@@ -103,7 +102,7 @@ same material. This is why the Energy panel (both the matplotlib
 totals are still written as extra columns in `<stem>_energy.dat` and
 still printed in the `[7]` report table, just not what's on the y-axis.
 
-## 2. A real, live cross-check on this example's fixture
+## 2. Cross-check: `--track-pair` against the RDF's own first peak
 
 `aimd.ANI`/`.XV`/`.fdf`/`.out` is a real SIESTA AIMD run: a 5-step
 Verlet trajectory of an isolated O2 dimer in vacuum. With only 2 atoms,
@@ -127,81 +126,64 @@ Ang) -- too short a run to mean anything thermodynamically, but exactly
 the kind of event `--track-pair` exists to let you watch directly
 instead of only seeing it blurred into a population-averaged RDF.
 
-## 3. What changed this session
+## 3. Features at a glance
 
-- **A real bug, found via a user's real run**: `--label` mode used to
-  silently assume the real SIESTA input file is named `<label>.fdf` --
-  needed for the true MD timestep (`MD.LengthTimeStep`). In practice this
-  almost never holds: SIESTA always names `.XV`/`.ANI`/`.HSX`/`.WFSX`
-  after `SystemLabel`, but the INPUT file's own name is chosen by the
-  user and is very often different (e.g. `SystemLabel siesta` with the
-  real input called `calc.fdf`). This silently degraded to "assume 1 fs
-  per frame" with only an easy-to-miss warning. Fixed with
-  **`--geometry-file`** -- the same `--label`-decoupled explicit path
-  `stb-sts`/`stb-coop`/`stb-ipr`/`stb-effmass`/`stb-spintexture` already
-  use for their own `.fdf`/`.HSX` inputs (section 4 of this README).
-  `core/md_traj.py`'s `read_static_lattice`/`read_frame_lattices`/
-  `read_md_timestep_fs` now take an optional `fdf_path` override instead
-  of always reconstructing `<label>.fdf` internally; `stb-ani2traj`'s own
-  calls are unaffected (defaults to `None`, preserving the old guess).
-- **`--list-atoms`** (new) -- a standalone early-exit mode: prints every
+- **`--geometry-file <path>`**: an explicit, `--label`-decoupled path to
+  the real SIESTA input `.fdf` (needed for the true MD timestep) --
+  the same `--sts`/`--coop`/`--ipr`/`--effmass`/`--spintexture` pattern
+  this suite already uses for `.fdf`/`.HSX` inputs. Details and a live
+  reproduction of the real-world filename mismatch it fixes: section 4.
+- **`--list-atoms`**: a standalone early-exit mode -- prints every
   atom's 0-based index, species, and Cartesian coordinates (from the
   first frame only, so it's fast regardless of trajectory length), then
-  exits immediately without running RDF/MSD/VDOS/anything else. Found
-  while diagnosing the bug above: an out-of-range `--track-pair` index
-  produced a clean error, but picking a VALID index (and knowing which
-  atom it spatially is) still meant guessing or hand-counting from the
-  `.fdf`. Deliberately a separate opt-in mode rather than a table always
+  exits immediately without running RDF/MSD/VDOS/anything else.
+  Deliberately a separate opt-in mode rather than a table always
   printed in the report -- a real structure can have hundreds of atoms.
-  The interactive `stb-suite` menu now asks "List every atom's index/
+  The interactive `stb-suite` menu asks "List every atom's index/
   species/coordinates?" (y/N) right before prompting for
   `--track-atom`/`--track-pair`.
-- **Two new features**: `--track-atom N` (single-atom displacement) and
-  `--track-pair I-J` (atom-pair relative distance) -- new report
-  sections `[5]`/`[6]`, always printed (say "Not requested" if the flag
-  is omitted, same convention as `[8]`'s gnuplot section).
-- **`[7] THERMODYNAMIC TIME SERIES`** (new) -- energy/temperature/volume/
+- **`--track-atom N`** (single-atom displacement) and **`--track-pair
+  I-J`** (atom-pair relative distance) -- report sections `[5]`/`[6]`,
+  always printed (say "Not requested" if the flag is omitted, same
+  convention as `[8]`'s gnuplot section). Theory: sections 1.4/1.5.
+- **`[7] THERMODYNAMIC TIME SERIES`** -- energy/temperature/volume/
   pressure in one 4-panel figure (matplotlib via `--view`, gnuplot via
   `--save-gnuplot`), reading Energy/Temperature/Pressure from SIESTA's
-  own dedicated `<label>.MDE` file for a `--label` run (section 1.6
-  above). The Energy panel's y-axis plots `eV/atom`, not the raw
-  absolute total (an intensive, system-size-independent quantity --
-  section 1.7 above); `[7]`'s report table and `<stem>_energy.dat`'s
-  extra columns still carry the absolute eV values too.
-- **Numbered `[0]`...`[10]` report** (`RUN METADATA`, `INPUT DATA`, `RDF`,
-  `MSD & DIFFUSION`, `VACF/VDOS`, the two tracking sections, the new
+  own dedicated `<label>.MDE` file for a `--label` run (section 1.6).
+  The Energy panel's y-axis plots `eV/atom`, not the raw absolute total
+  (an intensive, system-size-independent quantity -- section 1.7);
+  `[7]`'s report table and `<stem>_energy.dat`'s extra columns still
+  carry the absolute eV values too. Verified on a real 500-step SIESTA
+  NVT run: section 5.
+- **Numbered `[0]`...`[10]` report** (`RUN METADATA`, `INPUT DATA`,
+  `RDF`, `MSD & DIFFUSION`, `VACF/VDOS`, the two tracking sections, the
   thermodynamic section, `WRITING OUTPUT FILES`, `REFERENCES`,
   `SUMMARY & FILES`).
-- **`--save-gnuplot`** (new) writes a real `.dat` + `.gplot` pair for
-  every computed quantity (RDF, MSD, VACF, VDOS, volume, energy,
-  temperature, pressure, and the atom-displacement/pair-distance series
-  if used) plus one combined 4-panel `<stem>_thermo.gplot` -- this tool
-  previously wrote matplotlib PNGs unconditionally on every run
-  (`--save-data` only controlled the `.dat` half) with no gnuplot output
-  at all.
-- **`--view`** (new) shows the same figures as an interactive matplotlib
-  preview, off by default -- previously the PNGs were always generated
-  with no way to skip it.
-- **`-o`/`--output-dir`** (new) -- previously always wrote into the
-  current directory.
-- **`[9] REFERENCES`** (new) -- writes `references.bib` citing SIESTA
-  for a `--label` run; correctly prints a note instead for a generic
+- **`--save-gnuplot`** writes a real `.dat` + `.gplot` pair for every
+  computed quantity (RDF, MSD, VACF, VDOS, volume, energy, temperature,
+  pressure, and the atom-displacement/pair-distance series if used)
+  plus one combined 4-panel `<stem>_thermo.gplot`.
+- **`--view`** shows the same figures as an interactive matplotlib
+  preview, off by default.
+- **`-o`/`--output-dir`** selects where every output file is written
+  (default: the current directory).
+- **`[9] REFERENCES`** writes `references.bib` citing SIESTA for a
+  `--label` run; correctly prints a note instead for a generic
   `--trajectory` input, since that path isn't guaranteed to be a SIESTA
-  run at all (see section 6 below).
-- Physics/function reviewed live: the RDF minimum-image convention, the
-  MSD Einstein-relation diffusion-coefficient conversion, and the
-  VACF-derived VDOS were all independently re-derived by hand against
-  the code -- no bug found in the original physics (unlike some of this
-  session's other rewrites).
+  run at all (section 6).
 
-## 4. `--geometry-file`: the real bug fix, in detail
+## 4. `--geometry-file`: the real-world `.fdf` filename mismatch, in detail
 
 `--label` mode reads two things from a `.fdf`: the true MD timestep
 (`MD.InitialTimeStep`/`MD.LengthTimeStep`) and, only as a LAST-resort
 lattice fallback (after `<label>.out`'s per-step cell and `<label>.XV`),
-the geometry itself. Renaming this example's own `aimd.fdf` to `calc.fdf`
-(simulating the real-world mismatch a user hit live) reproduces the bug
-and its fix directly:
+the geometry itself. SIESTA always names `.XV`/`.ANI`/`.HSX`/`.WFSX`
+after `SystemLabel`, but the INPUT `.fdf`'s own filename is chosen by
+the user and is very often different (e.g. `SystemLabel siesta` with
+the real input called `calc.fdf`) -- without an explicit override, this
+silently degrades to "assume 1 fs per frame" with only an easy-to-miss
+warning. Renaming this example's own `aimd.fdf` to `calc.fdf`
+reproduces the scenario and its fix directly:
 
 ```
 $ stb-aimdAnalysis --label aimd --no-intro   # no aimd.fdf present -- only calc.fdf
@@ -219,15 +201,15 @@ already carries its own per-frame cell, no `.fdf` involved at all) -- and
 is validated to exist up front, same as every other explicit-path flag
 in this suite.
 
-## 5. A REAL 500-step SIESTA NVT run: `.MDE` + `--geometry-file` together
+## 5. A real 500-step SIESTA NVT run: `.MDE` + `--geometry-file` together
 
 `siesta.ANI`/`.XV`/`.MDE` + `calc.fdf`/`structure.fdf` are a SECOND,
 real SIESTA run bundled with this example (distinct from the small
 5-step `aimd.*` fixture above) -- 500 MD steps, an 8-atom SiC supercell,
 Nose thermostat at a 500 K target. `SystemLabel siesta` but the real
 input is `calc.fdf` -- reproducing the exact `--geometry-file` scenario
-above on a real, richer run, AND giving `[7] THERMODYNAMIC TIME SERIES`
-real `.MDE` data to read:
+above on a richer run, AND giving `[7] THERMODYNAMIC TIME SERIES` real
+`.MDE` data to read:
 
 ```
 $ stb-aimdAnalysis --label siesta --geometry-file calc.fdf --save-gnuplot --no-intro
@@ -258,21 +240,20 @@ Three independent physical sanity checks all pass on this real data:
   value never is.
 - **`E_tot` is ~140x more stable than `E_KS`** (std 0.0029 eV vs.
   0.4158 eV) -- confirming `E_tot`, not `E_KS`, is the physically
-  appropriate "conserved-ish" quantity to judge stability by, the same
-  lesson `stb-mlmd` learned live this session for its own NVE energy
-  tracking (section 1.6 above).
+  appropriate "conserved-ish" quantity to judge stability by (section
+  1.6 above).
 
 ## 6. `--trajectory`: independent of SIESTA
 
 Not every trajectory this tool can read comes from SIESTA -- `stb-mlmd`
 (a MACE-driven MD run) writes the same xsf/pdb/xyz formats
 `stb-aimdAnalysis --trajectory` accepts. Because that input isn't
-guaranteed to be a SIESTA calculation, `[8] REFERENCES` correctly skips
+guaranteed to be a SIESTA calculation, `[9] REFERENCES` correctly skips
 the SIESTA citation for it instead of assuming one:
 
 ```
 $ stb-aimdAnalysis --trajectory synthetic_traj.xyz --track-pair 0-1 --no-intro
-[8] REFERENCES
+[9] REFERENCES
 No SIESTA-specific references for a generic --trajectory input -- cite
 whichever tool produced it instead (e.g. stb-mlmd's own MACE/foundation
 -model references).
@@ -282,12 +263,12 @@ An extended-xyz trajectory written with per-frame `Time` info (e.g.
 `stb-mlmd --out-format xyz`) auto-detects `dt`; `xsf`/`pdb` carry no such
 data, so `--dt` is required for those.
 
-## 7. Known, deliberate limitations (unchanged this session)
+## 7. Known, deliberate limitations
 
 - The VDOS is qualitative, not benchmark-grade (section 1.3).
-- This example's own fixture (5 frames) is far too short for the
-  MSD/diffusion or VDOS numbers to carry real physical meaning -- it
-  only demonstrates that the pipeline runs correctly end to end.
+- This example's small `aimd.*` fixture (5 frames) is far too short for
+  the MSD/diffusion or VDOS numbers to carry real physical meaning --
+  it only demonstrates that the pipeline runs correctly end to end.
 - `--track-pair`'s minimum-image convention assumes no atom moves more
   than half a cell length between frames (the same assumption the RDF
   and PBC-unwrapping already make elsewhere in this suite).

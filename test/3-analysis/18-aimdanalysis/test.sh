@@ -243,8 +243,8 @@ fi
 rm -rf real_nvt
 
 
-# --- 3. --track-atom / --track-pair (new features) ---
-echo -e "\n--- Testing --track-atom 0 --track-pair 0-1 (new: displacement + relative distance) ---"
+# --- 3. --track-atom / --track-pair ---
+echo -e "\n--- Testing --track-atom 0 --track-pair 0-1 (displacement + relative distance) ---"
 
 stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 --save-gnuplot --no-intro > log_track.txt 2>&1
 check_exit_code $? 0

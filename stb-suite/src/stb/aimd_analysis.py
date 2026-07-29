@@ -8,134 +8,119 @@
 
 """Physical post-processing of an AIMD/MD trajectory: radial distribution
 function g(r), mean-squared displacement (MSD) and diffusion coefficient, a
-VACF-derived vibrational density of states (VDOS), and (new this session)
-per-atom displacement / atom-pair relative-distance tracking. Input is
-either a SIESTA AIMD run (<label>.ANI + .out) or a generic ASE-readable
-trajectory (e.g. one written by stb-mlmd). Complements stb-ani2traj, which
-only converts a SIESTA trajectory's format for external viewers.
+VACF-derived vibrational density of states (VDOS), per-atom displacement /
+atom-pair relative-distance tracking, and a thermodynamic time series
+(energy/temperature/volume/pressure). Input is either a SIESTA AIMD run
+(<label>.ANI + .out) or a generic ASE-readable trajectory (e.g. one written
+by stb-mlmd). Complements stb-ani2traj, which only converts a SIESTA
+trajectory's format for external viewers.
 
-Physics/function reviewed live (item 3.18) -- re-derived by hand against
-the code, no bug found (unlike some of this session's other rewrites):
+Physics notes:
  - RDF (compute_rdf): minimum-image fractional-coordinate distances,
-   correctly re-derived per frame from that frame's own cell (so a
-   variable-cell/NPT run stays correct), normalized against the standard
-   ideal-gas shell-volume density.
+   re-derived per frame from that frame's own cell (so a variable-cell/
+   NPT run stays correct), normalized against the standard ideal-gas
+   shell-volume density.
  - MSD/diffusion (compute_msd/fit_diffusion_coefficient): sliding-time-
    origin averaging (not just t=0), 3D Einstein relation D = slope/6, and
    the Ang^2/fs -> cm^2/s conversion (1e-16/1e-15, explicit rather than a
-   folded magic constant) checked dimensionally and confirmed correct.
+   folded magic constant).
  - VACF/VDOS (compute_vacf_vdos): central-difference velocities (the only
    option -- .ANI carries no velocities), FFT-based autocorrelation
-   (Wiener-Khinchin), frequency axis fs^-1 -> cm^-1 conversion checked
-   against the physical constant c = 2.99792458e10 cm/s.
+   (Wiener-Khinchin), frequency axis fs^-1 -> cm^-1 conversion via the
+   physical constant c = 2.99792458e10 cm/s.
 
-Output/report style rewritten (v1.0.0 -> v2.0.0) to match the rest of the
-Analysis category (stb-wfdensity/stb-sts/stb-coop/stb-ipr/stb-effmass/
-stb-spintexture): a numbered [0]...[10] report, --save-report, --save-
-gnuplot (previously wrote <stem>_{rdf,msd,vdos}.png/.dat unconditionally
-on every run via matplotlib, with --save-data only adding the .dat half --
-no way to opt out of the PNGs, and no gnuplot script at all), and --view
-(previously the matplotlib PNGs were always generated -- now an on-demand
-interactive preview, off by default, matching every other rewritten tool
-this session). -o/--output-dir is new (previously always wrote into the
-current directory).
+Output/report style matches the rest of the Analysis category (stb-
+wfdensity/stb-sts/stb-coop/stb-ipr/stb-effmass/stb-spintexture): a
+numbered [0]...[10] report, --save-report, --save-gnuplot (writes a .dat +
+.gplot pair for every computed quantity instead of unconditional
+matplotlib PNGs), --view (an on-demand interactive matplotlib preview),
+and -o/--output-dir.
 
-Two new features added this session:
- - --track-atom N (0-based atom index): the Cartesian displacement of one
-   specific atom from its own initial position, frame by frame -- built on
-   the already-PBC-unwrapped trajectory (core.md_traj.unwrap_trajectory)
-   the MSD/VDOS analyses already use, so a real diffusing/hopping atom's
-   displacement stays physically continuous instead of resetting every
-   time it crosses a periodic boundary. Useful e.g. for watching one
-   diffusing adatom/dopant/defect during a run instead of only the
-   species-averaged MSD.
- - --track-pair I-J (two 0-based atom indices, e.g. '0-5'): the relative
-   separation between two SPECIFIC atoms every frame, using the SAME
-   minimum-image convention as compute_rdf (fractional-coordinate
-   difference, wrapped to [-0.5, 0.5), converted through that frame's own
-   cell) rather than the unwrapped trajectory -- deliberately different
-   from --track-atom's convention, because what matters physically for a
-   bond length/hydrogen-bond distance/reaction coordinate is the atoms'
-   TRUE instantaneous separation. Unwrapping each atom independently would
-   not give this: two atoms can each accumulate their own independent
-   drift/unwrap path that does not cancel back down to their true short
-   separation, especially over a long trajectory. Verified live on this
-   tool's own 2-atom O2 fixture: --track-pair 0-1 reproduces the same O-O
-   bond-length range as the RDF's own first peak (~1.0-1.3 Ang).
+--track-atom N (0-based atom index) reports the Cartesian displacement of
+one specific atom from its own initial position, frame by frame -- built
+on the already-PBC-unwrapped trajectory (core.md_traj.unwrap_trajectory)
+the MSD/VDOS analyses already use, so a real diffusing/hopping atom's
+displacement stays physically continuous instead of resetting every time
+it crosses a periodic boundary. Useful e.g. for watching one diffusing
+adatom/dopant/defect during a run instead of only the species-averaged
+MSD.
 
-A real bug found and fixed while a user exercised --track-pair on a real
-run: --label mode's MD timestep (MD.InitialTimeStep/MD.LengthTimeStep)
-and lattice fallback both silently assumed the real SIESTA input file is
-named <label>.fdf. In practice this almost never holds -- the input
-file's name is chosen by the user and the SystemLabel inside it is very
-often different (e.g. SystemLabel 'siesta' with the real input called
-calc.fdf) -- unlike .XV/.ANI/.HSX/.WFSX, which SIESTA itself always names
-after SystemLabel. This silently degraded to "assume 1 fs per frame" with
-only a warning, the same gap already closed elsewhere in this suite via
-an explicit, --label-decoupled file path (stb-sts/stb-coop/stb-ipr/
-stb-effmass/stb-spintexture's own --geometry-file). Fixed by adding
---geometry-file here too (core/md_traj.py's read_static_lattice/
-read_frame_lattices/read_md_timestep_fs now take an optional fdf_path
+--track-pair I-J (two 0-based atom indices, e.g. '0-5') reports the
+relative separation between two SPECIFIC atoms every frame, using the
+SAME minimum-image convention as compute_rdf (fractional-coordinate
+difference, wrapped to [-0.5, 0.5), converted through that frame's own
+cell) rather than the unwrapped trajectory -- deliberately different from
+--track-atom's convention, because what matters physically for a bond
+length/hydrogen-bond distance/reaction coordinate is the atoms' TRUE
+instantaneous separation. Unwrapping each atom independently would not
+give this: two atoms can each accumulate their own independent drift/
+unwrap path that does not cancel back down to their true short
+separation, especially over a long trajectory. Verified on this tool's
+own 2-atom O2 fixture: --track-pair 0-1 reproduces the same O-O
+bond-length range as the RDF's own first peak (~1.0-1.3 Ang).
+
+--geometry-file <path>: --label mode's MD timestep (MD.InitialTimeStep/
+MD.LengthTimeStep) and lattice fallback both need the real SIESTA input
+.fdf, whose filename is chosen by the user and can differ from the
+SystemLabel inside it (e.g. SystemLabel 'siesta' with the real input
+called calc.fdf) -- unlike .XV/.ANI/.HSX/.WFSX, which SIESTA itself
+always names after SystemLabel. Without this override, a renamed/missing
+.fdf silently degrades to "assume 1 fs per frame" with only a warning --
+the same gap closed elsewhere in this suite via an explicit, --label-
+decoupled file path (stb-sts/stb-coop/stb-ipr/stb-effmass/stb-
+spintexture's own --geometry-file). core/md_traj.py's read_static_lattice/
+read_frame_lattices/read_md_timestep_fs take an optional fdf_path
 override instead of always reconstructing "<label>.fdf" internally;
-ani2traj.py's own calls are unaffected -- fdf_path defaults to None,
-preserving the old <label>.fdf guess there for now).
+ani2traj.py's own calls are unaffected (fdf_path defaults to None,
+preserving the plain <label>.fdf guess there).
 
-Also added (found while diagnosing the same real run): --list-atoms, a
-standalone early-exit mode -- prints every atom's 0-based index, species,
-and Cartesian coordinates (from the first frame only, so it's fast
-regardless of trajectory length) then exits immediately, without running
-RDF/MSD/VDOS/anything else. Lets --track-atom/--track-pair's required
-indices (and which specific atoms they refer to, spatially) be picked
-directly instead of guessed or hand-counted from the .fdf -- this is
-exactly what surfaced the --geometry-file gap above: an out-of-range
---track-pair index on an 8-atom real structure produced a clean [FAIL],
-but the underlying MD.LengthTimeStep warning right above it revealed the
-.fdf was never actually being found. Deliberately a separate opt-in mode
-rather than a table always printed in [1] INPUT DATA -- a real structure
-can easily have hundreds of atoms, which would make every single run's
-report unusably long by default. The interactive stb-suite menu now
-asks "List every atom's index/species/coordinates?" (y/N) right before
-prompting for --track-atom/--track-pair -- answering 'y' runs this and
-prints its output there; 'n' (or Enter) skips it, same opt-in default
-as the CLI flag itself.
+--list-atoms is a standalone early-exit mode: prints every atom's 0-based
+index, species, and Cartesian coordinates (from the first frame only, so
+it's fast regardless of trajectory length) then exits immediately,
+without running RDF/MSD/VDOS/anything else. Lets --track-atom/
+--track-pair's required indices (and which specific atoms they refer to,
+spatially) be picked directly instead of guessed or hand-counted from the
+.fdf. Deliberately a separate opt-in mode rather than a table always
+printed in [1] INPUT DATA -- a real structure can easily have hundreds of
+atoms, which would make every run's report unusably long by default. The
+interactive stb-suite menu asks "List every atom's index/species/
+coordinates?" (y/N) right before prompting for --track-atom/--track-pair
+-- answering 'y' runs this and prints its output there; 'n' (or Enter)
+skips it, same opt-in default as the CLI flag itself.
 
-New [7] THERMODYNAMIC TIME SERIES section: energy/temperature/volume/
-pressure vs time in one 4-panel figure (2x2, matplotlib via --view;
-gnuplot via --save-gnuplot -- a `set multiplot layout 2,2` script,
-write_multipanel_gplot, plus an individual .dat per quantity so each can
-also be plotted standalone). For --label mode, Energy/Temperature/
-Pressure are read from SIESTA's own dedicated '<label>.MDE' file
-(core.siesta_log.get_mde_trajectory, new) -- a small, clean per-step
+[7] THERMODYNAMIC TIME SERIES reports and plots energy/temperature/
+volume/pressure vs time in one 4-panel figure (2x2, matplotlib via
+--view; gnuplot via --save-gnuplot -- a `set multiplot layout 2,2`
+script, write_multipanel_gplot, plus an individual .dat per quantity so
+each can also be plotted standalone). For --label mode, Energy/
+Temperature/Pressure are read from SIESTA's own dedicated '<label>.MDE'
+file (core.siesta_log.get_mde_trajectory) -- a small, clean per-step
 table (Step, T, E_KS, E_tot, Vol, P) SIESTA already writes for exactly
 this purpose, rather than re-scraping scattered .out log lines the way
-get_md_trajectory()'s cell/E_KS/Temp_ion already does. Unlike the INPUT
-.fdf, '.MDE' is always named after SystemLabel (like .XV/.ANI), so no
+get_md_trajectory()'s cell/E_KS/Temp_ion does. Unlike the INPUT .fdf,
+'.MDE' is always named after SystemLabel (like .XV/.ANI), so no
 --geometry-file-style override is needed for it. Both E_tot (total
-energy, kinetic+potential) and E_KS (the electronic/potential-like
-energy alone) are plotted together on the Energy panel when both are
-available -- the same E_pot-is-not-the-conserved-quantity distinction
-`stb-mlmd` was fixed for this session (E_tot trades between kinetic and
-potential by design; only the total is meaningful to check for
-conservation/drift). The Energy panel's y-axis (matplotlib and gnuplot
-alike) is eV/atom, not the raw absolute total -- a system-size
--independent scale, comparable across different structures/runs; the
-absolute eV values are still written as extra columns in
-<stem>_energy.dat (and still printed in the [7] report table) for
-completeness, just not what's plotted. Volume is always available
-regardless of input
-source (computed directly from each frame's own cell); for a generic
---trajectory input, Energy/Temperature fall back to each frame's own
-embedded 'Epot'/'Temp' info if present (e.g. from stb-mlmd --out-format
-xyz) and Pressure is never available (no known source). Verified live on
-a real 500-step SIESTA Nose-thermostat (NVT) AIMD run (8-atom SiC
-supercell, target 500 K): Volume exactly constant (std = 0.0000 Ang^3, a
-fixed-cell NVT run), Temperature fluctuating around the 500 K target
-(mean 503.1 K) as expected for a Nose thermostat over a small 8-atom
-system (not clamped, unlike a fixed target an NVE run's initial
-Maxwell-Boltzmann seed would only approximate once), and E_tot's std
-(0.0029 eV) vs. E_KS's std (0.4158 eV) -- ~140x smaller -- confirms E_tot,
-not E_KS, is the physically appropriate "conserved-ish" quantity to
-watch, the same lesson `stb-mlmd` learned live for NVE.
+energy, kinetic+potential) and E_KS (the electronic/potential-like energy
+alone) are plotted together on the Energy panel when both are available
+-- E_tot trades between kinetic and potential energy by design, so only
+the total is meaningful to check for conservation/drift (the same
+distinction stb-mlmd's own energy tracking relies on). The Energy panel's
+y-axis (matplotlib and gnuplot alike) is eV/atom, not the raw absolute
+total -- a system-size-independent scale, comparable across different
+structures/runs; the absolute eV values are still written as extra
+columns in <stem>_energy.dat (and still printed in the [7] report table)
+for completeness, just not what's plotted. Volume is always available
+regardless of input source (computed directly from each frame's own
+cell); for a generic --trajectory input, Energy/Temperature fall back to
+each frame's own embedded 'Epot'/'Temp' info if present (e.g. from
+stb-mlmd --out-format xyz) and Pressure is never available (no known
+source). Verified against a real 500-step SIESTA Nose-thermostat (NVT)
+AIMD run (8-atom SiC supercell, target 500 K): Volume exactly constant
+(std = 0.0000 Ang^3, a fixed-cell NVT run), Temperature fluctuating
+around the 500 K target (mean 503.1 K, as expected for a small 8-atom
+system's canonical-ensemble fluctuations), and E_tot's std (0.0029 eV)
+vs. E_KS's std (0.4158 eV) -- ~140x smaller -- confirming E_tot, not
+E_KS, is the physically appropriate "conserved-ish" quantity to watch.
 """
 
 VERSION = "2.0.0"

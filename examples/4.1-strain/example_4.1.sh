@@ -168,18 +168,46 @@ mkdir -p "$OUT/interactive"
 cp structure.fdf calc.fdf "$OUT/interactive/"
 # Prompts in order: structure file (blank -> default structure.fdf), calc
 # file (blank -> default calc.fdf), relax mode (1 -> cell-fixed), pseudo
-# source (blank -> skip), advanced settings (n -> skip), direction (x --
-# y,z ARE equivalent on this cubic fixture, so the "generate them too?"
-# follow-up appears -- answer n to match Case 1's single direction),
-# stmin, stmax, step, save-report (n), "Press Enter to continue", quit.
+# source (blank -> skip), advanced settings (n -> skip), direction menu
+# (1 -- 'x', the first of 5 entries on this cubic structure: x, xy, ALL
+# UNIAXIAL, ALL BIAXIAL, ALL -- see Case 7 below), stmin, stmax, step,
+# save-report (n), "Press Enter to continue", quit.
 (cd "$OUT/interactive" && \
-    printf '4.1.1\n\n\n1\n\nn\nx\nn\n0\n2\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '4.1.1\n\n\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/cell-fixed/strain_runs/x" "$OUT/interactive/strain_runs/x" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (4.1.1) produced byte-identical folders."
 else
     echo "UNEXPECTED: CLI and interactive menu results differ -- see"
     echo "  diff -rq '$OUT/cell-fixed/strain_runs/x' '$OUT/interactive/strain_runs/x'"
 fi
+pause
+
+
+echo "=================================================================="
+echo " Case 7: the interactive menu's direction-picker -- pick ALL, get x AND xy"
+echo "=================================================================="
+cat <<'EOF'
+The interactive menu (4.1.1) detects vacuum axes and symmetry-equivalent
+directions (uniaxial AND biaxial) up front, and only offers independent,
+non-redundant ones instead of the free-text prompt the CLI itself has.
+On this cubic structure.fdf that's just 2 out of the 6 possible
+directions: x (y, z are equivalent) and xy (xz, yz are equivalent).
+Picking the menu's "ALL" entry runs Stage 1 once per independent
+direction in a single pass -- "ALL UNIAXIAL"/"ALL BIAXIAL" do the same
+scoped to just one strain type.
+EOF
+mkdir -p "$OUT/all-directions"
+cp structure.fdf calc.fdf "$OUT/all-directions/"
+# Prompts in order: structure file (blank -> default), calc file (blank ->
+# default), relax mode (1 -> cell-fixed), pseudo source (blank -> skip),
+# advanced settings (n -> skip), direction menu (5 -- 'ALL independent
+# directions -- uniaxial + biaxial', the last of 5 entries: x, xy, ALL
+# UNIAXIAL, ALL BIAXIAL, ALL), stmin, stmax, step, save-report (n), "Press
+# Enter to continue", quit.
+(cd "$OUT/all-directions" && \
+    printf '4.1.1\n\n\n1\n\nn\n5\n0\n2\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+echo "\$ find strain_runs -maxdepth 2 -type d | sort"
+(cd "$OUT/all-directions" && find strain_runs -maxdepth 2 -type d | sort)
 pause
 
 

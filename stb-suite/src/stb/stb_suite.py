@@ -6246,9 +6246,10 @@ def run_strain_generator() -> None:
     print(color_text("STRAIN GENERATOR (stb-strain)", 'bold').center(60))
     print("="*60)
     print(color_text(
-        "Generates strained structures along one Cartesian direction. For a uniaxial "
-        "direction, symmetry-equivalent axes are detected automatically -- you can choose "
-        "to also generate their folders, for cross-validation.", 'cyan'))
+        "Generates strained structures along one or more Cartesian directions. Vacuum-padded "
+        "axes and symmetry-equivalent directions (both uniaxial and biaxial) are detected "
+        "up front, so you only ever choose among the physically valid, non-redundant "
+        "directions -- or run all of them at once.", 'cyan'))
     print()
 
     default_structure = "structure.fdf"
@@ -6308,11 +6309,10 @@ def run_strain_generator() -> None:
         if not output_dir:
             output_dir = "strain_runs"
 
-    # Dimensionality: detected ONCE, upfront -- before the direction question,
-    # so it's known regardless of whether the request turns out to be
-    # uniaxial or biaxial. Feeds the CONFIGURATION SUMMARY recap below and
-    # (for a uniaxial direction) the axis-symmetry table's vacuum-axis
-    # column, so the structure file is only ever read once either way.
+    # Dimensionality: detected ONCE, upfront -- before the direction menu
+    # below, which needs vacuum_axes to filter out vacuum-padded directions.
+    # Also feeds the CONFIGURATION SUMMARY recap, so the structure file is
+    # only ever read once.
     structure = None
     vacuum_axes = None
     dimensionality_label = "unknown (could not detect)"
@@ -6329,38 +6329,67 @@ def run_strain_generator() -> None:
             "\n[WARNING] Could not detect dimensionality (advisory only) -- "
             "continuing without it.", 'yellow'))
 
-    direction = get_input("\nStrain direction (x,y,z,xy,xz,yz): ").lower()
-    while not all(c in 'xyz' for c in direction) or len(direction) not in (1, 2):
-        print(color_text("Invalid direction! Use x,y,z for uniaxial or xy,xz,yz for biaxial", 'red'))
-        direction = get_input("Strain direction (x,y,z,xy,xz,yz): ").lower()
-
-    directions_to_run = [direction]
-
-    # Uniaxial only (biaxial is out of scope for this check, same as
-    # stb-strain's own CLI advisory -- see core/symmetry.py::
-    # equivalent_cartesian_axes docstring): show the SAME axis-symmetry table
-    # stb-strain itself prints when it runs -- reusing the dimensionality
-    # already detected above (vacuum_axes) -- then offer to also generate the
-    # equivalent axis/axes' folders -- --output-dir already exists precisely
-    # so multiple stb-strain invocations can share one directory without
-    # colliding.
-    if len(direction) == 1 and structure is not None:
+    # Detect vacuum-padded axes and symmetry-equivalent directions (both
+    # uniaxial and biaxial -- see strain.py::print_direction_selection_table)
+    # up front, so the direction menu below only ever offers directions that
+    # are physically valid and not redundant with one another. Falls back to
+    # the old free-text prompt (validated, but with no symmetry/vacuum
+    # filtering) if the structure couldn't be read or the symmetry pre-check
+    # fails for any reason.
+    directions_to_run = None
+    if structure is not None:
         try:
             pmg_structure = structure_io.to_pymatgen(structure)
             groups, point_group = symmetry.equivalent_cartesian_axes(
                 pmg_structure, symprec, angle_tolerance)
             _, ops = symmetry.get_point_group_operations(pmg_structure, symprec, angle_tolerance)
-            equivalent = strain.print_axis_symmetry_table(direction, groups, point_group, ops, vacuum_axes)
-            if equivalent:
-                extra = get_input(
-                    f"\nAlso generate folder(s) for the equivalent direction(s) "
-                    f"{', '.join(equivalent)}? [y/N]: ").strip().lower()
-                if extra == 'y':
-                    directions_to_run.extend(equivalent)
+            independent = strain.print_direction_selection_table(groups, point_group, ops, vacuum_axes)
+            if independent:
+                uniaxial_independent = [d for d in independent if len(d) == 1]
+                biaxial_independent = [d for d in independent if len(d) == 2]
+
+                # Individual directions first, then grouped "run several at
+                # once" choices -- ALL UNIAXIAL / ALL BIAXIAL (only when that
+                # kind has at least one independent direction) and, always
+                # last, ALL of the above (uniaxial + biaxial together).
+                menu_entries = [(d, [d]) for d in independent]
+                if uniaxial_independent:
+                    menu_entries.append((
+                        f"ALL independent UNIAXIAL directions ({', '.join(uniaxial_independent)})",
+                        uniaxial_independent))
+                if biaxial_independent:
+                    menu_entries.append((
+                        f"ALL independent BIAXIAL directions ({', '.join(biaxial_independent)})",
+                        biaxial_independent))
+                menu_entries.append((
+                    f"ALL independent directions -- uniaxial + biaxial ({len(independent)} total)",
+                    independent))
+
+                print()
+                for i, (label, _) in enumerate(menu_entries, 1):
+                    print(f"  {i}) {label}")
+                n_options = len(menu_entries)
+                choice = get_input(f"\nSelect a direction [1-{n_options}]: ").strip()
+                while not choice.isdigit() or not (1 <= int(choice) <= n_options):
+                    print(color_text(f"Invalid choice! Enter a number from 1 to {n_options}.", 'red'))
+                    choice = get_input(f"Select a direction [1-{n_options}]: ").strip()
+                choice = int(choice)
+                directions_to_run = list(menu_entries[choice - 1][1])
+            else:
+                print(color_text(
+                    "[WARNING] No independent, non-vacuum direction is available -- "
+                    "falling back to manual direction entry.", 'yellow'))
         except Exception:
             print(color_text(
-                "[WARNING] Could not run the symmetry pre-check (advisory only) -- "
-                "continuing with just the requested direction.", 'yellow'))
+                "[WARNING] Could not run the symmetry/vacuum pre-check (advisory only) -- "
+                "falling back to manual direction entry.", 'yellow'))
+
+    if directions_to_run is None:
+        direction = get_input("\nStrain direction (x,y,z,xy,xz,yz): ").lower()
+        while not all(c in 'xyz' for c in direction) or len(direction) not in (1, 2):
+            print(color_text("Invalid direction! Use x,y,z for uniaxial or xy,xz,yz for biaxial", 'red'))
+            direction = get_input("Strain direction (x,y,z,xy,xz,yz): ").lower()
+        directions_to_run = [direction]
 
     stmin = get_float_input("\nMinimum strain % (default 0): ", 0.0)
     stmax = get_float_input("Maximum strain % (default 25): ", 25.0)

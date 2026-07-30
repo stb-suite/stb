@@ -405,20 +405,33 @@ check_contains "save-report" log_help.txt
 
 
 # --- 13. Interactive path (stb-suite, shortcut 4.1.1) ---
+# NOTE: vacuum-padded axes and symmetry-equivalent directions (uniaxial AND
+# biaxial) are now detected up front and offered as a NUMBERED menu (see
+# strain.py::print_direction_selection_table) -- the direction is chosen by
+# picking a number, not typing 'x'/'xy' as free text, and there's no more
+# separate "also generate the equivalent axis/axes too?" y/n follow-up.
+# Individual independent directions are listed first, followed by grouped
+# "run several at once" choices: ALL UNIAXIAL (only shown if there's at least
+# one independent uniaxial direction), ALL BIAXIAL (same, biaxial), and
+# finally ALL (uniaxial + biaxial together), always last. On structure.fdf
+# (2D, vacuum along z, point group -6m2, x/y NOT symmetry-equivalent -- see
+# section 5 above), the independent/non-vacuum menu is: 1) x  2) y  3) xy
+# 4) ALL UNIAXIAL (x, y)  5) ALL BIAXIAL (xy)  6) ALL (x, y, xy). On
+# si_cubic.fdf (m-3m, all 3 axes equivalent), it collapses to: 1) x  2) xy
+# 3) ALL UNIAXIAL (x)  4) ALL BIAXIAL (xy)  5) ALL (x, xy).
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.1.1) ---"
 
 echo "Testing: navigate 4.1.1 -> structure -> calc -> relax-mode (1=cell-fixed) -> skip pseudo -> skip"
-echo "         advanced -> x (no equivalent on this 2D fixture) -> 0/2/2 -> no report -> quit"
+echo "         advanced -> direction menu, pick 1 (x) -> 0/2/2 -> no report -> quit"
 rm -rf strain_runs
 # Prompts in order: structure file (default suggestion, blank -> structure.fdf),
 # calc file (default suggestion, blank -> calc.fdf), relax mode (1 -> cell-fixed),
-# pseudo source (blank -> skip), advanced settings (n -> skip), direction (x --
-# no symmetry-equivalent axis on this hexagonal 2D fixture, so no "generate
-# equivalent(s) too?" follow-up), stmin, stmax, step, save-report (n), then the
-# "Press Enter to continue" pause, then quit.
-printf '4.1.1\n\n\n1\n\nn\nx\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# pseudo source (blank -> skip), advanced settings (n -> skip), direction menu
+# (1 -> x), stmin, stmax, step, save-report (n), then the "Press Enter to
+# continue" pause, then quit.
+printf '4.1.1\n\n\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Detected dimensionality: 2D" log_menu.txt
-check_contains "AXIS SYMMETRY (uniaxial direction 'x')" log_menu.txt
+check_contains "STRAIN DIRECTION SELECTION" log_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_contains "Dimensionality.*2D" log_menu.txt
 check_contains "Relax mode.*cell-fixed" log_menu.txt
@@ -431,53 +444,69 @@ check_absent strain_runs/x/strain_stage1.txt
 
 echo "Testing: navigate 4.1.1 -> invalid structure file then valid"
 rm -rf strain_runs
-printf '4.1.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\n1\n\nn\nx\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_retry.txt 2>&1
+printf '4.1.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_retry.txt 2>&1
 check_contains "File not found" log_menu_retry.txt
 check_success strain_runs/x/strain_x_2.00/structure.fdf
 
-echo "Testing: navigate 4.1.1 -> biaxial direction -> dimensionality still detected/shown, no axis-symmetry table"
+echo "Testing: navigate 4.1.1 -> direction menu, pick the biaxial 'xy' entry -> generated correctly"
 rm -rf strain_runs
-printf '4.1.1\nstructure.fdf\ncalc.fdf\n1\n\nn\nxy\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_biaxial.txt 2>&1
+printf '4.1.1\nstructure.fdf\ncalc.fdf\n1\n\nn\n3\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_biaxial.txt 2>&1
 check_contains "Detected dimensionality: 2D" log_menu_biaxial.txt
 check_contains "Dimensionality.*2D" log_menu_biaxial.txt
-if grep -q "AXIS SYMMETRY (uniaxial direction" log_menu_biaxial.txt 2>/dev/null; then
-    echo -e "   -> ${RED}Failed:${NC} axis-symmetry table shown for a biaxial direction (out of scope)"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} no axis-symmetry table for a biaxial direction"
-    PASS=$((PASS+1))
-fi
+check_contains "xy.*biaxial.*INDEPENDENT" log_menu_biaxial.txt
+check_contains "z.*uniaxial.*VACUUM" log_menu_biaxial.txt
 check_success strain_runs/xy/strain_xy_2.00/structure.fdf
 
 echo "Testing: navigate 4.1.1 -> invalid relax-mode choice then valid"
 rm -rf strain_runs
-printf '4.1.1\nstructure.fdf\ncalc.fdf\n9\n1\n\nn\nx\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_badmode.txt 2>&1
+printf '4.1.1\nstructure.fdf\ncalc.fdf\n9\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_badmode.txt 2>&1
 check_contains "Invalid choice" log_menu_badmode.txt
 check_success strain_runs/x/strain_x_2.00/structure.fdf
 
+echo "Testing: navigate 4.1.1 -> invalid direction-menu choice then valid"
+rm -rf strain_runs
+printf '4.1.1\nstructure.fdf\ncalc.fdf\n1\n\nn\n9\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_baddir.txt 2>&1
+check_contains "Invalid choice! Enter a number from 1 to 6" log_menu_baddir.txt
+check_success strain_runs/x/strain_x_2.00/structure.fdf
+
+echo "Testing: navigate 4.1.1 -> direction menu, pick ALL UNIAXIAL (x, y) -> only x/y generated, not xy"
+rm -rf strain_runs
+printf '4.1.1\nstructure.fdf\ncalc.fdf\n1\n\nn\n4\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_alluni.txt 2>&1
+check_contains "Direction(s) to generate.*x, y" log_menu_alluni.txt
+check_success strain_runs/x/strain_x_2.00/structure.fdf
+check_success strain_runs/y/strain_y_2.00/structure.fdf
+check_absent strain_runs/xy/strain_xy_2.00/structure.fdf
+
+echo "Testing: navigate 4.1.1 -> direction menu, pick ALL BIAXIAL (xy) -> only xy generated, not x/y"
+rm -rf strain_runs
+printf '4.1.1\nstructure.fdf\ncalc.fdf\n1\n\nn\n5\n0\n2\n2\nn\n\n0\n' | stb-suite > log_menu_allbi.txt 2>&1
+check_contains "Direction(s) to generate.*xy" log_menu_allbi.txt
+check_success strain_runs/xy/strain_xy_2.00/structure.fdf
+check_absent strain_runs/x/strain_x_2.00/structure.fdf
+check_absent strain_runs/y/strain_y_2.00/structure.fdf
+
 echo "Testing: navigate 4.1.1 -> cubic fixture -> relax-mode (2=stress-constrained) -> pseudo bank 1 (dojo)"
-echo "         -> x -> accept generating the equivalent y,z folders too -> save report"
+echo "         -> direction menu, pick ALL (independent directions only: x, xy -- NOT y, z, xz, yz,"
+echo "         which are symmetry-redundant) -> save report"
 rm -rf strain_runs
 # Prompts in order: structure file, calc file, relax mode (2 -- stress
 # -constrained), pseudo source (1 -- bundled dojo), advanced settings (n),
-# direction (x -- y,z ARE equivalent on this cubic fixture), accept the
-# follow-up (y), stmin, stmax, step, save-report (y), then one "Press Enter to
-# continue" pause (not three -- run_tool's pause is suppressed for every
-# direction but the last), then quit.
-printf '4.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\nn\nx\ny\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
-check_contains "y, z are equivalent to 'x' by symmetry" log_menu_multi.txt
-check_contains "Direction(s) to generate.*x, y, z" log_menu_multi.txt
+# direction menu (5 -- 'ALL' entry, the last of 5 entries: x, xy, ALL
+# UNIAXIAL, ALL BIAXIAL, ALL, on this cubic fixture), stmin, stmax, step,
+# save-report (y), then one "Press Enter to continue" pause (not two --
+# run_tool's pause is suppressed for every direction but the last), then quit.
+printf '4.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\nn\n5\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
+check_contains "2 independent, non-vacuum direction(s): x, xy" log_menu_multi.txt
+check_contains "Direction(s) to generate.*x, xy" log_menu_multi.txt
 check_contains "Relax mode.*stress-constrained" log_menu_multi.txt
 check_success strain_runs/x/strain_x_2.00/si_cubic.fdf
-check_success strain_runs/y/strain_y_2.00/si_cubic.fdf
-check_success strain_runs/z/strain_z_2.00/si_cubic.fdf
+check_success strain_runs/xy/strain_xy_2.00/si_cubic.fdf
 check_success strain_runs/x/strain_x_2.00/Si.psml
 echo "Testing: each direction's own strain_stage1.txt was saved separately (no clobbering)"
 check_success strain_runs/x/strain_stage1.txt
-check_success strain_runs/y/strain_stage1.txt
-check_success strain_runs/z/strain_stage1.txt
+check_success strain_runs/xy/strain_stage1.txt
 if [ "$(grep -c "Press Enter to continue" log_menu_multi.txt)" -eq 1 ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} only one 'Press Enter to continue' pause for all 3 directions"
+    echo -e "   -> ${GREEN}Verified:${NC} only one 'Press Enter to continue' pause for all directions"
     PASS=$((PASS+1))
 else
     echo -e "   -> ${RED}Failed:${NC} expected exactly 1 'Press Enter to continue' pause, "\

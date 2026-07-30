@@ -312,6 +312,85 @@ def print_axis_symmetry_table(requested_axis, groups, point_group, ops, vacuum_a
     return equivalent
 
 
+_CANONICAL_DIRECTIONS = ('x', 'y', 'z', 'xy', 'xz', 'yz')
+
+
+def print_direction_selection_table(groups, point_group, ops, vacuum_axes, f_out=None):
+    """Classifies all 6 canonical stb-strain directions (x, y, z uniaxial; xy,
+    xz, yz biaxial) into VACUUM (touches a vacuum-padded axis -- can't be
+    strained), REDUNDANT (symmetry-equivalent to an already-listed
+    representative), or INDEPENDENT (a representative worth actually running),
+    and prints the classification -- same visual convention as
+    print_axis_symmetry_table above, but covering the whole direction menu
+    upfront (before any direction is chosen) instead of one requested axis at a
+    time.
+
+    Biaxial equivalence is derived from the SAME axis `groups`
+    equivalent_cartesian_axes already computes for uniaxial directions, no
+    separate biaxial symmetry computation needed: a biaxial direction's strain
+    tensor is I - e_c(x)e_c, where c is its own EXCLUDED axis (e.g. 'xy' =
+    diag(1,1,0) excludes 'z' -- see apply_cartesian_strain, this is a diagonal
+    biaxial strain, not a shear). Under a point-group rotation R this
+    transforms to I - (Rc)(x)(Rc), so two biaxial directions are
+    symmetry-equivalent iff their excluded axes are related by some point
+    -group operation -- exactly the criterion `groups` already encodes for
+    single axes. Uniaxial and biaxial directions are tracked as separate
+    equivalence spaces (never cross-equivalent to each other).
+
+    Returns the ordered list (canonical order) of INDEPENDENT direction
+    strings -- the representatives worth offering the user to choose from.
+    """
+    axis_letters = 'xyz'
+    axis_group_of = {}
+    for group in groups:
+        frozen = frozenset(group)
+        for i in group:
+            axis_group_of[i] = frozen
+
+    print_dual("", f_out)
+    print_dual("-" * 60, f_out)
+    print_dual(color_text("STRAIN DIRECTION SELECTION", 'cyan').center(60), f_out)
+    print_dual("-" * 60, f_out)
+    print_dual(f"  Detected symmetry : point group {point_group} -- {symmetry.operations_summary(ops)}", f_out)
+    print_dual("-" * 60, f_out)
+    print_dual(f"  {'Direction':<11}{'Type':<10}{'Status':<14}Notes", f_out)
+    print_dual(f"  {'-' * 56}", f_out)
+
+    independent = []
+    representative_of = {'uniaxial': {}, 'biaxial': {}}
+    for direction in _CANONICAL_DIRECTIONS:
+        kind = 'uniaxial' if len(direction) == 1 else 'biaxial'
+        involved = [axis_letters.index(c) for c in direction]
+
+        if any(vacuum_axes[i] for i in involved):
+            vac_letters = ', '.join(axis_letters[i] for i in involved if vacuum_axes[i])
+            status = color_text("VACUUM".ljust(14), 'yellow')
+            print_dual(f"  {direction:<11}{kind:<10}{status}involves vacuum axis '{vac_letters}'", f_out)
+            continue
+
+        if kind == 'uniaxial':
+            group_key = axis_group_of[involved[0]]
+        else:
+            excluded_letter = next(c for c in axis_letters if c not in direction)
+            group_key = axis_group_of[axis_letters.index(excluded_letter)]
+
+        seen = representative_of[kind]
+        if group_key in seen:
+            rep = seen[group_key]
+            status = color_text("REDUNDANT".ljust(14), 'cyan')
+            print_dual(f"  {direction:<11}{kind:<10}{status}equivalent to '{rep}'", f_out)
+        else:
+            seen[group_key] = direction
+            independent.append(direction)
+            status = color_text("INDEPENDENT".ljust(14), 'green')
+            print_dual(f"  {direction:<11}{kind:<10}{status}--", f_out)
+
+    print_dual(f"  {'-' * 56}", f_out)
+    print_dual(f"  {len(independent)} independent, non-vacuum direction(s): {', '.join(independent)}", f_out)
+    print_dual("-" * 60, f_out)
+    return independent
+
+
 def apply_cartesian_strain(lattice_vectors, strain, direction):
     """
     Apply uniaxial or biaxial strain in Cartesian coordinates.

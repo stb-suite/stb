@@ -151,7 +151,71 @@ straining `y` or `z` too:
 Purely advisory — it never blocks the run, and biaxial directions are out
 of scope for this check (see `core/symmetry.py`'s own docstring for why).
 
-## 5. Output layout: one subfolder per direction
+## 5. The interactive menu goes further: a full direction-picker (`stb-suite` → `4.1.1`)
+
+The `[3] AXIS SYMMETRY ADVISORY` above is CLI-only, uniaxial-only, and
+purely informational — it tells you `y`/`z` are redundant but doesn't stop
+you from running them anyway, and it has nothing to say about biaxial
+directions at all. The interactive menu (`stb-suite` → `4.1.1`) does the
+equivalent check for **both** uniaxial and biaxial directions, together
+with vacuum-axis detection, and turns it into an actual choice instead of
+just a warning: it detects everything up front, then only offers the
+directions that are physically valid (non-vacuum) and not
+symmetry-redundant.
+
+Biaxial equivalence is derived from the exact same axis-symmetry groups
+the CLI's own advisory uses, just keyed by each biaxial direction's
+*excluded* axis instead of its own axes — `xy` excludes `z`, so it's
+equivalent to another biaxial direction whenever a point-group operation
+maps their excluded axes onto each other. No separate biaxial symmetry
+computation is needed.
+
+On this folder's own `structure.fdf` (cubic Si, `m-3m`, no vacuum), the
+menu collapses from 6 possible directions down to 2 independent ones:
+
+```
+------------------------------------------------------------
+            STRAIN DIRECTION SELECTION
+------------------------------------------------------------
+  Detected symmetry : point group m-3m -- 48 operation(s) ...
+------------------------------------------------------------
+  Direction  Type      Status        Notes
+  --------------------------------------------------------
+  x          uniaxial  INDEPENDENT   --
+  y          uniaxial  REDUNDANT     equivalent to 'x'
+  z          uniaxial  REDUNDANT     equivalent to 'x'
+  xy         biaxial   INDEPENDENT   --
+  xz         biaxial   REDUNDANT     equivalent to 'xy'
+  yz         biaxial   REDUNDANT     equivalent to 'xy'
+  --------------------------------------------------------
+  2 independent, non-vacuum direction(s): x, xy
+------------------------------------------------------------
+
+  1) x
+  2) xy
+  3) ALL independent UNIAXIAL directions (x)
+  4) ALL independent BIAXIAL directions (xy)
+  5) ALL independent directions -- uniaxial + biaxial (2 total)
+
+Select a direction [1-5]:
+```
+
+Picking `5` runs Stage 1 once per independent direction (`x` and `xy`
+here), each into its own `strain_runs/<direction>/` subfolder (section 6)
+— with no separate y/n follow-up prompt needed, and without ever wasting a
+real calculation on `y`, `z`, `xz`, or `yz`. `3` and `4` are the same idea
+scoped to just one strain type — handy when a structure has several
+independent directions of each kind and you only want, say, every
+uniaxial one.
+
+On a vacuum-padded structure (a 2D slab, say), any direction touching the
+vacuum axis is marked `VACUUM` instead and dropped from the menu entirely
+— `stb-strain`'s own CLI would otherwise hard-error if you asked for one
+of those by hand. If the structure can't be read, or the symmetry
+pre-check fails for any reason, the menu falls back to the old free-text
+prompt (`x`, `y`, `z`, `xy`, `xz`, `yz`) with no filtering.
+
+## 6. Output layout: one subfolder per direction
 
 Every direction gets its own `<output-dir>/<direction>/` subfolder —
 `strain_runs/x/strain_x_0.00/`, `strain_runs/x/strain_x_2.00/`, and so on
@@ -162,7 +226,7 @@ direction's `--save-report` file overwriting another's. This also sets up
 Stage 2 to read every direction found under `strain_runs/` at once — more
 on that once Stage 2 is added here.
 
-## 6. Running it both ways
+## 7. Running it both ways
 
 Every command below also works through the interactive menu —
 `stb-suite` → `4.1.1` (or type `4.1.1` directly from the main prompt) asks
@@ -176,7 +240,7 @@ stb-strain -s structure.fdf -c calc.fdf \
     --relax-mode cell-fixed --stdir x --stmin 0 --stmax 2 --step 2
 ```
 
-## 7. Files in this folder
+## 8. Files in this folder
 
 | File                       | What it is                                                        |
 |-----------------------------|--------------------------------------------------------------------|
@@ -185,13 +249,13 @@ stb-strain -s structure.fdf -c calc.fdf \
 | `calc_missing_relax.fdf`    | Same file, deliberately misconfigured — for the gotcha demo only   |
 | `example_4.1.sh`            | This walkthrough's runnable script (Stage 1 only, for now)         |
 
-## 8. Running the script
+## 9. Running the script
 
 ```bash
 bash example_4.1.sh
 ```
 
-## 9. What's next
+## 10. What's next
 
 Stage 2 (`stb-strainAnalysis`, code `4.1.2`) — reading the `strain_runs/`
 folders back after you've run SIESTA in each one, fitting the

@@ -6446,7 +6446,12 @@ def run_strain_post_processor() -> None:
     print("\n" + "="*60)
     print(color_text("STRAIN POST-PROCESSING ANALYZER", 'bold').center(60))
     print("="*60 + "\n")
-    print(color_text("This tool analyzes 'strain_*' folders inside a run directory.", 'yellow'))
+    print(color_text(
+        "Analyzes 'strain_*' folders inside a run directory -- reads either a single "
+        "direction's own subfolder or the top-level output directory (every direction "
+        "found under it is compared automatically, no flag needed). Dimensionality is "
+        "auto-detected from a real structure file when one is found alongside the SIESTA "
+        "output; falls back to 3D otherwise.", 'yellow'))
 
     args = []
 
@@ -6465,27 +6470,50 @@ def run_strain_post_processor() -> None:
 
     args.extend(["--file", siesta_out, "--no-intro"])
 
-    # 3. Dimensionalidade: 3D (default) / 2D / 1D
-    print(f"\nDimensionality: {color_text('1', 'cyan')}=3D bulk (default), "
-          f"{color_text('2', 'cyan')}=2D sheet (N/m), {color_text('3', 'cyan')}=1D wire/tube (nN)")
-    dim_choice = get_input("Select option (1-3) [default: 1]: ").strip()
-    if dim_choice == '2':
-        args.append("--2d")
-        print(color_text("-> 2D Mode Enabled (N/m)", 'green'))
-    elif dim_choice == '3':
-        args.append("--1d")
-        print(color_text("-> 1D Mode Enabled (nN)", 'green'))
+    # 3. Dimensionalidade -- auto-detected by default, same convention as
+    # stb-mlelastic's own interactive wrapper.
+    dimensionality = get_input(
+        "\nDimensionality, auto/3d/2d/1d [default: auto]: ").strip()
+    if dimensionality:
+        args.extend(["--dimensionality", dimensionality])
+
+    # 4. Advanced settings (rarely-touched tolerances), gated -- same pattern
+    # as stb-strain's own interactive wrapper.
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap for auto-detection, physical "
+        "cross-section for a 1D run)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        vacuum_gap = get_float_input(
+            "Vacuum gap threshold in Ang, used only for auto-detection (default: 10.0): ", 10.0)
+        args.extend(["--vacuum-gap", str(vacuum_gap)])
         cross_section = get_input(
-            "Physical cross-section area in Ang^2 for a conventional GPa reading "
-            "(blank = skip, Force in nN only): ").strip()
+            "Physical cross-section area in Ang^2, for a conventional GPa reading if this "
+            "turns out to be 1D (blank = skip): ").strip()
         if cross_section:
             args.extend(["--cross-section", cross_section])
 
-    # 4. Yield strength (opt-in -- borrowed metallurgy concept, off by default)
+    # 5. Yield strength (opt-in -- borrowed metallurgy concept, off by default)
     show_yield = get_input(
-        "Also report the 0.2% offset Yield strength? (y/N): ").lower()
+        "\nAlso report the 0.2% offset Yield strength? (y/N): ").lower()
     if show_yield in ('y', 'yes'):
         args.append("--yield")
+
+    # 6. Output directory + stb-standard report/plot options
+    output_dir = get_input("\nOutput directory [default: current directory]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input(
+        "Also save the curve data + a gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input(
+        "Show an interactive matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     print(color_text("\nRunning analysis...", 'yellow'))
     run_tool("stb-strainAnalysis", args)

@@ -5,9 +5,7 @@ applies a Cartesian strain to a structure and writes ready-to-run SIESTA
 folders; **Stage 2** (`stb-strainAnalysis`, code `4.1.2`) aggregates the
 finished SIESTA runs back into a stress-strain curve and mechanical
 properties. Both stages live in this one folder (one workflow, one
-tutorial) instead of one folder per tool. **This part only covers Stage
-1** — Stage 2 will be added to this same `README.md`/`example_4.1.sh`
-in a follow-up update.
+tutorial) instead of one folder per tool.
 
 ## 1. What Stage 1 does
 
@@ -240,24 +238,118 @@ stb-strain -s structure.fdf -c calc.fdf \
     --relax-mode cell-fixed --stdir x --stmin 0 --stmax 2 --step 2
 ```
 
-## 8. Files in this folder
+## 8. Stage 2: reading the results back (`stb-strainAnalysis`, code `4.1.2`)
+
+Once you've run SIESTA in every `strain_runs/<direction>/strain_<direction>_<pct>/`
+folder from Stage 1, Stage 2 reads the finished `.out` files back and fits
+a stress-strain curve: initial modulus, peak stress (UTS), critical strain,
+toughness, and optionally the 0.2% offset yield. It reports in the same
+numbered `[N]` section style as Stage 1's own report:
+
+```
+[0] RUN METADATA          -- the requested directory/file/dimensionality/output settings
+[1] INPUT DATA            -- which strain_* folders were found, grouped by direction
+[2] DIMENSIONALITY DETECTION
+[3] MECHANICAL PROPERTIES -- a quick-reference table (if >1 direction) + one full block per direction
+[4] OUTPUT FILES          -- what --save-gnuplot would write / did write
+[5] SUMMARY & NEXT STEPS
+```
+
+**Dimensionality is auto-detected, not asked for.** `[2]` looks for a real
+`.fdf` structure file inside the first `strain_*` folder found (Stage 1
+always writes one — the deformed structure, same basename you gave
+`--structure`) and classifies it via vacuum-axis detection, exactly like
+Stage 1's own `[2]` section and `stb-mlelastic`'s `--dimensionality auto`:
+vacuum along `z` only → 2D (`N/m`); vacuum along `x`+`y` → 1D (`nN`); no
+vacuum → 3D (`GPa`, this folder's own case). If no `.fdf` is found at all
+(a hand-built folder holding only a bare SIESTA `.out`) it falls back to
+3D with a `[NOTE]`, not an error — pass `--dimensionality` explicitly
+(`auto`/`3d`/`2d`/`1d`) to override either way.
+
+**Multiple directions are compared automatically, no flag needed.** Point
+`--dir` at Stage 1's top-level output directory (`strain_runs`, holding
+`x/`, `xy/`, ... subfolders — e.g. from picking Stage 1's menu "ALL"
+option) and `[1]`/`[3]` report every direction found, side by side, the
+same way `--dir strain_runs/x` alone still reports just that one
+direction on its own.
+
+**The initial-slope fit is transparent, and only ever fit over a genuinely
+small-strain window.** `[3]` reports not just the modulus but the fit
+window itself (how many points, what strain range) and the fit's standard
+error, e.g. `Fit window : 3 point(s), strain 0.0000% to 4.0000%`. The fit
+prefers every point within ±2% strain; when a sweep's own step size is
+coarser than that (very common for a large-deformation sweep, e.g. this
+workflow's own default 25% range at a few-percent step), fewer than 3
+points land inside ±2% -- the window widens to the nearest few points
+instead, with an explicit `[NOTE]` saying so.
+
+**A real bug was found and fixed here, verified live**: the *previous*
+version of this fallback fit the *entire* sweep (0% all the way to
+whatever `--stmax` was) whenever too few points fell in ±2%, instead of
+widening to just the nearest few -- silently averaging the genuine
+small-strain elastic response together with large-strain, manifestly
+nonlinear/plastic behavior into one number. On a real 2D SiC monolayer
+dataset (3 directions, 21 steps each, 0-40% strain, 2%/step -- so only the
+0%/2% points ever fell in ±2%), that gave a "modulus" with R² as low as
+~0.01 (statistically meaningless) instead of the correct near-zero-strain
+slope (R² > 0.99 once the window widens to the nearest 3 points instead).
+The fit line drawn on both the gnuplot and matplotlib output is now also
+clipped to the actual fit window (never drawn across the full strain
+range, which would otherwise visually claim the material follows that
+straight line all the way to its peak/plastic regime).
+
+**Plotting: both gnuplot and matplotlib, both opt-in, points-and-line.**
+`--save-gnuplot` writes `<direction>_curve.dat`/`.gplot` (or
+`comparison_curve.dat`/`.gplot` for multiple directions) — the same
+`.dat`+`.gplot` convention used throughout this suite. `--view` opens an
+interactive matplotlib plot of the same curve instead — shown on screen
+only, never written to disk. Both draw the stress/force-strain data as
+connected points-and-line (not bare scatter points), the small-strain fit
+line (dashed, clipped to its own fit window -- see above), and the peak
+point. `--save-report` persists the numbered report itself to
+`stb_strainAnalysis_report.txt`. All three default off.
+
+```
+$ stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot
+...
+[3] MECHANICAL PROPERTIES
+------------------------------------------------------------
+2 direction(s) found -- comparing automatically (no flag needed). Full
+detail per direction follows; quick-reference table first:
+Direction | Slope (GPa) | R²     | Peak (GPa) | Crit. Strain (%) | Toughness (GJ/m^3) | Notes
+-----------------------------------------------------------------------------------------------
+X         | ...         | ...    | ...        | ...              | ...                | --
+XY        | ...         | ...    | ...        | ...              | ...                | --
+
+Direction       : X
+...
+  Fit window    : 3 point(s), strain 0.0000% to 4.0000%
+...
+```
+
+`example_4.1.sh`'s own Stage 2 case (below) demonstrates this against
+small synthetic `calc.out` data, since this folder's own Stage 1 run
+doesn't invoke real SIESTA. The auto-dimensionality-detection,
+auto-multi-direction-comparison, and fit-window behavior above were
+additionally verified live against a real, fully-converged SIESTA dataset
+(a 2D SiC monolayer, 3 directions × 21 strain steps each, 0-40%): `[2]`
+correctly auto-detected 2D purely from the real `structure.fdf` (vacuum
+along `z`); `[1]`/`[3]` correctly compared all 3 directions with no
+`--compare`-style flag at all; and the fit-window fix took each
+direction's modulus R² from ~0.01-0.13 (the old, buggy full-range fit) to
+0.9968-0.9999 (fit correctly widened to the nearest 3 points instead).
+
+## 9. Files in this folder
 
 | File                       | What it is                                                        |
 |-----------------------------|--------------------------------------------------------------------|
 | `structure.fdf`             | Bulk Si, 8-atom conventional cubic cell, fractional coordinates    |
 | `calc.fdf`                  | The (correct) relaxation calc.fdf for `structure.fdf`              |
 | `calc_missing_relax.fdf`    | Same file, deliberately misconfigured — for the gotcha demo only   |
-| `example_4.1.sh`            | This walkthrough's runnable script (Stage 1 only, for now)         |
+| `example_4.1.sh`            | This walkthrough's runnable script (both stages)                   |
 
-## 9. Running the script
+## 10. Running the script
 
 ```bash
 bash example_4.1.sh
 ```
-
-## 10. What's next
-
-Stage 2 (`stb-strainAnalysis`, code `4.1.2`) — reading the `strain_runs/`
-folders back after you've run SIESTA in each one, fitting the
-stress-strain curve, and reporting mechanical properties — will be added
-to this same `README.md` and `example_4.1.sh` in a follow-up update.

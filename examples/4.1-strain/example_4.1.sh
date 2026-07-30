@@ -218,9 +218,103 @@ cat <<'EOF'
 Stage 1 (stb-strain, 4.1.1) is done: strain_runs/<direction>/ folders are
 ready, each with a deformed structure, calc.fdf (with %include
 config_extra.fdf added), config_extra.fdf itself, and any linked
-pseudopotentials. Run SIESTA in each one.
+pseudopotentials. Run SIESTA in each one, then hand the results to Stage 2
+(stb-strainAnalysis, 4.1.2) below.
+EOF
+pause
 
-Stage 2 (stb-strainAnalysis, 4.1.2) -- reading the finished SIESTA runs
-back and fitting the stress-strain curve -- will be added to this same
-script and README.md in a follow-up update.
+
+echo "=================================================================="
+echo " Case 8: Stage 2 -- reading one direction's results back (stb-strainAnalysis, 4.1.2)"
+echo "=================================================================="
+cat <<'EOF'
+This script doesn't run real SIESTA, so Stage 2 is demonstrated here
+against small, hand-built calc.out data instead (same idea as this
+folder's own calc_missing_relax.fdf -- illustrative, not a real result).
+Stage 2 reports in the same numbered [N] section style as Stage 1's own
+report, and auto-detects dimensionality from a real structure.fdf if one
+is found in the folder (none is here, so it falls back to 3D with a
+[NOTE], not an error).
+
+This fixture also deliberately uses a coarse 10%/step (linear only up to
+~20%, then plateauing -- a stand-in for real yielding) so only 1 point
+falls within the usual +-2% window, showing the fit-window WIDEN to the
+nearest 3 points instead of silently averaging in the plateau -- watch
+"Fit window" and the [NOTE] below.
+EOF
+mkdir -p "$OUT/stage2-single/strain_runs/x/strain_x_0.00" \
+         "$OUT/stage2-single/strain_runs/x/strain_x_10.00" \
+         "$OUT/stage2-single/strain_runs/x/strain_x_20.00" \
+         "$OUT/stage2-single/strain_runs/x/strain_x_30.00"
+for pair in "0.00:0" "10.00:15" "20.00:28" "30.00:29"; do
+    pct="${pair%%:*}"; kbar="${pair##*:}"
+    cat > "$OUT/stage2-single/strain_runs/x/strain_x_$pct/calc.out" <<EOF
+outcell: Unit cell vectors (Ang):
+        5.470000    0.000000    0.000000
+        0.000000    5.470000    0.000000
+        0.000000    0.000000    5.470000
+
+siesta: Stress tensor Voigt (kbar):     ${kbar}.00      0.00      0.00      0.00      0.00      0.00
+EOF
+done
+echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot --no-intro"
+(cd "$OUT/stage2-single" && stb-strainAnalysis --file calc.out --dir strain_runs \
+    --save-report --save-gnuplot --no-intro | sed -n '/\[2\] DIMENSIONALITY/,/\[4\] OUTPUT FILES/p')
+pause
+
+
+echo "=================================================================="
+echo " Case 9: Stage 2 -- multiple directions compared automatically, no flag needed"
+echo "=================================================================="
+cat <<'EOF'
+Point --dir at the top-level output directory (holding one <direction>/
+subfolder per direction, e.g. from Case 7's "ALL" run) and every direction
+found is compared automatically -- no --compare-style flag exists or is
+needed. --view shows the same comparison as an interactive matplotlib plot
+instead of (or alongside) --save-gnuplot's .dat+.gplot pair.
+EOF
+mkdir -p "$OUT/stage2-compare/strain_runs/x/strain_x_0.00" \
+         "$OUT/stage2-compare/strain_runs/x/strain_x_1.00" \
+         "$OUT/stage2-compare/strain_runs/x/strain_x_2.00" \
+         "$OUT/stage2-compare/strain_runs/xy/strain_xy_0.00" \
+         "$OUT/stage2-compare/strain_runs/xy/strain_xy_1.00" \
+         "$OUT/stage2-compare/strain_runs/xy/strain_xy_2.00"
+for pair in "0.00:0" "1.00:15" "2.00:28"; do
+    pct="${pair%%:*}"; kbar="${pair##*:}"
+    cat > "$OUT/stage2-compare/strain_runs/x/strain_x_$pct/calc.out" <<EOF
+outcell: Unit cell vectors (Ang):
+        5.470000    0.000000    0.000000
+        0.000000    5.470000    0.000000
+        0.000000    0.000000    5.470000
+
+siesta: Stress tensor Voigt (kbar):     ${kbar}.00      0.00      0.00      0.00      0.00      0.00
+EOF
+done
+for pair in "0.00:0" "1.00:22" "2.00:40"; do
+    pct="${pair%%:*}"; kbar="${pair##*:}"
+    cat > "$OUT/stage2-compare/strain_runs/xy/strain_xy_$pct/calc.out" <<EOF
+outcell: Unit cell vectors (Ang):
+        5.470000    0.000000    0.000000
+        0.000000    5.470000    0.000000
+        0.000000    0.000000    5.470000
+
+siesta: Stress tensor Voigt (kbar):     ${kbar}.00      ${kbar}.00      0.00      0.00      0.00      0.00
+EOF
+done
+echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --no-intro"
+(cd "$OUT/stage2-compare" && stb-strainAnalysis --file calc.out --dir strain_runs \
+    --no-intro | sed -n '/\[3\] MECHANICAL/,/\[4\] OUTPUT FILES/p')
+pause
+
+
+echo "=================================================================="
+echo " Workflow 4.1 complete"
+echo "=================================================================="
+cat <<'EOF'
+Stage 1 (stb-strain, 4.1.1): strained structures generated, one folder per
+direction/strain value. Stage 2 (stb-strainAnalysis, 4.1.2): reads real
+SIESTA runs back (auto-detecting dimensionality, auto-comparing multiple
+directions), reports mechanical properties in a numbered [0]-[5] section
+style, and can plot with gnuplot (--save-gnuplot) and/or matplotlib
+(--view).
 EOF

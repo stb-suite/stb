@@ -1,0 +1,32 @@
+# A 2D SiC monolayer, 2 atoms/cell (1 Si + 1 C), already relaxed at its DFT
+# equilibrium in-plane lattice constant (vacuum along z, Lz ~ 20.77 Ang).
+# Chosen on purpose, same spirit as 4.1-strain's cubic Si: its point group,
+# -6m2 (hexagonal, non-centrosymmetric), makes stb-elasticInputs'
+# --symmetry-method basic/full distinction REAL, not a toy illustration --
+# 'basic' needs all 3 in-plane directions (15 SIESTA calculations at the
+# strain range this example uses) to fully determine the stiffness matrix,
+# while 'full' needs only 1 (5 calculations) for the exact same physics.
+# See the README's worked example (section 4) for the real numbers.
+
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+ 2   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 1.55197287   -2.68805717   -0.00000001
+ 1.55197287   2.68805717   0.00000001
+ -0.00000000   0.00000010   20.76959437
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  -0.00001187   0.00001187   0.29543400   1
+  0.66667911   0.33332089   0.29543631   2
+%endblock AtomicCoordinatesAndAtomicSpecies

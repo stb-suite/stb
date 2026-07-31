@@ -646,9 +646,10 @@ bash example_4.1.sh
 
 ## 9. What's next
 
-- **`stb-elasticInputs`/`stb-elasticAnalysis`** (Workflow `4.2`) — the
-  rigorous full elastic tensor `C_ij` this workflow's own modulus is
-  deliberately NOT a substitute for (section 1.2/5).
+- **`stb-elasticInputs`/`stb-elasticAnalysis`** (Workflow `4.2`, see
+  [`../4.2-elastic/`](../4.2-elastic/)) — the rigorous full elastic tensor
+  `C_ij` this workflow's own modulus is deliberately NOT a substitute for
+  (section 1.2/5).
 - **`stb-mlelastic`** (ML Simulations) — a fast MACE-based preview of the
   same stiffness-tensor physics, no SIESTA/`strain_*` folders needed; a
   good sanity check before committing to the real DFT workflow here.

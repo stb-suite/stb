@@ -1,0 +1,87 @@
+# The SAME calc.fdf used for structure.fdf's own real relaxation (same
+# basis/k-points/XC/SCF) -- stb-elasticInputs never regenerates any of
+# this, it only writes the strained structure and adds one %include line
+# (see the README, section 2). This is the file you pass as --calc.
+#
+# Deliberately kept WITH its real MD.TypeOfRun/MD.VariableCell/MD.Steps
+# block still active (exactly as it came from the real relaxation this
+# structure went through) -- unlike stb-strain, stb-elasticInputs does not
+# need a "correct" relaxation block here to work right: every generated
+# folder is FORCED to a pure single-point SCF regardless of what this
+# block says, via a %include prepended at the very top of the copy it
+# writes. The README's "gotcha, live" (section 2.2) proves this override
+# actually wins over the MD.Steps 200/MD.VariableCell true below.
+
+## ===================================================================
+## SYSTEM DEFINITION
+## ===================================================================
+SystemLabel      siesta
+SystemName       siesta
+
+## Include the structure file generated with STB-SUITE
+%include structure.fdf
+
+## ===================================================================
+## BASIS SET DEFINITION
+## ===================================================================
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+## ===================================================================
+## K-POINT SAMPLING (BRILLOUIN ZONE)
+## ===================================================================
+kgrid.MonkhorstPack   [12  12  1]
+Mesh.CutOff           320  Ry
+FilterCutoff          150  Ry
+
+## ===================================================================
+## EXCHANGE-CORRELATION (XC) FUNCTIONAL
+## ===================================================================
+XC.Functional       GGA
+XC.Authors          PBE
+
+## ===================================================================
+## SPIN POLARIZATION
+## ===================================================================
+Spin                non-polarized
+
+## ===================================================================
+## SELF-CONSISTENT-FIELD (SCF)
+## ===================================================================
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.DM.Tolerance        1.0d-5  eV
+SCF.Mixer.History       6
+ElectronicTemperature   300 K
+Diag.ParallelOverK      .true.
+
+## ===================================================================
+## VAN DER WAALS CORRECTIONS (GRIMME DFT-D3)
+## ===================================================================
+# A 2D monolayer's own interlayer/vdW interactions don't apply here (no
+# second layer), but DFT-D3 also corrects intra-layer dispersion -- kept
+# on since that's what the real reference relaxation used.
+DFTD3                   .true.
+
+## ===================================================================
+## STRUCTURE RELAXATION (MOLECULAR DYNAMICS - MD)
+## ===================================================================
+## Real, active relaxation settings -- deliberately NOT single-point.
+## stb-elasticInputs forces every generated folder to single-point
+## regardless (see the header comment above and the README's section 2).
+MD.TypeOfRun            CG
+MD.VariableCell         true
+MD.MaxForceTol          0.01 eV/Ang
+MD.Steps                200
+
+## ===================================================================
+## STARTING THE CALCULATION (Using previous results)
+## ===================================================================
+DM.UseSaveDM            .true.
+
+## ===================================================================
+## OUTPUT FILES
+## ===================================================================
+WriteCoorInitial        .true.
+WriteForces             .true.

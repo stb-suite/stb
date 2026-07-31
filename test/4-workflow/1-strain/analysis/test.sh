@@ -159,6 +159,33 @@ else
     echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed, skipping actual render"
 fi
 
+echo -e "\n--- Testing --save-gnuplot with a relative -o/--output-dir (not '.') ---"
+echo "Testing: the .gplot script must reference its data/output files by bare filename,"
+echo "         NOT prefixed with --output-dir -- gnuplot resolves them relative to ITS OWN"
+echo "         cwd when run, and the natural usage is 'cd <output-dir> && gnuplot <script>'"
+rm -rf gnuplot_subdir_out
+stb-strainAnalysis --file calc.out --dir . -o gnuplot_subdir_out --save-gnuplot --no-intro > log_gnuplot_outdir.txt 2>&1
+check_success gnuplot_subdir_out/x_curve.dat
+check_success gnuplot_subdir_out/x_curve.gplot
+if grep -q "gnuplot_subdir_out" gnuplot_subdir_out/x_curve.gplot 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} x_curve.gplot references its own --output-dir path -- will"
+    echo -e "      fail when run from inside that same directory (doubly-nested path)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} x_curve.gplot references bare filenames only"
+    PASS=$((PASS+1))
+fi
+check_contains 'set output "x_curve.pdf"' gnuplot_subdir_out/x_curve.gplot
+check_contains 'plot "x_curve.dat"' gnuplot_subdir_out/x_curve.gplot
+check_contains "Render with: cd gnuplot_subdir_out" log_gnuplot_outdir.txt
+if command -v gnuplot > /dev/null 2>&1; then
+    (cd gnuplot_subdir_out && gnuplot x_curve.gplot > gnuplot_render.log 2>&1)
+    check_exit_code $? 0
+    check_success gnuplot_subdir_out/x_curve.pdf
+else
+    echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed, skipping actual render"
+fi
+
 echo "Testing: without --save-report/--save-gnuplot, nothing is written"
 rm -f x_curve.dat x_curve.gplot stb_strainAnalysis_report.txt
 stb-strainAnalysis --file calc.out --dir . --no-intro > log_nosave.txt 2>&1

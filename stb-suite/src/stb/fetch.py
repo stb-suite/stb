@@ -6,11 +6,16 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.14.0"
+VERSION = "1.14.1"  # retry transient connection resets against COD (observed live:
+                     # crystallography.net intermittently resets the connection on
+                     # both /result and /<id>.cif -- not a stb-fetch bug, but worth
+                     # a few automatic retries before giving up)
 
 import sys
 import argparse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from pymatgen.core import Composition, Structure
 from pymatgen.io.cif import CifParser
 from stb.core import citations, kspace, structure_checks, structure_io
@@ -21,6 +26,19 @@ from stb.core.symmetry import (
 )
 
 COD_BASE_URL = "https://www.crystallography.net/cod"
+
+# stb-fetch is the suite's first (and so far only) network-dependent tool --
+# COD's own endpoints have been observed live to intermittently reset the
+# connection (ConnectionResetError) on an otherwise-healthy network path, so
+# a shared Session with a few automatic retries (connect/read only -- never
+# retries a real HTTP error like 404, which raise_for_status() below still
+# raises immediately) is cheap insurance against a single bad moment on
+# COD's end failing an otherwise-fine run outright.
+_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5,
+               status_forcelist=[502, 503, 504], allowed_methods=["GET"])
+_SESSION = requests.Session()
+_SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY))
+_SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY))
 
 # A hand-picked subset of pymatgen's ~30 built-in OptimadeRester aliases,
 # relevant to a DFT/SIESTA audience (mp/cod deliberately excluded -- they're
@@ -152,7 +170,7 @@ def fetch_cod_candidates(formula):
     that's a display concern for the caller), where each row is a dict with
     the fields COD returns (file, formula, sg, sgNumber, a/b/c, year...).
     """
-    response = requests.get(
+    response = _SESSION.get(
         f"{COD_BASE_URL}/result",
         params={"formula": to_hill_formula(formula), "format": "json"},
         timeout=30,
@@ -163,7 +181,7 @@ def fetch_cod_candidates(formula):
 
 def fetch_cod_structure(cod_id):
     """Downloads and parses a single COD entry's CIF into a pymatgen Structure."""
-    response = requests.get(f"{COD_BASE_URL}/{cod_id}.cif", timeout=30)
+    response = _SESSION.get(f"{COD_BASE_URL}/{cod_id}.cif", timeout=30)
     response.raise_for_status()
     structures = CifParser.from_str(response.text).parse_structures(primitive=False, on_error="warn")
     if not structures:

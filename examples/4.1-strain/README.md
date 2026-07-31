@@ -560,7 +560,76 @@ verified result.
   scanned folder; a hand-built/legacy folder holding only a bare `.out`
   falls back to 3D (section 3.2).
 
-## 6. Files in this folder
+## 6. Step-by-step: running this workflow on your own structure
+
+0. **Prerequisite**: an already-relaxed structure (`structure.fdf`,
+   fractional coordinates) and the exact `calc.fdf` used for that
+   relaxation (the golden rule in section 2.2) — this workflow strains an
+   existing equilibrium structure, it doesn't find one for you.
+
+1. **Decide `--relax-mode`** (section 2.3): `cell-fixed` (clamped-cell) or
+   `stress-constrained` (relaxed-transverse-stress) — pick the DFT
+   convention you actually want. Stage 1 is cheap (it only writes `.fdf`
+   files, no SCF), so it costs nothing to redo with the other mode later
+   if you change your mind.
+
+2. **Run Stage 1** (`stb-strain`, code `4.1.1`):
+   - CLI: `stb-strain -s structure.fdf -c calc.fdf --relax-mode <mode>
+     --stdir <direction> --stmin <min> --stmax <max> --step <step>`
+   - Interactive: `stb-suite` → `4.1.1` — detects vacuum axes and
+     symmetry-equivalent directions up front (section 2.5) and offers a
+     numbered menu of only the independent, non-redundant directions (or
+     an "ALL" option to run several in one pass).
+   - Either way, this writes `strain_runs/<direction>/strain_<direction>_<pct>/`
+     folders (section 2.6): the deformed structure, `calc.fdf` (with the
+     new `%include` line added), `config_extra.fdf`, and any linked
+     pseudopotentials.
+
+3. **Check the symmetry advisory** — the CLI's own `[3] AXIS SYMMETRY
+   ADVISORY` (uniaxial only, section 2.4) or the interactive menu's full
+   direction-selection table (uniaxial + biaxial, section 2.5). If two
+   directions are symmetry-equivalent, you only need to actually compute
+   one of them.
+
+4. **Run SIESTA yourself in every generated folder.** Stage 1 never runs
+   SIESTA — `cd` into each `strain_<direction>_<pct>/` and run it exactly
+   like any other SIESTA calculation using its own `calc.fdf` (e.g.
+   `siesta calc.fdf > calc.out`, or through your own batch/queue script).
+   Repeat for every `<direction>/` subfolder if you generated more than
+   one.
+
+5. **Run Stage 2** (`stb-strainAnalysis`, code `4.1.2`) once every run
+   finishes:
+   - CLI: `stb-strainAnalysis --file calc.out --dir strain_runs` — point
+     `--dir` at the SAME top-level directory Stage 1 wrote into. Exactly
+     one direction found underneath → a single-direction report; more
+     than one → compared automatically, no flag needed (section 3.3).
+   - Interactive: `stb-suite` → `4.1.2` — the same questions (directory,
+     output filename, dimensionality override, yield, output options)
+     instead of flags.
+   - Dimensionality (GPa/N/m/nN) is auto-detected from the real structure
+     file Stage 1 wrote into each folder (section 3.2) — nothing to set
+     manually in the common case.
+
+6. **Read the `[3] MECHANICAL PROPERTIES` report** (sections 1.3/3.1):
+   initial modulus (with its own fit window and R², section 3.4), peak
+   stress/force (UTS) and critical strain, toughness, and yield if you
+   passed `--yield`. Pay attention to any `[WARNING]` — peak at the edge
+   of the tested range means widen `--stmin`/`--stmax` and rerun; a
+   biaxial direction only ever reports its first-axis component, not a
+   true biaxial modulus (section 5).
+
+7. **(Optional) persist or plot the result**: `--save-report` writes the
+   full report to `stb_strainAnalysis_report.txt`; `--save-gnuplot` writes
+   `<direction>_curve.dat`/`.gplot` (render with `cd <output-dir> &&
+   gnuplot <script>.gplot`, section 3.5); `--view` opens the same curve
+   interactively in matplotlib instead.
+
+8. **(Optional) go further**: for the rigorous full elastic tensor instead
+   of this workflow's own single-direction modulus, see
+   `stb-elasticInputs`/`stb-elasticAnalysis` (section 9).
+
+## 7. Files in this folder
 
 | File                       | What it is                                                        |
 |-----------------------------|--------------------------------------------------------------------|
@@ -569,13 +638,13 @@ verified result.
 | `calc_missing_relax.fdf`    | Same file, deliberately misconfigured — for the gotcha demo only   |
 | `example_4.1.sh`            | This walkthrough's runnable script (both stages)                   |
 
-## 7. Running the script
+## 8. Running the script
 
 ```bash
 bash example_4.1.sh
 ```
 
-## 8. What's next
+## 9. What's next
 
 - **`stb-elasticInputs`/`stb-elasticAnalysis`** (Workflow `4.2`) — the
   rigorous full elastic tensor `C_ij` this workflow's own modulus is

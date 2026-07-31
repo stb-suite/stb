@@ -180,9 +180,8 @@ through.
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep + analysis) together, instead of one folder per tool --
-`4.1-strain/` currently only covers Stage 1 (`stb-strain`, code `4.1.1`);
-Stage 2 (`stb-strainAnalysis`, code `4.1.2`) will be added to that same
-folder in a follow-up update.
+`4.1-strain/` covers both stages (`stb-strain`, code `4.1.1`, and
+`stb-strainAnalysis`, code `4.1.2`) as a single, theory-first tutorial.
 
 ## Adding another example
 

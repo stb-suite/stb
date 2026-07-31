@@ -1,14 +1,13 @@
 #!/bin/bash
-# Guided example: Workflow 4.1 -- Stress-Strain, Stage 1 (stb-strain, code
-# 4.1.1 in the stb-suite menu). Stage 2 (stb-strainAnalysis, code 4.1.2)
-# will be added to this same script in a follow-up update.
+# Guided example: Workflow 4.1 -- Stress-Strain (both stages: stb-strain,
+# code 4.1.1, and stb-strainAnalysis, code 4.1.2, in the stb-suite menu).
 #
-# Not an automated test (see test/4-workflow/1-strain/prep/test.sh for
-# that) -- a commented walk-through: it runs real commands, one case at a
-# time, into its own output/<case>/ folder, and shows you the piece of
-# output that proves what just happened. Pauses between sections so you
-# can read before moving on. Safe to re-run any time -- it always starts
-# by wiping its own output/.
+# Not an automated test (see test/4-workflow/1-strain/{prep,analysis}/
+# test.sh for that) -- a commented walk-through: it runs real commands,
+# one case at a time, into its own output/<case>/ folder, and shows you
+# the piece of output that proves what just happened. Pauses between
+# sections so you can read before moving on. Safe to re-run any time -- it
+# always starts by wiping its own output/.
 #
 # structure.fdf is bulk silicon, an 8-atom conventional cubic cell.
 # calc.fdf is the (correct) calc.fdf for its original relaxation --
@@ -21,6 +20,10 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+# Stage 2's --view calls plt.show() -- MPLBACKEND=Agg makes that a no-op
+# instead of blocking on a GUI window, same convention test.sh itself uses.
+export MPLBACKEND=Agg
+
 OUT="$DIR/output"
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -32,16 +35,31 @@ pause() {
 }
 
 echo "=================================================================="
-echo " What Workflow 4.1 -- Stage 1 (stb-strain) does"
+echo " Welcome: stress, strain, and what this workflow measures"
 echo "=================================================================="
 cat <<'EOF'
-Applies a small Cartesian strain (uniaxial x/y/z, or biaxial xy/xz/yz) to
-a relaxed structure's lattice vectors, for a range of strain values, and
-writes one ready-to-run SIESTA folder per value: the deformed structure,
-a copy of calc.fdf, a new config_extra.fdf (see below), and any linked
-pseudopotentials. Doesn't run SIESTA itself -- you run each folder
-yourself, then (once added here) hand the results to Stage 2
-(stb-strainAnalysis) for the stress-strain fit.
+A small crystal deformation is F = I + strain_tensor (the standard small
+-strain/linear-elasticity approximation) -- Stage 1 (stb-strain) applies
+this to the lattice vectors for a range of strain values and writes one
+ready-to-run SIESTA folder per value; Stage 2 (stb-strainAnalysis) reads
+the finished runs back and fits the resulting stress-strain curve.
+
+That curve's shape carries 4 physical numbers (a 5th is opt-in):
+  Initial Slope   stiffness -- stress needed for a small strain (Hooke's
+                  law), NOT automatically a full elastic tensor C_ij (that
+                  needs the sibling stb-elasticAnalysis workflow instead)
+  Peak (UTS)      the largest stress/force reached -- ultimate strength
+  Critical Strain the strain at which that peak occurs
+  Toughness       area under the whole curve -- energy absorbed before
+                  failure, a distinct concept from stiffness or strength
+  Yield (0.2%)    opt-in; a macroscopic metallurgy concept, only loosely
+                  meaningful for a defect-free periodic DFT crystal
+
+Units depend on dimensionality, auto-detected by Stage 2: 3D -> GPa (a
+real stress); 2D -> N/m (SIESTA's own stress un-diluted by the arbitrary
+vacuum height, the same convention 2D-materials literature uses, e.g.
+graphene's ~340 N/m in-plane stiffness); 1D -> nN (a raw axial force, no
+arbitrary cross-section assumed).
 
 --relax-mode selects how the cell responds to the imposed strain:
   cell-fixed          cell locked exactly at the imposed strain; only
@@ -49,7 +67,9 @@ yourself, then (once added here) hand the results to Stage 2
   stress-constrained   only the imposed direction's own stress fixed;
                        every other periodic direction relaxes freely
 Both are expressed through the same mechanism: a new config_extra.fdf
-file with a %block Geometry.Constraints, %include-d into calc.fdf.
+file with a %block Geometry.Constraints, %include-d into calc.fdf. See
+this folder's README.md for the full theory (section 1) behind all of
+this.
 EOF
 pause
 
@@ -301,9 +321,12 @@ outcell: Unit cell vectors (Ang):
 siesta: Stress tensor Voigt (kbar):     ${kbar}.00      ${kbar}.00      0.00      0.00      0.00      0.00
 EOF
 done
-echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --no-intro"
+echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --no-intro --view"
 (cd "$OUT/stage2-compare" && stb-strainAnalysis --file calc.out --dir strain_runs \
-    --no-intro | sed -n '/\[3\] MECHANICAL/,/\[4\] OUTPUT FILES/p')
+    --no-intro --view | sed -n '/\[3\] MECHANICAL/,/\[4\] OUTPUT FILES/p')
+echo "(--view opened/closed a matplotlib comparison plot -- MPLBACKEND=Agg above"
+echo " makes that a silent no-op in this unattended script; drop it yourself to"
+echo " actually see the plot pop up)"
 pause
 
 

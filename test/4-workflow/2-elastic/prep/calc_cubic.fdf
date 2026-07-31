@@ -1,0 +1,16 @@
+SystemLabel siesta
+SystemName siesta
+
+%include si_cubic.fdf
+
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+kgrid.MonkhorstPack   [8  8  8]
+Mesh.CutOff           250  Ry
+
+MaxSCFIterations      100
+DM.Tolerance          1.0d-4
+XC.functional         GGA
+XC.authors            PBE

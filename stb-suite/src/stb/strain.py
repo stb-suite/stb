@@ -94,15 +94,12 @@ import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, link_pseudo
+from stb.core.structure_io import (
+    strip_fdf_comments, read_effective_md_steps, read_md_state, is_siesta_true,
+    insert_include_after_structure)
 
 REPORT_FILE = "strain_stage1.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
-
-_MD_TYPEOFRUN_VALUE_RE = re.compile(r'MD\.TypeOfRun\s+(\S+)', re.IGNORECASE)
-_MD_STEPS_VALUE_RE = re.compile(r'MD\.Steps\s+(\d+)', re.IGNORECASE)
-_MD_NUMCGSTEPS_VALUE_RE = re.compile(r'MD\.NumCGsteps\s+(\d+)', re.IGNORECASE)
-_MD_VARIABLECELL_VALUE_RE = re.compile(r'MD\.VariableCell\s+(\S+)', re.IGNORECASE)
-_SIESTA_TRUE_VALUES = {'t', 'true', '.true.', 'yes'}
 
 _VOIGT_LABELS = {1: 'XX', 2: 'YY', 3: 'ZZ', 4: 'YZ', 5: 'XZ', 6: 'XY'}
 _VOIGT_AXES = {1: (0,), 2: (1,), 3: (2,), 4: (1, 2), 5: (0, 2), 6: (0, 1)}  # 0=x, 1=y, 2=z
@@ -122,59 +119,6 @@ def normalize_direction(direction):
     if len(direction) == 2:
         return ''.join(sorted(direction.lower()))
     return direction.lower()
-
-
-def _strip_fdf_comments(calc_text):
-    """Removes everything from the first '#' onward on every line (SIESTA's
-    own fdf comment convention -- also used for trailing inline comments
-    after a real value, e.g. 'DM.UseSaveDM .true.  #(...)'). Used before
-    scanning calc_text for a directive's CURRENT value -- otherwise a
-    plain-English comment merely mentioning a directive's name (e.g. '##
-    MD.VariableCell should stay true', a real, caught-live bug while
-    writing this tool's own example) could be misread as the actual value
-    if that comment happens to appear earlier in the file than the real
-    directive line."""
-    return "\n".join(line.split('#', 1)[0] for line in calc_text.splitlines())
-
-
-def _read_effective_steps(calc_text):
-    """Returns (key_name, value) for the relaxation step count -- prefers
-    'MD.Steps' (what a real relaxation calc.fdf and stb-inputfile's own
-    generated template both use), falling back to 'MD.NumCGsteps' (an
-    older/alternate spelling some templates may still use) if 'MD.Steps'
-    is absent. (None, None) if neither is present."""
-    calc_text = _strip_fdf_comments(calc_text)
-    steps_match = _MD_STEPS_VALUE_RE.search(calc_text)
-    if steps_match:
-        return 'MD.Steps', steps_match.group(1)
-    numcg_match = _MD_NUMCGSTEPS_VALUE_RE.search(calc_text)
-    if numcg_match:
-        return 'MD.NumCGsteps', numcg_match.group(1)
-    return None, None
-
-
-def _read_md_state(calc_text):
-    """Read-only scan of calc_text's CURRENT MD.TypeOfRun/MD.Steps (or
-    MD.NumCGsteps)/MD.VariableCell directives, for reporting state in [4]
-    below -- this tool never rewrites any of these, only the %include line
-    for config_extra.fdf, so this is purely informational/advisory. A
-    value is None when the tag is absent (a normal template, not a
-    malformed one)."""
-    stripped = _strip_fdf_comments(calc_text)
-    run_match = _MD_TYPEOFRUN_VALUE_RE.search(stripped)
-    varcell_match = _MD_VARIABLECELL_VALUE_RE.search(stripped)
-    steps_key, steps_value = _read_effective_steps(calc_text)
-    return {
-        'typeofrun': run_match.group(1) if run_match else None,
-        'steps_key': steps_key,
-        'steps': steps_value,
-        'variablecell': varcell_match.group(1) if varcell_match else None,
-    }
-
-
-def _is_siesta_true(value):
-    """True if value.lower() is one of SIESTA's boolean-true spellings."""
-    return value is not None and value.lower() in _SIESTA_TRUE_VALUES
 
 
 def compute_voigt_status(norm_dir, vacuum_axes, relax_mode):
@@ -229,27 +173,6 @@ def build_geometry_constraints_block(voigt_status):
             lines.append(f"  stress {voigt_idx}  # Fixes {_VOIGT_LABELS[voigt_idx]}")
     lines.append("%endblock Geometry.Constraints")
     return "\n".join(lines) + "\n"
-
-
-def insert_include_after_structure(calc_text, structure_basename, include_name=EXTRA_FDF_FILE):
-    """Inserts '%include <include_name>' right after the existing
-    '%include <structure_basename>' line -- the exact position the
-    Geometry.Constraints block already occupies (commented out, as a
-    template) in the 2 real reference calc.fdf files this was verified
-    against. Falls back to prepending at the very top of the file if no
-    such line is found (calc.fdf not %including the structure file by
-    this exact name already triggers a separate [NOTE] in [4], so this
-    never fails silently). --calc itself is otherwise untouched -- no
-    other directive (MD.VariableCell/MD.TypeOfRun/MD.Steps) is rewritten
-    here."""
-    include_line = f"%include {include_name}"
-    pattern = re.compile(
-        r'^([ \t]*%include[ \t]+' + re.escape(structure_basename) + r'[ \t]*)$',
-        re.IGNORECASE | re.MULTILINE)
-    new_text, count = pattern.subn(r'\1\n' + include_line, calc_text, count=1)
-    if count == 0:
-        new_text = include_line + "\n\n" + calc_text
-    return new_text
 
 
 def print_axis_symmetry_table(requested_axis, groups, point_group, ops, vacuum_axes, f_out=None):
@@ -681,12 +604,12 @@ def main():
     }
     print_dual(f"Mode              : {args.relax_mode} -- {mode_rationale[args.relax_mode]}", f_out)
 
-    before = _read_md_state(original_calc_text)
+    before = read_md_state(original_calc_text)
     steps_label = f"{before['steps_key']}={before['steps']}" if before['steps_key'] else "(absent)"
     print_dual(f"Calc template (current state, read-only -- nothing below is forced):", f_out)
     print_dual(f"  MD.TypeOfRun={before['typeofrun'] or '(absent)'}  Steps: {steps_label}  "
                f"MD.VariableCell={before['variablecell'] or '(absent)'}", f_out)
-    if not _is_siesta_true(before['variablecell']):
+    if not is_siesta_true(before['variablecell']):
         print_dual(color_text(
             "[WARNING] MD.VariableCell is not enabled in this calc.fdf (or is absent). The "
             "%block Geometry.Constraints written below only has an effect while the cell is "
@@ -713,7 +636,7 @@ def main():
         print_dual(f"  {line}", f_out)
     print_dual(f"\n'%include {EXTRA_FDF_FILE}' is inserted right after '%include "
                f"{structure_basename}' in every generated {calc_basename} copy.", f_out)
-    forced_calc_text = insert_include_after_structure(original_calc_text, structure_basename)
+    forced_calc_text = insert_include_after_structure(original_calc_text, structure_basename, EXTRA_FDF_FILE)
 
     print_section("[5] PSEUDOPOTENTIALS", f_out)
     if args.pseudo_dir:

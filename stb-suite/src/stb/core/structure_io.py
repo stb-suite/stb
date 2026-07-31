@@ -14,6 +14,13 @@ cell (k-grids, pymatgen Structure, symmetry...). Tools that instead rewrite an
 existing .fdf's %block LatticeVectors while leaving its LatticeConstant line
 untouched (elastic_inputs.py, strain.py) must use `raw_lattice_vectors()`
 instead, or they'd silently double-apply the lattice constant on write.
+
+Also hosts a small set of calc.fdf MD-directive helpers (`strip_fdf_comments`,
+`read_effective_md_steps`, `read_md_state`, `is_siesta_true`,
+`insert_include_after_structure`) shared by strain.py and elastic_inputs.py --
+moved here once elastic_inputs.py became a second consumer of the exact same
+"read the current MD.TypeOfRun/Steps/VariableCell state without rewriting
+anything" need.
 """
 
 from __future__ import annotations
@@ -652,3 +659,99 @@ def alias_single_atom_species(source_path: str, out_path: str, species: str,
 
     with open(out_path, "w") as f:
         f.writelines(out_lines)
+
+
+# ==========================================
+# calc.fdf MD-directive helpers -- shared by strain.py and elastic_inputs.py
+# (moved here once elastic_inputs.py became a second consumer of the exact
+# same "read the current MD.TypeOfRun/Steps/VariableCell state, without
+# rewriting anything" need, same extract-on-second-use policy as the rest
+# of this module).
+# ==========================================
+
+_MD_TYPEOFRUN_VALUE_RE = re.compile(r'MD\.TypeOfRun\s+(\S+)', re.IGNORECASE)
+_MD_STEPS_VALUE_RE = re.compile(r'MD\.Steps\s+(\d+)', re.IGNORECASE)
+_MD_NUMCGSTEPS_VALUE_RE = re.compile(r'MD\.NumCGsteps\s+(\d+)', re.IGNORECASE)
+_MD_VARIABLECELL_VALUE_RE = re.compile(r'MD\.VariableCell\s+(\S+)', re.IGNORECASE)
+_SIESTA_TRUE_VALUES = {'t', 'true', '.true.', 'yes'}
+
+
+def strip_fdf_comments(calc_text: str) -> str:
+    """Removes everything from the first '#' onward on every line (SIESTA's
+    own fdf comment convention -- also used for trailing inline comments
+    after a real value, e.g. 'DM.UseSaveDM .true.  #(...)'). Used before
+    scanning calc_text for a directive's CURRENT value -- otherwise a
+    plain-English comment merely mentioning a directive's name (e.g. '##
+    MD.VariableCell should stay true', a real, caught-live bug while
+    writing strain.py's own example) could be misread as the actual value
+    if that comment happens to appear earlier in the file than the real
+    directive line."""
+    return "\n".join(line.split('#', 1)[0] for line in calc_text.splitlines())
+
+
+def read_effective_md_steps(calc_text: str) -> tuple[str | None, str | None]:
+    """Returns (key_name, value) for the relaxation step count -- prefers
+    'MD.Steps' (what a real relaxation calc.fdf and stb-inputfile's own
+    generated template both use), falling back to 'MD.NumCGsteps' (an
+    older/alternate spelling some templates may still use) if 'MD.Steps'
+    is absent. (None, None) if neither is present."""
+    calc_text = strip_fdf_comments(calc_text)
+    steps_match = _MD_STEPS_VALUE_RE.search(calc_text)
+    if steps_match:
+        return 'MD.Steps', steps_match.group(1)
+    numcg_match = _MD_NUMCGSTEPS_VALUE_RE.search(calc_text)
+    if numcg_match:
+        return 'MD.NumCGsteps', numcg_match.group(1)
+    return None, None
+
+
+def read_md_state(calc_text: str) -> dict:
+    """Read-only scan of calc_text's CURRENT MD.TypeOfRun/MD.Steps (or
+    MD.NumCGsteps)/MD.VariableCell directives, for reporting purposes --
+    never rewrites anything itself, purely informational/advisory. A value
+    is None when the tag is absent (a normal template, not a malformed
+    one)."""
+    stripped = strip_fdf_comments(calc_text)
+    run_match = _MD_TYPEOFRUN_VALUE_RE.search(stripped)
+    varcell_match = _MD_VARIABLECELL_VALUE_RE.search(stripped)
+    steps_key, steps_value = read_effective_md_steps(calc_text)
+    return {
+        'typeofrun': run_match.group(1) if run_match else None,
+        'steps_key': steps_key,
+        'steps': steps_value,
+        'variablecell': varcell_match.group(1) if varcell_match else None,
+    }
+
+
+def is_siesta_true(value: str | None) -> bool:
+    """True if value.lower() is one of SIESTA's boolean-true spellings."""
+    return value is not None and value.lower() in _SIESTA_TRUE_VALUES
+
+
+def insert_include_after_structure(calc_text: str, structure_basename: str, include_name: str) -> str:
+    """Inserts '%include <include_name>' right after the existing
+    '%include <structure_basename>' line -- the exact position the
+    Geometry.Constraints block already occupies (commented out, as a
+    template) in strain.py's own reference calc.fdf files. Falls back to
+    prepending at the very top of the file if no such line is found.
+    --calc itself is otherwise untouched -- no other directive is
+    rewritten here.
+
+    Only safe to use when `include_name`'s own directives do NOT already
+    appear earlier in calc_text: SIESTA's fdf reader is first-occurrence
+    -wins for duplicate labels (verified in hubbardu.py::write_run_folder),
+    so an include inserted here would be silently ignored for any
+    directive the base file already sets earlier in the file. strain.py's
+    own config_extra.fdf (a %block Geometry.Constraints) is safe because
+    that block name never pre-exists in a real calc.fdf; a caller wanting
+    to override a directive (e.g. MD.TypeOfRun/MD.Steps) that commonly
+    IS already present in a real template should prepend instead (see
+    elastic_inputs.py's own local prepend_include)."""
+    include_line = f"%include {include_name}"
+    pattern = re.compile(
+        r'^([ \t]*%include[ \t]+' + re.escape(structure_basename) + r'[ \t]*)$',
+        re.IGNORECASE | re.MULTILINE)
+    new_text, count = pattern.subn(r'\1\n' + include_line, calc_text, count=1)
+    if count == 0:
+        new_text = include_line + "\n\n" + calc_text
+    return new_text

@@ -42,6 +42,7 @@ from scipy.stats import linregress
 # Use trapezoid for compatibility with new Scipy
 from scipy.integrate import trapezoid
 from stb.core import siesta_log, structure_io, kspace
+from stb.core.siesta_log import find_strain_folders
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_strainAnalysis_report.txt"
@@ -216,33 +217,6 @@ def analyze_mechanics(data, direction, is_2d=False, z_height=20.0,
         result['cross_section'] = cross_section
 
     return result
-
-
-def find_strain_folders(base_dir):
-    """Finds every 'strain_*' run folder reachable from base_dir, supporting
-    2 layouts: flat (strain_<dir>_<pct> directly under base_dir -- what you
-    get by pointing base_dir at a single direction's own subfolder, e.g.
-    'strain_runs/x') and nested (stb-strain's own default output layout: one
-    <direction>/ subfolder per strain direction under base_dir, each holding
-    that direction's strain_<direction>_<pct> folders). This lets --dir point
-    at either a single direction's subfolder (this direction only) or the
-    top-level output directory itself (every direction found under it,
-    compared automatically) without the caller needing to know which layout
-    is present.
-    """
-    direct = [os.path.join(base_dir, d) for d in sorted(os.listdir(base_dir))
-              if os.path.isdir(os.path.join(base_dir, d)) and d.startswith('strain_')]
-    if direct:
-        return direct
-    nested = []
-    for d in sorted(os.listdir(base_dir)):
-        sub = os.path.join(base_dir, d)
-        if not os.path.isdir(sub):
-            continue
-        nested.extend(
-            os.path.join(sub, e) for e in sorted(os.listdir(sub))
-            if os.path.isdir(os.path.join(sub, e)) and e.startswith('strain_'))
-    return nested
 
 
 def _canonical_direction(direction):

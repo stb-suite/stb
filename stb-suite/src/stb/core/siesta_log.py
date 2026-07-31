@@ -78,6 +78,35 @@ def parse_strain_folder_name(folder_name: str) -> tuple[str | None, float | None
     return direction, value
 
 
+def find_strain_folders(base_dir: str) -> list[str]:
+    """Finds every 'strain_*' run folder reachable from base_dir, supporting
+    2 layouts: flat (strain_<dir>_<pct> directly under base_dir -- what you
+    get by pointing base_dir at a single direction's own subfolder, e.g.
+    'strain_runs/x') and nested (stb-strain's/stb-elasticInputs' own default
+    output layout: one <direction>/ subfolder per strain direction under
+    base_dir, each holding that direction's strain_<direction>_<pct>
+    folders). This lets --dir (or the analog CWD-relative scan) point at
+    either a single direction's subfolder (this direction only) or the
+    top-level output directory itself (every direction found under it)
+    without the caller needing to know which layout is present. Moved here
+    from strain_analysis.py once elastic_analysis.py became a second
+    consumer needing the identical flat-or-nested folder discovery.
+    """
+    direct = [os.path.join(base_dir, d) for d in sorted(os.listdir(base_dir))
+              if os.path.isdir(os.path.join(base_dir, d)) and d.startswith('strain_')]
+    if direct:
+        return direct
+    nested = []
+    for d in sorted(os.listdir(base_dir)):
+        sub = os.path.join(base_dir, d)
+        if not os.path.isdir(sub):
+            continue
+        nested.extend(
+            os.path.join(sub, e) for e in sorted(os.listdir(sub))
+            if os.path.isdir(os.path.join(sub, e)) and e.startswith('strain_'))
+    return nested
+
+
 def get_fermi_energy(path: str) -> float | None:
     """Extracts Fermi energy (eV) from a SIESTA .out file.
 

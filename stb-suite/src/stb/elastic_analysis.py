@@ -253,9 +253,13 @@ def _parse_energy_folder_name(folder):
     """Parses strain_<pattern>_<magnitude> folder names written by
     stb-elasticInputs --method energy, where <pattern> is a pure Voigt mode
     ('xx') or a combined one ('xx+yy'). Returns (pattern, strain_percent),
-    or (None, None) if the folder doesn't match this convention.
+    or (None, None) if the folder doesn't match this convention. Matches
+    against os.path.basename(folder), not `folder` itself, since `folder`
+    may be a nested path (stb-elasticInputs' own <direction>/strain_.../
+    output layout) -- the pattern is anchored to the whole basename, not
+    just any substring of it.
     """
-    m = re.match(r"^strain_([a-z]+(?:\+[a-z]+)*)_(m?)(\d+\.\d+)$", folder)
+    m = re.match(r"^strain_([a-z]+(?:\+[a-z]+)*)_(m?)(\d+\.\d+)$", os.path.basename(folder))
     if not m:
         return None, None
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
@@ -1335,7 +1339,10 @@ def main():
 
     # --- Data Mining ---
     print(f"[INFO] Scanning for 'strain_*' folders...")
-    folders = sorted([f for f in os.listdir('.') if os.path.isdir(f) and f.startswith("strain_")])
+    # Flat (strain_*/ directly here) or nested (stb-elasticInputs' own
+    # <direction>/strain_.../ output layout) -- same helper stb-strainAnalysis
+    # uses for stb-strain's identical two-layout convention.
+    folders = siesta_log.find_strain_folders('.')
     data = {}
 
     Lz = 1.0

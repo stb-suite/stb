@@ -314,7 +314,8 @@ echo -e "\n--- Testing the full prep+analysis symmetry-reduction round-trip (cub
 mkdir -p reduction_run
 pushd reduction_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --no-intro > log_prep.txt 2>&1
 check_contains "Modes: \['xx', 'xy'\]" log_prep.txt
 check_success reference_structure.fdf
 python3 - <<'PYEOF'
@@ -342,10 +343,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_(xx|xy)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_(xx|xy)_(m?)(\d+\.\d+)", folder)
     mode, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -385,7 +385,8 @@ echo -e "\n--- Testing pooled fitting across explicit equivalent directions (cub
 mkdir -p pooling_run
 pushd pooling_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
 check_contains "Modes: \['xx', 'yy', 'zz', 'xy', 'xz', 'yz'\]" log_prep.txt
 python3 - <<'PYEOF'
 import os, re
@@ -401,10 +402,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_(xx|yy|zz|xy|xz|yz)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_(xx|yy|zz|xy|xz|yz)_(m?)(\d+\.\d+)", folder)
     mode, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -448,7 +448,8 @@ echo "Testing: cubic fixture, full method agrees exactly with the basic-method r
 mkdir -p full_cubic_run
 pushd full_cubic_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 check_contains "Modes: \['xx', 'xy'\]" log_prep.txt
 python3 - <<'PYEOF'
 import os, re
@@ -475,10 +476,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_(xx|xy)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_(xx|xy)_(m?)(\d+\.\d+)", folder)
     mode, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -502,7 +502,8 @@ echo "Testing: 2D hexagonal fixture -- the real target case (basic method finds 
 mkdir -p full_hex_run
 pushd full_hex_run > /dev/null
 cp "$FIXTURE_DIR/../prep/structure.fdf" .
-stb-elasticInputs --file structure.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc.fdf" .
+stb-elasticInputs -s structure.fdf -c calc.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 check_contains "Point group -6m2 has 5 independent elastic constant" log_prep.txt
 check_contains "Modes: \['xx'\]" log_prep.txt
 python3 - <<'PYEOF'
@@ -535,10 +536,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_(xx)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_(xx)_(m?)(\d+\.\d+)", folder)
     mode, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -587,7 +587,8 @@ echo "Testing: cubic fixture -- 3 patterns (2 pure + 1 combined), exact recovery
 mkdir -p energy_cubic_run
 pushd energy_cubic_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --method energy --no-intro > log_prep.txt 2>&1
 check_contains "Modes: \['xx', 'yz', 'xx+yy'\]" log_prep.txt
 python3 - <<'PYEOF'
 import os, re
@@ -605,10 +606,9 @@ C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1
 C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
 C_raw = C_true / CONV
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -631,7 +631,8 @@ echo "Testing: 2D hexagonal fixture -- only 2 in-plane patterns needed, exact re
 mkdir -p energy_hex_run
 pushd energy_hex_run > /dev/null
 cp "$FIXTURE_DIR/../prep/structure.fdf" .
-stb-elasticInputs --file structure.fdf --method energy --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc.fdf" .
+stb-elasticInputs -s structure.fdf -c calc.fdf --output-dir . --method energy --no-intro > log_prep.txt 2>&1
 check_contains "Modes: \['xx', 'xy'\]" log_prep.txt
 python3 - <<'PYEOF'
 import os, re
@@ -656,10 +657,9 @@ C_true[3,3] = C_true[4,4] = C44
 C_true[5,5] = C66
 C_raw = C_true / CONV
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -683,7 +683,8 @@ echo "Testing: diagnostic -- non-negligible linear energy term warns about a poo
 mkdir -p energy_linear_run
 pushd energy_linear_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --method energy --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -700,10 +701,9 @@ C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1
 C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
 C_raw = C_true / CONV
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -745,7 +745,8 @@ echo "Testing: consistent stress+energy data -> section [3] shows 0% diff, no wa
 mkdir -p eggbox_consistent_run
 pushd eggbox_consistent_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -768,10 +769,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -798,7 +798,8 @@ echo "Testing: contaminated energy on one direction only -> flagged, other direc
 mkdir -p eggbox_contaminated_run
 pushd eggbox_contaminated_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -821,10 +822,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -864,7 +864,8 @@ echo "Testing: --method energy never runs the eggbox check"
 mkdir -p eggbox_energy_run
 pushd eggbox_energy_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --method energy --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -879,10 +880,9 @@ C_true[0,0] = C_true[1,1] = C_true[2,2] = 166.0
 C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1] = 64.0
 C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
 C_raw = C_true / CONV
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -907,7 +907,8 @@ echo "Testing: per-direction fit quality -- residual stress and low R^2 flagged 
 mkdir -p quality_run
 pushd quality_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -931,10 +932,9 @@ def voigt_to_tensor(v):
     return s
 
 rng = np.random.default_rng(42)
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -965,7 +965,8 @@ echo "Testing: tensor symmetry (C vs C^T) -- flagged for --symmetry-method basic
 mkdir -p symcheck_run
 pushd symcheck_run > /dev/null
 cp "$FIXTURE_DIR/../prep/triclinic.fdf" .
-stb-elasticInputs --file triclinic.fdf --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_triclinic.fdf" .
+stb-elasticInputs -s triclinic.fdf -c calc_triclinic.fdf --output-dir . --dirs xx yy zz xy xz yz --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -992,10 +993,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -1052,7 +1052,8 @@ echo "Testing: cubic Si fixture -- A^U in the known ~0.2-0.3 range, S11 = 1/E[10
 mkdir -p compliance_cubic_run
 pushd compliance_cubic_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -1075,10 +1076,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -1104,7 +1104,8 @@ echo "Testing: 2D hexagonal fixture -- 2D compliance matrix, S11 = 1/Ex"
 mkdir -p compliance_hex_run
 pushd compliance_hex_run > /dev/null
 cp "$FIXTURE_DIR/../prep/structure.fdf" .
-stb-elasticInputs --file structure.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc.fdf" .
+stb-elasticInputs -s structure.fdf -c calc.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -1134,10 +1135,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -1182,7 +1182,8 @@ echo "Testing: --method stress -- elastic_plots/ has per-direction + combined da
 mkdir -p plots_stress_run
 pushd plots_stress_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --dirs all --symmetry-method full --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -1205,10 +1206,9 @@ def voigt_to_tensor(v):
     s[2,1], s[2,0], s[1,0] = s[1,2], s[0,2], s[0,1]
     return s
 
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0
@@ -1258,7 +1258,8 @@ echo "Testing: --method energy -- elastic_plots/ has pattern-named dat/gplot pai
 mkdir -p plots_energy_run
 pushd plots_energy_run > /dev/null
 cp "$FIXTURE_DIR/../prep/si_cubic.fdf" .
-stb-elasticInputs --file si_cubic.fdf --method energy --no-intro > log_prep.txt 2>&1
+cp "$FIXTURE_DIR/../prep/calc_cubic.fdf" .
+stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --output-dir . --method energy --no-intro > log_prep.txt 2>&1
 python3 - <<'PYEOF'
 import os, re
 import numpy as np
@@ -1273,10 +1274,9 @@ C_true[0,0] = C_true[1,1] = C_true[2,2] = 166.0
 C_true[0,1] = C_true[1,0] = C_true[0,2] = C_true[2,0] = C_true[1,2] = C_true[2,1] = 64.0
 C_true[3,3] = C_true[4,4] = C_true[5,5] = 80.0
 C_raw = C_true / CONV
-for folder in os.listdir('.'):
-    if not folder.startswith('strain_'):
-        continue
-    m = re.match(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
+import glob
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_([a-z+]+)_(m?)(\d+\.\d+)", folder)
     pattern, sign, val = m.group(1), m.group(2), float(m.group(3))
     pct = -val if sign == 'm' else val
     delta = pct / 100.0

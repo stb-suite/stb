@@ -2298,10 +2298,28 @@ def run_elastic_generator() -> None:
     print()
 
     # 1. Structure file
-    input_file = get_input("Input structure file (fdf/poscar): ")
+    input_file = get_input("Input structure.fdf (lattice + atomic coordinates): ")
     while not os.path.isfile(input_file):
         print(color_text("File not found!", 'red'))
-        input_file = get_input("Input structure file: ")
+        input_file = get_input("Input structure.fdf: ")
+
+    # 1b. calc.fdf template
+    default_calc = "calc.fdf"
+    if os.path.isfile(default_calc):
+        calc_file = get_input(
+            "Input calc.fdf -- SCF/basis/pseudopotential/MD settings (normally %include-ing "
+            f"the structure file above) [default: {default_calc}]: ").strip() or default_calc
+    else:
+        print(color_text(f"-> No '{default_calc}' found -- enter the real calc.fdf path below.", 'yellow'))
+        calc_file = get_input(
+            "Input calc.fdf (SCF/basis/pseudopotential/MD settings, normally %include-ing the "
+            "structure file): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Input calc.fdf: ").strip()
+
+    # 1c. Pseudopotentials (optional)
+    pseudo_dir = prompt_pseudo_source(optional=True)
 
     # 2. Sampling
     max_strain = get_float_input("\nMax strain % (default: 2.0): ", 2.0)
@@ -2356,9 +2374,9 @@ def run_elastic_generator() -> None:
 
     # 5. Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, symprec, angle_tolerance, output_file = 10.0, 1e-3, 5.0, "structure.fdf"
+    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 1e-3, 5.0, "elastic_runs"
     show_advanced = get_input(
-        "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output filename)? "
+        "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output directory)? "
         "[y/N]: ").strip().lower()
     if show_advanced == 'y':
         vacuum_gap = get_float_input(
@@ -2366,33 +2384,43 @@ def run_elastic_generator() -> None:
             "(default: 10.0): ", 10.0)
         symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
         angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
-        output_file = get_input("Output filename per strain folder (default: structure.fdf): ").strip()
-        if not output_file:
-            output_file = "structure.fdf"
+        output_dir = get_input("Output directory (default: elastic_runs): ").strip()
+        if not output_dir:
+            output_dir = "elastic_runs"
+
+    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
 
     args = [
-        "--file", input_file,
+        "--structure", input_file,
+        "--calc", calc_file,
         "--max", str(max_strain),
         "--steps", str(steps),
         "--method", method,
         "--vacuum-gap", str(vacuum_gap),
         "--symprec", str(symprec),
         "--angle-tolerance", str(angle_tolerance),
-        "--output", output_file,
+        "--output-dir", output_dir,
         "--no-intro",
     ] + dirs_args
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
     if symmetry_method is not None:
         args.extend(["--symmetry-method", symmetry_method])
+    if save_report:
+        args.append("--save-report")
 
     # 6. Recap -- always shown, no confirmation gate
     summary_rows = [
         ("Structure file", input_file),
+        ("Calc template", calc_file),
+        ("Pseudo source", pseudo_dir or "(not given)"),
         ("Strain range", f"+/-{max_strain}%, {steps} steps"),
         ("Fitting method", method),
         ("Direction strategy", direction_summary),
         ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
         ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
-        ("Output filename", output_file),
+        ("Output directory", output_dir),
+        ("Save report", "yes" if save_report else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 

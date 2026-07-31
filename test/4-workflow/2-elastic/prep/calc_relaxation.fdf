@@ -1,0 +1,26 @@
+SystemLabel siesta
+SystemName siesta
+
+%include si_cubic.fdf
+
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+kgrid.MonkhorstPack   [8  8  8]
+Mesh.CutOff           250  Ry
+
+MaxSCFIterations      100
+DM.Tolerance          1.0d-4
+XC.functional         GGA
+XC.authors            PBE
+
+## Real relaxation settings -- deliberately ACTIVE (not single-point), to
+## verify stb-elasticInputs' own single-point override actually wins over
+## these via SIESTA's first-occurrence-wins fdf precedence (config_extra.fdf
+## is prepended at the very top of the generated calc.fdf, before these
+## lines, so its MD.Steps=0/MD.VariableCell=false take effect instead).
+MD.TypeOfRun            CG
+MD.VariableCell         true
+MD.MaxForceTol          0.01 eV/Ang
+MD.Steps                100

@@ -62,11 +62,11 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Baseline: existing xx-only fixtures (regression, still works) ---
 echo -e "\n--- Testing baseline analysis (xx-only, existing checked-in fixtures) ---"
-stb-elasticAnalysis --no-intro > log_baseline.txt 2>&1
+stb-elasticAnalysis --dir . --save-report --no-intro > log_baseline.txt 2>&1
 check_exit_code $? 0
-check_success mechanical_properties.txt
-check_contains "C11:    16.0 GPa" mechanical_properties.txt
-check_contains "coupling" mechanical_properties.txt
+check_success elastic_stage2.txt
+check_contains "C11:    16.0 GPa" elastic_stage2.txt
+check_contains "coupling" elastic_stage2.txt
 
 
 # --- 3. Physics: corrected 2D Poisson's ratio on an anisotropic fixture
@@ -110,7 +110,7 @@ for pct, tag in [(1.0, "1.00"), (2.0, "2.00"), (-1.0, "m1.00")]:
         f.write(f"siesta:   0.00000000  {syy:.8f}   0.00000000\n")
         f.write("siesta:   0.00000000   0.00000000   0.00000000\n")
 PYEOF
-stb-elasticAnalysis --dimensionality 2d --no-intro > log_aniso.txt 2>&1
+stb-elasticAnalysis --dir . --dimensionality 2d --no-intro > log_aniso.txt 2>&1
 check_exit_code $? 0
 check_contains "C11.*200.00" log_aniso.txt
 check_contains "C22.*100.00" log_aniso.txt
@@ -143,7 +143,7 @@ for folder, pct in [("strain_xx_1.00", 1.0), ("strain_x_2.00", 2.0)]:
         f.write("siesta:   0.00000000   0.00000000   0.00000000\n")
         f.write("siesta:   0.00000000   0.00000000   0.00000000\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_merge.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_merge.txt 2>&1
 check_exit_code $? 0
 check_contains "Loaded 2 calculations from 2 folders" log_merge.txt
 # If the two folders hadn't merged, only 1 point would survive for 'xx' and
@@ -215,7 +215,7 @@ for direction in ['xx', 'yy', 'zz', 'yz', 'xz', 'xy']:
             for row in range(3):
                 f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_full_tensor.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_full_tensor.txt 2>&1
 check_exit_code $? 0
 check_contains "C11:   200.0 GPa" log_full_tensor.txt
 check_contains "C22:   150.0 GPa" log_full_tensor.txt
@@ -282,7 +282,7 @@ for direction in ['xx', 'yy', 'zz', 'yz', 'xz', 'xy']:
 PYEOF
 
 echo "Testing: all 6 directions present, cubic symmetry -> no coupling section"
-stb-elasticAnalysis --no-intro > log_cubic_full.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_cubic_full.txt 2>&1
 check_exit_code $? 0
 check_contains "C11:   166.0 GPa" log_cubic_full.txt
 if grep -q "COUPLING CONSTANTS" log_cubic_full.txt 2>/dev/null; then
@@ -297,7 +297,7 @@ echo "Testing: only xx/yy/zz present -> missing-direction note names yz, xz, xy"
 mkdir -p partial_run
 pushd partial_run > /dev/null
 cp -r ../strain_xx_* ../strain_yy_* ../strain_zz_* .
-stb-elasticAnalysis --no-intro > log_partial.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_partial.txt 2>&1
 check_exit_code $? 0
 check_contains "No data for direction(s) yz, xz, xy" log_partial.txt
 check_contains "0 by missing data, not by symmetry" log_partial.txt
@@ -356,7 +356,7 @@ for folder in glob.glob('*/strain_*'):
         for row in range(3):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_reduction.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_reduction.txt 2>&1
 check_exit_code $? 0
 check_contains "Detected point group m-3m" log_reduction.txt
 check_contains "C11:   166.0 GPa" log_reduction.txt
@@ -422,7 +422,7 @@ for folder in glob.glob('*/strain_*'):
         for row in range(3):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_pooling.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_pooling.txt 2>&1
 check_exit_code $? 0
 check_contains "\['xx', 'yy', 'zz'\] are symmetry-equivalent" log_pooling.txt
 check_contains "xx: 165.80 GPa (independent, pre-pooling)" log_pooling.txt
@@ -489,7 +489,7 @@ for folder in glob.glob('*/strain_*'):
         for row in range(3):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
 PYEOF
-stb-elasticAnalysis --symmetry-method full --no-intro > log_full_cubic.txt 2>&1
+stb-elasticAnalysis --dir . --symmetry-method full --no-intro > log_full_cubic.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group m-3m has 3 independent elastic constant" log_full_cubic.txt
 check_contains "C11:   166.0 GPa" log_full_cubic.txt
@@ -551,7 +551,7 @@ for folder in glob.glob('*/strain_*'):
 PYEOF
 # Only 'xx' was ever run, yet the 2D report must show C22=C11 and
 # C66=(C11-C12)/2 exactly -- the hexagonal reduction 'basic' cannot see.
-stb-elasticAnalysis --dimensionality 2d --symmetry-method full --no-intro > log_full_hex.txt 2>&1
+stb-elasticAnalysis --dir . --dimensionality 2d --symmetry-method full --no-intro > log_full_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group -6m2 has 5 independent elastic constant" log_full_hex.txt
 check_contains "fit used 1 of 6 canonical direction(s): xx" log_full_hex.txt
@@ -569,7 +569,7 @@ mkdir -p full_noref_run
 pushd full_noref_run > /dev/null
 mkdir -p strain_xx_2.00
 cp "$FIXTURE_DIR/strain_xx_2.00/calc.out" strain_xx_2.00/ 2>/dev/null || true
-stb-elasticAnalysis --symmetry-method full --no-intro > log_noref.txt 2>&1
+stb-elasticAnalysis --dir . --symmetry-method full --no-intro > log_noref.txt 2>&1
 check_exit_code $? 1
 check_contains "requires a readable reference_structure.fdf" log_noref.txt
 popd > /dev/null
@@ -618,7 +618,7 @@ for folder in glob.glob('*/strain_*'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --method energy --no-intro > log_energy_cubic.txt 2>&1
+stb-elasticAnalysis --dir . --method energy --no-intro > log_energy_cubic.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group m-3m has 3 independent elastic constant" log_energy_cubic.txt
 check_contains "C11:   166.0 GPa" log_energy_cubic.txt
@@ -669,7 +669,7 @@ for folder in glob.glob('*/strain_*'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --dimensionality 2d --method energy --no-intro > log_energy_hex.txt 2>&1
+stb-elasticAnalysis --dir . --dimensionality 2d --method energy --no-intro > log_energy_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group -6m2 has 5 independent elastic constant" log_energy_hex.txt
 check_contains "fit used 2 strain pattern(s): \['xx', 'xy'\]" log_energy_hex.txt
@@ -715,7 +715,7 @@ for folder in glob.glob('*/strain_*'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --method energy --no-intro > log_energy_linear.txt 2>&1
+stb-elasticAnalysis --dir . --method energy --no-intro > log_energy_linear.txt 2>&1
 check_contains "linear energy term.*not.*negligible" log_energy_linear.txt
 popd > /dev/null
 
@@ -724,7 +724,7 @@ mkdir -p energy_noref_run
 pushd energy_noref_run > /dev/null
 mkdir -p strain_xx_2.00
 cp "$FIXTURE_DIR/strain_xx_2.00/calc.out" strain_xx_2.00/ 2>/dev/null || true
-stb-elasticAnalysis --method energy --no-intro > log_noref.txt 2>&1
+stb-elasticAnalysis --dir . --method energy --no-intro > log_noref.txt 2>&1
 check_exit_code $? 1
 check_contains "requires a readable reference_structure.fdf" log_noref.txt
 popd > /dev/null
@@ -785,13 +785,82 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_consistent.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_consistent.txt 2>&1
 check_exit_code $? 0
 check_contains "\[3\] NUMERICAL QUALITY DIAGNOSTICS" log_consistent.txt
 check_contains "Eggbox cross-check (stress vs. energy, same data)" log_consistent.txt
 check_contains "xx: stress =   166.00 GPa | energy =   166.00 GPa | diff =  0.00%" log_consistent.txt
 check_contains "xy: stress =    80.00 GPa | energy =    80.00 GPa | diff =  0.00%" log_consistent.txt
 check_contains "All checked direction(s) agree within tolerance" log_consistent.txt
+popd > /dev/null
+
+# Real bug, found and fixed analyzing a real user run: the eggbox check's
+# own energy_value was multiplied by the STRESS-side conv_factor (which for
+# 2D/1D already includes a geometric Lz/cross_section "un-dilution" factor
+# needed only on the stress side), inflating energy_value by an extra
+# factor of Lz for 2D -- a real ~20x error was observed live (spurious
+# ~1900% "possible eggbox" false positive from a genuine ~4% cross-method
+# agreement). This case is analytically consistent by construction (same
+# convention as "consistent stress+energy data" above, just in 2D and with
+# the stress deliberately written already diluted by Lz, exactly like a
+# real SIESTA 2D slab calculation) -- diff must come out ~0%, not ~2000%.
+echo "Testing: 2D eggbox cross-check is not inflated by the cell height (Lz) -- real bug regression"
+mkdir -p eggbox_2d_run
+pushd eggbox_2d_run > /dev/null
+cp "$FIXTURE_DIR/../prep/structure.fdf" .
+cp "$FIXTURE_DIR/../prep/calc.fdf" .
+stb-elasticInputs -s structure.fdf -c calc.fdf --output-dir . --dirs xx --no-intro > log_prep.txt 2>&1
+python3 - <<'PYEOF'
+import re
+import numpy as np
+import glob
+from stb.core import structure_io
+
+CONV = 16.021766  # eV/Ang^2 -> N/m
+structure = structure_io.read_fdf("reference_structure.fdf")
+pmg = structure_io.to_pymatgen(structure)
+lat = pmg.lattice.matrix
+Lz = np.linalg.norm(lat[2])
+Area0 = np.linalg.norm(np.cross(lat[0], lat[1]))
+
+C11_true = 200.0  # N/m (target)
+C11_raw = C11_true / CONV  # eV/Ang^2
+
+for folder in glob.glob('*/strain_*'):
+    m = re.search(r"strain_xx_(m?)(\d+\.\d+)", folder)
+    sign, val = m.group(1), float(m.group(2))
+    pct = -val if sign == 'm' else val
+    delta = pct / 100.0
+    # SIESTA reports a VOLUMETRIC stress -- a real 2D slab's in-plane
+    # stress is diluted by the vacuum, i.e. by Lz, exactly what conv_factor
+    # (Lz * CONV_EVA2_TO_NM) undoes on the stress side.
+    sigma_xx_3d_raw = (C11_raw * delta) / Lz
+    dE = 0.5 * Area0 * C11_raw * delta**2  # pure quadratic, no linear term
+    with open(f"{folder}/calc.out", "w") as f:
+        # get_cell_height (used by main() to find Lz for CONV_FACTOR) reads
+        # this block -- without it Lz silently defaults to 1.0, the
+        # opposite failure mode from the bug being tested here.
+        f.write("outcell: Unit cell vectors (Ang):\n")
+        for row in lat:
+            f.write(f"        {row[0]:.6f}   {row[1]:.6f}   {row[2]:.6f}\n")
+        f.write("\n")
+        f.write("siesta: Stress tensor (static) (eV/Ang**3):\n")
+        f.write(f"siesta: {sigma_xx_3d_raw:.10f}   0.0000000000   0.0000000000\n")
+        f.write( "siesta:  0.0000000000   0.0000000000   0.0000000000\n")
+        f.write( "siesta:  0.0000000000   0.0000000000   0.0000000000\n")
+        f.write(f"siesta: FreeEng = {dE:.10f}\n")
+PYEOF
+stb-elasticAnalysis --dir . --dimensionality 2d --no-intro > log_2d_eggbox.txt 2>&1
+check_exit_code $? 0
+check_contains "xx: stress =   200.00 N/m | energy =   200.00 N/m | diff =  0.00%" log_2d_eggbox.txt
+check_contains "All checked direction(s) agree within tolerance" log_2d_eggbox.txt
+if grep -q "possible eggbox" log_2d_eggbox.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} spurious eggbox warning (Lz-inflation bug regressed)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no spurious eggbox warning for consistent 2D data"
+    PASS=$((PASS+1))
+fi
 popd > /dev/null
 
 echo "Testing: contaminated energy on one direction only -> flagged, other direction unaffected"
@@ -840,7 +909,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_contaminated.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_contaminated.txt 2>&1
 check_exit_code $? 0
 check_contains "xx: stress =   166.00 GPa | energy =   207.50 GPa | diff = 25.00%.*WARNING" log_contaminated.txt
 check_contains "xy: stress =    80.00 GPa | energy =    80.00 GPa | diff =  0.00%.*OK" log_contaminated.txt
@@ -854,7 +923,7 @@ for d in strain_xx_1.00 strain_xx_2.00 strain_xx_m1.00; do
     mkdir -p "$d"
     cp "$FIXTURE_DIR/$d/calc.out" "$d/"
 done
-stb-elasticAnalysis --no-intro > log_noref_eggbox.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_noref_eggbox.txt 2>&1
 check_exit_code $? 0
 check_contains "Eggbox cross-check skipped: no readable reference_structure.fdf" log_noref_eggbox.txt
 check_contains "STABILITY AND PROPERTIES" log_noref_eggbox.txt
@@ -892,7 +961,7 @@ for folder in glob.glob('*/strain_*'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --method energy --no-intro > log_energy_noeggbox.txt 2>&1
+stb-elasticAnalysis --dir . --method energy --no-intro > log_energy_noeggbox.txt 2>&1
 check_exit_code $? 0
 if grep -qi "EGGBOX" log_energy_noeggbox.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} --method energy unexpectedly ran the eggbox check"
@@ -953,7 +1022,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_quality.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_quality.txt 2>&1
 check_exit_code $? 0
 check_contains "xx: R\^2 = 1.000000 | residual stress =    2.00 GPa.*WARNING" log_quality.txt
 check_contains "yy: R\^2 = 1.000000 | residual stress =    0.00 GPa.*OK" log_quality.txt
@@ -1019,13 +1088,13 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_symcheck.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_symcheck.txt 2>&1
 check_exit_code $? 0
 check_contains "Tensor symmetry (C vs C\^T): max |C_ij - C_ji| = 15.000.*i=1, j=2.*WARNING" log_symcheck.txt
 check_contains "C is not close to symmetric" log_symcheck.txt
 
 echo "Testing: --symmetry-method full never runs the tensor symmetry check (always exact by construction)"
-stb-elasticAnalysis --symmetry-method full --no-intro > log_symcheck_full.txt 2>&1
+stb-elasticAnalysis --dir . --symmetry-method full --no-intro > log_symcheck_full.txt 2>&1
 check_exit_code $? 0
 if grep -q "Tensor symmetry" log_symcheck_full.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} --symmetry-method full unexpectedly ran the tensor symmetry check"
@@ -1092,7 +1161,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_compliance_cubic.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_compliance_cubic.txt 2>&1
 check_exit_code $? 0
 check_contains "\[1b\] 3D COMPLIANCE MATRIX (1/GPa)" log_compliance_cubic.txt
 check_contains "7.670e-03" log_compliance_cubic.txt
@@ -1151,7 +1220,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --dimensionality 2d --symmetry-method full --no-intro > log_compliance_hex.txt 2>&1
+stb-elasticAnalysis --dir . --dimensionality 2d --symmetry-method full --no-intro > log_compliance_hex.txt 2>&1
 check_exit_code $? 0
 check_contains "\[1b\] 2D COMPLIANCE MATRIX (m/N)" log_compliance_hex.txt
 check_contains "5.333e-03" log_compliance_hex.txt
@@ -1164,7 +1233,7 @@ for d in strain_xx_1.00 strain_xx_2.00 strain_xx_m1.00; do
     mkdir -p "$d"
     cp "$FIXTURE_DIR/$d/calc.out" "$d/"
 done
-stb-elasticAnalysis --no-intro > log_singular.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > log_singular.txt 2>&1
 check_exit_code $? 0
 check_contains "Could not invert the 3D stiffness matrix" log_singular.txt
 popd > /dev/null
@@ -1222,7 +1291,7 @@ for folder in glob.glob('*/strain_*'):
             f.write("siesta: " + "   ".join(f"{sigma_t[row, c]:.10f}" for c in range(3)) + "\n")
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --no-intro > log_report.txt 2>&1
+stb-elasticAnalysis --dir . --save-gnuplot --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_report.txt
 check_contains "Method               : stress (--symmetry-method basic)" log_report.txt
@@ -1236,7 +1305,9 @@ check_success elastic_plots/all_directions_fit.gplot
 check_contains "C_xx = 166.0000 GPa" elastic_plots/xx_fit.dat
 check_contains "f(x) = 166" elastic_plots/xx_fit.gplot
 check_contains "\[5\] SUMMARY & FILES" log_report.txt
-check_contains "E=163.27 GPa.*A\^U=0.247" log_report.txt
+check_contains "E (Young's modulus)        | 163.27 GPa" log_report.txt
+check_contains "A\^U (anisotropy index)     | 0.247" log_report.txt
+check_contains "VERDICT                    | STABLE" log_report.txt
 check_contains "Plot data   : elastic_plots/ (3 file pair(s)" log_report.txt
 if command -v gnuplot > /dev/null 2>&1; then
     ( cd elastic_plots && gnuplot xx_fit.gplot > /dev/null 2>gnuplot_err.txt )
@@ -1286,7 +1357,7 @@ for folder in glob.glob('*/strain_*'):
     with open(f"{folder}/calc.out", "w") as f:
         f.write(f"siesta: FreeEng = {dE:.10f}\n")
 PYEOF
-stb-elasticAnalysis --method energy --no-intro > log_report.txt 2>&1
+stb-elasticAnalysis --dir . --method energy --save-gnuplot --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_report.txt
 check_contains "Method               : energy" log_report.txt
@@ -1302,10 +1373,31 @@ popd > /dev/null
 # --- 14. Error and robustness cases ---
 echo -e "\n--- Testing error cases ---"
 
+echo "Testing: --dir not found"
+stb-elasticAnalysis --dir does_not_exist --no-intro > log_missing_dir.txt 2>&1
+check_exit_code $? 1
+check_contains "Directory 'does_not_exist' not found" log_missing_dir.txt
+
+echo "Testing: --dir pointed at a single direction's own subfolder -- that direction alone"
+mkdir -p dir_flag_run/xx
+cp "$FIXTURE_DIR/../prep/si_cubic.fdf" dir_flag_run/reference_structure.fdf
+for d in strain_xx_1.00 strain_xx_2.00 strain_xx_m1.00; do
+    mkdir -p "dir_flag_run/xx/$d"
+    cp "$FIXTURE_DIR/$d/calc.out" "dir_flag_run/xx/$d/"
+done
+stb-elasticAnalysis --dir dir_flag_run/xx --no-intro > log_dir_single.txt 2>&1
+check_exit_code $? 0
+check_contains "strain_\* folders found: 3" log_dir_single.txt
+
+echo "Testing: --dir at the top-level directory -- reference_structure.fdf found under it too"
+stb-elasticAnalysis --dir dir_flag_run --no-intro > log_dir_top.txt 2>&1
+check_exit_code $? 0
+check_contains "Reference structure  : dir_flag_run/reference_structure.fdf (found)" log_dir_top.txt
+
 echo "Testing: no strain_* folders"
 mkdir -p empty_run
 pushd empty_run > /dev/null
-stb-elasticAnalysis --no-intro > ../log_empty.txt 2>&1
+stb-elasticAnalysis --dir . --no-intro > ../log_empty.txt 2>&1
 check_exit_code $? 1
 popd > /dev/null
 check_contains "No valid data found in strain folders" log_empty.txt
@@ -1323,21 +1415,69 @@ check_contains "method" log_help.txt
 check_contains "eggbox-tolerance" log_help.txt
 check_contains "fit-quality-tolerance" log_help.txt
 check_contains "plot-dir" log_help.txt
+check_contains "save-gnuplot" log_help.txt
+check_contains "view" log_help.txt
+
+echo "Testing: --save-gnuplot off by default -- no elastic_plots/ files written"
+mkdir -p no_gnuplot_run
+pushd no_gnuplot_run > /dev/null
+for d in strain_xx_1.00 strain_xx_2.00 strain_xx_m1.00; do
+    mkdir -p "$d"
+    cp "$FIXTURE_DIR/$d/calc.out" "$d/"
+done
+stb-elasticAnalysis --dir . --no-intro > log_no_gnuplot.txt 2>&1
+check_exit_code $? 0
+if [ -d elastic_plots ]; then
+    echo -e "   -> ${RED}Failed:${NC} elastic_plots/ was created without --save-gnuplot"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} elastic_plots/ not created without --save-gnuplot"
+    PASS=$((PASS+1))
+fi
+if grep -q "Plot data   :" log_no_gnuplot.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} '[5] SUMMARY & FILES' still mentioned plot data without --save-gnuplot"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no 'Plot data' line without --save-gnuplot"
+    PASS=$((PASS+1))
+fi
+check_contains "Pass --save-gnuplot to also write the fitting data" log_no_gnuplot.txt
+check_contains "Pass --view to see an interactive matplotlib plot" log_no_gnuplot.txt
+popd > /dev/null
+
+echo "Testing: --view shows an interactive matplotlib plot without crashing (non-interactive backend)"
+mkdir -p view_run
+pushd view_run > /dev/null
+for d in strain_xx_1.00 strain_xx_2.00 strain_xx_m1.00; do
+    mkdir -p "$d"
+    cp "$FIXTURE_DIR/$d/calc.out" "$d/"
+done
+MPLBACKEND=Agg stb-elasticAnalysis --dir . --view --no-intro > log_view.txt 2>&1
+check_exit_code $? 0
+if grep -q "Traceback" log_view.txt 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected traceback with --view"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} --view ran cleanly (Agg backend, no display needed)"
+    PASS=$((PASS+1))
+fi
+popd > /dev/null
 
 
 # --- 15. Interactive path (stb-suite, shortcut 4.2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.2.2) ---"
 
-echo "Testing: navigate 4.2.2 -> calc.out -> all defaults (stress, auto dimensionality, basic symmetry, skip advanced) -> quit"
-rm -f mechanical_properties.txt
-# Prompts in order: file, method (blank -> stress), reference-structure
-# (blank -> default), dimensionality choice (blank -> auto), symmetry-method
-# (blank -> basic), advanced settings (n -> skip, CLI defaults apply), then
-# the "Press Enter to continue" pause, then quit.
-printf '4.2.2\ncalc.out\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 4.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, basic symmetry, skip advanced) -> save report -> quit"
+rm -f elastic_stage2.txt
+# Prompts in order: dir (. -> current dir), file, method (blank -> stress),
+# reference-structure (blank -> default), dimensionality (blank -> auto),
+# symmetry-method (blank -> basic), advanced settings (n -> skip, CLI
+# defaults apply), save report (y), save gnuplot (n), view (n), then the
+# "Press Enter to continue" pause, then quit.
+printf '4.2.2\n.\ncalc.out\n\n\n\n\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "STABILITY AND PROPERTIES" log_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
-check_success mechanical_properties.txt
+check_success elastic_stage2.txt
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
     FAIL=$((FAIL+1))
@@ -1347,13 +1487,14 @@ else
 fi
 
 echo "Testing: navigate 4.2.2 -> manual dimensionality override -> 1D"
-rm -f mechanical_properties.txt
-# Prompts in order: file, method (blank -> stress), reference-structure
-# (blank -> default), dimensionality choice (2 -> manual), manual pick
-# (3 -> 1D), symmetry-method (blank -> basic), advanced settings (n -> skip),
-# then the "Press Enter to continue" pause, then quit.
-printf '4.2.2\ncalc.out\n\n\n2\n3\n\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
-check_contains "Dimensionality forced to 1D" log_1d_menu.txt
+rm -f elastic_stage2.txt
+# Prompts in order: dir (. -> current dir), file, method (blank -> stress),
+# reference-structure (blank -> default), dimensionality (1d -> manual
+# override), symmetry-method (blank -> basic), advanced settings (n ->
+# skip), save report (n), save gnuplot (n), view (n), then the "Press
+# Enter to continue" pause, then quit.
+printf '4.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
+check_contains "Dimensionality: .*1D.*(manual override" log_1d_menu.txt
 check_contains "1D (manual override)" log_1d_menu.txt
 if grep -q "Traceback" log_1d_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"

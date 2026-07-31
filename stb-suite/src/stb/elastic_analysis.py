@@ -6,7 +6,7 @@
 #     Integrated Style Refactoring              #
 #################################################
 
-VERSION = "1.10.0" # --dimensionality (auto 3D/2D/1D detection + manual override) replaces --2d
+VERSION = "1.13.2" # fix: eggbox cross-check double-applied the Lz/cross_section dilution factor for 2D/1D, inflating energy_value
 
 import os
 import sys
@@ -17,7 +17,7 @@ from time import sleep
 from datetime import datetime
 from scipy.stats import linregress
 from stb.core import kspace, siesta_log, structure_io, symmetry
-from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
+from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 
 # ==========================================
 #           HELPERS & CONFIG
@@ -41,7 +41,7 @@ RELEVANT_DIRECTIONS = {
     "2d": {'xx', 'yy', 'xy'},
     "1d": {'zz'},
 }
-REPORT_FILE = "mechanical_properties.txt"
+REPORT_FILE = "elastic_stage2.txt"
 
 # Voigt index (0-based, 1..6 in the usual 1-based convention) -> Cartesian
 # stress-tensor (row, col). Matches this module's existing convention
@@ -428,6 +428,23 @@ def eggbox_cross_check(data, folders, file_name, pmg_structure, dimensionality, 
     else:
         norm_factor = pmg_structure.volume  # Ang^3
 
+    # Real bug, found and fixed live comparing this check's own energy_value
+    # against a genuinely independent --method energy run on the same
+    # structure: for 2D/1D, `conv_factor` (passed in from main()) is the
+    # STRESS-side conversion factor, which already bakes in a geometric
+    # "un-dilution" term (Lz for 2D, cross_section for 1D) needed because
+    # SIESTA's raw stress is a volumetric quantity diluted by the vacuum
+    # padding. Total energy is extensive and was NOT diluted by that same
+    # vacuum -- energy_value below already divides by norm_factor (the
+    # actual area/length) to undo it, so multiplying by the STRESS-side
+    # conv_factor applied that same geometric factor a second time, inflating
+    # energy_value by an extra factor of Lz (2D) / cross_section (1D). Use
+    # the bare eV-unit -> reported-unit constant instead, with no geometric
+    # factor -- 3D was never affected (CONV_EVA3_TO_GPA has none to begin
+    # with, same value as conv_factor there).
+    pure_conv_factor = {"2d": CONV_EVA2_TO_NM, "1d": CONV_EVA1_TO_NN,
+                         "3d": CONV_EVA3_TO_GPA}[dimensionality]
+
     energy_series = {}
     for folder in folders:
         direction, val = siesta_log.parse_strain_folder_name(folder)
@@ -462,7 +479,7 @@ def eggbox_cross_check(data, folders, file_name, pmg_structure, dimensionality, 
         # differs from the stress side -- missing it here silently
         # inflated shear constants by 4x in initial testing.
         gamma_unit_m = 2.0 if mode in SHEAR_DIRECTIONS else 1.0
-        energy_value = (2 * a / (norm_factor * gamma_unit_m ** 2)) * conv_factor
+        energy_value = (2 * a / (norm_factor * gamma_unit_m ** 2)) * pure_conv_factor
 
         own_col = _fit_column(data[mode]['eps'], data[mode]['stress'], conv_factor, mode in SHEAR_DIRECTIONS)
         stress_value = own_col[DIRECTION_TO_COLUMN[mode]]
@@ -775,6 +792,72 @@ def write_energy_plots(plot_dir, series, fit_coeffs, unit_label, f_out):
         os.remove(combined_dat)
 
     return written
+
+
+def view_stress_plot(data, fit_diagnostics, conv_factor, unit_label):
+    """Interactive matplotlib preview of the stress-strain fits -- every
+    direction actually measured overlaid in one figure (data points + its
+    own linear fit), the on-screen counterpart to write_stress_plots' saved
+    gnuplot .dat/.gplot pairs. Same conv_factor/fit_diagnostics inputs, no
+    re-fitting; never written to disk (see --view). matplotlib is imported
+    lazily by the one caller that actually needs it (main(), only if
+    args.view), same lazy-import convention stb-strainAnalysis's own --view
+    uses.
+    """
+    import matplotlib.pyplot as plt
+    fit_by_mode = {r['mode']: r for r in fit_diagnostics}
+    modes = [m for m in symmetry.VOIGT_MODES if m in data and m in fit_by_mode]
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for i, mode in enumerate(modes):
+        series = data[mode]
+        fit = fit_by_mode[mode]
+        is_shear = mode in SHEAR_DIRECTIONS
+        eng_factor = 2.0 if is_shear else 1.0
+        S = np.array(series['stress'])
+        i2, j2 = VOIGT_TO_TENSOR[DIRECTION_TO_COLUMN[mode]]
+        eps_eng = np.array(series['eps']) * eng_factor
+        stress_vals = conv_factor * S[:, i2, j2]
+        color = PLOT_COLORS[i % len(PLOT_COLORS)]
+        ax.plot(eps_eng, stress_vals, 'o', color=color, label=f"{mode.upper()} data")
+        x_fit = np.array([eps_eng.min(), eps_eng.max()])
+        ax.plot(x_fit, fit['slope'] * x_fit + fit['residual_stress'], '--', color=color)
+    ax.set_title("Stress-Strain Fits -- All Directions")
+    ax.set_xlabel("Engineering strain (fraction)")
+    ax.set_ylabel(f"Stress ({unit_label})")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    plt.show()
+
+
+def view_energy_plot(series, fit_coeffs):
+    """Interactive matplotlib preview of the energy-strain parabolic fits --
+    every pattern actually measured overlaid in one figure (data points +
+    its own quadratic fit), the on-screen counterpart to write_energy_plots'
+    saved gnuplot .dat/.gplot pairs. Same fit_coeffs input, no re-fitting;
+    never written to disk (see --view).
+    """
+    import matplotlib.pyplot as plt
+    patterns = [p for p in series if p in fit_coeffs]
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for i, pattern in enumerate(patterns):
+        s = series[pattern]
+        a, b, c = fit_coeffs[pattern]
+        delta = np.array(s['delta'])
+        energy = np.array(s['energy'])
+        color = PLOT_COLORS[i % len(PLOT_COLORS)]
+        ax.plot(delta, energy, 'o', color=color, label=f"{pattern} data")
+        x_fit = np.linspace(delta.min(), delta.max(), 100)
+        ax.plot(x_fit, a * x_fit**2 + b * x_fit + c, '--', color=color)
+    ax.set_title("Energy-Strain Fits -- All Patterns")
+    ax.set_xlabel("Strain (fraction)")
+    ax.set_ylabel("Total energy (eV)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    plt.show()
 
 
 # ==========================================
@@ -1130,11 +1213,15 @@ def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_dir
     # Stability and Properties Check
     summary = check_stability_and_report(C_sym, args.dimensionality, unit_label, f_out)
 
-    # --- [5] SUMMARY & FILES: a compact recap of the numbers already
-    # printed above (no recomputation -- reuses check_stability_and_report's
-    # own return value) plus where everything ended up on disk, so the
-    # report is self-contained even if someone only reads the last few
-    # lines. ---
+    # --- [5] SUMMARY & FILES: one glanceable table recapping every number
+    # that matters -- the primary elastic constants (same values/labels
+    # already printed in [1]/[2] above, re-derived from C_sym here, not
+    # re-fit) plus the derived properties (from check_stability_and_report's
+    # own return value, no recomputation) plus the verdict, so a reader can
+    # get the headline results from this one section without having to
+    # scroll back through the raw matrices/diagnostics above. File
+    # locations follow as plain lines, kept separate from the results
+    # table since they aren't physical quantities. ---
     warning_count = 0
     if symmetry_check is not None and symmetry_check[3]:
         warning_count += 1
@@ -1144,20 +1231,32 @@ def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_dir
         warning_count += sum(1 for r in eggbox_results if r['flagged'])
 
     print_section('[5] SUMMARY & FILES', f_out)
+    result_rows = []
     if args.dimensionality == "1d":
-        print_dual(f"C33={summary['C33']:.4f} {unit_label}", f_out)
+        result_rows.append((["C33 (axial stiffness)", f"{C_sym[2,2]:.4f} {unit_label}"], None))
     elif args.dimensionality == "2d":
-        print_dual(f"Ex={summary['Ex']:.2f} {unit_label}  Ey={summary['Ey']:.2f} {unit_label}  "
-                   f"v_yx={summary['nu_yx']:.3f}  v_xy={summary['nu_xy']:.3f}  "
-                   f"G_xy={summary['G_xy']:.2f} {unit_label}", f_out)
+        for l, (r, c) in zip(["C11", "C22", "C12", "C66"], [(0,0), (1,1), (0,1), (5,5)]):
+            result_rows.append(([l, f"{C_sym[r,c]:.2f} {unit_label}"], None))
+        result_rows.append((["Ex (in-plane, x)", f"{summary['Ex']:.2f} {unit_label}"], None))
+        result_rows.append((["Ey (in-plane, y)", f"{summary['Ey']:.2f} {unit_label}"], None))
+        result_rows.append((["v_yx / v_xy (Poisson)", f"{summary['nu_yx']:.3f} / {summary['nu_xy']:.3f}"], None))
     else:
+        for l, (r, c) in zip(["C11", "C22", "C33", "C44", "C55", "C66", "C12", "C13", "C23"],
+                              [(0,0), (1,1), (2,2), (3,3), (4,4), (5,5), (0,1), (0,2), (1,2)]):
+            result_rows.append(([l, f"{C_sym[r,c]:.1f} {unit_label}"], None))
         au_str = f"{summary['A_U']:.3f}" if summary['A_U'] is not None else "N/A"
-        print_dual(f"E={summary['E']:.2f} {unit_label}  B={summary['B']:.2f} {unit_label}  "
-                   f"v={summary['nu']:.3f}  A^U={au_str}", f_out)
-    verdict = color_text('STABLE', 'green') if summary['passes'] else color_text('UNSTABLE', 'red')
-    print_dual(f"Verdict: {verdict}  |  Quality warnings raised in [3]: {warning_count}", f_out)
+        result_rows.append((["E (Young's modulus)", f"{summary['E']:.2f} {unit_label}"], None))
+        result_rows.append((["B (Bulk modulus)", f"{summary['B']:.2f} {unit_label}"], None))
+        result_rows.append((["v (Poisson's ratio)", f"{summary['nu']:.3f}"], None))
+        result_rows.append((["A^U (anisotropy index)", au_str], None))
+    result_rows.append((["Quality warnings (see [3])", str(warning_count)],
+                         'yellow' if warning_count else None))
+    result_rows.append((["VERDICT", "STABLE" if summary['passes'] else "UNSTABLE"],
+                         'green' if summary['passes'] else 'red'))
+    print_table(["Quantity", "Value"], result_rows, f_out)
+
     if report_path:
-        print_dual(f"Full report : {report_path}", f_out)
+        print_dual(f"\nFull report : {report_path}", f_out)
     if plot_files:
         print_dual(f"Plot data   : {args.plot_dir}/ ({len(plot_files)} file pair(s) -- raw fitting "
                    "data + gnuplot scripts, see [Saved] lines above)", f_out)
@@ -1174,6 +1273,15 @@ def main():
     parser.add_argument("-f", "--file", type=str, default="calc.out",
                         help="Siesta log/output filename inside strain folders (default: calc.out)")
 
+    parser.add_argument("-d", "--dir", default="elastic_runs",
+                        help="Directory to scan for 'strain_*' run folders and the undeformed "
+                             "reference_structure.fdf (default: elastic_runs, matching "
+                             "stb-elasticInputs' own --output-dir default). Accepts either "
+                             "stb-elasticInputs' own nested output layout -- point this at a single "
+                             "direction's own subfolder (e.g. elastic_runs/xx) for that direction "
+                             "alone, or at the top-level output directory itself to automatically "
+                             "use every direction found under it -- or a flat directory of "
+                             "'strain_*' folders.")
     parser.add_argument("--method", choices=["stress", "energy"], default="stress",
                         help="Which physical quantity to fit (default: stress). 'stress': the "
                              "existing stress-strain linear fit (sigma = C . epsilon), see "
@@ -1211,16 +1319,17 @@ def main():
                              "uniformly (cubic, hexagonal, trigonal, ...), at the cost of being "
                              "a global least-squares fit rather than an exact per-column one. "
                              "Requires --reference-structure to be available.")
-    parser.add_argument("--reference-structure", default="reference_structure.fdf",
-                        help="UNDEFORMED structure file (default: reference_structure.fdf, written "
-                             "automatically by stb-elasticInputs next to the strain_*/ folders), used "
-                             "only to detect symmetry for the diagnostic/pooling/reconstruction across "
-                             "equivalent directions. Must be the undeformed structure, not one from "
-                             "inside a strain folder -- a single-axis strain genuinely lowers the "
-                             "symmetry (e.g. cubic strained along x alone is exactly tetragonal, not "
-                             "'cubic with noise'), so reading symmetry from a strained structure would "
-                             "silently misdetect it. Never required -- falls back to independent "
-                             "per-direction fitting if unavailable.")
+    parser.add_argument("--reference-structure", default=None,
+                        help="UNDEFORMED structure file (default: reference_structure.fdf inside "
+                             "--dir, written automatically by stb-elasticInputs next to the "
+                             "strain_*/ folders), used only to detect symmetry for the diagnostic/"
+                             "pooling/reconstruction across equivalent directions. Must be the "
+                             "undeformed structure, not one from inside a strain folder -- a "
+                             "single-axis strain genuinely lowers the symmetry (e.g. cubic strained "
+                             "along x alone is exactly tetragonal, not 'cubic with noise'), so "
+                             "reading symmetry from a strained structure would silently misdetect "
+                             "it. Never required -- falls back to independent per-direction fitting "
+                             "if unavailable.")
     parser.add_argument("--symprec", type=float, default=1e-3,
                         help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own default).")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
@@ -1245,18 +1354,32 @@ def main():
                              "energy method's linear-term check). No new DFT calculations: reuses "
                              "the same stress-strain fit each direction's column already needed.")
     parser.add_argument("--plot-dir", default="elastic_plots",
-                        help="Directory (default: elastic_plots, created automatically) to write "
-                             "the raw fitting data + gnuplot scripts into -- one .dat/.gplot pair "
-                             "per direction (--method stress) or pattern (--method energy), plus a "
-                             "combined overview. Same data+.gplot convention as the rest of the "
-                             "suite (e.g. stb-strainAnalysis). Always written, no new DFT "
-                             "calculations: reuses the data/fit already computed for the report.")
+                        help="Directory (default: elastic_plots, created only if --save-gnuplot "
+                             "is given) to write the raw fitting data + gnuplot scripts into -- "
+                             "one .dat/.gplot pair per direction (--method stress) or pattern "
+                             "(--method energy), plus a combined overview.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also write the raw fitting data + gnuplot scripts into --plot-dir "
+                             "(same data+.gplot convention as the rest of the suite, e.g. "
+                             "stb-strainAnalysis). Off by default -- no new DFT calculations "
+                             "either way, reuses the data/fit already computed for the report.")
+    parser.add_argument("--view", action="store_true",
+                        help="Show an interactive matplotlib preview (every measured direction/"
+                             "pattern overlaid with its own fit) before finishing. Never saved to "
+                             "disk -- pass --save-gnuplot for that. Off by default.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
+
+    if args.reference_structure is None:
+        args.reference_structure = os.path.normpath(os.path.join(args.dir, "reference_structure.fdf"))
+
+    if not os.path.isdir(args.dir):
+        print(color_text(f"[FAIL] Directory '{args.dir}' not found.", 'red'))
+        sys.exit(1)
 
     if args.intro:
         show_intro([
@@ -1338,11 +1461,11 @@ def main():
     print(f"[INFO] Mode: {color_text(desc, desc_color)} (Units: {unit_label})")
 
     # --- Data Mining ---
-    print(f"[INFO] Scanning for 'strain_*' folders...")
-    # Flat (strain_*/ directly here) or nested (stb-elasticInputs' own
+    print(f"[INFO] Scanning '{args.dir}' for 'strain_*' folders...")
+    # Flat (strain_*/ directly under --dir) or nested (stb-elasticInputs' own
     # <direction>/strain_.../ output layout) -- same helper stb-strainAnalysis
     # uses for stb-strain's identical two-layout convention.
-    folders = siesta_log.find_strain_folders('.')
+    folders = siesta_log.find_strain_folders(args.dir)
     data = {}
 
     Lz = 1.0
@@ -1422,6 +1545,7 @@ def main():
     print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)
 
     print_section('[0] RUN METADATA', f_out)
+    print_dual(f"Run directory        : {args.dir}", f_out)
     print_dual(f"Date/time            : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
     print_dual(f"Method               : {args.method}"
                + (f" (--symmetry-method {args.symmetry_method})" if args.method == "stress" else ""),
@@ -1441,6 +1565,8 @@ def main():
         print_dual(f"Tolerances           : symprec={args.symprec}, "
                    f"angle-tolerance={args.angle_tolerance} deg", f_out)
     print_dual(f"Plot data directory  : {args.plot_dir}/", f_out)
+    print_dual(f"Save gnuplot         : {'yes' if args.save_gnuplot else 'no'}", f_out)
+    print_dual(f"View (matplotlib)    : {'yes' if args.view else 'no'}", f_out)
 
     if args.method == "energy":
         # --- Energy-strain (parabolic fit) path: its own folder
@@ -1476,17 +1602,26 @@ def main():
 
         C_sym = 0.5 * (C + C.T)
 
-        os.makedirs(args.plot_dir, exist_ok=True)
-        plot_files = write_energy_plots(args.plot_dir, energy_series, fit_coeffs, unit_label, f_out)
+        if args.save_gnuplot:
+            os.makedirs(args.plot_dir, exist_ok=True)
+            plot_files = write_energy_plots(args.plot_dir, energy_series, fit_coeffs, unit_label, f_out)
+        else:
+            plot_files = []
 
         emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                              plot_files=plot_files)
+        if not args.save_gnuplot:
+            print_dual("Pass --save-gnuplot to also write the fitting data + gnuplot scripts.", f_out)
+        if not args.view:
+            print_dual("Pass --view to see an interactive matplotlib plot before finishing.", f_out)
         if f_out:
             f_out.close()
         print("-" * 60)
         if report_path:
             print(f"[DONE] Report saved to: {color_text(report_path, 'green')}")
         print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))
+        if args.view:
+            view_energy_plot(energy_series, fit_coeffs)
         return
 
     loaded_count = 0
@@ -1599,13 +1734,20 @@ def main():
     # symmetric by construction and would give an uninformative ~0.
     symmetry_check = tensor_symmetry_check(C) if args.symmetry_method == "basic" else None
 
-    os.makedirs(args.plot_dir, exist_ok=True)
-    plot_files = write_stress_plots(args.plot_dir, data, fit_diagnostics, CONV_FACTOR,
-                                     unit_label, f_out)
+    if args.save_gnuplot:
+        os.makedirs(args.plot_dir, exist_ok=True)
+        plot_files = write_stress_plots(args.plot_dir, data, fit_diagnostics, CONV_FACTOR,
+                                         unit_label, f_out)
+    else:
+        plot_files = []
 
     emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                          eggbox_results=eggbox_results, fit_diagnostics=fit_diagnostics,
                          symmetry_check=symmetry_check, plot_files=plot_files)
+    if not args.save_gnuplot:
+        print_dual("Pass --save-gnuplot to also write the fitting data + gnuplot scripts.", f_out)
+    if not args.view:
+        print_dual("Pass --view to see an interactive matplotlib plot before finishing.", f_out)
 
     if f_out:
         f_out.close()
@@ -1614,6 +1756,8 @@ def main():
     if report_path:
         print(f"[DONE] Report saved to: {color_text(report_path, 'green')}")
     print(color_text("\nScience is organized knowledge. Wisdom is organized life.", 'bold'))
+    if args.view:
+        view_stress_plot(data, fit_diagnostics, CONV_FACTOR, unit_label)
 
 if __name__ == "__main__":
     try:

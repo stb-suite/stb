@@ -2437,12 +2437,19 @@ def run_elastic_analyzer() -> None:
         "never block the report -- they only flag suspicious data.", 'cyan'))
     print()
 
-    # 1. Output/log filename
+    # 1. Directory with the strain_* run folders (same default as
+    # stb-elasticInputs' own --output-dir, so the two stages chain with no
+    # extra typing in the common case).
+    run_dir = get_input("Directory with elastic run folders [default: elastic_runs]: ").strip()
+    if not run_dir:
+        run_dir = "elastic_runs"
+
+    # 2. Output/log filename
     output_filename = get_input("Siesta output filename inside strain folders (default: calc.out): ").strip()
     if not output_filename:
         output_filename = "calc.out"
 
-    # 2. Fitting method
+    # 3. Fitting method
     print("\n" + "-"*60)
     print(color_text("FITTING METHOD", 'cyan').center(60))
     print("-"*60)
@@ -2451,33 +2458,19 @@ def run_elastic_analyzer() -> None:
     method_choice = get_input("Select method (1-2, default 1): ").strip()
     method = "energy" if method_choice == '2' else "stress"
 
-    # 3. Reference (undeformed) structure -- feeds dimensionality auto-detection,
+    # 4. Reference (undeformed) structure -- feeds dimensionality auto-detection,
     # symmetry detection, and --method energy's reference volume/area/length.
+    # Left blank by default -- the CLI itself now defaults to
+    # <run_dir>/reference_structure.fdf.
     ref_structure = get_input(
-        "\nUndeformed reference structure file (default: reference_structure.fdf): ").strip()
-    if not ref_structure:
-        ref_structure = "reference_structure.fdf"
+        f"\nUndeformed reference structure file [default: {run_dir}/reference_structure.fdf]: ").strip()
 
-    # 4. Dimensionality: auto-detect (default) or manual override
-    print("\n" + color_text("DIMENSIONALITY", 'cyan'))
-    print(f"[{color_text('1', 'yellow')}] Auto-detect (default) -> from {ref_structure}'s vacuum padding "
-          "(3D/2D/1D)")
-    print(f"[{color_text('2', 'yellow')}] Manual override -> choose 3D / 2D / 1D yourself")
-    dim_choice = get_input("Select (1-2, default 1): ").strip()
-    if dim_choice == '2':
-        print(f"  [{color_text('1', 'yellow')}] 3D Bulk      (GPa)")
-        print(f"  [{color_text('2', 'yellow')}] 2D Material  (N/m)")
-        print(f"  [{color_text('3', 'yellow')}] 1D Wire/Tube (nN)")
-        manual_dim = get_input("  Select (1-3, default 1): ").strip()
-        dim_map = {'1': '3d', '2': '2d', '3': '1d'}
-        dimensionality = dim_map.get(manual_dim, '3d')
-        print(color_text(f"-> Dimensionality forced to {dimensionality.upper()}", 'green'))
-        dimensionality_summary = dimensionality.upper() + " (manual override)"
-    else:
-        dimensionality = "auto"
-        dimensionality_summary = None  # filled in after the advanced-settings gate below (needs vacuum_gap)
+    # 5. Dimensionality -- auto-detected by default, same convention as
+    # stb-strainAnalysis' own interactive wrapper.
+    dimensionality = get_input(
+        "\nDimensionality, auto/3d/2d/1d [default: auto]: ").strip()
 
-    # 5. Symmetry reduction (only meaningful for --method stress; energy always
+    # 6. Symmetry reduction (only meaningful for --method stress; energy always
     # uses the general symmetry-allowed-subspace fit regardless of this flag)
     symmetry_method = None
     if method == "stress":
@@ -2486,7 +2479,7 @@ def run_elastic_analyzer() -> None:
             "(also catches hexagonal/trigonal reductions)? : ").strip()
         symmetry_method = "full" if sym_choice == '2' else "basic"
 
-    # 6. Advanced settings (rarely-touched tolerances -- gated so the essential
+    # 7. Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
     vacuum_gap, symprec, angle_tolerance = 10.0, 1e-3, 5.0
     eggbox_tolerance, fit_quality_tolerance, plot_dir = 5.0, 0.995, "elastic_plots"
@@ -2494,7 +2487,7 @@ def run_elastic_analyzer() -> None:
         "\nConfigure advanced settings (vacuum-gap, symmetry/quality tolerances, plot "
         "directory)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
-        if dimensionality == "auto":
+        if not dimensionality or dimensionality == "auto":
             vacuum_gap = get_float_input(
                 "Vacuum gap threshold in Ang, for dimensionality auto-detection "
                 "(default: 10.0): ", 10.0)
@@ -2509,31 +2502,52 @@ def run_elastic_analyzer() -> None:
         if not plot_dir:
             plot_dir = "elastic_plots"
 
-    if dimensionality_summary is None:
+    if dimensionality and dimensionality != "auto":
+        dimensionality_summary = dimensionality.upper() + " (manual override)"
+    else:
         dimensionality_summary = f"auto-detect (vacuum-gap={vacuum_gap} Ang)"
 
+    # 8. Save report?
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+
+    # 9. Save the raw fitting data + gnuplot scripts, and/or preview on screen?
+    save_gnuplot = get_input(
+        "Also save the fitting data + a gnuplot script? (y/N): ").strip().lower() == 'y'
+    view = get_input(
+        "Show an interactive matplotlib plot before finishing? (y/N): ").strip().lower() == 'y'
+
     args = [
+        "--dir", run_dir,
         "--file", output_filename,
         "--method", method,
-        "--reference-structure", ref_structure,
-        "--dimensionality", dimensionality,
         "--vacuum-gap", str(vacuum_gap),
         "--symprec", str(symprec),
         "--angle-tolerance", str(angle_tolerance),
         "--plot-dir", plot_dir,
         "--no-intro",
     ]
+    if ref_structure:
+        args.extend(["--reference-structure", ref_structure])
+    if dimensionality:
+        args.extend(["--dimensionality", dimensionality])
     if symmetry_method is not None:
         args.extend(["--symmetry-method", symmetry_method])
     if method == "stress":
         args.extend(["--eggbox-tolerance", str(eggbox_tolerance),
                      "--fit-quality-tolerance", str(fit_quality_tolerance)])
+    if save_report:
+        args.append("--save-report")
+    if save_gnuplot:
+        args.append("--save-gnuplot")
+    if view:
+        args.append("--view")
 
-    # 7. Recap -- always shown, no confirmation gate
+    # 10. Recap -- always shown, no confirmation gate
     summary_rows = [
+        ("Run directory", run_dir),
         ("Log filename", output_filename),
         ("Fitting method", method),
-        ("Reference structure", ref_structure),
+        ("Reference structure", ref_structure or f"{run_dir}/reference_structure.fdf (default)"),
         ("Dimensionality", dimensionality_summary),
     ]
     if symmetry_method is not None:
@@ -2543,9 +2557,12 @@ def run_elastic_analyzer() -> None:
         summary_rows.append(("Quality diagnostics", f"eggbox={eggbox_tolerance}%, "
                               f"fit-quality R^2={fit_quality_tolerance}"))
     summary_rows.append(("Plot data directory", plot_dir))
+    summary_rows.append(("Save report", "yes" if save_report else "no"))
+    summary_rows.append(("Save gnuplot", "yes" if save_gnuplot else "no"))
+    summary_rows.append(("View (matplotlib)", "yes" if view else "no"))
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
-    print(color_text("\nRunning analysis in current directory...", 'yellow'))
+    print(color_text(f"\nRunning analysis in '{run_dir}'...", 'yellow'))
     run_tool("stb-elasticAnalysis", args)
 
 def run_input_generator() -> None:

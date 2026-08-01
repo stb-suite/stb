@@ -394,7 +394,7 @@ def run_cohesive_setup() -> None:
 
     # Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, output_dir, bsse_cutoff, symprec, bsse_convergence_increment = 10.0, ".", 4.0, 1e-3, 2.0
+    vacuum_gap, output_dir, bsse_cutoff, symprec, bsse_convergence_increment = 10.0, "cohesive_runs", 4.0, 1e-3, [2.0]
     advanced_items = "vacuum-gap, output directory"
     if bsse_correction:
         advanced_items += ", BSSE cutoff radius/symmetry tolerance"
@@ -405,9 +405,9 @@ def run_cohesive_setup() -> None:
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
             "(default: 10.0): ", 10.0)
-        output_dir = get_input("Output root directory (default: current directory): ").strip()
+        output_dir = get_input("Output root directory (default: cohesive_runs): ").strip()
         if not output_dir:
-            output_dir = "."
+            output_dir = "cohesive_runs"
         if bsse_correction:
             bsse_cutoff = get_float_input(
                 "BSSE ghost-neighbor cutoff radius in Ang (default: 4.0 -- reaches 1 shell "
@@ -416,8 +416,18 @@ def run_cohesive_setup() -> None:
             symprec = get_float_input(
                 "Symmetry-detection tolerance, for multi-site BSSE (default: 0.001): ", 1e-3)
             if bsse_convergence_check:
-                bsse_convergence_increment = get_float_input(
-                    "BSSE convergence-check cutoff increment in Ang (default: 2.0): ", 2.0)
+                inc_input = get_input(
+                    "BSSE convergence-check cutoff increment(s) in Ang -- one value for a "
+                    "single before/after check, or several space-separated values (e.g. "
+                    "'2 4 6') for a full convergence scan (default: 2.0): ").strip()
+                if inc_input:
+                    try:
+                        bsse_convergence_increment = [float(x) for x in inc_input.split()]
+                    except ValueError:
+                        print(color_text("Invalid input, using default (2.0).", 'red'))
+                        bsse_convergence_increment = [2.0]
+
+    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
 
     args = [
         "-s", struct_file,
@@ -434,13 +444,15 @@ def run_cohesive_setup() -> None:
         args.extend(["--bsse-cutoff", str(bsse_cutoff), "--symprec", str(symprec)])
         args.append("--bsse-multi-site" if bsse_multi_site else "--no-bsse-multi-site")
         if bsse_convergence_check:
-            args.extend(["--bsse-convergence-check",
-                         "--bsse-convergence-increment", str(bsse_convergence_increment)])
+            args.extend(["--bsse-convergence-check", "--bsse-convergence-increment"])
+            args.extend(str(v) for v in bsse_convergence_increment)
 
     if pp_path:
         args.extend(["-p", pp_path])
     if spin_choice in ['y', 'yes']:
         args.append("--spin")
+    if save_report:
+        args.append("--save-report")
 
     # Recap -- always shown, no confirmation gate
     bsse_desc = "OFF"
@@ -457,9 +469,11 @@ def run_cohesive_setup() -> None:
         ("BSSE correction", bsse_desc),
     ]
     if bsse_correction and bsse_convergence_check:
-        summary_rows.append(("BSSE convergence check", f"ON (+{bsse_convergence_increment} Ang)"))
+        incs = ", ".join(f"+{v:g}" for v in bsse_convergence_increment)
+        summary_rows.append(("BSSE convergence check", f"ON ({incs} Ang)"))
     summary_rows.append(("Vacuum-gap threshold", f"{vacuum_gap} Ang"))
     summary_rows.append(("Output directory", output_dir))
+    summary_rows.append(("Save report", "yes" if save_report else "no"))
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-cohesive", args)
@@ -482,12 +496,17 @@ def run_cohesive_analysis() -> None:
         out_file = get_input("SIESTA output file name [-o]: ").strip()
 
     dir_path = get_input(
-        "Path to results folder containing 'structure' and 'atoms' (default: current dir) [-d]: "
+        "Path to results folder containing 'structure' and 'atoms' (default: cohesive_runs) [-d]: "
     ).strip()
 
     force_tolerance = get_float_input(
         "Force tolerance for the 'is the full structure relaxed' check, in eV/Ang "
         "(default: 0.05): ", 0.05)
+
+    # Save report / view plot?
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    view = get_input(
+        "Show an interactive matplotlib plot before finishing? (y/N): ").strip().lower() == 'y'
 
     args = [
         "-o", out_file,
@@ -496,12 +515,18 @@ def run_cohesive_analysis() -> None:
     ]
     if dir_path:
         args.extend(["-d", dir_path])
+    if save_report:
+        args.append("--save-report")
+    if view:
+        args.append("--view")
 
     # Recap -- always shown, no confirmation gate
     summary_rows = [
         ("SIESTA output filename", out_file),
-        ("Results directory", dir_path or "."),
+        ("Results directory", dir_path or "cohesive_runs (default)"),
         ("Force tolerance", f"{force_tolerance} eV/Ang"),
+        ("Save report", "yes" if save_report else "no"),
+        ("View (matplotlib)", "yes" if view else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 

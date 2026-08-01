@@ -70,7 +70,7 @@ pushd "$TEST_DIR" > /dev/null
 #     section below. ---
 echo -e "\n--- Testing default run (vacuum-aware k-grid) ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf --no-bsse-correction --no-intro > log_default.txt 2>&1
+stb-cohesive -s structure.fdf -O . --no-bsse-correction --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success structure/calc.fdf
 check_success structure/structure.fdf
@@ -81,7 +81,7 @@ echo "Verifying dimensionality is now reported"
 check_contains "Detected dimensionality: 2D" log_default.txt
 
 echo "Verifying the in-plane axes get a real k-grid but the vacuum axis is forced to 1"
-check_contains "Calculated K-grid for full structure: 7 7 1" log_default.txt
+check_contains "K-grid (full structure): 7 7 1" log_default.txt
 check_contains "kgrid.MonkhorstPack   \[7  7  1\]" structure/calc.fdf
 
 echo "Verifying the isolated atom is always Gamma-only"
@@ -105,10 +105,10 @@ check_contains "NOTE. --bsse-correction is OFF" log_default.txt
 # --- 3. --spin: only the full structure calc changes ---
 echo -e "\n--- Testing --spin ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf --spin --no-bsse-correction --no-intro > log_spin.txt 2>&1
+stb-cohesive -s structure.fdf -O . --spin --no-bsse-correction --no-intro > log_spin.txt 2>&1
 check_exit_code $? 0
 check_contains "Spin                polarized" structure/calc.fdf
-check_contains "Spin polarization ENABLED" log_spin.txt
+check_contains "Spin (full structure) : polarized" log_spin.txt
 
 
 # --- 4. --pp-path: .psf pseudopotentials are linked (regression test -- this
@@ -116,7 +116,7 @@ check_contains "Spin polarization ENABLED" log_spin.txt
 #     generated directories without any pseudopotential at all) ---
 echo -e "\n--- Testing --pp-path with a .psf pseudopotential ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf -p pp --no-bsse-correction --no-intro > log_psf.txt 2>&1
+stb-cohesive -s structure.fdf -O . -p pp --no-bsse-correction --no-intro > log_psf.txt 2>&1
 check_exit_code $? 0
 check_success structure/C.psf
 check_success atoms/C/C.psf
@@ -133,7 +133,7 @@ fi
 echo -e "\n--- Testing .psml priority over .psf ---"
 rm -rf structure atoms atoms_bsse
 echo "dummy pseudopotential content" > pp/C.psml
-stb-cohesive -s structure.fdf -p pp --no-bsse-correction --no-intro > log_psml.txt 2>&1
+stb-cohesive -s structure.fdf -O . -p pp --no-bsse-correction --no-intro > log_psml.txt 2>&1
 check_exit_code $? 0
 check_success structure/C.psml
 if [ -e structure/C.psf ]; then
@@ -148,7 +148,7 @@ fi
 # --- 6. --pp-path accepts a bundled bank name ---
 echo -e "\n--- Testing --pp-path with a bundled bank name (dojo) ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf -p dojo --no-bsse-correction --no-intro > log_bank.txt 2>&1
+stb-cohesive -s structure.fdf -O . -p dojo --no-bsse-correction --no-intro > log_bank.txt 2>&1
 check_exit_code $? 0
 check_success structure/C.psml
 rm -f pp/C.psml
@@ -161,7 +161,7 @@ check_contains "pseudo-dojo.org" log_bank.txt
 # --- 7. --vacuum: isolated-atom box size is configurable ---
 echo -e "\n--- Testing --vacuum ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf --vacuum 30 --no-bsse-correction --no-intro > log_vacuum.txt 2>&1
+stb-cohesive -s structure.fdf -O . --vacuum 30 --no-bsse-correction --no-intro > log_vacuum.txt 2>&1
 check_exit_code $? 0
 check_contains "30.000000   0.000000   0.000000" atoms/C/structure.fdf
 
@@ -174,10 +174,10 @@ check_exit_code $? 2
 echo -e "\n--- Testing --vacuum-gap ---"
 rm -rf structure atoms atoms_bsse
 echo "Testing: a --vacuum-gap larger than the fixture's 20 Ang out-of-plane gap reports 3D instead"
-stb-cohesive -s structure.fdf --vacuum-gap 25 --no-bsse-correction --no-intro > log_vacuum_gap.txt 2>&1
+stb-cohesive -s structure.fdf -O . --vacuum-gap 25 --no-bsse-correction --no-intro > log_vacuum_gap.txt 2>&1
 check_exit_code $? 0
 check_contains "Detected dimensionality: 3D" log_vacuum_gap.txt
-if grep -q "Calculated K-grid for full structure: 7 7 [^1]" log_vacuum_gap.txt; then
+if grep -q "K-grid (full structure): 7 7 [^1]" log_vacuum_gap.txt; then
     echo -e "   -> ${GREEN}Verified:${NC} c-axis is no longer forced to 1 division"
     PASS=$((PASS+1))
 else
@@ -201,6 +201,22 @@ else
     PASS=$((PASS+1))
 fi
 rm -rf run1
+
+echo "Testing: default --output-dir is now 'cohesive_runs' (not the current directory)"
+rm -rf structure atoms atoms_bsse cohesive_runs
+stb-cohesive -s structure.fdf --no-bsse-correction --no-intro > log_outdir_default.txt 2>&1
+check_exit_code $? 0
+check_contains "Output directory      : cohesive_runs" log_outdir_default.txt
+check_success cohesive_runs/structure/calc.fdf
+check_success cohesive_runs/atoms/C/calc.fdf
+if [ -e structure/calc.fdf ]; then
+    echo -e "   -> ${RED}Failed:${NC} structure/calc.fdf was also created outside cohesive_runs/"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} nothing created outside cohesive_runs/ by default"
+    PASS=$((PASS+1))
+fi
+rm -rf cohesive_runs
 
 
 # --- 10. Phantom species: a species declared in ChemicalSpeciesLabel but
@@ -235,9 +251,9 @@ AtomicCoordinatesFormat Fractional
  0.25 0.25 0.25 1
 %endblock AtomicCoordinatesAndAtomicSpecies
 EOF
-stb-cohesive -s phantom.fdf --no-bsse-correction --no-intro > log_phantom.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --no-bsse-correction --no-intro > log_phantom.txt 2>&1
 check_exit_code $? 0
-check_contains "Detected species: C" log_phantom.txt
+check_contains "Species (need a calculation) | C" log_phantom.txt
 check_contains "Declared but never placed.*Si" log_phantom.txt
 check_success atoms/C/calc.fdf
 if [ -d atoms/Si ]; then
@@ -252,7 +268,7 @@ fi
 # --- 11. --bsse-correction (the default): ghost-cluster generation ---
 echo -e "\n--- Testing --bsse-correction (default ON) ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s phantom.fdf --no-intro > log_bsse.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --no-intro > log_bsse.txt 2>&1
 check_exit_code $? 0
 check_contains "BSSE (COUNTERPOISE) CORRECTION" log_bsse.txt
 check_success atoms_bsse/C/calc.fdf
@@ -271,7 +287,7 @@ check_contains "2   -6   C_ghost" atoms_bsse/C/structure.fdf
 check_contains "NumberOfSpecies    2" atoms_bsse/C/structure.fdf
 
 echo "Verifying the ghost pseudopotential is symlinked from the real element's file"
-stb-cohesive -s phantom.fdf -p pp --no-intro > log_bsse_pp.txt 2>&1
+stb-cohesive -s phantom.fdf -O . -p pp --no-intro > log_bsse_pp.txt 2>&1
 check_success atoms_bsse/C/C_ghost.psf
 if [ "$(readlink -f atoms_bsse/C/C_ghost.psf)" = "$(readlink -f atoms_bsse/C/C.psf)" ]; then
     echo -e "   -> ${GREEN}Verified:${NC} C_ghost.psf resolves to the same file as the real C.psf"
@@ -282,12 +298,22 @@ else
 fi
 
 
-# --- 12. --bsse-cutoff: configurable, and a --vacuum too small for it warns ---
+# --- 12. --bsse-cutoff: configurable, and a --vacuum too small (in absolute
+#     terms -- buffer = --vacuum/2 is now independent of --bsse-cutoff, since
+#     the BSSE cluster box auto-grows with the cutoff instead of eating into
+#     a fixed-size one) warns ---
 echo -e "\n--- Testing --bsse-cutoff safety check ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s phantom.fdf --vacuum 10 --bsse-cutoff 4 --no-intro > log_bsse_small_box.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --vacuum 8 --bsse-cutoff 4 --no-intro > log_bsse_small_box.txt 2>&1
 check_exit_code $? 0
-check_contains "WARNING. --vacuum 10" log_bsse_small_box.txt
+check_contains "WARNING. --vacuum 8" log_bsse_small_box.txt
+
+echo "Testing: buffer = --vacuum/2 no longer depends on --bsse-cutoff (a bigger cutoff no longer shrinks it)"
+rm -rf structure atoms atoms_bsse
+stb-cohesive -s phantom.fdf -O . --vacuum 8 --bsse-cutoff 20 --no-intro > log_bsse_big_cutoff.txt 2>&1
+check_exit_code $? 0
+check_contains "WARNING. --vacuum 8" log_bsse_big_cutoff.txt
+check_contains "48.00000000   0.00000000   0.00000000" atoms_bsse/C/structure.fdf
 
 
 # --- 12b. Multi-site BSSE (default ON): the graphene-like fixture has 3
@@ -295,7 +321,7 @@ check_contains "WARNING. --vacuum 10" log_bsse_small_box.txt
 # -- one ghost cluster per site, in nested atoms_bsse/<sym>/site_<x>_<n>/. ---
 echo -e "\n--- Testing multi-site BSSE (default, 3 distinct sites) ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf --no-intro > log_multisite.txt 2>&1
+stb-cohesive -s structure.fdf -O . --no-intro > log_multisite.txt 2>&1
 check_exit_code $? 0
 check_contains "3 symmetrically distinct site.s. detected for C" log_multisite.txt
 check_success atoms_bsse/C/site_k_x6/structure.fdf
@@ -311,7 +337,7 @@ fi
 
 echo "Testing: --no-bsse-multi-site collapses to a single (first) site, with a warning naming the skipped ones"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s structure.fdf --no-bsse-multi-site --no-intro > log_single_site.txt 2>&1
+stb-cohesive -s structure.fdf -O . --no-bsse-multi-site --no-intro > log_single_site.txt 2>&1
 check_exit_code $? 0
 check_contains "WARNING. --no-bsse-multi-site: using only the first site" log_single_site.txt
 check_contains "skipping b .x1., g .x3." log_single_site.txt
@@ -329,30 +355,60 @@ fi
 # site/species, mirroring the same layout under atoms_bsse_check/ ---
 echo -e "\n--- Testing --bsse-convergence-check ---"
 rm -rf structure atoms atoms_bsse atoms_bsse_check
-stb-cohesive -s phantom.fdf --bsse-convergence-check --no-intro > log_conv_check.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --bsse-convergence-check --no-intro > log_conv_check.txt 2>&1
 check_exit_code $? 0
 check_contains "Also generated .atoms_bsse_check/. at cutoff 6.0 Ang" log_conv_check.txt
 check_success atoms_bsse_check/C/structure.fdf
 check_success atoms_bsse_check/C/calc.fdf
 
 echo "Testing: --bsse-convergence-check requires --bsse-correction"
-stb-cohesive -s phantom.fdf --no-bsse-correction --bsse-convergence-check --no-intro > log_conv_check_noreq.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --no-bsse-correction --bsse-convergence-check --no-intro > log_conv_check_noreq.txt 2>&1
 check_exit_code $? 2
+
+
+# --- 12c2. --bsse-convergence-increment with 2+ values: a full cutoff scan,
+#     one 'atoms_bsse_check_<cutoff>/' per point instead of the single flat
+#     'atoms_bsse_check/' above -- also verifies the buffer (--vacuum/2)
+#     stays constant across every scanned cutoff (box = 2*cutoff + vacuum). ---
+echo -e "\n--- Testing --bsse-convergence-increment with multiple values (cutoff scan) ---"
+rm -rf structure atoms atoms_bsse atoms_bsse_check atoms_bsse_check_6.0 atoms_bsse_check_8.0 atoms_bsse_check_10.0
+stb-cohesive -s phantom.fdf -O . --bsse-cutoff 4 --bsse-convergence-check \
+    --bsse-convergence-increment 2 4 6 --no-intro > log_conv_scan.txt 2>&1
+check_exit_code $? 0
+check_contains "BSSE convergence check: ON, scanning 3 cutoffs .6.0, 8.0, 10.0 Ang." log_conv_scan.txt
+check_contains "Also generated 3 BSSE convergence-check references" log_conv_scan.txt
+check_success atoms_bsse_check_6.0/C/structure.fdf
+check_success atoms_bsse_check_8.0/C/structure.fdf
+check_success atoms_bsse_check_10.0/C/structure.fdf
+if [ -d atoms_bsse_check ]; then
+    echo -e "   -> ${RED}Failed:${NC} flat 'atoms_bsse_check/' also created (should be scan-only naming)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no flat 'atoms_bsse_check/' (scan-only naming, 2+ increments)"
+    PASS=$((PASS+1))
+fi
+echo "Verifying every scan box keeps the same buffer (--vacuum/2 = 10.0 Ang) regardless of cutoff"
+check_contains "28.00000000   0.00000000   0.00000000" atoms_bsse/C/structure.fdf
+check_contains "32.00000000   0.00000000   0.00000000" atoms_bsse_check_6.0/C/structure.fdf
+check_contains "36.00000000   0.00000000   0.00000000" atoms_bsse_check_8.0/C/structure.fdf
+check_contains "40.00000000   0.00000000   0.00000000" atoms_bsse_check_10.0/C/structure.fdf
+check_success atoms_bsse/C/bsse_cutoff.txt
+check_contains "^4.0$" atoms_bsse/C/bsse_cutoff.txt
 
 
 # --- 12d. --dispersion: DFT-D3 enabled uniformly across every calc.fdf ---
 echo -e "\n--- Testing --dispersion (DFT-D3) ---"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s phantom.fdf --dispersion --no-intro > log_dispersion.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --dispersion --no-intro > log_dispersion.txt 2>&1
 check_exit_code $? 0
-check_contains "DFT-D3 dispersion correction ENABLED" log_dispersion.txt
+check_contains "Dispersion (D3)       : ON" log_dispersion.txt
 check_contains "DFTD3                   .true." structure/calc.fdf
 check_contains "DFTD3                   .true." atoms/C/calc.fdf
 check_contains "DFTD3                   .true." atoms_bsse/C/calc.fdf
 
 echo "Testing: --dispersion OFF by default (DFTD3 .false. everywhere)"
 rm -rf structure atoms atoms_bsse
-stb-cohesive -s phantom.fdf --no-intro > log_no_dispersion.txt 2>&1
+stb-cohesive -s phantom.fdf -O . --no-intro > log_no_dispersion.txt 2>&1
 check_contains "DFTD3                   .false." structure/calc.fdf
 check_contains "DFTD3                   .false." atoms/C/calc.fdf
 
@@ -387,38 +443,54 @@ check_contains "bsse-multi-site" log_help.txt
 check_contains "bsse-convergence-check" log_help.txt
 check_contains "dispersion" log_help.txt
 check_contains "symprec" log_help.txt
+check_contains "save-report" log_help.txt
 
 
 # --- 14. Interactive path (stb-suite, shortcut 4.3.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.3.1) ---"
 
-echo "Testing: navigate 4.3.1 -> structure.fdf -> defaults (dispersion N, BSSE on, multi-site on, conv-check N) -> skip advanced -> quit"
-rm -rf structure atoms atoms_bsse
+echo "Testing: navigate 4.3.1 -> structure.fdf -> defaults (dispersion N, BSSE on, multi-site on, conv-check N) -> skip advanced -> save report -> quit"
+rm -rf structure atoms atoms_bsse cohesive_runs
 # Prompts in order: file, k-density (blank -> default), pp-path (blank ->
 # skip), spin (n), dispersion (n), vacuum (blank -> default), BSSE choice
 # (blank -> Y, default), multi-site choice (blank -> Y, default),
-# convergence-check choice (n), advanced settings (n -> skip), then the
-# "Press Enter to continue" pause, then quit.
-printf '4.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# convergence-check choice (n), advanced settings (n -> skip), save report
+# (n), then the "Press Enter to continue" pause, then quit.
+printf '4.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
-check_success structure/calc.fdf
-check_success atoms/C/calc.fdf
+check_success cohesive_runs/structure/calc.fdf
+check_success cohesive_runs/atoms/C/calc.fdf
 # This fixture has 3 symmetrically distinct C sites (multi-site is ON by
 # default), so the BSSE layout is nested rather than a flat atoms_bsse/C/.
-check_success atoms_bsse/C/site_k_x6/calc.fdf
+check_success cohesive_runs/atoms_bsse/C/site_k_x6/calc.fdf
 
 echo "Testing: navigate 4.3.1 -> decline BSSE -> no atoms_bsse/ created (multi-site/conv-check prompts skipped entirely)"
-rm -rf structure atoms atoms_bsse
-printf '4.3.1\nstructure.fdf\n\n\nn\nn\n\nn\n\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
+rm -rf structure atoms atoms_bsse cohesive_runs
+printf '4.3.1\nstructure.fdf\n\n\nn\nn\n\nn\n\nn\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
 check_contains "BSSE correction.*OFF" log_menu_nobsse.txt
-check_success structure/calc.fdf
-if [ -d atoms_bsse ]; then
+check_success cohesive_runs/structure/calc.fdf
+if [ -d cohesive_runs/atoms_bsse ]; then
     echo -e "   -> ${RED}Failed:${NC} atoms_bsse/ was created despite declining BSSE in the menu"
     FAIL=$((FAIL+1))
 else
     echo -e "   -> ${GREEN}Verified:${NC} no atoms_bsse/ created"
     PASS=$((PASS+1))
 fi
+
+echo "Testing: navigate 4.3.1 -> conv-check (y) -> advanced (y) -> multi-value increment '2 4 6' -> cutoff scan"
+rm -rf structure atoms atoms_bsse atoms_bsse_check atoms_bsse_check_6.0 atoms_bsse_check_8.0 atoms_bsse_check_10.0 cohesive_runs
+# Prompts in order: file, k-density (blank), pp-path (blank), spin (n),
+# dispersion (n), vacuum (blank), BSSE choice (blank -> Y), multi-site
+# choice (blank -> Y), convergence-check choice (y), advanced settings (y),
+# vacuum-gap (blank), output dir (blank), bsse-cutoff (blank), symprec
+# (blank), convergence increment(s) ('2 4 6' -- the new multi-value scan),
+# save report (n), then "Press Enter to continue", then quit.
+printf '4.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\ny\ny\n\n\n\n\n2 4 6\nn\n\n0\n' | stb-suite > log_menu_scan.txt 2>&1
+check_contains "BSSE convergence check.*ON .+2, +4, +6 Ang." log_menu_scan.txt
+check_contains "Also generated 3 BSSE convergence-check references" log_menu_scan.txt
+check_success cohesive_runs/atoms_bsse_check_6.0/C/site_k_x6/calc.fdf
+check_success cohesive_runs/atoms_bsse_check_8.0/C/site_k_x6/calc.fdf
+check_success cohesive_runs/atoms_bsse_check_10.0/C/site_k_x6/calc.fdf
 
 
 popd > /dev/null

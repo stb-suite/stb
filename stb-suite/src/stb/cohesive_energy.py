@@ -5,8 +5,12 @@
 # Developed by Dr. Carlos M. O. Bastos          #
 #      bastoscmo.github.io                      #
 #################################################
-    
-VERSION = "1.11.0" # D3 dispersion, multi-site BSSE (default on), and --bsse-convergence-check
+
+VERSION = "2.0.0"  # stb-standard numbered report ([0]-[7], --save-report) and a
+                    # single wrapping --output-dir (default cohesive_runs, matching
+                    # stb-strain/stb-elasticInputs' own <property>_runs convention)
+                    # instead of writing structure/atoms/atoms_bsse[_check] loose
+                    # into the current directory by default.
 
 import os
 import sys
@@ -15,8 +19,10 @@ import shutil
 import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
-from stb.core.cli import color_text, show_intro
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, link_pseudo
+from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
+from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source, link_pseudo
+
+REPORT_FILE = "cohesive_stage1.txt"
 
 # Base Template
 CALC_TEMPLATE = """
@@ -39,7 +45,7 @@ PAO.EnergyShift     0.02 Ry
 ## K-POINT SAMPLING (BRILLOUIN ZONE)
 ## ===================================================================
 kgrid.MonkhorstPack   [1  1  1]
-Mesh.CutOff           320  Ry   
+Mesh.CutOff           320  Ry
 FilterCutoff          150  Ry
 
 ## ===================================================================
@@ -200,6 +206,13 @@ def generate_bsse_reference(pmg_structure, sym, anchor_index, z_num, cutoff, vac
 
     Returns the number of ghost neighbors found (0 if none -- the caller
     decides whether that's worth a warning, e.g. cutoff too small).
+
+    Also writes a small 'bsse_cutoff.txt' sidecar with the numeric `cutoff`
+    -- a flat 'atoms_bsse/'/'atoms_bsse_check/'-style folder name carries no
+    cutoff information of its own (unlike the multi-scan 'atoms_bsse_check_
+    <cutoff>/' naming), so stb-cohesiveAnalysis has no other way to recover
+    it later for reporting/plotting (see core.cohesive_shared eventually, or
+    cohesive_analysis.py::find_reference_cutoff for now).
     """
     neighbors = find_ghost_neighbors(pmg_structure, anchor_index, cutoff)
     cluster = build_ghost_cluster(sym, z_num, neighbors, vacuum)
@@ -208,6 +221,8 @@ def generate_bsse_reference(pmg_structure, sym, anchor_index, z_num, cutoff, vac
 
     with open(os.path.join(out_dir, "calc.fdf"), 'w') as f:
         f.write(_isolated_atom_calc(dispersion))
+    with open(os.path.join(out_dir, "bsse_cutoff.txt"), 'w') as f:
+        f.write(f"{cutoff}\n")
 
     link_pseudo(pp_path, sym, out_dir)
     for elem, _z, _rel in neighbors:
@@ -252,67 +267,6 @@ def resolve_bsse_sites(pmg_structure, sym, symprec, multi_site, fallback_index):
     return sites, sites, space_group
 
 
-def write_inequivalent_sites_report(path, struct_file, symprec, bsse_cutoff, check_cutoff,
-                                     convergence_check, multi_site, space_groups, rows):
-    """Writes the full non-equivalent-site / BSSE-reference table (species,
-    Wyckoff letter, multiplicity, fractional coordinates, whether it was
-    actually used as a BSSE reference, and its ghost-neighbor count) plus
-    the symmetry context (space group per species, symprec, cutoffs) to a
-    plain-text file at `path`. Complements the same table already printed
-    to stdout during setup -- this is the persistent copy so it survives
-    past the terminal, for citing in a paper/report or re-checking later
-    which Wyckoff site a given atoms_bsse/<sym>/site_*/ folder corresponds
-    to.
-    """
-    lines = []
-    lines.append("=" * 80)
-    lines.append("NON-EQUIVALENT SITES / BSSE REFERENCE REPORT")
-    lines.append("=" * 80)
-    lines.append(f"Structure file                             : {struct_file}")
-    lines.append(f"Symmetry tolerance (--symprec)              : {symprec}")
-    lines.append(f"BSSE ghost-neighbor cutoff (--bsse-cutoff)  : {bsse_cutoff} Ang")
-    if convergence_check:
-        lines.append(f"BSSE convergence check (--bsse-convergence-check): ON "
-                      f"(check cutoff {check_cutoff} Ang)")
-    else:
-        lines.append("BSSE convergence check                      : OFF")
-    lines.append(f"Multi-site BSSE (--bsse-multi-site)         : {'ON' if multi_site else 'OFF'}")
-    lines.append("")
-    lines.append("Space group(s) detected (per species, same structure -- should agree):")
-    for sym, sg in space_groups.items():
-        lines.append(f"  {sym}: {sg or '(detection failed/unavailable)'}")
-    lines.append("")
-
-    header = f"{'Species':<10}{'Wyckoff':<10}{'Mult.':<8}{'Fractional coordinates':<32}{'Used':<7}{'Ghost nb.'}"
-    sep = "-" * 80
-    lines.append(sep)
-    lines.append(header)
-    lines.append(sep)
-    for sym, wyckoff, mult, frac_coords, used, n_ghosts, _bsse_rel in rows:
-        wy = wyckoff or "?"
-        m = str(mult) if mult is not None else "?"
-        coord_str = f"{frac_coords[0]:.6f}  {frac_coords[1]:.6f}  {frac_coords[2]:.6f}"
-        used_str = "yes" if used else "no"
-        ghost_str = str(n_ghosts) if n_ghosts is not None else "--"
-        lines.append(f"{sym:<10}{wy:<10}{m:<8}{coord_str:<32}{used_str:<7}{ghost_str}")
-    lines.append(sep)
-    lines.append("")
-
-    used_rows = [r for r in rows if r[4]]
-    if used_rows:
-        lines.append("BSSE reference directories:")
-        for sym, wyckoff, mult, _frac, _used, _n, bsse_rel in used_rows:
-            site_desc = sym if wyckoff is None else f"{sym}, site {wyckoff} (x{mult})"
-            entry = f"  {site_desc}: {bsse_rel}"
-            if convergence_check:
-                entry += f"  (check: {bsse_rel.replace('atoms_bsse/', 'atoms_bsse_check/', 1)})"
-            lines.append(entry)
-        lines.append("")
-
-    with open(path, 'w') as f:
-        f.write("\n".join(lines) + "\n")
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Prepare folder structure for cohesive energy calculations.",
@@ -322,23 +276,33 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument("-s", "--structure", dest="structure", type=str, required=True, 
+    parser.add_argument("-s", "--structure", dest="structure", type=str, required=True,
                         help="Path to the initial structure.fdf file")
-    
+
     parser.add_argument("-p", "--pp-path", dest="pp_path", type=str, default="",
                         help=f"Pseudopotentials source (optional): a bundled bank "
                              f"({', '.join(BANKS)}) or a folder path.")
-    
-    parser.add_argument("-k", "--k-density", dest="k_density", type=float, default=0.2, 
+
+    parser.add_argument("-k", "--k-density", dest="k_density", type=float, default=0.2,
                         help="K-point density in 1/Angstrom (default: 0.2)")
-    
+
     parser.add_argument("--spin", dest="spin", action="store_true",
                         help="Set the full structure calculation to spin polarized")
 
     parser.add_argument("--vacuum", dest="vacuum", type=float, default=20.0,
-                        help="Cubic box side (Ang) for each isolated-atom calculation "
-                             "(default: 20.0). Increase for elements with unusually "
-                             "diffuse basis orbitals.")
+                        help="Guaranteed buffer (Ang/2, see below) between the outermost atom "
+                             "of each isolated-atom-type calculation and the edge of its cubic "
+                             "simulation box (default: 20.0). For a plain isolated atom (no "
+                             "neighbors) the box is exactly this value, same as before. For a "
+                             "BSSE ghost cluster (see --bsse-cutoff) or its --bsse-convergence-"
+                             "check counterpart, the box automatically GROWS with the cluster's "
+                             "own radius (box side = 2*cutoff + --vacuum) so the buffer beyond "
+                             "the outermost ghost atom stays exactly --vacuum/2 regardless of "
+                             "how large --bsse-cutoff/--bsse-convergence-increment are -- "
+                             "otherwise a bigger convergence-check cluster would eat into a "
+                             "fixed-size box and risk interacting with its own periodic images, "
+                             "contaminating the very convergence check it's meant to validate. "
+                             "Increase for elements with unusually diffuse basis orbitals.")
 
     parser.add_argument("--vacuum-gap", dest="vacuum_gap", type=float, default=10.0,
                         help="Vacuum gap threshold in Ang used to detect which lattice axes "
@@ -347,11 +311,14 @@ def main():
                              "Vacuum-padded axes are forced to a single (Gamma-only) k-grid "
                              "division regardless of --k-density.")
 
-    parser.add_argument("-O", "--output-dir", dest="output_dir", default=".",
-                        help="Root directory (default: current directory) for the 'structure', "
-                             "'atoms' and 'atoms_bsse' folders -- set this to avoid silently "
-                             "overwriting a previous run's setup when preparing more than one "
-                             "structure from the same working directory.")
+    parser.add_argument("-O", "--output-dir", dest="output_dir", default="cohesive_runs",
+                        help="Root directory (default: cohesive_runs, matching stb-strain's/"
+                             "stb-elasticInputs' own <property>_runs convention) for the "
+                             "'structure', 'atoms' and 'atoms_bsse' folders -- so "
+                             "stb-cohesiveAnalysis can just 'cd <output-dir>' (or pass --dir) "
+                             "and find everything with no extra flags. Set this to avoid "
+                             "silently overwriting a previous run's setup when preparing more "
+                             "than one structure from the same working directory.")
 
     parser.add_argument("--bsse-correction", dest="bsse_correction", action="store_true",
                         default=True,
@@ -401,17 +368,23 @@ def main():
                              "the sites being skipped), instead of one cluster per site.")
     parser.add_argument("--bsse-convergence-check", dest="bsse_convergence_check",
                         action="store_true", default=False,
-                        help="Also generate a second BSSE reference per species/site at a "
-                             "larger cutoff (see --bsse-convergence-increment), in "
-                             "'atoms_bsse_check/' -- stb-cohesiveAnalysis then reports how "
-                             "much the BSSE-corrected cohesive energy shifts between the two "
-                             "cutoffs, as a convergence check (default: OFF -- on top of "
-                             "--bsse-correction's own doubling, this triples the isolated-"
-                             "atom-type calculation count). Requires --bsse-correction.")
+                        help="Also generate one or more extra BSSE references per species/site "
+                             "at a larger cutoff (see --bsse-convergence-increment) -- "
+                             "stb-cohesiveAnalysis then reports how much the BSSE-corrected "
+                             "cohesive energy shifts as the cutoff grows, as a convergence "
+                             "check (default: OFF -- on top of --bsse-correction's own "
+                             "doubling, each extra cutoff adds one more isolated-atom-type "
+                             "calculation per species/site). Requires --bsse-correction.")
     parser.add_argument("--bsse-convergence-increment", dest="bsse_convergence_increment",
-                        type=float, default=2.0,
-                        help="Ang added to --bsse-cutoff for the --bsse-convergence-check "
-                             "reference (default: 2.0).")
+                        type=float, default=[2.0], nargs='+',
+                        help="One or more Ang values added to --bsse-cutoff (default: 2.0, a "
+                             "single point). Pass several (e.g. --bsse-convergence-increment 2 "
+                             "4 6) to scan multiple cutoffs in one run and see the correction's "
+                             "full trend instead of a single before/after comparison -- "
+                             "stb-cohesiveAnalysis will report and plot the whole curve. With "
+                             "exactly one increment (the default), the extra reference is "
+                             "written to 'atoms_bsse_check/' as before; with 2+, each is "
+                             "written to its own 'atoms_bsse_check_<cutoff>/' instead.")
 
     parser.add_argument("--dispersion", dest="dispersion", action="store_true",
                         help="Enable Grimme DFT-D3 dispersion correction (SIESTA's own "
@@ -421,6 +394,10 @@ def main():
                              "contribute non-negligibly to the cohesive energy. Safe to apply "
                              "uniformly: a genuinely isolated atom has no neighbor to form a "
                              "dispersion pair with, so D3 contributes ~0 there regardless.")
+
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by "
+                             "default.")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-cohesive {VERSION}")
 
@@ -436,8 +413,19 @@ def main():
     if args.bsse_convergence_check:
         if not args.bsse_correction:
             parser.error("--bsse-convergence-check requires --bsse-correction.")
-        if args.bsse_convergence_increment <= 0:
+        if any(inc <= 0 for inc in args.bsse_convergence_increment):
             parser.error("--bsse-convergence-increment must be positive.")
+
+    # Computed up front (used by both [0] RUN METADATA and [5] BSSE
+    # CORRECTION below): the sorted, de-duplicated set of extra cutoffs to
+    # generate. Exactly one -> the classic single before/after check
+    # ('atoms_bsse_check/', unchanged naming/behavior); two or more -> a full
+    # convergence scan ('atoms_bsse_check_<cutoff>/' per point).
+    check_cutoffs = (
+        sorted({round(args.bsse_cutoff + inc, 6) for inc in args.bsse_convergence_increment})
+        if args.bsse_convergence_check else []
+    )
+    multi_check = len(check_cutoffs) > 1
 
     if args.pp_path:
         try:
@@ -454,13 +442,48 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    print("\n" + color_text("COHESIVE ENERGY:", 'bold'))
-    print("-"*60)
+    os.makedirs(args.output_dir, exist_ok=True)
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
 
-    # Extract structure data
-    print("\n[INFO] Read structure file ...")
+    print_dual(color_text("===== STB-COHESIVE STAGE 1 REPORT (COHESIVE ENERGY PREP) =====", 'magenta'), f_out)
+
+    # --- [0] RUN METADATA ---
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Structure file        : {args.structure}", f_out)
+    print_dual(f"Pseudo source         : {args.pp_path or '(not given)'}", f_out)
+    print_dual(f"K-point density       : {args.k_density} 1/Ang", f_out)
+    print_dual(f"Spin (full structure) : {'polarized' if args.spin else 'non-polarized'}", f_out)
+    print_dual(f"Dispersion (D3)       : {'ON' if args.dispersion else 'OFF'}", f_out)
+    print_dual(f"Isolated-atom vacuum  : {args.vacuum} Ang (buffer beyond the outermost atom; "
+               "BSSE cluster boxes auto-grow with --bsse-cutoff to keep this buffer constant)",
+               f_out)
+    print_dual(f"Vacuum-gap threshold  : {args.vacuum_gap} Ang", f_out)
+    if args.bsse_correction:
+        print_dual(f"BSSE correction       : ON (cutoff={args.bsse_cutoff} Ang, "
+                   f"multi-site={'on' if args.bsse_multi_site else 'off'})", f_out)
+        if args.bsse_convergence_check:
+            if multi_check:
+                cuts = ", ".join(f"{c:.1f}" for c in check_cutoffs)
+                print_dual(f"BSSE convergence check: ON, scanning {len(check_cutoffs)} cutoffs "
+                           f"({cuts} Ang)", f_out)
+            else:
+                inc = args.bsse_convergence_increment[0]
+                print_dual(f"BSSE convergence check: ON (+{inc:g} Ang -> cutoff "
+                           f"{check_cutoffs[0]:.1f} Ang)", f_out)
+        else:
+            print_dual("BSSE convergence check: OFF", f_out)
+        print_dual(f"Symmetry tolerance    : symprec={args.symprec}", f_out)
+    else:
+        print_dual("BSSE correction       : OFF", f_out)
+    print_dual(f"Output directory      : {args.output_dir}", f_out)
+    print_dual(f"Save report           : {'yes' if args.save_report else 'no'}", f_out)
+    if report_path:
+        print_dual(f"Report file           : {report_path}", f_out)
+
+    # --- [1] INPUT STRUCTURE ---
+    print_section("[1] INPUT STRUCTURE", f_out)
     structure, vacuum_axes = parse_structure_fdf(args.structure, args.vacuum_gap)
-    print(f"{color_text('[INFO]', 'green')} Detected dimensionality: {kspace.dimensionality_label(vacuum_axes)}")
     lattice = structure.lattice
     species_meta = structure_io.species_dict(structure)
     counts = structure_io.atom_counts(structure)
@@ -472,105 +495,124 @@ def main():
     # atom_counts docstring).
     species = {sym: meta for sym, meta in species_meta.items() if counts.get(sym, 0) > 0}
     unused_species = [sym for sym in species_meta if counts.get(sym, 0) == 0]
-    print(f"[INFO] Detected species: {', '.join(species.keys())}")
+    composition = ", ".join(f"{sym}{n}" for sym, n in counts.items())
+    cell_volume = abs(np.linalg.det(lattice))
+    print_table(["Quantity", "Value"], [
+        (["Composition", composition], None),
+        (["Total atoms", str(sum(counts.values()))], None),
+        (["Species (need a calculation)", ", ".join(species.keys())], None),
+        (["Coordinate format", structure.coord_format], None),
+        (["Lattice constant", f"{structure.lattice_constant} Ang"], None),
+        (["Cell volume", f"{cell_volume:.4f} Ang^3"], None),
+    ], f_out)
     if unused_species:
-        print(f"{color_text('[INFO]', 'cyan')} Declared but never placed (no isolated-atom "
-              f"calculation needed): {', '.join(unused_species)}")
+        print_dual(color_text(
+            f"[INFO] Declared but never placed (no isolated-atom calculation needed): "
+            f"{', '.join(unused_species)}", 'cyan'), f_out)
 
-    # Calculate K-grid for the full structure
-    print("[INFO] Calculate Monkhorst-Pack grid ...")
+    # --- [2] DIMENSIONALITY & K-GRID ---
+    print_section("[2] DIMENSIONALITY & K-GRID", f_out)
+    print_dual(f"Detected dimensionality: {kspace.dimensionality_label(vacuum_axes)}", f_out)
+    print_table(["Axis", "Status"], [
+        ([letter, "vacuum" if is_vac else "periodic"], 'yellow' if is_vac else None)
+        for letter, is_vac in zip('xyz', vacuum_axes)
+    ], f_out)
     try:
         kgrid_divs = kspace.compute_monkhorts(lattice[0], lattice[1], lattice[2], args.k_density, vacuum_axes)
     except ValueError as e:
-        print(color_text(f"[ERROR] {e}", 'red'))
+        print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+        if f_out:
+            f_out.close()
         sys.exit(1)
-    print(f"[INFO] Calculated K-grid for full structure: {kgrid_divs[0]} {kgrid_divs[1]} {kgrid_divs[2]} (density = {args.k_density})")
+    print_dual(f"K-grid (full structure): {kgrid_divs[0]} {kgrid_divs[1]} {kgrid_divs[2]} "
+               f"(density={args.k_density} 1/Ang)", f_out)
+    print_dual("K-grid (isolated atoms/BSSE clusters): 1 1 1 (Gamma-only, always -- an "
+               "isolated cluster in a large vacuum box has no dispersion to sample)", f_out)
 
-    # 1. Setup full structure directory
-    print("\n[INFO] Setting up full structure directory ...")
+    # --- [3] FULL STRUCTURE SETUP ---
+    print_section("[3] FULL STRUCTURE SETUP", f_out)
     struct_dir = os.path.join(args.output_dir, "structure")
     os.makedirs(struct_dir, exist_ok=True)
-
     shutil.copy(args.structure, os.path.join(struct_dir, "structure.fdf"))
 
     struct_calc = CALC_TEMPLATE
     if args.spin:
         struct_calc = struct_calc.replace("Spin                non-polarized", "Spin                polarized")
-        print("[INFO] Spin polarization ENABLED for the full structure.")
     else:
-        print("[INFO] Spin polarization DISABLED for the full structure.")
-        print(color_text(
-            "[NOTE] Every isolated-atom (and BSSE-corrected) reference is always spin-"
-            "polarized regardless of this setting -- correct for closed-shell/non-magnetic "
-            "bulk materials, but if this structure is expected to order magnetically, its "
-            "non-polarized bulk energy will be compared against polarized atomic references, "
-            "an inconsistent (not just incomplete) comparison. Pass --spin if in doubt.",
-            'yellow'))
+        print_dual(color_text(
+            "[NOTE] Spin polarization is OFF for the full structure. Every isolated-atom (and "
+            "BSSE-corrected) reference is always spin-polarized regardless of this setting -- "
+            "correct for closed-shell/non-magnetic bulk materials, but if this structure is "
+            "expected to order magnetically, its non-polarized bulk energy will be compared "
+            "against polarized atomic references, an inconsistent (not just incomplete) "
+            "comparison. Pass --spin if in doubt.", 'yellow'), f_out)
 
-    # Apply calculated K-grid
     kgrid_str = f"kgrid.MonkhorstPack   [{kgrid_divs[0]}  {kgrid_divs[1]}  {kgrid_divs[2]}]"
     struct_calc = re.sub(r'kgrid\.MonkhorstPack\s+\[.*?\]', kgrid_str, struct_calc)
-
     if args.dispersion:
         struct_calc = struct_calc.replace("DFTD3                   .false.", "DFTD3                   .true.")
-        print(f"{color_text('[INFO]', 'cyan')} DFT-D3 dispersion correction ENABLED.")
 
     with open(os.path.join(struct_dir, "calc.fdf"), 'w') as f:
         f.write(struct_calc)
-
     for sym in species.keys():
         link_pseudo(args.pp_path, sym, struct_dir)
+    print_dual(f"Written: {struct_dir}/structure.fdf, {struct_dir}/calc.fdf", f_out)
 
-    # 2. Setup isolated atoms directories
-    print("\n[INFO] Setting up isolated atoms directories ...")
+    # --- [4] ISOLATED ATOMS ---
+    print_section("[4] ISOLATED ATOMS", f_out)
     atoms_root = os.path.join(args.output_dir, "atoms")
     os.makedirs(atoms_root, exist_ok=True)
 
+    atom_rows = []
     for sym, data in species.items():
-        print(f"[INFO] Setting up isolated {sym} ...")
         atom_dir = os.path.join(atoms_root, sym)
         os.makedirs(atom_dir, exist_ok=True)
-
-        # Isolated atom structure
         generate_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"), args.vacuum)
-
-        # Calc file for isolated atom (Always polarized + Gamma point only)
         with open(os.path.join(atom_dir, "calc.fdf"), 'w') as f:
             f.write(_isolated_atom_calc(args.dispersion))
-
         link_pseudo(args.pp_path, sym, atom_dir)
+        atom_rows.append(([sym, str(data['Z']), f"{atoms_root}/{sym}/"], None))
+    print_table(["Species", "Z", "Folder"], atom_rows, f_out)
 
-    # 3. BSSE (counterpoise) -corrected reference: one ghost cluster per
-    # species, or per symmetrically distinct site if the species occupies
-    # more than one (see --bsse-multi-site).
-    if args.bsse_correction:
-        print("\n" + "-"*60)
-        print(color_text("BSSE (COUNTERPOISE) CORRECTION", 'cyan').center(60))
-        print("-"*60)
-        half_box = args.vacuum / 2.0
-        if half_box - args.bsse_cutoff < 5.0:
-            print(color_text(
-                f"[WARNING] --vacuum {args.vacuum} Ang leaves only "
-                f"{half_box - args.bsse_cutoff:.1f} Ang of buffer beyond the ghost cluster's "
-                f"outermost neighbor (--bsse-cutoff {args.bsse_cutoff} Ang) -- consider a "
-                "larger --vacuum or a smaller --bsse-cutoff to avoid the cluster interacting "
-                "with its own periodic images.", 'yellow'))
+    # --- [5] BSSE (COUNTERPOISE) CORRECTION ---
+    print_section("[5] BSSE (COUNTERPOISE) CORRECTION", f_out)
+    if not args.bsse_correction:
+        print_dual(color_text(
+            "[NOTE] --bsse-correction is OFF -- the resulting cohesive energy will NOT be "
+            "corrected for Basis Set Superposition Error (a known LCAO bias that systematically "
+            "over-binds). Run without --no-bsse-correction (the default) to get a corrected "
+            "reference.", 'yellow'), f_out)
+    else:
+        # Box side for a ghost cluster at a given cutoff is 2*cutoff + vacuum
+        # (see --vacuum's own help text) -- this guarantees a buffer of
+        # exactly vacuum/2 beyond the outermost ghost atom REGARDLESS of how
+        # large the cutoff is, so --bsse-convergence-check's larger cluster
+        # (cutoff + --bsse-convergence-increment) gets a proportionally
+        # bigger box instead of eating into a fixed-size one. A plain
+        # isolated atom (cutoff=0) reduces to box=vacuum, unchanged from
+        # before.
+        buffer = args.vacuum / 2.0
+        if buffer < 5.0:
+            print_dual(color_text(
+                f"[WARNING] --vacuum {args.vacuum} Ang gives only {buffer:.1f} Ang of buffer "
+                "beyond the outermost atom of every isolated-atom-type calculation (plain atom, "
+                "BSSE cluster, and BSSE convergence-check cluster alike -- the box now grows "
+                "with --bsse-cutoff/--bsse-convergence-increment to keep this buffer constant, "
+                "so increasing either no longer helps) -- consider a larger --vacuum to avoid "
+                "interaction with periodic images.", 'yellow'), f_out)
 
-        check_cutoff = args.bsse_cutoff + args.bsse_convergence_increment
-        if args.bsse_convergence_check and half_box - check_cutoff < 5.0:
-            print(color_text(
-                f"[WARNING] --vacuum {args.vacuum} Ang leaves only "
-                f"{half_box - check_cutoff:.1f} Ang of buffer for the --bsse-convergence-check "
-                f"cluster (cutoff {check_cutoff} Ang) -- consider a larger --vacuum.", 'yellow'))
+        def check_root(cutoff):
+            """'atoms_bsse_check/' for the classic single-point check (exactly
+            one --bsse-convergence-increment, unchanged naming/behavior);
+            'atoms_bsse_check_<cutoff>/' per point for a multi-cutoff scan."""
+            name = "atoms_bsse_check" if not multi_check else f"atoms_bsse_check_{cutoff:.1f}"
+            return os.path.join(args.output_dir, name)
 
         pmg_structure = structure_io.to_pymatgen(structure)
         atoms_bsse_root = os.path.join(args.output_dir, "atoms_bsse")
-        atoms_bsse_check_root = os.path.join(args.output_dir, "atoms_bsse_check")
 
-        print(f"  {'Species':<10}{'Site':<14}{'Ghost neighbors':<18}Cutoff")
-        print(f"  {'-'*55}")
         any_empty = False
-        report_rows = []
+        bsse_rows = []
         space_groups = {}
         for sym, data in species.items():
             fallback_index = next(i for i, site in enumerate(pmg_structure) if site.specie.symbol == sym)
@@ -581,15 +623,15 @@ def main():
 
             if len(all_sites) > 1:
                 site_desc = ", ".join(f"{w or '?'} (x{m or '?'})" for _i, w, m in all_sites)
-                print(f"{color_text('[INFO]', 'cyan')} {len(all_sites)} symmetrically distinct "
-                      f"site(s) detected for {sym}: {site_desc}")
+                print_dual(f"{color_text('[INFO]', 'cyan')} {len(all_sites)} symmetrically distinct "
+                           f"site(s) detected for {sym}: {site_desc}", f_out)
                 if not args.bsse_multi_site:
                     skipped = ", ".join(f"{w or '?'} (x{m or '?'})" for _i, w, m in all_sites[1:])
-                    print(color_text(
+                    print_dual(color_text(
                         f"[WARNING] --no-bsse-multi-site: using only the first site as the BSSE "
                         f"reference for {sym} -- skipping {skipped}, which may not be "
                         "representative if their local environment differs. Pass "
-                        "--bsse-multi-site (the default) for a reference per site.", 'yellow'))
+                        "--bsse-multi-site (the default) for a reference per site.", 'yellow'), f_out)
 
             single_site = len(sites_to_use) == 1
             for idx, wyckoff, mult in sites_to_use:
@@ -597,68 +639,129 @@ def main():
                     site_label = "--"
                     bsse_rel = f"atoms_bsse/{sym}/"
                     bsse_dir = os.path.join(atoms_bsse_root, sym)
-                    check_dir = os.path.join(atoms_bsse_check_root, sym)
+                    site_suffix = sym
                 else:
                     site_label = f"{wyckoff} (x{mult})"
                     bsse_rel = f"atoms_bsse/{sym}/site_{wyckoff}_x{mult}/"
                     bsse_dir = os.path.join(atoms_bsse_root, sym, f"site_{wyckoff}_x{mult}")
-                    check_dir = os.path.join(atoms_bsse_check_root, sym, f"site_{wyckoff}_x{mult}")
+                    site_suffix = os.path.join(sym, f"site_{wyckoff}_x{mult}")
 
                 n_ghosts = generate_bsse_reference(
-                    pmg_structure, sym, idx, data['Z'], args.bsse_cutoff, args.vacuum,
+                    pmg_structure, sym, idx, data['Z'], args.bsse_cutoff,
+                    2 * args.bsse_cutoff + args.vacuum,
                     bsse_dir, args.pp_path, args.dispersion)
-                print(f"  {sym:<10}{site_label:<14}{n_ghosts:<18}{args.bsse_cutoff} Ang")
                 if n_ghosts == 0:
                     any_empty = True
-                report_rows.append((sym, wyckoff, mult, pmg_structure[idx].frac_coords, True, n_ghosts, bsse_rel))
+                bsse_rows.append((
+                    [sym, site_label, str(n_ghosts), f"{args.bsse_cutoff} Ang", "yes", bsse_rel],
+                    'yellow' if n_ghosts == 0 else None))
 
                 if args.bsse_convergence_check:
-                    generate_bsse_reference(
-                        pmg_structure, sym, idx, data['Z'], check_cutoff, args.vacuum,
-                        check_dir, args.pp_path, args.dispersion)
+                    for cutoff in check_cutoffs:
+                        generate_bsse_reference(
+                            pmg_structure, sym, idx, data['Z'], cutoff,
+                            2 * cutoff + args.vacuum,
+                            os.path.join(check_root(cutoff), site_suffix),
+                            args.pp_path, args.dispersion)
 
             for idx, wyckoff, mult in all_sites:
                 if idx not in used_indices:
-                    report_rows.append((sym, wyckoff, mult, pmg_structure[idx].frac_coords, False, None, None))
-        print(f"  {'-'*55}")
+                    site_label = f"{wyckoff} (x{mult})" if wyckoff is not None else "--"
+                    bsse_rows.append(([sym, site_label, "--", "--", "no (skipped)", "--"], None))
+
+        print_table(["Species", "Site", "Ghost nb.", "Cutoff", "Used", "Folder"], bsse_rows, f_out)
+
         if any_empty:
-            print(color_text(
-                "  [WARNING] At least one species/site found ZERO ghost neighbors within "
+            print_dual(color_text(
+                "[WARNING] At least one species/site found ZERO ghost neighbors within "
                 f"--bsse-cutoff {args.bsse_cutoff} Ang -- its BSSE-corrected reference will be "
                 "IDENTICAL to the uncorrected one (no ghost basis added). Increase "
-                "--bsse-cutoff if it does have real neighbors further out.", 'yellow'))
-        print(color_text(
-            "  How many coordination shells 'Ghost neighbors' actually reaches depends on the "
+                "--bsse-cutoff if it does have real neighbors further out.", 'yellow'), f_out)
+        print_dual(color_text(
+            "How many coordination shells 'Ghost nb.' actually reaches depends on the "
             "material's bond length (see --bsse-cutoff --help) -- the correction is converged "
             "once a larger --bsse-cutoff no longer changes the BSSE-corrected energy "
             "appreciably; consider checking that before trusting the result "
             + ("(see 'atoms_bsse_check/', generated below)." if args.bsse_convergence_check
-               else "(--bsse-convergence-check can automate this).") , 'cyan'))
-        if args.bsse_convergence_check:
-            print(color_text(
-                f"  Also generated 'atoms_bsse_check/' at cutoff {check_cutoff} Ang "
+               else "(--bsse-convergence-check can automate this)."), 'cyan'), f_out)
+        if args.bsse_convergence_check and not multi_check:
+            c = check_cutoffs[0]
+            print_dual(color_text(
+                f"Also generated 'atoms_bsse_check/' at cutoff {c:.1f} Ang "
                 "(--bsse-cutoff + --bsse-convergence-increment) -- stb-cohesiveAnalysis will "
-                "report the shift between the two as a convergence diagnostic.", 'cyan'))
-        print(color_text(
-            "  stb-cohesiveAnalysis will auto-detect 'atoms_bsse/' and report both the "
-            "uncorrected and BSSE-corrected cohesive energy.", 'cyan'))
+                "report the shift between the two as a convergence diagnostic. Its box is "
+                f"{2 * c + args.vacuum:.1f} Ang wide (vs. "
+                f"{2 * args.bsse_cutoff + args.vacuum:.1f} Ang for the --bsse-cutoff reference) "
+                f"-- both keep the same {args.vacuum / 2.0:.1f} Ang buffer beyond their "
+                "respective outermost ghost atom, so this shift reflects the correction's real "
+                "cutoff dependence, not a box-size artifact.", 'cyan'), f_out)
+        elif args.bsse_convergence_check and multi_check:
+            print_dual(color_text(
+                f"Also generated {len(check_cutoffs)} BSSE convergence-check references -- a "
+                "full cutoff scan from --bsse-convergence-increment's multiple values -- so "
+                "stb-cohesiveAnalysis can report and plot the cohesive energy vs. cutoff trend "
+                f"instead of a single before/after point. Every box keeps the same "
+                f"{args.vacuum / 2.0:.1f} Ang buffer beyond its own outermost ghost atom (box "
+                "side = 2*cutoff + --vacuum), regardless of cutoff, so the trend reflects the "
+                "correction's real cutoff dependence, not a box-size artifact.", 'cyan'), f_out)
+            print_table(["Cutoff", "Box side", "Folder"], [
+                ([f"{c:.1f} Ang", f"{2 * c + args.vacuum:.1f} Ang", f"atoms_bsse_check_{c:.1f}/"], None)
+                for c in check_cutoffs
+            ], f_out)
+        print_dual(color_text(
+            "Space group(s) detected (per species, same structure -- should agree): "
+            + ", ".join(f"{sym}={sg or '(detection failed)'}" for sym, sg in space_groups.items()),
+            'cyan'), f_out)
+        print_dual(color_text(
+            "stb-cohesiveAnalysis will auto-detect 'atoms_bsse/' and report both the "
+            "uncorrected and BSSE-corrected cohesive energy.", 'cyan'), f_out)
 
-        report_path = os.path.join(atoms_bsse_root, "inequivalent_sites.txt")
-        write_inequivalent_sites_report(
-            report_path, args.structure, args.symprec, args.bsse_cutoff, check_cutoff,
-            args.bsse_convergence_check, args.bsse_multi_site, space_groups, report_rows)
-        print(color_text(f"  Non-equivalent site / symmetry report written to: {report_path}", 'cyan'))
-        print("-"*60)
+    # --- [6] PSEUDOPOTENTIALS ---
+    print_section("[6] PSEUDOPOTENTIALS", f_out)
+    if args.pp_path:
+        found, missing = get_required_pseudos(species.keys(), args.pp_path)
+        print_dual(f"Source            : {args.pp_path}", f_out)
+        print_table(["Species", "Status"], [
+            ([sp, "MISSING" if sp in missing else "found"], 'yellow' if sp in missing else None)
+            for sp in species.keys()
+        ], f_out)
+        if missing:
+            print_dual(color_text(
+                f"[WARNING] Missing pseudopotential(s) for: {', '.join(missing)} -- these will "
+                "need to be added manually to every generated folder.", 'yellow'), f_out)
+        else:
+            print_dual(color_text(
+                "[OK] All required pseudopotentials found -- linked into every generated "
+                "folder.", 'green'), f_out)
     else:
-        print(color_text(
-            "\n[NOTE] --bsse-correction is OFF -- the resulting cohesive energy will NOT be "
-            "corrected for Basis Set Superposition Error (a known LCAO bias that "
-            "systematically over-binds). Run without --no-bsse-correction (the default) to "
-            "get a corrected reference.", 'yellow'))
+        print_dual("Not given (pass -p/--pp-path -- a bundled bank or a folder path -- to "
+                   "link the required pseudopotential for every species into every generated "
+                   "folder). Pseudopotentials will need to be added manually.", f_out)
 
-    print("\n[INFO] Complete job!")
-    print("\n"+"-"*60)
-    print(color_text("Setup complete! Folders 'structure' and 'atoms' are ready.\n\n", 'bold'))
+    # --- [7] SUMMARY & NEXT STEPS ---
+    print_section("[7] SUMMARY & NEXT STEPS", f_out)
+    folder_list = [f"{struct_dir}/", f"{atoms_root}/ ({len(species)} species)"]
+    if args.bsse_correction:
+        folder_list.append(f"{os.path.join(args.output_dir, 'atoms_bsse')}/")
+        if args.bsse_convergence_check:
+            if multi_check:
+                for c in check_cutoffs:
+                    folder_list.append(f"{os.path.join(args.output_dir, f'atoms_bsse_check_{c:.1f}')}/")
+            else:
+                folder_list.append(f"{os.path.join(args.output_dir, 'atoms_bsse_check')}/")
+    print_dual(f"Written under '{args.output_dir}':", f_out)
+    for entry in folder_list:
+        print_dual(f"  {entry}", f_out)
+    if report_path:
+        print_dual(f"Report            : {report_path}", f_out)
+    print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+    print_dual(f"  1. Run SIESTA in every generated folder (structure/, atoms/<species>/"
+               + (", atoms_bsse/<species>/..." if args.bsse_correction else "") + ").", f_out)
+    print_dual(f"  2. Once they're done: cd {args.output_dir} && stb-cohesiveAnalysis -o calc.out "
+               f"(or, from elsewhere: stb-cohesiveAnalysis -o calc.out --dir {args.output_dir}).", f_out)
+
+    if f_out:
+        f_out.close()
 
 if __name__ == "__main__":
     main()

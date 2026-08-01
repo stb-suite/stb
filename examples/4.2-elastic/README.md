@@ -584,6 +584,6 @@ bash example_4.2.sh
   energy-volume curve instead, an independent cross-check on a 3D
   structure's own `B` (section 3, `[4]`) against this workflow's
   stress-strain-derived value.
-- **`stb-cohesive`/`stb_cohesive_analysis`** (Workflow `4.3`) — a different
-  mechanical-stability question (cohesive energy per atom) about the same
-  kind of structure.
+- **[`4.3-cohesive`](../4.3-cohesive/)** (`stb-cohesive`/`stb-cohesiveAnalysis`,
+  Workflow `4.3`) — a different mechanical-stability question (cohesive
+  energy per atom) about the same kind of structure.

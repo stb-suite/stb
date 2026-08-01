@@ -653,8 +653,9 @@ bash example_4.1.sh
 - **`stb-mlelastic`** (ML Simulations) — a fast MACE-based preview of the
   same stiffness-tensor physics, no SIESTA/`strain_*` folders needed; a
   good sanity check before committing to the real DFT workflow here.
-- **`stb-cohesive`** (Workflow `4.3`) — a different mechanical-stability
-  question (cohesive energy per atom) about the same kind of structure.
+- **[`4.3-cohesive`](../4.3-cohesive/)** (`stb-cohesive`/`stb-cohesiveAnalysis`,
+  Workflow `4.3`) — a different mechanical-stability question (cohesive
+  energy per atom) about the same kind of structure.
 - **`stb-mleos`**/**`stb-eosInputs`+`stb-eosAnalysis`** — bulk modulus
   from the curvature of the energy-volume curve instead, an independent
   cross-check on a 3D structure's stiffness against this workflow's own

@@ -90,7 +90,7 @@ pushd "$TEST_DIR" > /dev/null
 #     phonopy's thermal-displacement-matrix code with an unrelated assertion
 #     error (reproduced once while writing this test; not a stb bug, just an
 #     unrealistic fixture) ---
-echo -e "\n--- Testing the real-SIESTA-forces path (--bands --dos --pdos --thermal-displacements --freeze-unstable-mode) ---"
+echo -e "\n--- Testing the real-SIESTA-forces path (--bands --dos --pdos --thermal-displacements --freeze-unstable-mode --save-gnuplot) ---"
 rm -rf phonon_runs
 stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-intro > log_create.txt 2>&1
 python3 - <<'PYEOF'
@@ -111,9 +111,10 @@ for i, d in enumerate(sorted(glob.glob("phonon_runs/disp-*")), start=1):
             out.write(f"{idx:>6}  {vals[0]: .9E}  {vals[1]: .9E}  {vals[2]: .9E}\n")
 PYEOF
 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos --thermal-displacements \
-    --freeze-unstable-mode --no-intro > log_pos_siesta.txt 2>&1
-check_contains "Force files found : 84" log_pos_siesta.txt
+    --freeze-unstable-mode --save-gnuplot --save-report --no-intro > log_pos_siesta.txt 2>&1
+check_contains "Force files found : 42" log_pos_siesta.txt
 check_contains "FORCE_SETS       : generated successfully" log_pos_siesta.txt
+check_contains "Symmetry precision: 0.01 Ang" log_pos_siesta.txt
 check_contains "THERMAL PROPERTIES SUMMARY" log_pos_siesta.txt
 check_contains "BAND STRUCTURE" log_pos_siesta.txt
 check_contains "Bravais lattice" log_pos_siesta.txt
@@ -126,6 +127,29 @@ check_success phonon_runs/thermal_properties.dat
 check_success phonon_runs/phonon_plots/bands.dat
 check_success phonon_runs/phonon_plots/bands.gplot
 check_success phonon_runs/phonon_plots/dos.dat
+
+echo -e "\n--- Testing --save-gnuplot is off by default ---"
+rm -rf phonon_runs/phonon_plots
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_no_gnuplot.txt 2>&1
+check_contains "save-gnuplot not requested" log_pos_no_gnuplot.txt
+if [ ! -d phonon_runs/phonon_plots ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 'phonon_plots/' NOT created (as expected)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} 'phonon_plots/' unexpectedly created without --save-gnuplot"
+    FAIL=$((FAIL+1))
+fi
+
+echo -e "\n--- Testing --symprec (looser than default doesn't crash, changes the report) ---"
+stb-phononsPos -dir phonon_runs -m 4 4 4 --symprec 0.1 --no-intro > log_pos_symprec.txt 2>&1
+check_exit_code $? 0
+check_contains "Symmetry precision: 0.1 Ang" log_pos_symprec.txt
+
+echo -e "\n--- Testing --view completes headlessly without hanging (matplotlib Agg backend) ---"
+MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos \
+    --view --no-intro > log_pos_view.txt 2>&1
+check_exit_code $? 0
+check_contains "SUMMARY & FILES" log_pos_view.txt
 
 
 # --- 3. ML-computed force constants path (no SIESTA .FA needed) -- this is
@@ -163,28 +187,42 @@ echo "Testing: --version"
 stb-phononsPos --version > log_version.txt 2>&1
 check_contains "stb-phononsPos" log_version.txt
 
-echo "Testing: --help documents --bands/--dos"
+echo "Testing: --help documents --bands/--dos/--symprec/--save-gnuplot/--view"
 stb-phononsPos --help > log_help.txt 2>&1
 check_contains "bands" log_help.txt
 check_contains "dos" log_help.txt
+check_contains "symprec" log_help.txt
+check_contains "save-gnuplot" log_help.txt
+check_contains "view" log_help.txt
 
 
 # --- 5. Interactive path (stb-suite, shortcut 4.4.2) -- exercises the
-#     numbered "Additional analyses" list added to fix the silent-no-op bug ---
+#     numbered "Additional analyses" list added to fix the silent-no-op bug,
+#     plus the newer 'all' shortcut and --save-report/--save-gnuplot/--view
+#     prompts ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.4.2) ---"
 
 echo "Testing: select '1' from the numbered list -> bands actually runs"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '4.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
+printf '4.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
 check_contains "Selected: bands" log_menu_bands.txt
 check_contains "BAND STRUCTURE" log_menu_bands.txt
 check_success phonon_ml_runs/phonon_bands.png
 
 echo "Testing: an unrecognized token (old y/n habit) is now flagged instead of silently ignored"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '4.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
+printf '4.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
 check_contains "Ignored unrecognized option(s): y" log_menu_typo.txt
 check_not_contains "BAND STRUCTURE" log_menu_typo.txt
+
+echo "Testing: 'all' shortcut selects bands+dos+pdos+thermal but not freeze, and --save-report writes the report"
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml phonon_ml_runs/phonon_properties.txt
+printf '4.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+check_contains "Selected: bands, dos, pdos, thermal" log_menu_all.txt
+check_contains "BAND STRUCTURE" log_menu_all.txt
+check_contains "DENSITY OF STATES" log_menu_all.txt
+check_not_contains "MODE FREEZE" log_menu_all.txt
+check_success phonon_ml_runs/phonon_properties.txt
 
 
 popd > /dev/null

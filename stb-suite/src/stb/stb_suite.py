@@ -167,15 +167,19 @@ def run_phonon_postprocessing() -> None:
     print(f"\n{color_text('Additional analyses (Tiers 2-3) -- select any that apply:', 'yellow')}")
     for i, (_key, desc) in enumerate(EXTRA_ANALYSIS_OPTIONS, start=1):
         print(f"  {color_text(str(i), 'cyan')} = {desc}")
+    ALL_ANALYSES_KEYS = {"bands", "dos", "pdos", "thermal"}  # freeze (5) excluded --
+    # a different kind of action (writes a structure file), not just a plot/report.
     raw_choice = get_input(
         f"Select by number (1-{len(EXTRA_ANALYSIS_OPTIONS)}), space/comma-separated, "
-        "or blank for none: ").strip().lower()
+        "'all' for 1-4, or blank for none: ").strip().lower()
 
     selected = set()
     unrecognized = []
     option_keys = {key for key, _ in EXTRA_ANALYSIS_OPTIONS}
     for tok in raw_choice.replace(',', ' ').split():
-        if tok.isdigit() and 1 <= int(tok) <= len(EXTRA_ANALYSIS_OPTIONS):
+        if tok == 'all':
+            selected |= ALL_ANALYSES_KEYS
+        elif tok.isdigit() and 1 <= int(tok) <= len(EXTRA_ANALYSIS_OPTIONS):
             selected.add(EXTRA_ANALYSIS_OPTIONS[int(tok) - 1][0])
         elif tok in option_keys:  # old-style keyword still accepted
             selected.add(tok)
@@ -197,8 +201,9 @@ def run_phonon_postprocessing() -> None:
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    plot_dir, band_points, vacuum_gap, freeze_amplitude = "phonon_plots", 101, 10.0, 0.05
-    advanced_items = "plot directory"
+    plot_dir, band_points, vacuum_gap, freeze_amplitude, symprec = (
+        "phonon_plots", 101, 10.0, 0.05, 0.01)
+    advanced_items = "plot directory, symmetry tolerance"
     if want_bands:
         advanced_items += ", band-path resolution, vacuum-gap"
     if want_freeze:
@@ -208,6 +213,11 @@ def run_phonon_postprocessing() -> None:
         plot_dir = get_input("Gnuplot .dat/.gplot output directory (default: phonon_plots): ").strip()
         if not plot_dir:
             plot_dir = "phonon_plots"
+        symprec = get_float_input(
+            "Symmetry-detection tolerance Ang, used for force-constant symmetrization "
+            "and the band-path (default: 0.01 -- NOT Phonopy's/ASE's own much tighter "
+            "raw defaults; loosen, don't tighten, if unsure -- a much tighter value "
+            "than Stage 1 used can fail to reconstruct force constants): ", 0.01)
         if want_bands:
             band_points = get_int_input(
                 "Q-points per band-structure path segment (default: 101): ", 101)
@@ -219,6 +229,13 @@ def run_phonon_postprocessing() -> None:
                 "Target max atomic displacement for the frozen mode, Ang "
                 "(default: 0.05): ", 0.05)
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    save_gnuplot = get_input(
+        "Also save gnuplot .dat + .gplot scripts for every computed quantity? (y/N): "
+    ).strip().lower() == 'y'
+    view_plots = get_input(
+        "View plots interactively via matplotlib now? (y/N): ").strip().lower() == 'y'
+
     args = [
         "-dir", phonon_dir,
         "-m", str(m_x), str(m_y), str(m_z),
@@ -226,6 +243,7 @@ def run_phonon_postprocessing() -> None:
         "--tmax", str(tmax),
         "--tstep", str(tstep),
         "--plot-dir", plot_dir,
+        "--symprec", str(symprec),
         "--no-intro"
     ]
     if sys_label and sys_label.upper() != "N/A":
@@ -240,6 +258,12 @@ def run_phonon_postprocessing() -> None:
         args.append("--thermal-displacements")
     if want_freeze:
         args += ["--freeze-unstable-mode", "--freeze-amplitude", str(freeze_amplitude)]
+    if save_report:
+        args.append("--save-report")
+    if save_gnuplot:
+        args.append("--save-gnuplot")
+    if view_plots:
+        args.append("--view")
 
     print(color_text("\nStarting Phonon post-processing...", 'green'))
     run_tool("stb-phononsPos", args)

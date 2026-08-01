@@ -22,6 +22,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io, kspace, mace_relax, mace_phonons
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
+from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ
 from stb.phonons_pos import build_band_path, band_path_to_phonopy_format, band_tick_positions, pretty_label
 
 require_mace()
@@ -40,15 +41,6 @@ OUTPUT_FORMATS = {
     "pdb": ("proteindatabank", ".pdb"),
     "xyz": ("extxyz", ".xyz"),
 }
-
-# Below this (THz), a "negative" frequency is treated as numerical noise
-# (e.g. residual acoustic-sum-rule violation after symmetrize_force_
-# constants(), or plain floating-point roundoff at Gamma where the true
-# acoustic-branch frequency is exactly 0) rather than a genuine imaginary/
-# unstable mode -- verified live: post-ASR-correction, a real run's worst
-# Gamma-point residual was ~5e-5 THz, several orders of magnitude below
-# this threshold; a genuinely unstable mode is typically at least ~0.1 THz.
-_IMAGINARY_MODE_TOL_THZ = -0.01
 
 
 def print_symmetry_table(phonon, f_out=None):

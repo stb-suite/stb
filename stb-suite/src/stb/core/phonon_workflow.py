@@ -30,6 +30,17 @@ from stb.core.cli import color_text, print_dual
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 
+# Below this (THz), a "negative" frequency is treated as numerical noise
+# (e.g. residual acoustic-sum-rule violation after symmetrize_force_
+# constants(), or plain floating-point roundoff at Gamma where the true
+# acoustic-branch frequency is exactly 0) rather than a genuine imaginary/
+# unstable mode -- verified live (in stb-mlphonons): post-ASR-correction, a
+# real run's worst Gamma-point residual was ~5e-5 THz, several orders of
+# magnitude below this threshold; a genuinely unstable mode is typically
+# at least ~0.1 THz. Shared by stb-mlphonons and stb-phononsPos, extracted
+# here once the latter became a second consumer.
+IMAGINARY_MODE_TOL_THZ = -0.01
+
 
 def detect_system_label(phonon_dir):
     """Auto-detect SystemLabel from the calc.fdf/structure.fdf copied into
@@ -128,7 +139,8 @@ def write_displacement_folders(output_root, phonon, supercells, structure_filena
     return folders, yaml_path
 
 
-def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None):
+def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None,
+                                      symprec=None):
     """Builds FORCE_SETS from disp-*/<system_label>.FA (subprocess
     phonopy-init --siesta -f, falling back to plain `phonopy` on older
     installs -- same fallback phonons_pos.py already used) and loads the
@@ -136,6 +148,17 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
     when `has_embedded_fc` (an ML-sourced phonopy_disp.yaml, e.g. from
     stb-mlphonons, already has force constants embedded -- no SIESTA
     .FA/FORCE_SETS involved at all).
+
+    `symprec` is None by default, leaving phonopy.load's own raw default
+    (1e-5, tighter than pymatgen's real 0.01 default -- same too-tight
+    bug class as build_phonon_displacements's own symprec) untouched --
+    ir_modes.py/her_analysis.py/oer_analysis.py/raman_modes.py, none of
+    which expose a --symprec of their own, are unaffected. Only
+    phonons_pos.py passes an explicit value (its own --symprec, default
+    0.01). This tolerance feeds both phonopy.load's primitive_matrix=
+    'auto' spglib primitive-cell detection (used for the band path) and
+    force-constant symmetrization (symmetrize_fc=True is phonopy.load's
+    own default already).
 
     Leaves the process chdir'd into `phonon_dir` on return (phonopy.load
     needs phonopy_disp.yaml/FORCE_SETS to be resolved relative to the
@@ -186,9 +209,10 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
 
     print("[INFO] Initializing Phonopy API and loading FORCE_SETS ...")
     original_dir = os.getcwd()
+    load_kwargs = {} if symprec is None else {"symprec": symprec}
     try:
         os.chdir(phonon_dir)
-        phonon = phonopy.load("phonopy_disp.yaml")
+        phonon = phonopy.load("phonopy_disp.yaml", **load_kwargs)
     except Exception as e:
         print_dual(color_text(f"[ERROR] Could not load phonopy data: {e}", 'red'), f_out)
         os.chdir(original_dir)

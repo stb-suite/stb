@@ -27,7 +27,8 @@ except ImportError:
 # Cores ANSI para terminal
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core import kspace
-from stb.core.phonon_workflow import detect_system_label, load_phonon_with_force_constants
+from stb.core.phonon_workflow import (
+    detect_system_label, load_phonon_with_force_constants, IMAGINARY_MODE_TOL_THZ)
 
 REPORT_FILE = "phonon_properties.txt"
 # Same palette as elastic_analysis.py's PLOT_COLORS (first 3 entries), kept
@@ -137,12 +138,18 @@ def write_thermal_plots(plot_dir, temperatures, free_energy, entropy, heat_capac
     return written
 
 
-def build_band_path(primitive, bohr_to_angstrom, vacuum_gap):
+def build_band_path(primitive, bohr_to_angstrom, vacuum_gap, symprec=2e-4):
     """Auto-detects a high-symmetry q-path for the primitive cell using the
     same ASE Bravais-lattice machinery as stb-kpath (core.kspace +
     ase.cell.Cell.bandpath -- see kpath.py::get_kpath_from_structure)
     instead of Phonopy's seekpath-based auto_band_structure, avoiding a new
     optional dependency (ase is already a core requirement of this suite).
+
+    `symprec` feeds ASE's own `eps` tolerance for Bravais-lattice
+    classification/bandpath detection -- defaults to ASE's own raw
+    default (2e-4 Ang) so stb-mlphonons's call (which doesn't pass this
+    argument) is unaffected; stb-phononsPos passes its own --symprec
+    (default 0.01) explicitly.
 
     Returns (kpoints_dict, path_segments, bravais_name) or None if every
     axis is vacuum-padded (0D -- a q-path isn't physically meaningful).
@@ -158,8 +165,8 @@ def build_band_path(primitive, bohr_to_angstrom, vacuum_gap):
 
     pbc = tuple(not v for v in vacuum_axes)
     cell = Cell(lattice_ang)
-    bravais = cell.get_bravais_lattice(pbc=pbc)
-    bp = cell.bandpath(pbc=pbc, npoints=0)
+    bravais = cell.get_bravais_lattice(pbc=pbc, eps=symprec)
+    bp = cell.bandpath(pbc=pbc, npoints=0, eps=symprec)
 
     kpoints_dict = {('GAMMA' if label == 'G' else label): coords
                     for label, coords in bp.special_points.items()}
@@ -227,6 +234,21 @@ def band_tick_positions(distances, labels, path_connections):
 def pretty_label(label):
     """GAMMA -> the Greek letter, for display in reports/plot tick labels."""
     return "Γ" if label == "GAMMA" else label
+
+
+def _stability_verdict(freq):
+    """(is_unstable, note) for a minimum frequency, using
+    IMAGINARY_MODE_TOL_THZ instead of a razor's-edge 0 cutoff -- a small
+    negative residual (e.g. -0.0003 THz, ASR/floating-point noise at
+    Gamma) is explicitly reported as stable-within-tolerance rather than
+    silently indistinguishable, on sight, from a genuine instability
+    (the "-0.00000 looks unstable but is called stable" confusion).
+    `note` is a ready-to-append string, empty unless freq is negative but
+    still classified stable.
+    """
+    if freq < IMAGINARY_MODE_TOL_THZ:
+        return True, ""
+    return False, " (within numerical tolerance)" if freq < 0 else ""
 
 
 def write_band_plots(plot_dir, bs, labels, path_connections, f_out):
@@ -485,8 +507,27 @@ def main():
     parser.add_argument("--freeze-amplitude", type=float, default=0.05,
                         help="Target maximum atomic displacement (Ang) for "
                              "--freeze-unstable-mode (default: 0.05)")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (Ang), used for force-constant "
+                             "symmetrization and the --bands high-symmetry path (default: "
+                             "0.01, pymatgen's own default -- matches the rest of the suite, "
+                             "and deliberately NOT Phonopy's/ASE's own raw defaults (1e-5 / "
+                             "2e-4), which are far tighter than typical DFT-relaxation noise). "
+                             "A much TIGHTER value than what stb-phononsCreate used to reduce "
+                             "the displacements (its own --symprec, also default 0.01) can "
+                             "fail to reconstruct force constants -- loosen, don't tighten, "
+                             "if in doubt.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also write a .dat + .gplot pair for every computed quantity "
+                             "(thermal properties, bands, group velocity, DOS, PDOS, thermal "
+                             "displacements). Off by default -- this tool previously wrote "
+                             "these unconditionally on every run.")
+    parser.add_argument("--view", action="store_true",
+                        help="Show an interactive matplotlib preview of the computed plots "
+                             "(thermal properties, bands, DOS, PDOS) before finishing. Off "
+                             "by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsPos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -505,7 +546,6 @@ def main():
 
     phonon_dir = args.directory
 
-    # 1. Validação do Diretório
     print(f"\n[INFO] Validating phonon directory '{phonon_dir}' ...")
     if not os.path.exists(phonon_dir):
         print(color_text(f"[ERROR] Directory '{phonon_dir}' not found.", 'red'))
@@ -552,6 +592,8 @@ def main():
         print_dual(f"SystemLabel       : {system_label} ({label_source})", f_out)
     print_dual(f"Q-point mesh      : {args.mesh[0]} x {args.mesh[1]} x {args.mesh[2]}", f_out)
     print_dual(f"Temperature range : {args.tmin} K to {args.tmax} K (step {args.tstep} K)", f_out)
+    print_dual(f"Symmetry precision: {args.symprec:g} Ang (force-constant symmetrization + "
+                "band-path detection)", f_out)
     extra_analyses = [name for flag, name in [
         (args.bands, "band structure"),
         (args.dos, "total DOS"),
@@ -561,22 +603,27 @@ def main():
     ] if flag]
     print_dual(f"Extra analyses    : {', '.join(extra_analyses) if extra_analyses else 'none'}", f_out)
 
-    # 2. Extração de Forças (Criando FORCE_SETS)
     print_section('[1] FORCE EXTRACTION', f_out)
 
-    # 3. Propriedades Térmicas usando a API Python do Phonopy -- FORCE_SETS
-    # extraction (or skipping it for an ML-embedded yaml) + phonopy.load,
-    # via core/phonon_workflow.py (also stb-ramanModes's Stage 2 loader).
-    # Leaves the process chdir'd into phonon_dir; os.chdir(original_dir)
-    # happens once, near the very end of this function, same as before.
+    # FORCE_SETS extraction (or skipping it for an ML-embedded yaml) +
+    # phonopy.load, via core/phonon_workflow.py (also stb-ramanModes's
+    # Stage 2 loader). Leaves the process chdir'd into phonon_dir;
+    # os.chdir(original_dir) happens once, near the very end of this
+    # function, same as before.
     phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
-        phonon_dir, system_label, has_embedded_fc, f_out)
+        phonon_dir, system_label, has_embedded_fc, f_out, symprec=args.symprec)
     # true_bohr_to_angstrom (only meaningful for the bohr-numeric/SIESTA
     # case, distinct from internal_to_angstrom which is 1.0 for the
     # ML-embedded case -- see core/phonon_workflow.py's docstring for the
     # bug this distinction fixes) is still needed standalone below, e.g.
     # for the tdispmat.cif cell-unit fix.
     true_bohr_to_angstrom = get_physical_units().Bohr
+
+    # Eliminates the spurious near-zero negative frequency at Gamma that
+    # plain finite-difference force constants otherwise carry from
+    # translational-invariance numerical noise -- same fix/rationale as
+    # stb-mlphonons (see core/phonon_workflow.py::IMAGINARY_MODE_TOL_THZ).
+    phonon.symmetrize_force_constants(show_drift=False)
 
     print(f"[INFO] Running thermal properties calculation ...")
     print(f"       -> Q-Mesh: {args.mesh}")
@@ -596,7 +643,8 @@ def main():
     print_dual(f"Supercell used         : {supercell_dim[0]} x {supercell_dim[1]} x {supercell_dim[2]} "
                 f"({len(phonon.dataset['first_atoms'])} displacements, {disp_mag:.4f} Ang each)", f_out)
     print_dual(f"Minimum mesh frequency : {min_freq:.4f} THz", f_out)
-    if min_freq < 0:
+    mesh_unstable, mesh_note = _stability_verdict(min_freq)
+    if mesh_unstable:
         print_dual(color_text(
             "[WARNING] Negative (imaginary) phonon frequencies found -- the "
             "structure/supercell is dynamically unstable at some q-point (soft mode, "
@@ -605,12 +653,14 @@ def main():
             "the resulting free energy/entropy/heat capacity are not physically "
             "meaningful as-is.", 'red'), f_out)
     else:
-        print_dual(color_text("No imaginary modes found on the sampled mesh.", 'green'), f_out)
+        print_dual(color_text(
+            f"No imaginary modes found on the sampled mesh{mesh_note}.", 'green'), f_out)
     band_min_freq = None
     band_plots_written = []
     if args.bands:
         print(f"[INFO] Building auto-detected high-symmetry q-path for band structure ...")
-        path = build_band_path(phonon.primitive, internal_to_angstrom, args.vacuum_gap)
+        path = build_band_path(phonon.primitive, internal_to_angstrom, args.vacuum_gap,
+                                symprec=args.symprec)
 
         print_section('[2b] BAND STRUCTURE', f_out)
         if path is None:
@@ -632,13 +682,15 @@ def main():
 
             band_min_freq = np.concatenate(bs.frequencies).min()
             print_dual(f"Minimum band-path frequency : {band_min_freq:.4f} THz", f_out)
-            if band_min_freq < 0:
+            band_unstable, band_note = _stability_verdict(band_min_freq)
+            if band_unstable:
                 print_dual(color_text(
                     "[WARNING] Negative (imaginary) frequency found along the band path -- "
                     "this can catch zone-boundary/high-symmetry instabilities the mesh "
                     "(sampled only at its own grid points) missed.", 'red'), f_out)
             else:
-                print_dual(color_text("No imaginary modes found along the band path.", 'green'), f_out)
+                print_dual(color_text(
+                    f"No imaginary modes found along the band path{band_note}.", 'green'), f_out)
 
             gv_mag = np.concatenate([np.linalg.norm(seg, axis=2) for seg in bs.group_velocities])
             print_dual(f"Group velocity |v_g| : min {gv_mag.min():.4f}, max {gv_mag.max():.4f} "
@@ -652,15 +704,16 @@ def main():
             phonon.write_yaml_band_structure(filename="band.yaml")
             print(color_text(f" -> Saved band data as '{os.path.join(phonon_dir, 'band.yaml')}'", 'cyan'))
 
-            band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
-                                                    path_connections, f_out)
-            band_plots_written += write_group_velocity_plot(args.plot_dir, bs,
-                                                               path_connections, f_out)
+            if args.save_gnuplot:
+                band_plots_written = write_band_plots(args.plot_dir, bs, band_labels,
+                                                        path_connections, f_out)
+                band_plots_written += write_group_velocity_plot(args.plot_dir, bs,
+                                                                   path_connections, f_out)
 
     frozen_mode_filename = None
     if args.freeze_unstable_mode:
         print_section('[2c] MODE FREEZE', f_out)
-        if min_freq >= 0:
+        if not mesh_unstable:
             print_dual("No imaginary mode on the sampled mesh -- nothing to freeze.", f_out)
         else:
             q_idx, band_idx = np.unravel_index(np.argmin(phonon.mesh.frequencies),
@@ -721,7 +774,6 @@ def main():
 
     phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
 
-    # 4. Salvando Gráficos e Dados
     print("[INFO] Exporting results ...")
 
     tp_plot = phonon.plot_thermal_properties()
@@ -750,9 +802,11 @@ def main():
     print_dual(f"  Entropy        : {entropy[-1]:.6f} J/K/mol", f_out)
     print_dual(f"  Heat capacity  : {heat_capacity[-1]:.6f} J/K/mol", f_out)
 
-    plots_written = write_thermal_plots(args.plot_dir, temperatures, free_energy,
-                                         entropy, heat_capacity, f_out)
-    plots_written += band_plots_written
+    plots_written = []
+    if args.save_gnuplot:
+        plots_written = write_thermal_plots(args.plot_dir, temperatures, free_energy,
+                                             entropy, heat_capacity, f_out)
+        plots_written += band_plots_written
 
     if args.dos:
         print(f"[INFO] Computing total DOS (reusing the thermal-properties mesh) ...")
@@ -792,19 +846,27 @@ def main():
                                 f"(Debye temperature {debye_temp:.2f} K)", f_out)
             except Exception:
                 pass  # best-effort -- the quadratic-DOS fit can fail for a noisy/sparse mesh
-            dos_plots = write_dos_plot(args.plot_dir, td.frequency_points, td.dos, f_out)
-            plots_written += dos_plots
+            if args.save_gnuplot:
+                dos_plots = write_dos_plot(args.plot_dir, td.frequency_points, td.dos, f_out)
+                plots_written += dos_plots
+            if args.view:
+                phonon.plot_total_dos()
         if args.pdos:
             pd = phonon.projected_dos
             species_pdos = {}
+            species_indices = []
             for sp in species:
                 idx = [i for i, s in enumerate(symbols) if s == sp]
+                species_indices.append(idx)
                 species_pdos[sp] = pd.projected_dos[idx].sum(axis=0)
             for sp in species:
                 peak_idx = int(np.argmax(species_pdos[sp]))
                 print_dual(f"  {sp} PDOS peak    : {pd.frequency_points[peak_idx]:.4f} THz", f_out)
-            pdos_plots = write_pdos_plot(args.plot_dir, pd.frequency_points, species_pdos, f_out)
-            plots_written += pdos_plots
+            if args.save_gnuplot:
+                pdos_plots = write_pdos_plot(args.plot_dir, pd.frequency_points, species_pdos, f_out)
+                plots_written += pdos_plots
+            if args.view:
+                phonon.plot_projected_dos(pdos_indices=species_indices, legend=species)
 
     if args.thermal_displacements:
         matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
@@ -856,17 +918,23 @@ def main():
         for sp in species:
             print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
 
-        thermal_disp_plots = write_thermal_displacement_plot(args.plot_dir, tdm.temperatures,
-                                                                species_uiso, f_out)
-        plots_written += thermal_disp_plots
+        if args.save_gnuplot:
+            thermal_disp_plots = write_thermal_displacement_plot(args.plot_dir, tdm.temperatures,
+                                                                    species_uiso, f_out)
+            plots_written += thermal_disp_plots
+        # No --view here: phonopy's plot_thermal_displacements() needs a
+        # separate run_thermal_displacements() (isotropic-only) call this
+        # tool never makes -- it uses run_thermal_displacement_matrices()
+        # (full ADP tensors) instead, and there's no matrices-plotting
+        # equivalent in phonopy's API.
 
-    # Retorna ao diretório original
     os.chdir(original_dir)
 
     print_section('[4] SUMMARY & FILES', f_out)
     overall_min_freq = min(min_freq, band_min_freq) if band_min_freq is not None else min_freq
-    stability_verdict = ("UNSTABLE (imaginary modes present)" if overall_min_freq < 0
-                          else "stable on the sampled mesh"
+    overall_unstable, overall_note = _stability_verdict(overall_min_freq)
+    stability_verdict = ("UNSTABLE (imaginary modes present)" if overall_unstable
+                          else f"stable{overall_note} on the sampled mesh"
                                + (" and band path" if band_min_freq is not None else ""))
     print_dual(f"Dynamical stability : {stability_verdict}", f_out)
     if report_path:
@@ -880,16 +948,25 @@ def main():
                          f"{os.path.join(phonon_dir, cif_filename)}")
     if frozen_mode_filename is not None:
         extra_files += f", {os.path.join(phonon_dir, frozen_mode_filename)}"
+    gnuplot_note = (f", {os.path.join(phonon_dir, args.plot_dir)}/ "
+                     f"({len(plots_written)} .dat/.gplot pairs)" if args.save_gnuplot
+                     else " (--save-gnuplot not requested)")
     print_dual(f"Files               : {os.path.join(phonon_dir, plot_filename)}, "
-                f"{os.path.join(phonon_dir, dat_filename)}{extra_files}, "
-                f"{os.path.join(phonon_dir, args.plot_dir)}/ "
-                f"({len(plots_written)} .dat/.gplot pairs)", f_out)
-
+                f"{os.path.join(phonon_dir, dat_filename)}{extra_files}{gnuplot_note}", f_out)
 
     if f_out:
         f_out.close()
     print("\n" + "-" * 60)
     print(color_text("Post-processing complete! Results are in your phonon directory.\n", 'bold'))
+
+    # --view runs last, after the report is fully printed/closed, so a
+    # blocking matplotlib window never delays or hides it -- shows every
+    # figure phonopy's own plot_*() calls above already built (bands,
+    # thermal properties, and any of DOS/PDOS/thermal-displacements that
+    # were computed), same pattern as aimd_analysis.py's --view.
+    if args.view:
+        import matplotlib.pyplot as plt
+        plt.show()
 
 if __name__ == "__main__":
     main()

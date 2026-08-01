@@ -29,7 +29,7 @@ BIB_FILE = "references.bib"
 # treat it as vacuum-padded rather than genuinely periodic.
 VACUUM_GAP_ANG = 10.0
 
-def compute_layer_group(structure, aperiodic_dir, symprec=1e-3):
+def compute_layer_group(structure, aperiodic_dir, symprec=0.01):
     """Layer-group analysis for a genuinely 2D-periodic structure (periodic
     along the 2 axes other than `aperiodic_dir`, vacuum-padded along it) --
     the physically correct symmetry classification for a slab, unlike the
@@ -190,7 +190,7 @@ def compute_point_group(structure, tolerance=0.3):
     except Exception:
         return None
 
-def compute_symmetry(structure, symprec=1e-3, angle_tolerance=5.0):
+def compute_symmetry(structure, symprec=0.01, angle_tolerance=5.0):
     """Pure computation -- no printing, no file I/O. Returns a results dict
     that format_report() turns into the console/file report.
 
@@ -752,8 +752,13 @@ def main():
                         help="Input file format:\n"
                              "  fdf:        SIESTA structure input (%%block LatticeVectors etc.)\n"
                              "  struct_out: SIESTA post-relaxation output (.STRUCT_OUT)")
-    parser.add_argument("--symprec", type=float, default=1e-3,
-                        help="Symmetry-detection tolerance in Å (default: 1e-3).")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance in Å (default: 0.01, pymatgen's own "
+                             "default). Loosen further (e.g. 0.02-0.05) for a structure relaxed "
+                             "with a looser force tolerance -- a tighter value than the "
+                             "relaxation's own residual numerical noise can misdetect the true "
+                             "space group; use --scan-symprec to check where a given structure's "
+                             "symmetry call is sensitive.")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry-detection angle tolerance in degrees (default: 5.0).")
     parser.add_argument("--no-operations", dest="show_operations", action="store_false",

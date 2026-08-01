@@ -54,7 +54,7 @@ def detect_system_label(phonon_dir):
     return None
 
 
-def build_phonon_displacements(unitcell, supercell_matrix, distance_ang):
+def build_phonon_displacements(unitcell, supercell_matrix, distance_ang, symprec=None):
     """Constructs the Phonopy object and generates the displaced
     supercells via generate_displacements(). `distance_ang` is in
     Angstrom, converted internally to Bohr: phonopy's SIESTA interface
@@ -65,13 +65,33 @@ def build_phonon_displacements(unitcell, supercell_matrix, distance_ang):
     (same pitfall documented in phonons_create.py's original inline
     version of this code).
 
+    `symprec` is None by default, leaving Phonopy's own raw default
+    (`1e-5`) untouched -- kept this way so existing callers (her_refs.py/
+    ir.py/oer_refs.py/raman.py, none of which expose a --symprec of their
+    own yet) see zero behavior change. `1e-5` is far too tight for a real
+    DFT-relaxed structure and can silently misdetect the true space group
+    (this also drives which primitive_matrix Phonopy auto-resolves, since
+    that resolution uses the same tolerance) -- verified live on a real
+    relaxed AlP (zincblende) structure: at `1e-5` Phonopy reports space
+    group `R3m` (wrong -- a numerical-noise artifact, the same failure
+    mode documented for pymatgen's SpacegroupAnalyzer elsewhere in this
+    suite); at `0.01` (pymatgen's own default) it correctly reports
+    `F-43m`. stb-phononsCreate is the first, and so far only, caller to
+    pass an explicit value (its own `--symprec`, default 0.01) -- give
+    another caller the same fix by passing `symprec=0.01` (or exposing its
+    own flag) once it has a real need, same "fix on first genuine use"
+    policy as the rest of this suite's `core/` modules.
+
     Returns (phonon, supercells) -- phonon.dataset has the
     symmetry-reduced displacement pattern (spglib, via Phonopy itself),
     supercells is the list of displaced structures (some entries may be
     None, same convention as phonopy.supercells_with_displacements).
     """
     bohr_to_angstrom = get_physical_units().Bohr
-    phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, calculator="siesta")
+    phonopy_kwargs = {"calculator": "siesta"}
+    if symprec is not None:
+        phonopy_kwargs["symprec"] = symprec
+    phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, **phonopy_kwargs)
     phonon.generate_displacements(distance=distance_ang / bohr_to_angstrom)
     supercells = phonon.supercells_with_displacements
     return phonon, supercells

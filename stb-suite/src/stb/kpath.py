@@ -310,9 +310,12 @@ def main():
     parser.add_argument(
         "--symprec",
         type=float,
-        default=1e-3,
+        default=0.01,
         help="Symmetry-detection tolerance for the crystallographic space-group "
-             "analysis. Default: 0.001"
+             "analysis. Default: 0.01 (pymatgen's own default). Loosen further "
+             "(e.g. 0.02-0.05) for a structure relaxed with a looser force "
+             "tolerance -- a tighter value than the relaxation's own residual "
+             "numerical noise can misdetect the true space group."
     )
     parser.add_argument(
         "--angle-tolerance",

@@ -118,10 +118,10 @@ monolayer.""",
                         help="One symmetrically-distinct Wyckoff site: element symbol and "
                              "fractional x y z. Repeat --site for each distinct site.")
 
-    parser.add_argument("--symprec", type=float, default=1e-3,
+    parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry precision, used both for the post-build symmetry "
-                             "detection and for --reduce (default: 1e-3, matches "
-                             "stb-symmetry/stb-unitcell).")
+                             "detection and for --reduce (default: 0.01, pymatgen's own default, "
+                             "matches stb-symmetry/stb-unitcell).")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own default).")
 

@@ -728,6 +728,25 @@ def is_siesta_true(value: str | None) -> bool:
     return value is not None and value.lower() in _SIESTA_TRUE_VALUES
 
 
+def prepend_include(calc_text: str, include_name: str) -> str:
+    """Inserts '%include <include_name>' at the very TOP of calc_text,
+    before anything else -- including the structure %include. Unlike
+    insert_include_after_structure below (safe there only because the
+    included block name never pre-exists in a real calc.fdf), this is for
+    override directives (e.g. MD.TypeOfRun/MD.Steps/MD.NumCGsteps/
+    MD.VariableCell to force single-point SCF) that commonly DO already
+    appear in a real relaxation template -- and SIESTA's fdf reader is
+    first-occurrence-wins for duplicate labels (verified in
+    hubbardu.py::write_run_folder), so the override must physically precede
+    any pre-existing occurrence in the base file to actually take effect,
+    regardless of where the base file's own structure %include happens to
+    sit. Shared by elastic_inputs.py and phonons_create.py, both of which
+    need to force single-point SCF over a user-supplied relaxation calc.fdf
+    template.
+    """
+    return f"%include {include_name}\n\n" + calc_text
+
+
 def insert_include_after_structure(calc_text: str, structure_basename: str, include_name: str) -> str:
     """Inserts '%include <include_name>' right after the existing
     '%include <structure_basename>' line -- the exact position the

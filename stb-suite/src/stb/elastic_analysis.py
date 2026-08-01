@@ -1330,8 +1330,12 @@ def main():
                              "reading symmetry from a strained structure would silently misdetect "
                              "it. Never required -- falls back to independent per-direction fitting "
                              "if unavailable.")
-    parser.add_argument("--symprec", type=float, default=1e-3,
-                        help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own default).")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (default: 0.01, pymatgen's own "
+                             "default). Loosen further (e.g. 0.02-0.05) for a structure relaxed "
+                             "with a looser force tolerance -- a tighter value than the "
+                             "relaxation's own residual numerical noise can misdetect the true "
+                             "space group.")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                              "default), same use as --symprec.")

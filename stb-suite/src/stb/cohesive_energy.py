@@ -350,10 +350,14 @@ def main():
                              "species; the correction is converged once increasing --bsse-"
                              "cutoff no longer changes the reported BSSE-corrected energy "
                              "appreciably. Only used when --bsse-correction is on.")
-    parser.add_argument("--symprec", dest="symprec", type=float, default=1e-3,
-                        help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own "
+    parser.add_argument("--symprec", dest="symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (default: 0.01, pymatgen's own "
                              "default), used to find symmetrically distinct sites per species "
-                             "for --bsse-multi-site.")
+                             "for --bsse-multi-site. Loosen further (e.g. 0.02-0.05) for a "
+                             "structure relaxed with a looser force tolerance -- a tighter "
+                             "value than the relaxation's own residual numerical noise can "
+                             "misdetect the true space group (see stb-symmetry --scan-symprec "
+                             "to check where a given structure's symmetry call is sensitive).")
     parser.add_argument("--bsse-multi-site", dest="bsse_multi_site", action="store_true",
                         default=True,
                         help="When a species occupies 2+ symmetrically distinct sites (e.g. "

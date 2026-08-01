@@ -295,10 +295,10 @@ Look it up by exact id, or search by formula and pick a candidate.""",
                         help="Also reduce the fetched structure to its primitive/conventional/"
                              "refined unit cell (same logic as stb-unitcell) before writing. "
                              "Default: keep the structure exactly as fetched.")
-    parser.add_argument("--symprec", type=float, default=1e-3,
+    parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry precision, used for the fetched structure's space group "
-                             "summary and for --unitcell (default: 1e-3, matches stb-unitcell/"
-                             "stb-symmetry).")
+                             "summary and for --unitcell (default: 0.01, pymatgen's own default, "
+                             "matches stb-unitcell/stb-symmetry).")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry angle tolerance in degrees, used the same way as "
                              "--symprec (default: 5.0, pymatgen's own default).")

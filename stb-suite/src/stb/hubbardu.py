@@ -321,7 +321,7 @@ REFERENCE_U sanity check, ...).""",
                 "one:", 'red'))
             try:
                 pmg_structure = structure_io.to_pymatgen(structure)
-                sites, space_group = find_inequivalent_sites(pmg_structure, symprec=1e-3,
+                sites, space_group = find_inequivalent_sites(pmg_structure, symprec=0.01,
                                                                filter_species=args.species)
                 print(f"  {color_text('Space group:', 'cyan')} {space_group}")
                 for rep, wyckoff, multiplicity in sites:

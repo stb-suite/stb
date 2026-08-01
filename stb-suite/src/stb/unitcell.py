@@ -60,7 +60,7 @@ def _describe_structure(pmg_structure, vacuum_axes, f_out):
         print_dual(f"Density        : {len(pmg_structure) / pmg_structure.lattice.volume:.4f} atoms/Ang^3", f_out)
 
 
-def _validate_structure(pmg_structure, vacuum_axes, f_out, symprec=1e-3):
+def _validate_structure(pmg_structure, vacuum_axes, f_out, symprec=0.01):
     """Shared malformation checklist (core.structure_checks) plus a
     space-group label -- same shape as supercell.py/slab.py/nanotube.py/
     defect.py/sqs.py's own _validate_structure(), wrapped in try/except by
@@ -115,9 +115,13 @@ unit cell, which may be much smaller than the literal input cell (e.g. a
                              "refined: conventional cell with atomic positions snapped to the\n"
                              "detected symmetry -- cleans up numerical noise from relaxations or\n"
                              "hand-built/CIF structures without changing which atoms are present.")
-    parser.add_argument("--symprec", type=float, default=1e-3,
-                        help="Symmetry precision (default: 1e-3, matches stb-symmetry). Also used "
-                             "as the tolerance for the before/after symmetry analysis below.")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry precision (default: 0.01, pymatgen's own default, matches "
+                             "stb-symmetry). Also used as the tolerance for the before/after "
+                             "symmetry analysis below. Loosen further (e.g. 0.02-0.05) for a "
+                             "structure relaxed with a looser force tolerance -- a tighter value "
+                             "than the relaxation's own residual numerical noise can misdetect "
+                             "the true space group.")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own default).")
 

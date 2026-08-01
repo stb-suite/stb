@@ -57,7 +57,7 @@ import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, link_pseudo
-from stb.core.structure_io import read_md_state, is_siesta_true
+from stb.core.structure_io import read_md_state, is_siesta_true, prepend_include
 
 REPORT_FILE = "elastic_stage1.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
@@ -161,22 +161,6 @@ def print_symmetry_table(dirs_before, kept, point_group, ops, symmetry_method, m
     print_dual("-" * 60, f_out)
 
 
-def prepend_include(calc_text, include_name):
-    """Inserts '%include <include_name>' at the very TOP of calc_text,
-    before anything else -- including the structure %include. Unlike
-    strain.py's insert_include_after_structure (safe there only because
-    Geometry.Constraints never pre-exists in a real calc.fdf), this tool's
-    override directives (MD.TypeOfRun/MD.Steps/MD.NumCGsteps/
-    MD.VariableCell) commonly DO already appear in a real relaxation
-    template -- and SIESTA's fdf reader is first-occurrence-wins for
-    duplicate labels (verified in hubbardu.py::write_run_folder), so the
-    override must physically precede any pre-existing occurrence in the
-    base file to actually take effect, regardless of where the base
-    file's own structure %include happens to sit.
-    """
-    return f"%include {include_name}\n\n" + calc_text
-
-
 # ==========================================
 #                  MAIN
 # ==========================================
@@ -262,10 +246,13 @@ def main():
                              "periodic vs. vacuum-padded (default: 10.0), same convention as "
                              "stb-kgrid/stb-strain. Requested directions touching a vacuum-padded "
                              "axis are skipped with a warning instead of generated.")
-    parser.add_argument("--symprec", type=float, default=1e-3,
-                        help="Symmetry-detection tolerance (default: 1e-3, pymatgen's own default), "
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (default: 0.01, pymatgen's own default), "
                              "used for the symmetry-based direction reduction and the "
-                             "informational note about triclinic/monoclinic structures.")
+                             "informational note about triclinic/monoclinic structures. Loosen "
+                             "further (e.g. 0.02-0.05) for a structure relaxed with a looser "
+                             "force tolerance -- a tighter value than the relaxation's own "
+                             "residual numerical noise can misdetect the true space group.")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                              "default), same use as --symprec.")

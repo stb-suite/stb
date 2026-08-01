@@ -47,7 +47,7 @@ def find_inequivalent_sites(pmg_structure, symprec, filter_species=None):
     return sites, space_group
 
 
-def space_group_label(pmg_structure, symprec=1e-3) -> str:
+def space_group_label(pmg_structure, symprec=0.01) -> str:
     """Returns e.g. "Fm-3m (No. 225)" -- the same "international symbol (No.
     number)" format find_inequivalent_sites already builds inline, extracted
     here once stb-translate became a second consumer (--dry-run/conversion
@@ -57,7 +57,7 @@ def space_group_label(pmg_structure, symprec=1e-3) -> str:
     return f"{dataset.international} (No. {dataset.number})"
 
 
-def layer_group_label(pmg_structure, aperiodic_dir, symprec=1e-3):
+def layer_group_label(pmg_structure, aperiodic_dir, symprec=0.01):
     """Returns e.g. "p31m (No. 78)" for a genuinely 2D-periodic structure
     (periodic along the 2 axes other than `aperiodic_dir`, vacuum-padded
     along it) -- just the label, no operations/sites/Wyckoff table. Same
@@ -155,7 +155,7 @@ def point_group_label(pmg_structure, tolerance=0.3):
         return None
 
 
-def equivalent_cartesian_axes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+def equivalent_cartesian_axes(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Groups the 3 Cartesian axes (x=0, y=1, z=2) by point-group symmetry:
     axes in the same group are related by a rotation/reflection of the
     structure's point group, so straining along one axis must give an
@@ -235,7 +235,7 @@ def strain_tensor(mode, delta=1.0):
     return eps
 
 
-def equivalent_strain_modes(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+def equivalent_strain_modes(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Groups the 6 canonical Voigt strain modes ('xx','yy','zz','yz','xz',
     'xy') by point-group symmetry: modes in the same group are related by a
     rotation/reflection of the structure's point group (R . eps_i . R^T ==
@@ -309,7 +309,7 @@ def operations_summary(ops) -> str:
     return f"{len(ops)} operation(s) ({proper} proper rotation(s), {improper} improper (mirror/inversion/rotoreflection))"
 
 
-def get_point_group_operations(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+def get_point_group_operations(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Returns (point_group_symbol, ops): the structure's point group and its
     Cartesian symmetry operations (pymatgen SymmOp list), with none of the
     strain-mode/elastic-tensor machinery above. A thin, standalone accessor
@@ -442,7 +442,7 @@ def rotate_elastic_tensor(C, R):
     return full_tensor_to_voigt(T_rot)
 
 
-def symmetry_allowed_basis(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+def symmetry_allowed_basis(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Returns (basis, point_group_symbol): `basis` is a list of 6x6 Voigt
     matrices spanning the subspace of elastic tensors invariant under every
     operation of the structure's point group -- i.e. every physically
@@ -660,7 +660,7 @@ def fit_stiffness_matrix_energy(basis, pattern_targets, conv_factor):
     return C * conv_factor
 
 
-def crystal_system(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
+def crystal_system(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Returns (crystal_system, point_group_symbol), e.g. ("triclinic", "-1").
 
     Used by stb-elasticInputs to flag when the "vary one strain component at
@@ -679,7 +679,7 @@ def crystal_system(pmg_structure, symprec=1e-3, angle_tolerance=5.0):
     return sga.get_crystal_system(), sga.get_point_group_symbol()
 
 
-def reduce_to_unitcell(structure, mode, symprec=1e-3, angle_tolerance=5.0):
+def reduce_to_unitcell(structure, mode, symprec=0.01, angle_tolerance=5.0):
     """Returns (new_structure, sga) for the requested `mode`:
       - primitive: smallest possible cell.
       - conventional: standardized, usually larger, cell.

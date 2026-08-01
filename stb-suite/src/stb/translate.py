@@ -647,7 +647,7 @@ def writefilecif(typevectors, latticeparameter, vectors, getatoms, atomsposition
 
     atoms = build_ase_atoms(final_type, latticeparameter, vectors, getatoms, final_positions)
     structure = AseAtomsAdaptor.get_structure(atoms)
-    CifWriter(structure, symprec=1e-3).write_file(outfilename)
+    CifWriter(structure, symprec=0.01).write_file(outfilename)
 
 
 

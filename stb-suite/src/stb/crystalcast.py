@@ -591,11 +591,12 @@ stb-symmetry or stb-unitcell.)""",
                         help="Path to a custom fine-tuned .model file for --ml-rank, instead "
                              "of a MACE-MP-0 foundation size. Only valid together with --ml-rank.")
 
-    parser.add_argument("--symprec", type=float, default=1e-3,
+    parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry precision: for generation, used to re-detect each --dim 3 "
                              "candidate's actual space group; for --substitute/--subgroup/"
                              "--supergroup, the tolerance passed to pyxtal's own symmetry "
-                             "detection (default: 1e-3, matches stb-symmetry/stb-unitcell).")
+                             "detection (default: 0.01, pymatgen's own default, matches "
+                             "stb-symmetry/stb-unitcell).")
     parser.add_argument("--angle-tolerance", type=float, default=5.0,
                         help="Angle tolerance in degrees for symmetry detection (default: 5.0, "
                              "matches stb-symmetry/stb-unitcell).")

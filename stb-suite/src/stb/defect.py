@@ -174,9 +174,10 @@ automatically at every symmetrically distinct site.""",
     parser.add_argument("--filter-species", type=str, default=None,
                         help="Restrict --nearest's or --all-inequivalent-sites' search to atoms "
                              "of this element.")
-    parser.add_argument("--symprec", type=float, default=1e-3,
+    parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry precision for --all-inequivalent-sites and the before/after "
-                             "symmetry table (default: 1e-3, matches stb-symmetry/stb-unitcell).")
+                             "symmetry table (default: 0.01, pymatgen's own default, matches "
+                             "stb-symmetry/stb-unitcell).")
     parser.add_argument("--ml-rank", action="store_true",
                         help="Only valid with --all-inequivalent-sites. Quickly relaxes each "
                              "candidate site's local geometry (positions only) with a MACE "

@@ -278,6 +278,39 @@ def run_phonon_generator() -> None:
             print(color_text("Invalid input format. Using default 2 2 2.", 'yellow'))
             dim_x, dim_y, dim_z = 2, 2, 2
 
+    # 3b. Malha de k-points da supercélula -- preview the 0.2 1/Ang-density
+    # suggestion as the bracketed default, so the user sees real numbers
+    # instead of a blind "blank to auto-suggest".
+    suggested_kgrid = None
+    try:
+        _struct = structure_io.read_fdf(structure_file)
+        _pos = np.array([p for _, p in _struct.atoms])
+        _frac = kspace.to_fractional(_pos, _struct.lattice, _struct.coord_format == 'cartesian')
+        _vac = kspace.detect_vacuum_axes(_frac, _struct.lattice, 10.0)
+        _sc_lattice = np.diag([dim_x, dim_y, dim_z]) @ np.array(_struct.lattice)
+        suggested_kgrid = kspace.compute_monkhorts(
+            _sc_lattice[0], _sc_lattice[1], _sc_lattice[2], 0.2, _vac)
+    except Exception:
+        suggested_kgrid = None
+
+    if suggested_kgrid:
+        default_str = f"{suggested_kgrid[0]} {suggested_kgrid[1]} {suggested_kgrid[2]}"
+        kgrid_choice = get_input(f"\nSupercell k-grid [{default_str}]: ").strip()
+        if not kgrid_choice:
+            kgrid_choice = default_str
+    else:
+        kgrid_choice = get_input("\nSupercell k-grid 'X Y Z' (blank to auto-suggest): ").strip()
+    kgrid = None
+    if kgrid_choice:
+        try:
+            kgrid_vals = [int(x) for x in kgrid_choice.split()]
+            if len(kgrid_vals) == 3:
+                kgrid = kgrid_vals
+            else:
+                print(color_text("Please provide exactly 3 integers. Auto-suggesting instead.", 'yellow'))
+        except ValueError:
+            print(color_text("Invalid input format. Auto-suggesting instead.", 'yellow'))
+
     # 4. Definir distância de deslocamento
     distance = get_float_input("\nDisplacement distance in Å [default: 0.01]: ", 0.01)
 
@@ -305,8 +338,8 @@ def run_phonon_generator() -> None:
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, ml_device = 10.0, "cpu"
-    advanced_items = "vacuum-gap"
+    vacuum_gap, symprec, ml_device = 10.0, 0.01, "cpu"
+    advanced_items = "vacuum-gap, symmetry tolerance"
     if ml_prerelax:
         advanced_items += ", ML device"
     show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
@@ -314,9 +347,15 @@ def run_phonon_generator() -> None:
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
             "(default: 10.0): ", 10.0)
+        symprec = get_float_input(
+            "Symmetry-detection tolerance Phonopy uses to reduce displacements, in Ang "
+            "(default: 0.01 -- NOT Phonopy's own much tighter raw default, which can "
+            "misdetect the true space group on a real relaxed structure): ", 0.01)
         if ml_prerelax:
             device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
             ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
 
     # 7. Preparar e executar o script
     args = [
@@ -326,11 +365,16 @@ def run_phonon_generator() -> None:
         "-d", str(distance),
         "-p", pseudo_dir,
         "--vacuum-gap", str(vacuum_gap),
+        "--symprec", str(symprec),
         "--no-intro"
     ]
+    if kgrid is not None:
+        args += ["--kgrid", str(kgrid[0]), str(kgrid[1]), str(kgrid[2])]
     if ml_prerelax:
         args += ["--ml-prerelax", "--ml-model", ml_model, "--ml-device", ml_device,
                   "--ml-fmax", str(ml_fmax)]
+    if save_report:
+        args.append("--save-report")
 
     print(color_text("\nGenerating phonon displacement folders...", 'green'))
     run_tool("stb-phononsCreate", args)
@@ -394,7 +438,7 @@ def run_cohesive_setup() -> None:
 
     # Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, output_dir, bsse_cutoff, symprec, bsse_convergence_increment = 10.0, "cohesive_runs", 4.0, 1e-3, [2.0]
+    vacuum_gap, output_dir, bsse_cutoff, symprec, bsse_convergence_increment = 10.0, "cohesive_runs", 4.0, 0.01, [2.0]
     advanced_items = "vacuum-gap, output directory"
     if bsse_correction:
         advanced_items += ", BSSE cutoff radius/symmetry tolerance"
@@ -414,7 +458,7 @@ def run_cohesive_setup() -> None:
                 "for longer-bonded solids, several for short-bonded covalent ones like "
                 "graphene/diamond; check the printed ghost-neighbor count): ", 4.0)
             symprec = get_float_input(
-                "Symmetry-detection tolerance, for multi-site BSSE (default: 0.001): ", 1e-3)
+                "Symmetry-detection tolerance, for multi-site BSSE (default: 0.01): ", 0.01)
             if bsse_convergence_check:
                 inc_input = get_input(
                     "BSSE convergence-check cutoff increment(s) in Ang -- one value for a "
@@ -2399,7 +2443,7 @@ def run_elastic_generator() -> None:
 
     # 5. Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 1e-3, 5.0, "elastic_runs"
+    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 0.01, 5.0, "elastic_runs"
     show_advanced = get_input(
         "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output directory)? "
         "[y/N]: ").strip().lower()
@@ -2407,7 +2451,7 @@ def run_elastic_generator() -> None:
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
             "(default: 10.0): ", 10.0)
-        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.01): ", 0.01)
         angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
         output_dir = get_input("Output directory (default: elastic_runs): ").strip()
         if not output_dir:
@@ -2506,7 +2550,7 @@ def run_elastic_analyzer() -> None:
 
     # 7. Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, symprec, angle_tolerance = 10.0, 1e-3, 5.0
+    vacuum_gap, symprec, angle_tolerance = 10.0, 0.01, 5.0
     eggbox_tolerance, fit_quality_tolerance, plot_dir = 5.0, 0.995, "elastic_plots"
     show_advanced = get_input(
         "\nConfigure advanced settings (vacuum-gap, symmetry/quality tolerances, plot "
@@ -2516,7 +2560,7 @@ def run_elastic_analyzer() -> None:
             vacuum_gap = get_float_input(
                 "Vacuum gap threshold in Ang, for dimensionality auto-detection "
                 "(default: 10.0): ", 10.0)
-        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.01): ", 0.01)
         angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
         if method == "stress":
             eggbox_tolerance = get_float_input(
@@ -2699,7 +2743,7 @@ def run_kpath_generator() -> None:
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    vacuum_gap, eps, symprec, angle_tolerance = 10.0, 0.0002, 1e-3, 5.0
+    vacuum_gap, eps, symprec, angle_tolerance = 10.0, 0.0002, 0.01, 5.0
     show_advanced = get_input(
         "\nConfigure advanced settings (vacuum-gap, Bravais-lattice tolerance, "
         "symmetry tolerances)? [y/N]: ").strip().lower()
@@ -2708,7 +2752,7 @@ def run_kpath_generator() -> None:
             "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
             "(default: 10.0): ", 10.0)
         eps = get_float_input("Bravais-lattice detection tolerance / eps (default: 0.0002): ", 0.0002)
-        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.01): ", 0.01)
         angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
 
     args = [
@@ -3217,7 +3261,7 @@ def run_unitcell_generator() -> None:
     mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
     mode = {'2': 'conventional', '3': 'refined'}.get(mode_choice, 'primitive')
 
-    symprec = get_float_input("\nSymmetry precision [default: 1e-3]: ", 1e-3)
+    symprec = get_float_input("\nSymmetry precision [default: 0.01]: ", 0.01)
 
     output_file = get_input("\nOutput file name [default: unitcell.fdf]: ").strip()
     if not output_file:
@@ -6365,7 +6409,7 @@ def run_strain_generator() -> None:
     # essential flow below stays short) -- collected here, not after the
     # direction question, because the axis-symmetry preview table below needs
     # the actual vacuum-gap/symmetry tolerances to be accurate.
-    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 1e-3, 5.0, "strain_runs"
+    vacuum_gap, symprec, angle_tolerance, output_dir = 10.0, 0.01, 5.0, "strain_runs"
     show_advanced = get_input(
         "\nConfigure advanced settings (vacuum-gap, symmetry tolerances, output directory)? "
         "[y/N]: ").strip().lower()
@@ -6373,7 +6417,7 @@ def run_strain_generator() -> None:
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for detecting periodic vs. vacuum-padded axes "
             "(default: 10.0): ", 10.0)
-        symprec = get_float_input("Symmetry-detection tolerance (default: 0.001): ", 1e-3)
+        symprec = get_float_input("Symmetry-detection tolerance (default: 0.01): ", 0.01)
         angle_tolerance = get_float_input("Symmetry angle tolerance in degrees (default: 5.0): ", 5.0)
         output_dir = get_input("Output directory (default: strain_runs): ").strip()
         if not output_dir:

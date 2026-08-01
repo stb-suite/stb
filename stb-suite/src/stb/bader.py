@@ -236,7 +236,7 @@ def read_spin_density(file_rho, geometry, cube_path):
         return None
 
 
-def find_symmetry_groups(geometry, physical_idx, symprec=1e-3, angle_tolerance=5.0):
+def find_symmetry_groups(geometry, physical_idx, symprec=0.01, angle_tolerance=5.0):
     """Returns a list of groups of positions into `physical_idx` (i.e. into
     atoms_data, which is built in the same order) that the detected space
     group treats as symmetrically equivalent -- singleton "groups" (no

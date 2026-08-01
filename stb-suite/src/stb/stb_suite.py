@@ -4019,46 +4019,112 @@ def run_convergence_generator() -> None:
     print(color_text("CONVERGENCE TEST GENERATOR", 'bold').center(60))
     print("="*60 + "\n")
 
-    struct_file = get_input("Input structure file (-s): ")
-    while not os.path.isfile(struct_file):
-        print(color_text("File not found!", 'red'))
-        struct_file = get_input("Input structure file (-s): ")
+    struct_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not struct_file:
+        struct_file = "structure.fdf"
 
-    calc_file = get_input("Calc.fdf template file (-c): ")
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template file (-c): ")
+    calc_file = get_input("Calc.fdf template file [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
 
-    print(f"\n{color_text('Select Parameter to Sweep:', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = Mesh.CutOff (Ry)")
-    print(f"  {color_text('2', 'cyan')} = PAO.EnergyShift (Ry)")
-    print(f"  {color_text('3', 'cyan')} = K-grid density (1/Ang)")
-    param_choice = get_input("Select option (1-3): ").strip()
-    param_map = {'1': 'meshcutoff', '2': 'energyshift', '3': 'kgrid'}
-    parameter = param_map.get(param_choice, 'meshcutoff')
+    pseudo_source = prompt_pseudo_source(optional=True)
 
-    min_value = get_float_input("\nMinimum value: ")
-    max_value = get_float_input("Maximum value: ")
-    step_value = get_float_input("Step: ")
-
-    args = [
-        "--structure", struct_file,
-        "--calc", calc_file,
-        "--parameter", parameter,
-        "--min", str(min_value),
-        "--max", str(max_value),
-        "--step", str(step_value),
-        "--no-intro"
+    # Numbered multi-select + 'all' shortcut -- same UX convention as
+    # run_phonon_postprocessing()'s own additional-analyses list.
+    PARAMETER_OPTIONS = [
+        ("meshcutoff", "Mesh.CutOff (Ry)"),
+        ("energyshift", "PAO.EnergyShift (Ry)"),
+        ("kgrid", "K-grid density (1/Ang)"),
     ]
+    print(f"\n{color_text('Select parameter(s) to sweep:', 'yellow')}")
+    for i, (_key, desc) in enumerate(PARAMETER_OPTIONS, start=1):
+        print(f"  {color_text(str(i), 'cyan')} = {desc}")
+    raw_choice = get_input(
+        f"Select by number (1-{len(PARAMETER_OPTIONS)}), space/comma-separated, "
+        "or 'all' for all three: ").strip().lower()
 
-    if parameter == 'kgrid':
+    selected = []
+    unrecognized = []
+    option_keys = {key for key, _ in PARAMETER_OPTIONS}
+    for tok in raw_choice.replace(',', ' ').split():
+        if tok == 'all':
+            for key, _ in PARAMETER_OPTIONS:
+                if key not in selected:
+                    selected.append(key)
+        elif tok.isdigit() and 1 <= int(tok) <= len(PARAMETER_OPTIONS):
+            key = PARAMETER_OPTIONS[int(tok) - 1][0]
+            if key not in selected:
+                selected.append(key)
+        elif tok in option_keys:
+            if tok not in selected:
+                selected.append(tok)
+        else:
+            unrecognized.append(tok)
+
+    if unrecognized:
+        print(color_text(
+            f"[WARNING] Ignored unrecognized option(s): {', '.join(unrecognized)} "
+            f"(expected a number 1-{len(PARAMETER_OPTIONS)}, or 'all').", 'yellow'))
+    if not selected:
+        print(color_text("No parameter selected -- defaulting to Mesh.CutOff.", 'yellow'))
+        selected = ["meshcutoff"]
+    print(color_text(f"Selected: {', '.join(selected)}", 'green'))
+
+    # Each selected parameter gets its own --<parameter>-range flag, so ALL
+    # of them (customized or left at their suggested default) always end up
+    # in ONE combined stb-convergence invocation -- one report showing
+    # every selected parameter together, not fragmented across several
+    # separate runs/reports.
+    param_defaults = {
+        "meshcutoff": (100.0, 400.0, 50.0, "Ry"),
+        "energyshift": (0.001, 0.05, 0.01, "Ry"),
+        "kgrid": (0.05, 0.30, 0.05, "1/Ang"),
+    }
+    range_flag = {"meshcutoff": "--meshcutoff-range", "energyshift": "--energyshift-range",
+                  "kgrid": "--kgrid-range"}
+    custom_ranges = {}
+    for p in selected:
+        d_min, d_max, d_step, d_unit = param_defaults[p]
+        customize = get_input(
+            f"\nCustomize the sweep range for '{p}' (suggested: {d_min:g} to "
+            f"{d_max:g}, step {d_step:g} {d_unit})? [y/N]: ").strip().lower()
+        if customize == 'y':
+            min_value = get_float_input("  Minimum value: ")
+            max_value = get_float_input("  Maximum value: ")
+            step_value = get_float_input("  Step: ")
+            custom_ranges[p] = (min_value, max_value, step_value)
+
+    if 'kgrid' in selected:
         vacuum_gap = get_float_input("\nVacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
-        args.extend(["--vacuum-gap", str(vacuum_gap)])
+    else:
+        vacuum_gap = None
+
+    relax_steps = get_int_input(
+        "\nRelaxation steps forced in every generated folder (positions + cell) "
+        "[default: 100]: ", 100)
 
     output_dir = get_input("\nOutput directory [default: convergence_runs]: ").strip()
     if not output_dir:
         output_dir = "convergence_runs"
-    args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+
+    args = [
+        "--structure", struct_file,
+        "--calc", calc_file,
+        "--parameter", *selected,
+        "--relax-steps", str(relax_steps),
+        "--output-dir", output_dir,
+        "--no-intro"
+    ]
+    if pseudo_source:
+        args += ["--pseudo-dir", pseudo_source]
+    if vacuum_gap is not None:
+        args += ["--vacuum-gap", str(vacuum_gap)]
+    if save_report:
+        args.append("--save-report")
+    for p, (mn, mx, st) in custom_ranges.items():
+        args += [range_flag[p], str(mn), str(mx), str(st)]
 
     run_tool("stb-convergence", args)
 
@@ -7523,7 +7589,7 @@ WORKFLOW_TOOLS = {
         'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-convergence)",
-                'description': "Generate a sweep of calc.fdf variants for one parameter.",
+                'description': "Generate a sweep of calc.fdf variants for one or more parameters (or 'all').",
                 'func': run_convergence_generator},
             2: {'title': "Stage 2 - Analysis (stb-convergenceAnalysis)",
                 'description': "Extract energies from convergence_* folders and report the converged value.",

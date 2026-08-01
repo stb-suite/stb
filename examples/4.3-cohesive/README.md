@@ -549,9 +549,10 @@ bash example_4.3.sh
 
 ## 9. What's next
 
-- **`4.1-strain`** / **`4.2-elastic`** — a different mechanical question
-  (how the structure *responds* to a deformation) about the same kind of
-  already-relaxed structure this workflow starts from.
+- **`4.1-strain`** / **`4.2-elastic`** / **`4.4-phonons`** — a different
+  mechanical or vibrational question (how the structure *responds* to a
+  deformation, or how it vibrates) about the same kind of already-relaxed
+  structure this workflow starts from.
 - There is currently **no ML-preview twin tool** for this workflow (unlike
   `4.2-elastic`'s `stb-mlelastic`) — a real, documented gap in the suite
   today, not an oversight in this tutorial.

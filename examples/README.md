@@ -179,14 +179,17 @@ through.
 | 4.1  | `stb-strain` / `stb-strainAnalysis` | [`4.1-strain/`](4.1-strain/) |
 | 4.2  | `stb-elasticInputs` / `stb-elasticAnalysis` | [`4.2-elastic/`](4.2-elastic/) |
 | 4.3  | `stb-cohesive` / `stb-cohesiveAnalysis` | [`4.3-cohesive/`](4.3-cohesive/) |
+| 4.4  | `stb-phononsCreate` / `stb-phononsPos` | [`4.4-phonons/`](4.4-phonons/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep + analysis) together, instead of one folder per tool --
 `4.1-strain/` covers both stages (`stb-strain`, code `4.1.1`, and
 `stb-strainAnalysis`, code `4.1.2`) as a single, theory-first tutorial,
 `4.2-elastic/` does the same for `stb-elasticInputs` (`4.2.1`) and
-`stb-elasticAnalysis` (`4.2.2`), and `4.3-cohesive/` does the same for
-`stb-cohesive` (`4.3.1`) and `stb-cohesiveAnalysis` (`4.3.2`).
+`stb-elasticAnalysis` (`4.2.2`), `4.3-cohesive/` does the same for
+`stb-cohesive` (`4.3.1`) and `stb-cohesiveAnalysis` (`4.3.2`), and
+`4.4-phonons/` does the same for `stb-phononsCreate` (`4.4.1`) and
+`stb-phononsPos` (`4.4.2`).
 
 ## Adding another example
 

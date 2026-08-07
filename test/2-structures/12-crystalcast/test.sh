@@ -592,10 +592,10 @@ check_contains "Target space group" log_menu_supergroup.txt
 check_contains "225" log_menu_supergroup.txt
 
 if [ "$HAS_MACE" -eq 1 ]; then
-    echo "Testing: navigate 2.12 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Ni 4', 'O 8' -> defaults -> ml-rank? y -> foundation model (blank custom) -> model small -> no save-report/view -> output -> quit"
+    echo "Testing: navigate 2.12 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Ni 4', 'O 8' -> defaults -> ml-rank? y -> foundation model (blank custom) -> model small -> device cpu (default) -> no save-report/view -> output -> quit"
     rm -f menu_mlrank.fdf
     menu_inputs=(
-        "2.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "y" "" "small" "" "" "menu_mlrank.fdf" ""
+        "2.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "y" "" "small" "" "" "" "menu_mlrank.fdf" ""
         "0"
     )
     printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_mlrank.txt 2>&1

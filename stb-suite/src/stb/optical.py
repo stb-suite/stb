@@ -15,7 +15,7 @@ import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, build_optical_block
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 
 REPORT_FILE = "optical_stage1.txt"
 
@@ -49,7 +49,7 @@ def write_direction_folder(out_dir, fdf_structure, calc_text, pp_path):
     """Writes structure.fdf (unchanged -- no new geometry, this workflow
     never touches atomic positions/lattice) + calc.fdf (single-point +
     the Optical.* block for one Cartesian direction, already baked into
-    calc_text by the caller) + linked pseudos for one direction folder.
+    calc_text by the caller) + copied pseudos for one direction folder.
     Deliberately does NOT write/recompute a kgrid.MonkhorstPack block --
     the ground-state SCF k-grid is left entirely to the user's own -c/
     --calc template, matching raman_modes.py's own precedent for this
@@ -63,7 +63,7 @@ def write_direction_folder(out_dir, fdf_structure, calc_text, pp_path):
         f.write(calc_text)
     symbols = sorted({sym for sym, _ in fdf_structure.atoms})
     for sym in symbols:
-        link_pseudo(pp_path, sym, out_dir)
+        copy_pseudo(pp_path, sym, out_dir)
 
 
 def main():

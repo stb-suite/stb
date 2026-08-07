@@ -226,5 +226,5 @@ stb-supercell -f si_bulk.fdf -d 2 2 2 -sp 0.1
 
 See `2.1-stb-2Dstacking/` for a different kind of cell-building tool (two
 independent monolayers matched via the ZSL algorithm instead of one
-structure tiled by an integer matrix), or `1.6-stb-mlrelax/` for a closer
+structure tiled by an integer matrix), or `1.7-stb-mlrelax/` for a closer
 look at the MACE pre-relaxation `--ml-relax` reuses here.

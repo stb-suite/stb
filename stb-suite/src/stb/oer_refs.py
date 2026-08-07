@@ -17,7 +17,7 @@ import numpy as np
 from pymatgen.core.periodic_table import Element
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.calc_directives import force_single_point
 from stb.core.siesta_log import get_free_energy, get_outcell, check_scf_and_force, report_quality_diagnostics
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
@@ -193,7 +193,7 @@ def build_h2o_structure(vacuum_box):
 def make_ghost_variant(base_structure, ghost_start, ghost_end):
     """Returns a copy of base_structure with atoms in [ghost_start,
     ghost_end) turned into ghost species ('<symbol>_ghost', negative Z,
-    same real pseudopotential file via link_pseudo's dest_label) --
+    same real pseudopotential file via copy_pseudo's dest_label) --
     same Boys-Bernardi counterpoise convention as her_refs.py's own
     make_ghost_variant, duplicated here. Adsorbate atoms are always
     appended last (guaranteed by oer.py/oer_intermediates.py), so a
@@ -261,9 +261,9 @@ def isolate_atoms(base_structure, indices):
 
 
 def write_folder(out_dir, fdf_structure, calc_text, pp_path):
-    """Writes structure.fdf + calc.fdf + linked pseudos for one derived
+    """Writes structure.fdf + calc.fdf + copied pseudos for one derived
     reference folder. Handles ghost species ('<symbol>_ghost' resolves
-    back to the real element's pseudopotential via link_pseudo's
+    back to the real element's pseudopotential via copy_pseudo's
     dest_label) transparently. Duplicated from her_refs.py.
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -273,7 +273,7 @@ def write_folder(out_dir, fdf_structure, calc_text, pp_path):
     present_labels = sorted({symbol for symbol, _ in fdf_structure.atoms})
     for label in present_labels:
         real_symbol = label[:-len("_ghost")] if label.endswith("_ghost") else label
-        link_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
+        copy_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
 
 
 def write_bsse_triad(out_root, prefix, base_structure, n_substrate, calc_text, pp_path):
@@ -642,7 +642,7 @@ stb-oerAnalysis.""",
                 symbols = sorted({sym for sym, _ in structure_for_phonons.atoms})
                 for d in folders:
                     for sym in symbols:
-                        link_pseudo(args.pseudo_dir, sym, d)
+                        copy_pseudo(args.pseudo_dir, sym, d)
                     with open(os.path.join(d, "calc.fdf"), "w") as f:
                         f.write(zpe_calc)
                 print_dual(f"  {color_text('[OK]', 'green')} {len(folders)} displacement folder(s) "

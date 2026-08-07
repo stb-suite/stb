@@ -212,7 +212,7 @@ echo "Testing: navigate 2.11 -> invalid file then valid -> tiny steps -> no save
 rm -f amorphous.fdf
 menu_inputs=(
     "2.11" "does_not_exist.fdf" "si8.fdf" "3000" "15" "300" "20" ""
-    "" "" "" "" "" "" ""
+    "" "" "" "" "" "" "" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu.txt 2>&1
@@ -224,7 +224,7 @@ echo "Testing: navigate 2.11 -> tiny steps -> save-data yes -> save-traj yes -> 
 rm -f interactive_traj.fdf interactive_traj_md_diagnostics.dat interactive_traj_md_traj.xyz
 menu_inputs=(
     "2.11" "si8.fdf" "3000" "10" "300" "10" "y" "y" "xyz" "5"
-    "" "" "" "" "" "interactive_traj.fdf"
+    "" "" "" "" "" "" "interactive_traj.fdf"
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_traj.txt 2>&1

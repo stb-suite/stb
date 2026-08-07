@@ -17,10 +17,7 @@ VERSION = "1.13.0"  # --symprec (default 0.01, pymatgen's own default) now threa
                     # rewritten as a print_table with symprec shown and the result highlighted
 
 import os
-import io
 import sys
-import warnings
-import contextlib
 import argparse
 from time import sleep
 from datetime import datetime
@@ -28,7 +25,8 @@ import glob
 import numpy as np
 from ase import Atoms
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
-from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
+from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_section,
+                          print_table, capture_library_noise)
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
@@ -37,37 +35,6 @@ from stb.core.structure_io import read_md_state, prepend_include
 
 REPORT_FILE = "phonon_prep_properties.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
-
-
-@contextlib.contextmanager
-def capture_library_noise(collector, label):
-    """Captures stdout prints and warnings.warn() calls made by external
-    libraries (MACE/torch/phonopy/spglib) during the wrapped block, instead
-    of letting them interleave with this tool's own numbered report --
-    appended to `collector` (a list of strings) and printed together, once,
-    in the final LIBRARY WARNINGS section instead. This tool's own
-    print_dual output never goes through here (only third-party calls are
-    wrapped), so nothing from the report itself is ever captured/delayed.
-    """
-    buf = io.StringIO()
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        with contextlib.redirect_stdout(buf):
-            yield
-    text = buf.getvalue().strip()
-    if text:
-        collector.append(f"[{label}]\n{text}")
-    # De-duplicated by message text -- torch/mace commonly re-emit the exact
-    # same DeprecationWarning once per call site internally (e.g. one per
-    # torch.jit.load), which would otherwise print a dozen+ identical lines
-    # here for a single underlying issue.
-    seen = {}
-    for w in caught:
-        key = f"{w.category.__name__}: {w.message}"
-        seen[key] = seen.get(key, 0) + 1
-    for key, count in seen.items():
-        suffix = f" (x{count})" if count > 1 else ""
-        collector.append(f"[{label}] {key}{suffix}")
 
 
 def print_symmetry_table(phonon, symprec, f_out=None):

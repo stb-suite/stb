@@ -295,7 +295,7 @@ cat <<'EOF'
 --ml-relax pre-relaxes the just-built heterostructure with a MACE potential
 before writing it out (positions only by default) -- a fast heuristic pass
 before committing to a real SIESTA relaxation, same idea as stb-mlrelax
-(see 1.6-stb-mlrelax/). --ml-relax-cell additionally relaxes the in-plane
+(see 1.7-stb-mlrelax/). --ml-relax-cell additionally relaxes the in-plane
 cell (a/b) -- but the vacuum axis (c) always stays EXACTLY fixed, via the
 same build_cell_mask() masking stb-mlrelax uses for a slab: relaxing the
 vacuum thickness/gap here would be meaningless (and would break the ZSL

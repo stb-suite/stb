@@ -55,7 +55,7 @@ echo "--- Starting tester for STB-Nanotube (item 2.4) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/graphene.fdf" "$TEST_DIR/"
-cp "$(cd "$FIXTURE_DIR/../../1-inputs/3-k-path" && pwd)/example_3D_silicon.fdf" "$TEST_DIR/"
+cp "$(cd "$FIXTURE_DIR/../../1-inputs/4-k-path" && pwd)/example_3D_silicon.fdf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null

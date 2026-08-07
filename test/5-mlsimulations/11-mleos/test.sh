@@ -232,7 +232,7 @@ check_contains "skip-foundation-comparison" log_help.txt
 # --- 8. Interactive path (stb-suite, shortcut 5.11) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.11) ---"
 rm -rf interactive_out
-printf '5.11\nsi8.fdf\n\n\n\n\n\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.11\nsi8.fdf\n\n\n\n\n\n\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/eos_curve.png
 

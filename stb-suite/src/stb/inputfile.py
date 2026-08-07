@@ -18,7 +18,7 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
 REPORT_FILE = "stb_inputfile_report.txt"
@@ -893,49 +893,6 @@ _BIB_NOSE = ("Nose1984", """@article{Nose1984,
   doi     = {10.1063/1.447334}
 }""")
 
-# Pseudopotential-bank citations, one per stb.core.pseudopotentials.BANKS key
-# -- kept here rather than read from BANKS[...]['citation'] directly since
-# that field is a plain human-readable string (printed by resolve_pseudo_
-# source()), not already-formatted BibTeX.
-_BIB_PSEUDO_DOJO = ("vanSetten2018", """@article{vanSetten2018,
-  author  = {van Setten, M. J. and Giantomassi, M. and Bousquet, E. and Verstraete, M. J. and Hamann, D. R. and Gonze, X. and Rignanese, G.-M.},
-  title   = {The {PseudoDojo}: Training and grading a 85 element optimized norm-conserving pseudopotential table},
-  journal = {Computer Physics Communications},
-  year    = {2018},
-  volume  = {226},
-  pages   = {39--54},
-  doi     = {10.1016/j.cpc.2018.01.012}
-}""")
-
-_BIB_VIRTUAL_VAULT = ("VirtualVault", """@misc{VirtualVault,
-  author       = {{NNIN/C}},
-  title        = {{SIESTA} Pseudopotentials Virtual Vault},
-  institution  = {Cornell NanoScale Science and Technology Facility},
-  url          = {https://nninc.cnf.cornell.edu/}
-}""")
-
-_BIB_PSEUDO_BANK = {
-    "dojo": _BIB_PSEUDO_DOJO,
-    "virtual_vault": _BIB_VIRTUAL_VAULT,
-}
-
-
-def detect_pseudo_bank(pp_path):
-    """If `pp_path` resolves to one of the bundled stb.core.pseudopotentials.
-    BANKS folders, returns its bank name (so the matching citation can be
-    added); None for a blank path or a user-supplied folder -- there's no
-    reliable citation for pseudopotentials this suite didn't curate itself.
-    """
-    if not pp_path:
-        return None
-    normalized = os.path.normpath(pp_path)
-    base = os.path.basename(normalized)
-    parent = os.path.basename(os.path.dirname(normalized))
-    if parent == "pseudopotentials" and base in BANKS:
-        return base
-    return None
-
-
 def build_bib_entries(chosen_mode, d3_enabled, pseudo_bank=None):
     """Returns the (key, bibtex-entry) pairs for the methods this specific
     run's calc.fdf actually exercises, so the user has everything needed to
@@ -949,8 +906,8 @@ def build_bib_entries(chosen_mode, d3_enabled, pseudo_bank=None):
         entries.append(_BIB_DFTD3)
     if chosen_mode == 'aimd':
         entries.append(_BIB_NOSE)
-    if pseudo_bank in _BIB_PSEUDO_BANK:
-        entries.append(_BIB_PSEUDO_BANK[pseudo_bank])
+    if pseudo_bank in citations.PSEUDO_BANK_CITATIONS:
+        entries.append(citations.PSEUDO_BANK_CITATIONS[pseudo_bank])
     return entries
 
 

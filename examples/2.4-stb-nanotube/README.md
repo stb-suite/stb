@@ -246,5 +246,5 @@ stb-nanotube -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 6 --passiva
 ## What's next
 
 See `2.3-stb-slab/` for a different kind of cut (a finite Miller-index
-slab instead of a rolled/tiled monolayer), or `1.6-stb-mlrelax/` for a
+slab instead of a rolled/tiled monolayer), or `1.7-stb-mlrelax/` for a
 closer look at the MACE pre-relaxation `--ml-relax` reuses here.

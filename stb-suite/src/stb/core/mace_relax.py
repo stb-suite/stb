@@ -38,6 +38,48 @@ def build_cell_mask(vacuum_axes):
     return mask
 
 
+def gpu_available():
+    """Returns (available, detail) -- whether a CUDA-capable GPU is actually
+    usable by the installed PyTorch build, and a short human-readable reason
+    either way (e.g. "NVIDIA GeForce RTX 3080" when available, or "PyTorch
+    was not built with CUDA support (a CPU-only build)" when not). Imports
+    torch lazily (same policy as the rest of this module -- callers that
+    never touch GPU/MACE at all shouldn't pay for the import). Used both to
+    validate an explicit --device cuda request (resolve_device below) and,
+    standalone, by the interactive stb-suite menu to tell the user up front
+    whether choosing "cuda" will actually work on this machine, before they
+    commit to it.
+    """
+    import torch
+    if not torch.backends.cuda.is_built():
+        return False, "PyTorch was not built with CUDA support (a CPU-only build)"
+    if not torch.cuda.is_available():
+        return False, ("no CUDA-capable GPU was detected by the installed PyTorch build -- "
+                        "check 'nvidia-smi' and your GPU drivers")
+    return True, torch.cuda.get_device_name(0)
+
+
+def resolve_device(device):
+    """Validates `device` ('cpu' or 'cuda') against what's actually
+    available, raising a clear ValueError -- not a silent fallback to CPU,
+    and not letting torch's own often-cryptic runtime error surface deep
+    inside a model-loading call instead -- if 'cuda' is requested but
+    gpu_available() says no. A silent fallback would quietly give a much
+    slower run than the user asked for, with no indication anything was
+    wrong. Returns `device` unchanged when valid ('cpu' is always valid,
+    trivially).
+    """
+    if device != "cuda":
+        return device
+    available, detail = gpu_available()
+    if not available:
+        raise ValueError(
+            f"--device cuda requested, but {detail}. Install a CUDA-enabled PyTorch build "
+            "(see https://pytorch.org/get-started/locally/) or pass --device cpu instead."
+        )
+    return device
+
+
 def get_calculator(model="small", device="cpu", dtype="float64"):
     """Loads a MACE potential as an ASE calculator: the MACE-MP-0 foundation
     model (`model` = "small"/"medium"/"large", downloaded/cached on first
@@ -52,11 +94,17 @@ def get_calculator(model="small", device="cpu", dtype="float64"):
     once there's a real need (same "expose on first genuine use" policy as
     everywhere else in this suite).
 
+    `device` is validated via resolve_device() before anything is loaded --
+    every caller in the suite funnels through this one function, so this is
+    the single place a bad --device cuda request (no GPU/no CUDA-enabled
+    torch) is caught, consistently, everywhere.
+
     Default float64 for geometry optimization (MACE's own guidance is
     unambiguous that float32 is for MD, not geometry optimization) --
     callers doing MD (e.g. stb-amorphize's melt/quench stages) should pass
     dtype="float32" explicitly.
     """
+    device = resolve_device(device)
     import os
     if os.path.isfile(model):
         from mace.calculators import MACECalculator

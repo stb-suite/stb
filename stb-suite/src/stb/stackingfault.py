@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.calc_directives import force_single_point
 from stb.core.heterostructure import find_zsl_match, build_stacked_structure
 from stb.core.deps import require_mace
@@ -116,7 +116,7 @@ def write_ml_preview_plot(ml_grid, grid_n, out_path):
 
 
 def write_grid_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path):
-    """Writes structure.fdf + calc.fdf + linked pseudopotentials for one
+    """Writes structure.fdf + calc.fdf + copied pseudopotentials for one
     shift_II_JJ/ grid-point folder -- same shape as adsorb.py's
     write_reference_folder / neb.py's write_image_folder. `species_meta`
     only needs to cover layer1's declared species -- any symbol unique to
@@ -132,7 +132,7 @@ def write_grid_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path):
         f.write(calc_text)
     symbols = {site.specie.symbol for site in pmg_structure}
     for sym in sorted(symbols):
-        link_pseudo(pp_path, sym, out_dir)
+        copy_pseudo(pp_path, sym, out_dir)
 
 
 def main():

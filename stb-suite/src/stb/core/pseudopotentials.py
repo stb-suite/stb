@@ -2,11 +2,18 @@
 stb-suite/src/stb/pseudopotentials/), plus resolution of a user-supplied
 --pseudo-dir/--pp-path/-p value into an actual directory: either one of the
 bundled bank names below, or a literal filesystem path. Shared by every tool
-that needs pseudopotentials copied/symlinked into a run folder
-(hubbardu.py, cohesive_energy.py, inputfile.py, phonons_create.py, adsorb.py).
+that needs a pseudopotential copied into a run folder (hubbardu.py,
+cohesive_energy.py, inputfile.py, phonons_create.py, adsorb.py).
+
+Pseudopotentials are always COPIED (shutil.copy2), never symlinked -- a
+symlink into a bundled bank or an external --pseudo-dir points at an
+absolute path outside the run folder, which silently breaks the moment that
+folder is archived/rsynced/scp'd elsewhere (e.g. to an HPC cluster) without
+also bringing the link target along; a real copy travels with the folder.
 """
 
 import os
+import shutil
 import importlib.resources
 
 from stb.core.cli import color_text
@@ -66,6 +73,44 @@ def resolve_pseudo_source(value):
     return path
 
 
+def detect_pseudo_bank(pp_path):
+    """If `pp_path` resolves to one of the bundled BANKS folders, returns its
+    bank name (so the matching citation can be added); None for a blank path
+    or a user-supplied folder -- there's no reliable citation for
+    pseudopotentials this suite didn't curate itself. Moved here from
+    inputfile.py once stb-pseudo became a second consumer of the exact same
+    "which bundled bank is this?" check, same extract-on-second-use policy
+    as the rest of core/.
+    """
+    if not pp_path:
+        return None
+    normalized = os.path.normpath(pp_path)
+    base = os.path.basename(normalized)
+    parent = os.path.basename(os.path.dirname(normalized))
+    if parent == "pseudopotentials" and base in BANKS:
+        return base
+    return None
+
+
+def list_bank_elements(name):
+    """Element symbols available in bundled bank `name` (a BANKS key),
+    sorted -- derived from the .psf/.psml filenames actually present, so it
+    can never drift from get_required_pseudos()'s own lookup convention.
+    Raises ValueError via bank_path()'s caller contract if `name` isn't a
+    known bank (checked explicitly here since bank_path() itself doesn't
+    validate its argument).
+    """
+    if name not in BANKS:
+        raise ValueError(f"'{name}' is not a recognized pseudopotential bank ({', '.join(BANKS)}).")
+    path = bank_path(name)
+    elements = set()
+    for fname in os.listdir(path):
+        stem, ext = os.path.splitext(fname)
+        if ext in (".psf", ".psml"):
+            elements.add(stem)
+    return sorted(elements)
+
+
 def get_required_pseudos(symbols, pseudo_dir):
     """Checks whether a pseudopotential file (.psf preferred, .psml
     fallback) exists in `pseudo_dir` for every symbol in `symbols`.
@@ -100,20 +145,24 @@ def get_required_pseudos(symbols, pseudo_dir):
     return found_pseudos, missing_elements
 
 
-def link_pseudo(pp_path, symbol, target_dir, dest_label=None):
-    """Symlinks the pseudopotential (.psml preferred, .psf fallback) for
-    `symbol`, found under `pp_path` (already resolved via
-    resolve_pseudo_source), into `target_dir` -- no-op if `pp_path` is falsy.
+def copy_pseudo(pp_path, symbol, target_dir, dest_label=None):
+    """Copies (shutil.copy2, not a symlink -- see the module docstring) the
+    pseudopotential (.psml preferred, .psf fallback) for `symbol`, found
+    under `pp_path` (already resolved via resolve_pseudo_source), into
+    `target_dir` -- no-op if `pp_path` is falsy. A no-op too if the
+    destination file already exists (e.g. a rerun over the same folder),
+    same idempotency this had back when it symlinked.
 
     `dest_label` (default: `symbol`) is the species LABEL the destination
     filename must match -- SIESTA resolves a species' pseudopotential file by
     its declared ChemicalSpeciesLabel label, not its Z. Used by
     cohesive_energy.py for BSSE ghost species (e.g. real pseudopotential
-    'C.psf' symlinked as 'C_ghost.psf' so the ghost label 'C_ghost' -- Z=-6,
-    no valence charge, same basis as real carbon -- resolves to the same real
+    'C.psf' copied as 'C_ghost.psf' so the ghost label 'C_ghost' -- Z=-6, no
+    valence charge, same basis as real carbon -- resolves to the same real
     pseudopotential file); every other caller leaves it at the default.
     Moved here once adsorb.py became a second consumer of the exact same
-    symbol -> symlinked-file logic cohesive_energy.py already had.
+    symbol -> per-folder-file logic cohesive_energy.py already had (named
+    link_pseudo at the time, when it still symlinked).
     """
     if not pp_path:
         return
@@ -123,10 +172,8 @@ def link_pseudo(pp_path, symbol, target_dir, dest_label=None):
         src = os.path.join(pp_path_abs, f"{symbol}.{ext}")
         if os.path.exists(src):
             dst = os.path.join(target_dir, f"{dest_label}.{ext}")
-            try:
-                os.symlink(src, dst)
-            except FileExistsError:
-                pass
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
             return
     print(color_text(f"[WARNING] Pseudopotential '{symbol}.psml' or '{symbol}.psf' not found in {pp_path}", 'yellow'))
     return

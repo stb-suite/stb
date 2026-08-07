@@ -276,7 +276,7 @@ Take the amorphized `.fdf` into a real SIESTA relaxation/calculation (e.g.
 via `stb-inputfile`, example `1.1`) — remember this is a fast heuristic
 starting guess, not a DFT-verified amorphous structure. See
 `2.10-stb-molecule/` for another Structures-category tool with the same
-numbered-report/provenance-header conventions, or `1.6-stb-mlrelax/` for
+numbered-report/provenance-header conventions, or `1.7-stb-mlrelax/` for
 another MACE-driven tool in this suite (including the same FIRE/BFGS/LBFGS
 convergence theory `stb-amorphize`'s own final relax step also relies on).
 If you have your own SIESTA training data, `stb-mlffAnalysis` (Workflow

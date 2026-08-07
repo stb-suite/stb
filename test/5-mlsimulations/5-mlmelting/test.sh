@@ -178,7 +178,7 @@ check_contains "save-trajectories" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.5) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.5) ---"
 rm -rf interactive_out
-printf '5.5\nal4.fdf\n\nsmall\n1\n300\n1800\n1500\n30\n50\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.5\nal4.fdf\n\nsmall\n\n1\n300\n1800\n1500\n30\n50\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/melting_curve.png
 

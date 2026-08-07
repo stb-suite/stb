@@ -36,6 +36,16 @@ check_contains() {
     fi
 }
 
+check_absent() {
+    if [ ! -e "$1" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent, as expected"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' should not exist"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 check_exit_code() {
     if [ "$1" -eq "$2" ]; then
         echo -e "   -> ${GREEN}Verified:${NC} exit code $1 (expected $2)"
@@ -87,13 +97,17 @@ check_contains "Generated 9 run(s)" log_basic.txt
 check_success hubbardu_runs/scf_alpha_0.1000/calc.fdf
 check_success hubbardu_runs/frozen_alpha_0.1000/calc.fdf
 
+echo "Testing: calc.fdf just includes config_extra.fdf now (DFT+U/MaxSCFIterations/etc. live there)"
+check_contains "%include config_extra.fdf" hubbardu_runs/scf_alpha_0.1000/calc.fdf
+check_success hubbardu_runs/scf_alpha_0.1000/config_extra.fdf
+
 echo "Testing: the frozen branch gets its OWN alpha=0.0000 folder (not a reuse of reference)"
 check_success hubbardu_runs/frozen_alpha_0.0000/calc.fdf
-check_contains "0.000    0.000" hubbardu_runs/frozen_alpha_0.0000/calc.fdf
+check_contains "0.000    0.000" hubbardu_runs/frozen_alpha_0.0000/config_extra.fdf
 
 echo "Testing: frozen folders use MaxSCFIterations 2 (not the old buggy 1)"
-check_contains "MaxSCFIterations 2" hubbardu_runs/frozen_alpha_0.1000/calc.fdf
-if grep -q "MaxSCFIterations 1$" hubbardu_runs/frozen_alpha_0.1000/calc.fdf; then
+check_contains "MaxSCFIterations 2" hubbardu_runs/frozen_alpha_0.1000/config_extra.fdf
+if grep -q "MaxSCFIterations 1$" hubbardu_runs/frozen_alpha_0.1000/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} should not use MaxSCFIterations 1"
     FAIL=$((FAIL+1))
 else
@@ -107,8 +121,8 @@ check_success hubbardu_runs/frozen_alpha_0.1000/siesta.DM
 check_success hubbardu_runs/frozen_alpha_0.0000/siesta.DM
 
 echo "Testing: scf folders get DM.UseSaveDM but no MaxSCFIterations cap"
-check_contains "DM.UseSaveDM T" hubbardu_runs/scf_alpha_0.1000/calc.fdf
-if grep -q "MaxSCFIterations" hubbardu_runs/scf_alpha_0.1000/calc.fdf; then
+check_contains "DM.UseSaveDM T" hubbardu_runs/scf_alpha_0.1000/config_extra.fdf
+if grep -q "MaxSCFIterations" hubbardu_runs/scf_alpha_0.1000/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} scf_alpha_0.1000 should NOT have MaxSCFIterations"
     FAIL=$((FAIL+1))
 else
@@ -142,7 +156,7 @@ echo -e "\n--- Testing --frozen-iterations ---"
 make_reference hubbardu_runs5
 stb-hubbarduAlphas --dir hubbardu_runs5 --alphas 0.1 --frozen-iterations 3 --no-intro > log_frozen_iter.txt 2>&1
 check_exit_code $? 0
-check_contains "MaxSCFIterations 3" hubbardu_runs5/frozen_alpha_0.1000/calc.fdf
+check_contains "MaxSCFIterations 3" hubbardu_runs5/frozen_alpha_0.1000/config_extra.fdf
 
 echo "Testing: --frozen-iterations below the empirical minimum warns but still runs"
 rm -rf hubbardu_runs6
@@ -150,7 +164,7 @@ make_reference hubbardu_runs6
 stb-hubbarduAlphas --dir hubbardu_runs6 --alphas 0.1 --frozen-iterations 1 --no-intro > log_frozen_iter_low.txt 2>&1
 check_exit_code $? 0
 check_contains "below the empirically-needed minimum" log_frozen_iter_low.txt
-check_contains "MaxSCFIterations 1" hubbardu_runs6/frozen_alpha_0.1000/calc.fdf
+check_contains "MaxSCFIterations 1" hubbardu_runs6/frozen_alpha_0.1000/config_extra.fdf
 
 echo "Testing: --frozen-iterations 0 is rejected"
 stb-hubbarduAlphas --dir hubbardu_runs6 --alphas 0.1 --frozen-iterations 0 --no-intro > log_frozen_iter_zero.txt 2>&1
@@ -191,10 +205,13 @@ check_contains "No pseudopotentials saved by stage 1" log_no_pseudo.txt
 # --- 4e. Stage 2 also rejects a hand-edited template that already has DFT+U set up ---
 echo -e "\n--- Testing the DFT+U guard is also enforced in stage 2 ---"
 make_reference hubbardu_runs9
+# reference/calc.fdf is now just '%include config_extra.fdf' (the DFT+U block itself lives in
+# the sibling config_extra.fdf, not inline) -- simulates a user hand-editing the template
+# snapshot back to a previously-generated run folder's own calc.fdf by mistake.
 cat "hubbardu_runs9/reference/calc.fdf" > "hubbardu_runs9/_template_calc.fdf"
 stb-hubbarduAlphas --dir hubbardu_runs9 --alphas 0.1 --no-intro > log_stage2_guard.txt 2>&1
 check_exit_code $? 1
-check_contains "already contains an LDAU.proj" log_stage2_guard.txt
+check_contains "already '%include config_extra.fdf'" log_stage2_guard.txt
 
 
 # --- 4f. Aliased (multi-atom-species) reference propagates through stage 2 ---
@@ -210,10 +227,10 @@ check_exit_code $? 0
 check_contains "isolated via alias species 'Mn_pert'" log_alias.txt
 
 echo "Testing: generated scf/frozen folders perturb 'Mn_pert', not 'Mn'"
-check_contains "Mn_pert   1" hubbardu_runs10/scf_alpha_0.1000/calc.fdf
-check_contains "Mn_pert   1" hubbardu_runs10/frozen_alpha_0.1000/calc.fdf
-check_contains "Mn_pert   1" hubbardu_runs10/frozen_alpha_0.0000/calc.fdf
-if grep -q "^Mn   1" hubbardu_runs10/scf_alpha_0.1000/calc.fdf; then
+check_contains "Mn_pert   1" hubbardu_runs10/scf_alpha_0.1000/config_extra.fdf
+check_contains "Mn_pert   1" hubbardu_runs10/frozen_alpha_0.1000/config_extra.fdf
+check_contains "Mn_pert   1" hubbardu_runs10/frozen_alpha_0.0000/config_extra.fdf
+if grep -q "^Mn   1" hubbardu_runs10/scf_alpha_0.1000/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} the unperturbed Mn should not appear in the LDAU.proj block"
     FAIL=$((FAIL+1))
 else
@@ -269,11 +286,22 @@ check_contains "frozen-iterations" log_help.txt
 # --- 6. Interactive path (stb-suite, shortcut 4.7.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.7.2) ---"
 
-echo "Testing: navigate 4.7.2 -> default dir -> default alphas -> quit"
+echo "Testing: navigate 4.7.2 -> default dir -> default alphas -> default frozen-iterations ->"
+echo "  save-report=N -> quit"
 make_reference hubbardu_runs4
-printf '4.7.2\nhubbardu_runs4\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+printf '4.7.2\nhubbardu_runs4\n\n\nn\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+check_exit_code $? 0
 check_contains "Generated 9 run(s)" log_menu.txt
 check_success hubbardu_runs4/frozen_alpha_0.0000/calc.fdf
+check_absent hubbardu_runs4/hubbardu_stage2.txt
+
+echo "Testing: navigate 4.7.2 again -> save-report=Y -> quit"
+rm -rf hubbardu_runs4b
+make_reference hubbardu_runs4b
+printf '4.7.2\nhubbardu_runs4b\n\n\ny\n\n0\n' | timeout 20 stb-suite > log_menu_report.txt 2>&1
+check_exit_code $? 0
+check_contains "Generated 9 run(s)" log_menu_report.txt
+check_success hubbardu_runs4b/hubbardu_stage2.txt
 
 
 popd > /dev/null

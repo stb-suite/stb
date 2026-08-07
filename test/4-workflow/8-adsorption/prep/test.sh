@@ -60,59 +60,178 @@ echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
 
+# Every case below writes under the tool's own default --output-dir
+# (adsorption_run/ -- everything for one study lives under one folder, same
+# convention as stb-hubbardu's hubbardu_runs), so "rm -rf adsorption_run"
+# alone resets state between cases.
+RUN=adsorption_run
 
-# --- 2. Single atom, ontop site (default) -- BSSE correction is ON by
-#     default, so this also covers the standard (uncorrected + BSSE) case ---
-echo -e "\n--- Testing a single-atom adsorbate (O), default ontop site, default BSSE ---"
+
+# --- 2. Single atom, ontop site (default) ---
+echo -e "\n--- Testing a single-atom adsorbate (O), default ontop site ---"
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
 check_contains "Success:.*1 site folder" log_atom.txt
-check_success clean_slab/structure.fdf
-check_success clean_slab/calc.fdf
-check_success adsorbate/structure.fdf
-check_contains "kgrid.MonkhorstPack   \[1  1  1\]" adsorbate/calc.fdf
-check_contains "Spin.*polarized" adsorbate/calc.fdf
-check_success sites/site_1_ontop/structure.fdf
-check_contains "NumberofAtoms      3" sites/site_1_ontop/structure.fdf
-check_success sites/adsorption_sites.txt
-check_success sites/adsorption_sites.png
-check_success sites/site_1_ontop/bsse_slab/structure.fdf
-check_success sites/site_1_ontop/bsse_adsorbate/structure.fdf
-check_contains "O_ghost" sites/site_1_ontop/bsse_slab/structure.fdf
-check_contains "C_ghost" sites/site_1_ontop/bsse_adsorbate/structure.fdf
-# bsse_slab keeps the real slab atoms (C) at the same positions as the site
-check_contains "NumberofAtoms      3" sites/site_1_ontop/bsse_slab/structure.fdf
-check_contains "NumberofAtoms      3" sites/site_1_ontop/bsse_adsorbate/structure.fdf
-# persistent numbered report: [0]-[3] sections + full run metadata
-check_contains "\[0\] RUN METADATA" sites/adsorption_sites.txt
-check_contains "\[1\] REFERENCE FOLDERS" sites/adsorption_sites.txt
-check_contains "\[2\] ADSORPTION SITES" sites/adsorption_sites.txt
-check_contains "\[3\] SUMMARY" sites/adsorption_sites.txt
-check_contains "Calc template   : calc.fdf" sites/adsorption_sites.txt
-check_contains "BSSE correction : ON" sites/adsorption_sites.txt
-check_contains "SITE_TABLE" sites/adsorption_sites.txt
+check_success $RUN/clean_slab/structure.fdf
+check_success $RUN/clean_slab/calc.fdf
+check_success $RUN/adsorbate/structure.fdf
+check_contains "kgrid.MonkhorstPack   \[1  1  1\]" $RUN/adsorbate/calc.fdf
+check_contains "Spin.*polarized" $RUN/adsorbate/calc.fdf
+check_success $RUN/sites/site_1_ontop/structure.fdf
+check_contains "NumberofAtoms      3" $RUN/sites/site_1_ontop/structure.fdf
+check_success $RUN/sites/adsorption_sites.txt
+check_success $RUN/sites/adsorption_sites.png
 
-
-# --- 2b. --no-bsse-correction skips the ghost-fragment folders entirely ---
-echo -e "\n--- Testing --no-bsse-correction ---"
-rm -rf clean_slab adsorbate sites
-stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-bsse-correction --no-intro \
-    > log_no_bsse.txt 2>&1
-check_success sites/site_1_ontop/structure.fdf
-if [ -d sites/site_1_ontop/bsse_slab ]; then
-    echo -e "   -> ${RED}Failed:${NC} 'sites/site_1_ontop/bsse_slab' unexpectedly created"
+echo "Testing: dipole correction is forced (via config_extra.fdf, not calc.fdf directly) on"
+echo "  clean_slab/ and sites/site_*/ (real slabs), but NOT on adsorbate/ (isolated molecule"
+echo "  in an all-around vacuum box, not a slab)"
+check_contains "Slab.DipoleCorrection      .true." $RUN/clean_slab/config_extra.fdf
+check_contains "Slab.DipoleCorrection      .true." $RUN/sites/site_1_ontop/config_extra.fdf
+if grep -q "Slab.DipoleCorrection" $RUN/clean_slab/calc.fdf $RUN/sites/site_1_ontop/calc.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} Slab.DipoleCorrection should live in config_extra.fdf, not calc.fdf directly"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} 'sites/site_1_ontop/bsse_slab' NOT created (as expected)"
+    echo -e "   -> ${GREEN}Verified:${NC} calc.fdf itself carries no dipole correction tag (it's in config_extra.fdf)"
     PASS=$((PASS+1))
 fi
+if grep -q "Slab.DipoleCorrection" $RUN/adsorbate/config_extra.fdf $RUN/adsorbate/calc.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected Slab.DipoleCorrection in the isolated-adsorbate folder"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no dipole correction tag in the isolated-adsorbate reference"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --force-spin is ON by default -- sites/site_*/ get Spin polarized via"
+echo "  config_extra.fdf (overriding calc.fdf's own 'Spin non-polarized'), clean_slab/ does not"
+check_contains "Force spin      : yes -> Spin polarized" log_atom.txt
+check_contains "Dipole correction: yes" log_atom.txt
+check_contains "Spin                polarized" $RUN/sites/site_1_ontop/config_extra.fdf
+python3 -c "
+with open('$RUN/sites/site_1_ontop/calc.fdf') as f:
+    lines = [l for l in f if l.strip()]
+assert lines[0].startswith('%include config_extra.fdf'), lines[0]
+print('OK')
+" > log_spin_order_check.txt 2>&1
+check_contains "OK" log_spin_order_check.txt
+if grep -q "Spin" $RUN/clean_slab/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected Spin tag in clean_slab/config_extra.fdf (no adsorbate there)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} clean_slab/config_extra.fdf has no Spin override"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --no-force-spin leaves sites/site_*/ calc.fdf's own Spin tag untouched"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-force-spin --no-intro > log_nospin.txt 2>&1
+check_contains "Force spin      : isolated ref only" log_nospin.txt
+if grep -q "Spin" $RUN/sites/site_1_ontop/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected Spin tag in config_extra.fdf with --no-force-spin"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no Spin tag added to config_extra.fdf with --no-force-spin"
+    PASS=$((PASS+1))
+fi
+check_contains "Slab.DipoleCorrection      .true." $RUN/sites/site_1_ontop/config_extra.fdf
+check_contains "\[NOTE\].*'O':.*means the COMBINED" log_nospin.txt
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
+
+echo "Testing: stb-adsorb no longer writes 'bsse/' at prep time -- that's stb-adsorbBsse's job, "
+echo "  once sites have actually relaxed (see ../bsse/test.sh)"
+if [ -d $RUN/bsse ]; then
+    echo -e "   -> ${RED}Failed:${NC} 'bsse/' unexpectedly created by stb-adsorb"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} 'bsse/' NOT created by stb-adsorb (as expected)"
+    PASS=$((PASS+1))
+fi
+
+# numbered report ([0]-[6], print_section style): printed to console (captured
+# in log_atom.txt) always; sites/adsorption_sites.txt is now a lean machine-
+# readable file (just the SITE_TABLE), NOT gated behind --save-report -- see
+# the --save-report sub-case further below for the full persisted narrative.
+check_contains "\[0\] RUN METADATA" log_atom.txt
+check_contains "\[1\] REFERENCE FOLDERS" log_atom.txt
+check_contains "\[2\] ADSORPTION SITES: FINDING & COUNT" log_atom.txt
+check_contains "\[3\] ML PRE-SCREENING" log_atom.txt
+check_contains "\[4\] WRITING SITE FOLDERS" log_atom.txt
+check_contains "\[5\] SUMMARY & NEXT STEPS" log_atom.txt
+check_contains "\[6\] LIBRARY WARNINGS" log_atom.txt
+check_contains "Calc template   : calc.fdf" log_atom.txt
+check_contains "Not requested" log_atom.txt
+check_contains "stb-adsorbBsse next" log_atom.txt
+check_contains "SITE_TABLE" $RUN/sites/adsorption_sites.txt
+
+echo "Testing: everything lands under the default adsorption_run/ folder"
+check_contains "Output dir      : adsorption_run" log_atom.txt
+
+echo "Testing: config_extra.fdf enforces a fixed cell everywhere (single-point BSSE config_extra "
+echo "  is now written by stb-adsorbBsse instead, see ../bsse/test.sh)"
+check_success $RUN/clean_slab/config_extra.fdf
+check_contains "MD.VariableCell false" $RUN/clean_slab/config_extra.fdf
+check_contains "%include config_extra.fdf" $RUN/clean_slab/calc.fdf
+check_success $RUN/sites/site_1_ontop/config_extra.fdf
+check_contains "MD.VariableCell false" $RUN/sites/site_1_ontop/config_extra.fdf
+if grep -q "MD.TypeOfRun" $RUN/sites/site_1_ontop/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} the site's OWN config_extra.fdf should not force single-point"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} the site's own config_extra.fdf only fixes the cell (positions may relax)"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: [1] warns that this small graphene primitive cell is laterally too small (adsorbate too close to its own periodic image)"
+check_contains "WARNING.*own periodic image in the ab-plane" log_atom.txt
+
+echo "Testing: --view-plots shows the generated plots (headless-safe via MPLBACKEND=Agg) without crashing"
+rm -rf $RUN
+MPLBACKEND=Agg stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop \
+    --view-plots --no-intro > log_view_plots.txt 2>&1
+check_exit_code $? 0
+check_success $RUN/sites/adsorption_sites.png
+check_contains "\[6\] LIBRARY WARNINGS" log_view_plots.txt
+
+echo "Testing: without --save-report, sites/adsorption_sites.txt has no report narrative"
+if grep -q "RUN METADATA" $RUN/sites/adsorption_sites.txt; then
+    echo -e "   -> ${RED}Failed:${NC} adsorption_sites.txt unexpectedly contains the full narrative"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} adsorption_sites.txt has no report narrative (SITE_TABLE only)"
+    PASS=$((PASS+1))
+fi
+
+echo "Testing: --save-report writes adsorption_run/adsorption_prep_report.txt with the full narrative"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --save-report --no-intro > log_save_report.txt 2>&1
+check_success $RUN/adsorption_prep_report.txt
+check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
+check_contains "\[6\] LIBRARY WARNINGS" $RUN/adsorption_prep_report.txt
+check_contains "Report          : " log_save_report.txt
+
+echo "Testing: -s/--structure and -c/--calc default to structure.fdf/calc.fdf"
+rm -rf $RUN
+stb-adsorb --adsorbate O --no-intro > log_defaults.txt 2>&1
+check_exit_code $? 0
+check_contains "Structure       : structure.fdf" log_defaults.txt
+check_contains "Calc template   : calc.fdf" log_defaults.txt
+check_success $RUN/sites/site_1_ontop/structure.fdf
+
+echo "Testing: -O/--output-dir still overrides the default (single-folder convention is opt-out, not forced)"
+rm -rf $RUN custom_out
+stb-adsorb --adsorbate O -O custom_out --no-intro > log_custom_out.txt 2>&1
+check_success custom_out/clean_slab/structure.fdf
+check_success custom_out/sites/site_1_ontop/structure.fdf
+rm -rf custom_out
+
 
 
 # --- 3. Molecule adsorbate (G2), all site types, --all-sites ---
 echo -e "\n--- Testing a molecule adsorbate (H2O), --site-type all --all-sites ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type all --all-sites --no-intro > log_molecule.txt 2>&1
 check_contains "3 atom(s)" log_molecule.txt
-n_sites=$(find sites -maxdepth 1 -type d -name 'site_*' | wc -l)
+n_sites=$(find $RUN/sites -maxdepth 1 -type d -name 'site_*' | wc -l)
 if [ "$n_sites" -ge 2 ]; then
     echo -e "   -> ${GREEN}Verified:${NC} multiple site folders written ($n_sites)"
     PASS=$((PASS+1))
@@ -121,15 +240,53 @@ else
     FAIL=$((FAIL+1))
 fi
 
+echo "Testing: [2] reports raw-vs-symmetry-reduced candidate counts per site type"
+check_contains "Raw candidates" log_molecule.txt
+check_contains "After symm. reduction" log_molecule.txt
+check_contains "TOTAL" log_molecule.txt
+check_contains "Configuration count :" log_molecule.txt
+
 
 # --- 4. --ml-rank --top-k (MACE-MP-0 already cached locally) ---
 echo -e "\n--- Testing --ml-rank --top-k 2 ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type all --all-sites \
     --ml-rank --top-k 2 --no-intro > log_mlrank.txt 2>&1
-check_contains "ML pre-screen" log_mlrank.txt
+check_contains "Relaxing candidates for" log_mlrank.txt
 check_contains "Rank" log_mlrank.txt
-n_kept=$(find sites -maxdepth 1 -type d -name 'site_*' | wc -l)
+check_contains "\[1/4\]" log_mlrank.txt
+check_contains "converged\|hit step cap" log_mlrank.txt
+check_contains "top-k 2: keeping only the 2 best-ranked" log_mlrank.txt
+check_success $RUN/sites/ml_rank_ranking.png
+
+echo "Testing: the relaxed adsorbate-slab distance (not just the pre-relax height guess) is"
+echo "  reported per candidate, and it's explicit that this relaxed geometry -- not the"
+echo "  initial guess -- is what gets written to the site folders below"
+check_contains "relaxed distance = " log_mlrank.txt
+check_contains "Relaxed dist (Ang)" log_mlrank.txt
+check_contains "Init\. h" log_mlrank.txt
+check_contains "this relaxed geometry, not the initial guess, is what gets written" log_mlrank.txt
+check_contains "\[4\] WRITING SITE FOLDERS" log_mlrank.txt
+check_contains "every site folder below is written from the MACE-MP-0 -relaxed geometry" log_mlrank.txt
+
+echo "Testing: the written structure.fdf reflects the RELAXED distance, not the 2.0 Ang initial guess"
+python3 -c "
+import glob
+from stb.core import structure_io
+site_dir = sorted(glob.glob('$RUN/sites/site_*'))[0]
+s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
+ads_z = s.atoms[-1][1][2]
+slab_z = s.atoms[0][1][2]
+delta_frac = abs(ads_z - slab_z)
+c_length = s.lattice[2][2]
+delta_ang = delta_frac * c_length
+# the initial guess was 2.0 Ang; a real MACE relax on this fixture should have
+# moved it measurably away from that value (verified live: ~1.2-3.1 Ang range)
+assert abs(delta_ang - 2.0) > 0.1, f'adsorbate height looks unrelaxed: {delta_ang:.3f} Ang'
+print('OK')
+" > log_mlrank_relaxed_check.txt 2>&1
+check_contains "OK" log_mlrank_relaxed_check.txt
+n_kept=$(find $RUN/sites -maxdepth 1 -type d -name 'site_*' | wc -l)
 if [ "$n_kept" -eq 2 ]; then
     echo -e "   -> ${GREEN}Verified:${NC} exactly 2 site folders kept (--top-k 2)"
     PASS=$((PASS+1))
@@ -141,33 +298,37 @@ fi
 
 # --- 5. --both-sides (free-standing 2D material, vacuum on both sides) ---
 echo -e "\n--- Testing --both-sides ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --both-sides --no-intro \
     > log_bothsides.txt 2>&1
-check_success sites/site_1_ontop_bothsides/structure.fdf
-check_contains "NumberofAtoms      4" sites/site_1_ontop_bothsides/structure.fdf
+check_success $RUN/sites/site_1_ontop_bothsides/structure.fdf
+check_contains "NumberofAtoms      4" $RUN/sites/site_1_ontop_bothsides/structure.fdf
 
 
 # --- 6. Manual --position override ---
 echo -e "\n--- Testing --position (manual override) ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --position 0.0 0.0 --height 2.5 --no-intro \
     > log_position.txt 2>&1
-check_success sites/site_1_manual/structure.fdf
+check_success $RUN/sites/site_1_manual/structure.fdf
 
 
 # --- 6b. Multiple adsorbates in one call ---
 echo -e "\n--- Testing --adsorbate O,N (multiple adsorbates) ---"
-rm -rf clean_slab adsorbate adsorbate_O adsorbate_N sites
-stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O,N --site-type ontop --no-bsse-correction \
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O,N --site-type ontop \
     --no-intro > log_multi_ads.txt 2>&1
-check_success adsorbate_O/structure.fdf
-check_success adsorbate_N/structure.fdf
-check_success sites/site_1_ontop_O/structure.fdf
-check_success sites/site_1_ontop_N/structure.fdf
-check_contains "Adsorbate: O" sites/adsorption_sites.txt
-check_contains "Adsorbate: N" sites/adsorption_sites.txt
-check_contains "single atom: its isolated reference is forced spin-polarized" log_multi_ads.txt
+check_success $RUN/adsorbate_O/structure.fdf
+check_success $RUN/adsorbate_N/structure.fdf
+check_success $RUN/sites/site_1_ontop_O/structure.fdf
+check_success $RUN/sites/site_1_ontop_N/structure.fdf
+# "Adsorbate:" itself is ANSI-color-wrapped in the raw console log (unlike
+# the old adsorption_sites.txt, print_dual doesn't strip color codes going to
+# stdout), so match the plain text on either side of the color reset instead.
+check_contains "O (1 atom(s))" log_multi_ads.txt
+check_contains "N (1 atom(s))" log_multi_ads.txt
+check_contains "'O': its isolated reference is forced spin-polarized" log_multi_ads.txt
+check_contains "'N': its isolated reference is forced spin-polarized" log_multi_ads.txt
 
 echo "Testing: an invalid name inside a comma-separated list is reported clearly"
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O,Xx --no-intro > log_multi_bad.txt 2>&1
@@ -177,17 +338,17 @@ check_contains "'Xx' is not a recognized" log_multi_bad.txt
 
 # --- 6c. Height sweep (approach curve) ---
 echo -e "\n--- Testing --height-sweep ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop \
-    --height-sweep 1.5 3.0 0.5 --no-bsse-correction --no-intro > log_height_sweep.txt 2>&1
+    --height-sweep 1.5 3.0 0.5 --no-intro > log_height_sweep.txt 2>&1
 for h in 1.50 2.00 2.50 3.00; do
-    check_success "sites/site_1_ontop_h${h}/structure.fdf"
+    check_success "$RUN/sites/site_1_ontop_h${h}/structure.fdf"
 done
 python3 -c "
 import sys
 from stb.core import structure_io
 for h in (1.5, 2.0, 2.5, 3.0):
-    s = structure_io.to_pymatgen(structure_io.read_fdf(f'sites/site_1_ontop_h{h:.2f}/structure.fdf'))
+    s = structure_io.to_pymatgen(structure_io.read_fdf(f'adsorption_run/sites/site_1_ontop_h{h:.2f}/structure.fdf'))
     z_slab = max(site.coords[2] for site in s if site.specie.symbol == 'C')
     z_ads = [site.coords[2] for site in s if site.specie.symbol == 'O'][0]
     actual = round(z_ads - z_slab, 4)
@@ -206,31 +367,62 @@ check_exit_code $? 2
 
 # --- 6d. --ml-prerelax (isolated adsorbate) ---
 echo -e "\n--- Testing --ml-prerelax ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --ml-prerelax \
-    --no-bsse-correction --no-intro > log_prerelax.txt 2>&1
+    --no-intro > log_prerelax.txt 2>&1
 check_contains "ML pre-relax" log_prerelax.txt
 check_contains "Converged" log_prerelax.txt
-check_success adsorbate/structure.fdf
+check_success $RUN/adsorbate/structure.fdf
 
 
 # --- 6e. Overlap/clash warning: --height too small places the adsorbate
 #     right on top of a slab atom ---
 echo -e "\n--- Testing overlap warning (--position with a too-small height) ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --position 0.0 0.0 --height 0.2 --no-intro \
     > log_overlap.txt 2>&1
 check_contains "WARNING.*closest slab-adsorbate distance" log_overlap.txt
-check_contains "WARNING.*closest slab-adsorbate distance" sites/adsorption_sites.txt
 
 
 # --- 6f. Vacuum-box-vs-molecule-size warning: a molecule too large for a
 #     tiny isolated-reference box may self-interact with its own images ---
 echo -e "\n--- Testing --vacuum-box sanity warning (H2O in a 3.0 Ang box) ---"
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --vacuum-box 3.0 --no-intro \
     > log_smallbox.txt 2>&1
 check_contains "WARNING.*spans.*more than half of --vacuum-box" log_smallbox.txt
+
+
+# --- 6g. cluster_candidate_coords: symmetrically-equivalent candidates that land in
+#     different periodic images (pymatgen's own AdsorbateSiteFinder.symm_reduce/
+#     put_coord_inside wrap each candidate independently, no shared reference point)
+#     must be re-wrapped into the SAME periodic image -- a real bug reported live: a
+#     user's adsorption_sites.png showed most candidates clustered together but 1-2
+#     appearing far away, even though they were the same physical site type. ---
+echo -e "\n--- Testing cluster_candidate_coords (symmetrically-equivalent site clustering) ---"
+python3 -c "
+import numpy as np
+from stb.core.adsorption_sites import cluster_candidate_coords
+
+lattice = np.eye(3) * 10.0
+# two physically-equivalent points just on either side of a cell boundary
+c_near = np.array([0.001, 0.5, 0.5]) @ lattice
+c_far = np.array([0.999, 0.5, 0.5]) @ lattice   # pymatgen's own floor-wrap would leave this here
+wrapped = cluster_candidate_coords([c_near, c_far], lattice)
+w_far_frac = wrapped[1] @ np.linalg.inv(lattice)
+assert abs(w_far_frac[0] - (-0.001)) < 1e-9, f'expected ~-0.001, got {w_far_frac[0]}'
+assert abs(w_far_frac[1] - 0.5) < 1e-9 and abs(w_far_frac[2] - 0.5) < 1e-9
+
+# an explicit reference point (not coords[0]) is honored
+wrapped2 = cluster_candidate_coords([c_far], lattice, reference=c_near)
+w2_frac = wrapped2[0] @ np.linalg.inv(lattice)
+assert abs(w2_frac[0] - (-0.001)) < 1e-9
+
+# empty input -> unchanged (no crash)
+assert cluster_candidate_coords([], lattice) == []
+print('OK')
+" > log_cluster_check.txt 2>&1
+check_contains "OK" log_cluster_check.txt
 
 
 # --- 7. Error and robustness cases ---
@@ -250,17 +442,17 @@ s.lattice = s.lattice[[2, 1, 0]]
 s.atoms = [(sym, np.array([pos[2], pos[1], pos[0]])) for sym, pos in s.atoms]
 structure_io.write_fdf(s, 'wrong_vacuum.fdf')
 "
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s wrong_vacuum.fdf -c calc.fdf --adsorbate O --no-intro > log_wrong_vacuum.txt 2>&1
 check_exit_code $? 0
 check_contains "vacuum axis was 'a', not c -- relabeled" log_wrong_vacuum.txt
-check_success sites/site_1_ontop/structure.fdf
+check_success $RUN/sites/site_1_ontop/structure.fdf
 python3 -c "
 import sys
 import numpy as np
 from stb.core import structure_io
 orig = structure_io.to_pymatgen(structure_io.read_fdf('structure.fdf'))
-relabeled = structure_io.to_pymatgen(structure_io.read_fdf('clean_slab/structure.fdf'))
+relabeled = structure_io.to_pymatgen(structure_io.read_fdf('adsorption_run/clean_slab/structure.fdf'))
 orig_coords = np.array(sorted(orig.cart_coords.tolist()))
 relabeled_coords = np.array(sorted(relabeled.cart_coords.tolist()))
 sys.exit(0 if np.allclose(orig_coords, relabeled_coords, atol=1e-6) else 1)
@@ -282,14 +474,14 @@ s.lattice = s.lattice[[0, 2, 1]]
 s.atoms = [(sym, np.array([pos[0], pos[2], pos[1]])) for sym, pos in s.atoms]
 structure_io.write_fdf(s, 'vacuum_on_b.fdf')
 "
-rm -rf clean_slab adsorbate sites
+rm -rf $RUN
 stb-adsorb -s vacuum_on_b.fdf -c calc.fdf --adsorbate O --no-intro > log_vacuum_on_b.txt 2>&1
 check_exit_code $? 0
 check_contains "vacuum axis was 'b', not c -- relabeled" log_vacuum_on_b.txt
 python3 -c "
 import sys
 from stb.core import structure_io
-s = structure_io.read_fdf('clean_slab/structure.fdf')
+s = structure_io.read_fdf('adsorption_run/clean_slab/structure.fdf')
 import numpy as np
 sys.exit(0 if np.linalg.det(s.lattice) > 0 else 1)
 "
@@ -299,7 +491,7 @@ import sys
 import numpy as np
 from stb.core import structure_io
 orig = structure_io.to_pymatgen(structure_io.read_fdf('structure.fdf'))
-relabeled = structure_io.to_pymatgen(structure_io.read_fdf('clean_slab/structure.fdf'))
+relabeled = structure_io.to_pymatgen(structure_io.read_fdf('adsorption_run/clean_slab/structure.fdf'))
 orig_coords = np.array(sorted(orig.cart_coords.tolist()))
 relabeled_coords = np.array(sorted(relabeled.cart_coords.tolist()))
 sys.exit(0 if np.allclose(orig_coords, relabeled_coords, atol=1e-6) else 1)
@@ -358,6 +550,8 @@ echo "Testing: --help documents --adsorbate/--site-type"
 stb-adsorb --help > log_help.txt 2>&1
 check_contains "adsorbate" log_help.txt
 check_contains "site-type" log_help.txt
+check_contains "view-plots" log_help.txt
+check_contains "adsorption_run" log_help.txt
 
 echo "Testing: --list"
 stb-adsorb --list --no-intro > log_list.txt 2>&1
@@ -367,8 +561,8 @@ check_contains "H2O" log_list.txt
 # --- 8. Interactive path (stb-suite, shortcut 4.8.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.8.1) ---"
 
-echo "Testing: navigate 4.8.1 -> single ontop site, default BSSE (on) -> quit"
-rm -rf clean_slab adsorbate sites
+echo "Testing: navigate 4.8.1 -> single ontop site -> quit"
+rm -rf $RUN
 {
   echo "4.8.1"
   echo "structure.fdf"  # struct_file
@@ -379,49 +573,24 @@ rm -rf clean_slab adsorbate sites
   echo "1"               # site_choice (ontop)
   echo ""               # height_sweep_choice (default N)
   echo ""               # height (default)
+  echo ""               # force_spin (default Y)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
   echo "n"               # both_sides_choice
-  echo ""               # bsse_choice (default -> ON)
-  echo ""               # show_advanced (default -> skip)
+  echo ""               # show_advanced (default -> skip, so output_dir defaults to adsorption_run)
+  echo "y"               # save_report -> yes
+  echo "n"               # view_choice -> no (headless)
+  echo "n"               # view_plots_choice -> no (headless)
   echo ""               # press enter to continue
   echo "0"               # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Success:.*1 site folder" log_menu.txt
-check_success sites/site_1_ontop/structure.fdf
-check_success sites/site_1_ontop/bsse_slab/structure.fdf
-
-echo "Testing: navigate 4.8.1 -> single ontop site, BSSE off -> quit"
-rm -rf clean_slab adsorbate sites
-{
-  echo "4.8.1"
-  echo "structure.fdf"
-  echo "calc.fdf"
-  echo ""
-  echo "O"
-  echo ""               # ml_prerelax_choice
-  echo "1"
-  echo ""               # height_sweep_choice
-  echo ""
-  echo "n"
-  echo "0"
-  echo "n"
-  echo "n"               # bsse_choice -> OFF
-  echo ""
-  echo ""
-  echo "0"
-} | stb-suite > log_menu_no_bsse.txt 2>&1
-check_success sites/site_1_ontop/structure.fdf
-if [ -d sites/site_1_ontop/bsse_slab ]; then
-    echo -e "   -> ${RED}Failed:${NC} 'sites/site_1_ontop/bsse_slab' unexpectedly created (menu BSSE=off)"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} 'sites/site_1_ontop/bsse_slab' NOT created (menu BSSE=off, as expected)"
-    PASS=$((PASS+1))
-fi
+check_success $RUN/sites/site_1_ontop/structure.fdf
+check_success $RUN/adsorption_prep_report.txt
+check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
 
 echo "Testing: navigate 4.8.1 -> two adsorbates + height sweep -> quit"
-rm -rf clean_slab adsorbate adsorbate_* sites
+rm -rf $RUN
 {
   echo "4.8.1"
   echo "structure.fdf"
@@ -434,18 +603,21 @@ rm -rf clean_slab adsorbate adsorbate_* sites
   echo "1.5"              # h_min
   echo "2.5"              # h_max
   echo "0.5"              # h_step
+  echo ""               # force_spin (default Y)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
-  echo ""               # bsse_choice (default -> ON)
   echo ""               # show_advanced
+  echo "n"               # save_report -> no
+  echo "n"               # view_choice -> no
+  echo "n"               # view_plots_choice -> no
   echo ""               # press enter
   echo "0"               # quit
 } | stb-suite > log_menu_sweep.txt 2>&1
 check_contains "Success:.*6 site folder" log_menu_sweep.txt
-check_success sites/site_1_ontop_O_h1.50/structure.fdf
-check_success sites/site_1_ontop_N_h2.50/structure.fdf
-check_success adsorbate_O/structure.fdf
-check_success adsorbate_N/structure.fdf
+check_success $RUN/sites/site_1_ontop_O_h1.50/structure.fdf
+check_success $RUN/sites/site_1_ontop_N_h2.50/structure.fdf
+check_success $RUN/adsorbate_O/structure.fdf
+check_success $RUN/adsorbate_N/structure.fdf
 
 
 popd > /dev/null

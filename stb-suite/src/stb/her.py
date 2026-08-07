@@ -18,7 +18,7 @@ from pymatgen.core import Molecule
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 
 REPORT_FILE = "her_stage1.txt"
 _DIPOLE_CORR_RE = re.compile(r'Slab\.DipoleCorrection\s+\S+', re.IGNORECASE)
@@ -107,7 +107,7 @@ def force_dipole_correction(calc_text):
 
 
 def write_site_folder(out_dir, ads_structure, calc_text, species_meta, pp_path):
-    """Writes structure.fdf + calc.fdf + linked pseudos for one candidate
+    """Writes structure.fdf + calc.fdf + copied pseudos for one candidate
     site (or the clean-slab copy). Mirrors stb-adsorb's own
     write_reference_folder, rewritten locally (see module docstring for
     why this isn't imported).
@@ -120,7 +120,7 @@ def write_site_folder(out_dir, ads_structure, calc_text, species_meta, pp_path):
         f.write(calc_text)
     symbols = {site.specie.symbol for site in ads_structure}
     for sym in sorted(symbols):
-        link_pseudo(pp_path, sym, out_dir)
+        copy_pseudo(pp_path, sym, out_dir)
     return fdf_structure
 
 

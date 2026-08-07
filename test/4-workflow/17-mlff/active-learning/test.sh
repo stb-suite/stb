@@ -194,7 +194,7 @@ check_contains "md-temperature" log_help.txt
 # --- 4. Interactive path (stb-suite, shortcut 4.17.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.17.3) ---"
 rm -rf mlff_config_012 mlff_config_013
-printf '4.17.3\n%s\nmlff_config_001/calc.fdf\n\n\n5\n0.2\n1\n.\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
+printf '4.17.3\n%s\nmlff_config_001/calc.fdf\n\n\n5\n0.2\n1\n.\n\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Suggested configs" log_menu.txt
 

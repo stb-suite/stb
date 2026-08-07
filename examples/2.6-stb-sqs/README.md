@@ -278,5 +278,5 @@ stb-sqs -f ni32.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5
 See `2.2-stb-supercell/` for building a bigger, more dilute cell before
 running an SQS search on it, `2.5-stb-defect/` for another example of a
 single missing/substituted atom breaking symmetry substantially, or
-`1.6-stb-mlrelax/` for a closer look at the MACE pre-relaxation
+`1.7-stb-mlrelax/` for a closer look at the MACE pre-relaxation
 `--ml-relax` reuses here.

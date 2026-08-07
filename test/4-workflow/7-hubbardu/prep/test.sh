@@ -90,11 +90,19 @@ else
     PASS=$((PASS+1))
 fi
 
-echo "Testing: the generated LDAU.proj block matches the verified SIESTA syntax (U=0, J=0 default)"
-check_contains "LDAU.PotentialShift T" hubbardu_runs/reference/calc.fdf
-check_contains "Mn   1" hubbardu_runs/reference/calc.fdf
-check_contains "n=3    2" hubbardu_runs/reference/calc.fdf
-check_contains "0.000    0.000" hubbardu_runs/reference/calc.fdf
+echo "Testing: calc.fdf now just includes config_extra.fdf, instead of embedding the DFT+U block inline"
+check_contains "%include config_extra.fdf" hubbardu_runs/reference/calc.fdf
+
+echo "Testing: the generated LDAU.proj block (in config_extra.fdf) matches the verified SIESTA syntax (U=0, J=0 default)"
+check_contains "LDAU.PotentialShift T" hubbardu_runs/reference/config_extra.fdf
+check_contains "Mn   1" hubbardu_runs/reference/config_extra.fdf
+check_contains "n=3    2" hubbardu_runs/reference/config_extra.fdf
+check_contains "0.000    0.000" hubbardu_runs/reference/config_extra.fdf
+
+echo "Testing: config_extra.fdf also forces single-point SCF (no ionic/cell relaxation)"
+check_contains "MD.TypeOfRun       CG" hubbardu_runs/reference/config_extra.fdf
+check_contains "MD.Steps           0" hubbardu_runs/reference/config_extra.fdf
+check_contains "MD.VariableCell    false" hubbardu_runs/reference/config_extra.fdf
 
 echo "Testing: run_manifest.json records species/shell/j and the reference run"
 check_contains '"species": "Mn"' hubbardu_runs/run_manifest.json
@@ -109,8 +117,8 @@ stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --shell 4f --j 0.5 --no-i
 check_exit_code $? 0
 check_contains "Mn (4f: n=4, l=3)" log_override.txt
 check_contains "0.500" log_override.txt
-check_contains "n=4    3" hubbardu_runs/reference/calc.fdf
-check_contains "0.000    0.500" hubbardu_runs/reference/calc.fdf
+check_contains "n=4    3" hubbardu_runs/reference/config_extra.fdf
+check_contains "0.000    0.500" hubbardu_runs/reference/config_extra.fdf
 check_contains '"j": 0.5' hubbardu_runs/run_manifest.json
 
 
@@ -198,15 +206,15 @@ stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --no-intro > log_mult
 check_exit_code $? 1
 check_contains "appears 2 times" log_multi_no_index.txt
 check_contains "Pass --atom-index" log_multi_no_index.txt
-check_contains "atom-index 1" log_multi_no_index.txt
+check_contains "atom-index | Wyckoff | Note" log_multi_no_index.txt
 check_contains "symmetry-equivalent atom(s) -- any one of them gives the same result" log_multi_no_index.txt
 
 echo "Testing: --species matching 1 atom (existing fixture) needs no --atom-index -- unaffected"
 rm -rf hubbardu_runs
 stb-hubbardu -s structure.fdf -c calc.fdf --species Mn --no-intro > log_single_unaffected.txt 2>&1
 check_exit_code $? 0
-check_contains "Mn   1" hubbardu_runs/reference/calc.fdf
-if grep -q "Mn_pert" hubbardu_runs/reference/calc.fdf; then
+check_contains "Mn   1" hubbardu_runs/reference/config_extra.fdf
+if grep -q "Mn_pert" hubbardu_runs/reference/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} single-atom species should never be aliased"
     FAIL=$((FAIL+1))
 else
@@ -228,9 +236,9 @@ echo "Testing: valid --atom-index isolates the perturbation via an aliased speci
 rm -rf hubbardu_runs
 stb-hubbardu -s structure_2mn.fdf -c calc.fdf --species Mn --atom-index 1 --no-intro > log_multi_ok.txt 2>&1
 check_exit_code $? 0
-check_contains "Perturbed atom:" log_multi_ok.txt
+check_contains "Perturbed atom" log_multi_ok.txt
 check_contains "Mn_pert" log_multi_ok.txt
-check_contains "Mn_pert   1" hubbardu_runs/reference/calc.fdf
+check_contains "Mn_pert   1" hubbardu_runs/reference/config_extra.fdf
 check_contains "perturbed_species" hubbardu_runs/run_manifest.json
 check_contains "Mn_pert" hubbardu_runs/run_manifest.json
 check_contains "\"atom_index\": 1" hubbardu_runs/run_manifest.json
@@ -324,11 +332,29 @@ echo "Testing: --shell explicitly supplied for a species with no default works"
 stb-hubbardu -s structure_si.fdf -c calc.fdf --species Si --shell 3d -o si_runs --no-intro > log_shell_override.txt 2>&1
 check_exit_code $? 0
 
-echo "Testing: a template that already has an LDAU.proj block/PotentialShift is rejected"
-cp hubbardu_runs/reference/calc.fdf already_has_ldau.fdf
-stb-hubbardu -s structure.fdf -c already_has_ldau.fdf --species Mn --no-intro > log_guard.txt 2>&1
+echo "Testing: a template with an embedded LDAU.proj block/PotentialShift is rejected"
+cat > already_has_ldau_inline.fdf << 'EOF'
+SystemLabel siesta
+%include structure.fdf
+LDAU.PotentialShift T
+%block LDAU.proj
+Mn 1
+n=3 2
+0.000 0.000
+0.000 0.000
+%endblock LDAU.proj
+EOF
+stb-hubbardu -s structure.fdf -c already_has_ldau_inline.fdf --species Mn --no-intro > log_guard.txt 2>&1
 check_exit_code $? 1
 check_contains "already contains an LDAU.proj" log_guard.txt
+
+echo "Testing: re-pointing --calc straight at a PREVIOUSLY-GENERATED reference/calc.fdf is rejected"
+echo "  (its DFT+U block now lives in a sibling config_extra.fdf, not inline -- the raw LDAU regex"
+echo "  alone can no longer catch this, so check_no_existing_ldau also flags the bare %include line)"
+cp hubbardu_runs/reference/calc.fdf already_has_ldau.fdf
+stb-hubbardu -s structure.fdf -c already_has_ldau.fdf --species Mn --no-intro > log_guard_include.txt 2>&1
+check_exit_code $? 1
+check_contains "already '%include config_extra.fdf'" log_guard_include.txt
 
 echo "Testing: the DFTU.proj/DFTU.PotentialShift spelling is also rejected (SIESTA accepts both)"
 cat > already_has_dftu.fdf << 'EOF'
@@ -371,19 +397,28 @@ check_contains "SCF.H.Tolerance" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 4.7.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.7.1) ---"
 
-echo "Testing: navigate 4.7.1 -> invalid file then valid -> calc.fdf -> Mn -> no atom-index -> auto shell -> default J -> default output -> quit"
+echo "Testing: navigate 4.7.1 -> blank structure/calc (defaults to structure.fdf/calc.fdf in cwd) ->"
+echo "  Mn -> no atom-index -> auto shell -> default J -> no pseudo -> default output -> save-report=N -> quit"
 rm -rf hubbardu_runs
-printf '4.7.1\ndoes_not_exist.fdf\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
-check_contains "File not found" log_menu.txt
+printf '4.7.1\n\n\nMn\n\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Generated 'reference/'" log_menu.txt
 check_success hubbardu_runs/run_manifest.json
+check_absent hubbardu_runs/hubbardu_stage1.txt
 
-echo "Testing: navigate 4.7.1 -> structure_2mn.fdf -> calc.fdf -> Mn -> atom-index 1 -> auto shell -> default J -> default output -> quit"
+echo "Testing: navigate 4.7.1 -> structure_2mn.fdf -> calc.fdf -> Mn -> atom-index 1 -> auto shell ->"
+echo "  default J -> no pseudo -> default output -> save-report=Y -> quit"
 rm -rf hubbardu_runs
-printf '4.7.1\nstructure_2mn.fdf\ncalc.fdf\nMn\n1\n\n\n\n\n\n0\n' | stb-suite > log_menu_atom_index.txt 2>&1
-check_contains "Perturbed atom:" log_menu_atom_index.txt
+printf '4.7.1\nstructure_2mn.fdf\ncalc.fdf\nMn\n1\n\n\n\n\ny\n\n0\n' | stb-suite > log_menu_atom_index.txt 2>&1
+check_contains "Perturbed atom" log_menu_atom_index.txt
 check_contains "Generated 'reference/'" log_menu_atom_index.txt
-check_contains "Mn_pert   1" hubbardu_runs/reference/calc.fdf
+check_contains "Mn_pert   1" hubbardu_runs/reference/config_extra.fdf
+check_success hubbardu_runs/hubbardu_stage1.txt
+
+echo "Testing: navigate 4.7.1 with a genuinely missing structure file -> the CLI itself (not the"
+echo "  interactive wrapper) reports the error, since the wrapper no longer pre-validates paths"
+rm -rf hubbardu_runs
+printf '4.7.1\ndoes_not_exist.fdf\ncalc.fdf\nMn\n\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu_missing.txt 2>&1
+check_contains "does_not_exist.fdf' not found" log_menu_missing.txt
 
 
 popd > /dev/null

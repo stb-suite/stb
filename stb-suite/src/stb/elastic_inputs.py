@@ -56,7 +56,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, link_pseudo
+from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import read_md_state, is_siesta_true, prepend_include
 
 REPORT_FILE = "elastic_stage1.txt"
@@ -206,7 +206,7 @@ def main():
     parser.add_argument("-p", "--pseudo-dir", default="",
                         help="Pseudopotentials source (optional): a bundled bank "
                              f"({', '.join(BANKS)}) or a folder path. If given, the required "
-                             "pseudopotential for every species in the structure is linked into "
+                             "pseudopotential for every species in the structure is copied into "
                              "every generated folder, so it's immediately ready for SIESTA.")
     parser.add_argument("--method", choices=["stress", "energy"], default="stress",
                         help="Physical quantity the generated strains are meant to feed "
@@ -577,11 +577,11 @@ def main():
                 "need to be added manually to every generated folder.", 'yellow'), f_out)
         else:
             print_dual(color_text(
-                "[OK] All required pseudopotentials found -- will be linked into every "
+                "[OK] All required pseudopotentials found -- will be copied into every "
                 "generated folder.", 'green'), f_out)
     else:
         print_dual("Not given (pass -p/--pseudo-dir -- a bundled bank or a folder path -- to "
-                   "link the required pseudopotential for every species into every generated "
+                   "copy the required pseudopotential for every species into every generated "
                    "folder). Pseudopotentials will need to be added manually.", f_out)
 
     print_section("[6] GENERATED STRAIN FOLDERS", f_out)
@@ -611,7 +611,7 @@ def main():
                 fh.write(extra_fdf_text)
 
             for sym in species:
-                link_pseudo(args.pseudo_dir, sym, folder)
+                copy_pseudo(args.pseudo_dir, sym, folder)
 
             volume = abs(np.linalg.det(new_lattice)) * structure.lattice_constant ** 3
             folder_rows.append(([folder, d, f"{s:+.2f}",

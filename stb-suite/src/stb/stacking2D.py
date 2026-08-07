@@ -196,6 +196,8 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, instead of "
                              "a MACE-MP-0 foundation size.")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-2Dstacking {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -273,12 +275,15 @@ def main():
     ml_relax_info = {}
     if args.ml_relax:
         print_section("[3] ML PRE-RELAXATION (MACE)", f_out)
-        print_dual(f"Model           : {model_desc}", f_out)
+        print_dual(f"Model           : {model_desc} (device={args.device})", f_out)
         print_dual(f"Cell relaxation : "
                    f"{'in-plane only (vacuum axis fixed)' if args.ml_relax_cell else 'positions only'}", f_out)
         from pymatgen.io.ase import AseAtomsAdaptor
         model_arg = args.custom_model if args.custom_model else args.model
-        calc = mace_relax.get_calculator(model_arg)
+        try:
+            calc = mace_relax.get_calculator(model_arg, device=args.device)
+        except ValueError as e:
+            _fail(str(e), f_out)
         for line in mace_relax.describe_model(model_arg, calc):
             print_dual(line, f_out)
 

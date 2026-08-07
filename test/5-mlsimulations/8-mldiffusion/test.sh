@@ -181,7 +181,7 @@ check_contains "freeze-substrate" log_help.txt
 # --- 3. Interactive path (stb-suite, shortcut 5.8) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.8) ---"
 rm -rf interactive_out
-printf '5.8\nsi8.fdf\n1\n\nsmall\n5\ninteractive_out\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.8\nsi8.fdf\n1\n\nsmall\n\n5\ninteractive_out\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/migration_barriers.png
 

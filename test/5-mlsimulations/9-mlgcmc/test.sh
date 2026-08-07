@@ -233,7 +233,7 @@ check_contains "insertion-zmin" log_help.txt
 # --- 4. Interactive path (stb-suite, shortcut 5.9) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.9) ---"
 rm -rf interactive_out
-printf '5.9\ngraphene.fdf\nAr\n2\n2\n300\n150\n30\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.9\ngraphene.fdf\nAr\n2\n2\n300\n150\n30\n\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/mc_history.png
 

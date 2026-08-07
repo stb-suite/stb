@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-adsorbAnalysis (Adsorption Analysis, item 4.8.2). Uses
+# Smoke test for stb-adsorbAnalysis (Adsorption Analysis, item 4.8.3). Uses
 # stb-adsorb itself (real tool, no SIESTA needed for prep) to build the
 # clean_slab/adsorbate/sites folder layout against the same fixture as
 # ../prep/, then fabricates a "siesta: FreeEng" line per folder (synthetic,
@@ -54,7 +54,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-AdsorbAnalysis (item 4.8.2) ---"
+echo "--- Starting tester for STB-AdsorbAnalysis (item 4.8.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$PREP_DIR/structure.fdf" "$TEST_DIR/"
@@ -66,7 +66,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Build 3 candidate sites via stb-adsorb, then fabricate FreeEng ---
 echo -e "\n--- Testing analysis of a 3-site adsorption study ---"
-stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type all --all-sites --no-intro \
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type all --all-sites -O . --no-intro \
     > log_prep.txt 2>&1
 n_sites=$(find sites -maxdepth 1 -type d -name 'site_*' | wc -l)
 if [ "$n_sites" -ge 3 ]; then
@@ -80,6 +80,16 @@ fi
 printf 'siesta: FreeEng =    -200.000000\nSCF cycle converged after 12 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n' > clean_slab/calc.out
 printf 'siesta: FreeEng =     -13.500000\nSCF cycle converged after 9 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.005000\n' > adsorbate/calc.out
 site_dirs=(sites/site_*/)
+# bsse_slab/bsse_adsorbate live in a tree parallel to sites/, not nested
+# inside each site's own folder -- same basenames, "sites/" swapped for "bsse/".
+# stb-adsorb no longer writes these itself (that's stb-adsorbBsse's job, only
+# possible once a site has actually relaxed -- see ../bsse/test.sh for that
+# tool's own tests); fabricated here directly (empty, no calc.out yet) since
+# this file only exercises stb-adsorbAnalysis's own aggregation logic.
+bsse_dirs=("${site_dirs[@]/sites\//bsse/}")
+for d in "${bsse_dirs[@]}"; do
+    mkdir -p "${d}bsse_slab" "${d}bsse_adsorbate"
+done
 printf 'siesta: FreeEng =    -214.100000\nSCF cycle converged after 14 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.020000\n' > "${site_dirs[0]}calc.out"
 printf 'siesta: FreeEng =    -214.350000\nSCF cycle converged after 15 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.015000\n' > "${site_dirs[1]}calc.out"
 # site 2 is deliberately left unconverged AND with a large residual force, to
@@ -89,11 +99,10 @@ printf 'siesta: FreeEng =    -213.900000\nsiesta: Atomic forces (eV/Ang):\n   Ma
 most_stable=$(basename "${site_dirs[1]}")
 worst_quality=$(basename "${site_dirs[2]}")
 
-# bsse_slab/bsse_adsorbate folders already exist (stb-adsorb's --bsse-
-# correction defaults ON) but have no calc.out yet -- every site's BSSE
-# correction is "incomplete", so this run should report it as entirely
-# unavailable, not partially available.
-stb-adsorbAnalysis --dir . --no-intro > log_analysis.txt 2>&1
+# bsse_slab/bsse_adsorbate folders exist (fabricated above) but have no
+# calc.out yet -- every site's BSSE correction is "incomplete", so this run
+# should report it as entirely unavailable, not partially available.
+stb-adsorbAnalysis --dir . --save-report --no-intro > log_analysis.txt 2>&1
 check_contains "E_clean_slab : -200.000000 eV" log_analysis.txt
 check_contains "E_adsorbate (H) : -13.500000 eV" log_analysis.txt
 check_contains "\-0.850000" log_analysis.txt
@@ -104,6 +113,24 @@ check_success adsorption_curve.dat
 check_success adsorption_curve.gplot
 check_success adsorption_report.txt
 check_contains "Most stable site (uncorrected):.*$most_stable" adsorption_report.txt
+
+# --- 2a'. New [2]-[5] report structure: configuration-count breakdown,
+#     BSSE physics-check blurb, matplotlib ranking plot, always-present
+#     [4] APPLY/[5] LIBRARY WARNINGS sections ---
+echo -e "\n--- Testing the [0]-[5] report structure ---"
+check_contains "\[2\] SITE RESULTS: CONFIGURATION COUNT & TABLE" log_analysis.txt
+check_contains "Site folders found  : 4" log_analysis.txt
+check_contains "Read successfully   : 3" log_analysis.txt
+check_contains "Skipped             : 1  (missing calc.out: 1, unparseable energy: 0)" log_analysis.txt
+check_contains "BSSE coverage       : complete 0, incomplete 3, absent 1" log_analysis.txt
+check_contains "BSSE PHYSICS CHECK" log_analysis.txt
+check_contains "\[3\] SUMMARY & PLOT" log_analysis.txt
+check_contains "Ranking plot -> ./adsorption_ranking.png" log_analysis.txt
+check_success adsorption_ranking.png
+check_contains "\[4\] APPLY" log_analysis.txt
+check_contains "Not requested (pass --apply" log_analysis.txt
+check_contains "\[5\] LIBRARY WARNINGS" log_analysis.txt
+check_contains "No library warnings." log_analysis.txt
 # SCF-convergence / residual-force diagnostics: clean_slab and adsorbate both
 # converged cleanly above, so no warning should be emitted for either
 if grep -q "Could not confirm SCF convergence for clean_slab" log_analysis.txt; then
@@ -124,12 +151,12 @@ echo -e "\n--- Testing BSSE-corrected analysis (complete for all sites) ---"
 # (E_ads_bsse = -0.700), different from the uncorrected ranking (site 1,
 # E_ads_bsse = -0.300) -- demonstrates the correction can actually change
 # the answer, not just shift every site uniformly.
-echo "siesta: FreeEng =    -200.020000" > "${site_dirs[0]}bsse_slab/calc.out"
-echo "siesta: FreeEng =     -13.380000" > "${site_dirs[0]}bsse_adsorbate/calc.out"
-echo "siesta: FreeEng =    -200.500000" > "${site_dirs[1]}bsse_slab/calc.out"
-echo "siesta: FreeEng =     -13.550000" > "${site_dirs[1]}bsse_adsorbate/calc.out"
-echo "siesta: FreeEng =    -200.200000" > "${site_dirs[2]}bsse_slab/calc.out"
-echo "siesta: FreeEng =     -13.600000" > "${site_dirs[2]}bsse_adsorbate/calc.out"
+echo "siesta: FreeEng =    -200.020000" > "${bsse_dirs[0]}bsse_slab/calc.out"
+echo "siesta: FreeEng =     -13.380000" > "${bsse_dirs[0]}bsse_adsorbate/calc.out"
+echo "siesta: FreeEng =    -200.500000" > "${bsse_dirs[1]}bsse_slab/calc.out"
+echo "siesta: FreeEng =     -13.550000" > "${bsse_dirs[1]}bsse_adsorbate/calc.out"
+echo "siesta: FreeEng =    -200.200000" > "${bsse_dirs[2]}bsse_slab/calc.out"
+echo "siesta: FreeEng =     -13.600000" > "${bsse_dirs[2]}bsse_adsorbate/calc.out"
 bsse_most_stable=$(basename "${site_dirs[0]}")
 
 stb-adsorbAnalysis --dir . --no-intro > log_bsse.txt 2>&1
@@ -143,11 +170,11 @@ check_contains "(BSSE)" adsorption_curve.gplot
 
 # --- 2c. BSSE-corrected analysis: incomplete for one site ---
 echo -e "\n--- Testing BSSE-corrected analysis (incomplete for one site) ---"
-rm -f "${site_dirs[2]}bsse_adsorbate/calc.out"
+rm -f "${bsse_dirs[2]}bsse_adsorbate/calc.out"
 stb-adsorbAnalysis --dir . --no-intro > log_bsse_partial.txt 2>&1
 check_contains "incomplete/unreadable results" log_bsse_partial.txt
 check_contains "available for only 2/3 site" log_bsse_partial.txt
-echo "siesta: FreeEng =     -13.600000" > "${site_dirs[2]}bsse_adsorbate/calc.out"
+echo "siesta: FreeEng =     -13.600000" > "${bsse_dirs[2]}bsse_adsorbate/calc.out"
 
 
 # --- 2d. Multi-adsorbate + height-sweep round trip: real stb-adsorb prep,
@@ -158,7 +185,7 @@ cp structure.fdf calc.fdf multi/
 (
     cd multi
     stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O,N --site-type ontop \
-        --height-sweep 1.5 2.5 0.5 --no-bsse-correction --no-intro > log_multi_prep.txt 2>&1
+        --height-sweep 1.5 2.5 0.5 -O . --no-intro > log_multi_prep.txt 2>&1
     echo "siesta: FreeEng =    -200.000000" > clean_slab/calc.out
     echo "siesta: FreeEng =      -6.500000" > adsorbate_O/calc.out
     echo "siesta: FreeEng =      -8.200000" > adsorbate_N/calc.out
@@ -192,6 +219,21 @@ echo -e "\n--- Testing --apply ---"
 check_contains "Applied.*site_1_ontop_N_h1.50" multi/log_apply.txt
 check_success multi/best_prod.fdf
 check_contains "NumberofAtoms      3" multi/best_prod.fdf
+
+
+# --- 2f. --view / --view-plots: headless-safe smoke test (MPLBACKEND=Agg
+#     forces a non-interactive matplotlib backend so the ranking plot can
+#     still be built/shown; DISPLAY= makes ASE's own viewer fail fast with
+#     a graceful [FAIL] instead of hanging -- same convention already used
+#     for stb-adsorb's own --view/--view-plots test) ---
+echo -e "\n--- Testing --view / --view-plots (headless) ---"
+MPLBACKEND=Agg DISPLAY= stb-adsorbAnalysis --dir . --view --view-plots --no-intro \
+    > log_view.txt 2>&1
+check_contains "opening 6 frame(s)" log_view.txt
+check_contains "0 = clean_slab" log_view.txt
+check_contains "1 = adsorbate(H)" log_view.txt
+check_contains "Could not open the interactive 3D viewer" log_view.txt
+check_contains "No library warnings." log_view.txt
 
 
 # --- 3. A folder missing calc.out is skipped, not fatal ---
@@ -229,14 +271,15 @@ check_contains "dir" log_help.txt
 check_contains "file" log_help.txt
 
 
-# --- 5. Interactive path (stb-suite, shortcut 4.8.2) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.8.2) ---"
+# --- 5. Interactive path (stb-suite, shortcut 4.8.3) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.8.3) ---"
 
-echo "Testing: navigate 4.8.2 -> defaults -> quit"
+echo "Testing: navigate 4.8.3 -> defaults -> quit"
 rm -f adsorption_curve.dat adsorption_report.txt
-# 4.8.2 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
-# default) / "" (apply_target: skip) / "" (Press Enter to continue) / 0 (quit)
-printf '4.8.2\n.\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# 4.8.3 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
+# default) / "" (apply_target: skip) / "" (save_report: N) / "" (view: N) /
+# "" (view_plots: N) / "" (Press Enter to continue) / 0 (quit)
+printf '4.8.3\n.\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Most stable site (uncorrected):.*$most_stable" log_menu.txt
 check_contains "Most stable site (BSSE-corrected):.*$bsse_most_stable" log_menu.txt
 check_contains "Force tolerance" log_menu.txt

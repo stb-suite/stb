@@ -323,7 +323,7 @@ check_contains "skip-anisotropy-surface" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.3) ---"
 rm -rf interactive_out
-printf '5.3\nsi8.fdf\n\nsmall\n1.0\n4\n\ninteractive_out\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.3\nsi8.fdf\n\nsmall\n\n1.0\n4\n\ninteractive_out\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/stress_strain.png
 

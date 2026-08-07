@@ -1,2 +1,9 @@
-SCF cycle converged after 14 iterations
-siesta: FreeEng =    -500.999850
+SCF cycle converged after 12 iterations
+siesta: FreeEng =    -500.844000
+
+outcell: Unit cell vectors (Ang):
+        5.451    0.000000    0.000000
+        0.000000    5.451    0.000000
+        0.000000    0.000000    5.451
+
+outcell: Cell vector modules (Ang)   :    5.451    5.451    5.451

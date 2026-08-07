@@ -174,7 +174,7 @@ output — `example_2.1.sh` proves this directly at the end.
   picks which MACE potential to use. The report shows the full simulation
   detail per structure: model parameter count/cutoff radius, steps used,
   convergence, wall time, and a **before/after table** (same convention as
-  `1.6-stb-mlrelax/`'s own comparison table) — energy, max force, and, with
+  `1.7-stb-mlrelax/`'s own comparison table) — energy, max force, and, with
   `--ml-relax-cell`, lattice `a`/`b`/`gamma` alongside proof that `c` (the
   vacuum axis) never moves. A fast heuristic, not a substitute for a real
   DFT relaxation.
@@ -260,5 +260,5 @@ stb-2Dstacking -l1 graphene.fdf -l2 graphene.fdf -id 70 -a 50 -t 21.8
 ## What's next
 
 See `1.1-stb-inputfile/` for turning a stacked heterostructure into a full
-SIESTA run (basis, pseudopotentials, k-grid), or `1.6-stb-mlrelax/` for a
+SIESTA run (basis, pseudopotentials, k-grid), or `1.7-stb-mlrelax/` for a
 fast MACE-based pre-relaxation before committing to real DFT.

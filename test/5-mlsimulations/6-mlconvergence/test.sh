@@ -151,7 +151,7 @@ check_contains "no-relax" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.6) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.6) ---"
 rm -rf interactive_out
-printf '5.6\nsi8.fdf\nsmall medium\n\n\n\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.6\nsi8.fdf\nsmall medium\n\n\n\n\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/convergence.png
 

@@ -1047,6 +1047,619 @@ the expected ~1.0.
   collapse every comparison to 1.0; and a genuinely continuous, densely/evenly
   -sampled scan is correctly left un-broadened (still scores 1.0 against itself).
 
+**`stb-adsorb`/`stb-adsorbBsse`/`stb-adsorbAnalysis`** (Workflow item 8, "Adsorption") was
+restructured from a 2-stage prep+analysis pair into 3 stages after a real, verified physics
+bug in the BSSE (Boys-Bernardi counterpoise) correction was found while reviewing a genuine
+user SIESTA calculation: `stb-adsorb` (Stage 1) used to write the `bsse/site_*/
+{bsse_slab,bsse_adsorbate}` ghost-fragment folders at PREP time, frozen at the same
+pre-relaxation initial-guess geometry used for `sites/site_*/` itself -- before SIESTA had
+ever actually run there. Read directly off that real calculation's `siesta.XV`: the O-Si
+bond at one site relaxed from a 2.0 Ang initial guess down to ~1.62 Ang (plus ~0.46 Ang of
+substrate puckering) -- BSSE grows quickly as atoms get closer, so evaluating the ghost
+fragments at the far-too-separated initial geometry systematically UNDER-estimates the true
+correction, undermining the "same geometry as the real, relaxed site" requirement
+`examples/4.8-adsorption/README.md` (Section 2.3) already documented as the whole point of
+a counterpoise correction. Per this suite's own established workflow-placement rule (an
+"Analysis" stage must never generate new geometry/folders, only aggregate finished results
+-- the same constraint `stb-hubbardu` already solved with its own 3-stage prep/alphas/
+analysis split), the fix was a new dedicated Stage 2, `stb-adsorbBsse`: it reads each
+`sites/site_*/`'s finished `siesta.XV` (skipping, with a clear per-site report, any site
+that hasn't relaxed yet or whose atom count doesn't match its `structure.fdf` -- never a
+hard failure for the whole batch) and writes the ghost-fragment folders
+(`make_ghost_variant`/`write_bsse_folders`, moved here unchanged from `adsorb.py`) at THAT
+relaxed geometry instead. Reuses each site's own already-copied pseudopotential files
+directly as its ghost-species source (`pp_path=site_dir`), so this stage needs no
+`-p`/`--pseudo-dir` flag of its own. `stb-adsorb` (Stage 1) no longer generates any `bsse/`
+folder at all, and its `--bsse-correction`/`--no-bsse-correction` flags were removed
+outright (not deprecated -- the old behavior was never physically correct, so keeping it as
+a legacy opt-in would only perpetuate the bug). `stb-adsorbAnalysis` (renumbered Stage 2 ->
+Stage 3) needed no aggregation-logic changes -- it already read `bsse/site_*/
+{bsse_slab,bsse_adsorbate}/calc.out` exactly as `stb-adsorbBsse` now populates it; only its
+explanatory report text was updated to point at the new stage. Verified via a synthetic
+fixture (`test/4-workflow/8-adsorption/bsse/test.sh`): a fabricated `siesta.XV` (via sisl)
+with the adsorbate deliberately moved 0.5 Ang from `stb-adsorb`'s own initial guess produces
+ghost-fragment `structure.fdf` files whose written position matches that RELAXED geometry
+exactly, not the original guess; a site with no `siesta.XV` yet is reported and skipped (not
+fatal to the batch); a mismatched atom count (stale/hand-edited folder) is caught and
+reported explicitly rather than silently misread.
+
+**`stb-nebSites`** (Workflow item 9, "NEB / Reaction Path", `neb_sites.py`) is a new Stage 1
+inserted ahead of the existing `stb-neb`/`stb-nebAnalysis` pair, which renumbered from
+`4.9.1`/`4.9.2` to `4.9.2`/`4.9.3` -- the same insert-a-stage-and-renumber pattern already
+used when `stb-adsorbBsse` became the new Stage 2 of item 8 above. Where `stb-neb` needs two
+already-built, already-relaxed endpoint `.fdf` files, `stb-nebSites` builds the CANDIDATES for
+that pair itself: given a slab and one adsorbate/molecule, it enumerates the symmetrically
+distinct ontop/bridge/hollow sites (the exact same `AdsorbateSiteFinder` + `--symprec`
+machinery `stb-adsorb` uses) and writes two endpoint folders, `site_A/`/`site_B/`, for
+whichever two candidates you pick (`--site-a`/`--site-b`, 0-based indices into a single
+combined table spanning every requested site type -- a hop can legitimately go ontop ->
+hollow, not just between two sites of the same type). If either index is omitted, the tool
+prints the candidate table (plus a "closest candidate pair" suggestion, the site-level
+analog of `stb-mldiffusion`'s atom-level `find_neighbor_shell`) and exits, the same
+ambiguous-selection convention `stb-hubbardu`'s `--atom-index` already uses -- never guesses.
+Distinct from `stb-adsorb`: no isolated-adsorbate reference, no `E_ads` ranking, no
+`--all-sites`/`--ml-rank`/`--height-sweep`/`--both-sides` -- this tool only ever cares about
+two concrete points, not ranking many of them. Distinct from `stb-mldiffusion`: that one
+builds a vacancy-hop pair in BULK via a nearest-neighbor-ATOM shell search and runs the NEB
+itself with MACE; this tool builds an ADSORBATE-hop pair on a SLAB via symmetry-reduced site
+enumeration and only writes real SIESTA input folders -- running the actual NEB stays
+`stb-neb`/`stb-nebAnalysis`'s job.
+
+Two refactors, both following this suite's own extract-on-(further)-use policy:
+- **`core/adsorption_sites.py`** (new) -- `resolve_slab_orientation`/`reorient_vacuum_to_c`,
+  `resolve_adsorbate`, `write_reference_folder`, `write_site_plot`, and
+  `min_adsorbate_image_distance` moved out of `adsorb.py` once `stb-nebSites` became a second
+  consumer; `adsorb.py` now imports them instead of defining them locally (`resolve_slab_
+  orientation` was also changed to raise `ValueError`/return `(structure, relabel_note)`
+  instead of printing-and-`sys.exit`-ing itself, so each of the two callers can report the
+  error/info line in its own report's exact style). `parse_adsorbates`/`force_gamma_kgrid`/
+  `force_spin_polarized`/`isolated_adsorbate_structure`/`min_adsorbate_slab_distance` stay in
+  `adsorb.py`, specific to the isolated-`E_ads`-reference machinery `stb-nebSites` never
+  touches (its own copy of the small, generic `min_adsorbate_slab_distance` distance-matrix
+  check is a deliberate duplicate, not worth a cross-import -- same "plain generic helper"
+  bar `stb-adsorb`'s own `build_sweep_values` duplicate already sets). Verified via full
+  regression: `test/4-workflow/8-adsorption/{prep,bsse}/test.sh` both still pass unchanged
+  (111 and 46 checks) after the extraction.
+- **`core/structure_io.py::read_relaxed_or_input(path)`** (new) -- resolves a bare `.fdf` file
+  (unchanged `read_fdf` behavior) or a directory (reads its `structure.fdf` as the base, and
+  prefers a `*.XV` inside the same directory if one exists, same atom-count-mismatch guard as
+  before) into `(FdfStructure, used_relaxed)`. The third consumer of "prefer a finished `.XV`
+  over `structure.fdf`" (after `adsorb_bsse.py::read_relaxed_site_fdf` and
+  `adsorb_analysis.py::read_site_geometry_atoms`) is what triggered the extraction:
+  `stb-neb`'s own `--initial`/`--final` now accept a directory too (e.g. a `stb-nebSites`
+  `site_A/`/`site_B/` folder) via this same function, printing a `[WARNING]` in `[0] RUN
+  METADATA` (not fatal -- still builds the band from the unrelaxed guess, useful to preview
+  the path) when no `.XV` is found yet. `adsorb_bsse.py::read_relaxed_site_fdf` was refactored
+  into a thin wrapper around the shared function (its own "not relaxed yet" contract folds
+  the shared `(structure, used_relaxed)` tuple into a plain `None`, since BSSE -- unlike
+  `stb-neb` -- must skip an unrelaxed site outright, never fall back to its guess). Verified:
+  `test/4-workflow/8-adsorption/bsse/test.sh` (46 checks) unchanged after the refactor; live,
+  a fabricated `site_A/siesta.XV` (adsorbate shifted 0.3 Ang closer to the substrate, same
+  sisl-write recipe as the BSSE test fixture) was confirmed to override `site_A/structure.fdf`
+  in the generated `image_00/`, while an un-fabricated `site_B/` correctly still printed the
+  `NOT YET RELAXED` warning and fell back to its own `structure.fdf` guess.
+
+Verified live end-to-end on the same bare 2-atom graphene primitive cell `test/
+4-workflow/8-adsorption/prep/structure.fdf` uses: `stb-nebSites --adsorbate H` (no
+`--site-a`/`--site-b`) prints the same lateral-self-interaction `[WARNING]` Section 3.2 of
+`examples/4.8-adsorption/README.md` documents for this exact fixture, plus a 4-row candidate
+table (1 ontop + 3 bridge -- this basis exposes no `hollow` candidate to pymatgen's finder,
+same observation already made for `stb-adsorb` on this fixture) and a "closest candidate
+pair" suggestion; re-running with `--site-a 0 --site-b 3` writes `site_A/`
+(`NumberofAtoms 3` -- 2 substrate + H) and `site_B/` sharing the exact same 2 substrate-atom
+positions (trivial atom correspondence for the NEB step that follows, unlike
+`stb-mldiffusion`'s vacancy case, which needs an explicit index-matching construction);
+piping those two folders straight into `stb-neb --initial site_A --final site_B` produces a
+5-image band with the `NOT YET RELAXED` warning on both, exactly as expected before any real
+SIESTA relaxation has run.
+
+A follow-up pass added three visualization outputs, matching the conventions `stb-adsorb`
+already established rather than inventing new ones. All three share the same rotation trick:
+`plot_slab(..., adsorption_sites=False)` draws the substrate, and every hand-placed marker's
+raw (unrotated) Cartesian coordinate is first passed through
+`pymatgen.analysis.adsorption.get_rot(pmg_structure)` -- the exact same rotation `plot_slab`
+itself applies internally to its own adsorption-site markers (confirmed by reading its
+source) -- before plotting, so every marker lands exactly where the substrate atoms are
+drawn instead of being silently offset for any slab whose surface normal isn't already
+parallel to Cartesian z:
+- **`candidate_sites.png`** (`[2]`, `write_candidate_sites_plot`, whenever at least one
+  candidate is found -- including the `< 2 candidates` error case, for context) -- every
+  enumerated candidate marked with a small dot and its 0-based index as an adjacent text
+  label (the exact numbering `--site-a`/`--site-b` and the printed table use), dot color
+  encoding the site type (`_SITE_TYPE_COLORS`: ontop=red, bridge=blue, hollow=green) --
+  deliberately small, uniform dots (not large/shaped markers) so the number label next to
+  each one stays legible and the plot doesn't get visually noisy on a cell with many
+  candidates. Deliberately NOT `core/adsorption_sites.py::write_site_plot` (still
+  used by `stb-adsorb`'s own generic overview) -- that one draws pymatgen's OWN
+  `find_adsorption_sites()` candidates at ITS OWN default settings, not necessarily this
+  run's `--height`/`--symprec`/`--site-type`, and carries no index numbers at all; for a tool
+  whose whole point is picking two specific numbered candidates, a plot showing a different,
+  unnumbered site set would be actively misleading, not just unhelpful. Verified visually
+  (rendered PNG inspected directly) against the same bare graphene fixture: index 0 (ontop,
+  red) sits exactly on the substrate atom, indices 1-3 (bridge, blue) sit exactly at bond
+  midpoints -- matching `[2]`'s printed table (`0=ontop, 1..3=bridge`) exactly.
+
+  **Real bug found and fixed (reported live: dots/numbers invisible on a real, bigger
+  structure, only ever showing up correctly on the tiny 2-atom test fixture)**: both plotting
+  functions originally used a plain `zorder=100`/`101` for their own markers/labels, but
+  `plot_slab` draws its own repeated (default `repeat=5`) substrate-atom circles at
+  `zorder=2*idx`/`2*idx+1`, where `idx` runs over EVERY drawn copy -- up to `25*N` for an
+  `N`-atom cell, so `zorder` alone can reach into the hundreds for anything much bigger than
+  the 2-atom toy fixture, silently drawing our own markers UNDER the substrate instead of
+  over it. Fixed with a shared `_FOREGROUND_ZORDER = 10_000` constant (comfortably above any
+  realistic substrate-circle zorder) applied to every scatter/annotate call in both
+  functions. Verified live on the 32-atom 4x4 graphene supercell (`stb-supercell -d 4 4 1`)
+  that originally triggered the bug report: dots and index labels now render clearly on top.
+- **`chosen_sites.png`** (`[4]`, `write_chosen_sites_plot`, once `--site-a`/`--site-b`
+  resolve) -- marks ONLY the two chosen endpoints, labeled 'A'/'B'. Verified visually: site A
+  (ontop) landed exactly on a substrate atom, site B (bridge) landed exactly at the midpoint
+  between two neighboring substrate atoms -- both physically correct placements. Both plots'
+  legends use `bbox_to_anchor` below the axes (not `loc='upper right'`) after a first attempt
+  showed the legend clipping against the image edge for a site near a corner of the plotted
+  cell.
+- **`--view`** (needs `--site-a`/`--site-b` to have resolved) -- opens `clean_slab`,
+  `site_A`, `site_B` as a 3-frame browser in ASE's interactive viewer
+  (`core/ase_view.py::view_structure_interactive`, the same shared helper/graceful-
+  no-display-failure convention `stb-adsorb`'s own `--view` already uses), a separate flag
+  from `--view-plots` (matplotlib) for the same reason `stb-adsorb` keeps them separate.
+  Verified headless (`MPLBACKEND=Agg DISPLAY=`, same convention as every other `--view` test
+  in this suite): prints the 3 frame labels, then a graceful `[FAIL] Could not open the
+  interactive 3D viewer` instead of hanging.
+
+**`stb-neb` redesigned into 4 modes (`--mode 1-4`, default 3), plus a new CLI-only
+`stb-nebCycle`** -- item `4.9`'s middle stage no longer has a single fixed path (plain
+interpolation, optionally pre-shaped by a full MACE-MP-0 climbing-image NEB, always ending
+in single-point SIESTA `image_NN/` folders). It now covers the whole cost/precision
+spectrum between "100% MACE" and "100% real DFT" explicitly:
+
+| Mode | Path engine | Output | SIESTA's role |
+|---|---|---|---|
+| 1 | 100% MACE-MP-0 (full climbing-image NEB) | one `neb_mace_result.json` | none at all |
+| 2 | 100% MACE-MP-0, then one read | `image_NN/` (single-point) | one round, energy only |
+| 3 (default) | MACE-MP-0 + a few real-DFT refinement cycles | `cycle_00/image_NN/` + printed loop | several rounds, real forces |
+| 4 | 100% real-DFT NEB, no MACE at all | `cycle_00/image_NN/` + printed loop | every round, from cycle 0 |
+
+`--mode` **replaces** the old `--ml-neb`/`--no-ml-neb` boolean outright (a deliberate
+breaking CLI change, confirmed with the user rather than kept as a silently-coexisting
+second way to ask for the same thing) -- modes 1/2/3 all still run through the exact same
+`mace_relax.relax_neb` call the old `--ml-neb` did (`--ml-k`/`--ml-fmax`/`--ml-max-steps`/
+`--ml-freeze-substrate`/`--ml-freeze-threshold` are unchanged, just now gated on `mode in
+(1, 2, 3)` instead of a single flag); `--idpp`/`--ml-prerelax-endpoints` stay orthogonal to
+`--mode`, available in all four. Modes 3/4 write to `cycle_00/` (not the output root
+directly) and print a `[4] CLUSTER SUBMISSION` section with a ready-to-paste `sub.sh` loop
+-- `--climb-after` defaults suggested per mode (`0` for mode 3, since MACE already
+converged a well-shaped climbing-image band before handoff; `5` for mode 4, since climbing
+too early on a raw interpolated path risks locking onto the wrong image as the saddle, the
+same reasoning `relax_neb`'s own two-stage `climb=False`-then-`True` approach exists for).
+
+**`stb-nebCycle`** (`neb_cycle.py`) is the new piece modes 3/4 depend on: a genuinely
+CLI-only tool, deliberately **not** registered in `stb_suite.py`'s `WORKFLOW_TOOLS` (no
+interactive-menu entry at all, per explicit request) since its whole reason to exist is
+being called from *outside* any live Python process -- inside a cluster submission
+script's loop, alternating with real (possibly hours-later, queued) SIESTA runs. One call
+= one real-DFT NEB step:
+
+1. Finds the highest-numbered `cycle_NN/` under `--dir`, reads every `image_*`'s
+   `structure.fdf` (positions) + `calc.out` (energy, `core.siesta_log.get_free_energy`) +
+   `<SystemLabel>.FA` (forces, `core.siesta_log.read_fa_forces` -- see below).
+2. Builds one `ase.Atoms` per image, each wrapped in an
+   `ase.calculators.singlepoint.SinglePointCalculator(atoms, energy=E, forces=F)` --
+   injecting an already-finished result as if it came from a live calculator.
+3. Builds `ase.mep.neb.NEB(images, k=..., climb=<cycle >= --climb-after>,
+   method="improvedtangent")` -- same construction `core/mace_relax.py::relax_neb` already
+   uses, just with a pre-computed-result calculator instead of a live MACE one; endpoints
+   are never touched, same guarantee `relax_neb` documents.
+4. Takes exactly one **`FIRE(neb, restart=<state-file>).step()`** -- deliberately `step()`
+   directly, NOT `opt.run(fmax=..., steps=1)`. Verified live this distinction is load
+   -bearing: `ase.optimize.optimize.Dynamics.irun()` (what `run()` drives) re-evaluates
+   forces on the JUST-MOVED geometry right after `step()` to decide its own convergence
+   status for the next iteration -- but a `SinglePointCalculator` cannot recompute
+   anything for a geometry it wasn't constructed with, and this crashed with
+   `ase.calculators.calculator.PropertyNotImplementedError` the moment `run()` was tried.
+   Calling `step()` directly only ever evaluates forces on the CURRENT, already-known
+   geometry (needed for the gradient) and never re-queries afterward. Convergence is
+   instead checked explicitly beforehand, against the same pre-step forces already
+   computed for the report.
+5. Below `--fmax`: writes a `NEB_CONVERGED` sentinel at the root and stops (no new cycle;
+   re-running again is a clean no-op once this file exists). Otherwise: writes
+   `cycle_{N+1}/image_NN/` with the updated positions (reusing `neb.py::write_image_folder`
+   directly -- import, not duplicate -- and each new image's own already-copied
+   pseudopotentials as the `pp_path` source for the next cycle, same convention
+   `adsorb_bsse.py` already uses for its own ghost-fragment folders).
+
+**Restart mechanism, verified directly against the installed ASE source before writing
+any of this** (not assumed): `Optimizer.__init__(..., restart=<path>)` calls `self.read()`
+if the file exists, else `self.initialize()`; `FIRE.step()` ends every single call with
+`self.dump((self.vel, self.dt))` (JSON via `ase.io.jsonio.write_json`, not pickle) -- so
+even one `step()` correctly persists FIRE's velocity/timestep state for the next, wholly
+separate process invocation to pick back up. Proved live, not just by reading the source:
+two sequential `stb-nebCycle` calls with the exact SAME fabricated forces reapplied each
+time gave a step-2 displacement of a tracked interior image that was **exactly 2.000x**
+step-1's displacement (`FIRE`'s momentum genuinely accelerating while consecutive
+gradients agree) -- and a wholly independent, freshly-started run from the same starting
+geometry (no restart file) reproduced step-1's exact displacement again, byte-for-byte, to
+`< 1e-9` Ang, confirming the acceleration seen in the first run really did come from the
+restart file, not from anything else differing between the two runs.
+
+**A real, live-caught bug, now guarded against explicitly**: `ase.mep.neb.NEB`'s
+`"improvedtangent"` tangent estimate normalizes by its own norm
+(`tangent /= np.linalg.norm(tangent)`) -- a 0/0 whenever two neighboring images become
+(near-)degenerate (identical position and/or energy), silently producing NaN forces
+instead of raising. Caught live while stress-testing the restart mechanism with repeated,
+disconnected-from-geometry random forces: NaN quietly entered `FIRE`'s own persisted
+velocity state, then surfaced as a literal `nan   nan   nan` written into the NEXT cycle's
+`structure.fdf` -- a corrupted geometry with no error anywhere until something downstream
+inevitably broke. `stb-nebCycle` now evaluates `neb.get_forces()` inside
+`np.errstate(invalid="raise")` and refuses to take a step (clear `[ERROR]`, exit 1, no
+cycle folder written) the moment a non-finite force appears, rather than silently
+propagating it. Verified deterministically (not relying on reproducing the original
+organic trigger) with a purpose-built degenerate fixture: `stb-neb -i x.fdf -f x.fdf`
+(identical initial/final) puts every image at the exact same position, and any nonzero
+fabricated force reliably reproduces the exact same crash-turned-clean-error.
+
+**`core/siesta_log.py::read_fa_forces`** -- promoted from `mlff_analysis.py` (previously
+its own only consumer) once `neb_cycle.py` became a second, following this suite's usual
+extract-on-second-use policy; `mlff_analysis.py` now calls `siesta_log.read_fa_forces`
+directly instead of keeping a local copy, no behavior change.
+
+**`stb-nebAnalysis` (`neb_analysis.py`) becomes a mode-aware router**, reading a new
+`# MODE: N` marker `stb-neb` now writes into `neb_setup.txt` (alongside the pre-existing
+`# ML_NEB_USED:`/`# IMAGE_TABLE`) to decide how to read a study, with each mode's own
+dedicated code path:
+- **Mode 1**: `run_mode1_analysis()` reads `neb_mace_result.json` directly -- no
+  `calc.out` anywhere, since SCF/residual-force diagnostics simply don't apply to a
+  pure-MACE result. `read_mode1_json()` converts the JSON's `images` list into the exact
+  same `ImageRow` shape the rest of the module already works with, so
+  `fit_spline_barrier()`/`write_curve_plot()` are reused unmodified as a genuine
+  cross-check against the JSON's own already-reported barrier (both independently derived
+  from the same underlying MACE energies, one from ASE's `NEBTools.get_barrier(fit=True)`
+  Hermite-style fit at prep time, one from this module's own cubic-spline fit at analysis
+  time). `--apply` is refused with a clear, non-fatal note (mode 1 never writes a
+  `structure.fdf` per image at all -- JSON only).
+- **Mode 2**: unchanged -- exactly today's pre-existing `image_NN/` code path, no new
+  code touches it at all.
+- **Modes 3/4**: `find_analysis_cycle()` (thin wrapper reusing `neb_cycle.py`'s own
+  `find_latest_cycle`/`CONVERGED_SENTINEL` -- import, not duplicate) picks the
+  highest-numbered `cycle_NN/` under `--dir`, and every downstream path that used to read
+  `os.path.join(args.dir, label)` now reads `os.path.join(images_root, label)` instead
+  (`images_root` defaulting to `args.dir` for modes 2 and the pre-existing fallback path,
+  becoming the discovered `cycle_dir` only for 3/4) -- the reaction-coordinate table
+  itself still comes from the ORIGINAL `neb_setup.txt` at the root (written once, at
+  `cycle_00` prep time; positions shift slightly cycle to cycle but the path's own
+  topology/ordering doesn't), matching `adsorb_analysis.py::read_site_table`'s own
+  documented convention of never trusting a table's own recorded directory column. A
+  `[0]`-section `[NOTE]` reports plainly whether the analyzed cycle is the genuinely
+  `NEB_CONVERGED` one or just "the latest refinement so far". A bonus, non-blocking
+  `[2b] BARRIER VS. CYCLE` section (`collect_cycle_barrier_history`/
+  `write_cycle_convergence_plot`) scans every COMPLETE `cycle_*` (every image's energy
+  readable; an in-progress/partial cycle is silently skipped, not an error) and plots the
+  forward barrier's trend across the real-DFT refinement history once >= 2 complete
+  cycles exist -- a genuinely new capability with no analogue in the old single-path tool,
+  made possible only because modes 3/4 keep every cycle's folder instead of overwriting
+  in place.
+
+Verified end-to-end for all 4 modes against the same 9-atom graphene+H toy fixture
+`test/4-workflow/9-neb/prep/{initial,final}.fdf` already uses: mode 1 produced a valid,
+schema-complete JSON with a real (if tiny, toy-fixture-typical) barrier; mode 2 reproduced
+the exact old `--ml-neb` folder layout and report wording; mode 3/4 both wrote
+`cycle_00/image_NN/` with the correct climb-after suggestion in the printed loop; and
+`stb-nebAnalysis` correctly routed all four (including a live two-cycle mode-3 scenario
+where a second, refined `cycle_01/` was correctly preferred over `cycle_00/`, the
+convergence-history plot correctly picked up both, and the `[NOTE]` wording flipped
+correctly once a `NEB_CONVERGED` sentinel was added).
+
+**Two real bugs found and fixed from live user reports on the `stb-nebSites` -> `stb-neb`
+handoff, both surfacing as a scrambled/wrong reaction path with no crash**:
+
+1. **Distance-based atom matching (`--autosort-tol`) had no working fallback for a small/
+   densely-packed cell.** A real user's `site_A`/`site_B` pair (independently SIESTA-relaxed)
+   raised pymatgen's `Unable to reliably match structures with autosort_tol=X` -- expected,
+   since real substrate relaxation near an adsorption site routinely moves atoms further than
+   any single distance tolerance can unambiguously resolve. `neb.py`'s `main()` now catches this
+   `ValueError` and automatically retries once with `autosort_tol=0` (index-based: trust
+   `--initial`/`--final`'s own on-disk atom order directly, no distance matching), printing a
+   `[WARNING]` instead of a hard `[ERROR]` -- this is the right correspondence whenever both
+   endpoints share a guaranteed matching atom order (any `stb-nebSites` pair). Verified live
+   that raising `--autosort-tol` instead does NOT reliably fix this for a small cell (tested
+   0.3/1.0/2.0 Ang against the real repro, all failing differently, 2.0 Ang making every atom
+   ambiguous) -- `autosort_tol=0` was the only fix that actually worked.
+
+2. **`--autosort-tol 0` was itself never PROOF of a correct correspondence, only an assumption**
+   -- reported live as the path still coming out "completely scrambled" even after fix #1.
+   Traced to a real, confirmed gap: `core/structure_io.py::read_relaxed_or_input` (the function
+   `stb-neb` uses to prefer a folder's finished `siesta.XV` over its `structure.fdf` guess) took
+   `.XV`'s positions **purely by list index** and re-tagged them with `structure.fdf`'s symbols
+   -- the `.XV`'s own per-atom species column was never read or cross-checked, only an atom
+   -*count* check existed. Confirmed (by reading pymatgen's own source) that
+   `Structure.interpolate(..., autosort_tol=0)` only raises on a species mismatch AT THE SAME
+   INDEX -- a same-species atom swap (the common case for any multi-atom-of-one-element
+   substrate) passes completely silently, exactly matching the reported symptom (no crash,
+   wrong physics). Fixed two ways, mirroring the user's own suggested design (an explicit
+   per-atom identity record, not a distance-based guess):
+   - `read_relaxed_or_input` now ALSO cross-checks the `.XV`'s own per-atom species (via sisl,
+     same `[a.symbol for a in geom.atoms]` idiom already used by `adsorb_analysis.py`/
+     `mlff_analysis.py`) against `structure.fdf`'s expected per-index species, unconditionally
+     (no new parameter) -- strictly additive, no plausible false positive for a correctly
+     -formed folder, and benefits every existing caller (`stb-neb`, `adsorb_bsse.py::
+     read_relaxed_site_fdf`) for free.
+   - **New `core/neb_manifest.py`** (mirrors `core/dftu_data.py`'s `run_manifest.json`/
+     `load_manifest` pattern used by `stb-hubbardu`/`stb-hubbardUAlphas`): `stb-nebSites` now
+     writes an identical `neb_manifest.json` into BOTH `site_A/` and `site_B/` (not a shared
+     root file -- `stb-neb` only ever receives one folder at a time via `--initial`/`--final`),
+     recording the folder's actual on-disk `species_sequence` (re-read back from the
+     just-written `structure.fdf`, since `write_fdf` regroups atoms by species before writing
+     -- the physical file order is not simply "substrate then adsorbate"), `pair_id` (a
+     `uuid.uuid4().hex[:12]` shared by both folders of one `stb-nebSites` run), and atom-count
+     breakdown. `stb-neb`'s new `resolve_manifest_pair()` loads+cross-validates both manifests
+     (when BOTH `--initial`/`--final` are directories carrying one) two ways: against each
+     OTHER (`neb_manifest.validate_manifest_pair`, `species_sequence` list-equality is the
+     actual proof of a correct index correspondence -- `pair_id` mismatch alone is only an
+     informational `[WARNING]`, not fatal) and against the structure ACTUALLY read back by
+     `read_relaxed_or_input` (catches a stale manifest left over after a `structure.fdf`
+     regeneration/hand-edit). When both checks pass, `stb-neb` forces `--autosort-tol 0`
+     automatically (now PROVEN, not guessed) and prints a clean `[OK] Atom order PROVEN via
+     neb_manifest.json` confirmation instead of the fallback `[WARNING]` from fix #1. When
+     EITHER side lacks a manifest (a hand-built pair, or an older `stb-nebSites` run predating
+     this feature): falls back to exactly the pre-existing distance-based behavior, zero
+     regression. Any manifest inconsistency (tampered `species_sequence`, a required field
+     missing, a stale/regenerated folder) is a clean `[ERROR]`, never a raw traceback.
+
+   Also added, motivated by a SEPARATE real finding from the same live investigation: running
+   the user's actual (manifest-proven-correct) `site_A`/`site_B` pair through `stb-neb --mode 1`
+   gave a physically implausible ~47 eV barrier (16/33 atoms moved > 0.3 Ang between endpoints,
+   no `--idpp`) -- correct atom identity alone does not prevent plain linear interpolation from
+   producing atomic clashes in intermediate images across a large rearrangement. New
+   `check_endpoint_displacement()` reports max/mean per-atom displacement between
+   `--initial`/`--final` and, only when a broad fraction of the structure moved (>= 3 atoms AND
+   > 10% of the structure -- deliberately gated so a normal single-atom reaction hop, e.g. this
+   suite's own `initial.fdf`/`final.fdf` fixture at 1/9 atoms, never triggers it) and `--idpp`
+   wasn't used, prints a `[WARNING]` recommending `--idpp`. Advisory-only, same convention as
+   `check_path_quality` -- never auto-enables `--idpp` itself, since that would silently change
+   the actual interpolated path.
+
+   Verified end-to-end with a real `stb-nebSites`-generated `site_A`/`site_B` pair (synthetic
+   `siesta.XV` fabricated via sisl, same recipe as `test/4-workflow/8-adsorption/bsse/test.sh`):
+   manifest-proven pair skips distance matching entirely and never prints the fallback text;
+   removing the manifest from either or both sides reproduces today's exact behavior; a
+   manifest edited to disagree with its own folder, one edited to disagree with its pair
+   partner (while staying internally self-consistent -- requires editing the raw `.fdf` TEXT
+   directly rather than round-tripping through `read_fdf`/`write_fdf`, since `write_fdf`'s own
+   species-regrouping silently undoes an in-memory atoms-list reorder between atoms of
+   different species), and one missing a required field each produce a distinct, clean
+   `[ERROR]`.
+
+**Real bug found and fixed (user-reported): `core/structure_io.py::write_fdf` could write a
+non-sequential `%block ChemicalSpeciesLabel`**, which SIESTA requires to be gap-free
+(1, 2, 3, ...). `write_fdf` used to write each surviving species' id verbatim from
+`structure.species_meta[symbol]['id']` -- but `species_with_atoms` (its own zero-atom-count
+filter, e.g. a species declared in the file but with no atoms left after some upstream
+transformation) drops species from the OUTPUT without ever renumbering the ids of the ones
+that remain, so a `species_meta` like `{H:1, He:2, O:3, C:4}` with no He atoms left produced
+`1, 3, 4` on disk -- id `2` never reclaimed. `from_pymatgen` had the same root cause one level
+up: reusing a caller-supplied `species_meta` (the universal `species_dict(...)` pattern used
+by `stb-defect`/`stb-passivate`/`stb-nebSites`/every structure-transforming tool) after a
+species was removed elsewhere carried the same gap forward even before `write_fdf` ever saw
+it. Fixed at the one shared chokepoint every `.fdf` write in the suite funnels through:
+`write_fdf` now always renumbers `species_with_atoms` fresh to 1..N at write time (ignoring
+whatever `species_meta['id']` said), and `from_pymatgen` renumbers its returned
+`species_meta` the same way before returning (defense-in-depth, keeps the in-memory
+`FdfStructure` consistent with what gets written). A codebase-wide audit (two parallel
+research passes) confirmed every OTHER `.fdf`-species-writing path -- `translate.py`
+(delegates to `write_fdf`), `adsorb_bsse.py`'s ghost species, `core/passivation.py`/
+`passivate.py`/`slab.py --passivate`, `defect.py`, `crystalbuilder.py`, `crystalcast.py`
+(all via `ensure_species_id`/`from_pymatgen`/`write_fdf`), and `cohesive_energy.py`'s two
+hand-rolled writers (structurally incapable of a gap: one always single-species id=1, the
+other a from-empty incrementing counter with a dedup guard) -- either already produced
+correct numbering or inherits the fix automatically through the shared functions, so no
+other file needed a change. Verified directly (a deliberately gapped `species_meta` fixture
+now writes `1, 2, 3`, not `1, 3, 4`) and end-to-end through a real CLI call
+(`stb-defect --type vacancy` removing the one atom of a 4-species structure's rarest
+species correctly renumbers the remaining 3 species to `1, 2, 3`).
+
+**`stb-nebSites` (`neb_sites.py`) gained `center_slab_in_vacuum()`, a real bug fix reported
+live**: a freshly-cut slab conventionally starts near frac `z=0` with all vacuum stacked
+above it (pymatgen's own `SlabGenerator` convention, `stb-slab`'s output). During a real
+SIESTA relaxation, an atom that starts at frac `z` close to 0 can drift slightly negative
+and get wrapped by PBC to frac `z` close to 1 (the TOP of the cell) instead -- which then
+reads as an enormous, spurious per-atom displacement to anything comparing this relaxed
+site against another snapshot of the same atom (exactly `stb-neb`'s own endpoint-matching
+step, see the manifest/`--autosort-tol` fixes above -- this is a THIRD, independent
+contributor to the same "structure completamente bagunçada" class of symptom, this time a
+genuine coordinate artifact rather than an atom-identity or interpolation-quality issue).
+`center_slab_in_vacuum()` runs right after `resolve_slab_orientation` (so vacuum is
+already relabeled to c) and before any site is enumerated: computes the slab's frac-z span
+`[min, max]`, and if its midpoint is more than 1 Ang (in real Angstrom, via the c-lattice
+-vector length) away from the cell's own midpoint (`0.5`), rigidly translates every atom
+along c (`Structure.translate_sites(..., to_unit_cell=True)`, wrapping into the cell) so
+the slab sits centered in the vacuum gap instead -- a pure coordinate-origin shift, no
+change to any bond length/angle. Silent no-op (structure returned unchanged, not even
+copied) when already within that 1 Ang tolerance, so a well-behaved input isn't
+gratuitously rewritten. Reported in `[1] REFERENCE SLAB` either way (`[INFO] Slab was near
+a cell boundary...` with the exact shift applied, or `Slab already centered...`). Verified
+live: a synthetic near-boundary fixture (frac `z=0.02`, 20 Ang cell) correctly shifted by
+`+9.6 Ang` to frac `z=0.5`, with the adsorbate still placed the requested height above the
+now-recentered surface (frac `z=0.60` for `--height 2.0`); the suite's own already-centered
+graphene fixture (frac `z=0.5` from the start) correctly triggered no shift at all.
+
+`core/adsorption_sites.py::write_reference_folder` gained an opt-in `force_spin=False`
+parameter (new `SPIN_POLARIZED_BLOCK` constant, same file as `FIXED_CELL_BLOCK`), and
+`stb-nebSites` now passes `force_spin=True` by default for `site_A`/`site_B` (new
+`--force-spin`/`--no-force-spin` flags, `--force-spin` default ON, same
+`store_true`/`store_false`-sharing-a-`dest` pattern as `stb-neb`'s own
+`--ml-freeze-substrate`/`--no-ml-freeze-substrate`) -- a single adsorbate atom (or a
+molecule containing one) bonded to a slab commonly leaves the combined system with a net
+magnetic moment (most simply, an odd total valence-electron count, which a spin-restricted
+SCF cannot represent correctly at all), the same reasoning `adsorb.py`'s own
+`force_spin_polarized()` already applies to its isolated-adsorbate reference -- costs
+nothing for a genuinely closed-shell site (converges to zero moment). Implemented via
+`config_extra.fdf` (not by editing `--calc`'s own `Spin` tag directly, unlike
+`adsorb.py`'s version): `Spin polarized` is appended there alongside the existing
+`MD.VariableCell false`, and since `config_extra.fdf` is `%include`'d at the very top of
+the written `calc.fdf` (`structure_io.prepend_include`) and SIESTA's fdf reader is
+first-occurrence-wins for a duplicate label, this correctly overrides any `Spin
+non-polarized` (or absent tag) in the user's own `--calc` template regardless of where it
+appears. `force_spin` defaults to `False` in `write_reference_folder` itself, so
+`adsorb.py`'s existing 3 call sites (`clean_slab_dir`, the isolated-adsorbate `ads_dir`,
+and `site_dir`) are unaffected -- deliberately scoped to `stb-nebSites` only, matching
+what was asked, though the same reasoning would apply equally to `stb-adsorb`'s own
+`site_dir` if a future need arises. Verified live: default run's `config_extra.fdf` gets
+`Spin                polarized` and the written `calc.fdf`'s first non-empty line is the
+`%include config_extra.fdf`, confirmed ahead of the template's own (contradictory) `Spin
+non-polarized` line; `--no-force-spin` leaves `config_extra.fdf` with no `Spin` line at
+all, template untouched.
+
+**`stb-adsorb --ml-rank` (item 4.8.1) fixed a real transparency gap, user-reported**: the
+relaxed geometry it computes (MACE-MP-0, substrate fixed, adsorbate free -- so the
+adsorbate's height DOES already move away from the `--height` initial guess as part of
+this relax) was always what actually got written to the `sites/site_*/` SIESTA folders,
+but neither fact was visible anywhere in the report -- the `[3] ML PRE-SCREENING` table
+only ever showed the pre-relaxation `Height` guess, and nothing stated that `[4] WRITING
+SITE FOLDERS` uses the relaxed result rather than that guess. Fixed by computing each
+candidate's actual post-relax adsorbate-slab distance (`min_adsorbate_slab_distance` on
+`relaxed_struct`, already imported/defined in `adsorb.py`) and adding it as a new
+`Relaxed dist (Ang)` table column alongside the renamed `Init. h (Ang)` column, plus an
+explicit note in `[4]`: "every site folder below is written from the MACE-MP-0-relaxed
+geometry ... not the pre-relaxation 'Init. h' guess". The `scored` tuple grew one element
+(`relaxed_dist` appended last); every unpacking site (`plot_ml_ranking`'s two list
+comprehensions, `[4]`'s folder-writing loop) updated to match. `site_table.txt` (the
+machine-readable file `stb-adsorbAnalysis` parses) deliberately left untouched --
+its own comment already warns the column format/order is depended upon downstream, and
+this fix is about console/report visibility, not that file's contract. Verified live on
+the suite's own graphene+H fixture: 4 candidates that all started from the same `h=2.00`
+guess relaxed to visibly different distances (1.211-3.097 Ang), each one correctly
+reflected in the corresponding `structure.fdf`'s actual written adsorbate position.
+
+**`stb-adsorb` (item 4.8.1) closed two real physics-config gaps, user-reported**: spin
+polarization was inconsistent across the folders it writes (`adsorbate*/` was already
+forced `Spin polarized` via `force_spin_polarized`, but `clean_slab/` and every
+`sites/site_*/` silently used `--calc`'s own `Spin` setting unmodified -- the suite's
+own reference template declares `Spin non-polarized`, so in practice the isolated
+reference and the combined site -- the quantity `E_ads` actually depends on -- were
+computed at different levels of theory), and SIESTA's slab dipole correction
+(`Slab.DipoleCorrection`) was never set anywhere in this tool, despite `stb-her`/
+`stb-oer`/`stb-oerIntermediates` already treating the identical physics ("adsorbing on
+only one face breaks the slab's inversion/mirror symmetry along the vacuum axis, giving
+the cell a net dipole along a PERIODIC direction") as "structurally required," forced
+unconditionally on every site folder they write.
+
+- **Spin**: new `--force-spin`/`--no-force-spin` flags (default ON, same
+  `store_true`/`store_false`-sharing-a-`dest` pattern as `stb-nebSites`'s own flags of
+  the same name) extend `force_spin` (the `core/adsorption_sites.py::
+  write_reference_folder` parameter added for `stb-nebSites`, `config_extra.fdf`
+  -based, `%include`d at the top so it overrides `--calc`'s own `Spin` tag) to every
+  `sites/site_*/` folder too. `clean_slab/` deliberately does NOT get it (no adsorbate
+  present, no clear universal reason to force it -- same reasoning already documented
+  on `SPIN_POLARIZED_BLOCK` itself). The pre-existing `[NOTE]` (previously gated on
+  `len(mol) == 1`, claiming the combined calc.fdf is "used as given, unmodified") is
+  now unconditional per adsorbate (the underlying `force_spin_polarized` on the
+  isolated reference already was) and its wording branches on `args.force_spin` to
+  stay accurate either way.
+- **Dipole correction**: new `DIPOLE_CORRECTION_BLOCK` constant in
+  `core/adsorption_sites.py` (`Slab.DipoleCorrection      .true.`) and a new
+  `force_dipole=False` parameter on `write_reference_folder` itself -- same
+  `config_extra.fdf`-based mechanism as `force_spin`, deliberately NOT the calc_text
+  -editing `regex.subn`-style `force_dipole_correction` approach `her.py`/`oer.py`/
+  `oer_intermediates.py` each already have their own copy of (first implementation
+  pass here mirrored theirs via a new `core/calc_directives.py` copy, then rewritten
+  to the config_extra.fdf approach instead once asked to match how `force_spin`/
+  `MD.VariableCell false` already work in this same function -- the
+  `core/calc_directives.py` copy was removed again, unused). Applied unconditionally
+  (no flag -- matching HER/OER's own unconditional treatment of the same physics, and
+  free when the true dipole is already zero, since the correction itself evaluates to
+  zero) via `force_dipole=True` on the `write_reference_folder` calls for
+  `clean_slab_dir` and `site_dir`. Deliberately NOT applied to `adsorbate_dir` (the
+  isolated-adsorbate reference) -- a molecule in an all-around vacuum box, not a
+  2D-periodic-plus-vacuum slab, so `Slab.DipoleCorrection` has no physical meaning
+  there.
+
+Verified live: `clean_slab/config_extra.fdf` and every `sites/site_*/config_extra.fdf`
+contain `Slab.DipoleCorrection      .true.` (their `calc.fdf` itself carries neither
+this nor a `Spin` line directly -- both live only in `config_extra.fdf`);
+`sites/site_*/config_extra.fdf` also contains `Spin polarized` by default, with
+`%include config_extra.fdf` confirmed as the actual first line of the written
+`calc.fdf` (so it correctly overrides the template's own `Spin non-polarized` later in
+the same file); `clean_slab/config_extra.fdf` never gets a `Spin` line;
+`adsorbate/config_extra.fdf` gets neither override (its own spin-polarization is
+forced the older way, directly on `adsorbate_calc_text`, unchanged); `--no-force-spin`
+leaves `sites/site_*/config_extra.fdf` with no `Spin` override while the dipole
+correction override still applies. Zero regression across the full
+adsorption-workflow regression suite (`prep` 132/132, `bsse` 46/46, `analysis`
+66/66), plus `stb-nebSites`'s own suites (`sites` 74/74) confirming
+`write_reference_folder`'s new `force_dipole` parameter defaulting to `False` is a
+no-op for its existing, unrelated `force_spin`-only caller.
+
+**CPU/GPU device selection for every MACE-consuming tool** (`core/mace_relax.py`, all
+32 tools that ever load a MACE model). Every one of these tools now exposes a
+`--device {cpu,cuda}` flag (named `--ml-device`/`--mace-device` instead, matching each
+tool's own pre-existing naming convention, on `adsorb.py`, `neb.py`,
+`stackingfault.py`, `oer_intermediates.py`, `phonons_create.py`, `xrdsearch.py`,
+`crystalcast.py`), defaulting to `cpu`, plumbed straight through to
+`core/mace_relax.py::get_calculator`'s existing `device` parameter -- the single
+chokepoint every MACE-consuming tool in the suite already calls through, so GPU
+validation is implemented exactly once and every caller inherits it for free just by
+threading its own `device` argument to that one function:
+- `core/mace_relax.py::gpu_available()` -- returns `(available, detail)`, checking
+  `torch.backends.cuda.is_built()` (was PyTorch compiled with CUDA support at all)
+  then `torch.cuda.is_available()` (is a CUDA-capable GPU actually visible right now),
+  `detail` being the failure reason or (on success) `torch.cuda.get_device_name(0)`.
+- `core/mace_relax.py::resolve_device(device)` -- a no-op for `"cpu"`; for `"cuda"`,
+  calls `gpu_available()` and raises a clear `ValueError` (pointing at
+  https://pytorch.org/get-started/locally/) if no usable GPU is found, rather than
+  letting PyTorch fail with its own less-actionable internal error deeper in model
+  loading. `get_calculator` calls this as its very first line, before any model
+  loading happens.
+- Every interactive `stb_suite.py` wrapper for these 32 tools gained a matching
+  `Device [cpu/cuda, default: cpu]:` prompt inside its existing advanced-settings /
+  model-selection block (right after the model-size prompt, or gated behind the same
+  `if <ml_option>:` conditional as the rest of that function's MACE-specific prompts
+  when MACE usage is itself opt-in, e.g. `run_defect_generator`'s two separate
+  `--ml-rank`/`--ml-relax` gates) -- proactively runs `gpu_available()` itself and
+  prints `[OK] GPU detected: <name>` or a `[WARNING]` before ever invoking the tool, so
+  a bad `cuda` choice is caught in the menu rather than surfacing as a subprocess
+  failure.
+
+Verified live: `gpu_available()` correctly reports a real GPU's name (RTX 3060) on a
+machine that has one; mocking `torch.cuda.is_available` to `False` confirms
+`resolve_device("cuda")` raises the expected `ValueError`.
+
+**A real regression, self-discovered via the regression sweep this rollout required**
+(not user-reported): `core/structure_io.py::write_fdf`'s species-id renumbering
+(added earlier the same session to close a "non-sequential `%block
+ChemicalSpeciesLabel`" gap -- SIESTA requires ids to be a gap-free `1, 2, 3, ...`)
+renumbered species in `structure.species`' own iteration order (first-occurrence-in
+-atoms order), not the RELATIVE order implied by each species' pre-existing
+`species_meta['id']` -- silently reversible for any caller that assigns ids in an
+intentional order independent of physical atom-list order. Caught running
+`test/2-structures/12-crystalcast/test.sh`: `stb-crystalcast --species O Ni` (meaning
+"O should be id 1") could come out with Ni as id 1 instead, purely depending on which
+species happened to appear first in the generated structure's own atom list. Fixed in
+both `write_fdf` and the identical bug in `from_pymatgen` by sorting species by their
+OLD id before assigning fresh sequential ones (`sorted(species_with_atoms, key=lambda
+s: int(structure.species_meta[s]['id']))`) -- this both closes any id gap AND
+preserves whatever ordering intent the caller already encoded, instead of the two
+being in tension. Verified directly: `--species O Ni` now keeps O as id 1 while still
+renumbering sequentially; the original gap-fixing scenario (H:1, He:2 removed, O:3,
+C:4 -> H:1, O:2, C:3) still works.
+
+**A second real, unrelated bug found via the same regression sweep**:
+`mladsorb.py`'s `main()` called `structure = resolve_slab_orientation(structure,
+args.vacuum_gap)` without unpacking its return value -- `resolve_slab_orientation`
+(in `core/adsorption_sites.py`) was changed, in an earlier session, from a
+print-and-`sys.exit` function into one that returns `(structure, relabel_note)` (or
+raises `ValueError`) so each of its two then-existing callers (`adsorb.py`,
+`neb_sites.py`) could report the info/error line in their own report's exact style --
+`mladsorb.py` was a pre-existing third consumer that was never updated for the new
+signature, so `structure` ended up bound to a `(structure, note)` tuple, crashing the
+very next line (`structure_io.to_pymatgen(structure)`) with `AttributeError: 'tuple'
+object has no attribute 'atoms'` on literally every run. Fixed to match the other two
+callers' pattern (`try: structure, relabel_note = resolve_slab_orientation(...) except
+ValueError: fail(...)`, then print the note if present). Caught via
+`test/5-mlsimulations/10-mladsorb/test.sh` going from 26/57 to 55/57 once fixed (the 2
+remaining failures are unrelated -- `Rotation.random(rng=rng)` in `pick_best_orientation`
+needs scipy >= 1.15's `rng` keyword; this environment has 1.13.1, which only accepts
+`random_state`; confirmed via `git log -p` that this line predates any of this
+session's changes).
+
 ## Domain conventions worth knowing
 
 - Structure file formats handled throughout: POSCAR (VASP), CIF, FDF (SIESTA), XYZ

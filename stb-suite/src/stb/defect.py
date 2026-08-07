@@ -213,6 +213,8 @@ automatically at every symmetrically distinct site.""",
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax/--ml-rank, "
                              "instead of a MACE-MP-0 foundation size.")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the full run report (including the symmetry "
@@ -349,7 +351,10 @@ automatically at every symmetrically distinct site.""",
         model_arg = args.custom_model if args.custom_model else args.model
         calc = None
         if args.ml_rank or args.ml_relax:
-            calc = mace_relax.get_calculator(model_arg)
+            try:
+                calc = mace_relax.get_calculator(model_arg, device=args.device)
+            except ValueError as e:
+                fail(str(e))
 
         stem, ext = os.path.splitext(args.output)
         ext = ext or ".fdf"
@@ -375,6 +380,7 @@ automatically at every symmetrically distinct site.""",
         if args.ml_rank:
             print_section("[4] ML RANKING (MACE)", f_out)
             print_dual(f"Model            : {model_desc}", f_out)
+            print_dual(f"Device           : {args.device}", f_out)
             print_dual("Relaxing each candidate site (positions only)...", f_out)
             for row in results:
                 site_pmg = row[3]
@@ -398,6 +404,7 @@ automatically at every symmetrically distinct site.""",
         elif args.ml_relax:
             print_section("[4] ML PRE-RELAXATION (MACE)", f_out)
             print_dual(f"Model            : {model_desc}", f_out)
+            print_dual(f"Device           : {args.device}", f_out)
             print_dual(f"Cell relaxation  : {'yes (vacuum axes fixed)' if args.ml_relax_cell else 'no (positions only)'}", f_out)
             for row in results:
                 one_indexed, symbol, wyckoff, site_pmg = row[0], row[1], row[2], row[3]
@@ -542,8 +549,12 @@ automatically at every symmetrically distinct site.""",
         print_section("[4] ML PRE-RELAXATION (MACE)", f_out)
         model_arg = args.custom_model if args.custom_model else args.model
         print_dual(f"Model            : {model_desc}", f_out)
+        print_dual(f"Device           : {args.device}", f_out)
         print_dual(f"Cell relaxation  : {'yes (vacuum axes fixed)' if args.ml_relax_cell else 'no (positions only)'}", f_out)
-        calc = mace_relax.get_calculator(model_arg)
+        try:
+            calc = mace_relax.get_calculator(model_arg, device=args.device)
+        except ValueError as e:
+            fail(str(e))
         for line in mace_relax.describe_model(model_arg, calc):
             print_dual(line, f_out)
 

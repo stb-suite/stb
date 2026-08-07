@@ -222,5 +222,5 @@ stb-defect -f si64.fdf --type vacancy --index 1
 ## What's next
 
 See `2.2-stb-supercell/` for building a bigger, more dilute cell before
-introducing a defect into it, or `1.6-stb-mlrelax/` for a closer look at
+introducing a defect into it, or `1.7-stb-mlrelax/` for a closer look at
 the MACE pre-relaxation `--ml-relax`/`--ml-rank` reuse here.

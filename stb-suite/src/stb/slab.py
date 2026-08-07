@@ -200,6 +200,8 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, instead of "
                              "a MACE-MP-0 foundation size.")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the full run report (including the symmetry analysis) "
@@ -366,10 +368,14 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
     if args.ml_relax:
         print_section("[4] ML PRE-RELAXATION (MACE)", f_out)
         print_dual(f"Model           : {model_desc}", f_out)
+        print_dual(f"Device          : {args.device}", f_out)
         print_dual(f"Cell relaxation : "
                    f"{'in-plane only (vacuum axis fixed)' if args.ml_relax_cell else 'positions only'}", f_out)
         model_arg = args.custom_model if args.custom_model else args.model
-        calc = mace_relax.get_calculator(model_arg)
+        try:
+            calc = mace_relax.get_calculator(model_arg, device=args.device)
+        except ValueError as e:
+            fail(str(e))
         for line in mace_relax.describe_model(model_arg, calc):
             print_dual(line, f_out)
 

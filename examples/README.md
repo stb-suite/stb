@@ -85,7 +85,7 @@ Every example follows the same shape:
 ## Conventions shared across examples
 
 Several conventions recur across the newer input-generating tools (see
-`1.1-stb-inputfile/`, `1.4-stb-dftu/`, `1.5-stb-fetch/`, `1.6-stb-mlrelax/`,
+`1.1-stb-inputfile/`, `1.2-stb-pseudo/`, `1.5-stb-dftu/`, `1.6-stb-fetch/`, `1.7-stb-mlrelax/`,
 `2.1-stb-2Dstacking/`, `2.2-stb-supercell/`, `2.3-stb-slab/`,
 `2.4-stb-nanotube/`, `2.5-stb-defect/`, `2.6-stb-sqs/`, `2.7-stb-unitcell/`,
 `2.8-stb-crystalbuilder/`, `2.9-stb-passivate/`, `2.10-stb-molecule/`,
@@ -124,7 +124,7 @@ pip install -e .
 
 This puts every `stb-*` command (and `stb-suite` itself) on your PATH.
 
-A few examples (currently `1.6-stb-mlrelax/`, anything under the future
+A few examples (currently `1.7-stb-mlrelax/`, anything under the future
 `5.x-*` ML Simulations examples) additionally need the optional `ml` extra
 — PyTorch + `mace-torch`:
 
@@ -141,11 +141,12 @@ through.
 | Code | Tool            | Folder                                    |
 |------|-----------------|--------------------------------------------|
 | 1.1  | `stb-inputfile` | [`1.1-stb-inputfile/`](1.1-stb-inputfile/)  |
-| 1.2  | `stb-kgrid`     | [`1.2-stb-kgrid/`](1.2-stb-kgrid/)          |
-| 1.3  | `stb-kpath`     | [`1.3-stb-kpath/`](1.3-stb-kpath/)          |
-| 1.4  | `stb-dftu`      | [`1.4-stb-dftu/`](1.4-stb-dftu/)            |
-| 1.5  | `stb-fetch`     | [`1.5-stb-fetch/`](1.5-stb-fetch/)          |
-| 1.6  | `stb-mlrelax`   | [`1.6-stb-mlrelax/`](1.6-stb-mlrelax/)      |
+| 1.2  | `stb-pseudo`    | [`1.2-stb-pseudo/`](1.2-stb-pseudo/)        |
+| 1.3  | `stb-kgrid`     | [`1.3-stb-kgrid/`](1.3-stb-kgrid/)          |
+| 1.4  | `stb-kpath`     | [`1.4-stb-kpath/`](1.4-stb-kpath/)          |
+| 1.5  | `stb-dftu`      | [`1.5-stb-dftu/`](1.5-stb-dftu/)            |
+| 1.6  | `stb-fetch`     | [`1.6-stb-fetch/`](1.6-stb-fetch/)          |
+| 1.7  | `stb-mlrelax`   | [`1.7-stb-mlrelax/`](1.7-stb-mlrelax/)      |
 | 2.1  | `stb-2Dstacking`| [`2.1-stb-2Dstacking/`](2.1-stb-2Dstacking/)|
 | 2.2  | `stb-supercell` | [`2.2-stb-supercell/`](2.2-stb-supercell/)  |
 | 2.3  | `stb-slab`      | [`2.3-stb-slab/`](2.3-stb-slab/)            |
@@ -180,16 +181,28 @@ through.
 | 4.2  | `stb-elasticInputs` / `stb-elasticAnalysis` | [`4.2-elastic/`](4.2-elastic/) |
 | 4.3  | `stb-cohesive` / `stb-cohesiveAnalysis` | [`4.3-cohesive/`](4.3-cohesive/) |
 | 4.4  | `stb-phononsCreate` / `stb-phononsPos` | [`4.4-phonons/`](4.4-phonons/) |
+| 4.6  | `stb-xrdsearch` / `stb-xrdrank` | [`4.6-xrd/`](4.6-xrd/) |
+| 4.7  | `stb-hubbardu` / `stb-hubbarduAlphas` / `stb-hubbarduAnalysis` | [`4.7-hubbardu/`](4.7-hubbardu/) |
+| 4.8  | `stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` | [`4.8-adsorption/`](4.8-adsorption/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
-stage (prep + analysis) together, instead of one folder per tool --
-`4.1-strain/` covers both stages (`stb-strain`, code `4.1.1`, and
-`stb-strainAnalysis`, code `4.1.2`) as a single, theory-first tutorial,
+stage (prep [+ perturbation] + analysis) together, instead of one folder
+per tool -- `4.1-strain/` covers both stages (`stb-strain`, code `4.1.1`,
+and `stb-strainAnalysis`, code `4.1.2`) as a single, theory-first tutorial,
 `4.2-elastic/` does the same for `stb-elasticInputs` (`4.2.1`) and
 `stb-elasticAnalysis` (`4.2.2`), `4.3-cohesive/` does the same for
-`stb-cohesive` (`4.3.1`) and `stb-cohesiveAnalysis` (`4.3.2`), and
+`stb-cohesive` (`4.3.1`) and `stb-cohesiveAnalysis` (`4.3.2`),
 `4.4-phonons/` does the same for `stb-phononsCreate` (`4.4.1`) and
-`stb-phononsPos` (`4.4.2`).
+`stb-phononsPos` (`4.4.2`), `4.6-xrd/` does the same for `stb-xrdsearch`
+(`4.6.1`) and `stb-xrdrank` (`4.6.2`), `4.7-hubbardu/` extends the
+pattern across **three** stages instead of two: `stb-hubbardu` (`4.7.1`,
+reference prep), `stb-hubbarduAlphas` (`4.7.2`, perturbation prep), and
+`stb-hubbarduAnalysis` (`4.7.3`, the linear-response fit and final
+computed `U`), and `4.8-adsorption/` does the same for `stb-adsorb`
+(`4.8.1`, site prep), `stb-adsorbBsse` (`4.8.2`, BSSE counterpoise prep,
+generated only once Stage 1's sites have actually relaxed), and
+`stb-adsorbAnalysis` (`4.8.3`, the adsorption-energy ranking, with and
+without the BSSE correction).
 
 ## Adding another example
 

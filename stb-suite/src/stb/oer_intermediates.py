@@ -17,7 +17,7 @@ from pymatgen.core import Molecule
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.siesta_log import get_free_energy, get_outcell, report_quality_diagnostics
 from stb.core.deps import require_mace
 
@@ -260,7 +260,7 @@ def build_ooh_molecule(oo_bond_ang=_OOH_OO_BOND_ANG, oh_bond_ang=_OOH_OH_BOND_AN
 
 
 def write_relax_folder(out_dir, fdf_structure, calc_text, pp_path):
-    """Writes structure.fdf + calc.fdf + linked pseudos for one
+    """Writes structure.fdf + calc.fdf + copied pseudos for one
     relaxation folder (derived single candidate, or one --strategy
     search candidate). Same shape as oer.py's write_site_folder /
     her_refs.py's write_folder, duplicated locally (self-contained
@@ -272,7 +272,7 @@ def write_relax_folder(out_dir, fdf_structure, calc_text, pp_path):
         f.write(calc_text)
     symbols = sorted({sym for sym, _ in fdf_structure.atoms})
     for sym in symbols:
-        link_pseudo(pp_path, sym, out_dir)
+        copy_pseudo(pp_path, sym, out_dir)
 
 
 def ml_prerelax_adsorbate(fdf_structure, n_substrate, model, device, fmax):

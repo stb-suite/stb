@@ -20,7 +20,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source, copy_pseudo
 
 REPORT_FILE = "cohesive_stage1.txt"
 
@@ -151,7 +151,7 @@ def build_ghost_cluster(anchor_symbol, anchor_Z, neighbors, vacuum_box):
     """Builds a synthetic FdfStructure for a BSSE (counterpoise) cluster: the
     real anchor atom at the box center, plus one ghost entry per unique
     neighboring element (SIESTA convention: Z negative, no valence charge,
-    same basis as the real element -- see link_pseudo's dest_label), placed
+    same basis as the real element -- see copy_pseudo's dest_label), placed
     at the anchor's REAL local coordination geometry (from find_ghost_neighbors).
     `vacuum_box` is the cubic box side in Ang (anchor at the fractional
     center, same convention as generate_isolated_atom_fdf).
@@ -196,7 +196,7 @@ def _isolated_atom_calc(dispersion):
 def generate_bsse_reference(pmg_structure, sym, anchor_index, z_num, cutoff, vacuum, out_dir,
                              pp_path, dispersion):
     """Builds and writes ONE BSSE (counterpoise) ghost-cluster reference
-    (structure.fdf + calc.fdf + linked pseudopotentials, real anchor + real
+    (structure.fdf + calc.fdf + copied pseudopotentials, real anchor + real
     ghost neighbors) at `out_dir`, anchored at `pmg_structure[anchor_index]`.
     Shared by the main --bsse-cutoff reference and the optional --bsse-
     convergence-check reference (same construction, different cutoff/dir),
@@ -224,9 +224,9 @@ def generate_bsse_reference(pmg_structure, sym, anchor_index, z_num, cutoff, vac
     with open(os.path.join(out_dir, "bsse_cutoff.txt"), 'w') as f:
         f.write(f"{cutoff}\n")
 
-    link_pseudo(pp_path, sym, out_dir)
+    copy_pseudo(pp_path, sym, out_dir)
     for elem, _z, _rel in neighbors:
-        link_pseudo(pp_path, elem, out_dir, dest_label=f"{elem}_ghost")
+        copy_pseudo(pp_path, elem, out_dir, dest_label=f"{elem}_ghost")
     return len(neighbors)
 
 
@@ -559,7 +559,7 @@ def main():
     with open(os.path.join(struct_dir, "calc.fdf"), 'w') as f:
         f.write(struct_calc)
     for sym in species.keys():
-        link_pseudo(args.pp_path, sym, struct_dir)
+        copy_pseudo(args.pp_path, sym, struct_dir)
     print_dual(f"Written: {struct_dir}/structure.fdf, {struct_dir}/calc.fdf", f_out)
 
     # --- [4] ISOLATED ATOMS ---
@@ -574,7 +574,7 @@ def main():
         generate_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"), args.vacuum)
         with open(os.path.join(atom_dir, "calc.fdf"), 'w') as f:
             f.write(_isolated_atom_calc(args.dispersion))
-        link_pseudo(args.pp_path, sym, atom_dir)
+        copy_pseudo(args.pp_path, sym, atom_dir)
         atom_rows.append(([sym, str(data['Z']), f"{atoms_root}/{sym}/"], None))
     print_table(["Species", "Z", "Folder"], atom_rows, f_out)
 
@@ -735,11 +735,11 @@ def main():
                 "need to be added manually to every generated folder.", 'yellow'), f_out)
         else:
             print_dual(color_text(
-                "[OK] All required pseudopotentials found -- linked into every generated "
+                "[OK] All required pseudopotentials found -- copied into every generated "
                 "folder.", 'green'), f_out)
     else:
         print_dual("Not given (pass -p/--pp-path -- a bundled bank or a folder path -- to "
-                   "link the required pseudopotential for every species into every generated "
+                   "copy the required pseudopotential for every species into every generated "
                    "folder). Pseudopotentials will need to be added manually.", f_out)
 
     # --- [7] SUMMARY & NEXT STEPS ---

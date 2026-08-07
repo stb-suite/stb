@@ -351,7 +351,7 @@ check_contains "diffusion-n-images" log_help.txt
 # --- 4. Interactive path (stb-suite, shortcut 5.10) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.10) ---"
 rm -rf interactive_out
-printf '5.10\ngraphene_slab.fdf\nH\n\nsmall\nontop\n2.0\n1\n\nn\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.10\ngraphene_slab.fdf\nH\n\nsmall\n\nontop\n2.0\n1\n\nn\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/site_ranking.png
 

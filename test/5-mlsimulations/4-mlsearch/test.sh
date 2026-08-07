@@ -246,7 +246,7 @@ check_contains "snapshot-interval" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.4) ---"
 rm -rf interactive_out
-printf '5.4\nsi8.fdf\n\nsmall\n1\n5\n0.3\n1000\n1\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.4\nsi8.fdf\n\nsmall\n\n1\n5\n0.3\n1000\n1\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/best_structure.fdf
 check_success interactive_out/search_history.png

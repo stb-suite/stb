@@ -5,7 +5,7 @@
 #
 # Needs the optional 'ml' extra (pip install stb_suite[ml] -- PyTorch +
 # mace-torch). The whole file is skipped with a clear message if `mace`
-# isn't importable, same gating pattern as test/1-inputs/6-mlrelax and
+# isn't importable, same gating pattern as test/1-inputs/7-mlrelax and
 # test/5-mlsimulations/1-mlmd. si_bulk.fdf is the same 64-atom Ge:Si
 # substitutional-defect fixture used there (bulk, 3D periodic). --dim 1 1 1
 # and a small --mesh/--band-points keep this a fast smoke test, not a
@@ -358,7 +358,7 @@ check_contains "animate-format" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2) ---"
 rm -rf interactive_out
-printf '5.2\nsi_bulk.fdf\n\nsmall\n1 1 1\ninteractive_out\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.2\nsi_bulk.fdf\n\nsmall\n\n1 1 1\ninteractive_out\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/bands.png
 check_success interactive_out/dos.png

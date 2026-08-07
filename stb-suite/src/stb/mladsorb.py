@@ -416,7 +416,12 @@ def main():
     except Exception as e:
         fail(f"Could not read '{args.slab}': {e}")
 
-    structure = resolve_slab_orientation(structure, args.vacuum_gap)
+    try:
+        structure, relabel_note = resolve_slab_orientation(structure, args.vacuum_gap)
+    except ValueError as e:
+        fail(str(e))
+    if relabel_note:
+        print_dual(color_text(f"[INFO] {relabel_note}", 'yellow'), f_out)
     pmg_structure = structure_io.to_pymatgen(structure)
     slab_species_meta = structure_io.species_dict(structure)
     n_substrate = len(pmg_structure)

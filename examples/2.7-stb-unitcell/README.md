@@ -234,5 +234,5 @@ stb-unitcell -f your_relaxed_structure.fdf --mode refined
 ## What's next
 
 See `2.2-stb-supercell/` for the opposite direction (building a larger
-cell from a smaller one), or `1.6-stb-mlrelax/` for a closer look at the
+cell from a smaller one), or `1.7-stb-mlrelax/` for a closer look at the
 MACE pre-relaxation `--ml-relax` reuses here.

@@ -17,7 +17,7 @@ import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_icet
-from stb.core.pseudopotentials import resolve_pseudo_source, link_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 
 REPORT_FILE = "gqca_stage1.txt"
 
@@ -417,7 +417,7 @@ def detect_structure_vacuum(fdf_structure, vacuum_gap):
 def write_cluster_folder(out_dir, fdf_structure, calc_text_template, pp_path, kdensity, vacuum_gap):
     """Writes structure.fdf + calc.fdf (relaxation directives forced,
     based on THIS structure's own freshly-detected dimensionality -- see
-    detect_structure_vacuum) + linked pseudos + a density-based k-grid
+    detect_structure_vacuum) + copied pseudos + a density-based k-grid
     (recomputed per folder -- every n_j structure has a different cell,
     and potentially a different axis order) for one representative-
     cluster folder. Returns (divisions, is_2d).
@@ -431,7 +431,7 @@ def write_cluster_folder(out_dir, fdf_structure, calc_text_template, pp_path, kd
         f.write(calc_text)
     symbols = sorted({sym for sym, _ in fdf_structure.atoms})
     for sym in symbols:
-        link_pseudo(pp_path, sym, out_dir)
+        copy_pseudo(pp_path, sym, out_dir)
     divisions = kspace.compute_monkhorts(
         fdf_structure.lattice[0], fdf_structure.lattice[1], fdf_structure.lattice[2],
         kdensity, vacuum_axes=vacuum_axes)

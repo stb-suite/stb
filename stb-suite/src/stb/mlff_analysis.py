@@ -29,33 +29,6 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section
 REPORT_FILE = "stb_mlffAnalysis_report.txt"
 
 
-def read_fa_forces(fa_path):
-    """Reads ALL atomic forces (eV/Ang) from a SIESTA .FA file -- format:
-    first line = atom count, then one row per atom '<1-based index> Fx Fy
-    Fz'. Generalizes her_analysis.py's read_fa_force() (which only reads
-    ONE specific atom, for HER's local-ZPE Hessian) to the whole array;
-    first consumer of the "all atoms at once" shape, so this stays local
-    here rather than moving into core/ yet (extract-on-second-use policy).
-    Returns an (natoms, 3) array, or None on any read/parse failure.
-    """
-    try:
-        with open(fa_path) as f:
-            lines = f.readlines()
-    except OSError:
-        return None
-    try:
-        n = int(lines[0].split()[0])
-    except (IndexError, ValueError):
-        return None
-    if len(lines) < n + 1:
-        return None
-    try:
-        forces = np.array([[float(x) for x in lines[i + 1].split()[1:4]] for i in range(n)])
-    except (IndexError, ValueError):
-        return None
-    return forces
-
-
 def collect_training_configs(config_dirs, f_out=None):
     """Scans each config_dirs entry for a finished SIESTA calculation
     (SystemLabel auto-detected from its .fdf) and builds one ase.Atoms per
@@ -96,7 +69,7 @@ def collect_training_configs(config_dirs, f_out=None):
             continue
 
         energy = siesta_log.get_free_energy(out_file)
-        forces = read_fa_forces(fa_file)
+        forces = siesta_log.read_fa_forces(fa_file)
         if energy is None or forces is None:
             print_dual(color_text(
                 f"[WARNING] {d}: could not parse energy/forces -- skipping.", 'yellow'), f_out)

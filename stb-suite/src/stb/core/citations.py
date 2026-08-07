@@ -148,6 +148,37 @@ PYXTAL = ("Fredericks2021pyxtal", """@article{Fredericks2021pyxtal,
 }""")
 
 
+# Pseudopotential-bank citations, one per stb.core.pseudopotentials.BANKS
+# key -- kept here rather than read from BANKS[...]['citation'] directly
+# since that field is a plain human-readable string (printed by
+# resolve_pseudo_source()), not already-formatted BibTeX. Moved here from
+# inputfile.py once stb-pseudo became a second consumer.
+PSEUDO_DOJO = ("vanSetten2018", """@article{vanSetten2018,
+  author  = {van Setten, M. J. and Giantomassi, M. and Bousquet, E. and Verstraete, M. J. and Hamann, D. R. and Gonze, X. and Rignanese, G.-M.},
+  title   = {The {PseudoDojo}: Training and grading a 85 element optimized norm-conserving pseudopotential table},
+  journal = {Computer Physics Communications},
+  year    = {2018},
+  volume  = {226},
+  pages   = {39--54},
+  doi     = {10.1016/j.cpc.2018.01.012}
+}""")
+
+PSEUDO_VIRTUAL_VAULT = ("VirtualVault", """@misc{VirtualVault,
+  author       = {{NNIN/C}},
+  title        = {{SIESTA} Pseudopotentials Virtual Vault},
+  institution  = {Cornell NanoScale Science and Technology Facility},
+  url          = {https://nninc.cnf.cornell.edu/}
+}""")
+
+# Keyed by stb.core.pseudopotentials.BANKS name, for callers that already
+# have the resolved bank name (e.g. via detect_pseudo_bank()) and just want
+# the matching bib entry.
+PSEUDO_BANK_CITATIONS = {
+    "dojo": PSEUDO_DOJO,
+    "virtual_vault": PSEUDO_VIRTUAL_VAULT,
+}
+
+
 def _read_existing_entries(bib_path):
     """Returns {key: full_entry_text} already in `bib_path`, or {} if the
     file doesn't exist -- parsed back from the same blank-line-separated

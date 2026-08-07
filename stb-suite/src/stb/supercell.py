@@ -123,6 +123,8 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, "
                              "instead of a MACE-MP-0 foundation size.")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the full run report (including the symmetry "
@@ -224,7 +226,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
     ml_relax_info = None
     if args.ml_relax:
         print_section("[4] ML PRE-RELAXATION (MACE)", f_out)
-        print_dual(f"Model           : {model_desc}", f_out)
+        print_dual(f"Model           : {model_desc} (device={args.device})", f_out)
         print_dual(f"Cell relaxation : "
                    f"{'in cell (vacuum axes fixed)' if args.ml_relax_cell else 'positions only'}", f_out)
 
@@ -232,7 +234,10 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
         vacuum_axes_super = kspace.detect_vacuum_axes(frac_coords_super, supercell.lattice.matrix, VACUUM_GAP_ANG)
 
         model_arg = args.custom_model if args.custom_model else args.model
-        calc = mace_relax.get_calculator(model_arg)
+        try:
+            calc = mace_relax.get_calculator(model_arg, device=args.device)
+        except ValueError as e:
+            _fail(str(e), f_out)
         for line in mace_relax.describe_model(model_arg, calc):
             print_dual(line, f_out)
 

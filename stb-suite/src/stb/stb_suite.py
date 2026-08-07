@@ -378,6 +378,15 @@ def run_phonon_generator() -> None:
         if ml_prerelax:
             device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
             ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if ml_device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
 
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
 
@@ -608,19 +617,30 @@ def run_adsorb_setup() -> None:
     print("="*60)
     print(color_text(
         "Sets up a clean-slab reference, an isolated-adsorbate reference, and one folder "
-        "per candidate adsorption site -- run SIESTA in each, then use Stage 2 (Analysis) "
-        "for the real DFT adsorption energy.", 'cyan'))
+        "per candidate adsorption site -- run SIESTA in each, then use Stage 2 (BSSE Prep) "
+        "for a counterpoise-corrected reference and Stage 3 (Analysis) for the real DFT "
+        "adsorption energy.", 'cyan'))
     print()
 
-    struct_file = get_input("Input slab/2D structure FDF file, vacuum along c (-s): ").strip()
+    struct_file = get_input(
+        "Input slab/2D structure FDF file, vacuum along c [default: structure.fdf] (-s): ").strip()
+    if not struct_file:
+        struct_file = "structure.fdf"
     while not os.path.isfile(struct_file):
         print(color_text("File not found!", 'red'))
         struct_file = get_input("Input slab/2D structure FDF file (-s): ").strip()
+        if not struct_file:
+            struct_file = "structure.fdf"
 
-    calc_file = get_input("Calc.fdf template already configured for this slab (-c): ").strip()
+    calc_file = get_input(
+        "Calc.fdf template already configured for this slab [default: calc.fdf] (-c): ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
     while not os.path.isfile(calc_file):
         print(color_text("File not found!", 'red'))
         calc_file = get_input("Calc.fdf template file (-c): ").strip()
+        if not calc_file:
+            calc_file = "calc.fdf"
 
     pp_path = prompt_pseudo_source(optional=True)
 
@@ -659,6 +679,12 @@ def run_adsorb_setup() -> None:
     else:
         height = get_float_input("\nAdsorption height above the surface, Ang [default: 2.0]: ", 2.0)
 
+    force_spin = get_input(
+        "\nForce Spin polarized in every site folder too (not just the isolated-adsorbate "
+        "reference)? A single adsorbate atom bonded to a slab commonly leaves the combined "
+        "system with a net magnetic moment (costs nothing for a genuinely closed-shell site). "
+        "[Y/n]: ").strip().lower() != 'n'
+
     all_sites_choice = get_input(
         "\nWrite a folder for every symmetrically distinct site (Y), or just one (n)? [Y/n]: "
     ).strip().lower()
@@ -684,27 +710,43 @@ def run_adsorb_setup() -> None:
             "\nAdsorb on both faces (free-standing 2D material)? (y/N): ").strip().lower()
         both_sides = both_sides_choice in ('y', 'yes')
 
-    bsse_choice = get_input(
-        "\nGenerate BSSE (counterpoise) -corrected references per site too? (Y/n -- doubles "
-        "each site's SIESTA folder count; LCAO adsorption energies are otherwise "
-        "systematically over-bound): ").strip().lower()
-    bsse_correction = bsse_choice not in ('n', 'no')
-
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    symprec, vacuum_gap, vacuum_box, output_dir = 0.01, 10.0, 20.0, "."
-    show_advanced = get_input(
-        "\nConfigure advanced settings (symmetry tolerance, vacuum-gap, vacuum box, "
-        "output directory)? [y/N]: ").strip().lower()
+    symprec, vacuum_gap, vacuum_box, output_dir, ml_device = 0.01, 10.0, 20.0, "adsorption_run", "cpu"
+    uses_mace = ml_prerelax or ml_rank
+    advanced_items = "symmetry tolerance, vacuum-gap, vacuum box, output directory"
+    if uses_mace:
+        advanced_items += ", ML device"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         symprec = get_float_input("Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
         vacuum_gap = get_float_input(
             "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
         vacuum_box = get_float_input(
             "Isolated-adsorbate vacuum box side in Ang [default: 20.0]: ", 20.0)
-        output_dir = get_input("Output root directory [default: current directory]: ").strip()
+        output_dir = get_input("Output root directory [default: adsorption_run]: ").strip()
         if not output_dir:
-            output_dir = "."
+            output_dir = "adsorption_run"
+        if uses_mace:
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if ml_device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    view_choice = get_input(
+        "View every generated structure (clean_slab, adsorbate(s), every site) interactively "
+        "via ASE before finishing? (y/N): ").strip().lower()
+    view_plots_choice = get_input(
+        "Show the matplotlib plot(s) this run generates (site layout, and the ML ranking "
+        "chart if ML pre-screening was used) on screen before finishing? (y/N): ").strip().lower()
 
     args = [
         "-s", struct_file,
@@ -716,7 +758,14 @@ def run_adsorb_setup() -> None:
         "--vacuum-box", str(vacuum_box),
         "--output-dir", output_dir,
         "--no-intro",
+        "--force-spin" if force_spin else "--no-force-spin",
     ]
+    if save_report:
+        args.append("--save-report")
+    if view_choice == 'y':
+        args.append("--view")
+    if view_plots_choice == 'y':
+        args.append("--view-plots")
     if height_sweep is not None:
         args.extend(["--height-sweep", str(height_sweep[0]), str(height_sweep[1]), str(height_sweep[2])])
     else:
@@ -735,7 +784,8 @@ def run_adsorb_setup() -> None:
         args.extend(["--site-index", str(site_index)])
     if both_sides:
         args.append("--both-sides")
-    args.append("--bsse-correction" if bsse_correction else "--no-bsse-correction")
+    if uses_mace:
+        args.extend(["--ml-device", ml_device])
 
     summary_rows = [
         ("Structure file", struct_file),
@@ -747,14 +797,52 @@ def run_adsorb_setup() -> None:
         ("Sites", "all symmetrically distinct" if all_sites else f"index {site_index}"),
         ("ML pre-screen", f"ON (top {top_k or 'all'})" if ml_rank else "OFF"),
         ("Both faces", "yes" if both_sides else "no"),
-        ("BSSE correction", "ON" if bsse_correction else "OFF"),
         ("Height", f"sweep {height_sweep[0]}-{height_sweep[1]} step {height_sweep[2]} Ang"
                    if height_sweep is not None else f"{height} Ang"),
         ("Output directory", output_dir),
+        ("Save report", "yes" if save_report else "no"),
+        ("View interactively", "yes" if view_choice == 'y' else "no"),
+        ("Show plots on screen", "yes" if view_plots_choice == 'y' else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-adsorb", args)
+
+
+def run_adsorb_bsse() -> None:
+    """Interface for the Adsorption BSSE Prep (adsorb_bsse.py)"""
+    print("\n" + "="*60)
+    print(color_text("ADSORPTION BSSE PREP", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads every 'sites/site_*/' folder that has already finished relaxing in SIESTA and "
+        "writes its BSSE (counterpoise) ghost-fragment references -- 'bsse/site_*/bsse_slab/' "
+        "and 'bsse/site_*/bsse_adsorbate/' -- at that site's actual RELAXED geometry (from its "
+        "own siesta.XV), not the pre-relaxation guess. Run this only after Stage 1's sites have "
+        "finished relaxing; sites not yet relaxed are reported and skipped, not fatal.", 'cyan'))
+    print()
+
+    dir_path = get_input(
+        "Root directory with 'clean_slab'/'sites' [default: adsorption_run]: ").strip()
+    if not dir_path:
+        dir_path = "adsorption_run"
+
+    out_file = get_input("SIESTA output filename inside each site folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this site relaxed' check, in eV/Ang "
+        "(default: 0.05): ", 0.05)
+
+    args = ["--dir", dir_path, "--file", out_file,
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-adsorbBsse", args)
 
 
 def run_adsorb_analysis() -> None:
@@ -763,13 +851,15 @@ def run_adsorb_analysis() -> None:
     print(color_text("ADSORPTION ANALYSIS", 'bold').center(60))
     print("="*60)
     print(color_text(
-        "Reads 'clean_slab/', 'adsorbate/' and every 'sites/site_*/' folder and reports "
-        "E_ads = E_site - E_clean_slab - E_adsorbate, ranked most stable first.", 'cyan'))
+        "Reads 'clean_slab/', 'adsorbate/' and every 'sites/site_*/' folder (plus 'bsse/site_*/' "
+        "if stb-adsorbBsse has been run) and reports E_ads = E_site - E_clean_slab - "
+        "E_adsorbate, ranked most stable first.", 'cyan'))
     print()
 
-    dir_path = get_input("Root directory with 'clean_slab'/'adsorbate'/'sites' [default: .]: ").strip()
+    dir_path = get_input(
+        "Root directory with 'clean_slab'/'adsorbate'/'sites' [default: adsorption_run]: ").strip()
     if not dir_path:
-        dir_path = "."
+        dir_path = "adsorption_run"
 
     out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
     if not out_file:
@@ -788,7 +878,134 @@ def run_adsorb_analysis() -> None:
     if apply_target:
         args.extend(["--apply", apply_target])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    view_choice = get_input(
+        "View every folder's structure (clean_slab, adsorbate(s), every site) interactively "
+        "via ASE before finishing? (y/N): ").strip().lower()
+    view_plots_choice = get_input(
+        "Show the matplotlib adsorption-ranking plot on screen before finishing? (y/N): "
+    ).strip().lower()
+    if save_report:
+        args.append("--save-report")
+    if view_choice == 'y':
+        args.append("--view")
+    if view_plots_choice == 'y':
+        args.append("--view-plots")
+
     run_tool("stb-adsorbAnalysis", args)
+
+
+def run_neb_sites() -> None:
+    """Interface for the NEB Site Selection (neb_sites.py)"""
+    print("\n" + "="*60)
+    print(color_text("NEB SITE SELECTION", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Enumerates symmetrically distinct adsorption sites on a slab and writes two endpoint "
+        "folders (site_A/, site_B/) for the pair you pick -- run SIESTA (a real relaxation) in "
+        "each, then use Stage 2 (stb-neb) to build the reaction path between them.", 'cyan'))
+    print()
+
+    struct_file = get_input("Input slab/2D structure FDF file, vacuum along c (-s): ").strip()
+    while not os.path.isfile(struct_file):
+        print(color_text("File not found!", 'red'))
+        struct_file = get_input("Input slab/2D structure FDF file (-s): ").strip()
+
+    calc_file = get_input("Calc.fdf template already configured for this slab (-c): ").strip()
+    while not os.path.isfile(calc_file):
+        print(color_text("File not found!", 'red'))
+        calc_file = get_input("Calc.fdf template file (-c): ").strip()
+
+    pp_path = prompt_pseudo_source(optional=True)
+
+    print("\nAdsorbate: an element symbol (e.g. 'H') or an ASE G2 molecule name (e.g. 'H2O') -- "
+          "the ONE species hopping between the two sites you'll pick below. Type 'list' to see "
+          "all G2 names.")
+    adsorbate = get_input("Adsorbate: ").strip()
+    while adsorbate.lower() == "list" or not adsorbate:
+        run_tool("stb-nebSites", ["--list", "--no-intro"])
+        adsorbate = get_input("Adsorbate: ").strip()
+
+    print(f"\n{color_text('Site type:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = ontop")
+    print(f"  {color_text('2', 'cyan')} = bridge")
+    print(f"  {color_text('3', 'cyan')} = hollow")
+    print(f"  {color_text('4', 'cyan')} = all")
+    site_choice = get_input("Select option (1-4) [default: 4]: ").strip()
+    site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
+    site_type = site_map.get(site_choice, 'all')
+
+    height = get_float_input("\nAdsorption height above the surface, Ang [default: 2.0]: ", 2.0)
+
+    force_spin = get_input(
+        "\nForce Spin polarized in site_A/site_B? A single adsorbate atom bonded to a slab "
+        "commonly leaves the combined system with a net magnetic moment (costs nothing for a "
+        "genuinely closed-shell site). [Y/n]: ").strip().lower() != 'n'
+
+    # Advanced settings (rarely-touched -- gated so the essential flow above
+    # stays short; CLI defaults apply untouched when skipped).
+    symprec, vacuum_gap, output_dir = 0.01, 10.0, "nebsites_run"
+    show_advanced = get_input(
+        "\nConfigure advanced settings (symmetry tolerance, vacuum-gap, output directory)? "
+        "[y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        symprec = get_float_input("Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
+        vacuum_gap = get_float_input(
+            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+        output_dir = get_input("Output root directory [default: nebsites_run]: ").strip()
+        if not output_dir:
+            output_dir = "nebsites_run"
+
+    base_args = [
+        "-s", struct_file, "-c", calc_file, "--adsorbate", adsorbate,
+        "--site-type", site_type, "--height", str(height),
+        "--symprec", str(symprec), "--vacuum-gap", str(vacuum_gap),
+        "--output-dir", output_dir, "--no-intro",
+        "--force-spin" if force_spin else "--no-force-spin",
+    ]
+    if pp_path:
+        base_args.extend(["-p", pp_path])
+
+    print(color_text(
+        "\nListing candidate sites first (no selection yet) -- pick two from the table below.",
+        'cyan'))
+    run_tool("stb-nebSites", base_args, pause=False)
+
+    site_a = get_int_input("\nFIRST endpoint -- site index (0-based, from the table above): ")
+    site_b = get_int_input("SECOND endpoint -- site index (0-based): ")
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    view_plots_choice = get_input(
+        "Show the candidate-site and chosen-sites plots on screen before finishing? "
+        "(y/N): ").strip().lower()
+    view_choice = get_input(
+        "View the clean slab, site_A and site_B interactively via ASE before finishing? "
+        "(y/N): ").strip().lower()
+
+    args = base_args + ["--site-a", str(site_a), "--site-b", str(site_b)]
+    if save_report:
+        args.append("--save-report")
+    if view_plots_choice == 'y':
+        args.append("--view-plots")
+    if view_choice == 'y':
+        args.append("--view")
+
+    summary_rows = [
+        ("Structure file", struct_file),
+        ("Calc template", calc_file),
+        ("Pseudopotentials", pp_path or "(none)"),
+        ("Adsorbate", adsorbate),
+        ("Site type", site_type),
+        ("Height", f"{height} Ang"),
+        ("Site A / Site B", f"{site_a} / {site_b}"),
+        ("Output directory", output_dir),
+        ("Save report", "yes" if save_report else "no"),
+        ("Show plots on screen", "yes" if view_plots_choice == 'y' else "no"),
+        ("View interactively", "yes" if view_choice == 'y' else "no"),
+    ]
+    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
+
+    run_tool("stb-nebSites", args)
 
 
 def run_neb_setup() -> None:
@@ -797,20 +1014,26 @@ def run_neb_setup() -> None:
     print(color_text("NEB SETUP", 'bold').center(60))
     print("="*60)
     print(color_text(
-        "Interpolates a reaction-path band between two already-relaxed endpoint structures "
-        "and writes one single-point SIESTA folder per image -- run SIESTA in each, then use "
-        "Stage 2 (Analysis) for the DFT-level energy profile.", 'cyan'))
+        "Interpolates a reaction-path band between two already-relaxed endpoint structures, "
+        "then builds the path in one of 4 modes (MACE-only, MACE + 1 single-point SIESTA, "
+        "MACE + real-DFT refinement cycles, or 100% real-DFT) -- run SIESTA as directed, then "
+        "use Stage 3 (Analysis) for the energy profile.", 'cyan'))
     print()
 
-    initial_file = get_input("Initial (already-relaxed) endpoint structure FDF file (-i): ").strip()
-    while not os.path.isfile(initial_file):
-        print(color_text("File not found!", 'red'))
-        initial_file = get_input("Initial endpoint structure FDF file (-i): ").strip()
+    initial_file = get_input(
+        "Initial (already-relaxed) endpoint -- a structure FDF file, or a folder containing one "
+        "(e.g. a stb-nebSites site_A/, whose finished siesta.XV is preferred if present) (-i): "
+    ).strip()
+    while not (os.path.isfile(initial_file) or os.path.isdir(initial_file)):
+        print(color_text("Not found!", 'red'))
+        initial_file = get_input("Initial endpoint (file or folder) (-i): ").strip()
 
-    final_file = get_input("Final (already-relaxed) endpoint structure FDF file (-f): ").strip()
-    while not os.path.isfile(final_file):
-        print(color_text("File not found!", 'red'))
-        final_file = get_input("Final endpoint structure FDF file (-f): ").strip()
+    final_file = get_input(
+        "Final (already-relaxed) endpoint -- file or folder, same convention as above (-f): "
+    ).strip()
+    while not (os.path.isfile(final_file) or os.path.isdir(final_file)):
+        print(color_text("Not found!", 'red'))
+        final_file = get_input("Final endpoint (file or folder) (-f): ").strip()
 
     calc_file = get_input("Calc.fdf template (-c): ").strip()
     while not os.path.isfile(calc_file):
@@ -826,15 +1049,20 @@ def run_neb_setup() -> None:
         "MACE needed)? (y/N): ").strip().lower()
     idpp = idpp_choice in ('y', 'yes')
 
-    ml_neb_choice = get_input(
-        "\nRun a real climbing-image NEB on MACE-MP-0 before writing SIESTA folders? Needs "
-        "the optional 'ml' extra (y/N): ").strip().lower()
-    ml_neb = ml_neb_choice in ('y', 'yes')
+    print(f"\n{color_text('Mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = 100% MACE-MP-0 -> a JSON result, no SIESTA at all")
+    print(f"  {color_text('2', 'cyan')} = 100% MACE-MP-0, then 1 single-point SIESTA per image")
+    print(f"  {color_text('3', 'cyan')} = MACE-MP-0 + a few real-DFT refinement cycles "
+          "(stb-nebCycle, run yourself in a cluster loop) [default]")
+    print(f"  {color_text('4', 'cyan')} = 100% real-DFT NEB from a plain interpolated path, no MACE")
+    mode_choice = get_input("Select option (1-4) [default: 3]: ").strip()
+    mode = int(mode_choice) if mode_choice in ('1', '2', '3', '4') else 3
+
     ml_k = 0.1
     ml_max_steps = 200
     ml_freeze_substrate = True
     ml_freeze_threshold = 0.3
-    if ml_neb:
+    if mode in (1, 2, 3):
         ml_k = get_float_input("  NEB spring constant, eV/Ang^2 [default: 0.1]: ", 0.1)
         ml_max_steps = get_int_input("  Max optimizer steps [default: 200]: ", 200)
         freeze_choice = get_input(
@@ -847,27 +1075,42 @@ def run_neb_setup() -> None:
 
     ml_prerelax_choice = get_input(
         "\nPre-relax both endpoints with MACE-MP-0 before interpolating? Independent of the "
-        "ML-NEB choice above -- needs the optional 'ml' extra (y/N): ").strip().lower()
+        "mode chosen above -- needs the optional 'ml' extra (y/N): ").strip().lower()
     ml_prerelax_endpoints = ml_prerelax_choice in ('y', 'yes')
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    autosort_tol, output_dir = 0.5, "."
-    show_advanced = get_input(
-        "\nConfigure advanced settings (atom-correspondence tolerance, output directory)? "
-        "[y/N]: ").strip().lower()
+    autosort_tol, output_dir, ml_device = 0.5, ".", "cpu"
+    uses_mace = mode in (1, 2, 3) or ml_prerelax_endpoints
+    advanced_items = "atom-correspondence tolerance, output directory"
+    if uses_mace:
+        advanced_items += ", ML device"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         autosort_tol = get_float_input(
             "Atom-correspondence tolerance for interpolation, Ang [default: 0.5]: ", 0.5)
         output_dir = get_input("Output root directory [default: current directory]: ").strip()
         if not output_dir:
             output_dir = "."
+        if uses_mace:
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if ml_device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
 
     args = [
         "-i", initial_file,
         "-f", final_file,
         "-c", calc_file,
         "-n", str(n_images),
+        "--mode", str(mode),
         "--autosort-tol", str(autosort_tol),
         "--output-dir", output_dir,
         "--no-intro",
@@ -876,15 +1119,23 @@ def run_neb_setup() -> None:
         args.extend(["-p", pp_path])
     if idpp:
         args.append("--idpp")
-    if ml_neb:
-        args.extend(["--ml-neb", "--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps)])
+    if mode in (1, 2, 3):
+        args.extend(["--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps)])
         if ml_freeze_substrate:
             args.extend(["--ml-freeze-substrate", "--ml-freeze-threshold", str(ml_freeze_threshold)])
         else:
             args.append("--no-ml-freeze-substrate")
     if ml_prerelax_endpoints:
         args.append("--ml-prerelax-endpoints")
+    if uses_mace:
+        args.extend(["--ml-device", ml_device])
 
+    mode_labels = {
+        1: "1 - 100% MACE-MP-0 (JSON, no SIESTA)",
+        2: "2 - MACE-MP-0 + 1 single-point SIESTA per image",
+        3: "3 - MACE-MP-0 + real-DFT refinement cycles (default)",
+        4: "4 - 100% real-DFT NEB, no MACE",
+    }
     summary_rows = [
         ("Initial structure", initial_file),
         ("Final structure", final_file),
@@ -892,9 +1143,10 @@ def run_neb_setup() -> None:
         ("Pseudopotentials", pp_path or "(none)"),
         ("N images", n_images),
         ("IDPP refinement", "ON" if idpp else "OFF"),
-        ("ML-NEB (MACE-MP-0)", f"ON (k={ml_k}, max steps={ml_max_steps})" if ml_neb else "OFF"),
-        ("ML-NEB freeze substrate", (f"ON (threshold {ml_freeze_threshold} Ang)" if ml_freeze_substrate else "OFF")
-                                     if ml_neb else "n/a"),
+        ("Mode", mode_labels[mode]),
+        ("MACE k / max steps", f"{ml_k} / {ml_max_steps}" if mode in (1, 2, 3) else "n/a"),
+        ("MACE freeze substrate", (f"ON (threshold {ml_freeze_threshold} Ang)" if ml_freeze_substrate else "OFF")
+                                    if mode in (1, 2, 3) else "n/a"),
         ("ML pre-relax endpoints", "ON" if ml_prerelax_endpoints else "OFF"),
         ("Output directory", output_dir),
     ]
@@ -994,11 +1246,13 @@ def run_stackingfault_setup() -> None:
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    max_area, max_strain, match_id, vacuum, strain_mode, twist, output_dir = \
-        150.0, 0.05, 0, None, "top", 0.0, "."
-    show_advanced = get_input(
-        "\nConfigure advanced settings (ZSL match tolerance, vacuum, strain mode, twist, "
-        "output directory)? [y/N]: ").strip().lower()
+    max_area, max_strain, match_id, vacuum, strain_mode, twist, output_dir, ml_device = \
+        150.0, 0.05, 0, None, "top", 0.0, ".", "cpu"
+    uses_mace = ml_prerelax_layers or ml_relax_gap or ml_preview
+    advanced_items = "ZSL match tolerance, vacuum, strain mode, twist, output directory"
+    if uses_mace:
+        advanced_items += ", ML device"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         max_area = get_float_input("Max ZSL supercell area, Ang^2 [default: 150.0]: ", 150.0)
         max_strain = get_float_input("Max ZSL match strain fraction [default: 0.05]: ", 0.05)
@@ -1011,6 +1265,18 @@ def run_stackingfault_setup() -> None:
         output_dir = get_input("Output root directory [default: current directory]: ").strip()
         if not output_dir:
             output_dir = "."
+        if uses_mace:
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if ml_device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
 
     args = [
         "-l1", layer1_file,
@@ -1036,6 +1302,8 @@ def run_stackingfault_setup() -> None:
         args.extend(["--ml-relax-gap", "--ml-relax-gap-window", str(ml_relax_gap_window)])
     if ml_preview:
         args.append("--ml-preview")
+    if uses_mace:
+        args.extend(["--ml-device", ml_device])
 
     summary_rows = [
         ("Layer 1", layer1_file),
@@ -1212,6 +1480,19 @@ def run_2d_stacker() -> None:
             if not model:
                 model = "small"
             args.extend(["--model", model])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -2753,6 +3034,66 @@ def run_kgrid_generator() -> None:
 
     run_tool("stb-kgrid", args)
 
+def run_pseudo_generator() -> None:
+    """Interface for the Pseudopotential Resolver (stb-pseudo)"""
+    print("\n" + "="*60)
+    print(color_text("PSEUDOPOTENTIAL RESOLVER (stb-pseudo)", 'bold').center(60))
+    print("="*60 + "\n")
+
+    print(f"{color_text('What do you want to do?', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Resolve pseudopotentials for a structure file (.fdf) (default)")
+    print(f"  {color_text('2', 'cyan')} = Resolve pseudopotentials for an explicit list of elements")
+    print(f"  {color_text('3', 'cyan')} = Browse the elements available in a bundled bank")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip() or '1'
+
+    if mode_choice == '3':
+        print(f"\nBundled banks: {', '.join(sorted(BANKS))}")
+        bank = get_input("Bank name: ").strip()
+        while bank not in BANKS:
+            print(color_text(f"Unknown bank. Choose one of: {', '.join(sorted(BANKS))}", 'red'))
+            bank = get_input("Bank name: ").strip()
+        run_tool("stb-pseudo", ["--list-elements", bank, "--no-intro"])
+        return
+
+    if mode_choice == '2':
+        species_input = get_input("Element symbols, space-separated (e.g. Fe O): ").strip()
+        while not species_input:
+            print(color_text("At least one element is required!", 'red'))
+            species_input = get_input("Element symbols, space-separated (e.g. Fe O): ").strip()
+        args = ["--species", *species_input.split(), "--no-intro"]
+    else:
+        input_file = get_input("Input structure file (.fdf): ").strip()
+        while not os.path.isfile(input_file):
+            print(color_text("File not found!", 'red'))
+            input_file = get_input("Input structure file (.fdf): ").strip()
+        args = ["--file", input_file, "--no-intro"]
+
+    print(f"\nBundled banks: {', '.join(sorted(BANKS))} (or type a custom directory path)")
+    pp_path = get_input("Primary pseudopotential source (bank name or path): ").strip()
+    while not pp_path:
+        print(color_text("A pseudopotential source is required!", 'red'))
+        pp_path = get_input("Primary pseudopotential source (bank name or path): ").strip()
+    args.extend(["--pp-path", pp_path])
+
+    fallback = get_input(
+        "Fallback source for elements missing from the primary one "
+        "[optional, press Enter to skip]: ").strip()
+    if fallback:
+        args.extend(["--fallback-dir", fallback])
+
+    output = get_input("Output directory to copy resolved pseudopotentials into [default: .]: ").strip() or "."
+    args.extend(["--output", output])
+
+    dry_run = get_input("Dry run only, no files copied? (y/N): ").strip().lower()
+    if dry_run == 'y':
+        args.append("--dry-run")
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    run_tool("stb-pseudo", args)
+
 def run_kpath_generator() -> None:
     """Interface for the K-Path Generator (stb-kpath)"""
     print("\n" + "="*60)
@@ -2847,6 +3188,19 @@ def run_supercell_generator() -> None:
             if not model:
                 model = "small"
             args.extend(["--model", model])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -2962,6 +3316,19 @@ def run_slab_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3071,6 +3438,19 @@ def run_nanotube_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3128,6 +3508,18 @@ def run_defect_generator() -> None:
             ).strip().lower()
             if ml_rank in ('y', 'yes'):
                 args.append("--ml-rank")
+                device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+                device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+                if device == "cuda":
+                    from stb.core.mace_relax import gpu_available
+                    available, detail = gpu_available()
+                    if available:
+                        print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                    else:
+                        print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                          "the tool will report a clear error when it runs unless you "
+                                          "switch back to cpu.", 'yellow'))
+                args.extend(["--device", device])
         else:
             index_str = get_input("Atom index/indices, comma-separated (e.g. '3,7'): ").strip()
             args.extend(["--index", index_str])
@@ -3174,6 +3566,19 @@ def run_defect_generator() -> None:
                 if not model:
                     model = "small"
                 args.extend(["--model", model])
+
+            device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+            device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
+            args.extend(["--device", device])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -3256,6 +3661,19 @@ def run_sqs_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3325,6 +3743,19 @@ def run_unitcell_generator() -> None:
             if not model:
                 model = "small"
             args.extend(["--model", model])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -3420,6 +3851,19 @@ def run_crystalbuilder_generator() -> None:
             if not model:
                 model = "small"
             args.extend(["--model", model])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -3635,6 +4079,19 @@ def run_crystalcast_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3800,6 +4257,19 @@ def run_passivate_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3853,6 +4323,19 @@ def run_molecule_generator() -> None:
                 model = "small"
             args.extend(["--model", model])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -3903,6 +4386,19 @@ def run_mlrelax_generator() -> None:
         if not model:
             model = "small"
         args.extend(["--model", model])
+
+    device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+    device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
+    args.extend(["--device", device])
 
     fmax = get_float_input("Force convergence, eV/Ang [default: 0.05]: ", 0.05)
 
@@ -3996,6 +4492,19 @@ def run_amorphize_generator() -> None:
         if not model:
             model = "small"
         args.extend(["--model", model])
+
+    device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+    device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
+    args.extend(["--device", device])
 
     save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -4143,27 +4652,52 @@ def run_convergence_analyzer() -> None:
     if not output_filename:
         output_filename = "calc.out"
 
-    tolerance = get_float_input("Convergence tolerance in eV/atom [default: 0.001]: ", 0.001)
-
-    curve_output = get_input("Output curve data file name [default: convergence_curve.dat]: ").strip()
-    if not curve_output:
-        curve_output = "convergence_curve.dat"
+    tolerance = get_float_input("Energy convergence tolerance in eV/atom [default: 0.01]: ", 0.01)
 
     args = [
         "--dir", run_dir,
         "--file", output_filename,
         "--tolerance", str(tolerance),
-        "--output", curve_output,
         "--no-intro"
     ]
 
-    apply_target = get_input("\nApply the converged value to a calc.fdf now? "
+    # Advanced settings (rarely-touched tolerances), gated -- same pattern
+    # as stb-strain/stb-mlelastic's own interactive wrappers.
+    show_advanced = get_input(
+        "\nConfigure advanced settings (relaxed-volume tolerance, residual-force "
+        "data-quality flag)? [y/N]: ").strip().lower()
+    if show_advanced == 'y':
+        volume_tolerance = get_float_input(
+            "Relaxed-cell-volume convergence tolerance in % [default: 0.5]: ", 0.5)
+        args.extend(["--volume-tolerance", str(volume_tolerance)])
+        force_tolerance = get_float_input(
+            "Residual-force data-quality flag threshold in eV/Ang, NOT a convergence "
+            "criterion [default: 0.05]: ", 0.05)
+        args.extend(["--force-tolerance", str(force_tolerance)])
+
+    output_dir = get_input("\nOutput directory [default: current directory]: ").strip()
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input(
+        "Also save, per parameter, the curve data + a gnuplot script? (y/N): ").strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input(
+        "Show an interactive matplotlib plot before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+
+    apply_target = get_input("\nApply the converged value(s) to a calc.fdf now? "
                               "Path to the file, or leave blank to skip: ").strip()
     if apply_target:
         args.extend(["--apply", apply_target])
         vacuum_gap = get_float_input(
-            "Vacuum-axis detection threshold in Ang, only used if the sweep "
-            "was kgrid [default: 10.0]: ", 10.0)
+            "Vacuum-axis detection threshold in Ang, only used if kgrid was swept "
+            "[default: 10.0]: ", 10.0)
         args.extend(["--vacuum-gap", str(vacuum_gap)])
 
     run_tool("stb-convergenceAnalysis", args)
@@ -4175,15 +4709,13 @@ def run_hubbardu_prep() -> None:
     print(color_text("HUBBARD U (LINEAR RESPONSE) - STAGE 1: REFERENCE PREP", 'bold').center(60))
     print("="*60 + "\n")
 
-    struct_file = get_input("Input structure file (-s): ")
-    while not os.path.isfile(struct_file):
-        print(color_text("File not found!", 'red'))
-        struct_file = get_input("Input structure file (-s): ")
+    struct_file = get_input("Input structure file [default: structure.fdf]: ").strip()
+    if not struct_file:
+        struct_file = "structure.fdf"
 
-    calc_file = get_input("Calc.fdf template file (-c): ")
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template file (-c): ")
+    calc_file = get_input("Calc.fdf template file [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
 
     species = get_input("Species to correct (e.g. Mn): ").strip()
     while not species:
@@ -4216,6 +4748,10 @@ def run_hubbardu_prep() -> None:
         output_dir = "hubbardu_runs"
     args.extend(["--output-dir", output_dir])
 
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
     run_tool("stb-hubbardu", args)
 
 
@@ -4239,9 +4775,13 @@ def run_hubbardu_alphas() -> None:
         args.extend(["--alphas"] + alphas_str.split())
 
     frozen_iter = get_int_input(
-        "MaxSCFIterations for the frozen-density runs [default: 2]: ", 2
+        "MaxSCFIterations for the frozen-density runs [default: 1]: ", 1
     )
     args.extend(["--frozen-iterations", str(frozen_iter)])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
 
     run_tool("stb-hubbarduAlphas", args)
 
@@ -4270,6 +4810,18 @@ def run_hubbardu_analysis() -> None:
     ).strip()
     if output_file:
         args.extend(["--output", output_file])
+
+    save_gnuplot = get_input(
+        "\nAlso save the response curve as data + gnuplot script (in 'plot/')? (y/N): "
+    ).strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib preview before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
 
     run_tool("stb-hubbarduAnalysis", args)
 
@@ -4920,8 +5472,10 @@ def run_oer_intermediates() -> None:
         ooh_height = get_float_input("  OOH adsorption height in Ang [default: 2.0]: ", 2.0)
         args.extend(["--ooh-height", str(ooh_height)])
 
-    show_advanced = get_input(
-        "\nConfigure advanced settings (OOH* starting bond lengths/bend angle)? [y/N]: ").strip().lower()
+    advanced_items = "OOH* starting bond lengths/bend angle"
+    if ml_prerelax:
+        advanced_items += ", ML device"
+    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         oo_bond_length = get_float_input(
             "Illustrative starting O-O bond length for OOH*, in Ang [default: 1.45]: ", 1.45)
@@ -4932,6 +5486,19 @@ def run_oer_intermediates() -> None:
         ooh_bend_deg = get_float_input(
             "Illustrative starting O-O-H bend angle for OOH*, in degrees [default: 100.0]: ", 100.0)
         args.extend(["--ooh-bend-deg", str(ooh_bend_deg)])
+        if ml_prerelax:
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+            if ml_device == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
+            args.extend(["--ml-device", ml_device])
 
     print(color_text("\nBuilding O*/OOH* intermediate geometries...", 'green'))
     run_tool("stb-oerIntermediates", args)
@@ -5318,6 +5885,15 @@ def run_mlff_analysis() -> None:
     batch_size = get_int_input("Batch size [default: 5]: ", 5)
 
     device = get_input("Device (cpu/cuda) [default: auto-detect]: ").strip().lower()
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
 
     name = get_input("Experiment/model name [default: mlff_model]: ").strip() or "mlff_model"
     work_dir = get_input("Working directory [default: .]: ").strip() or "."
@@ -5392,6 +5968,19 @@ def run_mlff_active_learning() -> None:
     top_k = get_int_input("Number of highest-scoring candidates to write out [default: 5]: ", 5)
     output_dir = get_input("Output directory [default: .]: ").strip() or "."
     args.extend(["--top-k", str(top_k), "--output-dir", output_dir])
+
+    device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+    device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
+    args.extend(["--device", device])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -5493,8 +6082,8 @@ def run_mlmd_generator() -> None:
                  "--n-steps", str(n_steps), "--timestep", str(timestep)])
 
     show_advanced = get_input(
-        "\nConfigure advanced settings (thermostat/barostat coupling, compressibility)? "
-        "[y/N]: ").strip().lower()
+        "\nConfigure advanced settings (thermostat/barostat coupling, compressibility, "
+        "ML device)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         if ensemble in ("nvt", "npt"):
             taut = get_float_input("Thermostat coupling time, fs [default: 100]: ", 100.0)
@@ -5504,6 +6093,18 @@ def run_mlmd_generator() -> None:
             compressibility = get_float_input(
                 "Compressibility, eV/Ang^3 [default: 4.57e-5 -- water's value]: ", 4.57e-5)
             args.extend(["--taup", str(taup), "--compressibility", str(compressibility)])
+        device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     output = get_input("\nTrajectory filename [default: <input>_md_traj.xsf]: ").strip()
     if output:
@@ -5545,6 +6146,19 @@ def run_mlphonons_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     dim_str = get_input("Supercell dimensions, 3 integers [default: 2 2 2]: ").strip()
     dim = dim_str.split() if dim_str else ["2", "2", "2"]
@@ -5661,6 +6275,19 @@ def run_mlelastic_generator() -> None:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     max_strain = get_input("Max strain magnitude, %% [default: 1.0]: ").strip()
     if max_strain:
         args.extend(["--max", max_strain])
@@ -5742,6 +6369,19 @@ def run_mlsearch_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     print(f"\n{color_text('Algorithm:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Basin hopping (default)")
@@ -5826,6 +6466,19 @@ def run_mlmelting_generator() -> None:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
 
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
+
     temp_choice = get_input(
         "\nTemperatures to scan: [1] range (min/max/step), [2] explicit list "
         "[default: 1]: ").strip() or '1'
@@ -5895,6 +6548,19 @@ def run_mlconvergence_generator() -> None:
     if custom_str:
         args.extend(["--custom-models", *custom_str.split()])
 
+    device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+    device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
+    args.extend(["--device", device])
+
     energy_tol = get_input("Energy tolerance, meV/atom [default: 5.0]: ").strip()
     if energy_tol:
         args.extend(["--energy-tolerance", energy_tol])
@@ -5951,6 +6617,19 @@ def run_mlneb_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     n_images = get_input("Total images including both endpoints [default: 7]: ").strip()
     if n_images:
@@ -6010,6 +6689,19 @@ def run_mldiffusion_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     n_images = get_input("Total images including both endpoints [default: 5]: ").strip()
     if n_images:
@@ -6083,6 +6775,19 @@ def run_mlgcmc_generator() -> None:
     if equilibration_steps:
         args.extend(["--equilibration-steps", equilibration_steps])
 
+    device_choice = get_input("\nDevice [cpu/cuda, default: cpu]: ").strip().lower()
+    device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+    if device == "cuda":
+        from stb.core.mace_relax import gpu_available
+        available, detail = gpu_available()
+        if available:
+            print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+        else:
+            print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                              "the tool will report a clear error when it runs unless you "
+                              "switch back to cpu.", 'yellow'))
+    args.extend(["--device", device])
+
     output_dir = get_input("Output directory [default: mlgcmc_out]: ").strip()
     if output_dir:
         args.extend(["--output-dir", output_dir])
@@ -6139,6 +6844,19 @@ def run_mladsorb_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     site_type = get_input(
         "Site type, all/ontop/bridge/hollow [default: all]: ").strip()
@@ -6211,6 +6929,19 @@ def run_mleos_generator() -> None:
     else:
         model = get_input("Model size, small/medium/large [default: small]: ").strip()
         args.extend(["--model", model or "small"])
+
+        device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
+        if device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+        args.extend(["--device", device])
 
     eos = get_input(
         "EOS form, birchmurnaghan/vinet/murnaghan/sj [default: birchmurnaghan]: ").strip()
@@ -7088,7 +7819,51 @@ def run_xrdsearch_generator() -> None:
         groups = get_input("Space groups to try: ").strip()
 
     count_per_group = get_int_input("Candidates per space group [default: 1]: ", 1)
+
+    mace_relax_choice = get_input(
+        "\nPre-relax the final candidates (positions + cell) with MACE before generating "
+        "calc.fdf? (y/N): ").strip().lower()
+    mace_model = mace_custom_model = ""
+    if mace_relax_choice == 'y':
+        mace_custom_model = get_input(
+            "Use a custom MACE model instead (e.g. one fine-tuned via stb-mlffAnalysis)? "
+            "Path, or Enter to use a MACE-MP-0 foundation model: ").strip()
+        if mace_custom_model:
+            while not os.path.isfile(mace_custom_model):
+                print(color_text("File not found!", 'red'))
+                mace_custom_model = get_input("Custom model path: ").strip()
+        else:
+            mace_model = get_input("Model size, small/medium/large [default: small]: ").strip() or "small"
+
+        mace_device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+        mace_device = mace_device_choice if mace_device_choice in ("cpu", "cuda") else "cpu"
+        if mace_device == "cuda":
+            from stb.core.mace_relax import gpu_available
+            available, detail = gpu_available()
+            if available:
+                print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+            else:
+                print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                  "the tool will report a clear error when it runs unless you "
+                                  "switch back to cpu.", 'yellow'))
+
+    custom_calc = get_input(
+        "\nCustom calc.fdf template (blank = auto-generate the standard relaxation input): "
+    ).strip()
+    d3_choice = spin_choice = ""
+    if not custom_calc:
+        d3_choice = get_input("Enable the DFT-D3 dispersion correction? (y/N): ").strip().lower()
+        spin_choice = get_input(
+            "Spin-polarized calculation? (y/N, default: non-polarized): ").strip().lower()
+
     output_dir = get_input("Output folder [default: xrd_search]: ").strip() or "xrd_search"
+
+    pseudo_source = prompt_pseudo_source(optional=True)
+
+    view_choice = get_input(
+        "\nView the generated candidate structures interactively via ASE when done? (y/N): "
+    ).strip().lower()
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
 
     args = [
         "--species", *species,
@@ -7098,6 +7873,27 @@ def run_xrdsearch_generator() -> None:
         "--output-dir", output_dir,
         "--no-intro",
     ]
+    if mace_relax_choice == 'y':
+        args.append("--mace-relax")
+        if mace_custom_model:
+            args.extend(["--mace-custom-model", mace_custom_model])
+        elif mace_model:
+            args.extend(["--mace-model", mace_model])
+        args.extend(["--mace-device", mace_device])
+    if custom_calc:
+        args.extend(["--calc", custom_calc])
+    else:
+        if d3_choice == 'y':
+            args.append("--d3")
+        if spin_choice == 'y':
+            args.append("--spin-polarized")
+    if pseudo_source:
+        args.extend(["--pseudo-dir", pseudo_source])
+    if view_choice == 'y':
+        args.append("--view")
+    if save_report == 'y':
+        args.append("--save-report")
+
     run_tool("stb-xrdsearch", args)
 
 def run_xrdrank_analyzer() -> None:
@@ -7106,10 +7902,12 @@ def run_xrdrank_analyzer() -> None:
     print(color_text("XRD STRUCTURE SEARCH -- RANK (stb-xrdrank)", 'bold').center(60))
     print("="*60 + "\n")
 
-    input_dir = get_input("Folder of candidate structures (e.g. from stb-xrdsearch): ").strip()
+    input_dir = get_input(
+        "Folder of candidate structures [default: xrd_search, stb-xrdsearch's own default "
+        "output folder]: ").strip() or "xrd_search"
     while not os.path.isdir(input_dir):
-        print(color_text("Folder not found!", 'red'))
-        input_dir = get_input("Folder of candidate structures: ").strip()
+        print(color_text(f"Folder not found: '{input_dir}'", 'red'))
+        input_dir = get_input("Folder of candidate structures: ").strip() or "xrd_search"
 
     experimental = get_input("Experimental XRD pattern file (2theta, intensity columns): ").strip()
     while not os.path.isfile(experimental):
@@ -7120,13 +7918,33 @@ def run_xrdrank_analyzer() -> None:
     if not wavelength:
         wavelength = "CuKa"
 
-    top_str = get_input("Show only the N best matches [default: show all]: ").strip()
+    print("A sparse discrete peak list (not a continuous scan) is normally auto-detected "
+          "and Gaussian-broadened before comparing, so it's on the same footing as each "
+          "candidate's simulated pattern.")
+    raw_choice = get_input(
+        "Force comparing it exactly as-is instead, with no auto-broadening? (y/N): ").strip().lower()
+
+    top_str = get_input("Show/plot only the N best matches [default: show all]: ").strip()
     output_file = get_input("Output ranking file name [default: xrd_rank.txt]: ").strip() or "xrd_rank.txt"
 
     args = ["--input-dir", input_dir, "--experimental", experimental,
             "--wavelength", wavelength, "--output", output_file, "--no-intro"]
+    if raw_choice == 'y':
+        args.append("--raw-experimental")
     if top_str:
         args.extend(["--top", top_str])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+    save_gnuplot = get_input(
+        "Also save the ranking + best-match overlay as data + gnuplot scripts? (y/N): "
+    ).strip().lower()
+    if save_gnuplot == 'y':
+        args.append("--save-gnuplot")
+    view_choice = get_input("Show the matplotlib preview before finishing? (y/N): ").strip().lower()
+    if view_choice == 'y':
+        args.append("--view")
 
     run_tool("stb-xrdrank", args)
 
@@ -7422,19 +8240,22 @@ INPUT_TOOLS = {
     1: {'title': "Input File Generator (stb-inputfile)",
         'description': "Create a 'calc.fdf' input file from a structure file.",
         'func': run_input_generator},
-    2: {'title': "K-Grid Generator (stb-kgrid)",
+    2: {'title': "Pseudopotential Resolver (stb-pseudo)",
+        'description': "Resolve the pseudopotentials a structure needs and copy them into a run folder.",
+        'func': run_pseudo_generator},
+    3: {'title': "K-Grid Generator (stb-kgrid)",
         'description': "Suggest a Monkhorst-Pack grid (k-points) based on desired density.",
         'func': run_kgrid_generator},
-    3: {'title': "K-Path Generator (stb-kpath)",
+    4: {'title': "K-Path Generator (stb-kpath)",
         'description': "Generate a high-symmetry k-path for band structure calculations.",
         'func': run_kpath_generator},
-    4: {'title': "DFT+U / Hubbard Block Generator (stb-dftu)",
+    5: {'title': "DFT+U / Hubbard Block Generator (stb-dftu)",
         'description': "Generate a ready-to-use %block LDAU.proj snippet from a user-supplied U (and J).",
         'func': run_dftu_generator},
-    5: {'title': "Structure Fetcher (stb-fetch)",
+    6: {'title': "Structure Fetcher (stb-fetch)",
         'description': "Fetch a structure from Materials Project or COD and write it as .fdf.",
         'func': run_fetch_generator},
-    6: {'title': "ML Pre-Relaxation (stb-mlrelax)",
+    7: {'title': "ML Pre-Relaxation (stb-mlrelax)",
         'description': "Fast pre-relaxation with the MACE-MP-0 potential (needs the optional 'ml' extra).",
         'func': run_mlrelax_generator},
        }
@@ -7586,13 +8407,13 @@ WORKFLOW_TOOLS = {
                 'func': run_phonon_postprocessing},
         }},
     5: {'title': "Convergence Tests",
-        'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check total-energy convergence.",
+        'description': "Sweep Mesh.CutOff, k-grid density, or PAO.EnergyShift and check energy + relaxed-structure convergence.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-convergence)",
                 'description': "Generate a sweep of calc.fdf variants for one or more parameters (or 'all').",
                 'func': run_convergence_generator},
             2: {'title': "Stage 2 - Analysis (stb-convergenceAnalysis)",
-                'description': "Extract energies from convergence_* folders and report the converged value.",
+                'description': "Analyze every parameter found under convergence_runs/ and report where energy AND the relaxed cell converge.",
                 'func': run_convergence_analyzer},
         }},
     6: {'title': "Structure Solution (XRD)",
@@ -7622,24 +8443,34 @@ WORKFLOW_TOOLS = {
         }},
     8: {'title': "Adsorption",
         'description': "Prepare a clean slab, an isolated adsorbate, and candidate adsorption "
-                        "sites, then compute the real DFT adsorption energy per site.",
+                        "sites, generate a BSSE-corrected reference at each site's relaxed "
+                        "geometry, then compute the real DFT adsorption energy per site.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-adsorb)",
                 'description': "Generate clean-slab/adsorbate/site folders ready for SIESTA.",
                 'func': run_adsorb_setup},
-            2: {'title': "Stage 2 - Analysis (stb-adsorbAnalysis)",
+            2: {'title': "Stage 2 - BSSE Prep (stb-adsorbBsse)",
+                'description': "Generate BSSE ghost-fragment folders at each relaxed site's "
+                               "geometry -- run after Stage 1's sites have finished in SIESTA.",
+                'func': run_adsorb_bsse},
+            3: {'title': "Stage 3 - Analysis (stb-adsorbAnalysis)",
                 'description': "Compute E_ads = E_site - E_clean_slab - E_adsorbate per site.",
                 'func': run_adsorb_analysis},
         }},
     9: {'title': "NEB / Reaction Path",
-        'description': "Interpolate a reaction-path band between two relaxed endpoints "
-                        "(optionally refined with MACE-MP-0), then compute the DFT-level "
-                        "energy profile and an approximate barrier.",
+        'description': "Enumerate symmetry-distinct sites and pick an endpoint pair, "
+                        "interpolate a reaction-path band between them (optionally refined "
+                        "with MACE-MP-0), then compute the DFT-level energy profile and an "
+                        "approximate barrier.",
         'stages': {
-            1: {'title': "Stage 1 - Prep (stb-neb)",
+            1: {'title': "Stage 1 - Site Selection (stb-nebSites)",
+                'description': "Enumerate symmetry-distinct adsorption sites and write two "
+                                "endpoint folders (site_A/, site_B/) for the pair you pick.",
+                'func': run_neb_sites},
+            2: {'title': "Stage 2 - Prep (stb-neb)",
                 'description': "Generate one single-point image_NN/ folder per band image.",
                 'func': run_neb_setup},
-            2: {'title': "Stage 2 - Analysis (stb-nebAnalysis)",
+            3: {'title': "Stage 3 - Analysis (stb-nebAnalysis)",
                 'description': "Compute the energy profile and forward/backward barrier.",
                 'func': run_neb_analysis},
         }},

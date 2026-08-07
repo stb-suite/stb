@@ -374,7 +374,7 @@ def run_group_transform(args, mode, crystal, f_out):
     return candidates, found_label
 
 
-def run_ml_rank(pmg_structures, model_arg, model_desc, f_out):
+def run_ml_rank(pmg_structures, model_arg, model_desc, f_out, device="cpu"):
     """Relaxes (positions only) each pmg_structure in `pmg_structures` --
     a list of (out_name, pmg_structure, is_isolated) -- with the requested
     MACE model, prints them ranked by relaxed energy, and returns a NEW list
@@ -397,7 +397,11 @@ def run_ml_rank(pmg_structures, model_arg, model_desc, f_out):
     with how the generation loop itself treats a single failed attempt.
     """
     print_dual(f"Model : {model_desc}", f_out)
-    calc = mace_relax.get_calculator(model_arg)
+    print_dual(f"Device : {device}", f_out)
+    try:
+        calc = mace_relax.get_calculator(model_arg, device=device)
+    except ValueError as e:
+        _fail(str(e), f_out)
     for line in mace_relax.describe_model(model_arg, calc):
         print_dual(line, f_out)
 
@@ -590,6 +594,8 @@ stb-symmetry or stb-unitcell.)""",
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-rank, instead "
                              "of a MACE-MP-0 foundation size. Only valid together with --ml-rank.")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
+                        help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry precision: for generation, used to re-detect each --dim 3 "
@@ -1020,7 +1026,8 @@ stb-symmetry or stb-unitcell.)""",
     ml_rank_used = args.ml_rank
     if args.ml_rank:
         print_section("[3] ML RANKING (MACE)", f_out)
-        ranked = run_ml_rank([(n, p, iso) for n, p, iso, _ in results], model_arg, model_desc, f_out)
+        ranked = run_ml_rank([(n, p, iso) for n, p, iso, _ in results], model_arg, model_desc, f_out,
+                             device=args.device)
         results = [(n, p, iso, glabel) for (n, p, iso), (_, _, _, glabel)
                    in zip(ranked, results)]
 

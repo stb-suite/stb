@@ -39,19 +39,50 @@ def resolve_wavelength(spec):
     return value, f"{value:.5f} Ang"
 
 
+def _select_intensity_column(columns, path):
+    """Among the columns found after 2-theta, picks the LAST one that isn't
+    constant (same value on every line) as intensity. For a plain 2-column
+    file that's the only candidate anyway; for stb-xrd's own 6-column
+    `--save-gnuplot` output (2theta d h k l intensity) none of d/h/k/l/
+    intensity are constant for a real multi-peak pattern, so this still
+    picks the last (correct) column -- unchanged from the old unconditional
+    "always take the last column" rule.
+
+    Added after a real diffractometer '.int' export (2theta, intensity, an
+    always-zero third column -- an unpopulated esd/uncertainty field) was
+    silently misread as all-zero intensity by that old rule. A real
+    zero-everywhere "intensity" doesn't just give a wrong score -- it gives
+    NO score at all: pyxtal.XRD.Similarity's cosine-weighted metric divides
+    by (among other things) the zero-norm array, so `similarity_calculate`
+    returns a bare 0/0 -> nan with no exception and no report-visible error,
+    only a bare `RuntimeWarning: invalid value encountered in scalar
+    divide` that -- before this suite's own LIBRARY WARNINGS section
+    existed -- would have been very easy to miss entirely.
+
+    Raises ValueError if every candidate column is constant (nothing usable
+    -- e.g. a file with only 2-theta and one all-zero column).
+    """
+    candidates = [i for i, col in enumerate(columns) if max(col) != min(col)]
+    if not candidates:
+        raise ValueError(
+            f"'{path}': every column after 2-theta is constant (no usable intensity "
+            "signal) -- check the file's column order/format.")
+    return columns[candidates[-1]]
+
+
 def read_experimental_pattern(path):
-    """Reads a 2-theta/intensity text file: whitespace- or comma-separated,
-    blank lines and '#' comments skipped. Intensity is always taken from the
-    LAST column, 2-theta from the first -- for a plain 2-column file that's
-    the same thing, but it also makes stb-xrd's own `--save-gnuplot` output
-    (`xrd_pattern.dat`, 6 columns: 2theta d h k l intensity) a valid
-    `--compare-to` input directly, instead of silently reading its `d`
-    column (Ang, index 1) as intensity. Returns a (2, N) array -- the same
-    shape pyxtal.XRD.Similarity expects for both patterns it compares (it
+    """Reads a 2-theta/intensity(/...) text file: whitespace- or
+    comma-separated, blank lines and '#' comments skipped, 2-theta always
+    the first column. Every line must have the same number of columns.
+    Intensity is picked from the columns after 2-theta via
+    _select_intensity_column() (see its docstring for why "always the last
+    column" alone isn't safe). Returns a (2, N) array -- the same shape
+    pyxtal.XRD.Similarity expects for both patterns it compares (it
     interpolates internally, so this doesn't need to share a grid with a
     simulated pattern).
     """
-    two_theta, intensity = [], []
+    two_theta = []
+    columns = []
     with open(path) as f:
         for lineno, raw_line in enumerate(f, start=1):
             line = raw_line.strip()
@@ -61,14 +92,24 @@ def read_experimental_pattern(path):
             if len(parts) < 2:
                 continue
             try:
-                two_theta.append(float(parts[0]))
-                intensity.append(float(parts[-1]))
+                values = [float(p) for p in parts]
             except ValueError:
-                raise ValueError(f"'{path}' line {lineno}: expected two numbers, got '{line}'.")
+                raise ValueError(f"'{path}' line {lineno}: expected numbers, got '{line}'.")
+            rest = values[1:]
+            if not columns:
+                columns = [[] for _ in rest]
+            elif len(rest) != len(columns):
+                raise ValueError(
+                    f"'{path}' line {lineno}: expected {len(columns) + 1} column(s) "
+                    f"(matching earlier lines), got {len(values)}.")
+            two_theta.append(values[0])
+            for i, v in enumerate(rest):
+                columns[i].append(v)
     if len(two_theta) < MIN_EXPERIMENTAL_POINTS:
         raise ValueError(
             f"'{path}' has only {len(two_theta)} data point(s) -- at least "
             f"{MIN_EXPERIMENTAL_POINTS} are needed for the similarity comparison.")
+    intensity = _select_intensity_column(columns, path)
     return np.array([two_theta, intensity])
 
 

@@ -70,21 +70,20 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Analysis of the known-ground-truth fixture ---
 echo -e "\n--- Testing analysis recovers the known U ---"
-stb-hubbarduAnalysis --dir hubbardu_runs --no-intro > log_basic.txt 2>&1
+stb-hubbarduAnalysis --dir hubbardu_runs --save-gnuplot --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "0.300000 1/eV" log_basic.txt
-check_contains "0.200000 1/eV" log_basic.txt
-check_contains "R^2=1.0000" log_basic.txt
+check_contains "0.300000   | 5.000000  | 1.0000" log_basic.txt
+check_contains "0.200000   | 5.000000  | 1.0000" log_basic.txt
 check_contains "1.6667 eV" log_basic.txt
 check_success Mn_LDAU.fdf
 
 echo "Testing: per-run SCF convergence status is reported"
-check_contains "SCF: converged" log_basic.txt
-check_contains "SCF: NOT CONVERGED, used anyway" log_basic.txt
+check_contains "5.000000   | converged" log_basic.txt
+check_contains "NOT CONVERGED, used anyway" log_basic.txt
 
 echo "Testing: frozen-density runs that hit SCF_NOT_CONV (expected, by design) are reported as OK, not a warning"
-check_contains "SCF: frozen evaluation complete (stopped at MaxSCFIterations, as designed)" log_basic.txt
-if grep -A1 "frozen_alpha_0.0000" log_basic.txt | grep -q "NOT CONVERGED, used anyway"; then
+check_contains "frozen eval. complete (stopped at MaxSCFIterations, as designed)" log_basic.txt
+if grep "frozen_alpha_0.0000" log_basic.txt | grep -q "NOT CONVERGED, used anyway"; then
     echo -e "   -> ${RED}Failed:${NC} a frozen run's expected SCF_NOT_CONV was reported as a real problem"
     FAIL=$((FAIL+1))
 else
@@ -93,21 +92,22 @@ else
 fi
 
 echo "Testing: a convergence summary is reported, split between scf/reference and frozen runs"
-check_contains "Convergence summary:" log_basic.txt
+check_contains "Convergence summary    :" log_basic.txt
 check_contains "14/14 run(s) read" log_basic.txt
 check_contains "of the 7 self-consistent (scf/reference) run(s), 6/7 fully converged, 1 NOT converged" log_basic.txt
 check_contains "Frozen-density runs: 7/7 completed as expected" log_basic.txt
 
 echo "Testing: fit intercepts are reported"
-check_contains "intercept=5.000000" log_basic.txt
+check_contains "| Intercept |" log_basic.txt
 
-echo "Testing: a response plot (data + gplot) is generated"
-check_success Mn_hubbardu_response.dat
-check_success Mn_hubbardu_response.gplot
-check_contains "index 0" Mn_hubbardu_response.gplot
-check_contains "index 1" Mn_hubbardu_response.gplot
-check_contains "f_scf(x) = 0.30000000" Mn_hubbardu_response.gplot
-check_contains "f_frozen(x) = 0.20000000" Mn_hubbardu_response.gplot
+echo "Testing: a response plot (data + gplot) is generated under hubbardu_runs/plot/ (opt-in via --save-gnuplot)"
+check_success hubbardu_runs/plot/Mn_hubbardu_response.dat
+check_success hubbardu_runs/plot/Mn_hubbardu_response.gplot
+check_contains "index 0" hubbardu_runs/plot/Mn_hubbardu_response.gplot
+check_contains "index 1" hubbardu_runs/plot/Mn_hubbardu_response.gplot
+check_contains "f_scf(x) = 0.30000000" hubbardu_runs/plot/Mn_hubbardu_response.gplot
+check_contains "f_frozen(x) = 0.20000000" hubbardu_runs/plot/Mn_hubbardu_response.gplot
+check_contains "hubbardu_runs/plot/Mn_hubbardu_response.dat" log_basic.txt
 
 echo "Testing: no spurious sign/negative-U warnings on this well-behaved fixture"
 if grep -qE "OPPOSITE signs|Computed U is NEGATIVE" log_basic.txt; then
@@ -140,6 +140,9 @@ echo -e "\n--- Testing -o/--output ---"
 stb-hubbarduAnalysis --dir hubbardu_runs -o custom_LDAU.fdf --no-intro > log_output.txt 2>&1
 check_exit_code $? 0
 check_success custom_LDAU.fdf
+
+echo "Testing: gnuplot output is off by default (opt-in via --save-gnuplot only)"
+check_contains "not written (off by default" log_output.txt
 
 
 # --- 4. R^2 warning path (noisy/non-linear synthetic data) ---
@@ -313,7 +316,7 @@ SCF Convergence by DM+H criterion
 EOF
 done
 stb-hubbarduAnalysis --dir retry_runs --no-intro > log_retry.txt 2>&1
-check_contains "SCF: converged" log_retry.txt
+check_contains "converged" log_retry.txt
 if grep -q "NOT CONVERGED" log_retry.txt; then
     echo -e "   -> ${RED}Failed:${NC} a converged-on-retry .out should not be reported as not-converged"
     FAIL=$((FAIL+1))
@@ -358,10 +361,10 @@ for folder, occ in data.items():
 "
 stb-hubbarduAnalysis --dir nonpolarized_runs --no-intro > log_nonpolarized.txt 2>&1
 check_exit_code $? 0
-check_contains "occupation=5.000000" log_nonpolarized.txt
-check_contains "occupation=5.060000" log_nonpolarized.txt
-check_contains "occupation=4.940000" log_nonpolarized.txt
-if grep -q "occupation=2\." log_nonpolarized.txt; then
+check_contains "5.000000" log_nonpolarized.txt
+check_contains "5.060000" log_nonpolarized.txt
+check_contains "4.940000" log_nonpolarized.txt
+if grep -qE "2\.500000|2\.530000|2\.470000" log_nonpolarized.txt; then
     echo -e "   -> ${RED}Failed:${NC} a non-polarized run's occupation was NOT doubled (still using the per-spin value)"
     FAIL=$((FAIL+1))
 else
@@ -433,7 +436,10 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.7.3) ---"
 
 echo "Testing: navigate 4.7.3 -> defaults -> quit"
 rm -f Mn_LDAU.fdf
-printf '4.7.3\nhubbardu_runs\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# Prompts after 'hubbardu_runs': output_filename, r2_tolerance, output_file,
+# save_gnuplot, view, save_report (6), then the "Press Enter to continue" pause (1) = 7 blanks.
+printf '4.7.3\nhubbardu_runs\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+check_exit_code $? 0
 check_contains "1.6667 eV" log_menu.txt
 check_success Mn_LDAU.fdf
 

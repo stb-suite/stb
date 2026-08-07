@@ -218,6 +218,88 @@ def read_fdf(path: str) -> FdfStructure:
     )
 
 
+def read_relaxed_or_input(path: str) -> tuple[FdfStructure, bool]:
+    """Resolves either a bare .fdf file path or a folder containing a
+    structure.fdf (optionally with a finished SIESTA '*.XV') into an
+    FdfStructure, preferring the relaxed geometry when one is available.
+    Returns (structure, used_relaxed).
+
+    - `path` a file: identical to read_fdf(path), used_relaxed is always
+      True (an explicit file is trusted as-is -- the caller decided it's
+      the right geometry).
+    - `path` a directory: reads its 'structure.fdf' as the base (lattice/
+      species_meta/atom order/labels), and if a '*.XV' is also present in
+      that same directory, replaces the positions with the geometry SIESTA
+      actually converged to (sisl read) -- used_relaxed is True only when
+      a '*.XV' was found and used, False when the caller is getting back
+      the pre-relaxation guess.
+
+    This is the third consumer of "prefer a finished .XV over structure.fdf"
+    (after adsorb_bsse.py's read_relaxed_site_fdf and adsorb_analysis.py's
+    read_site_geometry_atoms), extracted here so stb-neb's own directory
+    -input support (--initial/--final pointing at a stb-nebSites site_*/
+    folder) doesn't need a fourth copy -- extract-on-(further)-use, same
+    policy as the rest of core/.
+
+    Raises FileNotFoundError if `path` is a directory with no
+    'structure.fdf' inside it. Raises ValueError if a '*.XV' is present but
+    its atom count OR its per-index species disagree with structure.fdf's
+    own (a mismatched/stale folder) -- SIESTA never reorders atoms during a
+    relaxation, only updates positions, so either mismatch means the '.XV'
+    does not actually belong to this structure.fdf, not a case to silently
+    misread by trusting position-by-index alone (a per-index species check
+    is the only way to catch two same-species atoms having been silently
+    swapped -- a count-only check can't see that at all).
+    """
+    if not os.path.isdir(path):
+        return read_fdf(path), True
+
+    fdf_path = os.path.join(path, "structure.fdf")
+    if not os.path.isfile(fdf_path):
+        raise FileNotFoundError(f"No 'structure.fdf' found in directory '{path}'.")
+    base = read_fdf(fdf_path)
+
+    xv_files = sorted(glob.glob(os.path.join(path, "*.XV")))
+    if not xv_files:
+        return base, False
+
+    from stb.core.deps import require_sisl
+    from stb.core import kspace
+    sisl = require_sisl()
+    geom = sisl.get_sile(xv_files[0]).read_geometry()
+    if len(geom.xyz) != len(base.atoms):
+        raise ValueError(
+            f"'{xv_files[0]}' has {len(geom.xyz)} atom(s), but '{fdf_path}' has "
+            f"{len(base.atoms)} -- mismatched/stale folder."
+        )
+    xv_symbols = [a.symbol for a in geom.atoms]
+    base_symbols = [symbol for symbol, _ in base.atoms]
+    if xv_symbols != base_symbols:
+        mismatches = [i for i, (a, b) in enumerate(zip(xv_symbols, base_symbols)) if a != b]
+        shown = mismatches[:10]
+        raise ValueError(
+            f"'{xv_files[0]}' and '{fdf_path}' disagree on atom species at index(es) "
+            f"{shown}{'...' if len(mismatches) > 10 else ''} (e.g. index {mismatches[0]}: "
+            f"'.XV' has {xv_symbols[mismatches[0]]!r}, structure.fdf expects "
+            f"{base_symbols[mismatches[0]]!r}) -- SIESTA never reorders atoms during a "
+            "relaxation, only updates positions, so a per-index species mismatch means this "
+            "'.XV' does not actually belong to this 'structure.fdf' (a stale/regenerated "
+            "folder), not a case to silently misread by trusting position-by-index alone."
+        )
+    frac_coords = kspace.to_fractional(np.asarray(geom.xyz), base.lattice, True)
+    new_atoms = [(symbol, frac_coords[i]) for i, (symbol, _pos) in enumerate(base.atoms)]
+    relaxed = FdfStructure(
+        lattice=base.lattice,
+        lattice_constant=base.lattice_constant,
+        species=base.species,
+        species_meta=base.species_meta,
+        atoms=new_atoms,
+        coord_format="fractional",
+        raw_lines=[],
+    )
+    return relaxed, True
+
+
 def lattice_only(path_or_structure: str | FdfStructure) -> np.ndarray:
     """Physical lattice matrix (LatticeConstant applied), given a path or an already-read FdfStructure."""
     structure = read_fdf(path_or_structure) if isinstance(path_or_structure, str) else path_or_structure
@@ -344,10 +426,17 @@ def from_pymatgen(
 
     lattice_constant is always 1.0 (the physical lattice is written out as-is,
     matching write_fdf()'s expectations). If species_meta is given (typically
-    the original structure's, via species_dict()), its 'id' assignments are
-    reused for any symbol present in it, so species numbering stays stable
-    across the transformation; any symbol not in it gets the next free id
-    (see ensure_species_id()), with 'Z' looked up from the periodic table.
+    the original structure's, via species_dict()), its entries are reused for
+    any symbol present in it (so 'Z' doesn't need re-deriving); any symbol not
+    in it gets a placeholder id via ensure_species_id(), with 'Z' looked up
+    from the periodic table. The final 'id' for every species is then
+    renumbered fresh to 1..N in `species` order regardless of what was reused
+    or newly assigned above -- write_fdf() does this same renumbering again
+    at write time (belt-and-suspenders: SIESTA requires sequential, gap-free
+    ids, and a species_meta reused from a structure that has since lost a
+    species elsewhere -- e.g. after a supercell/filter/defect operation --
+    would otherwise carry that gap forward as a stale, non-sequential id
+    even before reaching write_fdf).
     """
     symbols = [site.specie.symbol for site in structure]
     species = list(dict.fromkeys(symbols))
@@ -361,6 +450,21 @@ def from_pymatgen(
     for symbol in species:
         if symbol not in meta:
             meta = ensure_species_id(meta, symbol)
+
+    # Fresh sequential ids (1..N, no gaps), assigned in the RELATIVE order implied
+    # by each species' id already in `meta` at this point -- not `species`' own
+    # iteration order (first-occurrence in `structure`'s own site list), which
+    # need not match a caller-supplied species_meta's intended id ordering. Real
+    # regression caught live: crystalcast.py builds species_meta assigning ids in
+    # --species argument order, independent of the order species happen to
+    # appear in the generated pymatgen Structure's own site list -- using
+    # `species`' order alone silently renumbered by the wrong order, flipping
+    # which species got id 1. Sorting by the already-assigned id first (either
+    # the caller's own, or the fresh one ensure_species_id just gave a brand-new
+    # symbol above) both closes any gap AND preserves that ordering intent.
+    ordered_by_old_id = sorted(species, key=lambda s: int(meta[s]["id"]))
+    for i, symbol in enumerate(ordered_by_old_id, start=1):
+        meta[symbol]["id"] = str(i)
 
     is_cartesian = coord_format == "cartesian"
     atoms = [
@@ -389,6 +493,18 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
     desired format (e.g. via a fractional/cartesian conversion done by the
     caller) before calling this.
 
+    Species ids (the integer in %block ChemicalSpeciesLabel, also referenced
+    in each atom's 4th coordinate column) are always freshly renumbered 1..N
+    here, in `species_with_atoms` order -- NOT read verbatim from
+    structure.species_meta[symbol]['id']. SIESTA requires this numbering to
+    be sequential with no gaps; species_meta's own stored id can go stale
+    (e.g. a species originally declared as #2 gets filtered out here for
+    having zero atoms, leaving #1/#3/#4 in the surviving set) since nothing
+    upstream renumbers on a species removal. Renumbering at the one point
+    every .fdf write in this suite funnels through fixes it everywhere at
+    once, rather than requiring every caller to keep its own species_meta
+    gap-free.
+
     `header_comment`, if given, overrides the default single-line
     "# automatic create using stb-translate..." header -- a string (one
     line) or a list of strings (one comment line each), for a caller that
@@ -403,6 +519,18 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
     species_with_atoms = [s for s in structure.species if atoms_by_species.get(s)]
     if not species_with_atoms:
         raise ValueError("Cannot write .fdf: no species with at least one atom.")
+    # Fresh sequential ids (1..N, no gaps), assigned in the RELATIVE order implied
+    # by each species' EXISTING species_meta id -- not species_with_atoms' own
+    # iteration order (structure.species' first-occurrence-in-atoms order), which
+    # need not match the caller's intended id ordering. Real regression caught
+    # live: crystalcast.py assigns ids via ensure_species_id in --species
+    # argument order, independent of the order species happen to appear in the
+    # generated structure's own atom list -- enumerate(species_with_atoms) alone
+    # silently renumbered by the wrong order, flipping which species got id 1.
+    # Sorting by the existing id first both closes any gap AND preserves
+    # whatever ordering intent the caller already encoded in species_meta.
+    ordered_by_old_id = sorted(species_with_atoms, key=lambda s: int(structure.species_meta[s]['id']))
+    fresh_ids = {symbol: str(i) for i, symbol in enumerate(ordered_by_old_id, start=1)}
 
     raw_lattice = raw_lattice_vectors(structure)
     coord_label = "Fractional" if structure.coord_format == "fractional" else "Ang"
@@ -424,7 +552,7 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
     ]
     for symbol in species_with_atoms:
         meta = structure.species_meta[symbol]
-        lines.append(f" {meta['id']}   {meta['Z']}   {symbol}\n")
+        lines.append(f" {fresh_ids[symbol]}   {meta['Z']}   {symbol}\n")
     lines.append("%endblock ChemicalSpeciesLabel\n\n")
     lines.append(f"LatticeConstant {structure.lattice_constant} Ang\n\n")
     lines.append(f"AtomicCoordinatesFormat  {coord_label}\n\n")
@@ -434,7 +562,7 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
     lines.append("%endblock LatticeVectors\n\n")
     lines.append("%block AtomicCoordinatesAndAtomicSpecies\n")
     for symbol in species_with_atoms:
-        species_id = structure.species_meta[symbol]["id"]
+        species_id = fresh_ids[symbol]
         for pos in atoms_by_species[symbol]:
             lines.append(f"  {pos[0]:.8f}   {pos[1]:.8f}   {pos[2]:.8f}   {species_id}\n")
     lines.append("%endblock AtomicCoordinatesAndAtomicSpecies\n")

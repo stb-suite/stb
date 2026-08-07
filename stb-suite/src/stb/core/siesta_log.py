@@ -543,6 +543,36 @@ def get_max_force(path: str) -> float | None:
     return max_force
 
 
+def read_fa_forces(fa_path: str) -> np.ndarray | None:
+    """Reads ALL atomic forces (eV/Ang) from a SIESTA .FA file -- format:
+    first line = atom count, then one row per atom '<1-based index> Fx Fy
+    Fz'. Returns an (natoms, 3) array, or None on any read/parse failure
+    (same fail-soft contract as every other parser in this module).
+
+    Promoted here from mlff_analysis.py once neb_cycle.py became a second
+    consumer -- extract-on-second-use, same policy as the rest of core/.
+    mlff_analysis.py's own read_fa_forces() (which itself generalized
+    her_analysis.py::read_fa_force's single-atom version) now just imports
+    this instead of keeping a local copy.
+    """
+    try:
+        with open(fa_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return None
+    try:
+        n = int(lines[0].split()[0])
+    except (IndexError, ValueError):
+        return None
+    if len(lines) < n + 1:
+        return None
+    try:
+        forces = np.array([[float(x) for x in lines[i + 1].split()[1:4]] for i in range(n)])
+    except (IndexError, ValueError):
+        return None
+    return forces
+
+
 def check_scf_and_force(out_path: str) -> tuple[bool, float | None]:
     """Returns (scf_converged, max_force) for one SIESTA .out file -- a
     thin wrapper over get_scf_convergence/get_max_force above. Neither

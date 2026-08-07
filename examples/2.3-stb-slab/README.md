@@ -230,5 +230,5 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 
 See `2.2-stb-supercell/` for a different structure-transform tool (an
 integer tiling matrix instead of a Miller-index cut), or
-`1.6-stb-mlrelax/` for a closer look at the MACE pre-relaxation
+`1.7-stb-mlrelax/` for a closer look at the MACE pre-relaxation
 `--ml-relax` reuses here.

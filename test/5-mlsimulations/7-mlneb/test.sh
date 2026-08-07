@@ -178,7 +178,7 @@ check_contains "idpp" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 5.7) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.7) ---"
 rm -rf interactive_out
-printf '5.7\nvac_initial.fdf\nvac_final.fdf\n\nsmall\n5\nn\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.7\nvac_initial.fdf\nvac_final.fdf\n\nsmall\n\n5\nn\ninteractive_out\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/neb_preview.png
 check_success interactive_out/neb_path.xyz

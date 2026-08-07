@@ -189,7 +189,7 @@ stb-inputfile structure.fdf -t relax -p dojo --view
 
 `stb-inputfile`'s `bands` mode writes a `calc.fdf` that references
 `%include kpath_bs.fdf`, but doesn't generate that file itself — that's
-`stb-kpath`'s (code 1.3) job. The script calls it too, so `output/bands/`
+`stb-kpath`'s (code 1.4) job. The script calls it too, so `output/bands/`
 ends up genuinely complete instead of missing a file SIESTA would need.
 
 ### Why dimensionality matters

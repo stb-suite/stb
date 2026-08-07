@@ -13,10 +13,13 @@ mechanics (ASCII logo, colors, borders, line-by-line reveal) are shared.
 from __future__ import annotations
 
 import os
+import io
 import re
 import sys
 import time
+import warnings
 import threading
+import contextlib
 from time import sleep
 
 COLORS = {
@@ -138,6 +141,40 @@ def print_table(headers, rows, f_out=None) -> None:
     for cells, color in rows:
         line = " | ".join(f"{c:<{w}}" for c, w in zip(cells, widths))
         print_dual(color_text(line, color) if color else line, f_out)
+
+
+@contextlib.contextmanager
+def capture_library_noise(collector, label):
+    """Captures stdout prints and warnings.warn() calls made by external
+    libraries (MACE/torch/phonopy/spglib/pymatgen) during the wrapped block,
+    instead of letting them interleave with a tool's own numbered report --
+    appended to `collector` (a list of strings) and printed together, once,
+    in a final LIBRARY WARNINGS section instead. A caller's own print_dual
+    output never goes through here (only third-party calls are wrapped), so
+    nothing from the report itself is ever captured/delayed. Moved here from
+    phonons_create.py once xrdsearch.py became a second consumer of the
+    exact same "collect noisy third-party output, report it once at the
+    end" need.
+    """
+    buf = io.StringIO()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with contextlib.redirect_stdout(buf):
+            yield
+    text = buf.getvalue().strip()
+    if text:
+        collector.append(f"[{label}]\n{text}")
+    # De-duplicated by message text -- torch/mace commonly re-emit the exact
+    # same DeprecationWarning once per call site internally (e.g. one per
+    # torch.jit.load), which would otherwise print a dozen+ identical lines
+    # here for a single underlying issue.
+    seen = {}
+    for w in caught:
+        key = f"{w.category.__name__}: {w.message}"
+        seen[key] = seen.get(key, 0) + 1
+    for key, count in seen.items():
+        suffix = f" (x{count})" if count > 1 else ""
+        collector.append(f"[{label}] {key}{suffix}")
 
 
 def run_with_spinner(func, *args, label: str = "Working", **kwargs):

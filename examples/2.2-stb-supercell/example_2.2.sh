@@ -184,7 +184,7 @@ cat <<'EOF'
 --ml-relax pre-relaxes the just-BUILT supercell with a MACE potential before
 writing it out (positions only by default) -- e.g. before hand-editing in a
 defect, or as a fast heuristic pass before a real SIESTA relaxation, same
-idea as stb-mlrelax (see 1.6-stb-mlrelax/). --ml-relax-cell additionally
+idea as stb-mlrelax (see 1.7-stb-mlrelax/). --ml-relax-cell additionally
 relaxes the cell itself. The report shows the full simulation detail: model
 parameter count/cutoff radius, steps used, convergence, wall time, and a
 before/after table -- energy, max force, and, with --ml-relax-cell, the

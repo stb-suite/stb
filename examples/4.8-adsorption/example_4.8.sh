@@ -1,20 +1,24 @@
 #!/bin/bash
 # Guided example: Adsorption workflow
-# (stb-adsorb / stb-adsorbBsse / stb-adsorbAnalysis, codes 4.8.1/4.8.2/4.8.3)
+# (stb-adsorb / stb-adsorbBsse / stb-adsorbAnalysis / stb-adsorbGibbs,
+# codes 4.8.1/4.8.2/4.8.3/4.8.4)
 #
-# Not an automated test (see test/4-workflow/8-adsorption/{prep,bsse,analysis}/
+# Not an automated test (see test/4-workflow/8-adsorption/{prep,bsse,analysis,gibbs}/
 # test.sh for that) -- a commented walk-through: it runs real commands, one
 # group at a time, and shows you the piece of output that proves what just
 # happened. It pauses between sections so you can read before moving on.
 #
 # stb-adsorb and stb-adsorbBsse are exercised for real (they only write
-# input files, never run SIESTA themselves). stb-adsorbAnalysis needs real
-# SIESTA .out files to analyze, which this walkthrough doesn't have -- so
-# the full-chain worked example (Section "output/workflow/" below)
-# fabricates calc.out files with a hand-chosen set of energies designed to
-# make one very concrete point: the BSSE correction can, and here does,
-# CHANGE which site you'd conclude is the most stable one. See the
-# README's Section 4 for the full arithmetic and why each number was
+# input files, never run SIESTA themselves). stb-adsorbAnalysis/stb-adsorbGibbs
+# need real SIESTA .out/.FA files to analyze, which this walkthrough doesn't
+# have -- so the full-chain worked example (Section "output/workflow/" below)
+# fabricates calc.out/.FA files with a hand-chosen set of energies/forces
+# designed to make two very concrete points: the BSSE correction can, and
+# here does, CHANGE which site you'd conclude is the most stable one (Stage
+# 3); and the electronic/BSSE-corrected E_ads alone doesn't tell you whether
+# adsorption is actually thermodynamically favorable once the isolated
+# reference's real translational entropy cost is included (Stage 4). See the
+# README's Sections 8 and 13 for the full arithmetic and why each number was
 # picked.
 
 set -e
@@ -60,6 +64,50 @@ write_freeeng() {
     local path="$1" energy="$2" maxforce="${3:-0.020000}"
     printf 'siesta: FreeEng =    %s\nSCF cycle converged after 12 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    %s\n' \
         "$energy" "$maxforce" > "$path"
+}
+
+# Fabricates a 'relaxed' siesta.XV for a single-atom isolated reference --
+# nothing to relax (one atom, no internal forces), so this just re-writes
+# its own structure.fdf position unchanged. Satisfies --compute-gibbs's
+# requirement that the isolated reference already be relaxed.
+fabricate_atom_xv() {
+    local dir="$1"
+    python3 -c "
+import sisl
+from stb.core import structure_io
+fdf = structure_io.read_fdf('$dir/structure.fdf')
+pmg = structure_io.to_pymatgen(fdf)
+atoms = [sisl.Atom(str(s.specie)) for s in pmg]
+geom = sisl.Geometry(pmg.cart_coords, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+sisl.get_sile('$dir/siesta.XV', mode='w').write_geometry(geom)
+"
+}
+
+# Writes all 6 disp_NNN/<system_label>.FA files for one Gibbs-prep local
+# -Hessian folder: an isotropic harmonic spring of stiffness k (eV/Ang^2)
+# on the single moved local atom (1-based index moved_1based, out of
+# natoms total in that folder's structure.fdf), zero force on every other
+# atom. k=0 models a genuinely free particle -- nothing restoring it, zero
+# force at every displacement, the same "free atom" fixture
+# test/4-workflow/8-adsorption/gibbs/test.sh already verifies gives
+# ZPE=0.0 exactly.
+write_hessian_fa() {
+    local gibbs_dir="$1" label="$2" natoms="$3" moved_1based="$4" k="$5"
+    python3 -c "
+k = $k
+d = 0.015
+order = [(0,1.0),(0,-1.0),(1,1.0),(1,-1.0),(2,1.0),(2,-1.0)]
+for i, (axis, sign) in enumerate(order, start=1):
+    force = [0.0, 0.0, 0.0]
+    force[axis] = -sign * k * d
+    with open(f'$gibbs_dir/disp_{i:03d}/$label.FA', 'w') as f:
+        f.write('$natoms\n')
+        for atom in range(1, $natoms + 1):
+            if atom == $moved_1based:
+                f.write(f'{atom} {force[0]:.8f} {force[1]:.8f} {force[2]:.8f}\n')
+            else:
+                f.write(f'{atom} 0.0 0.0 0.0\n')
+"
 }
 
 echo "=================================================================="
@@ -111,7 +159,7 @@ echo
 echo "Single-atom adsorbates are forced spin-polarized in their OWN isolated"
 echo "reference (many, like O, have a non-zero ground-state spin), while the"
 echo "combined slab+adsorbate calc.fdf is left exactly as you gave it:"
-grep "single atom" "$OUT/stage1_console.log"
+grep "non-zero ground-state spin" "$OUT/stage1_console.log"
 pause
 
 echo "=================================================================="
@@ -264,6 +312,52 @@ fi
 [ -s "$RUN/best_production.fdf" ] && echo "--apply wrote '$RUN/best_production.fdf' from the BSSE-corrected winner."
 pause
 
+echo "--- Stage 3b (stb-adsorbAnalysis --compute-gibbs): prep Stage 4's Hessian folders ---"
+cat <<'EOF'
+Stage 4 needs a vibrational Hessian at the winning site (site_1_ontop, the
+BSSE-corrected winner from Stage 3) AND at the isolated-adsorbate reference
+-- both must already be relaxed. A single O atom "relaxes" trivially
+(nothing to move), so its own siesta.XV is fabricated the same way as the
+sites above, just without any shift.
+EOF
+fabricate_atom_xv "$RUN/adsorbate"
+echo
+echo "\$ stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local"
+(cd "$RUN" && stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local --no-intro \
+    > "$OUT/workflow_stage3b.log")
+sed -n '/\[6\] GIBBS FREE ENERGY (DG) PREP/,/^$/p' "$OUT/workflow_stage3b.log"
+ls "$RUN/gibbs"
+pause
+
+echo "--- Fabricating the Hessian force data ---"
+cat <<'EOF'
+The SITE's adsorbed O atom gets a real, isotropic ~400 cm^-1 restoring
+force (k=10 eV/Ang^2 in all 3 directions -- a plausible adatom-surface
+vibration). The ISOLATED reference's O atom gets EXACTLY ZERO force at
+every displacement: a truly free atom has nothing to restore it, so its
+local Hessian is identically zero -- it has NO vibrational modes at all
+(ZPE=0 exactly, the same invariant test/4-workflow/8-adsorption/gibbs/
+test.sh verifies directly) -- but it still has real TRANSLATIONAL entropy,
+since it's free to move around in 3D. That's exactly this session's fix:
+before it, a free atom's isolated reference contributed ZERO entropy too,
+which is not physically correct.
+EOF
+NATOMS_SITE=$(grep -i "^NumberofAtoms" "$RUN/sites/site_1_ontop/structure.fdf" | awk '{print $2}')
+write_hessian_fa "$RUN/gibbs/site_1_ontop" gibbs_site "$NATOMS_SITE" "$NATOMS_SITE" 10.0
+write_hessian_fa "$RUN/gibbs/O_isolated" gibbs_isolated 1 1 0.0
+echo "site_1_ontop has $NATOMS_SITE atoms total (substrate + the adsorbed O, always last)."
+pause
+
+echo "--- Stage 4 (stb-adsorbGibbs): DG(T) = E_ads + DZPE - T*DS ---"
+echo "\$ stb-adsorbGibbs --dir adsorption_run --save-report --tmin 200 --tmax 400 --tstep 100"
+(cd "$RUN" && stb-adsorbGibbs --dir . --save-report --tmin 200 --tmax 400 --tstep 100 --no-intro \
+    > "$OUT/workflow_stage4.log")
+sed -n '/\[2\] VIBRATIONAL\/THERMAL TERMS/,/\[3\] GIBBS FREE ENERGY/p' "$OUT/workflow_stage4.log" | head -n -1
+sed -n '/\[3\] GIBBS FREE ENERGY vs\. TEMPERATURE/,/\[Saved\]/p' "$OUT/workflow_stage4.log"
+echo
+ls "$RUN/adsorption_gibbs.png" "$RUN/adsorption_mode_spectrum.png"
+pause
+
 echo "=================================================================="
 echo " Proof: CLI and the interactive stb-suite menu agree (Stage 1)"
 echo "=================================================================="
@@ -304,8 +398,10 @@ Folders generated under output/:
   stage1_bothsides/        workflow/
 
 output/workflow/adsorption_run/ has the full chain: clean_slab/, adsorbate/,
-sites/site_*/, bsse/site_*/, adsorption_report.txt, adsorption_bsse_report.txt,
-adsorption_ranking.png, and best_production.fdf (the BSSE-corrected winner).
+sites/site_*/, bsse/site_*/, gibbs/, adsorption_report.txt,
+adsorption_bsse_report.txt, adsorption_gibbs_report.txt, adsorption_ranking.png,
+adsorption_gibbs.png, adsorption_mode_spectrum.png, and best_production.fdf
+(the BSSE-corrected winner).
 
 As a next step, on your OWN slab/2D structure:
   stb-adsorb -s <structure.fdf> -c <calc.fdf> --adsorbate <El-or-molecule> \
@@ -314,4 +410,8 @@ As a next step, on your OWN slab/2D structure:
   stb-adsorbBsse --dir adsorption_run
   # run SIESTA in every bsse/site_*/bsse_slab/ and bsse/site_*/bsse_adsorbate/, then:
   stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
+  # optionally, for a Gibbs free energy of adsorption:
+  stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local
+  # run SIESTA in every adsorption_run/gibbs/*/disp_*/ folder, then:
+  stb-adsorbGibbs --dir adsorption_run --save-report
 EOF

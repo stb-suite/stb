@@ -33,12 +33,15 @@ calculations is corrected for. This item has **four** stages:
   folders, once you've run SIESTA in them, into an actual Gibbs free
   energy of adsorption, `DG(T) = E_ads + DZPE - T*DS` (Section 13).
 
-`example_4.8.sh` is a guided, runnable walkthrough of all three stages —
-**including a worked numeric example (Section 4) where the BSSE
-correction changes which site you'd conclude is the most stable one.**
-That is the single most important thing to take from this page: an
-uncorrected adsorption-energy ranking is not just "a little too negative,"
-it can point at the wrong site outright.
+`example_4.8.sh` is a guided, runnable walkthrough of all four stages —
+**including a worked numeric example (Section 8) where the BSSE
+correction changes which site you'd conclude is the most stable one, and a
+second one (Section 13.4) where accounting for entropy turns a favorable
+adsorption unfavorable above room temperature.** Those are the two most
+important things to take from this page: an uncorrected adsorption-energy
+ranking is not just "a little too negative," it can point at the wrong site
+outright — and even a BSSE-corrected `E_ads` is only the electronic part of
+the story, not the full thermodynamic answer.
 
 ## 1. Why the cell stays fixed
 
@@ -422,10 +425,11 @@ relaxed)` / `SKIP (missing calc.out)`).
 
 ## 9. Known, deliberate limitations
 
-- **No SIESTA run is ever performed by this suite.** All three stages
+- **No SIESTA run is ever performed by this suite.** All four stages
   generate/read input and output files; you run SIESTA yourself in
-  `clean_slab/`, every `adsorbate*/`, every `sites/site_*/`, and every
-  `bsse/site_*/bsse_slab/`+`bsse_adsorbate/`, in between stages.
+  `clean_slab/`, every `adsorbate*/`, every `sites/site_*/`, every
+  `bsse/site_*/bsse_slab/`+`bsse_adsorbate/`, and every
+  `gibbs/*/disp_*/`, in between stages.
 - **`--no-force-spin` leaves the combined slab+adsorbate calculation's
   `Spin` setting up to you.** By default (Section 5) both the isolated
   reference AND every `sites/site_*/` folder are forced spin-polarized; if
@@ -446,11 +450,20 @@ relaxed)` / `SKIP (missing calc.out)`).
   different single `--site-type` values silently drops the earlier call's
   site-table row** (Section 5) — use one `--site-type all --all-sites`
   call, or separate output directories, instead.
-- **Stage 4's Gibbs free energy is not a full ideal-gas thermodynamic
-  treatment** (Section 13) — the isolated-adsorbate reference's own ZPE/
-  entropy is vibrational/harmonic only, with no translational/rotational
-  gas-phase entropy term. Exact for a single-atom adsorbate (a free atom
-  has no vibrational modes at all); an approximation for a polyatomic one.
+- **Stage 4's Gibbs free energy is a harmonic-approximation treatment, not
+  an anharmonic one** (Section 13) — `ZPE`/entropy come from a harmonic
+  Hessian (site) and `ase.thermochemistry.IdealGasThermo` (isolated
+  reference, full translational+rotational+vibrational as of this session
+  — no longer vibrational-only), both standard, but neither captures real
+  anharmonic effects (thermal expansion of the well, mode coupling). The
+  isolated reference's standard-state pressure is also fixed at 1 bar, not
+  user-configurable.
+- **`--zpe-mode local`'s site-side treatment is a decoupled-oscillator
+  approximation** — only the adsorbate's own atoms are displaced (substrate
+  frozen), ignoring any coupling between the adsorbate's vibrations and the
+  substrate's own phonons. `--zpe-mode full` removes this approximation (a
+  real phonon calculation of the whole structure) at the cost of far more
+  SIESTA jobs.
 - **Orientation deduplication (Section 14.2) doesn't correct for periodic
   wraparound** — RMSD is a direct Cartesian comparison, no minimum-image
   convention. Not expected to matter in practice (every orientation for one
@@ -480,7 +493,11 @@ relaxed)` / `SKIP (missing calc.out)`).
    -adsorbate reference to already be relaxed.
 7. If you passed `--compute-gibbs`: run SIESTA yourself in every
    `adsorption_run/gibbs/*/disp_*/` folder, then run Stage 4:
-   `stb-adsorbGibbs --dir adsorption_run --save-report`.
+   `stb-adsorbGibbs --dir adsorption_run --save-report --tmin <T1> --tmax <T2>`
+   covering whatever temperature range you actually care about. Read `D0`
+   (the electronic+ZPE part) alongside `DG(T)` (the full answer, including
+   entropy) — don't assume they agree (Section 13.4); check the estimated
+   desorption temperature (`[3b]`) against your own operating conditions.
 
 ## 11. Files in this folder
 
@@ -503,7 +520,7 @@ relaxed)` / `SKIP (missing calc.out)`).
 | `output/stage1_lateral_warning/` | same command | Section 3.2's lateral self-interaction `[WARNING]`, live |
 | `output/stage1_fixed/` | `stb-supercell -d 4 4 1` then `stb-adsorb --site-type all --all-sites` | the warning fixed by tiling; the `[2]` candidate-count table |
 | `output/stage1_bothsides/` | `stb-adsorb --adsorbate H --both-sides` | 2D free-standing material, both faces |
-| `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 | **the worked example (Section 8): BSSE flips the ranking** |
+| `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 → Stage 3b (`--compute-gibbs`) → (fabricated Hessian `.FA`) → Stage 4 | **the worked examples (Section 8: BSSE flips the ranking; Section 13.4: entropy flips DG unfavorable above ~331 K)** |
 | *(no folder — a diff only)* | Stage 1 via `printf … \| stb-suite` | proof the interactive menu (`4.8.1`) agrees with the CLI |
 
 ## 13. Stage 3 diagnostics/suggestions, and Stage 4 — Gibbs free energy (`stb-adsorbGibbs`, code `4.8.4`)
@@ -516,12 +533,19 @@ Stage 3 does more than just rank `E_ads` values now:
   adsorbate-slab distance changed between the pre-relaxation guess and the relaxed
   geometry — a quick sanity check that the adsorbate actually moved toward the
   surface during relaxation, not away from it.
+- **`[2c] BSSE BREAKDOWN`** — once Stage 2 has run, the raw ghost-fragment energies
+  (`E_bsse_slab`/`E_bsse_adsorbate`) behind every site's `E_ads_BSSE`, plus the
+  correction's shift in both eV and as a percentage of the uncorrected `E_ads` — for
+  *every* site with BSSE data, not just the winner Section 8's summary line already
+  reports. Useful for spotting a site where BSSE is a disproportionately large
+  fraction of the whole binding energy (a sign the LCAO basis may be too small for
+  that particular geometry).
 - **`[5] SUGGESTED NEXT ANALYSES`** — points you at other tools in the suite worth
   running on the winning site (`stb-bader`, `stb-dos`, `stb-workfunction`,
   `stb-coop`), each conditional on a SIESTA output file Stage 1 doesn't force on its
   own (e.g. `.RHO`, `.PDOS.xml`).
 
-### 13.1 The DG formula
+### 13.1 The DG formula, and what it physically means
 
 A plain `E_ads` is an electronic-energy-only number — it ignores that the adsorbate
 actually vibrates in its adsorption well (zero-point energy) and that vibrating
@@ -531,26 +555,192 @@ degrees of freedom carry entropy. The full correction:
 DG(T) = E_ads (BSSE-corrected if available, else raw)
         + [ZPE(site) - ZPE(isolated reference)]
         - T * [S(site) - S(isolated reference)]
+      = D0 - T * DS
 ```
 
 `ZPE(site)`/`S(site)` come from a vibrational Hessian of the adsorbate's own atoms at
 the winning site (substrate frozen — a decoupled-oscillator approximation, `--zpe-mode
 local`, the default; `--zpe-mode full` instead runs a real Phonopy phonon calculation
 of the entire site structure minus the clean slab's own phonons, far more SIESTA jobs
-but no decoupling approximation). `ZPE(isolated reference)`/`S(isolated reference)`
-always come from a full-molecule Hessian of the isolated-adsorbate reference alone —
-there's no periodic substrate to freeze/subtract for a molecule in a vacuum box, so
-`--zpe-mode` only ever changes the SITE side.
+but no decoupling approximation). These are standard harmonic-oscillator ZPE/entropy
+sums over whichever normal modes come out with a genuinely positive frequency — a
+substrate-frozen adsorbate has no exact zero modes to worry about, so any negative
+eigenvalue found here is a real red flag (an unconverged geometry), not a symmetry
+artifact.
 
-**Known limitation, printed in every Stage 4 report**: the isolated-reference term is
-vibrational/harmonic only — no translational/rotational ideal-gas entropy. Exact for a
-single-atom adsorbate (verified: a genuinely free atom gives exactly zero ZPE/entropy
-once its 3 trivial translational modes are excluded); an approximation for a
-polyatomic one, in the same spirit as (though computed differently from) `stb-her`/
-`stb-oer`'s own use of a fixed literature entropy for their H2/H2O gas-phase
-references.
+`ZPE(isolated reference)`/`S(isolated reference)` always come from a full-molecule
+Hessian of the isolated-adsorbate reference alone — there's no periodic substrate to
+freeze/subtract for a molecule in a vacuum box, so `--zpe-mode` only ever changes the
+SITE side. **This is where a real, quantitatively significant bug was fixed this
+session.** A free molecule/atom has 3 translational + (3 for nonlinear, 2 for linear,
+0 for monatomic) rotational rigid-body zero modes that carry no vibrational ZPE/entropy
+of their own — but the finite-difference Hessian construction has no way to make these
+land at exactly zero; roughly half typically come out numerically negative
+("imaginary") and half numerically positive, purely from floating-point noise. The
+isolated reference now selects exactly the `3N-6`/`3N-5`/`0` **highest-frequency**
+modes as genuine vibrations (`ase.thermochemistry.IdealGasThermo`'s own count-based
+selection, mirrored here explicitly so the split is visible in the report) — not by
+sign. Treating the isolated reference as a genuine ideal gas this way also means it now
+gets its **real translational (and, for a polyatomic adsorbate, rotational) entropy**
+(Sackur-Tetrode + rigid-rotor formulas, at a fixed 1 bar standard-state pressure,
+symmetry-number-aware via `core/symmetry.py::point_group_details`) — previously it
+contributed vibrational entropy only, silently missing the dominant entropy term for
+any small, weakly-bound adsorbate. Verified directly against gas-phase water's known
+experimental standard entropy (188.8 J/(mol·K) at 298.15 K, matched to <0.1%) before
+being trusted for a real calculation.
 
-### 13.2 Running it
+Physically, this matters because a free gas-phase species carries a lot of entropy
+(freedom to translate and rotate in 3D) that it mostly loses upon binding to a surface
+(it can now only vibrate in place). `DTS = T*[S(site) - S(isolated reference)]` is
+therefore usually strongly negative and grows in magnitude with `T` — meaning `DG`
+becomes progressively **less** favorable than the raw electronic `E_ads` as temperature
+rises, exactly the trend Section 13.4's worked example below shows numerically.
+
+### 13.2 Input parameters
+
+`stb-adsorbAnalysis --compute-gibbs` (Stage 3's opt-in Gibbs-prep step):
+
+| Flag | Meaning |
+|---|---|
+| `--compute-gibbs` | Writes the Hessian/phonon displacement folders for the BSSE-corrected (or, if unavailable, uncorrected) winning site. Off by default; needs the winning site AND its isolated-adsorbate reference to already have a finished `siesta.XV` — a clean `[ERROR]`, not a silent fallback to the pre-relaxation guess, if either isn't relaxed yet. |
+| `--zpe-mode {local,full}` | `local` (default): a partial-Hessian, decoupled-oscillator approximation — only the SITE's adsorbate atoms are displaced, substrate frozen, 6 folders per atom. `full`: a real Phonopy phonon calculation of the ENTIRE site structure and the clean slab (so Stage 4 can subtract the clean slab's own phonon ZPE/entropy) — physically more rigorous, far more SIESTA jobs (`6*3*N_atoms` displacements for an `N`-atom structure, vs. `6*N_adsorbate_atoms` for `local`). The isolated reference always uses `local` regardless — a molecule in vacuum has no periodic substrate phonon to subtract, so `full`'s extra machinery buys nothing there. |
+| `--displacement` | Finite-difference displacement, in Ang (default 0.015) — same physical role as `stb-phononsCreate`'s own displacement, smaller values are more harmonic but noisier, larger values sample more anharmonicity. |
+| `--gibbs-supercell` | `--zpe-mode full` only: supercell dimensions for the site+clean-slab phonon calculations (default `1 1 1`, appropriate once the slab's own in-plane supercell — Section 3.2 — is already large enough). |
+
+`stb-adsorbGibbs` (Stage 4 itself):
+
+| Flag | Meaning |
+|---|---|
+| `--dir` | Root directory containing `gibbs/`/`sites/`/`clean_slab/` (default `adsorption_run`). |
+| `--file` | SIESTA output filename inside each folder (default `calc.out`). |
+| `--tmin`/`--tmax`/`--tstep` | Temperature sweep, in K (defaults 200/400/25) — `DG`/`DS` are recomputed at every step (vibrational entropy is temperature-dependent even though `ZPE` itself isn't); the sweep's first point (`--tmin`) is also what `[FINAL RESULT]`/`D0` report. |
+| `--force-tolerance` | Residual atomic force, eV/Ang (default 0.05), above which a folder is flagged as possibly not fully converged/relaxed. Advisory only. |
+| `--save-report` | Persists the full report to `adsorption_gibbs_report.txt`. Off by default. |
+| `--view-plots` | Also shows the `DG`/`D0`/`DS` plot on screen instead of only saving it as a PNG. |
+
+### 13.3 Interpreting the output
+
+- **`D0`** — the ZPE-corrected binding energy, `E_ads + DZPE`. Temperature-independent
+  (unlike `DG`); the electronic+ZPE part of the story, before any entropy is
+  considered. Printed once, alongside `E_ads (raw)`/`E_ads (BSSE)`.
+- **`DZPE`** — `ZPE(site) - ZPE(isolated reference)`. Usually positive: binding to a
+  surface generally adds real, nonzero-frequency vibrational modes that didn't exist
+  (or existed as free rigid-body motion, contributing no ZPE) before adsorption.
+- **`DTS`**/**`DS`** — `DS` is `DTS / T`, reported in both eV/K and J/(mol·K) (the
+  conventional surface-science unit) — the actual entropy change of adsorption.
+  Typically strongly negative (Section 13.1) — literature values for losing most of a
+  small molecule's translational/rotational freedom upon adsorption are commonly in
+  the 100-150 J/(mol·K) range, a useful sanity-check scale for your own result.
+- **`DG(T)`** — the actual Gibbs free energy of adsorption at each scanned
+  temperature; the physically meaningful "is adsorption favorable" answer, not `E_ads`
+  alone.
+- **Estimated desorption temperature (`[3b]`)** — linear interpolation (or, flagged
+  `[EXTRAPOLATED]`, extrapolation) of the `DG(T)` sweep to its `DG = 0` crossing. A
+  rough estimate from a harmonic model, not a kinetic prediction (real desorption also
+  depends on a barrier/attempt-frequency, not just the sign of `DG`) — but a useful
+  single number for "is this still bound at the temperature I actually care about."
+- **`adsorption_gibbs.png`** — a 2-panel plot: top, `DG(T)` against two
+  temperature-independent reference lines (`E_ads` and `D0`); bottom, `DS(T)`.
+- **`adsorption_mode_spectrum.png`** — a stick-spectrum comparison of the site's and
+  isolated reference's vibrational frequencies (site above the axis, isolated
+  reference below), genuine vibrational modes as full-height solid stems, excluded
+  rigid-body/imaginary modes as short red stems — the isolated reference's excluded
+  modes cluster near 0 THz, well separated from any genuine vibration. This is exactly
+  the kind of plot that would have visually surfaced this session's mode-counting bug
+  (Section 13.1) on sight, rather than requiring a manual literature cross-check to
+  notice.
+
+### 13.4 Worked example: watching entropy turn a favorable adsorption unfavorable
+
+`example_4.8.sh`'s `output/workflow/` chain continues past Stage 3 (Section 8) into a
+Stage 4 example on the exact same `site_1_ontop` (the BSSE-corrected winner,
+`E_ads_BSSE = -0.530000 eV`) — a single adsorbed O atom, so a particularly clean case:
+a monatomic species has **zero** possible vibrational modes by definition (there's
+nothing to vibrate against), so its isolated reference's `ZPE` must come out **exactly
+zero** regardless of any Hessian data fed to it, while its entropy is **purely
+translational** (no rotation for a point particle either) — the simplest possible
+demonstration of this session's fix.
+
+Two fabricated `.FA` (force) datasets, hand-chosen the same "no real SIESTA available"
+way Section 8's `calc.out` values are:
+
+- **Site** (`site_1_ontop`'s adsorbed O, substrate frozen): an isotropic harmonic
+  restoring force, `k = 10 eV/Ang^2` in all 3 directions — a plausible
+  ~400 cm⁻¹ adatom-surface vibration.
+- **Isolated reference** (`O_isolated`): **exactly zero** force at every displacement
+  — nothing restores a truly free atom, so its local Hessian is identically zero.
+
+Running it (`stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local`, then
+`stb-adsorbGibbs --dir . --tmin 200 --tmax 400 --tstep 100`) gives, verbatim:
+
+```
+Isolated reference (1-atom, monatomic) -- ideal-gas treatment (translation + rotation + vibration):
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+Site (1-atom local Hessian) vibrational modes:
+    412.27 cm^-1  ( 12.36 THz)  E = 0.0511 eV   (x3, isotropic)
+ZPE(site)  = 0.0767 eV   ZPE(isolated ref) = 0.0000 eV   DZPE = +0.0767 eV
+D0 (ZPE-corrected binding energy) = E_ads + DZPE = -0.4533 eV
+
+T =  200.00 K   DZPE = +0.0767 eV   DTS = -0.2690 eV   DS = -1.3452 meV/K (-129.80 J/(mol*K))   DG = -0.1843 eV
+T =  300.00 K   DZPE = +0.0767 eV   DTS = -0.4102 eV   DS = -1.3672 meV/K (-131.92 J/(mol*K))   DG = -0.0432 eV
+T =  400.00 K   DZPE = +0.0767 eV   DTS = -0.5483 eV   DS = -1.3708 meV/K (-132.26 J/(mol*K))   DG = +0.0950 eV
+
+[FINAL RESULT] DG(adsorption) = -0.1843 eV at T = 200.0 K (D0 = -0.4533 eV)
+T_desorption ~= 331.2 K (interpolated within the scanned range)
+```
+
+`ZPE(isolated ref) = 0.0000 eV` exactly, as expected — but note `DTS` is very much
+**not** zero: the isolated O atom's real translational entropy (~130 J/(mol·K), right
+in the literature ballpark quoted in Section 13.3) dominates the whole calculation.
+The electronic+BSSE picture alone (`E_ads_BSSE = -0.530000 eV`) says this adsorption is
+comfortably favorable at any reasonable temperature; **`DG` tells a different story**
+— favorable at 200 K, only barely favorable at 300 K, and outright unfavorable by
+400 K, crossing zero at an estimated **331 K**, just above room temperature. This is
+the whole reason Stage 4 exists: a purely electronic `E_ads` (even BSSE-corrected)
+cannot tell you this on its own.
+
+The Gibbs-prep folders also demonstrate this session's `config_extra.fdf` refactor —
+`gibbs/site_1_ontop/disp_001/calc.fdf` is now just `%include config_extra.fdf` plus
+your original `--calc` template, unmodified:
+
+```
+%include config_extra.fdf
+
+SystemLabel gibbs_site
+...
+```
+
+with the single-point-SCF/level-of-theory overrides collected in
+`config_extra.fdf` itself — the same `%include`-based split `stb-adsorb`/
+`stb-adsorbBsse` already use (Sections 1/2), instead of editing `calc.fdf`'s own text
+in place as earlier versions of this tool did:
+
+```
+# Auto-generated -- keeps the cell fixed and forces a single-point SCF
+# (0 CG steps) so this displaced geometry isn't relaxed away.
+MD.VariableCell false
+MD.TypeOfRun       CG
+MD.Steps           0
+MD.NumCGsteps      0
+# Auto-generated -- forces spin-polarized SCF (see write_reference_folder's
+# force_spin docstring for why).
+Spin                polarized
+# Auto-generated -- forces the slab dipole correction (see write_reference_folder's
+# force_dipole docstring for why).
+Slab.DipoleCorrection      .true.
+# Auto-generated -- forces the Grimme DFT-D3 dispersion correction (see
+# write_reference_folder's force_vdw docstring for why).
+DFTD3                   .true.
+```
+
+(A handful of `[WARNING] Pseudopotential 'O.psml' or 'O.psf' not found` lines also
+appear in this walkthrough's own Stage 4 output — expected and harmless: this example
+never had real pseudopotential files to copy in the first place, same "mechanics only,
+not physically converged" caveat the whole walkthrough already carries.)
+
+### 13.5 Running it
 
 ```bash
 stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local

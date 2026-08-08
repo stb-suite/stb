@@ -1709,6 +1709,35 @@ user-requested from real workflow friction**:
   workflow shape exactly (checked with a small 2x2=4 grid and `--orientation-top-k 1`:
   exactly 1 folder written, while `orientation_trajectory.xyz` still carries all 4).
 
+**Real, latent gap found (user-requested check, not a crash report): a MACE relax under
+`--ml-rank` could write a fractional coordinate outside `[0, 1)`.** The write-time
+`wrap_into_cell` fix earlier this session only ever covered the plain (non-`--ml-rank`)
+`add_adsorbate` path -- the `--ml-rank`/orientation-sampling path builds
+`relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)` straight from the
+just-relaxed `ase.Atoms` and writes it unwrapped. The substrate is `FixAtoms`-frozen
+during this relax, but nothing constrains the free adsorbate atom(s)' motion to stay
+inside the cell -- an in-plane (periodic, non-vacuum) direction is exactly where a
+FIRE-relax trajectory starting near a cell edge (e.g. an `ontop` site sitting on a
+corner atom, frac x~0/1) can legitimately slide across the boundary while converging,
+same underlying risk `wrap_into_cell` was already written to guard against, just
+triggered by relaxation motion instead of the raw `add_adsorbate` placement. Fixed by
+wrapping `relaxed_struct` (via the same, already-verified `wrap_into_cell` from
+`neb.py`) immediately after building it, before `min_adsorbate_slab_distance` is
+computed on it (unaffected either way -- pymatgen's `distance_matrix` is periodic-aware,
+so wrapping before or after doesn't change that value) -- covers `--ml-rank` with or
+without orientation sampling, since both paths funnel through the same `kept` loop.
+Verified two ways: (1) live on the suite's own graphene+H fixture with a deliberately
+large `--height 19.5` (a genuine relaxation, no fabrication) -- the H atom converged to
+frac (0.9999999998, 0.9999999997), a hair below 1.0 from real floating-point noise at
+the exact 0/1 boundary (the identical `0.9999999997712383`-class artifact already
+documented for the write-time fix, printed as `1.00000000` by `write_fdf`'s own `.8f`
+rounding -- cosmetic, not a bug); (2) deterministically, by monkeypatching
+`mace_relax.relax` to shift the relaxed adsorbate atom by exactly 1.5 lattice vectors
+along both in-plane axes after a real relax completes -- the written `structure.fdf`
+correctly shows frac (0.5, 0.5), the same physical position with only the whole-lattice
+-vector part removed (not, say, silently clamped to 0.0/1.0, which would have discarded
+the genuine +0.5 displacement and misrepresented the physics).
+
 `core/adsorption_sites.py::write_reference_folder` gained an opt-in `force_spin=False`
 parameter (new `SPIN_POLARIZED_BLOCK` constant, same file as `FIXED_CELL_BLOCK`), and
 `stb-nebSites` now passes `force_spin=True` by default for `site_A`/`site_B` (new

@@ -334,6 +334,54 @@ else:
 " > log_frac_wrap_check.txt 2>&1
 check_contains "OK" log_frac_wrap_check.txt
 
+echo "Testing: a MACE relax that legitimately drifts the adsorbate outside the cell"
+echo "  (e.g. an unstable orientation sliding across a periodic in-plane boundary) is"
+echo "  wrapped back into [0, 1) before being written, same physical position"
+python3 -c "
+import sys, os
+sys.argv = ['stb-adsorb', '-s', 'structure.fdf', '-c', 'calc.fdf', '--adsorbate', 'H',
+            '--site-type', 'ontop', '--all-sites', '--height', '2.0', '--ml-rank',
+            '--no-intro', '-O', 'wrap_after_relax_run']
+
+from stb.core import mace_relax
+_orig_relax = mace_relax.relax
+
+def _patched_relax(atoms, calc, cell_mask=None, optimizer='FIRE', fmax=0.05, max_steps=200,
+                    step_history=None):
+    converged, steps = _orig_relax(atoms, calc, cell_mask=cell_mask, optimizer=optimizer,
+                                    fmax=fmax, max_steps=max_steps, step_history=step_history)
+    # Simulate the real-world case this fix targets: the optimizer's own
+    # trajectory legitimately carries the free adsorbate atom(s) a full+half
+    # lattice vector past the cell boundary along both in-plane axes -- e.g.
+    # an unstable starting orientation sliding across x=0/x=1 while relaxing.
+    cell = atoms.get_cell()
+    atoms.positions[-1] += 1.5 * cell[0] + 1.5 * cell[1]
+    return converged, steps
+
+mace_relax.relax = _patched_relax
+from stb.adsorb import main
+main()
+" > log_wrap_after_relax.txt 2>&1
+check_exit_code $? 0
+python3 -c "
+from stb.core import structure_io
+s = structure_io.read_fdf('wrap_after_relax_run/sites/site_1_ontop/structure.fdf')
+symbol, frac = s.atoms[-1]
+assert symbol == 'H', f'expected the adsorbate (H) last, got {symbol}'
+x, y, z = frac
+assert -1e-6 <= x <= 1.0 + 1e-6 and -1e-6 <= y <= 1.0 + 1e-6, \
+    f'adsorbate fractional coord not wrapped into [0, 1): {frac}'
+# The injected shift was exactly 1.5 lattice vectors along a and b -- the
+# wrapped x/y must land near 0.5 (same fractional part), not near 0.0/1.0
+# (which would mean the wrap silently discarded the +0.5 real displacement
+# instead of only removing the +1 whole-lattice-vector part).
+assert abs(x - 0.5) < 1e-4 and abs(y - 0.5) < 1e-4, \
+    f'wrapped coord lost its fractional part (physics changed): {frac}'
+print('OK')
+" > log_wrap_after_relax_check.txt 2>&1
+check_contains "OK" log_wrap_after_relax_check.txt
+rm -rf wrap_after_relax_run
+
 
 # --- 4a. generate_systematic_orientations / deduplicate_orientations: pure
 # unit tests (no MACE, no SIESTA) on the two new core/adsorption_sites.py

@@ -805,7 +805,14 @@ def main():
 
                 for rank, idx in enumerate(kept, start=1):
                     energy, ase_atoms, converged, steps = orient_results[idx]
-                    relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
+                    # A MACE relax only ever moves the free adsorbate atoms (the
+                    # substrate is FixAtoms-frozen), but nothing stops that motion
+                    # from carrying a fractional coordinate past a cell face (most
+                    # often the vacuum axis, for a tall --height guess) -- wrap back
+                    # into [0, 1) the same way the non---ml-rank path already does
+                    # for its unrelaxed guess (see [4] below), so every written
+                    # structure.fdf gets in-cell coordinates regardless of path.
+                    relaxed_struct = wrap_into_cell(AseAtomsAdaptor.get_structure(ase_atoms))
                     relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
                     orient_id = rank if orientation_sampling else 0
                     scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist, orient_id))

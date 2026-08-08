@@ -316,33 +316,60 @@ check_contains '"system_label": "gibbs_site"' $GT/gibbs/site_1_ontop/gibbs_local
 check_contains '"local_indices": \[0\]' $GT/gibbs/O_isolated/gibbs_local_meta.json
 
 echo "Testing: the site's Hessian folders inherit Spin polarized + Slab.DipoleCorrection + DFTD3"
-echo "  (same site-level-of-theory propagation already fixed for stb-adsorbBsse)"
+echo "  via config_extra.fdf (same mechanism/split as stb-adsorb/stb-adsorbBsse -- calc.fdf just"
+echo "  %includes it, the actual directives live in config_extra.fdf)"
 check_contains "SystemLabel gibbs_site" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
-check_contains "Spin                polarized" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
-check_contains "Slab.DipoleCorrection      .true." $GT/gibbs/site_1_ontop/disp_001/calc.fdf
-check_contains "DFTD3                   .true." $GT/gibbs/site_1_ontop/disp_001/calc.fdf
-check_contains "MD.TypeOfRun          CG" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
-check_contains "MD.NumCGsteps         0" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "%include config_extra.fdf" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "Spin                polarized" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
+check_contains "Slab.DipoleCorrection      .true." $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
+check_contains "DFTD3                   .true." $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
+check_contains "MD.TypeOfRun       CG" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
+check_contains "MD.NumCGsteps      0" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
 
 echo "Testing: the isolated reference's Hessian folders have Spin + DFTD3 but NO dipole"
 echo "  correction (not a slab -- Slab.DipoleCorrection has no physical meaning for a boxed"
-echo "  molecule) and no dangling '%include config_extra.fdf' (that file is never copied"
-echo "  into disp_NNN/ -- a real bug caught while wiring this same vdW propagation)"
+echo "  molecule), and DO carry a real (non-dangling) '%include config_extra.fdf' -- unlike the"
+echo "  old flat-calc.fdf design, config_extra.fdf is now actually written alongside it. Spin"
+echo "  is forced UNCONDITIONALLY in config_extra.fdf too (a precaution -- it's already baked"
+echo "  into calc.fdf's own body text by adsorb.py's force_spin_polarized, but"
+echo "  read_site_theory_flags can never detect that mechanism, so relying on it alone would be"
+echo "  a silent single point of failure) -- DFTD3 comes from read_site_theory_flags normally,"
+echo "  since the isolated reference DOES get its own config_extra.fdf for that (force_vdw=True)"
 check_contains "SystemLabel gibbs_isolated" $GT/gibbs/O_isolated/disp_001/calc.fdf
+check_contains "%include config_extra.fdf" $GT/gibbs/O_isolated/disp_001/calc.fdf
 check_contains "Spin                polarized" $GT/gibbs/O_isolated/disp_001/calc.fdf
-check_contains "DFTD3                   .true." $GT/gibbs/O_isolated/disp_001/calc.fdf
-if grep -q "DipoleCorrection" "$GT/gibbs/O_isolated/disp_001/calc.fdf" 2>/dev/null; then
-    echo -e "   -> ${RED}Failed:${NC} unexpected DipoleCorrection in the isolated reference's calc.fdf"
+check_success $GT/gibbs/O_isolated/disp_001/config_extra.fdf
+check_contains "Spin                polarized" $GT/gibbs/O_isolated/disp_001/config_extra.fdf
+check_contains "DFTD3                   .true." $GT/gibbs/O_isolated/disp_001/config_extra.fdf
+if grep -q "DipoleCorrection" "$GT/gibbs/O_isolated/disp_001/config_extra.fdf" 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected DipoleCorrection in the isolated reference's config_extra.fdf"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} no DipoleCorrection in the isolated reference's calc.fdf"
+    echo -e "   -> ${GREEN}Verified:${NC} no DipoleCorrection in the isolated reference's config_extra.fdf"
     PASS=$((PASS+1))
 fi
-if grep -q "%include config_extra.fdf" "$GT/gibbs/O_isolated/disp_001/calc.fdf" 2>/dev/null; then
-    echo -e "   -> ${RED}Failed:${NC} dangling '%include config_extra.fdf' in the isolated reference's Gibbs folder"
+
+echo "Testing: --zpe-mode full's clean-slab phonon reference inherits Slab.DipoleCorrection +"
+echo "  DFTD3 via config_extra.fdf (real gap found and fixed during this refactor -- this branch"
+echo "  used to never read the clean slab's own level of theory at all)"
+GT3=gibbs_full_test
+rm -rf "$GT3"
+cp -r "$GT" "$GT3"
+(cd "$GT3" && stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode full --no-intro \
+    > log_gibbs_full.txt 2>&1)
+check_exit_code $? 0
+check_success $GT3/gibbs/site_1_ontop/disp-001/structure.fdf
+check_success $GT3/gibbs/clean_slab_full/disp-001/structure.fdf
+check_contains "%include config_extra.fdf" $GT3/gibbs/site_1_ontop/disp-001/calc.fdf
+check_contains "%include config_extra.fdf" $GT3/gibbs/clean_slab_full/disp-001/calc.fdf
+check_contains "Slab.DipoleCorrection      .true." $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
+check_contains "DFTD3                   .true." $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
+check_contains "MD.NumCGsteps      0" $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
+if grep -q "Spin" "$GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf" 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected Spin override in the clean-slab phonon reference's config_extra.fdf"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} no dangling config_extra.fdf include in the isolated reference's Gibbs folder"
+    echo -e "   -> ${GREEN}Verified:${NC} no Spin override in the clean-slab phonon reference's config_extra.fdf (clean_slab/ never gets one)"
     PASS=$((PASS+1))
 fi
 

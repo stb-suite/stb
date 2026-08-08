@@ -155,6 +155,40 @@ def point_group_label(pmg_structure, tolerance=0.3):
         return None
 
 
+def point_group_details(pmg_structure, tolerance=0.3):
+    """Returns {"symbol", "rotational_symmetry_number", "linear"} for a
+    genuinely isolated (0D) molecule, or None on any failure (e.g. a
+    single-atom "molecule", same as point_group_label). Another thin sibling
+    of stb.symmetry's own compute_point_group -- extracted here (not reusing
+    point_group_label, whose established contract is a bare label string)
+    once adsorb_gibbs.py became a consumer needing the rotational symmetry
+    number and molecular linearity (nonlinear vs. linear vs. monatomic) for
+    ase.thermochemistry.IdealGasThermo's own `symmetrynumber`/`geometry`
+    arguments -- both come straight off the same PointGroupAnalyzer instance
+    point_group_label already builds, at negligible extra cost. `linear` is
+    derived from the returned Schoenflies symbol itself ("C*v"/"D*h", the
+    only two symbols PointGroupAnalyzer._proc_linear ever assigns -- verified
+    directly against the installed pymatgen source, since PointGroupAnalyzer
+    has no public `linear` attribute of its own) rather than re-deriving it
+    from its internal (non-public) inertia-tensor eigenvalues.
+    """
+    from pymatgen.core import Molecule
+    from pymatgen.symmetry.analyzer import PointGroupAnalyzer
+
+    species = [str(site.specie.symbol) for site in pmg_structure]
+    mol = Molecule(species, pmg_structure.cart_coords)
+    try:
+        pga = PointGroupAnalyzer(mol, tolerance=tolerance)
+        symbol = str(pga.get_pointgroup())
+        return {
+            "symbol": symbol,
+            "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
+            "linear": symbol in ("C*v", "D*h"),
+        }
+    except Exception:
+        return None
+
+
 def equivalent_cartesian_axes(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Groups the 3 Cartesian axes (x=0, y=1, z=2) by point-group symmetry:
     axes in the same group are related by a rotation/reflection of the

@@ -953,19 +953,19 @@ def run_adsorb_analysis() -> None:
         args.append("--view-plots")
 
     compute_gibbs = get_input(
-        "\nDeseja calcular a energia livre de Gibbs (DG) de adsorcao? Isso escreve as pastas de "
-        "deslocamento (Hessiana) para o site vencedor -- voce ainda precisa rodar o SIESTA nelas "
-        "e depois usar o Estagio 4 (stb-adsorbGibbs). (y/N): ").strip().lower() == 'y'
+        "\nCompute the Gibbs free energy (DG) of adsorption? This writes the displacement "
+        "(Hessian) folders for the winning site -- you still need to run SIESTA in them and "
+        "then use Stage 4 (stb-adsorbGibbs). (y/N): ").strip().lower() == 'y'
     if compute_gibbs:
         args.append("--compute-gibbs")
         zpe_mode = get_input(
-            "  Modo do calculo vibracional para o sitio -- 'local' (Hessiana parcial, so o "
-            "adsorvato, rapido, padrao) ou 'full' (phonopy real no cristal inteiro, mais caro) "
-            "[default: local]: ").strip().lower()
+            "  Vibrational calculation mode for the site -- 'local' (partial Hessian, "
+            "adsorbate only, fast, default) or 'full' (real phonopy on the whole crystal, "
+            "more expensive) [default: local]: ").strip().lower()
         if zpe_mode in ("local", "full"):
             args.extend(["--zpe-mode", zpe_mode])
         displacement = get_float_input(
-            "  Deslocamento para as diferencas finitas, em Ang (default: 0.015): ", 0.015)
+            "  Displacement for finite differences, in Ang (default: 0.015): ", 0.015)
         args.extend(["--displacement", str(displacement)])
 
     run_tool("stb-adsorbAnalysis", args)

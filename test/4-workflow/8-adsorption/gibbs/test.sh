@@ -102,13 +102,24 @@ check_success gibbs/O_isolated/gibbs_local_meta.json
 
 # --- 2. Fabricate .FA force files: an IDENTICAL isotropic harmonic
 #     "spring" (k=20 eV/Ang^2) on BOTH the site's O atom and the isolated
-#     reference's O atom -- same mass, same force constant, so their
-#     vibrational frequencies/ZPE/entropy are mathematically IDENTICAL and
-#     must cancel exactly: DZPE = DTS = 0, so DG must come out EXACTLY
-#     equal to the electronic-only E_ads (-0.100000 eV) -- a strong,
-#     exact-value cross-check of the whole Hessian/ZPE/entropy/DG pipeline,
-#     not just "did it run". ---
-echo -e "\n--- Testing DG with a symmetric synthetic Hessian (DZPE = DTS = 0 by construction) ---"
+#     reference's O atom. Under the OLD (pre-ideal-gas) code this made
+#     DZPE/DTS cancel exactly, since both sides used the same plain
+#     sign-based harmonic-oscillator sum. That is NO LONGER the expected
+#     result: the isolated reference is a genuine monatomic species, which
+#     physically has ZERO vibrational modes at all (a lone atom cannot
+#     vibrate) -- ase.thermochemistry.IdealGasThermo's 'monatomic' geometry
+#     correctly IGNORES the fabricated k entirely for the isolated side
+#     (ZPE(ref) stays exactly 0.0, same invariant as before) but now ALSO
+#     adds the atom's own real translational entropy (Sackur-Tetrode,
+#     mass-and-T-dependent, independent of k) -- something the old code
+#     never computed. The expected numbers below were derived two
+#     independent ways: (1) running this exact fixture through
+#     compute_local_hessian_thermo (site side, unchanged) and
+#     compute_ideal_gas_thermo (isolated side, new) directly, and (2) cross
+#     -checking the isolated reference's T*S against the closed-form
+#     Sackur-Tetrode equation by hand for atomic oxygen at 300 K/1 bar --
+#     both agree to float precision. ---
+echo -e "\n--- Testing DG with a synthetic Hessian (isolated ref is now a genuine monatomic ideal gas) ---"
 python3 -c "
 k = 20.0  # eV/Ang^2
 d = 0.015
@@ -137,23 +148,30 @@ check_contains "\[1\] ELECTRONIC ENERGIES" log_gibbs.txt
 check_contains "E_ads (raw)  =    -0.100000 eV" log_gibbs.txt
 check_contains "E_ads used for DG below: raw" log_gibbs.txt
 check_contains "\[2\] VIBRATIONAL/THERMAL TERMS" log_gibbs.txt
-check_contains "LIMITATION" log_gibbs.txt
+check_contains "ideal gas molecule" log_gibbs.txt
+check_contains "monatomic" log_gibbs.txt
 check_contains "\[3\] GIBBS FREE ENERGY vs. TEMPERATURE" log_gibbs.txt
-check_contains "DZPE = +0.0000 eV" log_gibbs.txt
-check_contains "DTS = +0.0000 eV" log_gibbs.txt
-check_contains "DG = -0.1000 eV" log_gibbs.txt
+check_contains "DZPE = +0.1084 eV" log_gibbs.txt
+check_contains "DTS = -0.4274 eV" log_gibbs.txt
+check_contains "DG = +0.4358 eV" log_gibbs.txt
+check_contains "D0 (ZPE-corrected binding energy)" log_gibbs.txt
+check_contains "D0 = +0.0084 eV" log_gibbs.txt
 check_contains "FINAL RESULT" log_gibbs.txt
-check_contains "DG(adsorption) = -0.1000 eV" log_gibbs.txt
+check_contains "DG(adsorption) = +0.4358 eV" log_gibbs.txt
 check_success adsorption_gibbs.png
 check_success adsorption_gibbs_report.txt
 
 
 # --- 3. Physical correctness: a truly isolated single atom (zero force at
 #     every displacement -- nothing to restore it) must give EXACTLY
-#     zero ZPE/entropy once its 3 pure-translation modes are excluded --
-#     not close to zero, exactly zero. Verified by calling the module's own
-#     function directly (not through the CLI, to get the raw float back). ---
-echo -e "\n--- Testing that a genuinely free atom gives exactly ZPE=0 ---"
+#     zero ZPE/entropy under compute_local_hessian_thermo once its 3
+#     pure-translation modes are excluded -- not close to zero, exactly
+#     zero. This function is only used for the SITE side in production now
+#     (the isolated reference uses compute_ideal_gas_thermo instead, see
+#     below), but the invariant itself is still worth guarding directly.
+#     Verified by calling the module's own function directly (not through
+#     the CLI, to get the raw float back). ---
+echo -e "\n--- Testing that a genuinely free atom gives exactly ZPE=0 (compute_local_hessian_thermo) ---"
 python3 -c "
 def write_fa(path, natoms, moved_1based, force):
     with open(path, 'w') as f:
@@ -171,6 +189,21 @@ assert ts == 0.0, f'expected exactly 0.0 TS for a free atom, got {ts}'
 print('OK')
 " > log_free_atom_check.txt 2>&1
 check_contains "OK" log_free_atom_check.txt
+
+echo -e "\n--- Testing that compute_ideal_gas_thermo's monatomic ZPE is exactly 0.0 even with a"
+echo "    nonzero synthetic Hessian (a lone atom has no vibrational modes, period -- the fix"
+echo "    must ignore fabricated force-constant data entirely for 'monatomic' geometry) ---"
+python3 -c "
+from stb.adsorb_gibbs import compute_ideal_gas_thermo
+# gibbs/O_isolated still holds the k=20 fixture from section 2 above.
+zpe, ts = compute_ideal_gas_thermo('gibbs/O_isolated', 'adsorbate', 'adsorbate/calc.out',
+                                    300.0, None, 'test')
+assert zpe == 0.0, f'expected exactly 0.0 ZPE for a monatomic species, got {zpe}'
+assert ts > 0.0, f'expected a nonzero translational entropy, got {ts}'
+print('OK')
+" > log_monatomic_zpe_check.txt 2>&1
+check_contains "OK" log_monatomic_zpe_check.txt
+
 # restore the symmetric-Hessian fixture for the sections below
 python3 -c "
 k = 20.0
@@ -183,6 +216,94 @@ for i, (axis, sign) in enumerate(order, start=1):
         f.write('1\n')
         f.write(f'1 {force[0]:.8f} {force[1]:.8f} {force[2]:.8f}\n')
 "
+
+
+# --- 3b. The actual bug fix: a synthetic 3-atom (nonlinear) isolated
+#     reference whose local Hessian is built from DECOUPLED per-axis
+#     springs -- axis 0 gets a large k (3 genuine, well-separated
+#     vibrational modes), axis 1 gets a tiny POSITIVE k (mimicking the
+#     real bug: a rigid-body mode that numerically lands on the positive
+#     side of zero), axis 2 gets a tiny NEGATIVE k (a rigid-body mode that
+#     lands negative, "imaginary"). A real free molecule has exactly
+#     3*3-6=3 genuine vibrational modes and 6 rigid-body zero modes
+#     (mixed sign, same as this fixture) -- the OLD sign-based filter
+#     would have wrongly kept the 3 tiny-positive modes as "vibrations";
+#     the fix must select exactly the 3 axis-0 (large-k) modes regardless
+#     of how the other 6 split across the sign boundary. ---
+echo -e "\n--- Testing the actual fix: count-based (not sign-based) rigid-body mode exclusion ---"
+mkdir -p adsorbate_synth gibbs/synth_isolated
+cat > adsorbate_synth/structure.fdf <<'EOF'
+NumberOfSpecies 3
+NumberofAtoms 3
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+ 3 1 H
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+AtomicCoordinatesFormat  Fractional
+%block LatticeVectors
+ 20.0 0.0 0.0
+ 0.0 20.0 0.0
+ 0.0 0.0 20.0
+%endblock LatticeVectors
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.500000 0.500000 0.505000 1
+ 0.500000 0.538000 0.476000 2
+ 0.500000 0.462000 0.476000 3
+%endblock AtomicCoordinatesAndAtomicSpecies
+EOF
+printf 'siesta: FreeEng = -300.0\n' > adsorbate_synth/calc.out
+python3 -c "
+import os, json
+d = 0.015
+local_indices = [0, 1, 2]
+local_symbols = ['O', 'H', 'H']
+order = []
+for atom_index in local_indices:
+    for axis, sign in [(0,1.0),(0,-1.0),(1,1.0),(1,-1.0),(2,1.0),(2,-1.0)]:
+        order.append({'atom_index': atom_index, 'axis': axis, 'sign': sign})
+with open('gibbs/synth_isolated/gibbs_local_meta.json', 'w') as f:
+    json.dump({'local_indices': local_indices, 'local_symbols': local_symbols,
+               'displacement_ang': d, 'order': order, 'system_label': 'gibbs_isolated'}, f)
+
+k_by_axis = {0: 20.0, 1: 0.001, 2: -0.001}  # genuine / tiny-positive / tiny-negative
+for i, entry in enumerate(order, start=1):
+    k = k_by_axis[entry['axis']]
+    force = [0.0, 0.0, 0.0]
+    force[entry['axis']] = -entry['sign'] * k * d
+    out_dir = f'gibbs/synth_isolated/disp_{i:03d}'
+    os.makedirs(out_dir, exist_ok=True)
+    with open(f'{out_dir}/gibbs_isolated.FA', 'w') as f:
+        f.write('3\n')
+        for atom_1based in (1, 2, 3):
+            if atom_1based - 1 == entry['atom_index']:
+                f.write(f'{atom_1based} {force[0]:.8f} {force[1]:.8f} {force[2]:.8f}\n')
+            else:
+                f.write(f'{atom_1based} 0.0 0.0 0.0\n')
+"
+python3 -c "
+from stb.adsorb_gibbs import compute_ideal_gas_thermo
+mode_log = []
+zpe, ts = compute_ideal_gas_thermo('gibbs/synth_isolated', 'adsorbate_synth',
+                                    'adsorbate_synth/calc.out', 300.0, None, 'synth',
+                                    mode_log=mode_log)
+kept = [m for m in mode_log if m['kept']]
+excluded = [m for m in mode_log if not m['kept']]
+assert len(kept) == 3, f'expected exactly 3 kept (genuine) modes, got {len(kept)}'
+assert len(excluded) == 6, f'expected exactly 6 excluded (rigid-body) modes, got {len(excluded)}'
+assert all(m['freq_thz'] > 10.0 for m in kept), f'kept modes should be the high-frequency ones: {kept}'
+assert all(m['freq_thz'] < 1.0 for m in excluded), f'excluded modes should be the near-zero ones: {excluded}'
+n_imag_excluded = sum(1 for m in excluded if m['imaginary'])
+assert n_imag_excluded == 3, f'expected exactly 3 of the 6 excluded modes to be imaginary (the tiny-negative-k group), got {n_imag_excluded}'
+print(f'OK: kept={len(kept)} excluded={len(excluded)} imag_excluded={n_imag_excluded} zpe={zpe:.4f}')
+" > log_rigid_body_fix_check.txt 2>&1
+check_contains "OK: kept=3 excluded=6 imag_excluded=3" log_rigid_body_fix_check.txt
+
+# Clean up: gibbs/synth_isolated is a second '*_isolated' folder, which
+# would otherwise make every stb-adsorbGibbs call below ambiguous
+# (find_gibbs_folders expects exactly one).
+rm -rf gibbs/synth_isolated adsorbate_synth
 
 
 # --- 4. Error and robustness cases ---

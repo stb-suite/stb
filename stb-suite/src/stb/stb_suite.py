@@ -622,143 +622,162 @@ def run_adsorb_setup() -> None:
         "adsorption energy.", 'cyan'))
     print()
 
+    print(color_text(
+        "Run 'stb-adsorb --help' any time for the full rationale behind an option below.",
+        'cyan'))
+
+    def section(title: str) -> None:
+        print(color_text(f"\n--- {title} ---", 'yellow'))
+
+    # ---------------------------------------------------------------- [1/4]
+    section("1/4 -- Input & adsorbate")
+
     struct_file = get_input(
-        "Input slab/2D structure FDF file, vacuum along c [default: structure.fdf] (-s): ").strip()
+        "Slab/2D structure FDF, vacuum along c [default: structure.fdf] (-s): ").strip()
     if not struct_file:
         struct_file = "structure.fdf"
     while not os.path.isfile(struct_file):
         print(color_text("File not found!", 'red'))
-        struct_file = get_input("Input slab/2D structure FDF file (-s): ").strip()
-        if not struct_file:
-            struct_file = "structure.fdf"
+        struct_file = get_input("Slab/2D structure FDF (-s): ").strip() or "structure.fdf"
 
     calc_file = get_input(
-        "Calc.fdf template already configured for this slab [default: calc.fdf] (-c): ").strip()
+        "Calc.fdf template already set up for this slab [default: calc.fdf] (-c): ").strip()
     if not calc_file:
         calc_file = "calc.fdf"
     while not os.path.isfile(calc_file):
         print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template file (-c): ").strip()
-        if not calc_file:
-            calc_file = "calc.fdf"
+        calc_file = get_input("Calc.fdf template (-c): ").strip() or "calc.fdf"
 
     pp_path = prompt_pseudo_source(optional=True)
 
-    print("\nAdsorbate: an element symbol (e.g. 'O') or an ASE G2 molecule name (e.g. 'H2O'). "
-          "Comma-separated for more than one (e.g. 'O,N,C') to compare several species at the "
-          "same site(s). Type 'list' to see all G2 names.")
-    adsorbate = get_input("Adsorbate(s): ").strip()
+    adsorbate = get_input(
+        "\nAdsorbate(s): element symbol(s) or ASE G2 molecule name(s), comma-separated "
+        "('list' to browse): ").strip()
     while adsorbate.lower() == "list" or not adsorbate:
         run_tool("stb-adsorb", ["--list", "--no-intro"])
         adsorbate = get_input("Adsorbate(s): ").strip()
 
-    ml_prerelax_choice = get_input(
-        "\nPre-relax the isolated adsorbate(s) with MACE-MP-0 before generating their reference? "
-        "Needs the optional 'ml' extra (y/N): ").strip().lower()
-    ml_prerelax = ml_prerelax_choice in ('y', 'yes')
+    ml_prerelax = get_input(
+        "Pre-relax the isolated adsorbate with MACE-MP-0 first? (needs the 'ml' extra) "
+        "(y/N): ").strip().lower() in ('y', 'yes')
 
-    print(f"\n{color_text('Site type:', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = ontop")
-    print(f"  {color_text('2', 'cyan')} = bridge")
-    print(f"  {color_text('3', 'cyan')} = hollow")
-    print(f"  {color_text('4', 'cyan')} = all")
-    site_choice = get_input("Select option (1-4) [default: 1]: ").strip()
+    # ---------------------------------------------------------------- [2/4]
+    section("2/4 -- Site selection")
+
+    print(f"{color_text('Site type:', 'yellow')} {color_text('1', 'cyan')}=ontop  "
+          f"{color_text('2', 'cyan')}=bridge  {color_text('3', 'cyan')}=hollow  "
+          f"{color_text('4', 'cyan')}=all")
+    site_choice = get_input("Select (1-4) [default: 1]: ").strip()
     site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
     site_type = site_map.get(site_choice, 'ontop')
 
     height_sweep = None
-    height_sweep_choice = get_input(
-        "\nSweep across multiple heights (approach curve), instead of one fixed height? "
-        "(y/N): ").strip().lower()
-    if height_sweep_choice in ('y', 'yes'):
-        h_min = get_float_input("  Minimum height, Ang [default: 1.5]: ", 1.5)
-        h_max = get_float_input("  Maximum height, Ang [default: 3.0]: ", 3.0)
-        h_step = get_float_input("  Step, Ang [default: 0.5]: ", 0.5)
-        height_sweep = (h_min, h_max, h_step)
-        height = h_min  # unused when height_sweep is set, kept for the summary/args fallback
-    else:
-        height = get_float_input("\nAdsorption height above the surface, Ang [default: 2.0]: ", 2.0)
-
-    force_spin = get_input(
-        "\nForce Spin polarized in every site folder too (not just the isolated-adsorbate "
-        "reference)? A single adsorbate atom bonded to a slab commonly leaves the combined "
-        "system with a net magnetic moment (costs nothing for a genuinely closed-shell site). "
-        "[Y/n]: ").strip().lower() != 'n'
+    while True:
+        height_input = get_input(
+            "\nHeight above the surface, Ang, or 'sweep' for an approach-curve scan "
+            "[default: 2.0]: ").strip()
+        if not height_input:
+            height = 2.0
+            break
+        if height_input.lower() == 'sweep':
+            h_min = get_float_input("  Min height, Ang [default: 1.5]: ", 1.5)
+            h_max = get_float_input("  Max height, Ang [default: 3.0]: ", 3.0)
+            h_step = get_float_input("  Step, Ang [default: 0.5]: ", 0.5)
+            height_sweep = (h_min, h_max, h_step)
+            height = h_min  # unused when height_sweep is set, kept for the summary/args fallback
+            break
+        try:
+            height = float(height_input)
+            break
+        except ValueError:
+            print(color_text("Enter a number, or 'sweep'.", 'red'))
 
     all_sites_choice = get_input(
         "\nWrite a folder for every symmetrically distinct site (Y), or just one (n)? [Y/n]: "
     ).strip().lower()
     all_sites = all_sites_choice not in ('n', 'no')
+    if not all_sites:
+        site_index = get_int_input("Which site (0-based index) [default: 0]: ", 0)
+
+    force_spin = get_input(
+        "\nForce spin polarization on site folders too (recommended for most adsorbates) "
+        "[Y/n]: ").strip().lower() != 'n'
+
+    # ---------------------------------------------------------------- [3/4]
+    section("3/4 -- ML pre-screening (optional, needs the 'ml' extra)")
 
     ml_rank = False
     top_k = None
     n_orient_polar, n_orient_azimuthal, orient_top_k, orient_rmsd_tol = 1, 1, None, 0.3
     if all_sites:
-        ml_rank_choice = get_input(
-            "\nPre-screen sites with a MACE-MP-0 relax before writing SIESTA folders? Needs "
-            "the optional 'ml' extra (y/N): ").strip().lower()
-        ml_rank = ml_rank_choice in ('y', 'yes')
+        ml_rank = get_input(
+            "Pre-screen sites with a MACE-MP-0 relax before writing SIESTA folders? "
+            "(y/N): ").strip().lower() in ('y', 'yes')
         if ml_rank:
             top_k_str = get_input(
-                "  Only keep the N best-ranked sites (blank = keep all): ").strip()
+                "  Keep only the N best-ranked sites (blank = keep all): ").strip()
             top_k = int(top_k_str) if top_k_str.isdigit() else None
-    else:
-        site_index = get_int_input("Which site (0-based index) [default: 0]: ", 0)
 
-    # Orientation sampling always needs --ml-rank under the hood, but the reason to ask
-    # for it differs: with --all-sites it's an extra refinement ON TOP OF an already-
-    # requested ranking; with a single --site-index it's the ONLY reason --ml-rank has
-    # anything to rank (a lone site has nothing to compare itself against otherwise --
-    # see adsorb.py's own parser.error for this), so asking here is what turns ml_rank on.
-    if all_sites and not ml_rank:
-        orient_choice = 'n'
-    else:
-        orient_scope = "per site" if all_sites else "at this one site"
-        needs_ml_note = "" if ml_rank else (
-            " Needs the optional 'ml' extra -- this is the only way to screen a single "
-            "site with MACE, since --ml-rank alone has nothing else to rank against there.")
-        orient_choice = get_input(
-            f"\nFor a multi-atom adsorbate (e.g. H2O), systematically sample several "
-            f"initial orientations {orient_scope} (which part of the molecule faces the "
-            f"surface) and relax each with MACE, keeping the best unique ones? No effect "
-            f"on single-atom adsorbates.{needs_ml_note} (y/N): ").strip().lower()
-    if orient_choice in ('y', 'yes'):
-        if not all_sites:
-            ml_rank = True
-        n_orient_polar = get_int_input("  Polar directions to sample [default: 4]: ", 4)
-        n_orient_azimuthal = get_int_input("  Azimuthal spins per direction [default: 2]: ", 2)
-        orient_top_k_str = get_input(
-            "  Keep only the N best unique orientations per site (blank = keep all): ").strip()
-        orient_top_k = int(orient_top_k_str) if orient_top_k_str.isdigit() else None
-        orient_rmsd_tol = get_float_input(
-            "  RMSD tolerance for merging near-duplicate orientations, Ang "
-            "[default: 0.3]: ", 0.3)
+    # Orientation sampling always needs --ml-rank under the hood: with --all-sites it's
+    # an extra refinement on top of an already-requested ranking; with a single
+    # --site-index it's the ONLY reason --ml-rank has anything to rank (see adsorb.py's
+    # own parser.error), so asking here is what turns ml_rank on for that case.
+    show_orient = (not all_sites) or ml_rank
+    if show_orient:
+        auto_note = "" if ml_rank else " (auto-enables ML pre-screening)"
+        orient_grid = get_input(
+            f"\nSample multiple adsorbate orientations, polar x azimuthal grid (e.g. "
+            f"4x2){auto_note}, blank to skip: ").strip()
+        if orient_grid:
+            try:
+                p_str, a_str = orient_grid.lower().split('x')
+                n_orient_polar, n_orient_azimuthal = int(p_str), int(a_str)
+            except ValueError:
+                print(color_text(
+                    "Invalid grid (expected e.g. '4x2') -- orientation sampling skipped.",
+                    'red'))
+                n_orient_polar, n_orient_azimuthal = 1, 1
+            else:
+                if not all_sites:
+                    ml_rank = True
+                orient_top_k_str = get_input(
+                    "  Keep only the N best unique orientations (blank = keep all): ").strip()
+                orient_top_k = int(orient_top_k_str) if orient_top_k_str.isdigit() else None
 
     both_sides = False
     if site_type != 'all' and not ml_rank and height_sweep is None:
-        both_sides_choice = get_input(
-            "\nAdsorb on both faces (free-standing 2D material)? (y/N): ").strip().lower()
-        both_sides = both_sides_choice in ('y', 'yes')
+        both_sides = get_input(
+            "\nAlso adsorb on the opposite face (free-standing 2D material)? "
+            "(y/N): ").strip().lower() in ('y', 'yes')
+
+    # ---------------------------------------------------------------- [4/4]
+    section("4/4 -- Advanced & output")
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
     symprec, vacuum_gap, vacuum_box, output_dir, ml_device = 0.01, 10.0, 20.0, "adsorption_run", "cpu"
     uses_mace = ml_prerelax or ml_rank
     advanced_items = "symmetry tolerance, vacuum-gap, vacuum box, output directory"
+    if show_orient:
+        advanced_items += ", orientation RMSD tolerance"
     if uses_mace:
         advanced_items += ", ML device"
-    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
+    show_advanced = get_input(f"Configure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
-        symprec = get_float_input("Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
+        symprec = get_float_input("  Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
         vacuum_gap = get_float_input(
-            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
+            "  Vacuum-axis detection threshold, Ang [default: 10.0]: ", 10.0)
         vacuum_box = get_float_input(
-            "Isolated-adsorbate vacuum box side in Ang [default: 20.0]: ", 20.0)
-        output_dir = get_input("Output root directory [default: adsorption_run]: ").strip()
+            "  Isolated-adsorbate vacuum box side, Ang [default: 20.0]: ", 20.0)
+        output_dir = get_input("  Output root directory [default: adsorption_run]: ").strip()
         if not output_dir:
             output_dir = "adsorption_run"
+        if show_orient:
+            orient_rmsd_tol = get_float_input(
+                "  RMSD tolerance for merging near-duplicate orientations, Ang "
+                "[default: 0.3]: ", 0.3)
         if uses_mace:
-            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            device_choice = get_input("  ML device [cpu/cuda, default: cpu]: ").strip().lower()
             ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
             if ml_device == "cuda":
                 from stb.core.mace_relax import gpu_available
@@ -770,13 +789,12 @@ def run_adsorb_setup() -> None:
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     view_choice = get_input(
-        "View every generated structure (clean_slab, adsorbate(s), every site) interactively "
-        "via ASE before finishing? (y/N): ").strip().lower()
+        "View every generated structure interactively via ASE before finishing? "
+        "(y/N): ").strip().lower()
     view_plots_choice = get_input(
-        "Show the matplotlib plot(s) this run generates (site layout, and the ML ranking "
-        "chart if ML pre-screening was used) on screen before finishing? (y/N): ").strip().lower()
+        "Show the generated plot(s) on screen before finishing? (y/N): ").strip().lower()
 
     args = [
         "-s", struct_file,

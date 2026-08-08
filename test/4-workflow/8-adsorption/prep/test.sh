@@ -271,7 +271,7 @@ check_contains "Relaxing candidates for" log_mlrank.txt
 check_contains "Rank" log_mlrank.txt
 check_contains "\[1/4\]" log_mlrank.txt
 check_contains "converged\|hit step cap" log_mlrank.txt
-check_contains "top-k 2: keeping only the 2 best-ranked" log_mlrank.txt
+check_contains "top-k 2: keeping every orientation of the 2 best-ranked" log_mlrank.txt
 check_success $RUN/sites/ml_rank_ranking.png
 
 echo "Testing: the relaxed adsorbate-slab distance (not just the pre-relax height guess) is"
@@ -952,14 +952,13 @@ rm -rf $RUN
   echo "calc.fdf"       # calc_file
   echo ""               # pp_path (skip)
   echo "O"               # adsorbate(s)
-  echo ""               # ml_prerelax_choice (default N)
+  echo ""               # ml_prerelax (default N)
   echo "1"               # site_choice (ontop)
-  echo ""               # height_sweep_choice (default N)
-  echo ""               # height (default)
-  echo ""               # force_spin (default Y)
+  echo ""               # height (blank = default 2.0, no sweep)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
-  echo "n"               # orient_choice -> no orientation sampling (no --ml-rank either)
+  echo ""               # force_spin (default Y)
+  echo ""               # orient_grid (blank -> skip orientation sampling)
   echo "n"               # both_sides_choice
   echo ""               # show_advanced (default -> skip, so output_dir defaults to adsorption_run)
   echo "y"               # save_report -> yes
@@ -981,16 +980,16 @@ rm -rf $RUN
   echo "calc.fdf"
   echo ""               # pp_path
   echo "O,N"             # adsorbate(s)
-  echo ""               # ml_prerelax_choice
+  echo ""               # ml_prerelax
   echo "1"               # site_choice (ontop)
-  echo "y"               # height_sweep_choice -> Y
+  echo "sweep"           # height -> trigger the approach-curve scan
   echo "1.5"              # h_min
   echo "2.5"              # h_max
   echo "0.5"              # h_step
-  echo ""               # force_spin (default Y)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
-  echo "n"               # orient_choice -> no orientation sampling
+  echo ""               # force_spin (default Y)
+  echo ""               # orient_grid (blank -> skip orientation sampling)
   echo ""               # show_advanced
   echo "n"               # save_report -> no
   echo "n"               # view_choice -> no
@@ -1012,20 +1011,16 @@ rm -rf $RUN
   echo "calc.fdf"
   echo ""               # pp_path
   echo "H2O"             # adsorbate(s)
-  echo ""               # ml_prerelax_choice
+  echo ""               # ml_prerelax
   echo "1"               # site_choice (ontop)
-  echo ""               # height_sweep_choice
-  echo ""               # height
-  echo ""               # force_spin (default Y)
+  echo ""               # height (default, no sweep)
   echo "y"               # all_sites_choice -> Y
+  echo ""               # force_spin (default Y)
   echo "y"               # ml_rank_choice -> Y
   echo ""               # top_k (blank = keep all)
-  echo "y"               # orient_choice -> Y
-  echo "2"               # n_orient_polar
-  echo "2"               # n_orient_azimuthal
+  echo "2x2"             # orientation grid (polar x azimuthal), merged prompt
   echo "1"               # orient_top_k -> keep only 1
-  echo ""               # orient_rmsd_tol (default)
-  echo ""               # show_advanced
+  echo ""               # show_advanced (orient_rmsd_tol default applies unasked)
   echo ""               # save_report
   echo ""               # view_choice
   echo ""               # view_plots_choice
@@ -1046,18 +1041,14 @@ rm -rf $RUN
   echo "calc.fdf"
   echo ""               # pp_path
   echo "H2O"             # adsorbate(s)
-  echo ""               # ml_prerelax_choice
+  echo ""               # ml_prerelax
   echo "1"               # site_choice (ontop)
-  echo ""               # height_sweep_choice
-  echo ""               # height
-  echo ""               # force_spin (default Y)
+  echo ""               # height (default, no sweep)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
-  echo "y"               # orient_choice -> Y (this is what turns --ml-rank on here)
-  echo "2"               # n_orient_polar
-  echo "2"               # n_orient_azimuthal
+  echo ""               # force_spin (default Y)
+  echo "2x2"             # orientation grid -> also turns --ml-rank on here
   echo "1"               # orient_top_k -> keep only 1
-  echo ""               # orient_rmsd_tol (default)
   echo ""               # show_advanced
   echo ""               # save_report
   echo ""               # view_choice

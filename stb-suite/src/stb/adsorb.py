@@ -306,7 +306,10 @@ def main():
     parser.add_argument("--ml-fmax", type=float, default=0.05)
     parser.add_argument("--top-k", type=int, default=None,
                          help="With --ml-rank: only write SIESTA folders for the N best-ranked "
-                              "sites, instead of all of them.")
+                              "sites, instead of all of them. Counts SITES, not orientations -- "
+                              "if orientation sampling is also on, every already "
+                              "--orientation-top-k-kept orientation of each of the N selected "
+                              "sites is written, so the number of folders can exceed N.")
 
     parser.add_argument("--n-orientations-polar", type=int, default=1,
                          help="With --ml-rank and a multi-atom --adsorbate: systematically sample "
@@ -870,9 +873,26 @@ def main():
                             "orientation/energy/converged.)", f_out)
 
             if args.top_k is not None:
-                scored = scored[:args.top_k]
-                print_dual(f"  --top-k {args.top_k}: keeping only the {len(scored)} best-ranked "
-                            "site(s) for the SIESTA folders written below.", f_out)
+                # Group by (slot, h) -- one already-orientation-top-k-filtered
+                # row per orientation kept for that site/height candidate --
+                # and rank GROUPS by their best (lowest-energy) member, rather
+                # than slicing the flat, globally energy-sorted `scored` list
+                # directly. Slicing the flat list (the previous behavior)
+                # could silently drop a second, already-kept orientation of
+                # the actual best site whenever some OTHER site's entry
+                # happened to land between them in the flat order -- with no
+                # orientation sampling this is a no-op (each group has
+                # exactly one row), so it's a strict bug fix, not a behavior
+                # change, for that (default) case.
+                group_best = {}
+                for row in scored:
+                    key = (row[0], row[1])  # (slot, h)
+                    group_best[key] = min(group_best.get(key, row[3]), row[3])
+                top_keys = set(sorted(group_best, key=lambda k: group_best[k])[:args.top_k])
+                scored = [row for row in scored if (row[0], row[1]) in top_keys]
+                print_dual(f"  --top-k {args.top_k}: keeping every orientation of the "
+                            f"{len(top_keys)} best-ranked site(s) ({len(scored)} folder(s) total) "
+                            "for the SIESTA folders written below.", f_out)
             ranked_by_adsorbate[name] = scored
 
     # --- [4] WRITING SITE FOLDERS: materializes every selected candidate

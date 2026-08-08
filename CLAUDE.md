@@ -2154,6 +2154,29 @@ needs scipy >= 1.15's `rng` keyword; this environment has 1.13.1, which only acc
 `random_state`; confirmed via `git log -p` that this line predates any of this
 session's changes).
 
+**Real bug found and fixed, user-reported: `stb-adsorb --ml-rank --top-k N` could silently
+drop a kept orientation of the actual best site.** `[3] ML PRE-SCREENING` builds `scored`, a
+flat list of `(slot, h, st, energy, ...)` rows -- one row per (site, orientation) pair,
+already filtered per-site by `--orientation-top-k` -- sorted globally by energy; `--top-k`
+then did a plain `scored[:args.top_k]`, slicing the combined site x orientation ranking
+directly instead of selecting sites first (contradicting the flag's own documented behavior:
+"only write SIESTA folders for the N best-ranked **sites**"). Reported live on a real 8-atom
+SiC slab + H2O: the winning site's two `--orientation-top-k 2`-kept orientations tied for
+rank 1/2 of the flat, all-sites-combined ranking, so `--top-k 1` kept only rank 1 (orientation
+1) and silently discarded rank 2 (orientation 2 of the SAME winning site) -- not reliable in
+general, since a worse site's own entry landing between two of the best site's orientations
+in the flat order would have kept the wrong candidate instead. Fixed by grouping `scored` by
+`(slot, h)` (a height-sweep candidate is also a distinct "site" in this tool's existing
+model), ranking GROUPS by their best (lowest-energy) member, then keeping every
+already-orientation-top-k-filtered row belonging to the top `--top-k` groups -- fully
+backward-compatible with the no-orientation-sampling case (each group already has exactly one
+row there, so grouped selection is byte-identical to the old flat-list slice; confirmed by the
+full `test/4-workflow/8-adsorption/prep/test.sh` regression suite, 188/188). Verified live by
+re-running the exact reported repro (`--all-sites --ml-rank --top-k 1
+--n-orientations-polar 2 --n-orientations-azimuthal 2 --orientation-top-k 2`): now writes both
+`site_1_ontop_orient1/` and `site_1_ontop_orient2/` under the winning site, instead of just
+one.
+
 ## Domain conventions worth knowing
 
 - Structure file formats handled throughout: POSCAR (VASP), CIF, FDF (SIESTA), XYZ

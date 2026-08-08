@@ -768,6 +768,18 @@ def main():
                         converged, steps = mace_relax.relax(ase_atoms, calc_mace, fmax=args.ml_fmax,
                                                               max_steps=200)
                     energy = ase_atoms.get_potential_energy()
+                    # Wrap right here, once, for EVERY relaxed orientation -- before anything
+                    # downstream sees this structure: deduplicate_orientations' RMSD (raw
+                    # Cartesian, needs a consistent canonical representation across
+                    # candidates to compare like with like), the orientation_trajectory.xyz
+                    # export below, and the site folder eventually written in [4]. The
+                    # substrate is FixAtoms-frozen during this relax, but nothing stops the
+                    # free adsorbate atom(s) from drifting past a periodic cell face while
+                    # converging (most likely for a site starting near a cell edge) --
+                    # ase.Atoms.wrap() is the same all-3-axes canonicalization
+                    # wrap_into_cell() does via pymatgen, just in place on the Atoms object
+                    # these downstream consumers already hold a reference to.
+                    ase_atoms.wrap()
                     orient_results.append((energy, ase_atoms, converged, steps))
                     if orientation_sampling:
                         # Succinct, self-overwriting counter (or periodic full lines when not
@@ -805,14 +817,9 @@ def main():
 
                 for rank, idx in enumerate(kept, start=1):
                     energy, ase_atoms, converged, steps = orient_results[idx]
-                    # A MACE relax only ever moves the free adsorbate atoms (the
-                    # substrate is FixAtoms-frozen), but nothing stops that motion
-                    # from carrying a fractional coordinate past a cell face (most
-                    # often the vacuum axis, for a tall --height guess) -- wrap back
-                    # into [0, 1) the same way the non---ml-rank path already does
-                    # for its unrelaxed guess (see [4] below), so every written
-                    # structure.fdf gets in-cell coordinates regardless of path.
-                    relaxed_struct = wrap_into_cell(AseAtomsAdaptor.get_structure(ase_atoms))
+                    # Already wrapped right after relaxing, above -- ase_atoms.wrap() was
+                    # called in place before this same object was stored in orient_results.
+                    relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
                     relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
                     orient_id = rank if orientation_sampling else 0
                     scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist, orient_id))

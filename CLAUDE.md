@@ -1738,6 +1738,30 @@ correctly shows frac (0.5, 0.5), the same physical position with only the whole-
 -vector part removed (not, say, silently clamped to 0.0/1.0, which would have discarded
 the genuine +0.5 displacement and misrepresented the physics).
 
+**Follow-up, user-reported: the wrap above was still too late** -- placed on
+`relaxed_struct` right before it fed into the site folder write, it never touched
+`orientation_frames` (the `orientation_trajectory.xyz` export) or the `ase_atoms`
+objects `deduplicate_orientations` compares by RMSD, both built earlier in the same
+loop from the SAME `ase.Atoms` object the wrap only ran on later. The user opened
+`orientation_trajectory.xyz` directly (VMD) and the written structures via `ase view`
+and saw molecules sitting outside the cell box in both. Fixed by moving the wrap to
+the earliest possible point instead: `ase_atoms.wrap()` (ASE's own in-place, all-3-axes
+Cartesian wrap -- same canonicalization `wrap_into_cell` does via pymatgen, just
+operating directly on the `Atoms` object every downstream consumer in this loop already
+holds a reference to) is now called immediately after each orientation's relax
+completes and its energy is read off, before `orient_results.append(...)` -- so
+`orientation_frames.append(ase_atoms)`, `deduplicate_orientations`'s RMSD (now
+comparing consistently-wrapped candidates instead of an inconsistent mix, a latent
+correctness improvement to the dedup itself, not just a display fix), and the later
+`relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)` used for the site folder
+all see the same, already-wrapped positions -- the redundant `wrap_into_cell()` call at
+that last step was removed as now-dead code. Verified live: monkeypatching
+`mace_relax.relax` to shift every free (adsorbate) atom by 1.5 lattice vectors along
+both in-plane axes, with H2O + orientation sampling on, confirmed BOTH
+`orientation_trajectory.xyz`'s frames (every sampled orientation, not just the kept
+ones) and the written `structure.fdf` land inside `[0, 1)` at the correct wrapped
+fractional position.
+
 `core/adsorption_sites.py::write_reference_folder` gained an opt-in `force_spin=False`
 parameter (new `SPIN_POLARIZED_BLOCK` constant, same file as `FIXED_CELL_BLOCK`), and
 `stb-nebSites` now passes `force_spin=True` by default for `site_A`/`site_B` (new

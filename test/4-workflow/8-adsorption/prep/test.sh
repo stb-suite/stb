@@ -336,47 +336,89 @@ check_contains "OK" log_frac_wrap_check.txt
 
 echo "Testing: a MACE relax that legitimately drifts the adsorbate outside the cell"
 echo "  (e.g. an unstable orientation sliding across a periodic in-plane boundary) is"
-echo "  wrapped back into [0, 1) before being written, same physical position"
+echo "  wrapped back into [0, 1) right after relaxing -- BEFORE the site folder is"
+echo "  written AND before orientation_trajectory.xyz (opened directly in VMD/ase view,"
+echo "  not just the final SIESTA input) is exported"
 python3 -c "
-import sys, os
-sys.argv = ['stb-adsorb', '-s', 'structure.fdf', '-c', 'calc.fdf', '--adsorbate', 'H',
+import sys, os, json
+sys.argv = ['stb-adsorb', '-s', 'structure.fdf', '-c', 'calc.fdf', '--adsorbate', 'H2O',
             '--site-type', 'ontop', '--all-sites', '--height', '2.0', '--ml-rank',
+            '--n-orientations-polar', '2', '--n-orientations-azimuthal', '1',
             '--no-intro', '-O', 'wrap_after_relax_run']
 
 from stb.core import mace_relax
 _orig_relax = mace_relax.relax
+pre_shift_frac = {}  # orient_j (1-based call order) -> unwrapped frac coords, before the
+                      # synthetic shift below -- the real MACE-relaxed position, whatever
+                      # it physically ended up being (not assumed to be any specific value).
+_call_counter = [0]
 
 def _patched_relax(atoms, calc, cell_mask=None, optimizer='FIRE', fmax=0.05, max_steps=200,
                     step_history=None):
     converged, steps = _orig_relax(atoms, calc, cell_mask=cell_mask, optimizer=optimizer,
                                     fmax=fmax, max_steps=max_steps, step_history=step_history)
+    _call_counter[0] += 1
+    pre_shift_frac[_call_counter[0]] = atoms.get_scaled_positions(wrap=False)[2:].copy()
     # Simulate the real-world case this fix targets: the optimizer's own
     # trajectory legitimately carries the free adsorbate atom(s) a full+half
     # lattice vector past the cell boundary along both in-plane axes -- e.g.
     # an unstable starting orientation sliding across x=0/x=1 while relaxing.
+    # Shifts EVERY free (non-substrate) atom, not just one -- H2O has 3.
     cell = atoms.get_cell()
-    atoms.positions[-1] += 1.5 * cell[0] + 1.5 * cell[1]
+    atoms.positions[2:] += 1.5 * cell[0] + 1.5 * cell[1]
     return converged, steps
 
 mace_relax.relax = _patched_relax
 from stb.adsorb import main
 main()
+with open('wrap_after_relax_run/pre_shift_frac.json', 'w') as f:
+    json.dump({k: v.tolist() for k, v in pre_shift_frac.items()}, f)
 " > log_wrap_after_relax.txt 2>&1
 check_exit_code $? 0
+
+echo "Testing: orientation_trajectory.xyz frames are wrapped correctly -- the same"
+echo "  physical position modulo the injected 1.5-lattice-vector shift (opened directly"
+echo "  in VMD/ase view, not just the final SIESTA input written in [4])"
 python3 -c "
+import json
+import numpy as np
+import ase.io
+with open('wrap_after_relax_run/pre_shift_frac.json') as f:
+    pre_shift_frac = {int(k): np.array(v) for k, v in json.load(f).items()}
+frames = ase.io.read('wrap_after_relax_run/sites/orientation_trajectory.xyz', index=':')
+assert len(frames) == len(pre_shift_frac), \
+    f'expected {len(pre_shift_frac)} sampled orientation frame(s), found {len(frames)}'
+for atoms in frames:
+    orient_j = atoms.info['orientation']
+    wrapped = atoms.get_scaled_positions(wrap=False)[2:]
+    assert np.all((wrapped >= -1e-6) & (wrapped <= 1.0 + 1e-6)), \
+        f'orientation {orient_j}: out-of-range fractional coord(s): {wrapped}'
+    # Wrapped value must equal (pre-shift + 1.5 along a/b only, z untouched)
+    # mod 1, whatever the real relaxed position actually was -- proves the
+    # SAME fractional part survived (only the whole-lattice-vector part was
+    # removed), not silently clamped/discarded/corrupted by the wrap.
+    expected = pre_shift_frac[orient_j].copy()
+    expected[:, :2] += 1.5
+    expected %= 1.0
+    delta = np.abs(wrapped - expected)
+    delta = np.minimum(delta, 1.0 - delta)  # tolerate a wrap-boundary flip (e.g. -1e-9 vs 1-1e-9)
+    assert np.all(delta < 1e-4), \
+        f'orientation {orient_j}: wrapped {wrapped} != expected {expected} (pre-shift {pre_shift_frac[orient_j]})'
+print('OK')
+" > log_wrap_xyz_check.txt 2>&1
+check_contains "OK" log_wrap_xyz_check.txt
+
+echo "Testing: the same wrapped positions are what's actually written to the site folders"
+python3 -c "
+import glob
 from stb.core import structure_io
-s = structure_io.read_fdf('wrap_after_relax_run/sites/site_1_ontop/structure.fdf')
-symbol, frac = s.atoms[-1]
-assert symbol == 'H', f'expected the adsorbate (H) last, got {symbol}'
-x, y, z = frac
-assert -1e-6 <= x <= 1.0 + 1e-6 and -1e-6 <= y <= 1.0 + 1e-6, \
-    f'adsorbate fractional coord not wrapped into [0, 1): {frac}'
-# The injected shift was exactly 1.5 lattice vectors along a and b -- the
-# wrapped x/y must land near 0.5 (same fractional part), not near 0.0/1.0
-# (which would mean the wrap silently discarded the +0.5 real displacement
-# instead of only removing the +1 whole-lattice-vector part).
-assert abs(x - 0.5) < 1e-4 and abs(y - 0.5) < 1e-4, \
-    f'wrapped coord lost its fractional part (physics changed): {frac}'
+bad = []
+for site_dir in sorted(glob.glob('wrap_after_relax_run/sites/site_*')):
+    s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
+    for symbol, frac in s.atoms:
+        if not all(-1e-6 <= c <= 1.0 + 1e-6 for c in frac):
+            bad.append(f'{site_dir}: {symbol} has out-of-range fractional coord {frac}')
+assert not bad, '\n'.join(bad)
 print('OK')
 " > log_wrap_after_relax_check.txt 2>&1
 check_contains "OK" log_wrap_after_relax_check.txt

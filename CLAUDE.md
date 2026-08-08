@@ -1083,6 +1083,39 @@ exactly, not the original guess; a site with no `siesta.XV` yet is reported and 
 fatal to the batch); a mismatched atom count (stale/hand-edited folder) is caught and
 reported explicitly rather than silently misread.
 
+**Second real, verified physics bug in `stb-adsorbBsse`, found from a real user SIESTA
+calculation** (O adsorbed on a SiC slab): the BSSE-corrected `E_ads` came out MORE
+negative (stronger binding) than the uncorrected value -- physically impossible for a
+genuine Boys-Bernardi counterpoise correction, which can only ever weaken (never
+strengthen) a binding energy, since adding ghost basis functions is a strictly
+variational improvement. Root cause: `write_bsse_folders`'s `config_extra.fdf`
+(`BSSE_SINGLE_POINT_BLOCK`) only ever forced `MD.VariableCell false` +
+single-point-SCF -- it never carried over the site's own `Spin polarized`/
+`Slab.DipoleCorrection` overrides (`read_original_calc_text` deliberately strips the
+site's `%include config_extra.fdf` line to recover the user's raw `--calc` template, and
+the BSSE stage's own replacement config never re-added them). So `bsse_slab`/
+`bsse_adsorbate` silently fell back to the template's own `Spin non-polarized`, while
+`E_site` (and the isolated-adsorbate reference) were genuinely spin-polarized -- for an
+open-shell adsorbate like O, the resulting spin-restriction penalty on the ghost
+fragment (~1.1 eV, verified against the real run's own `calc.out` files) was large
+enough to swamp the genuine (~0.01-0.2 eV) BSSE effect and flip its sign. Fixed with a
+new `read_site_theory_flags(site_dir)`: reads the site's own already-written
+`config_extra.fdf` (rather than re-deriving the answer from CLI flags, so it's correct
+regardless of which `stb-adsorb` version/flags produced that site) for whether `Spin`/
+`Slab.DipoleCorrection` are present, and `write_bsse_folders` now composes its
+`config_extra.fdf` as `BSSE_SINGLE_POINT_BLOCK` + (`core/adsorption_sites.py`'s own
+`SPIN_POLARIZED_BLOCK`/`DIPOLE_CORRECTION_BLOCK` when the site actually used them) --
+same shared constants `write_reference_folder` already uses, imported rather than
+duplicated. `write_bsse_folders` now returns `(spin_polarized, dipole_corrected)` so
+`main()`'s `[2] WRITING BSSE FOLDERS` section reports, per site, whether each was
+inherited. Verified live against the real repro (`--no-force-spin` fixture in
+`test/4-workflow/8-adsorption/bsse/test.sh`, 58 checks): a site built with
+`--force-spin` (the default) propagates both `Spin polarized` and
+`Slab.DipoleCorrection` into both ghost fragments; a site built with `--no-force-spin`
+correctly gets neither `Spin` line (dipole correction is unconditional at the site
+level, so it still propagates) -- confirming the fix reads the site's actual level of
+theory rather than always forcing spin on.
+
 **`stb-nebSites`** (Workflow item 9, "NEB / Reaction Path", `neb_sites.py`) is a new Stage 1
 inserted ahead of the existing `stb-neb`/`stb-nebAnalysis` pair, which renumbered from
 `4.9.1`/`4.9.2` to `4.9.2`/`4.9.3` -- the same insert-a-stage-and-renumber pattern already
@@ -1481,6 +1514,201 @@ live: a synthetic near-boundary fixture (frac `z=0.02`, 20 Ang cell) correctly s
 now-recentered surface (frac `z=0.60` for `--height 2.0`); the suite's own already-centered
 graphene fixture (frac `z=0.5` from the start) correctly triggered no shift at all.
 
+**`stb-adsorb` (item 4.8.1) gained the same `center_slab_in_vacuum()` recentering,
+user-requested** -- `neb_sites.py`'s own definition moved into `core/adsorption_sites.py`
+(extract-on-second-use, `neb_sites.py` now imports it instead of defining it locally, no
+behavior change there) once `adsorb.py` became a second consumer. Called right after
+`pmg_structure = structure_io.to_pymatgen(structure)` (so every downstream step --
+site-finding, `clean_slab/`, every `sites/site_*/` -- already sees the recentered
+geometry), with the `[INFO]`/`Slab already centered` report line moved into `[1]
+REFERENCE FOLDERS` (via `print_dual`, so it's captured by `--save-report`) rather than
+`adsorb.py`'s own pre-existing `relabel_note` placement (a plain `print()` before the
+report file even opens, left exactly as-is -- not a bug this change was asked to fix,
+so deliberately not touched). Verified live with the identical repro `stb-nebSites`
+itself was verified against: a synthetic frac `z=0.02` structure in a 20 Ang cell
+shifted by exactly `+9.600 Ang` to frac `z=0.5`, confirmed in the written
+`clean_slab/structure.fdf`; the suite's own already-centered fixture correctly
+triggers no shift.
+
+**`stb-adsorb` (4.8.1): DFT-D3 van der Waals correction forced unconditionally on every
+folder it writes, and systematic multi-orientation MACE screening for molecular
+adsorbates, both user-requested.**
+
+**Van der Waals**: new `core/adsorption_sites.py::VDW_CORRECTION_BLOCK` (`DFTD3
+.true.`, same `config_extra.fdf`-include mechanism as `FIXED_CELL_BLOCK`/
+`SPIN_POLARIZED_BLOCK`/`DIPOLE_CORRECTION_BLOCK`) and a new `force_vdw=False` parameter
+on `write_reference_folder`. `stb-adsorb`'s 3 call sites (`clean_slab/`, the isolated
+-adsorbate reference, `sites/site_*/`) all pass `force_vdw=True` unconditionally --
+same "hardcoded `True`, no opt-out flag" style `force_dipole=True` already used, not
+`force_spin`'s opt-out-able style, since (unlike the dipole correction) dispersion is
+physically meaningful for every folder alike, boxed molecule included. **Real-evidence
+syntax**: confirmed against an actual, successfully-completed SIESTA run in this exact
+workflow (`MESSAGES: "DFT-D3: loading default parameters for functional PBE"`) --
+SIESTA's OTHER vdW mechanism (a native `XC.Functional VDW` non-local functional) has no
+evidence of use anywhere in this repository and is NOT what this forces. Propagated
+everywhere the same "same level of theory as `E_site`" rule already applies to Spin/
+dipole (the exact bug class fixed earlier this session for BSSE): `adsorb_bsse.py`'s
+and `adsorb_analysis.py`'s own `read_site_theory_flags` now each return a 3-tuple
+`(spin, dipole, vdw)` (checking for `"DFTD3"` in the site's `config_extra.fdf`
+alongside `"Spin"`/`"Slab.DipoleCorrection"`), propagated into the BSSE ghost fragments
+and the Gibbs-prep Hessian displacement folders respectively, same as spin/dipole
+already were. Deliberately NOT extended to `stb-nebSites`/`neb_sites.py` (same
+`write_reference_folder`, but out of scope this round, same scoping precedent already
+set earlier this session for `wrap_into_cell`).
+
+**A second real, latent bug caught while wiring vdW into the Gibbs-prep isolated
+-adsorbate reference** (`adsorb_analysis.py`'s `[6] GIBBS FREE ENERGY (DG) PREP`): the
+isolated reference's own Hessian displacement folders were built from `open(ads_dir/
+calc.fdf).read()` directly -- unlike the site side, which already used
+`read_original_calc_text` to STRIP the leading `%include config_extra.fdf` line before
+reuse. Since `write_gibbs_folder` never copies a `config_extra.fdf` into `disp_NNN/`
+(only `calc.fdf`+`structure.fdf`), every isolated-reference Gibbs folder was carrying a
+literal, DANGLING `%include config_extra.fdf` that SIESTA would fail to parse --
+present since the ΔG feature first shipped, only surfaced now because adding vdW
+required re-deriving what flags to re-apply and forced a closer look at this exact
+code path. Fixed by switching to `read_original_calc_text` there too (matching the
+site side exactly), then explicitly re-applying whatever `read_site_theory_flags(
+ads_dir)` finds (`Spin`, `DFTD3` -- never `Slab.DipoleCorrection`, a boxed molecule
+isn't a slab, matching `write_reference_folder`'s own `adsorbate_dir` call having no
+`force_dipole`) via new `_force_vdw_correction_text` (mirroring the existing
+`_force_spin_polarized_text`/`_force_dipole_correction_text` flat-calc.fdf helpers).
+Verified live: `gibbs/<adsorbate>_isolated/disp_*/calc.fdf` no longer contains
+`%include config_extra.fdf` at all, and correctly carries `Spin polarized`+`DFTD3
+.true.` (no `Slab.DipoleCorrection`) inherited from the isolated reference's own
+folder.
+
+**Orientation sampling**: new `core/adsorption_sites.py::generate_systematic_
+orientations(mol, n_polar, n_azimuthal)` and `deduplicate_orientations(entries,
+n_substrate, rmsd_tol, energy_tol)`, wired into `stb-adsorb --ml-rank` via 4 new flags
+(`--n-orientations-polar`/`--n-orientations-azimuthal`, both default `1` = today's
+exact single-orientation behavior; `--orientation-top-k`; `--orientation-rmsd-tol`,
+default 0.3 Ang) -- deliberately NOT reusing `mladsorb.py::pick_best_orientation`
+(fully random `Rotation.random`, single-point energy only, picks ONE winner before a
+single relax): the user explicitly asked for a SYSTEMATIC (reproducible, no seed) set,
+with a FULL relax of every sampled orientation (not just single-point), keeping the
+Top-N unique survivors -- different enough from the existing random/single-point
+-then-relax-once pattern that reusing it wasn't practical.
+- `generate_systematic_orientations`: `n_polar` reference directions (in the
+  molecule's OWN unrotated frame) spread evenly over a sphere via a Fibonacci-sphere
+  lattice (deterministic, no pole-clustering the way a naive lat/long grid has, no RNG
+  needed) -- exploits that `AdsorbateSiteFinder.add_adsorbate` always translates
+  whichever atom(s) sit at the molecule's OWN most-negative-z to touch the surface, so
+  pre-rotating a different reference direction to that "most negative z" position is
+  exactly how to control which part of the molecule (for H2O: O, either H, or
+  in-between) ends up facing the surface. Each direction combined with `n_azimuthal`
+  evenly-spaced spins (0-360 deg, exclusive) about that same new z-axis, via
+  `scipy.spatial.transform.Rotation.align_vectors`+`from_rotvec` (already a suite
+  dependency, same `scipy.spatial.transform` `mladsorb.py` already imports). Verified:
+  a rigid rotation (bond lengths and center-of-mass exactly preserved to `1e-6`) with
+  `n_polar=6, n_azimuthal=4` -> 24 pairwise-distinct orientations, none identical.
+- `deduplicate_orientations`: greedy, RMSD on adsorbate atoms only (no Kabsch alignment
+  needed -- same substrate, same reference frame across every candidate at one site)
+  computed directly (no periodic minimum-image correction -- documented simplification,
+  not expected to matter for independently-relaxed candidates starting from the same
+  site coordinate). Drops a candidate only if it's within BOTH `rmsd_tol` AND
+  `energy_tol` (default 0.01 eV) of an already-kept one -- requiring both avoids
+  merging two genuinely different minima that coincidentally share one metric.
+  Verified: near-geometry+near-energy pairs collapse to 1; near-geometry-but-far-energy
+  and far-geometry-but-near-energy pairs both correctly stay as 2.
+
+Integration into `adsorb.py`'s existing `[3] ML PRE-SCREENING` `--ml-rank` loop: for
+each `(site, height)` candidate, generates the orientation set, runs a full MACE relax
+(substrate `FixAtoms`, same `mace_relax.relax` call already used) per orientation,
+sorts by energy, deduplicates, optionally trims to `--orientation-top-k`, and emits one
+`scored` entry per surviving orientation (tuple grew from 6 to 7 elements, `orient`
+appended last: `0` when sampling wasn't requested -- preserving every existing table/
+plot/folder-naming output byte-for-byte -- else the 1-based post-dedup energy rank).
+Flows into the SAME `[4] WRITING SITE FOLDERS` step unmodified, just with more
+`site_..._orientN` labels; the existing `--top-k` (trims across ALL candidates,
+existing flag) composes cleanly on top, unchanged. `plot_ml_ranking`'s bar labels grow
+a `-oN` suffix when orientations were sampled. Verified live end-to-end on the suite's
+own graphene fixture with a real H2O adsorbate (`--n-orientations-polar 4
+--n-orientations-azimuthal 2 --orientation-top-k 3`): 8 orientations sampled, 3 unique
+survivors, 3 real `site_1_ontop_orientN/` SIESTA folders written, each with genuinely
+different adsorbate-atom z-positions (confirmed by direct inspection) and `DFTD3
+.true.` correctly present in each.
+
+**A follow-up pass on orientation sampling added 4 more usability features, all
+user-requested from real workflow friction**:
+- **Single-site orientation sampling**: `--ml-rank` used to hard-require `--all-sites`
+  (`parser.error`, "screening a single --site-index site has nothing to rank against") --
+  too strict once orientation sampling exists, since a single chosen site's own sampled
+  orientations ARE something to rank, even with `--all-sites` never given. The check now
+  reads `if args.ml_rank and not args.all_sites and not orientation_flags_used:`, so
+  `--ml-rank --site-index N --n-orientations-polar/--azimuthal ...` (no `--all-sites`)
+  runs all requested orientations on that ONE chosen site instead of forcing every other
+  symmetric site too -- `variants` (the `(slot, height, site_type, coord)` list the
+  `--ml-rank` loop already iterates) needed zero changes for this, since a single-site
+  selection was already just `n_selected=1` in that same list; only the validation gate
+  was too strict. `stb_suite.py`'s `run_adsorb_setup()` menu wrapper was updated to
+  match: the orientation-sampling prompt used to live only inside the `--all-sites`
+  branch (`if all_sites: ... if ml_rank: ...`); it's now asked whenever `all_sites` is
+  True AND `ml_rank` was chosen, OR whenever `all_sites` is False (single site) --
+  answering "yes" in the single-site case is now what turns `ml_rank` on (no separate
+  "pre-screen with MACE?" question there, since orientation sampling is the only reason
+  `--ml-rank` does anything for one site). This also surfaced a real, latent args-
+  construction bug: the pre-existing code only ever appended `--ml-rank`/orientation
+  flags to `args` inside the `if all_sites:` branch, so a single-site `ml_rank=True`
+  (now reachable) would have silently built a command line with NONE of `--ml-rank`/
+  `--n-orientations-*` even though the user had just said yes to all of it -- fixed by
+  moving the `if ml_rank:` block out to run unconditionally (after the `all_sites`/
+  `site_index` args are appended), gating only `--top-k` (site-ranking, meaningless for
+  one site) on `all_sites` specifically. Verified live both via the CLI directly
+  (`--site-index 0 --ml-rank --n-orientations-polar 2 --n-orientations-azimuthal 2`,
+  no `--all-sites`, succeeds and writes `site_1_ontop_orientN/` folders) and through the
+  interactive menu (`4.8.1` -> single site -> orientation sampling -> yes), including
+  that the plain `--ml-rank --site-index N` case with NO orientation sampling is still
+  correctly rejected (`parser.error`, unchanged message).
+- **Succinct per-orientation progress counter**: the per-orientation MACE relax loop
+  previously printed nothing at all while it ran (only the post-dedup/top-k survivors
+  got a `print_dual` line each) -- fine for a small 2x2 grid, invisible/silent-feeling
+  for a large one (e.g. the docstring's own suggested 100-orientation, keep-the-best-10
+  workflow). New `core/cli.py::print_progress_line(line, step, total)`/
+  `finish_progress_line()` (extracted from `amorphize.py`'s pre-existing, tty-aware
+  melt/quench progress helpers of the same design -- `amorphize.py`'s own
+  `print_progress`/`finish_progress_line` are now thin wrappers calling the shared
+  versions, zero behavior change there, same extract-on-second-use policy as the rest of
+  `core/`): a self-overwriting `\r`-updated line on an interactive terminal, or a
+  periodic full line (every ~10% of the total, plus the final step) when stderr is
+  redirected (e.g. into a log file, exactly how this suite's own test scripts capture
+  output) -- avoiding both "spam scrollback with hundreds of lines" and "produce nothing
+  visible when piped." Called once per orientation inside `adsorb.py`'s relax loop
+  (`site {i}/{n_sites} ({type}, h=...): orientation {j}/{n_orientations} relaxed (E =
+  ... eV, converged/hit step cap)`), `finish_progress_line()` once the per-site
+  orientation loop ends. The post-dedup "N orientation(s) sampled -> M unique kept"
+  summary line (unchanged) still prints normally via `print_dual`.
+- **`.xyz` trajectory of every generated orientation**: `--n-orientations-polar`/
+  `--azimuthal` sampling now also writes `sites/orientation_trajectory<_adsorbate>.xyz`
+  (multi-frame extended XYZ, `ase.io.write(..., format="extxyz")`) containing EVERY
+  relaxed orientation candidate actually generated across every sampled site for that
+  adsorbate -- not just the unique/`--orientation-top-k`-surviving ones written as real
+  SIESTA folders -- so the full exploration (including near-duplicates/discarded, higher
+  -energy attempts) can be visually reviewed as a trajectory/video in VMD/OVITO,
+  something no static ranking table/plot can show. Each frame's `ase.Atoms.info` records
+  `site`/`site_type`/`height`/`orientation`/`energy_eV`/`converged` (visible as
+  extended-XYZ header key=value pairs, same convention `stb-mlmd`'s own `--out-format
+  xyz` already uses for per-frame metadata). **Real bug found and fixed while
+  implementing this**: writing straight from the just-relaxed `ase.Atoms` (still
+  carrying its live MACE `SinglePointCalculator`/`MACECalculator` results) raised
+  `KeyError: 'key from calculator already exists in atoms.info'` -- `ase`'s own extxyz
+  writer tries to fold the ATTACHED CALCULATOR's own results (`energy`, etc.) into
+  `atoms.info` too, colliding with the `energy_eV`-etc. keys this tool sets manually one
+  line earlier. Fixed by detaching the calculator (`ase_atoms.calc = None`) right after
+  reading `get_potential_energy()` and before appending to the frame list -- harmless,
+  since nothing downstream (`AseAtomsAdaptor.get_structure`, `min_adsorbate_slab_
+  distance`) needs the attached calculator, only the already-extracted `energy`/
+  `converged` values. Verified live: a 4-orientation single-site run wrote exactly 4
+  frames (matching `orient_results`' full count, before any dedup/top-k trimming), each
+  with the correct per-frame `site=`/`site_type=`/`energy_eV=` header fields.
+- **`--orientation-top-k` already covers "choose how many folders per site, ranked by
+  energy"**: no new code needed -- its existing docstring/behavior (`kept =
+  kept[:args.orientation_top_k]`, applied AFTER `deduplicate_orientations`) already
+  means exactly "of the N unique orientations found for a site (e.g. 100 sampled -> M
+  unique), keep only the `--orientation-top-k` lowest-energy ones as real SIESTA
+  folders" -- verified live it matches the requested "100 generated, pick the best 10"
+  workflow shape exactly (checked with a small 2x2=4 grid and `--orientation-top-k 1`:
+  exactly 1 folder written, while `orientation_trajectory.xyz` still carries all 4).
+
 `core/adsorption_sites.py::write_reference_folder` gained an opt-in `force_spin=False`
 parameter (new `SPIN_POLARIZED_BLOCK` constant, same file as `FIXED_CELL_BLOCK`), and
 `stb-nebSites` now passes `force_spin=True` by default for `site_A`/`site_B` (new
@@ -1621,6 +1849,219 @@ threading its own `device` argument to that one function:
 Verified live: `gpu_available()` correctly reports a real GPU's name (RTX 3060) on a
 machine that has one; mocking `torch.cuda.is_available` to `False` confirms
 `resolve_device("cuda")` raises the expected `ValueError`.
+
+**`stb-adsorb` (item 4.8.1) is a deliberate exception to `resolve_device`'s raise
+-on-missing-GPU default, per explicit user request**: `--ml-rank`/`--ml-prerelax` are
+only ever a fast pre-screening/pre-relax step ahead of the real SIESTA jobs the rest of
+the tool writes, so a missing GPU aborting the whole run (as every other MACE-consuming
+tool still does, unchanged) was judged more disruptive than useful here. New
+`adsorb.py::resolve_ml_device(device, mace_relax_module)` checks `gpu_available()`
+itself and returns `("cpu", <warning text>)` instead of letting `get_calculator`'s own
+`resolve_device` raise, so both `--ml-prerelax` and `--ml-rank` degrade to CPU with a
+`[WARNING]` in the report rather than erroring out. Returns the warning text instead of
+printing it directly: both call sites resolve this from inside a
+`capture_library_noise()` block, whose stdout redirect would otherwise silently swallow
+a `print_dual` call made in there, so the print happens just after the `with` block
+exits. Verified live on a GPU-less machine: `stb-adsorb --ml-rank --ml-device cuda`
+exits 0, prints `[WARNING] --ml-device cuda requested, but no CUDA-capable GPU was
+detected ... -- falling back to CPU.`, and still writes the site folder normally.
+
+**`stb-adsorb` (item 4.8.1), user-reported: the adsorbate could be written to
+`sites/site_*/structure.fdf` with a fractional coordinate outside `[0, 1)`** (negative,
+or >= 1). Root cause confirmed against pymatgen's own installed source:
+`AdsorbateSiteFinder.add_adsorbate`/`adsorb_both_surfaces` place the adsorbate atom(s)
+via `struct.append(specie, ads_coord + site.coords, coords_are_cartesian=True)` with no
+`to_unit_cell=True`, so the resulting fractional coordinate is never normalized -- and
+`core/structure_io.py::from_pymatgen` writes `site.frac_coords` straight through with no
+wrap either. All 3 possible origins of a site's structure (plain `add_adsorbate`, the
+`--ml-rank` MACE-relaxed structure, `--both-sides`) funnel through the same site-writing
+loop in `main()` before `write_reference_folder` is called, so a single fix there covers
+all of them: wraps `ads_struct` via `wrap_into_cell` -- already reused (not duplicated,
+same policy as everywhere else in `core/`) directly from `neb.py` (`from stb.neb import
+wrap_into_cell`), the same function `mlneb.py`/`mladsorb.py`/`mldiffusion.py` already
+import from there. `min_adsorbate_slab_distance`'s own `distance_matrix` is already
+periodic-aware, so wrapping first (before that overlap check, in the same loop) doesn't
+change its result. Scope deliberately limited to `stb-adsorb` alone, per explicit user
+request -- `stb-nebSites` has the identical latent issue (same `add_adsorbate` +
+`write_reference_folder` pattern) but was left unfixed for now. Verified live with a
+deliberately large `--height 15` on the suite's own 20 Ang-cell graphene fixture (slab
+top at frac z=0.5, so the unwrapped adsorbate would land at frac z=25/20=1.25): the
+written `structure.fdf` correctly shows z=0.25. A second, weaker case surfaced while
+building this regression test: a raw frac coordinate that's mathematically just below
+1.0 by floating-point noise (e.g. `0.9999999997712383`, from `--ml-rank`'s MACE relax
+landing an ontop adsorbate almost exactly back at its starting xy) is legitimately
+wrapped and correct, but `write_fdf`'s own `.8f` formatting rounds it to the printed
+string `"1.00000000"` -- not a bug (physically indistinguishable from 0.0, ~1e-8 Ang),
+but the regression test's own tolerance (`test/4-workflow/8-adsorption/prep/test.sh`)
+had to widen from a strict `< 1.0` to `<= 1.0 + 1e-6` to avoid flagging this harmless
+display-rounding artifact as a false failure.
+
+**Follow-up, user-reported: `sites/adsorption_sites.png` still showed candidate markers
+outside the highlighted unit cell**, even after the write-time fix above -- a different
+code path entirely (`core/adsorption_sites.py::write_site_plot`, the generic candidate
+-overview plot, was never touched by that fix, and only ever draws pymatgen's OWN
+`find_adsorption_sites()` candidates at pymatgen's own defaults, not this run's actual
+selected/written sites). The real constraint, already documented on
+`cluster_candidate_coords`'s own docstring from an earlier (2026-08-06) investigation:
+a group of symmetrically-equivalent candidates that are mutually close to each other can
+provably straddle the cell boundary in a way that makes "mutually close" and "fully
+inside one fixed `[0,1)` box" mutually exclusive for a SINGLE chosen representative
+point per candidate -- an attempt to force it anyway was tried and reverted back then.
+A first attempt this round (`periodic_marker_copies`, since replaced) sidestepped that
+by drawing EVERY periodic image of every candidate visible in the plotted window
+(matching `plot_slab`'s own `repeat=5` tiling of the underlying atoms) -- correct, but
+visually noisy (many duplicate "x" marks scattered well outside the cell too) and not
+what was actually asked for. Per explicit follow-up request ("mark only the ones inside
+the unit cell"), replaced with **`core/adsorption_sites.py::wrap_markers_into_cell
+(cart_sites, lattice_matrix, symm_op)`**: exactly one marker per candidate, its unique
+periodic image whose in-plane fractional coordinate (solved via `inv([a2d, b2d]) @ xy`
+in the plot's own 2D rotated frame, then `% 1.0` on both components -- the 2D-projected
+analog of `neb.py::wrap_into_cell`'s `frac_coords % 1.0`, needed separately since
+candidates here are bare Cartesian points, not full pymatgen Structures) lands in
+`[0,1) x [0,1)`. This deliberately reintroduces `cluster_candidate_coords`'s own
+documented tradeoff in the OTHER direction: two genuinely-adjacent-across-a-cell-seam
+candidates (e.g. frac x=0.001 and x=0.999) each wrap correctly but independently, so
+they can still end up near opposite edges of the same drawn cell -- accepted as the
+right tradeoff for this specific plot now that "only inside the cell, no clutter" is
+the stated priority. `write_site_plot` calls this in place of `cluster_candidate_coords`
+for its own single scatter call; `cluster_candidate_coords` itself is unchanged and
+still used everywhere else it always was (site-selection distance logic in
+`adsorb.py::main()`, `stb-nebSites`'s "closest candidate pair" suggestion), since those
+need one real, distance-comparable coordinate, not a plotting convenience. Benefits
+`stb-mladsorb` for free too (`mladsorb.py` reuses the same `write_site_plot`);
+`stb-nebSites` is unaffected, it has its own dedicated, unrelated plot functions.
+Verified live on the suite's own graphene fixture (`--site-type all --all-sites`, 4
+candidates): all 4 markers now render exactly once each, all strictly inside the drawn
+cell parallelogram, no duplicates outside it. Unit test in
+`test/4-workflow/8-adsorption/prep/test.sh` (6h): a candidate deliberately placed
+outside `[0,1)` (frac x=-0.3 in the rotated in-plane basis) comes back wrapped to
+alpha~0.7, one that's already inside comes back unchanged, and exactly one marker is
+returned per input candidate.
+
+**`stb-adsorbAnalysis` (Stage 3) gained physical diagnostics, a "what to run next"
+pointer, and an opt-in Gibbs-free-energy prep step; new `stb-adsorbGibbs` (Stage 4,
+item 4.8.4) computes the actual DG.** User-requested three-part addition to the
+Adsorption workflow (item 8):
+
+- **`[2b] PHYSICAL DIAGNOSTICS`** -- per site, dipole magnitude (reusing the
+  already-existing `core/siesta_log.py::get_electric_dipole`, no new parser needed)
+  and net spin/magnetic moment (new `core/siesta_log.py::get_spin_moment`, same
+  "last matching line wins, never raises" convention as every other parser there --
+  **flagged as unverified**: no spin-polarized `.out` fixture exists anywhere in this
+  repository to confirm SIESTA's exact wording against, tries two plausible patterns
+  `"Total spin polarization"`/`"Total spin moment"`, degrades to `None`/`"--"` if
+  neither matches a real run -- needs live confirmation), and a bond-length-change
+  column (`min_adsorbate_slab_distance`, imported directly from `adsorb.py` -- this
+  workflow's own established cross-import convention, e.g. `adsorb_bsse.py` already
+  imports `read_site_table` from `adsorb_analysis.py` the same way -- comparing the
+  pre-relaxation guess `structure.fdf` against the relaxed `.XV`/`read_site_geometry_
+  atoms` result).
+- **`[5] SUGGESTED NEXT ANALYSES`** -- always-printed, references `apply_source_label`
+  (the same winning-site variable `[4] APPLY` already resolves) with conditional
+  ("if you also generated `<file>`...") pointers at `stb-bader` (needs `.RHO`),
+  `stb-dos` (needs `.PDOS.xml`), `stb-workfunction` (needs `.VT` -- also a natural
+  dipole-correction consistency check, since `[2b]` already reports the dipole
+  `Slab.DipoleCorrection` is meant to fix), and `stb-coop` (needs a full-BZ `.WFSX` +
+  `.HSX`) -- none of these SIESTA outputs are things `stb-adsorb` itself guarantees
+  exist, so every suggestion is conditional rather than assumed.
+- **`[6] GIBBS FREE ENERGY (DG) PREP`**, opt-in via `--compute-gibbs` (off by
+  default) -- the one deliberate exception in this tool to "analysis never generates
+  new folders" (explicit user design decision, recorded here so it doesn't get
+  "fixed" back by accident later): writes the vibrational-Hessian displacement
+  folders the new Stage 4 needs, for the winning site (`apply_source_label`) and its
+  isolated-adsorbate reference, once BOTH are confirmed relaxed (`core/structure_io.py
+  ::read_relaxed_or_input`, a hard `[ERROR]` -- not silently falling back to the
+  unrelaxed guess -- if either lacks a finished `siesta.XV`, since a Hessian at a
+  non-stationary point isn't physically meaningful). `--zpe-mode {local,full}`
+  (default `local`, confirmed with the user) mirrors `stb-herRefs`/`stb-oerRefs`'s
+  own dual-mode design:
+  - `local` (default): a partial-Hessian, decoupled-oscillator finite-difference
+    calculation -- new `write_local_hessian_folders` (duplicated/adapted from
+    `oer_refs.py::write_local_zpe_folders`'s own N-atom generalization of
+    `her_refs.py`'s single-atom version -- each workflow stays self-contained,
+    re-reading/duplicating rather than cross-importing a SIBLING workflow's module,
+    exactly the same convention HER/OER already follow between themselves) --
+    displaces only the adsorbate's own atoms (substrate frozen) for the site side, 6
+    folders per atom (`disp_001..disp_{6N}`), plus a `gibbs_local_meta.json` sidecar
+    (atom indices/symbols/displacement/order/SystemLabel). **No Phonopy involved at
+    all** in this mode.
+  - `full`: a real Phonopy phonon calculation of the ENTIRE site structure AND the
+    clean slab (needed so Stage 4 can subtract the clean slab's own phonon ZPE/
+    entropy, same physical reasoning `her_analysis.py`'s own module docstring already
+    documents) -- reuses `core/phonon_workflow.py::build_phonon_displacements`/
+    `write_displacement_folders` directly, near-verbatim adaptation of
+    `her_refs.py`'s own full-mode block.
+  - **The isolated-adsorbate reference ALWAYS uses the `local` method, regardless of
+    `--zpe-mode`** -- confirmed as the right simplification with the user: a molecule
+    in an all-around vacuum box has no periodic substrate phonon to subtract, so
+    Phonopy's supercell machinery buys nothing there; a plain full-molecule Hessian
+    (every atom of the isolated reference, not just "the adsorbate's atoms" since
+    there's no substrate to freeze) is the correct, and cheaper, choice either way.
+  - Site/reference `config.fdf` correctness: the site's Hessian folders inherit the
+    site's own `Spin polarized`/`Slab.DipoleCorrection` (new `read_site_theory_flags`,
+    duplicated -- not cross-imported, same self-contained-workflow reasoning as
+    above -- from the identical fix already made for `stb-adsorbBsse`'s own ghost
+    fragments earlier this session) rather than silently reverting to the raw
+    `--calc` template's own (often non-polarized) `Spin` setting -- the exact class of
+    bug already found and fixed once for BSSE, deliberately not reintroduced here.
+    The isolated reference's own `calc.fdf` already has `Spin polarized` baked
+    directly into its text (from `adsorb.py`'s `force_spin_polarized`, applied
+    unconditionally to every isolated-adsorbate reference regardless of `--force-
+    spin`) and no `Slab.DipoleCorrection` at all (correctly -- not a slab) -- verified
+    live that its Gibbs folders inherit exactly that, unchanged.
+
+New **`stb-adsorbGibbs`** (`adsorb_gibbs.py`, Stage 4, item 4.8.4, deliberately IS
+registered in `stb_suite.py`'s `WORKFLOW_TOOLS` -- unlike `stb-nebCycle`, this one has
+a normal interactive menu entry, no cluster-submission-loop reason to omit it) reads
+whichever single `<site>/`+`<adsorbate>_isolated/`(+`clean_slab_full/` for `full`
+mode) folder set exists under `<dir>/gibbs/` (auto-detected by name pattern, no
+site label needs to be passed explicitly -- `--compute-gibbs` only ever preps ONE
+site's worth of folders per run), rebuilds the mass-weighted `3N x 3N` dynamical
+matrix from `.FA` force files via `core/siesta_log.py::read_fa_forces` (duplicated
+`read_fa_force` single-atom helper, same "each workflow re-reads its own files"
+policy as `her_analysis.py`/`oer_analysis.py`), diagonalizes it (reusing the exact
+same `_FREQ_CONVERSION_THZ`/`_EV_PER_THZ`/`_BOLTZMANN_EV_K` constants and
+harmonic-oscillator ZPE/entropy formulas as HER/OER), and combines:
+```
+DG(T) = E_ads (BSSE-corrected if complete, else raw) + [ZPE(site) - ZPE(isolated ref)]
+        - T * [S(site) - S(isolated ref)]
+```
+swept over `--tmin`/`--tmax`/`--tstep`, plotted as `adsorption_gibbs.png`. Reuses (not
+duplicates) `adsorb_analysis.py::read_site_table`/`read_bsse_energy`/
+`GIBBS_LOCAL_META_FILE` directly -- a legitimate cross-import since `adsorb_gibbs.py`
+is a brand-new file that only ever imports FROM `adsorb_analysis.py`, never the
+reverse, so no cycle is created (unlike why `adsorb_analysis.py` itself had to
+duplicate rather than import `adsorb_bsse.py`'s `read_site_theory_flags`: THAT
+direction already has `adsorb_bsse.py` importing `read_site_table` FROM
+`adsorb_analysis.py`, so importing back would cycle).
+
+**Documented, permanent limitation** (printed in every Stage 4 report, not just this
+file): the isolated-adsorbate reference's own ZPE/entropy term is VIBRATIONAL/
+HARMONIC ONLY -- it does NOT include the translational/rotational entropy a real free
+gas molecule has (an ideal-gas partition-function term this tool does not compute).
+For a single-atom adsorbate this is exact (verified live: a genuinely free atom with
+zero force at every displacement gives EXACTLY `zpe_ev = 0.0`/`ts_ev = 0.0` once its 3
+pure-translation modes are correctly excluded by the existing near-zero-frequency
+filter -- the right physical answer, a free atom has no vibrational modes at all); for
+a polyatomic adsorbate it's an approximation, in the same spirit as (though computed
+differently from) `stb-herRefs`/`stb-oerRefs`'s own use of a FIXED literature entropy
+for their H2/H2O gas-phase references -- generalized here since there is no literature
+table for an arbitrary adsorbate.
+
+Verified end-to-end live (not just unit-level): built a real site + isolated O
+reference via `stb-adsorb`, fabricated relaxed `siesta.XV` for both (same sisl-write
+recipe `../bsse/test.sh` already uses), ran `stb-adsorbAnalysis --compute-gibbs` for
+real, then fed the resulting `gibbs/` folders an IDENTICAL synthetic isotropic
+harmonic force constant (`k=20 eV/Ang^2`) on both the site's O atom and the isolated
+reference's O atom -- same mass, same force constant, so DZPE/DTS must cancel to
+EXACTLY zero by construction, making DG land EXACTLY on the electronic-only `E_ads`
+(`-0.100000 eV`) -- confirmed to the printed 4th decimal, a strong, exact-value
+cross-check of the whole Hessian-to-DG pipeline, not just "did it run without
+crashing". New tests: `test/4-workflow/8-adsorption/analysis/test.sh` (`2g`, the
+`--compute-gibbs` flow + config-inheritance checks) and a new
+`test/4-workflow/8-adsorption/gibbs/test.sh` (33 checks: the exact-cancellation DG
+cross-check, the free-atom ZPE=0 physics check, and error handling for a missing/
+ambiguous `gibbs/` layout or a missing `.FA` file).
 
 **A real regression, self-discovered via the regression sweep this rollout required**
 (not user-reported): `core/structure_io.py::write_fdf`'s species-id renumbering

@@ -23,7 +23,8 @@ from stb.core import citations
 from stb.core import structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core.ase_view import view_structure_interactive
-from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
+from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_section, print_table,
+                           print_progress_line, finish_progress_line as _shared_finish_progress_line)
 from stb.core.deps import require_mace
 
 REPORT_FILE = "stb_amorphize_report.txt"
@@ -94,18 +95,11 @@ def bond_angle_stats(atoms, cutoff=None):
 def print_progress(stage, step, total, temperature, start_time):
     elapsed = time.monotonic() - start_time
     line = f"  {stage}: step {step}/{total}, T={temperature:6.0f} K, {elapsed:6.1f}s elapsed"
-    if sys.stderr.isatty():
-        sys.stderr.write(f"\r{line}  ")
-        sys.stderr.flush()
-    elif step == total or step % max(1, total // 10) == 0:
-        sys.stderr.write(line + "\n")
-        sys.stderr.flush()
+    print_progress_line(line, step, total)
 
 
 def finish_progress_line():
-    if sys.stderr.isatty():
-        sys.stderr.write("\r" + " " * 90 + "\r")
-        sys.stderr.flush()
+    _shared_finish_progress_line()
 
 
 def _describe_structure(pmg_structure, vacuum_axes, f_out):

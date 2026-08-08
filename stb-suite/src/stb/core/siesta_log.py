@@ -494,6 +494,48 @@ def get_electric_dipole(path: str) -> np.ndarray | None:
     return dipole
 
 
+def get_spin_moment(path: str) -> float | None:
+    """Last net magnetic (spin) moment, in Bohr magnetons, from a SIESTA
+    .out file of a spin-polarized run. SIESTA only ever prints this for a
+    'Spin polarized' calculation; a non-polarized run has no such line at
+    all, so `None` here can mean either "not found" or "not a
+    spin-polarized run" -- callers can't tell the two apart from this
+    return value alone (same ambiguity get_electric_dipole already has
+    for a bulk-vs-non-bulk run), which is fine for this suite's usage
+    (adsorb_analysis.py already knows independently, from its own
+    force_spin/config_extra.fdf bookkeeping, whether a site was run
+    spin-polarized at all).
+
+    Tries two known SIESTA wordings, in order (last matching line wins,
+    same convention as every other parser here): the classic
+    "siesta:    Total spin polarization (Qup-Qdown) =    X.XXXXXX" line,
+    and a newer "Total spin moment:   X.XXXXXXX" wording seen in some
+    SIESTA versions. **Neither has been verified against a real
+    spin-polarized SIESTA .out in this environment** (no such fixture
+    exists in this repository) -- flagged here deliberately; if a live
+    run doesn't match, this returns None (never raises) rather than a
+    wrong number, but the exact substring may need adjusting once
+    checked against a real spin-polarized output.
+    """
+    moment = None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if "Total spin polarization" in line and "=" in line:
+                    try:
+                        moment = float(line.split("=", 1)[1].split()[0])
+                    except (IndexError, ValueError):
+                        pass
+                elif "Total spin moment" in line and ":" in line:
+                    try:
+                        moment = float(line.split(":", 1)[1].split()[0])
+                    except (IndexError, ValueError):
+                        pass
+    except Exception:
+        return None
+    return moment
+
+
 def get_scf_convergence(path: str) -> tuple[bool, int | None]:
     """Returns (converged, iterations) from the LAST "SCF cycle converged
     after N iterations" line in a SIESTA .out file. `converged` is False

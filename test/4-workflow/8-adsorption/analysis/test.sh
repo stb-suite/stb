@@ -114,22 +114,33 @@ check_success adsorption_curve.gplot
 check_success adsorption_report.txt
 check_contains "Most stable site (uncorrected):.*$most_stable" adsorption_report.txt
 
-# --- 2a'. New [2]-[5] report structure: configuration-count breakdown,
+# --- 2a'. New [2]-[7] report structure: configuration-count breakdown,
 #     BSSE physics-check blurb, matplotlib ranking plot, always-present
-#     [4] APPLY/[5] LIBRARY WARNINGS sections ---
-echo -e "\n--- Testing the [0]-[5] report structure ---"
+#     [2b]/[4]/[5]/[6]/[7] sections ---
+echo -e "\n--- Testing the [0]-[7] report structure ---"
 check_contains "\[2\] SITE RESULTS: CONFIGURATION COUNT & TABLE" log_analysis.txt
 check_contains "Site folders found  : 4" log_analysis.txt
 check_contains "Read successfully   : 3" log_analysis.txt
 check_contains "Skipped             : 1  (missing calc.out: 1, unparseable energy: 0)" log_analysis.txt
 check_contains "BSSE coverage       : complete 0, incomplete 3, absent 1" log_analysis.txt
 check_contains "BSSE PHYSICS CHECK" log_analysis.txt
+check_contains "\[2b\] PHYSICAL DIAGNOSTICS" log_analysis.txt
+check_contains "Dipole(a.u.)" log_analysis.txt
+check_contains "MagMoment(muB)" log_analysis.txt
+check_contains "Bond Change(Ang)" log_analysis.txt
 check_contains "\[3\] SUMMARY & PLOT" log_analysis.txt
 check_contains "Ranking plot -> ./adsorption_ranking.png" log_analysis.txt
 check_success adsorption_ranking.png
 check_contains "\[4\] APPLY" log_analysis.txt
 check_contains "Not requested (pass --apply" log_analysis.txt
-check_contains "\[5\] LIBRARY WARNINGS" log_analysis.txt
+check_contains "\[5\] SUGGESTED NEXT ANALYSES" log_analysis.txt
+check_contains "stb-bader --label" log_analysis.txt
+check_contains "stb-dos <label>.PDOS.xml" log_analysis.txt
+check_contains "stb-workfunction -l" log_analysis.txt
+check_contains "stb-coop --label" log_analysis.txt
+check_contains "\[6\] GIBBS FREE ENERGY (DG) PREP" log_analysis.txt
+check_contains "Not requested (pass --compute-gibbs" log_analysis.txt
+check_contains "\[7\] LIBRARY WARNINGS" log_analysis.txt
 check_contains "No library warnings." log_analysis.txt
 # SCF-convergence / residual-force diagnostics: clean_slab and adsorbate both
 # converged cleanly above, so no warning should be emitted for either
@@ -236,6 +247,106 @@ check_contains "Could not open the interactive 3D viewer" log_view.txt
 check_contains "No library warnings." log_view.txt
 
 
+# --- 2g. --compute-gibbs: writes the Hessian displacement folders under
+#     'gibbs/' for the winning site + its isolated-adsorbate reference, once
+#     both are actually relaxed (fabricated siesta.XV, same sisl-write
+#     recipe already used by ../bsse/test.sh) -- and refuses (clean ERROR,
+#     not a crash) when either isn't relaxed yet. All commands run inside a
+#     subshell (cd) for the side effects only -- every check_* call below
+#     happens OUTSIDE it (subshell variable changes, e.g. PASS/FAIL inside
+#     check_*, would otherwise be silently lost once the subshell exits;
+#     same pattern already used by 2d's 'multi/' subsection above).
+echo -e "\n--- Testing --compute-gibbs (Gibbs free energy prep) ---"
+GT=gibbs_test
+mkdir -p "$GT"
+cp structure.fdf calc.fdf "$GT/"
+(
+    cd "$GT"
+    stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop -O . --no-intro \
+        > log_prep.txt 2>&1
+    printf 'siesta: FreeEng =    -428.500000\nSCF cycle converged after 14 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.020000\n' \
+        > sites/site_1_ontop/calc.out
+    printf 'siesta: FreeEng =    -213.900000\nSCF cycle converged after 10 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n' \
+        > clean_slab/calc.out
+    printf 'siesta: FreeEng =    -214.500000\nSCF cycle converged after 8 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.005000\n' \
+        > adsorbate/calc.out
+)
+
+echo "Testing: --compute-gibbs refuses an unrelaxed winning site (no siesta.XV yet)"
+(cd "$GT" && stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local --no-intro \
+    > log_gibbs_unrelaxed.txt 2>&1)
+check_contains "no finished siesta.XV yet" $GT/log_gibbs_unrelaxed.txt
+if [ ! -e "$GT/gibbs/site_1_ontop" ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} '$GT/gibbs/site_1_ontop' absent, as expected"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} '$GT/gibbs/site_1_ontop' should not exist yet"
+    FAIL=$((FAIL+1))
+fi
+
+python3 -c "
+import sisl
+from stb.core import structure_io
+
+for site_dir in ('$GT/sites/site_1_ontop', '$GT/adsorbate'):
+    fdf = structure_io.read_fdf(f'{site_dir}/structure.fdf')
+    pmg = structure_io.to_pymatgen(fdf)
+    cart = pmg.cart_coords.copy()
+    if 'sites' in site_dir:
+        cart[-1, 2] -= 0.4  # relax the O atom closer to the substrate
+    atoms = [sisl.Atom(str(s.specie)) for s in pmg]
+    geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+    sisl.get_sile(f'{site_dir}/siesta.XV', mode='w').write_geometry(geom)
+"
+
+echo "Testing: --compute-gibbs with both sides relaxed"
+(cd "$GT" && stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local --save-report --no-intro \
+    > log_gibbs.txt 2>&1)
+check_exit_code $? 0
+check_contains "\[6\] GIBBS FREE ENERGY (DG) PREP" $GT/log_gibbs.txt
+check_contains "Winning site  : site_1_ontop" $GT/log_gibbs.txt
+check_contains "Isolated ref  : ./adsorbate" $GT/log_gibbs.txt
+check_success $GT/gibbs/site_1_ontop/disp_001/structure.fdf
+check_success $GT/gibbs/site_1_ontop/disp_006/structure.fdf
+check_success $GT/gibbs/site_1_ontop/gibbs_local_meta.json
+check_success $GT/gibbs/O_isolated/disp_001/structure.fdf
+check_success $GT/gibbs/O_isolated/gibbs_local_meta.json
+check_contains '"local_indices": \[2\]' $GT/gibbs/site_1_ontop/gibbs_local_meta.json
+check_contains '"system_label": "gibbs_site"' $GT/gibbs/site_1_ontop/gibbs_local_meta.json
+check_contains '"local_indices": \[0\]' $GT/gibbs/O_isolated/gibbs_local_meta.json
+
+echo "Testing: the site's Hessian folders inherit Spin polarized + Slab.DipoleCorrection + DFTD3"
+echo "  (same site-level-of-theory propagation already fixed for stb-adsorbBsse)"
+check_contains "SystemLabel gibbs_site" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "Spin                polarized" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "Slab.DipoleCorrection      .true." $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "DFTD3                   .true." $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "MD.TypeOfRun          CG" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+check_contains "MD.NumCGsteps         0" $GT/gibbs/site_1_ontop/disp_001/calc.fdf
+
+echo "Testing: the isolated reference's Hessian folders have Spin + DFTD3 but NO dipole"
+echo "  correction (not a slab -- Slab.DipoleCorrection has no physical meaning for a boxed"
+echo "  molecule) and no dangling '%include config_extra.fdf' (that file is never copied"
+echo "  into disp_NNN/ -- a real bug caught while wiring this same vdW propagation)"
+check_contains "SystemLabel gibbs_isolated" $GT/gibbs/O_isolated/disp_001/calc.fdf
+check_contains "Spin                polarized" $GT/gibbs/O_isolated/disp_001/calc.fdf
+check_contains "DFTD3                   .true." $GT/gibbs/O_isolated/disp_001/calc.fdf
+if grep -q "DipoleCorrection" "$GT/gibbs/O_isolated/disp_001/calc.fdf" 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected DipoleCorrection in the isolated reference's calc.fdf"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no DipoleCorrection in the isolated reference's calc.fdf"
+    PASS=$((PASS+1))
+fi
+if grep -q "%include config_extra.fdf" "$GT/gibbs/O_isolated/disp_001/calc.fdf" 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} dangling '%include config_extra.fdf' in the isolated reference's Gibbs folder"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no dangling config_extra.fdf include in the isolated reference's Gibbs folder"
+    PASS=$((PASS+1))
+fi
+
+
 # --- 3. A folder missing calc.out is skipped, not fatal ---
 echo -e "\n--- Testing that a site missing calc.out is skipped ---"
 rm -f "${site_dirs[2]}calc.out"
@@ -278,8 +389,9 @@ echo "Testing: navigate 4.8.3 -> defaults -> quit"
 rm -f adsorption_curve.dat adsorption_report.txt
 # 4.8.3 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
 # default) / "" (apply_target: skip) / "" (save_report: N) / "" (view: N) /
-# "" (view_plots: N) / "" (Press Enter to continue) / 0 (quit)
-printf '4.8.3\n.\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+# "" (view_plots: N) / "" (compute_gibbs: N) / "" (Press Enter to continue) /
+# 0 (quit)
+printf '4.8.3\n.\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Most stable site (uncorrected):.*$most_stable" log_menu.txt
 check_contains "Most stable site (BSSE-corrected):.*$bsse_most_stable" log_menu.txt
 check_contains "Force tolerance" log_menu.txt

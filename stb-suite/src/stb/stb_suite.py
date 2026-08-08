@@ -692,6 +692,7 @@ def run_adsorb_setup() -> None:
 
     ml_rank = False
     top_k = None
+    n_orient_polar, n_orient_azimuthal, orient_top_k, orient_rmsd_tol = 1, 1, None, 0.3
     if all_sites:
         ml_rank_choice = get_input(
             "\nPre-screen sites with a MACE-MP-0 relax before writing SIESTA folders? Needs "
@@ -703,6 +704,35 @@ def run_adsorb_setup() -> None:
             top_k = int(top_k_str) if top_k_str.isdigit() else None
     else:
         site_index = get_int_input("Which site (0-based index) [default: 0]: ", 0)
+
+    # Orientation sampling always needs --ml-rank under the hood, but the reason to ask
+    # for it differs: with --all-sites it's an extra refinement ON TOP OF an already-
+    # requested ranking; with a single --site-index it's the ONLY reason --ml-rank has
+    # anything to rank (a lone site has nothing to compare itself against otherwise --
+    # see adsorb.py's own parser.error for this), so asking here is what turns ml_rank on.
+    if all_sites and not ml_rank:
+        orient_choice = 'n'
+    else:
+        orient_scope = "per site" if all_sites else "at this one site"
+        needs_ml_note = "" if ml_rank else (
+            " Needs the optional 'ml' extra -- this is the only way to screen a single "
+            "site with MACE, since --ml-rank alone has nothing else to rank against there.")
+        orient_choice = get_input(
+            f"\nFor a multi-atom adsorbate (e.g. H2O), systematically sample several "
+            f"initial orientations {orient_scope} (which part of the molecule faces the "
+            f"surface) and relax each with MACE, keeping the best unique ones? No effect "
+            f"on single-atom adsorbates.{needs_ml_note} (y/N): ").strip().lower()
+    if orient_choice in ('y', 'yes'):
+        if not all_sites:
+            ml_rank = True
+        n_orient_polar = get_int_input("  Polar directions to sample [default: 4]: ", 4)
+        n_orient_azimuthal = get_int_input("  Azimuthal spins per direction [default: 2]: ", 2)
+        orient_top_k_str = get_input(
+            "  Keep only the N best unique orientations per site (blank = keep all): ").strip()
+        orient_top_k = int(orient_top_k_str) if orient_top_k_str.isdigit() else None
+        orient_rmsd_tol = get_float_input(
+            "  RMSD tolerance for merging near-duplicate orientations, Ang "
+            "[default: 0.3]: ", 0.3)
 
     both_sides = False
     if site_type != 'all' and not ml_rank and height_sweep is None:
@@ -776,12 +806,18 @@ def run_adsorb_setup() -> None:
         args.append("--ml-prerelax")
     if all_sites:
         args.append("--all-sites")
-        if ml_rank:
-            args.append("--ml-rank")
-            if top_k is not None:
-                args.extend(["--top-k", str(top_k)])
     else:
         args.extend(["--site-index", str(site_index)])
+    if ml_rank:
+        args.append("--ml-rank")
+        if all_sites and top_k is not None:
+            args.extend(["--top-k", str(top_k)])
+        if n_orient_polar != 1 or n_orient_azimuthal != 1:
+            args.extend(["--n-orientations-polar", str(n_orient_polar)])
+            args.extend(["--n-orientations-azimuthal", str(n_orient_azimuthal)])
+            if orient_top_k is not None:
+                args.extend(["--orientation-top-k", str(orient_top_k)])
+            args.extend(["--orientation-rmsd-tol", str(orient_rmsd_tol)])
     if both_sides:
         args.append("--both-sides")
     if uses_mace:
@@ -795,7 +831,13 @@ def run_adsorb_setup() -> None:
         ("ML pre-relax adsorbate", "ON" if ml_prerelax else "OFF"),
         ("Site type", site_type),
         ("Sites", "all symmetrically distinct" if all_sites else f"index {site_index}"),
-        ("ML pre-screen", f"ON (top {top_k or 'all'})" if ml_rank else "OFF"),
+        ("ML pre-screen",
+         (f"ON (top {top_k or 'all'} site(s))" if all_sites else "ON (single site)")
+         if ml_rank else "OFF"),
+        ("Orientation sampling",
+         f"{n_orient_polar}x{n_orient_azimuthal}" + (f", top {orient_top_k}"
+                                                       if orient_top_k is not None else "")
+         if (n_orient_polar != 1 or n_orient_azimuthal != 1) else "OFF"),
         ("Both faces", "yes" if both_sides else "no"),
         ("Height", f"sweep {height_sweep[0]}-{height_sweep[1]} step {height_sweep[2]} Ang"
                    if height_sweep is not None else f"{height} Ang"),
@@ -892,7 +934,62 @@ def run_adsorb_analysis() -> None:
     if view_plots_choice == 'y':
         args.append("--view-plots")
 
+    compute_gibbs = get_input(
+        "\nDeseja calcular a energia livre de Gibbs (DG) de adsorcao? Isso escreve as pastas de "
+        "deslocamento (Hessiana) para o site vencedor -- voce ainda precisa rodar o SIESTA nelas "
+        "e depois usar o Estagio 4 (stb-adsorbGibbs). (y/N): ").strip().lower() == 'y'
+    if compute_gibbs:
+        args.append("--compute-gibbs")
+        zpe_mode = get_input(
+            "  Modo do calculo vibracional para o sitio -- 'local' (Hessiana parcial, so o "
+            "adsorvato, rapido, padrao) ou 'full' (phonopy real no cristal inteiro, mais caro) "
+            "[default: local]: ").strip().lower()
+        if zpe_mode in ("local", "full"):
+            args.extend(["--zpe-mode", zpe_mode])
+        displacement = get_float_input(
+            "  Deslocamento para as diferencas finitas, em Ang (default: 0.015): ", 0.015)
+        args.extend(["--displacement", str(displacement)])
+
     run_tool("stb-adsorbAnalysis", args)
+
+
+def run_adsorb_gibbs() -> None:
+    """Interface for the Adsorption Gibbs Free Energy (adsorb_gibbs.py)"""
+    print("\n" + "="*60)
+    print(color_text("ADSORPTION GIBBS FREE ENERGY", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads the vibrational Hessian/phonon folders under '<dir>/gibbs/' (written by "
+        "stb-adsorbAnalysis --compute-gibbs, once SIESTA has finished in them) and computes "
+        "DG(adsorption) = E_ads (BSSE-corrected if available) + DZPE - T*DS, swept over a "
+        "temperature range.", 'cyan'))
+    print()
+
+    dir_path = get_input(
+        "Root directory with 'gibbs'/'sites'/'clean_slab' [default: adsorption_run]: ").strip()
+    if not dir_path:
+        dir_path = "adsorption_run"
+
+    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    tmin = get_float_input("Temperature sweep start, in K (default: 200): ", 200.0)
+    tmax = get_float_input("Temperature sweep end, in K (default: 400): ", 400.0)
+    tstep = get_float_input("Temperature sweep step, in K (default: 25): ", 25.0)
+
+    args = ["--dir", dir_path, "--file", out_file, "--tmin", str(tmin), "--tmax", str(tmax),
+            "--tstep", str(tstep), "--no-intro"]
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    view_plots_choice = get_input(
+        "Show the DG-vs-T plot on screen before finishing? (y/N): ").strip().lower()
+    if save_report:
+        args.append("--save-report")
+    if view_plots_choice == 'y':
+        args.append("--view-plots")
+
+    run_tool("stb-adsorbGibbs", args)
 
 
 def run_neb_sites() -> None:
@@ -8454,8 +8551,14 @@ WORKFLOW_TOOLS = {
                                "geometry -- run after Stage 1's sites have finished in SIESTA.",
                 'func': run_adsorb_bsse},
             3: {'title': "Stage 3 - Analysis (stb-adsorbAnalysis)",
-                'description': "Compute E_ads = E_site - E_clean_slab - E_adsorbate per site.",
+                'description': "Compute E_ads = E_site - E_clean_slab - E_adsorbate per site "
+                               "(plus dipole/spin/bond-length diagnostics); optionally also "
+                               "preps the winning site's Gibbs free energy folders.",
                 'func': run_adsorb_analysis},
+            4: {'title': "Stage 4 - Gibbs Free Energy (stb-adsorbGibbs)",
+                'description': "Compute DG(adsorption) = E_ads + DZPE - T*DS from the "
+                               "vibrational Hessian/phonon folders Stage 3 wrote.",
+                'func': run_adsorb_gibbs},
         }},
     9: {'title': "NEB / Reaction Path",
         'description': "Enumerate symmetry-distinct sites and pick an endpoint pair, "

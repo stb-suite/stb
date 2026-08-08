@@ -1,4 +1,4 @@
-# 4.8 — Workflow: Adsorption (`stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis`)
+# 4.8 — Workflow: Adsorption (`stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` / `stb-adsorbGibbs`)
 
 Computing a real DFT adsorption energy means comparing three numbers —
 the combined slab+adsorbate system, the bare slab, and the isolated
@@ -12,7 +12,7 @@ Getting an honest number out of that comparison depends on a handful of
 details that are easy to get subtly wrong by hand: whether the cell is
 allowed to relax, whether the slab's own periodic images interact with the
 adsorbate, and whether the basis-set mismatch between the three separate
-calculations is corrected for. This item has **three** stages, not two:
+calculations is corrected for. This item has **four** stages:
 
 - **Stage 1 (`stb-adsorb`, code `4.8.1`)** generates every folder the
   uncorrected `E_ads` needs (`clean_slab/`, `adsorbate*/`, one folder per
@@ -24,7 +24,14 @@ calculations is corrected for. This item has **three** stages, not two:
   correction is only meaningful at the real, relaxed geometry (Section 2).
 - **Stage 3 (`stb-adsorbAnalysis`, code `4.8.3`)** reads everything Stage
   1/2 produced and reports `E_ads`, with and without the BSSE correction,
-  ranked most stable first.
+  ranked most stable first — plus a per-site physical-diagnostics table
+  (dipole, magnetic moment, bond-length change), a "what to run next"
+  pointer at other tools in the suite, and an opt-in `--compute-gibbs`
+  step that preps the vibrational-Hessian folders Stage 4 needs
+  (Section 13).
+- **Stage 4 (`stb-adsorbGibbs`, code `4.8.4`)** turns those Hessian
+  folders, once you've run SIESTA in them, into an actual Gibbs free
+  energy of adsorption, `DG(T) = E_ads + DZPE - T*DS` (Section 13).
 
 `example_4.8.sh` is a guided, runnable walkthrough of all three stages —
 **including a worked numeric example (Section 4) where the BSSE
@@ -439,6 +446,16 @@ relaxed)` / `SKIP (missing calc.out)`).
   different single `--site-type` values silently drops the earlier call's
   site-table row** (Section 5) — use one `--site-type all --all-sites`
   call, or separate output directories, instead.
+- **Stage 4's Gibbs free energy is not a full ideal-gas thermodynamic
+  treatment** (Section 13) — the isolated-adsorbate reference's own ZPE/
+  entropy is vibrational/harmonic only, with no translational/rotational
+  gas-phase entropy term. Exact for a single-atom adsorbate (a free atom
+  has no vibrational modes at all); an approximation for a polyatomic one.
+- **Orientation deduplication (Section 14.2) doesn't correct for periodic
+  wraparound** — RMSD is a direct Cartesian comparison, no minimum-image
+  convention. Not expected to matter in practice (every orientation for one
+  candidate starts at the same site coordinate and relaxes independently),
+  but a documented simplification, not a rigorous guarantee.
 
 ## 10. Step-by-step: running this workflow on your own structure
 
@@ -458,7 +475,12 @@ relaxed)` / `SKIP (missing calc.out)`).
 6. Run Stage 3: `stb-adsorbAnalysis --dir adsorption_run --save-report
    --apply production.fdf`. Read `[3]` for **both** rankings before
    trusting a number — if they disagree, trust the BSSE-corrected one
-   (Section 8).
+   (Section 8). Add `--compute-gibbs` if you also want a Gibbs free
+   energy (Section 13) — it needs both the winning site AND its isolated
+   -adsorbate reference to already be relaxed.
+7. If you passed `--compute-gibbs`: run SIESTA yourself in every
+   `adsorption_run/gibbs/*/disp_*/` folder, then run Stage 4:
+   `stb-adsorbGibbs --dir adsorption_run --save-report`.
 
 ## 11. Files in this folder
 
@@ -466,7 +488,7 @@ relaxed)` / `SKIP (missing calc.out)`).
 |---|---|
 | `structure.fdf` | Bare 2-atom graphene primitive cell, free-standing (10 Ang vacuum along `c`) — small and fast, deliberately laterally too small to exercise Section 3.2's self-interaction check. |
 | `calc.fdf` | Shared `calc.fdf` template (non-polarized, Gamma-only, modest basis/mesh — mechanics only, not physically converged). |
-| `example_4.8.sh` | The guided walkthrough (**not** an automated test — see `test/4-workflow/8-adsorption/{prep,bsse,analysis}/test.sh` for that). Pauses between sections so you can read before moving on; safe to re-run. |
+| `example_4.8.sh` | The guided walkthrough (**not** an automated test — see `test/4-workflow/8-adsorption/{prep,bsse,analysis,gibbs}/test.sh` for that). Pauses between sections so you can read before moving on; safe to re-run. |
 | `output/` | Created by `example_4.8.sh` when you run it (git-ignored, not checked in). See below. |
 
 ## 12. Running the script
@@ -483,6 +505,150 @@ relaxed)` / `SKIP (missing calc.out)`).
 | `output/stage1_bothsides/` | `stb-adsorb --adsorbate H --both-sides` | 2D free-standing material, both faces |
 | `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 | **the worked example (Section 8): BSSE flips the ranking** |
 | *(no folder — a diff only)* | Stage 1 via `printf … \| stb-suite` | proof the interactive menu (`4.8.1`) agrees with the CLI |
+
+## 13. Stage 3 diagnostics/suggestions, and Stage 4 — Gibbs free energy (`stb-adsorbGibbs`, code `4.8.4`)
+
+Stage 3 does more than just rank `E_ads` values now:
+
+- **`[2b] PHYSICAL DIAGNOSTICS`** — per site, the electric dipole magnitude and net
+  magnetic moment SIESTA printed (both come free from `Slab.DipoleCorrection`/`Spin
+  polarized` already being forced by Stage 1), plus how much the closest
+  adsorbate-slab distance changed between the pre-relaxation guess and the relaxed
+  geometry — a quick sanity check that the adsorbate actually moved toward the
+  surface during relaxation, not away from it.
+- **`[5] SUGGESTED NEXT ANALYSES`** — points you at other tools in the suite worth
+  running on the winning site (`stb-bader`, `stb-dos`, `stb-workfunction`,
+  `stb-coop`), each conditional on a SIESTA output file Stage 1 doesn't force on its
+  own (e.g. `.RHO`, `.PDOS.xml`).
+
+### 13.1 The DG formula
+
+A plain `E_ads` is an electronic-energy-only number — it ignores that the adsorbate
+actually vibrates in its adsorption well (zero-point energy) and that vibrating
+degrees of freedom carry entropy. The full correction:
+
+```
+DG(T) = E_ads (BSSE-corrected if available, else raw)
+        + [ZPE(site) - ZPE(isolated reference)]
+        - T * [S(site) - S(isolated reference)]
+```
+
+`ZPE(site)`/`S(site)` come from a vibrational Hessian of the adsorbate's own atoms at
+the winning site (substrate frozen — a decoupled-oscillator approximation, `--zpe-mode
+local`, the default; `--zpe-mode full` instead runs a real Phonopy phonon calculation
+of the entire site structure minus the clean slab's own phonons, far more SIESTA jobs
+but no decoupling approximation). `ZPE(isolated reference)`/`S(isolated reference)`
+always come from a full-molecule Hessian of the isolated-adsorbate reference alone —
+there's no periodic substrate to freeze/subtract for a molecule in a vacuum box, so
+`--zpe-mode` only ever changes the SITE side.
+
+**Known limitation, printed in every Stage 4 report**: the isolated-reference term is
+vibrational/harmonic only — no translational/rotational ideal-gas entropy. Exact for a
+single-atom adsorbate (verified: a genuinely free atom gives exactly zero ZPE/entropy
+once its 3 trivial translational modes are excluded); an approximation for a
+polyatomic one, in the same spirit as (though computed differently from) `stb-her`/
+`stb-oer`'s own use of a fixed literature entropy for their H2/H2O gas-phase
+references.
+
+### 13.2 Running it
+
+```bash
+stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local
+# run SIESTA in every adsorption_run/gibbs/*/disp_*/ folder, then:
+stb-adsorbGibbs --dir adsorption_run --save-report --tmin 200 --tmax 400 --tstep 25
+```
+
+`stb-adsorbAnalysis --compute-gibbs` needs the winning site AND its isolated-adsorbate
+reference to already be relaxed (a finished `siesta.XV` in both) — it refuses with a
+clear `[ERROR]`, not a silent fallback to the pre-relaxation guess, if either isn't.
+`stb-adsorbGibbs` auto-detects which single site's folder set exists under `gibbs/` —
+you never need to pass a site label explicitly, since `--compute-gibbs` only ever
+preps one site's worth of folders per run.
+
+## 14. Van der Waals correction (always on), and systematic orientation sampling
+
+### 14.1 DFT-D3, forced on every folder
+
+`stb-adsorb` forces the Grimme DFT-D3 dispersion correction (`DFTD3 .true.`, SIESTA's
+own default parameters — PBE-parametrized, BJ damping) on `clean_slab/`, the isolated
+-adsorbate reference, and every `sites/site_*/` — unconditionally, no flag to turn it
+off. Standard GGA functionals miss dispersion forces entirely, which matters for a
+physisorption-like or weakly-bound site; without it, a comparison across candidate
+sites can be systematically biased toward whichever one happens to be least
+dispersion-dependent. Stage 2 (`stb-adsorbBsse`) and Stage 3's `--compute-gibbs`
+Hessian folders both inherit this the same way they already inherit `Spin polarized`/
+`Slab.DipoleCorrection` — every fragment being compared against `E_site` needs to be
+at the *same level of theory*, not just the same geometry, or the correction being
+computed stops meaning what it's supposed to.
+
+### 14.2 Systematic orientation sampling for a molecular adsorbate
+
+For a single-atom adsorbate, there's only one way to place it. For a molecule (H2O,
+CO2, ...), the molecule's own default orientation (from ASE's G2 database) picks
+*which atom touches the surface* — for water, whether it's the O or an H isn't something
+you control by default; it's just whatever pymatgen's `AdsorbateSiteFinder` happens to
+do with the molecule's as-loaded geometry.
+
+`--ml-rank` can now sample this systematically:
+
+```bash
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type all --all-sites \
+    --ml-rank --n-orientations-polar 4 --n-orientations-azimuthal 2 \
+    --orientation-top-k 3
+```
+
+For every candidate `(site, height)`, this relaxes `n_polar * n_azimuthal` (here 4×2=8)
+systematically-generated starting orientations with MACE-MP-0 (substrate fixed, same as
+`--ml-rank` already does for a single orientation), deduplicates the relaxed results
+(two orientations that converge to the same geometry AND the same energy collapse to
+one), and keeps up to `--orientation-top-k` unique survivors — each written as its own
+real SIESTA folder, `site_<N>_<type>_orient<k>/`, exactly the way `--ml-rank` already
+writes one folder per site.
+
+**This is systematic, not random or exhaustive**: `--n-orientations-polar` picks that
+many directions (in the molecule's own frame) to point at the surface, evenly spread
+over a sphere; `--n-orientations-azimuthal` spins each of those about the surface
+normal. The same flags always produce the exact same orientation set — no `--seed`
+needed, unlike `stb-mladsorb --n-orientations`'s fully random sampling (a different
+tool, doing a cheaper single-point-only pre-screen instead of a full relax of each
+orientation).
+
+Cost scales linearly with `n_polar * n_azimuthal` — one full MACE relax per orientation
+per candidate. A modest `4 2` (8 orientations) is a reasonable starting point;
+`--orientation-rmsd-tol` (default 0.3 Ang) controls how aggressively near-duplicate
+orientations get merged before `--orientation-top-k` is applied.
+
+### 14.3 A single site instead of `--all-sites`
+
+Orientation sampling also works on one chosen site (`--site-index N`, no `--all-sites`)
+— useful when you already know which site you care about and just want to explore how
+the molecule sits there:
+
+```bash
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site-index 0 \
+    --ml-rank --n-orientations-polar 4 --n-orientations-azimuthal 2 \
+    --orientation-top-k 3
+```
+
+Without orientation sampling, `--ml-rank` needs `--all-sites` (ranking one site against
+itself is meaningless); with it, the single chosen site's own sampled orientations are
+what gets ranked, and every generated configuration lands on that same site instead of
+spreading across the other symmetric sites.
+
+### 14.4 Progress feedback and the full-exploration `.xyz` trajectory
+
+Each orientation's MACE relax prints a one-line progress update as it runs (a
+self-overwriting counter on an interactive terminal, or a periodic line every ~10% of
+the total when output is redirected to a file) instead of staying silent until the
+whole batch finishes — useful once `n_polar * n_azimuthal` gets into the dozens.
+
+Every relaxed orientation actually generated — not just the unique/`--orientation-top-k`
+survivors written as SIESTA folders — is also saved to
+`sites/orientation_trajectory<_adsorbate>.xyz`, a multi-frame extended-XYZ file openable
+directly as a trajectory/video in VMD or OVITO. Each frame records its site, site type,
+height, orientation index, MACE energy, and convergence status as per-frame metadata, so
+the whole exploration (including near-duplicates and higher-energy attempts that got
+discarded) can be reviewed visually, not just read off the ranking table/plot.
 
 ## What's next
 

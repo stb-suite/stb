@@ -16,6 +16,7 @@ from stb.core import structure_io
 from stb.core.siesta_log import report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.pseudopotentials import copy_pseudo
+from stb.core.adsorption_sites import SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK, VDW_CORRECTION_BLOCK
 from stb.adsorb_analysis import read_site_table
 
 REPORT_FILE = "adsorption_bsse_report.txt"
@@ -39,6 +40,39 @@ BSSE_SINGLE_POINT_BLOCK = FIXED_CELL_BLOCK + (
     "MD.Steps           0\n"
     "MD.NumCGsteps      0\n"
 )
+
+
+def read_site_theory_flags(site_dir):
+    """Returns (spin_polarized, dipole_corrected, vdw_corrected): whether the
+    site's own config_extra.fdf (written by stb-adsorb's
+    write_reference_folder, see core/adsorption_sites.py) forced spin
+    polarization, the slab dipole correction, and/or the DFT-D3 dispersion
+    correction for THIS site. A counterpoise correction is only meaningful
+    if every fragment is evaluated at the exact same level of theory as
+    E_site, not just the same geometry -- real, user-reported bug: the
+    ghost fragments used to always fall back to config_extra.fdf's own
+    BSSE_SINGLE_POINT_BLOCK (no Spin/dipole line at all), so an open-shell
+    adsorbate's ghost fragment was silently solved spin-restricted while
+    E_site was spin-polarized, adding a spurious ~1 eV spin-restriction
+    penalty that swamped the genuine (~0.01-0.2 eV) BSSE correction and even
+    flipped the corrected E_ads to look MORE bound than the raw value --
+    physically impossible for a real counterpoise correction. `vdw_corrected`
+    closes the identical gap for DFT-D3 (forced unconditionally on every
+    stb-adsorb folder, see adsorb.py's own force_vdw=True call sites) --
+    without it, a ghost fragment would be missing the pairwise dispersion
+    terms E_site actually includes, the same "different level of theory"
+    bug class in a new guise. Reading the site's own config_extra.fdf
+    (rather than re-deriving this from CLI flags) is robust regardless of
+    which stb-adsorb version/flags produced that site. Returns
+    (False, False, False) if the site has no config_extra.fdf at all (e.g.
+    a hand-built site folder).
+    """
+    path = os.path.join(site_dir, CONFIG_EXTRA_FILE)
+    if not os.path.isfile(path):
+        return False, False, False
+    with open(path) as f:
+        text = f.read()
+    return "Spin" in text, "Slab.DipoleCorrection" in text, "DFTD3" in text
 
 
 def make_ghost_variant(base_structure, ghost_start, ghost_end):
@@ -104,23 +138,42 @@ def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
     read_relaxed_site_fdf) for the correction to mean anything -- moved
     here unchanged from adsorb.py, whose caller used to pass the
     pre-relaxation initial guess instead (the bug this stage fixes).
+
+    Also inherits the site's own level of theory (spin polarization, slab
+    dipole correction, DFT-D3 dispersion) via read_site_theory_flags(pp_path)
+    -- pp_path is always the site's own directory here (see main()) -- so
+    the ghost fragments are solved with the exact same Spin/
+    Slab.DipoleCorrection/DFTD3 setting as E_site itself, not just the same
+    geometry. Returns (spin_polarized, dipole_corrected, vdw_corrected) so
+    the caller can report it.
     """
     n_total = len(site_fdf.atoms)
     slab_variant = make_ghost_variant(site_fdf, n_substrate, n_total)  # ghost the adsorbate part
     ads_variant = make_ghost_variant(site_fdf, 0, n_substrate)         # ghost the slab part
+
+    spin_polarized, dipole_corrected, vdw_corrected = read_site_theory_flags(pp_path)
+    config_extra_content = BSSE_SINGLE_POINT_BLOCK
+    if spin_polarized:
+        config_extra_content += SPIN_POLARIZED_BLOCK
+    if dipole_corrected:
+        config_extra_content += DIPOLE_CORRECTION_BLOCK
+    if vdw_corrected:
+        config_extra_content += VDW_CORRECTION_BLOCK
 
     for sub_dir, variant in [("bsse_slab", slab_variant), ("bsse_adsorbate", ads_variant)]:
         out_dir = os.path.join(bsse_dir, sub_dir)
         os.makedirs(out_dir, exist_ok=True)
         structure_io.write_fdf(variant, os.path.join(out_dir, "structure.fdf"))
         with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
-            f.write(BSSE_SINGLE_POINT_BLOCK)
+            f.write(config_extra_content)
         with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
             f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
         present_labels = sorted({symbol for symbol, _ in variant.atoms})
         for label in present_labels:
             real_symbol = label[:-len("_ghost")] if label.endswith("_ghost") else label
             copy_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
+
+    return spin_polarized, dipole_corrected, vdw_corrected
 
 
 def read_relaxed_site_fdf(site_dir):
@@ -292,10 +345,13 @@ def main():
         # this site needs (copied there by stb-adsorb) -- reused directly
         # as the pseudopotential source for the ghost variants too, so this
         # stage never needs its own -p/--pseudo-dir flag.
-        write_bsse_folders(bsse_dir, relaxed_fdf, n_substrate, calc_text, site_dir)
+        spin_polarized, dipole_corrected, vdw_corrected = write_bsse_folders(
+            bsse_dir, relaxed_fdf, n_substrate, calc_text, site_dir)
         written.append(label)
         print_dual(f"  {color_text('[OK]', 'green')} {bsse_dir}/bsse_slab/, {bsse_dir}/bsse_adsorbate/ "
-                    "(relaxed geometry)", f_out)
+                    f"(relaxed geometry, spin: {'yes' if spin_polarized else 'no'}, "
+                    f"dipole: {'yes' if dipole_corrected else 'no'}, "
+                    f"vdw: {'yes' if vdw_corrected else 'no'} -- inherited from the site)", f_out)
 
     # --- [3] SUMMARY & NEXT STEPS. ---
     print_section("[3] SUMMARY & NEXT STEPS", f_out)

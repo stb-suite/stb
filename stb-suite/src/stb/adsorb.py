@@ -19,15 +19,18 @@ from pymatgen.core import Structure, Lattice
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
+from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
+                           capture_library_noise, print_progress_line, finish_progress_line)
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.deps import require_mace
 from stb.core.ase_view import view_structure_interactive
 from stb.core.adsorption_sites import (
     FIXED_CELL_BLOCK, CONFIG_EXTRA_FILE, resolve_adsorbate, resolve_slab_orientation,
-    write_reference_folder, write_site_plot, min_adsorbate_image_distance,
+    center_slab_in_vacuum, write_reference_folder, write_site_plot, min_adsorbate_image_distance,
     cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
+    generate_systematic_orientations, deduplicate_orientations,
 )
+from stb.neb import wrap_into_cell
 
 # REPORT_FILE is always written -- it carries the machine-readable
 # "# SITE_TABLE" block stb-adsorbAnalysis::read_site_table depends on, so
@@ -72,6 +75,30 @@ def force_spin_polarized(calc_text):
     return new_text
 
 
+def resolve_ml_device(device, mace_relax_module):
+    """Returns (device, warning) for a --ml-device request: `device`
+    unchanged with warning=None when valid, or ('cpu', <message>) when
+    'cuda' was requested but no usable GPU is available. Unlike
+    core/mace_relax.py's own resolve_device() (which raises -- the
+    deliberate default everywhere else in the suite, so a bad --device cuda
+    request never silently gives a much slower run with no indication
+    anything is wrong), stb-adsorb's --ml-rank/--ml-prerelax step is only
+    ever a fast pre-screening/pre-relax stage ahead of the real SIESTA jobs
+    that follow, so degrading to CPU here (with a visible warning in the
+    report) is a more convenient default than aborting the whole run.
+    Returns the warning text instead of printing it directly, since both
+    call sites resolve this from inside a capture_library_noise() block,
+    whose stdout redirect would otherwise silently swallow a print_dual
+    call made in there.
+    """
+    if device != "cuda":
+        return device, None
+    available, detail = mace_relax_module.gpu_available()
+    if available:
+        return device, None
+    return "cpu", f"--ml-device cuda requested, but {detail} -- falling back to CPU."
+
+
 def isolated_adsorbate_structure(molecule_pmg, vacuum_box):
     """Centers `molecule_pmg` (pymatgen Molecule) in a cubic vacuum box and
     returns it as a periodic FdfStructure -- same convention as
@@ -91,19 +118,23 @@ def isolated_adsorbate_structure(molecule_pmg, vacuum_box):
 
 def plot_ml_ranking(scored, ads_name, out_path, show=False):
     """Bar chart of the --ml-rank pre-screen's relative energies (dE = energy
-    - lowest energy found) per candidate, one bar per (site, height, type).
-    Single-series version of mladsorb.py::plot_site_ranking (no foundation-
-    vs-fine-tuned comparison here, since --ml-rank always uses one model).
-    `scored` is a list of (slot, height, site_type, energy, relaxed_struct,
-    relaxed_dist) tuples, already sorted by energy (ascending).
+    - lowest energy found) per candidate, one bar per (site, height, type,
+    orientation). Single-series version of mladsorb.py::plot_site_ranking
+    (no foundation-vs-fine-tuned comparison here, since --ml-rank always
+    uses one model). `scored` is a list of (slot, height, site_type, energy,
+    relaxed_struct, relaxed_dist, orientation) tuples, already sorted by
+    energy (ascending) -- `orientation` is 0 when orientation sampling
+    wasn't used (see generate_systematic_orientations), else the 1-based
+    rank among that site's unique orientations.
 
     `show=True` (--view-plots) additionally blocks on plt.show() before the
     figure is closed -- see write_site_plot's own docstring for why this
     isn't just called --view.
     """
     e_min = scored[0][3]
-    labels = [f"{st}\n#{slot}@{h:.1f}A" for slot, h, st, _e, _s, _d in scored]
-    dE = [energy - e_min for _slot, _h, _st, energy, _s, _d in scored]
+    labels = [f"{st}\n#{slot}@{h:.1f}A" + (f"-o{orient}" if orient else "")
+              for slot, h, st, _e, _s, _d, orient in scored]
+    dE = [energy - e_min for _slot, _h, _st, energy, _s, _d, _orient in scored]
     fig, ax = plt.subplots(figsize=(max(6, 0.9 * len(labels)), 5))
     colors = ['tab:green' if d == 0.0 else 'tab:blue' for d in dE]
     ax.bar(range(len(labels)), dE, color=colors)
@@ -277,6 +308,34 @@ def main():
                          help="With --ml-rank: only write SIESTA folders for the N best-ranked "
                               "sites, instead of all of them.")
 
+    parser.add_argument("--n-orientations-polar", type=int, default=1,
+                         help="With --ml-rank and a multi-atom --adsorbate: systematically sample "
+                              "this many initial molecule orientations PER SITE before relaxing -- "
+                              "which part of the molecule ends up facing the surface (e.g. O-down "
+                              "vs. H-down for H2O) is otherwise fixed by the molecule's default G2 "
+                              "geometry alone. Default 1 = current behavior, no sampling. Combined "
+                              "with --n-orientations-azimuthal below (total orientations per site = "
+                              "polar x azimuthal); a modest 4x2=8 is a reasonable starting point -- "
+                              "cost scales linearly with this product (one full MACE relax per "
+                              "orientation per site). Works with a single --site-index too, not just "
+                              "--all-sites -- every sampled orientation of the SAME site is then what "
+                              "gets ranked. Every relaxed orientation (not just the kept/unique ones) "
+                              "is saved to sites/orientation_trajectory.xyz as a multi-frame "
+                              "trajectory (viewable in VMD/OVITO).")
+    parser.add_argument("--n-orientations-azimuthal", type=int, default=1,
+                         help="With --ml-rank: this many evenly-spaced in-plane rotations sampled "
+                              "per polar direction (see --n-orientations-polar). Default 1.")
+    parser.add_argument("--orientation-top-k", type=int, default=None,
+                         help="With --ml-rank and orientation sampling: keep only the N best "
+                              "unique (post-deduplication) orientations per site, instead of all "
+                              "surviving ones. Unset (default) keeps every unique orientation "
+                              "found.")
+    parser.add_argument("--orientation-rmsd-tol", type=float, default=0.3,
+                         help="With --ml-rank and orientation sampling: two relaxed orientations "
+                              "at the same site are treated as duplicates (only the better-energy "
+                              "one kept) when their adsorbate-atom RMSD is below this (Ang) AND "
+                              "their energy differs by less than 0.01 eV. Default 0.3.")
+
     parser.add_argument("-O", "--output-dir", type=str, default="adsorption_run",
                          help="Root directory (default: adsorption_run) for 'clean_slab', "
                               "'adsorbate' and 'sites' -- everything this study needs lives under "
@@ -328,9 +387,20 @@ def main():
         parser.error("--both-sides and --height-sweep are not supported together yet.")
     if args.top_k is not None and not args.ml_rank:
         parser.error("--top-k is only valid with --ml-rank.")
-    if args.ml_rank and not args.all_sites:
+    orientation_flags_used = (
+        args.n_orientations_polar != 1 or args.n_orientations_azimuthal != 1
+        or args.orientation_top_k is not None
+    )
+    if orientation_flags_used and not args.ml_rank:
+        parser.error("--n-orientations-polar/--n-orientations-azimuthal/--orientation-top-k are "
+                      "only valid with --ml-rank.")
+    if args.n_orientations_polar < 1 or args.n_orientations_azimuthal < 1:
+        parser.error("--n-orientations-polar/--n-orientations-azimuthal must be >= 1.")
+    if args.ml_rank and not args.all_sites and not orientation_flags_used:
         parser.error("--ml-rank is only valid with --all-sites (screening a single --site-index "
-                      "site has nothing to rank against).")
+                      "site has nothing to rank against), UNLESS orientation sampling "
+                      "(--n-orientations-polar/--n-orientations-azimuthal) is also given -- a "
+                      "single site then has plenty to rank: its own sampled orientations.")
     if args.height_sweep is not None:
         hmin, hmax, hstep = args.height_sweep
         if hstep <= 0:
@@ -361,6 +431,7 @@ def main():
     if relabel_note:
         print(color_text(f"[INFO] {relabel_note}", 'yellow'))
     pmg_structure = structure_io.to_pymatgen(structure)
+    pmg_structure, slab_recentered, recenter_shift_ang = center_slab_in_vacuum(pmg_structure)
     slab_species_meta = structure_io.species_dict(structure)
     n_substrate = len(pmg_structure)
 
@@ -413,13 +484,26 @@ def main():
                    else "isolated ref only (--calc as-is for site folders)"), f_out)
     print_dual("  Dipole correction: yes -> Slab.DipoleCorrection T (clean_slab/ + site folders, "
                 "not the isolated ref)", f_out)
+    print_dual("  van der Waals   : yes -> DFTD3 T (clean_slab/, isolated ref, and site folders, "
+                "always on)", f_out)
     print_dual(f"  Save report     : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
 
     # --- [1] REFERENCE FOLDERS: clean slab (once) + one isolated-adsorbate
     # reference per requested adsorbate. ---
     print_section("[1] REFERENCE FOLDERS", f_out)
+    if slab_recentered:
+        print_dual(color_text(
+            f"  [INFO] Slab was near a cell boundary along c (uneven vacuum split) -- shifted by "
+            f"{recenter_shift_ang:+.3f} Ang to center it in the vacuum gap. This avoids a real "
+            "risk: an atom starting near frac z=0 can drift slightly negative during SIESTA "
+            "relaxation and wrap around to frac z~1 (the top of the cell) instead, which reads "
+            "as an enormous, spurious displacement to anything comparing this relaxed geometry "
+            "against another snapshot of the same atom (e.g. [2b]'s own bond-length-change check "
+            "below, or stb-adsorbBsse's atom-count/species match).", 'yellow'), f_out)
+    else:
+        print_dual("  Slab already centered in the vacuum gap (no boundary-wrap risk).", f_out)
     write_reference_folder(clean_slab_dir, pmg_structure, calc_text, slab_species_meta, args.pseudo_dir,
-                            force_dipole=True)
+                            force_dipole=True, force_vdw=True)
     print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}", f_out)
     view_frames.append(("clean_slab", AseAtomsAdaptor.get_atoms(pmg_structure)))
 
@@ -436,7 +520,10 @@ def main():
             with capture_library_noise(library_warnings, "MACE (--ml-prerelax calculator)"):
                 require_mace()
                 from stb.core import mace_relax
-                calc_mace_ads = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+                ml_device, gpu_warning = resolve_ml_device(args.ml_device, mace_relax)
+                calc_mace_ads = mace_relax.get_calculator(model=args.ml_model, device=ml_device)
+            if gpu_warning:
+                print_dual(color_text(f"  [WARNING] {gpu_warning}", 'yellow'), f_out)
             ads_atoms = AseAtomsAdaptor.get_atoms(mol)
             ads_atoms.pbc = False
             with capture_library_noise(library_warnings, "MACE (--ml-prerelax relax)"):
@@ -482,7 +569,8 @@ def main():
             else os.path.join(output_root, "adsorbate")
         isolated_structure = isolated_adsorbate_structure(mol, args.vacuum_box)
         pmg_isolated = structure_io.to_pymatgen(isolated_structure)
-        write_reference_folder(ads_dir, pmg_isolated, adsorbate_calc_text, {}, args.pseudo_dir)
+        write_reference_folder(ads_dir, pmg_isolated, adsorbate_calc_text, {}, args.pseudo_dir,
+                                force_vdw=True)
         adsorbate_dirs[name] = ads_dir
         print_dual(f"  {color_text('[OK]', 'green')} {ads_dir} (Gamma-only, spin-polarized, "
                     f"{args.vacuum_box:.1f} Ang box)", f_out)
@@ -637,12 +725,15 @@ def main():
     # SIESTA folder is written, since it decides (with --top-k) which
     # candidates are worth writing at all. ---
     print_section("[3] ML PRE-SCREENING", f_out)
-    ranked_by_adsorbate = {}  # name -> list of (slot, h, st, energy, relaxed_struct), post-top_k
+    ranked_by_adsorbate = {}  # name -> list of (slot, h, st, energy, relaxed_struct, relaxed_dist,
+                              # orientation), post-top_k (orientation: 0 = sampling not used, else
+                              # 1-based rank among that site's unique orientations)
     if not args.ml_rank:
         print_dual("  Not requested (pass --ml-rank to pre-screen every candidate with MACE-MP-0 "
                     "before committing to real SIESTA folders).", f_out)
     else:
         from ase.constraints import FixAtoms
+        import ase.io as ase_io
         # require_mace()/the mace_relax import both trigger mace/torch/e3nn's
         # own import-time prints and warnings the FIRST time this runs in the
         # process -- wrapped together with get_calculator() so none of that
@@ -650,31 +741,91 @@ def main():
         with capture_library_noise(library_warnings, "MACE (--ml-rank calculator)"):
             require_mace()
             from stb.core import mace_relax
-            calc_mace = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+            ml_device, gpu_warning = resolve_ml_device(args.ml_device, mace_relax)
+            calc_mace = mace_relax.get_calculator(model=args.ml_model, device=ml_device)
+        if gpu_warning:
+            print_dual(color_text(f"  [WARNING] {gpu_warning}", 'yellow'), f_out)
+        orientation_sampling = args.n_orientations_polar > 1 or args.n_orientations_azimuthal > 1
         for name, mol in adsorbates:
+            ads_suffix = f"_{name}" if multi_adsorbate else ""
+            orient_note = (f", {args.n_orientations_polar}x{args.n_orientations_azimuthal} "
+                            "orientation(s)/site" if orientation_sampling else "")
             print_dual(f"  {color_text('Relaxing candidates for', 'cyan')} '{name}' with MACE-MP-0 "
-                        f"(substrate fixed, {len(variants)} candidate(s)) ...", f_out)
+                        f"(substrate fixed, {len(variants)} candidate(s){orient_note}) ...", f_out)
             scored = []
+            orientation_frames = []  # every relaxed orientation, every site (before dedup/top-k) --
+                                      # only populated when orientation_sampling, written to a .xyz
+                                      # trajectory below for visual inspection (e.g. in VMD).
             for i, (slot, h, st, coord) in enumerate(variants, start=1):
-                ads_struct = finder.add_adsorbate(mol, coord)
-                ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
-                ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
-                with capture_library_noise(library_warnings, "MACE (--ml-rank relax)"):
-                    converged, steps = mace_relax.relax(ase_atoms, calc_mace, fmax=args.ml_fmax, max_steps=200)
-                energy = ase_atoms.get_potential_energy()
-                relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
-                relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
-                scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist))
-                print_dual(f"    [{i}/{len(variants)}] site {slot} ({st}, h={h:.2f}): "
-                            f"E = {energy:.4f} eV ({'converged' if converged else 'hit step cap'}, "
-                            f"{steps} step(s)), relaxed distance = {relaxed_dist:.3f} Ang", f_out)
+                orientations = generate_systematic_orientations(
+                    mol, args.n_orientations_polar, args.n_orientations_azimuthal)
+                orient_results = []  # (energy, ase_atoms, converged, steps)
+                for orient_j, orient_mol in enumerate(orientations, start=1):
+                    ads_struct = finder.add_adsorbate(orient_mol, coord)
+                    ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
+                    ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
+                    with capture_library_noise(library_warnings, "MACE (--ml-rank relax)"):
+                        converged, steps = mace_relax.relax(ase_atoms, calc_mace, fmax=args.ml_fmax,
+                                                              max_steps=200)
+                    energy = ase_atoms.get_potential_energy()
+                    orient_results.append((energy, ase_atoms, converged, steps))
+                    if orientation_sampling:
+                        # Succinct, self-overwriting counter (or periodic full lines when not
+                        # a tty, e.g. output redirected to a log) -- the per-orientation MACE
+                        # relax below has no other progress feedback, and a full print_dual
+                        # line per attempt (as opposed to per KEPT orientation, printed after
+                        # dedup below) would flood the report for a large polar x azimuthal grid.
+                        print_progress_line(
+                            f"    site {i}/{len(variants)} ({st}, h={h:.2f}): orientation "
+                            f"{orient_j}/{len(orientations)} relaxed (E = {energy:.4f} eV, "
+                            f"{'converged' if converged else 'hit step cap'})",
+                            orient_j, len(orientations))
+                        ase_atoms.info.update({
+                            "site": slot, "site_type": st, "height": round(h, 4),
+                            "orientation": orient_j, "energy_eV": round(energy, 6),
+                            "converged": bool(converged),
+                        })
+                        # Detach the calculator before saving -- its own attached results
+                        # (e.g. 'energy') collide with ase's extxyz writer trying to fold
+                        # them into atoms.info too, on top of the fields set just above.
+                        ase_atoms.calc = None
+                        orientation_frames.append(ase_atoms)
+                if orientation_sampling:
+                    finish_progress_line()
+                orient_results.sort(key=lambda r: r[0])
+
+                if orientation_sampling:
+                    kept = deduplicate_orientations(
+                        [(e, a) for e, a, _c, _s in orient_results], n_substrate,
+                        rmsd_tol=args.orientation_rmsd_tol)
+                    if args.orientation_top_k is not None:
+                        kept = kept[:args.orientation_top_k]
+                else:
+                    kept = [0]
+
+                for rank, idx in enumerate(kept, start=1):
+                    energy, ase_atoms, converged, steps = orient_results[idx]
+                    relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
+                    relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
+                    orient_id = rank if orientation_sampling else 0
+                    scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist, orient_id))
+                    orient_str = f", orientation {rank}/{len(kept)}" if orientation_sampling else ""
+                    print_dual(f"    [{i}/{len(variants)}{orient_str}] site {slot} ({st}, h={h:.2f}): "
+                                f"E = {energy:.4f} eV ({'converged' if converged else 'hit step cap'}, "
+                                f"{steps} step(s)), relaxed distance = {relaxed_dist:.3f} Ang", f_out)
+                if orientation_sampling:
+                    print_dual(f"    site {slot} ({st}, h={h:.2f}): {len(orientations)} "
+                                f"orientation(s) sampled -> {len(kept)} unique kept"
+                                + (f" (--orientation-top-k {args.orientation_top_k})"
+                                   if args.orientation_top_k is not None else ""), f_out)
             scored.sort(key=lambda r: r[3])
             e_min = scored[0][3]
-            rows = [([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st, f"{energy:.4f}",
-                      f"{energy - e_min:.4f}"], 'green' if rank == 1 else None)
-                    for rank, (slot, h, st, energy, _s, dist) in enumerate(scored, start=1)]
+            rows = [([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st,
+                      (str(orient) if orient else "--"), f"{energy:.4f}", f"{energy - e_min:.4f}"],
+                     'green' if rank == 1 else None)
+                    for rank, (slot, h, st, energy, _s, dist, orient) in enumerate(scored, start=1)]
             print_table(["Rank", "Site", "Init. h (Ang)", "Relaxed dist (Ang)", "Type",
-                         "Energy (eV)", "dE (eV)"], rows, f_out)
+                         "Orientation", "Energy (eV)", "dE (eV)"], rows, f_out)
             print_dual(color_text(
                 "  Note: a relative comparison from a fast ML potential, not an absolute DFT "
                 "adsorption energy -- use it to prioritize which site(s) to relax with SIESTA "
@@ -682,13 +833,27 @@ def main():
                 "guess used to build each candidate; 'Relaxed dist' is the actual closest "
                 "adsorbate-slab distance AFTER this MACE-MP-0 relax (substrate fixed, adsorbate "
                 "free) -- this relaxed geometry, not the initial guess, is what gets written to "
-                "the SIESTA folders in [4] below.", 'yellow'), f_out)
+                "the SIESTA folders in [4] below. 'Orientation' is '--' when orientation sampling "
+                "wasn't requested (--n-orientations-polar/--n-orientations-azimuthal both 1, the "
+                "default); otherwise it's the 1-based rank (by energy) among that site's unique, "
+                "post-deduplication orientations -- each becomes its own SIESTA folder in [4].",
+                'yellow'), f_out)
 
-            ads_suffix = f"_{name}" if multi_adsorbate else ""
             plot_path = os.path.join(sites_root, f"ml_rank_ranking{ads_suffix}.png")
             with capture_library_noise(library_warnings, "matplotlib plot_ml_ranking"):
                 plot_ml_ranking(scored, name, plot_path, show=args.view_plots)
             print_dual(f"  {color_text('[Saved]', 'cyan')} {plot_path}", f_out)
+
+            if orientation_sampling and orientation_frames:
+                traj_path = os.path.join(sites_root, f"orientation_trajectory{ads_suffix}.xyz")
+                with capture_library_noise(library_warnings, "ase.io.write (orientation trajectory)"):
+                    ase_io.write(traj_path, orientation_frames, format="extxyz")
+                print_dual(f"  {color_text('[Saved]', 'cyan')} {traj_path} ({len(orientation_frames)} "
+                            "relaxed orientation(s) across every sampled site for this adsorbate, "
+                            "including duplicates/discarded ones -- NOT just the unique/top-k subset "
+                            "written to SIESTA folders in [4] below. Open as a multi-frame trajectory "
+                            "in VMD/OVITO; each frame's info records site/site_type/height/"
+                            "orientation/energy/converged.)", f_out)
 
             if args.top_k is not None:
                 scored = scored[:args.top_k]
@@ -766,8 +931,9 @@ def main():
         for name, mol in adsorbates:
             ads_suffix = f"_{name}" if multi_adsorbate else ""
             if args.ml_rank:
-                for slot, h, st, _energy, relaxed_struct, _dist in ranked_by_adsorbate[name]:
-                    label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "")
+                for slot, h, st, _energy, relaxed_struct, _dist, orient in ranked_by_adsorbate[name]:
+                    label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "") \
+                        + (f"_orient{orient}" if orient else "")
                     site_records.append((label, relaxed_struct, name, h))
             else:
                 for slot, h, st, coord in variants:
@@ -777,6 +943,22 @@ def main():
 
     report_rows = []  # (label, adsorbate_name, height, dir)
     for label, ads_struct, ads_name, height in site_records:
+        # AdsorbateSiteFinder.add_adsorbate/adsorb_both_surfaces (and the
+        # MACE-relaxed structure from --ml-rank, built from the same
+        # unwrapped Cartesian placement) place the adsorbate atom(s) via a
+        # Cartesian coordinate with no to_unit_cell=True -- confirmed
+        # against pymatgen's own source -- so the resulting fractional
+        # coordinate can legitimately land outside [0, 1) (e.g. an
+        # adsorbate offset pushing z past the cell's own c length). Wrapped
+        # here, once, right before it's used for anything (the overlap
+        # check below and write_reference_folder), covering all 3 possible
+        # origins of ads_struct (plain add_adsorbate, --ml-rank relaxed,
+        # --both-sides) since they all funnel through this one loop.
+        # min_adsorbate_slab_distance's own distance_matrix is already
+        # periodic-aware, so wrapping first doesn't change that result --
+        # same wrap_into_cell() already reused (not duplicated) by
+        # mlneb.py/mladsorb.py/mldiffusion.py.
+        ads_struct = wrap_into_cell(ads_struct)
         min_dist = min_adsorbate_slab_distance(ads_struct, n_substrate)
         if min_dist is not None and min_dist < 0.7:
             print_dual(color_text(
@@ -786,7 +968,7 @@ def main():
 
         site_dir = os.path.join(sites_root, label)
         write_reference_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir,
-                                force_spin=args.force_spin, force_dipole=True)
+                                force_spin=args.force_spin, force_dipole=True, force_vdw=True)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))

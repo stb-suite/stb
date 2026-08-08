@@ -143,6 +143,36 @@ def print_table(headers, rows, f_out=None) -> None:
         print_dual(color_text(line, color) if color else line, f_out)
 
 
+def print_progress_line(line: str, step: int, total: int) -> None:
+    """Prints a live single-line progress indicator to stderr: a self-
+    overwriting \\r-updated line on an interactive terminal, or a periodic
+    full line (every ~10%, plus the final step) when stderr is redirected
+    (e.g. to a log file/CI), so a long, uniform per-step loop (an MD melt/
+    quench ramp, a batch of MACE relaxations) neither spams scrollback with
+    one line per step nor silently produces nothing when piped. Pair with
+    finish_progress_line() once the loop ends. Extracted from amorphize.py
+    once adsorb.py's --n-orientations-* orientation screen became a second
+    consumer needing the exact same behavior; amorphize.py's own
+    print_progress() is now a thin wrapper that builds its line and calls
+    this.
+    """
+    if sys.stderr.isatty():
+        sys.stderr.write(f"\r{line}  ")
+        sys.stderr.flush()
+    elif step == total or step % max(1, total // 10) == 0:
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+
+
+def finish_progress_line() -> None:
+    """Clears the line left by print_progress_line() on an interactive
+    terminal; a no-op otherwise (nothing to clear -- print_progress_line
+    already only wrote complete, newline-terminated lines there)."""
+    if sys.stderr.isatty():
+        sys.stderr.write("\r" + " " * 90 + "\r")
+        sys.stderr.flush()
+
+
 @contextlib.contextmanager
 def capture_library_noise(collector, label):
     """Captures stdout prints and warnings.warn() calls made by external

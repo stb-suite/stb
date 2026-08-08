@@ -39,7 +39,7 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.pseudopotentials import resolve_pseudo_source
 from stb.core.ase_view import view_structure_interactive
 from stb.core.adsorption_sites import (
-    resolve_adsorbate, resolve_slab_orientation, write_reference_folder,
+    resolve_adsorbate, resolve_slab_orientation, center_slab_in_vacuum, write_reference_folder,
     min_adsorbate_image_distance, cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
 )
 
@@ -215,42 +215,6 @@ def candidate_table_rows(candidates, suggested_pair):
         mark = " (suggested pair)" if i in suggested else ""
         rows.append(([str(i), st, f"{coord[0]:.4f}, {coord[1]:.4f}, {coord[2]:.4f}{mark}"], None))
     return rows
-
-
-def center_slab_in_vacuum(pmg_structure, tol_ang=1.0):
-    """Recenters the slab along c (assumed already relabeled so vacuum is on
-    c, see resolve_slab_orientation) so it sits in the middle of the vacuum
-    gap instead of touching a periodic boundary.
-
-    A freshly-cut slab (pymatgen's own SlabGenerator, stb-slab) conventionally
-    starts near frac z=0 with all vacuum stacked above it. During a real
-    SIESTA relaxation, an atom that starts at frac z close to 0 can easily
-    drift slightly negative and get wrapped to frac z close to 1 (the TOP of
-    the cell) instead -- which then reads as an enormous, spurious
-    displacement to anything comparing this relaxed geometry against another
-    snapshot of the same atom (e.g. stb-neb matching site_A against site_B).
-    Shifting the whole slab -- a rigid translation along c, then wrapping
-    into the cell -- to be centered removes this risk entirely without
-    changing the physical structure (bond lengths/angles are untouched, only
-    the coordinate origin along c moves).
-
-    Returns (structure, shifted, shift_ang). `shifted` is False (structure
-    returned unchanged, not even copied) when the slab is already within
-    `tol_ang` of centered, to avoid gratuitously rewriting coordinates for a
-    structure that doesn't need it.
-    """
-    frac_z = pmg_structure.frac_coords[:, 2]
-    slab_center = (frac_z.min() + frac_z.max()) / 2.0
-    shift = 0.5 - slab_center
-    c_length = np.linalg.norm(pmg_structure.lattice.matrix[2])
-    shift_ang = shift * c_length
-    if abs(shift_ang) < tol_ang:
-        return pmg_structure, False, shift_ang
-
-    pmg_structure = pmg_structure.copy()
-    pmg_structure.translate_sites(
-        list(range(len(pmg_structure))), [0.0, 0.0, shift], frac_coords=True, to_unit_cell=True)
-    return pmg_structure, True, shift_ang
 
 
 def min_adsorbate_slab_distance(pmg_structure, n_substrate):

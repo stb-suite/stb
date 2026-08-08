@@ -6,13 +6,15 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.4.1"  # BSSE text updated: now Stage 3 (stb-adsorbBsse became the new Stage 2, generating
-                    # bsse/ folders at each site's RELAXED geometry instead of stb-adsorb's old
-                    # pre-relaxation guess); no functional change to this tool's own aggregation.
+VERSION = "1.5.0"  # New: [2b] PHYSICAL DIAGNOSTICS (dipole/spin moment/bond-length change),
+                    # [5] SUGGESTED NEXT ANALYSES, and an opt-in [6] GIBBS FREE ENERGY (DG) PREP
+                    # step (--compute-gibbs) that writes the displacement folders stb-adsorbGibbs
+                    # (the new Stage 4) needs -- see their own docstrings/CLAUDE.md for the design.
 
 import os
 import re
 import sys
+import json
 import glob
 import shutil
 import argparse
@@ -25,11 +27,28 @@ from stb.core import siesta_log, structure_io
 from stb.core.siesta_log import check_scf_and_force, report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.ase_view import view_structure_interactive
+from stb.core.calc_directives import force_single_point
+from stb.core.pseudopotentials import copy_pseudo
+from stb.core.adsorption_sites import (
+    CONFIG_EXTRA_FILE, SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK, VDW_CORRECTION_BLOCK,
+)
+from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
+from stb.adsorb import min_adsorbate_slab_distance
 
 REPORT_FILE = "adsorption_report.txt"
 SITES_REPORT_FILE = "adsorption_sites.txt"
 RANKING_PLOT_FILE = "adsorption_ranking.png"
+GIBBS_LOCAL_META_FILE = "gibbs_local_meta.json"
 _HEIGHT_SUFFIX_RE = re.compile(r'_h[\d.]+$')
+_LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
+_SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
+_DIPOLE_RE = re.compile(r'Slab\.DipoleCorrection\s+\S+', re.IGNORECASE)
+_VDW_RE = re.compile(r'DFTD3\s+\S+', re.IGNORECASE)
+
+# Local-mode (partial-Hessian) displacement order (axis, sign) -- same
+# convention/order as her_refs.py's/oer_refs.py's own _LOCAL_DISPLACEMENTS,
+# applied here per local atom (see write_local_hessian_folders).
+_LOCAL_DISPLACEMENTS = [(0, 1.0), (0, -1.0), (1, 1.0), (1, -1.0), (2, 1.0), (2, -1.0)]
 
 
 def read_site_table(sites_root):
@@ -230,6 +249,178 @@ def read_site_geometry_atoms(folder):
     return None
 
 
+def force_system_label(calc_text, label):
+    """Substitutes/appends SystemLabel -- every derived Gibbs-prep folder
+    needs its own distinct label so SIESTA's per-run files (.FA, .DM, ...)
+    never collide between folders, and so stb-adsorbGibbs knows exactly
+    which '<label>.FA' filename to read back. Duplicated from her_refs.py/
+    oer_refs.py's own force_system_label (each workflow re-reads/derives
+    its own folders rather than importing a sibling workflow's module --
+    same "self-contained stage" convention HER/OER already follow; the
+    within-Adsorption-workflow cross-imports elsewhere, e.g.
+    adsorb_bsse.py importing read_site_table from this module, don't apply
+    here since that would create a real import cycle with adsorb_bsse.py).
+    """
+    new_text, count = _LABEL_RE.subn(f'SystemLabel {label}', calc_text)
+    if count == 0:
+        new_text += f"\nSystemLabel {label}\n"
+    return new_text
+
+
+def _force_spin_polarized_text(calc_text):
+    """Substitutes/appends 'Spin polarized' directly onto calc_text --
+    used for the Gibbs-prep site folders, which (unlike stb-adsorb's own
+    site folders) write a single flat calc.fdf with no config_extra.fdf
+    include mechanism. Same regex-substitute-or-append idiom as adsorb.py/
+    her_refs.py's own force_spin_polarized (duplicated, not imported --
+    see force_system_label's docstring for why).
+    """
+    new_text, count = _SPIN_RE.subn(r'\g<1>polarized', calc_text)
+    if count == 0:
+        return calc_text + "\nSpin                polarized\n"
+    return new_text
+
+
+def _force_dipole_correction_text(calc_text):
+    """Substitutes/appends 'Slab.DipoleCorrection .true.' directly onto
+    calc_text -- the flat-calc.fdf analog of
+    core/adsorption_sites.py::DIPOLE_CORRECTION_BLOCK for Gibbs-prep
+    folders (see _force_spin_polarized_text's docstring for why this
+    can't just reuse the config_extra.fdf mechanism here).
+    """
+    new_text, count = _DIPOLE_RE.subn('Slab.DipoleCorrection      .true.', calc_text)
+    if count == 0:
+        return calc_text + "\nSlab.DipoleCorrection      .true.\n"
+    return new_text
+
+
+def _force_vdw_correction_text(calc_text):
+    """Substitutes/appends 'DFTD3 .true.' directly onto calc_text -- the
+    flat-calc.fdf analog of core/adsorption_sites.py::VDW_CORRECTION_BLOCK
+    for Gibbs-prep folders (see _force_spin_polarized_text's docstring for
+    why this can't just reuse the config_extra.fdf mechanism here).
+    """
+    new_text, count = _VDW_RE.subn('DFTD3                   .true.', calc_text)
+    if count == 0:
+        return calc_text + "\nDFTD3                   .true.\n"
+    return new_text
+
+
+def read_site_theory_flags(folder):
+    """Returns (spin_polarized, dipole_corrected, vdw_corrected): whether
+    `folder`'s own config_extra.fdf (written by stb-adsorb's
+    write_reference_folder) forced Spin polarized / Slab.DipoleCorrection /
+    the DFT-D3 dispersion correction. The Gibbs-prep displacement folders
+    below must inherit the SAME level of theory as the structure they're
+    perturbing -- forgetting this was a real, user-reported bug already
+    fixed once for stb-adsorbBsse's own ghost fragments (see CLAUDE.md);
+    the same care applies here, including for DFT-D3 (forced
+    unconditionally on every stb-adsorb folder, see adsorb.py's own
+    force_vdw=True call sites). Returns (False, False, False) if `folder`
+    has no config_extra.fdf at all.
+    """
+    path = os.path.join(folder, CONFIG_EXTRA_FILE)
+    if not os.path.isfile(path):
+        return False, False, False
+    with open(path) as f:
+        text = f.read()
+    return "Spin" in text, "Slab.DipoleCorrection" in text, "DFTD3" in text
+
+
+def read_original_calc_text(calc_fdf_path):
+    """Strips the '%include config_extra.fdf' sidecar line
+    structure_io.prepend_include added when stb-adsorb first wrote this
+    folder's own calc.fdf, recovering the original --calc template text --
+    needed so the Gibbs-prep folders below can prepend their OWN config_
+    extra.fdf (single-point enforcement + whatever Spin/dipole flags
+    read_site_theory_flags found) without doubling the include line.
+    Duplicated from adsorb_bsse.py's identical helper (see
+    force_system_label's docstring for why: importing it directly would
+    create an adsorb_bsse.py <-> adsorb_analysis.py import cycle, since
+    adsorb_bsse.py already imports read_site_table from this module). A
+    no-op if the file doesn't start with that exact prefix (defensive;
+    e.g. a hand-edited calc.fdf, or the isolated-adsorbate reference,
+    which never gets a config_extra.fdf include of its own spin override
+    -- see adsorb.py's force_spin_polarized).
+    """
+    with open(calc_fdf_path) as f:
+        text = f.read()
+    prefix = f"%include {CONFIG_EXTRA_FILE}\n\n"
+    if text.startswith(prefix):
+        return text[len(prefix):]
+    return text
+
+
+def write_gibbs_folder(out_dir, fdf_structure, calc_text, pp_path):
+    """Writes structure.fdf + calc.fdf + copied pseudos for one Gibbs-prep
+    displacement folder. Same minimal writer as her_refs.py/oer_refs.py's
+    own write_folder (duplicated, not imported -- same reasoning as
+    force_system_label above).
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
+    with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
+        f.write(calc_text)
+    symbols = sorted({symbol for symbol, _ in fdf_structure.atoms})
+    for symbol in symbols:
+        copy_pseudo(pp_path, symbol, out_dir)
+
+
+def write_local_hessian_folders(gibbs_dir, base_structure, local_indices, displacement_ang,
+                                 calc_text, pp_path, system_label):
+    """Writes 6*len(local_indices) single-point folders (each local atom
+    displaced +/-x/+/-y/+/-z by `displacement_ang` from its position in
+    `base_structure`, every other atom -- including OTHER local atoms --
+    held fixed) for the 'local' partial-Hessian Gibbs-prep mode: a
+    decoupled-oscillator approximation for whichever atoms are "local"
+    (the adsorbate's own atoms, substrate frozen, for the site side; every
+    atom, for the isolated-adsorbate reference side, since there's no
+    substrate to freeze there at all). Same N-atom generalization
+    oer_refs.py::write_local_zpe_folders already established over
+    her_refs.py's original single-atom (H*) version -- duplicated here
+    (not imported) for the same self-contained-workflow reason as
+    force_system_label above. Writes a JSON sidecar (gibbs_local_meta.json)
+    with the local atom indices/symbols (per-atom mass lookup in Stage 4),
+    displacement_ang, the exact (atom_index, axis, sign) order, and the
+    SystemLabel used, so stb-adsorbGibbs never has to guess a folder-name
+    -to-DOF mapping or a '<label>.FA' filename.
+    """
+    os.makedirs(gibbs_dir, exist_ok=True)
+    inv_lattice = np.linalg.inv(base_structure.lattice)
+    local_symbols = [base_structure.atoms[i][0] for i in local_indices]
+
+    order = []
+    for atom_index in local_indices:
+        for axis, sign in _LOCAL_DISPLACEMENTS:
+            order.append({"atom_index": atom_index, "axis": axis, "sign": sign})
+
+    for i, entry in enumerate(order, start=1):
+        atom_index, axis, sign = entry["atom_index"], entry["axis"], entry["sign"]
+        symbol, frac = base_structure.atoms[atom_index]
+        cart = frac @ base_structure.lattice
+        delta_cart = np.zeros(3)
+        delta_cart[axis] = sign * displacement_ang
+        new_frac = (cart + delta_cart) @ inv_lattice
+        new_atoms = list(base_structure.atoms)
+        new_atoms[atom_index] = (symbol, new_frac)
+        disp_structure = structure_io.FdfStructure(
+            lattice=base_structure.lattice, lattice_constant=base_structure.lattice_constant,
+            species=base_structure.species, species_meta=base_structure.species_meta,
+            atoms=new_atoms, coord_format=base_structure.coord_format, raw_lines=[],
+        )
+        disp_dir = os.path.join(gibbs_dir, f"disp_{i:03d}")
+        write_gibbs_folder(disp_dir, disp_structure, calc_text, pp_path)
+
+    with open(os.path.join(gibbs_dir, GIBBS_LOCAL_META_FILE), "w") as f:
+        json.dump({
+            "local_indices": list(local_indices),
+            "local_symbols": local_symbols,
+            "displacement_ang": displacement_ang,
+            "order": order,
+            "system_label": system_label,
+        }, f)
+
+
 class SiteRow:
     """One analyzed site: label, which adsorbate/height it belongs to, and
     its computed energies. A plain attribute-holder (not a dataclass, to
@@ -237,7 +428,8 @@ class SiteRow:
     the field count grew enough (multi-adsorbate + height-sweep) that
     positional tuple unpacking everywhere had become error-prone to edit.
     """
-    def __init__(self, label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force):
+    def __init__(self, label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
+                 dipole=None, spin_moment=None, bond_change=None):
         self.label = label
         self.ads_name = ads_name
         self.height = height
@@ -246,6 +438,9 @@ class SiteRow:
         self.e_ads_bsse = e_ads_bsse
         self.scf_ok = scf_ok
         self.max_force = max_force
+        self.dipole = dipole              # |Electric dipole|, a.u., or None
+        self.spin_moment = spin_moment    # net magnetic moment, Bohr magnetons, or None
+        self.bond_change = bond_change    # relaxed - initial closest adsorbate-slab distance, Ang, or None
 
 
 def main():
@@ -291,6 +486,34 @@ def main():
                          help="Also show the matplotlib adsorption-ranking plot on screen "
                               "(one blocking window), instead of only saving it as a PNG. Off "
                               "by default.")
+    parser.add_argument("--compute-gibbs", action="store_true",
+                         help="Also write the vibrational-Hessian displacement folders (under "
+                              "'<dir>/gibbs/') stb-adsorbGibbs (Stage 4) needs to compute a "
+                              "Gibbs free energy of adsorption, for the winning site (BSSE-"
+                              "ranked if complete, else uncorrected) and its isolated-adsorbate "
+                              "reference. Off by default -- this is the one exception in this "
+                              "tool to 'analysis never generates new folders', by explicit "
+                              "design (see CLAUDE.md): the alternative would be a whole extra "
+                              "prep-only stage duplicating everything [0]-[4] already do.")
+    parser.add_argument("--zpe-mode", choices=["local", "full"], default="local",
+                         help="Vibrational Hessian mode for the SITE side, when --compute-gibbs "
+                              "(default: local). 'local': partial Hessian, only the adsorbate's "
+                              "own atoms displaced (substrate frozen) -- fast, a decoupled-"
+                              "oscillator approximation, no Phonopy involved. 'full': a real "
+                              "Phonopy phonon calculation of the ENTIRE site structure, minus "
+                              "the clean slab's own (also full-structure) phonon calculation -- "
+                              "rigorous, but far more SIESTA jobs. The isolated-adsorbate "
+                              "reference ALWAYS uses the 'local' (full-Hessian-of-the-whole-"
+                              "molecule) method regardless of this flag -- there's no periodic "
+                              "substrate phonon to subtract for an isolated molecule in a vacuum "
+                              "box, so Phonopy's supercell machinery buys nothing there.")
+    parser.add_argument("--displacement", type=float, default=0.015,
+                         help="Finite-difference displacement in Ang for the Hessian/Phonopy "
+                              "displacements (default: 0.015, same as stb-herRefs/stb-oerRefs).")
+    parser.add_argument("--gibbs-supercell", type=int, nargs=3, default=[1, 1, 1],
+                         help="Supercell dimensions for --zpe-mode full's site+clean-slab phonon "
+                              "calculations (default: 1 1 1 -- appropriate when the slab's own "
+                              "in-plane supercell is already large enough).")
     parser.add_argument("-v", "--version", action="version", version=f"stb-adsorbAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -344,6 +567,9 @@ def main():
         sys.exit(1)
     print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
     report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
+    clean_slab_fdf_path = os.path.join(args.dir, "clean_slab", "structure.fdf")
+    n_substrate = len(structure_io.read_fdf(clean_slab_fdf_path).atoms) \
+        if os.path.isfile(clean_slab_fdf_path) else 0
     if args.view:
         with capture_library_noise(library_warnings, "sisl/ASE (clean_slab geometry)"):
             atoms = read_site_geometry_atoms(os.path.join(args.dir, "clean_slab"))
@@ -354,6 +580,7 @@ def main():
     # single unnamed one mapping to the legacy 'adsorbate/' folder.
     ads_names = sorted({name for name, _h in site_table.values()}) if site_table else [None]
     adsorbate_energies = {}  # name -> energy
+    adsorbate_dirs = {}  # name -> folder, reused by [6] GIBBS FREE ENERGY (DG) PREP below
     for name in ads_names:
         candidate_dirs = []
         if name:
@@ -376,6 +603,7 @@ def main():
                 f_out.close()
             sys.exit(1)
         adsorbate_energies[name] = e_ads
+        adsorbate_dirs[name] = ads_dir
         print_dual(f"E_adsorbate ({name or 'default'}) : {e_ads:.6f} eV  ({ads_dir})", f_out)
         report_quality_diagnostics(f"adsorbate ({name or 'default'})", ads_out_path,
                                     args.force_tolerance, f_out)
@@ -450,7 +678,32 @@ def main():
             else:
                 incomplete_bsse_labels.append(label)
 
-        rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force))
+        # [2b] PHYSICAL DIAGNOSTICS -- best-effort, never fatal to the main
+        # E_ads result: dipole/spin come straight from calc.out (None if
+        # SIESTA never printed the line, e.g. a non-polarized run for spin);
+        # bond_change compares the closest adsorbate-slab distance at the
+        # pre-relaxation guess (structure.fdf) vs. the relaxed geometry
+        # (preferring .XV, same as read_site_geometry_atoms's own default).
+        dipole_vec = siesta_log.get_electric_dipole(out_path)
+        dipole_mag = float(np.linalg.norm(dipole_vec)) if dipole_vec is not None else None
+        spin_moment = siesta_log.get_spin_moment(out_path)
+        bond_change = None
+        if n_substrate > 0:
+            try:
+                initial_pmg = structure_io.to_pymatgen(
+                    structure_io.read_fdf(os.path.join(site_dir, "structure.fdf")))
+                dist_initial = min_adsorbate_slab_distance(initial_pmg, n_substrate)
+                relaxed_atoms = read_site_geometry_atoms(site_dir)
+                if relaxed_atoms is not None and dist_initial is not None:
+                    relaxed_pmg = AseAtomsAdaptor.get_structure(relaxed_atoms)
+                    dist_relaxed = min_adsorbate_slab_distance(relaxed_pmg, n_substrate)
+                    if dist_relaxed is not None:
+                        bond_change = dist_relaxed - dist_initial
+            except Exception:
+                bond_change = None
+
+        rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
+                             dipole=dipole_mag, spin_moment=spin_moment, bond_change=bond_change))
         row_color = 'yellow' if (not scf_ok or label in force_warn_labels) else None
         table_rows.append(([
             label, ads_name or '--', "--" if height is None else f"{height:.2f}",
@@ -522,6 +775,23 @@ def main():
         if f_out:
             f_out.close()
         sys.exit(1)
+
+    print_section('[2b] PHYSICAL DIAGNOSTICS', f_out)
+    print_dual(color_text(
+        "Dipole/spin come straight from each site's calc.out (Slab.DipoleCorrection and "
+        "Spin polarized are already forced by stb-adsorb by default, so these should be "
+        "non-trivial for a genuine one-sided adsorption site -- '--' means SIESTA never "
+        "printed the line, e.g. a non-polarized run for the spin column). Bond change compares "
+        "the closest adsorbate-slab distance at the pre-relaxation guess vs. the relaxed "
+        "geometry -- positive means the adsorbate moved AWAY from the slab during relaxation, "
+        "negative means it moved closer (the common case for a real chemisorption bond).",
+        'cyan'), f_out)
+    diag_rows = [([
+        r.label, f"{r.dipole:.4f}" if r.dipole is not None else "--",
+        f"{r.spin_moment:+.4f}" if r.spin_moment is not None else "--",
+        f"{r.bond_change:+.4f}" if r.bond_change is not None else "--",
+    ], None) for r in rows]
+    print_table(["Site", "Dipole(a.u.)", "MagMoment(muB)", "Bond Change(Ang)"], diag_rows, f_out)
 
     # Primary ranking always uses the uncorrected E_ads -- it's available
     # for every row, so it's the only metric safe to compare across all
@@ -623,8 +893,187 @@ def main():
         else:
             print_dual(f"{color_text('[Applied]', 'green')} {apply_source_label} -> {args.apply}", f_out)
 
-    # --- [5] LIBRARY WARNINGS: always last. ---
-    print_section('[5] LIBRARY WARNINGS', f_out)
+    # --- [5] SUGGESTED NEXT ANALYSES: always present, references the same
+    # apply_source_label winning site [3]/[4] already settled on. Every
+    # suggestion is conditional ("if you also generated <file>...") since
+    # none of these SIESTA outputs are guaranteed to exist -- each needs an
+    # extra flag/block in the user's own --calc template that stb-adsorb
+    # never forces (unlike Slab.DipoleCorrection/Spin polarized). ---
+    print_section('[5] SUGGESTED NEXT ANALYSES', f_out)
+    winning_site_dir = os.path.join(sites_root, apply_source_label)
+    print_dual(f"  All paths below are relative to the winning site's own folder: "
+                f"{winning_site_dir}", f_out)
+    print_dual(color_text(
+        "\n  - Bader charges/spin (if you saved '<label>.RHO'):\n"
+        "      stb-bader --label <label>\n"
+        "  - Density of states (if you enabled PDOS output, '<label>.PDOS.xml'):\n"
+        "      stb-dos <label>.PDOS.xml --type total species\n"
+        "  - Work function (if you saved '<label>.VT' -- SaveTotalPotential/"
+        "SaveElectrostaticPotential):\n"
+        "      stb-workfunction -l <label>\n"
+        "      (also a direct dipole-correction consistency check, since [2b] above already "
+        "reports the dipole this site's Slab.DipoleCorrection is meant to fix)\n"
+        "  - Bonding/antibonding character (if you saved a full-BZ '<label>.WFSX' -- "
+        "WriteWaveFunctions T + an explicit %block WaveFuncKPoints -- plus '<label>.HSX'):\n"
+        "      stb-coop --label <label> --quantity coop --pair <adsorbate-atom> "
+        "<surface-atom> --erange <E1> <E2> --sigma <meV>", 'cyan'), f_out)
+
+    # --- [6] GIBBS FREE ENERGY (DG) PREP: opt-in, --compute-gibbs. ---
+    print_section('[6] GIBBS FREE ENERGY (DG) PREP', f_out)
+    if not args.compute_gibbs:
+        print_dual("  Not requested (pass --compute-gibbs to write the vibrational-Hessian "
+                    "displacement folders stb-adsorbGibbs, Stage 4, needs for a ZPE/entropy-"
+                    "corrected Gibbs free energy of adsorption -- computed for the winning site "
+                    "above).", f_out)
+    else:
+        winning_row = next((r for r in rows if r.label == apply_source_label), None)
+        ads_name = winning_row.ads_name if winning_row else None
+        ads_dir = adsorbate_dirs.get(ads_name)
+        if ads_dir is None:
+            print_dual(color_text(
+                f"[ERROR] No isolated-adsorbate reference folder found for '{ads_name}' -- "
+                "cannot build the reference Hessian.", 'red'), f_out)
+        else:
+            try:
+                site_relaxed, site_used_relaxed = structure_io.read_relaxed_or_input(winning_site_dir)
+            except (FileNotFoundError, ValueError) as e:
+                print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+                site_relaxed, site_used_relaxed = None, False
+            try:
+                ads_relaxed, ads_used_relaxed = structure_io.read_relaxed_or_input(ads_dir)
+            except (FileNotFoundError, ValueError) as e:
+                print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+                ads_relaxed, ads_used_relaxed = None, False
+
+            if not site_used_relaxed:
+                print_dual(color_text(
+                    f"[ERROR] '{winning_site_dir}' has no finished siesta.XV yet -- a Hessian "
+                    "needs the actual relaxed geometry, not the pre-relaxation guess. Run SIESTA "
+                    "there first, then re-run with --compute-gibbs.", 'red'), f_out)
+            elif not ads_used_relaxed:
+                print_dual(color_text(
+                    f"[ERROR] '{ads_dir}' has no finished siesta.XV yet -- the isolated-adsorbate "
+                    "reference must also be relaxed before its own Hessian means anything.",
+                    'red'), f_out)
+            else:
+                gibbs_root = os.path.join(args.dir, "gibbs")
+                gibbs_site_dir = os.path.join(gibbs_root, apply_source_label)
+                gibbs_ads_dir = os.path.join(gibbs_root, f"{ads_name or 'default'}_isolated")
+
+                site_calc_text = force_single_point(
+                    read_original_calc_text(os.path.join(winning_site_dir, "calc.fdf")))
+                spin_site, dipole_site, vdw_site = read_site_theory_flags(winning_site_dir)
+                if spin_site:
+                    site_calc_text = _force_spin_polarized_text(site_calc_text)
+                if dipole_site:
+                    site_calc_text = _force_dipole_correction_text(site_calc_text)
+                if vdw_site:
+                    site_calc_text = _force_vdw_correction_text(site_calc_text)
+                site_calc_text = force_system_label(site_calc_text, "gibbs_site")
+
+                # read_original_calc_text (not a plain open().read()) strips the
+                # site's own '%include config_extra.fdf' prefix -- a real bug,
+                # caught while wiring vdW propagation here: without stripping it,
+                # the Gibbs displacement folders below would carry a DANGLING
+                # '%include config_extra.fdf' (that file is never copied into
+                # disp_NNN/, only calc.fdf+structure.fdf are), which SIESTA would
+                # fail to parse. Whatever Spin/DFTD3 the isolated reference's own
+                # calc.fdf carried is re-applied explicitly below instead (same
+                # read_site_theory_flags(ads_dir) this function already uses for
+                # the site side) -- Slab.DipoleCorrection is deliberately never
+                # re-applied here even if somehow present, matching
+                # write_reference_folder's own adsorbate_dir call (no
+                # force_dipole): a boxed molecule isn't a slab.
+                spin_ads, _dipole_ads, vdw_ads = read_site_theory_flags(ads_dir)
+                ads_calc_text = force_single_point(
+                    read_original_calc_text(os.path.join(ads_dir, "calc.fdf")))
+                if spin_ads:
+                    ads_calc_text = _force_spin_polarized_text(ads_calc_text)
+                if vdw_ads:
+                    ads_calc_text = _force_vdw_correction_text(ads_calc_text)
+                ads_calc_text = force_system_label(ads_calc_text, "gibbs_isolated")
+
+                n_total_site = len(site_relaxed.atoms)
+                site_local_indices = list(range(n_substrate, n_total_site))
+                ads_local_indices = list(range(len(ads_relaxed.atoms)))
+
+                print_dual(f"  Winning site  : {apply_source_label}  ({n_total_site - n_substrate} "
+                            "adsorbate atom(s))", f_out)
+                print_dual(f"  Isolated ref  : {ads_dir}  ({len(ads_local_indices)} atom(s))", f_out)
+                print_dual(f"  ZPE mode (site): {args.zpe_mode}  (isolated reference always uses "
+                            "'local' -- see --zpe-mode --help)", f_out)
+
+                write_local_hessian_folders(gibbs_ads_dir, ads_relaxed, ads_local_indices,
+                                             args.displacement, ads_calc_text, ads_dir, "gibbs_isolated")
+                print_dual(f"  {color_text('[OK]', 'green')} {gibbs_ads_dir}/disp_001.."
+                            f"disp_{6 * len(ads_local_indices):03d} (isolated-reference Hessian, "
+                            "local mode)", f_out)
+
+                if args.zpe_mode == "local":
+                    write_local_hessian_folders(gibbs_site_dir, site_relaxed, site_local_indices,
+                                                 args.displacement, site_calc_text, winning_site_dir,
+                                                 "gibbs_site")
+                    print_dual(f"  {color_text('[OK]', 'green')} {gibbs_site_dir}/disp_001.."
+                                f"disp_{6 * len(site_local_indices):03d} (site Hessian, adsorbate "
+                                "atoms only, substrate frozen)", f_out)
+                else:  # full
+                    print_dual(color_text(
+                        "  [NOTE] 'full' mode needs a full phonon calculation of BOTH the winning "
+                        "site AND the clean slab (stb-adsorbGibbs subtracts the clean slab's own "
+                        "phonon ZPE/entropy, same reasoning as stb-herRefs/stb-oerRefs) -- roughly "
+                        "double the cost of a single full phonon run.", 'yellow'), f_out)
+                    from phonopy.interface.siesta import read_siesta
+                    supercell_matrix = [[args.gibbs_supercell[0], 0, 0],
+                                         [0, args.gibbs_supercell[1], 0],
+                                         [0, 0, args.gibbs_supercell[2]]]
+
+                    site_fdf_path = os.path.join(gibbs_site_dir, "_reference.fdf")
+                    os.makedirs(gibbs_site_dir, exist_ok=True)
+                    structure_io.write_fdf(site_relaxed, site_fdf_path)
+                    site_unitcell = read_siesta(site_fdf_path)
+                    site_phonon, site_supercells = build_phonon_displacements(
+                        site_unitcell, supercell_matrix, args.displacement)
+                    site_folders, _site_yaml = write_displacement_folders(
+                        gibbs_site_dir, site_phonon, site_supercells, "structure.fdf",
+                        os.path.join(winning_site_dir, "calc.fdf"), [])
+                    site_symbols = sorted({sym for sym, _ in site_relaxed.atoms})
+                    for d in site_folders:
+                        for sym in site_symbols:
+                            copy_pseudo(winning_site_dir, sym, d)
+                        with open(os.path.join(d, "calc.fdf"), "w") as f:
+                            f.write(site_calc_text)
+                    print_dual(f"  {color_text('[OK]', 'green')} {len(site_folders)} displacement "
+                                f"folder(s) under {gibbs_site_dir}/", f_out)
+
+                    clean_slab_dir = os.path.join(args.dir, "clean_slab")
+                    gibbs_clean_dir = os.path.join(gibbs_root, "clean_slab_full")
+                    clean_fdf_path = os.path.join(gibbs_clean_dir, "_reference.fdf")
+                    os.makedirs(gibbs_clean_dir, exist_ok=True)
+                    clean_template = structure_io.read_fdf(clean_slab_fdf_path)
+                    structure_io.write_fdf(clean_template, clean_fdf_path)
+                    clean_unitcell = read_siesta(clean_fdf_path)
+                    clean_phonon, clean_supercells = build_phonon_displacements(
+                        clean_unitcell, supercell_matrix, args.displacement)
+                    clean_calc_text = force_system_label(
+                        force_single_point(read_original_calc_text(
+                            os.path.join(clean_slab_dir, "calc.fdf"))), "gibbs_clean")
+                    clean_folders, _clean_yaml = write_displacement_folders(
+                        gibbs_clean_dir, clean_phonon, clean_supercells, "structure.fdf",
+                        os.path.join(clean_slab_dir, "calc.fdf"), [])
+                    clean_symbols = sorted({sym for sym, _ in clean_template.atoms})
+                    for d in clean_folders:
+                        for sym in clean_symbols:
+                            copy_pseudo(clean_slab_dir, sym, d)
+                        with open(os.path.join(d, "calc.fdf"), "w") as f:
+                            f.write(clean_calc_text)
+                    print_dual(f"  {color_text('[OK]', 'green')} {len(clean_folders)} displacement "
+                                f"folder(s) under {gibbs_clean_dir}/", f_out)
+
+                print_dual(f"\n  Run SIESTA in every folder written above, then use: "
+                            f"stb-adsorbGibbs --dir {args.dir}", f_out)
+
+    # --- [7] LIBRARY WARNINGS: always last. ---
+    print_section('[7] LIBRARY WARNINGS', f_out)
     if library_warnings:
         print_dual(color_text(
             "Messages emitted by external libraries (sisl, pymatgen, matplotlib) during this "

@@ -101,6 +101,21 @@ else
     PASS=$((PASS+1))
 fi
 
+echo "Testing: DFT-D3 (van der Waals) is forced ON, unconditionally, in EVERY folder --"
+echo "  clean_slab/, adsorbate/ (isolated reference), and sites/site_*/ alike (unlike the"
+echo "  dipole correction, vdW is physically meaningful for a boxed molecule too)"
+check_contains "DFTD3                   .true." $RUN/clean_slab/config_extra.fdf
+check_contains "DFTD3                   .true." $RUN/adsorbate/config_extra.fdf
+check_contains "DFTD3                   .true." $RUN/sites/site_1_ontop/config_extra.fdf
+check_contains "van der Waals   : yes -> DFTD3 T" log_atom.txt
+if grep -q "DFTD3" $RUN/clean_slab/calc.fdf $RUN/sites/site_1_ontop/calc.fdf $RUN/adsorbate/calc.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} DFTD3 should live in config_extra.fdf, not calc.fdf directly"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} calc.fdf itself carries no DFTD3 tag (it's in config_extra.fdf)"
+    PASS=$((PASS+1))
+fi
+
 echo "Testing: --force-spin is ON by default -- sites/site_*/ get Spin polarized via"
 echo "  config_extra.fdf (overriding calc.fdf's own 'Spin non-polarized'), clean_slab/ does not"
 check_contains "Force spin      : yes -> Spin polarized" log_atom.txt
@@ -295,6 +310,195 @@ else
     FAIL=$((FAIL+1))
 fi
 
+echo "Testing: every written site's fractional coordinates are wrapped into [0, 1)"
+echo "  (AdsorbateSiteFinder places the adsorbate via a raw Cartesian offset with no"
+echo "  to_unit_cell=True, so an unwrapped coordinate can otherwise land outside the cell)"
+python3 -c "
+import glob
+from stb.core import structure_io
+# Tolerance matches write_fdf's own .8f formatting: a truly-wrapped coordinate
+# a hair below 1.0 (e.g. 0.9999999997, from MACE relax's own floating-point
+# noise) rounds to the printed string '1.00000000' -- not a real out-of-cell
+# bug, just 8-decimal display rounding at the exact 0/1 boundary.
+bad = []
+for site_dir in sorted(glob.glob('$RUN/sites/site_*')):
+    s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
+    for symbol, frac in s.atoms:
+        for c in frac:
+            if not (-1e-6 <= c <= 1.0 + 1e-6):
+                bad.append(f'{site_dir}: {symbol} has out-of-range fractional coord {c}')
+if bad:
+    print('\n'.join(bad))
+else:
+    print('OK')
+" > log_frac_wrap_check.txt 2>&1
+check_contains "OK" log_frac_wrap_check.txt
+
+
+# --- 4a. generate_systematic_orientations / deduplicate_orientations: pure
+# unit tests (no MACE, no SIESTA) on the two new core/adsorption_sites.py
+# functions, before exercising them live through --ml-rank below. ---
+echo -e "\n--- Testing generate_systematic_orientations / deduplicate_orientations (unit) ---"
+python3 -c "
+import numpy as np
+from pymatgen.core import Molecule
+from ase import Atoms
+from stb.core.adsorption_sites import generate_systematic_orientations, deduplicate_orientations
+
+mol = Molecule(['O', 'H', 'H'], [[0, 0, 0], [0.76, 0.59, 0], [-0.76, 0.59, 0]])
+
+# default (1x1) is a no-op -- exact same molecule, unchanged
+out = generate_systematic_orientations(mol, 1, 1)
+assert len(out) == 1
+assert np.allclose(out[0].cart_coords, mol.cart_coords)
+
+# 6x4 = 24 distinct orientations, all rigid rotations (bond lengths/COM preserved)
+out = generate_systematic_orientations(mol, 6, 4)
+assert len(out) == 24
+coords = [o.cart_coords for o in out]
+for i in range(len(coords)):
+    for j in range(i + 1, len(coords)):
+        assert not np.allclose(coords[i], coords[j], atol=1e-6), f'orientations {i},{j} identical'
+com0 = mol.center_of_mass
+d0 = np.linalg.norm(mol.cart_coords[0] - mol.cart_coords[1])
+for o in out:
+    assert np.allclose(o.center_of_mass, com0, atol=1e-6)
+    assert abs(np.linalg.norm(o.cart_coords[0] - o.cart_coords[1]) - d0) < 1e-6
+
+# deduplicate_orientations: needs BOTH close RMSD and close energy to collapse
+n_sub = 2
+def entry(ads_pos, e):
+    return e, Atoms(['C', 'C'] + ['O'] * len(ads_pos), positions=[[0, 0, 0], [1, 0, 0]] + ads_pos)
+
+near_geom_near_e = [entry([[0, 0, 2.0]], -10.000), entry([[0.01, 0, 2.0]], -10.001)]
+assert deduplicate_orientations(near_geom_near_e, n_sub, rmsd_tol=0.3, energy_tol=0.01) == [0]
+
+near_geom_far_e = [entry([[0, 0, 2.0]], -10.000), entry([[0.02, 0, 2.0]], -8.000)]
+assert deduplicate_orientations(near_geom_far_e, n_sub, rmsd_tol=0.3, energy_tol=0.01) == [0, 1]
+
+far_geom_near_e = [entry([[0, 0, 2.0]], -10.000), entry([[3.0, 3.0, 2.0]], -10.0005)]
+assert deduplicate_orientations(far_geom_near_e, n_sub, rmsd_tol=0.3, energy_tol=0.01) == [0, 1]
+
+print('OK')
+" > log_orientation_unit_check.txt 2>&1
+check_contains "OK" log_orientation_unit_check.txt
+
+
+# --- 4a2. --n-orientations-polar/--n-orientations-azimuthal live, through
+# --ml-rank, with a real (multi-atom) H2O adsorbate on the ontop site (MACE
+# -MP-0 already cached locally from section 4 above). Kept small (2x2=4) for
+# test runtime. ---
+echo -e "\n--- Testing --n-orientations-polar/--n-orientations-azimuthal (live, H2O) ---"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
+    --ml-rank --n-orientations-polar 2 --n-orientations-azimuthal 2 --no-intro \
+    > log_orientations.txt 2>&1
+check_exit_code $? 0
+check_contains "4 orientation(s) sampled" log_orientations.txt
+check_contains "Orientation" log_orientations.txt
+n_site_dirs=$(find $RUN/sites -maxdepth 1 -type d -name 'site_1_ontop_orient*' | wc -l)
+if [ "$n_site_dirs" -ge 1 ] && [ "$n_site_dirs" -le 4 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 1-4 unique orientation folder(s) written ($n_site_dirs)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected 1-4 orientation folders, found $n_site_dirs"
+    FAIL=$((FAIL+1))
+fi
+check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
+check_contains "NumberofAtoms      5" $RUN/sites/site_1_ontop_orient1/structure.fdf
+
+echo "Testing: succinct per-orientation progress counter is printed"
+check_contains "orientation 1/4 relaxed (E = " log_orientations.txt
+check_contains "orientation 4/4 relaxed (E = " log_orientations.txt
+
+echo "Testing: orientation_trajectory.xyz carries every generated orientation (not just kept ones)"
+check_success $RUN/sites/orientation_trajectory.xyz
+n_frames=$(grep -c "^Lattice=" $RUN/sites/orientation_trajectory.xyz 2>/dev/null)
+if [ "$n_frames" -eq 4 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} orientation_trajectory.xyz has all 4 generated frames"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected 4 frames in orientation_trajectory.xyz, found $n_frames"
+    FAIL=$((FAIL+1))
+fi
+check_contains "site=1 site_type=ontop" $RUN/sites/orientation_trajectory.xyz
+check_contains "energy_eV=" $RUN/sites/orientation_trajectory.xyz
+
+echo "Testing: --ml-rank via orientation sampling on a single --site-index (no --all-sites)"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site-index 0 \
+    --ml-rank --n-orientations-polar 2 --n-orientations-azimuthal 2 --no-intro \
+    > log_orientations_singlesite.txt 2>&1
+check_exit_code $? 0
+check_contains "site 1/1" log_orientations_singlesite.txt
+check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
+check_success $RUN/sites/orientation_trajectory.xyz
+
+echo "Testing: --ml-rank without --all-sites and without orientation sampling is still rejected"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site-index 0 \
+    --ml-rank --no-intro > log_mlrank_singlesite_rejected.txt 2>&1
+check_exit_code $? 2
+check_contains "UNLESS orientation sampling" log_mlrank_singlesite_rejected.txt
+
+echo "Testing: --orientation-top-k caps the number of kept orientations"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
+    --ml-rank --n-orientations-polar 2 --n-orientations-azimuthal 2 --orientation-top-k 1 \
+    --no-intro > log_orientations_topk.txt 2>&1
+check_exit_code $? 0
+n_kept=$(find $RUN/sites -maxdepth 1 -type d -name 'site_1_ontop_orient*' | wc -l)
+if [ "$n_kept" -eq 1 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} --orientation-top-k 1 kept exactly 1 orientation"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} expected exactly 1 orientation folder, found $n_kept"
+    FAIL=$((FAIL+1))
+fi
+
+echo "Testing: orientation flags without --ml-rank are rejected"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop \
+    --n-orientations-polar 2 --no-intro > log_orientations_no_mlrank.txt 2>&1
+check_exit_code $? 2
+check_contains "only valid with --ml-rank" log_orientations_no_mlrank.txt
+
+
+# --- 4b. --ml-device cuda without a usable GPU: warn and fall back to CPU,
+# not abort (this machine has no GPU, so this exercises the real fallback
+# path rather than a mocked one). ---
+echo -e "\n--- Testing --ml-device cuda falls back to CPU with a warning (no GPU here) ---"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --all-sites \
+    --ml-rank --top-k 1 --ml-device cuda --no-intro > log_ml_device_fallback.txt 2>&1
+check_exit_code $? 0
+check_contains "\[WARNING\] --ml-device cuda requested, but .* -- falling back to CPU\." log_ml_device_fallback.txt
+check_success $RUN/sites/site_1_ontop/structure.fdf
+
+
+# --- 4c. A --height large enough to push the adsorbate's fractional z
+# decisively past 1.0 (not just floating-point noise at the 0/1 boundary --
+# see the [4] wrap check above): AdsorbateSiteFinder.add_adsorbate places
+# the adsorbate via a raw Cartesian offset with no to_unit_cell=True, so
+# this would land at frac z=1.25 (25 Ang / 20 Ang cell) without the
+# wrap_into_cell() fix in adsorb.py's site-writing loop. ---
+echo -e "\n--- Testing a --height that pushes the adsorbate decisively past frac z=1.0 ---"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --height 15 --no-intro \
+    > log_height_wrap.txt 2>&1
+check_exit_code $? 0
+python3 -c "
+from stb.core import structure_io
+s = structure_io.read_fdf('$RUN/sites/site_1_ontop/structure.fdf')
+symbol, frac = s.atoms[-1]
+z = frac[2]
+# unwrapped would be 25/20 = 1.25; wrapped, it's 0.25
+assert 0.0 <= z < 1.0, f'{symbol} z={z} is not in [0, 1)'
+assert abs(z - 0.25) < 1e-6, f'{symbol} z={z}, expected ~0.25 (1.25 wrapped)'
+print('OK')
+" > log_height_wrap_check.txt 2>&1
+check_contains "OK" log_height_wrap_check.txt
+
 
 # --- 5. --both-sides (free-standing 2D material, vacuum on both sides) ---
 echo -e "\n--- Testing --both-sides ---"
@@ -423,6 +627,95 @@ assert cluster_candidate_coords([], lattice) == []
 print('OK')
 " > log_cluster_check.txt 2>&1
 check_contains "OK" log_cluster_check.txt
+
+
+# --- 6h. wrap_markers_into_cell: adsorption_sites.png must mark ONLY the
+#     candidates' representative position INSIDE the highlighted unit cell
+#     (per explicit request), one marker per candidate, no periodic clutter
+#     outside it. ---
+echo -e "\n--- Testing wrap_markers_into_cell (every candidate marked exactly once, inside the cell) ---"
+python3 -c "
+import numpy as np
+from pymatgen.analysis.adsorption import get_rot
+from pymatgen.core import Structure, Lattice
+from stb.core.adsorption_sites import wrap_markers_into_cell
+
+lattice = Lattice.from_parameters(2.46, 2.46, 20.0, 90, 90, 120)
+structure = Structure(lattice, ['C', 'C'], [[0, 0, 0.5], [1/3, 2/3, 0.5]])
+symm_op = get_rot(structure)
+a2d = np.asarray(symm_op.operate(lattice.matrix[0])[:2])
+b2d = np.asarray(symm_op.operate(lattice.matrix[1])[:2])
+inv_ab = np.linalg.inv(np.column_stack([a2d, b2d]))
+
+def frac_ab(xy):
+    return inv_ab @ np.asarray(xy)
+
+# a candidate deliberately outside the [0,1) cell in fractional terms
+# (frac x=-0.3, physically the same as x=0.7) -- must come back wrapped
+# into [0,1) x [0,1), one point, no extra copies.
+cart_outside = np.array([-0.3, 0.5, 0.5]) @ lattice.matrix
+# a candidate already inside [0,1) -- must come back unchanged (up to fp noise)
+cart_inside = np.array([0.2, 0.4, 0.5]) @ lattice.matrix
+
+wrapped = wrap_markers_into_cell([cart_outside, cart_inside], lattice.matrix, symm_op)
+assert len(wrapped) == 2, f'expected exactly 1 marker per candidate, got {len(wrapped)}'
+for xy in wrapped:
+    alpha, beta = frac_ab(xy)
+    assert -1e-9 <= alpha < 1.0 + 1e-9 and -1e-9 <= beta < 1.0 + 1e-9, \
+        f'marker not inside the cell: alpha={alpha}, beta={beta}'
+
+alpha0, beta0 = frac_ab(wrapped[0])
+assert abs(alpha0 - 0.7) < 1e-6, f'expected alpha~0.7 (wrapped from -0.3), got {alpha0}'
+alpha1, beta1 = frac_ab(wrapped[1])
+assert abs(alpha1 - 0.2) < 1e-6 and abs(beta1 - 0.4) < 1e-6
+
+# empty input -> empty output (no crash)
+assert wrap_markers_into_cell([], lattice.matrix, symm_op) == []
+print('OK')
+" > log_periodic_marker_check.txt 2>&1
+check_contains "OK" log_periodic_marker_check.txt
+
+
+# --- 6i. center_slab_in_vacuum: a slab pinned near a cell boundary along c
+#     (uneven vacuum split) must be recentered before any site is written --
+#     user-requested, same fix already shipped for stb-nebSites, now shared
+#     via core/adsorption_sites.py once stb-adsorb became a second consumer.
+#     Deliberately build a structure with frac z=0.02 in a 20 Ang cell (same
+#     scenario stb-nebSites' own live verification used). ---
+echo -e "\n--- Testing center_slab_in_vacuum (slab near a cell boundary gets recentered) ---"
+python3 -c "
+import numpy as np
+from stb.core import structure_io
+
+lattice = np.array([[2.46, 0.0, 0.0], [-1.23, 2.130422, 0.0], [0.0, 0.0, 20.0]])
+species_meta = {'C': {'id': '1', 'Z': 6}}
+atoms = [('C', np.array([0.0, 0.0, 0.02])), ('C', np.array([1 / 3, 2 / 3, 0.02]))]
+s = structure_io.FdfStructure(lattice=lattice, lattice_constant=1.0, species=['C'],
+                               species_meta=species_meta, atoms=atoms,
+                               coord_format='fractional', raw_lines=[])
+structure_io.write_fdf(s, 'structure_offcenter.fdf')
+"
+check_success structure_offcenter.fdf
+rm -rf $RUN
+stb-adsorb -s structure_offcenter.fdf -c calc.fdf --adsorbate H --site-type ontop --no-intro \
+    > log_offcenter.txt 2>&1
+check_exit_code $? 0
+check_contains "\[INFO\] Slab was near a cell boundary along c" log_offcenter.txt
+check_contains "shifted by +9.600 Ang to center it" log_offcenter.txt
+python3 -c "
+from stb.core import structure_io
+s = structure_io.read_fdf('$RUN/clean_slab/structure.fdf')
+for symbol, frac in s.atoms:
+    assert abs(frac[2] - 0.5) < 1e-6, f'{symbol} z={frac[2]}, expected 0.5 (recentered)'
+print('OK')
+" > log_offcenter_check.txt 2>&1
+check_contains "OK" log_offcenter_check.txt
+
+echo "Testing: an already-centered slab is left unchanged (no gratuitous rewrite)"
+rm -rf $RUN
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --no-intro \
+    > log_centered.txt 2>&1
+check_contains "Slab already centered in the vacuum gap" log_centered.txt
 
 
 # --- 7. Error and robustness cases ---
@@ -576,6 +869,7 @@ rm -rf $RUN
   echo ""               # force_spin (default Y)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
+  echo "n"               # orient_choice -> no orientation sampling (no --ml-rank either)
   echo "n"               # both_sides_choice
   echo ""               # show_advanced (default -> skip, so output_dir defaults to adsorption_run)
   echo "y"               # save_report -> yes
@@ -606,6 +900,7 @@ rm -rf $RUN
   echo ""               # force_spin (default Y)
   echo "n"               # all_sites_choice -> single site
   echo "0"               # site_index
+  echo "n"               # orient_choice -> no orientation sampling
   echo ""               # show_advanced
   echo "n"               # save_report -> no
   echo "n"               # view_choice -> no
@@ -618,6 +913,74 @@ check_success $RUN/sites/site_1_ontop_O_h1.50/structure.fdf
 check_success $RUN/sites/site_1_ontop_N_h2.50/structure.fdf
 check_success $RUN/adsorbate_O/structure.fdf
 check_success $RUN/adsorbate_N/structure.fdf
+
+echo "Testing: navigate 4.8.1 -> --ml-rank + orientation sampling (H2O) -> quit"
+rm -rf $RUN
+{
+  echo "4.8.1"
+  echo "structure.fdf"
+  echo "calc.fdf"
+  echo ""               # pp_path
+  echo "H2O"             # adsorbate(s)
+  echo ""               # ml_prerelax_choice
+  echo "1"               # site_choice (ontop)
+  echo ""               # height_sweep_choice
+  echo ""               # height
+  echo ""               # force_spin (default Y)
+  echo "y"               # all_sites_choice -> Y
+  echo "y"               # ml_rank_choice -> Y
+  echo ""               # top_k (blank = keep all)
+  echo "y"               # orient_choice -> Y
+  echo "2"               # n_orient_polar
+  echo "2"               # n_orient_azimuthal
+  echo "1"               # orient_top_k -> keep only 1
+  echo ""               # orient_rmsd_tol (default)
+  echo ""               # show_advanced
+  echo ""               # save_report
+  echo ""               # view_choice
+  echo ""               # view_plots_choice
+  echo ""               # press enter
+  echo "0"               # quit
+} | stb-suite > log_menu_orient.txt 2>&1
+check_contains "Orientation sampling" log_menu_orient.txt
+check_contains "2x2, top 1" log_menu_orient.txt
+check_contains "4 orientation(s) sampled -> 1 unique kept" log_menu_orient.txt
+check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
+check_contains "DFTD3                   .true." $RUN/sites/site_1_ontop_orient1/config_extra.fdf
+
+echo "Testing: navigate 4.8.1 -> single site + orientation sampling (H2O) -> quit"
+rm -rf $RUN
+{
+  echo "4.8.1"
+  echo "structure.fdf"
+  echo "calc.fdf"
+  echo ""               # pp_path
+  echo "H2O"             # adsorbate(s)
+  echo ""               # ml_prerelax_choice
+  echo "1"               # site_choice (ontop)
+  echo ""               # height_sweep_choice
+  echo ""               # height
+  echo ""               # force_spin (default Y)
+  echo "n"               # all_sites_choice -> single site
+  echo "0"               # site_index
+  echo "y"               # orient_choice -> Y (this is what turns --ml-rank on here)
+  echo "2"               # n_orient_polar
+  echo "2"               # n_orient_azimuthal
+  echo "1"               # orient_top_k -> keep only 1
+  echo ""               # orient_rmsd_tol (default)
+  echo ""               # show_advanced
+  echo ""               # save_report
+  echo ""               # view_choice
+  echo ""               # view_plots_choice
+  echo ""               # press enter
+  echo "0"               # quit
+} | stb-suite > log_menu_orient_singlesite.txt 2>&1
+check_contains "ML pre-screen" log_menu_orient_singlesite.txt
+check_contains "ON (single site)" log_menu_orient_singlesite.txt
+check_contains "Orientation sampling" log_menu_orient_singlesite.txt
+check_contains "2x2, top 1" log_menu_orient_singlesite.txt
+check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
+check_success $RUN/sites/orientation_trajectory.xyz
 
 
 popd > /dev/null

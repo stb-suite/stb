@@ -154,6 +154,25 @@ check_contains "MD.Steps           0" bsse/site_1_ontop_O/bsse_slab/config_extra
 check_contains "MD.NumCGsteps      0" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
 check_contains "%include config_extra.fdf" bsse/site_1_ontop_O/bsse_slab/calc.fdf
 
+echo "Testing: BSSE ghost fragments inherit the site's own level of theory"
+# stb-adsorb defaults to --force-spin (site) and an unconditional dipole
+# correction (see write_reference_folder's force_spin/force_dipole), so
+# site_1_ontop_O/config_extra.fdf carries both -- the BSSE ghost fragments
+# (bsse_slab/bsse_adsorbate) must inherit BOTH, or the counterpoise
+# correction mixes a spin-restriction/missing-dipole-correction penalty
+# into what's supposed to be a small basis-set effect (a real, reported bug
+# fixed by read_site_theory_flags()).
+check_contains "Spin" sites/site_1_ontop_O/config_extra.fdf
+check_contains "Slab.DipoleCorrection" sites/site_1_ontop_O/config_extra.fdf
+check_contains "DFTD3" sites/site_1_ontop_O/config_extra.fdf
+check_contains "Spin                polarized" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
+check_contains "Slab.DipoleCorrection      .true." bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
+check_contains "DFTD3                   .true." bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
+check_contains "Spin                polarized" bsse/site_1_ontop_O/bsse_adsorbate/config_extra.fdf
+check_contains "Slab.DipoleCorrection      .true." bsse/site_1_ontop_O/bsse_adsorbate/config_extra.fdf
+check_contains "DFTD3                   .true." bsse/site_1_ontop_O/bsse_adsorbate/config_extra.fdf
+check_contains "spin: yes, dipole: yes, vdw: yes" log_bsse.txt
+
 echo "Testing: real + ghost pseudopotentials copied directly from the site's own folder"
 check_success bsse/site_1_ontop_O/bsse_slab/C.psml
 check_success bsse/site_1_ontop_O/bsse_slab/O_ghost.psml
@@ -180,6 +199,48 @@ for sub in ('bsse_slab', 'bsse_adsorbate'):
 sys.exit(0)
 "
 check_exit_code $? 0
+
+
+# --- 2b. Negative case: a site built with --no-force-spin must NOT get a
+# Spin line propagated into its BSSE ghost fragments either -- confirms
+# read_site_theory_flags() actually reads the site's own config_extra.fdf
+# instead of unconditionally forcing spin. ---
+echo -e "\n--- Testing that --no-force-spin sites don't get a Spin line in BSSE either ---"
+mkdir -p nospin && pushd nospin > /dev/null
+cp "$PREP_DIR/structure.fdf" .
+cp "$PREP_DIR/calc.fdf" .
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop --no-force-spin -O . --no-intro \
+    > log_prep.txt 2>&1
+check_success sites/site_1_ontop/structure.fdf
+echo "fake C pseudopotential" > sites/site_1_ontop/C.psml
+echo "fake O pseudopotential" > sites/site_1_ontop/O.psml
+printf 'siesta: FreeEng =    -214.100000\nSCF cycle converged after 14 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.020000\n' \
+    > sites/site_1_ontop/calc.out
+python3 -c "
+import sisl
+from stb.core import structure_io
+
+fdf = structure_io.read_fdf('sites/site_1_ontop/structure.fdf')
+pmg = structure_io.to_pymatgen(fdf)
+cart = pmg.cart_coords.copy()
+cart[-1, 2] -= 0.5
+atoms = [sisl.Atom(str(s.specie)) for s in pmg]
+geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+sisl.get_sile('sites/site_1_ontop/siesta.XV', mode='w').write_geometry(geom)
+"
+check_success sites/site_1_ontop/siesta.XV
+stb-adsorbBsse --dir . --save-report --no-intro > log_bsse.txt 2>&1
+check_exit_code $? 0
+check_contains "spin: no, dipole: yes, vdw: yes" log_bsse.txt
+check_contains "DFTD3                   .true." bsse/site_1_ontop/bsse_slab/config_extra.fdf
+if grep -q "^Spin" bsse/site_1_ontop/bsse_slab/config_extra.fdf 2>/dev/null; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected 'Spin' line in bsse_slab/config_extra.fdf (--no-force-spin site)"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no 'Spin' line in bsse_slab/config_extra.fdf, as expected"
+    PASS=$((PASS+1))
+fi
+popd > /dev/null
 
 
 # --- 3. Mismatched/stale folder (atom count doesn't match structure.fdf) ---

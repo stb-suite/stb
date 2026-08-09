@@ -19,6 +19,7 @@ from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import neb_manifest
+from stb.core import adsorption_sites
 from stb.core.cli import color_text, show_intro, print_dual
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.deps import require_mace
@@ -64,21 +65,22 @@ def check_composition_match(initial_structure, final_structure):
 
 def resolve_manifest_pair(initial_path, final_path, initial_structure, final_structure):
     """Best-effort: if BOTH --initial/--final are directories containing a
-    neb_manifest.json (written by stb-nebSites), loads them, cross-checks
-    them against EACH OTHER (neb_manifest.validate_manifest_pair) AND
-    against the structures actually read back by read_relaxed_or_input --
-    the second check catches a stale manifest (structure.fdf/siesta.XV
-    regenerated or hand-edited since stb-nebSites wrote it), which a
-    manifest-vs-manifest-only comparison can't see.
+    neb_manifest.json (written by any tool that proves atom-index
+    correspondence between two structures -- see core/neb_manifest.py),
+    loads them, cross-checks them against EACH OTHER
+    (neb_manifest.validate_manifest_pair) AND against the structures
+    actually read back by read_relaxed_or_input -- the second check catches
+    a stale manifest (structure.fdf/siesta.XV regenerated or hand-edited
+    since the manifest was written), which a manifest-vs-manifest-only
+    comparison can't see.
 
     Returns (manifest_initial, manifest_final, pair_ids_match) when both
     sides have a manifest and everything checks out. Returns None if
     EITHER side has no manifest at all -- not an error, just "no proof
-    available" (an older stb-nebSites run predating this feature, or a
-    hand-built --initial/--final) -- falls back to the existing distance
-    -based --autosort-tol behavior. Exits (clean [ERROR], same convention
-    as check_composition_match) for every case where a manifest genuinely
-    IS present but can't be trusted.
+    available" (a hand-built --initial/--final, the common case) -- falls
+    back to the existing distance-based --autosort-tol behavior. Exits
+    (clean [ERROR], same convention as check_composition_match) for every
+    case where a manifest genuinely IS present but can't be trusted.
     """
     paths = {"--initial": (initial_path, initial_structure), "--final": (final_path, final_structure)}
     if not all(os.path.isdir(p) for p, _ in paths.values()):
@@ -102,8 +104,8 @@ def resolve_manifest_pair(initial_path, final_path, initial_structure, final_str
             print(color_text(
                 f"[ERROR] {label}'s read-back structure does not match its own "
                 f"'{neb_manifest.MANIFEST_FILENAME}' -- the folder's structure.fdf/siesta.XV was "
-                "likely regenerated or hand-edited after stb-nebSites wrote the manifest. Delete "
-                "the stale manifest (or re-run stb-nebSites) before retrying.", 'red'))
+                "likely regenerated or hand-edited after the manifest was written. Delete the "
+                "stale manifest before retrying.", 'red'))
             sys.exit(1)
 
     try:
@@ -134,30 +136,45 @@ def wrap_into_cell(pmg_structure):
                       pmg_structure.frac_coords % 1.0, coords_are_cartesian=False)
 
 
-def resolve_lattice_mismatch(initial_pmg, final_pmg, tol=1e-3):
-    """Returns a copy of `final_pmg` rebuilt on the INITIAL structure's
-    lattice (species/frac_coords kept from final_pmg). Prints a
-    [WARNING] if the two lattices differ by more than `tol` Ang in any
-    component -- not just stylistic: ase.mep.neb.NEB/idpp_interpolate both
-    raise NotImplementedError on any per-image cell mismatch (no
-    variable-cell NEB support in ASE), and pymatgen's Structure.interpolate
-    raises ValueError on unequal lattices unless interpolate_lattices=True
-    -- so a single fixed lattice for the whole band is the only thing
-    either downstream library can actually run, confirmed live against
-    both APIs. Below `tol`, no message (ordinary floating-point/rounding
-    noise between two independently-relaxed endpoint calculations).
+def require_lattice_match(initial_pmg, final_pmg, f_out, tol=1e-3):
+    """Hard-validates that the two endpoints' lattices agree within `tol`
+    Ang in every matrix component -- not just stylistic:
+    ase.mep.neb.NEB/idpp_interpolate both raise NotImplementedError on any
+    per-image cell mismatch (no variable-cell NEB support in ASE), and
+    pymatgen's Structure.interpolate raises ValueError on unequal lattices
+    unless interpolate_lattices=True -- so a single fixed lattice for the
+    whole band is the only thing either downstream library can actually
+    run, confirmed live against both APIs.
+
+    Above `tol`, this is now a hard [ERROR] + exit(1) (previously only a
+    [WARNING] that silently rebuilt --final onto --initial's lattice): a
+    mismatch this large means the user's own two "already-relaxed"
+    endpoints don't actually share a cell, which stb-neb should surface
+    rather than paper over -- re-relaxing --final on --initial's own cell
+    is the user's job, not this tool's.
+
+    Below `tol` (ordinary floating-point/rounding noise between two
+    independently-relaxed endpoint calculations, not a real difference),
+    silently returns a copy of `final_pmg` rebuilt bit-for-bit onto
+    initial_pmg's lattice (species/frac_coords kept from final_pmg) --
+    still needed even for a tiny numerical difference, since pymatgen/
+    ASE's own lattice-equality checks are tighter than this tool's `tol`.
     """
     initial_matrix = np.array(initial_pmg.lattice.matrix)
     final_matrix = np.array(final_pmg.lattice.matrix)
     max_diff = float(np.abs(initial_matrix - final_matrix).max())
     if max_diff > tol:
-        print(color_text(
-            f"[WARNING] Initial and final structures have different lattices (largest "
-            f"component difference: {max_diff:.4f} Ang) -- ase.mep.neb.NEB and pymatgen's "
-            "interpolation both require every image to share one exact cell (no variable-cell "
-            "NEB support in ASE). Adopting the INITIAL structure's lattice for the whole band; "
-            "the final structure's atomic (fractional) positions are kept, its own lattice is "
-            "discarded.", 'yellow'))
+        print_dual(color_text(
+            f"[ERROR] Initial and final structures have different lattices (largest component "
+            f"difference: {max_diff:.4f} Ang, tolerance: {tol} Ang) -- ase.mep.neb.NEB and "
+            "pymatgen's interpolation both require every image to share one exact cell (no "
+            "variable-cell NEB support in ASE). stb-neb requires --initial/--final to already "
+            "share the same lattice (it no longer silently overrides one with the other) -- "
+            "re-relax --final with --initial's own cell (e.g. a fixed-cell relaxation, or copy "
+            "--initial's %block LatticeVectors into --final's structure) before retrying.", 'red'),
+            f_out)
+        f_out.close()
+        sys.exit(1)
     return Structure(initial_pmg.lattice, final_pmg.species, final_pmg.frac_coords,
                       coords_are_cartesian=False)
 
@@ -333,16 +350,34 @@ def write_path_trajectory(pmg_images, out_path):
     ase_write(out_path, ase_images)
 
 
-def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path):
-    """Writes structure.fdf + calc.fdf + copied pseudopotentials for one
-    image_NN/ folder -- same shape as adsorb.py's write_reference_folder.
+def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
+                        force_spin=False, force_vdw=False, force_dipole=False):
+    """Writes structure.fdf + config_extra.fdf + calc.fdf + copied
+    pseudopotentials for one image_NN/ folder. config_extra.fdf is always
+    written (even empty, if all three flags are False) and always
+    %include'd at the very top of calc.fdf (structure_io.prepend_include)
+    -- same "config_extra.fdf as the standard mechanism for forcing
+    calculation directives" convention as core/adsorption_sites.py's
+    write_reference_folder, but WITHOUT that function's FIXED_CELL_BLOCK
+    (meaningless here -- every image folder is already forced single-point
+    by the caller, via force_single_point, before this loop runs) and
+    without calling write_reference_folder itself (that function is
+    slab/pymatgen-adsorption-specific). `calc_text` is assumed already
+    single-point-forced by the caller.
     """
     os.makedirs(out_dir, exist_ok=True)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
                                                 coord_format="fractional")
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
+    with open(os.path.join(out_dir, adsorption_sites.CONFIG_EXTRA_FILE), "w") as f:
+        if force_spin:
+            f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
+        if force_dipole:
+            f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
+        if force_vdw:
+            f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
-        f.write(calc_text)
+        f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
     symbols = {site.specie.symbol for site in pmg_structure}
     for sym in sorted(symbols):
         copy_pseudo(pp_path, sym, out_dir)
@@ -460,9 +495,8 @@ def main():
 
     parser.add_argument("-i", "--initial", type=str, required=True,
                          help="Initial (already-relaxed) endpoint: a structure.fdf file, or a "
-                              "directory containing one (e.g. a stb-nebSites site_A/ folder) -- "
-                              "a directory's own finished siesta.XV, if present, is preferred "
-                              "over its structure.fdf guess.")
+                              "directory containing one -- a directory's own finished siesta.XV, "
+                              "if present, is preferred over its structure.fdf guess.")
     parser.add_argument("-f", "--final", type=str, required=True,
                          help="Final (already-relaxed) endpoint -- same file-or-directory "
                               "convention as --initial, same composition.")
@@ -473,6 +507,30 @@ def main():
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
                          help="Pseudopotentials source (optional): a bundled bank or a folder path.")
 
+    parser.add_argument("--force-spin", dest="force_spin", action="store_true", default=True,
+                         help="Force Spin polarized (via config_extra.fdf, overriding --calc's "
+                              "own Spin tag if any) in every image_NN/ (default: ON) -- a "
+                              "reacting atom commonly leaves the system with a net magnetic "
+                              "moment, which a spin-restricted calculation cannot represent at "
+                              "all; costs nothing for a genuinely closed-shell path (converges "
+                              "to zero moment). No effect with --mode 1 (no SIESTA folders "
+                              "written).")
+    parser.add_argument("--no-force-spin", dest="force_spin", action="store_false",
+                         help="Leave --calc's own Spin tag untouched in every image_NN/.")
+    parser.add_argument("--force-vdw", dest="force_vdw", action="store_true", default=True,
+                         help="Force the Grimme DFT-D3 dispersion (van der Waals) correction "
+                              "(default: ON) in every image_NN/'s config_extra.fdf. No effect "
+                              "with --mode 1.")
+    parser.add_argument("--no-force-vdw", dest="force_vdw", action="store_false",
+                         help="Leave --calc's own dispersion settings untouched.")
+    parser.add_argument("--force-dipole", dest="force_dipole", action="store_true", default=True,
+                         help="Force the slab dipole correction (default: ON) in every "
+                              "image_NN/'s config_extra.fdf -- only meaningful for a genuinely "
+                              "one-sided slab/surface reaction path; harmless (evaluates near "
+                              "zero) otherwise. No effect with --mode 1.")
+    parser.add_argument("--no-force-dipole", dest="force_dipole", action="store_false",
+                         help="Leave --calc's own dipole settings untouched.")
+
     parser.add_argument("-n", "--n-images", type=int, default=7,
                          help="Total images along the band, endpoints included (default: 7).")
     parser.add_argument("--autosort-tol", type=float, default=0.5,
@@ -482,7 +540,7 @@ def main():
                               "-based matching entirely and use --initial/--final's atom order "
                               "directly -- the right choice (and more robust for a small/"
                               "densely-packed cell) when both endpoints already share a "
-                              "guaranteed matching order, e.g. a stb-nebSites site_A/site_B pair. "
+                              "guaranteed matching order (e.g. a neb_manifest.json-proven pair). "
                               "If matching fails at this tolerance, stb-neb automatically retries "
                               "once with --autosort-tol 0 (a [WARNING], not an [ERROR]) before "
                               "giving up -- this is usually already the right correspondence, so "
@@ -571,8 +629,7 @@ def main():
             sys.exit(1)
 
     # --initial/--final each accept a bare .fdf file (used exactly as given)
-    # or a directory -- e.g. one of stb-nebSites' own site_A/site_B folders
-    # -- in which case the folder's finished 'siesta.XV' is preferred over
+    # or a directory -- in which case the folder's finished 'siesta.XV' is preferred over
     # its pre-relaxation 'structure.fdf' guess (structure_io.py::
     # read_relaxed_or_input, shared with stb-adsorbBsse's own "prefer the
     # relaxed geometry" need). used_relaxed is False only when a directory
@@ -621,7 +678,7 @@ def main():
                 "reasoning applies here too); the band below is still generated, useful to preview "
                 "the path, but re-run once SIESTA has actually relaxed this endpoint.", 'yellow'), f_out)
         print_dual(f"  Atom correspondence: "
-                    + (f"PROVEN via {neb_manifest.MANIFEST_FILENAME} (stb-nebSites site_A/site_B pair)"
+                    + (f"PROVEN via {neb_manifest.MANIFEST_FILENAME}"
                        if manifest_pair is not None
                        else f"distance-based matching (--autosort-tol {args.autosort_tol})"), f_out)
         print_dual(f"  Calc template     : {args.calc}", f_out)
@@ -630,6 +687,14 @@ def main():
         print_dual(f"  N images          : {args.n_images}", f_out)
         print_dual(f"  IDPP refinement   : {'yes' if args.idpp else 'no'}", f_out)
         print_dual(f"  Mode              : {args.mode} ({_MODE_DESCRIPTIONS[args.mode]})", f_out)
+        print_dual(f"  Force spin/vdW/dipole: {'ON' if args.force_spin else 'off'}/"
+                    f"{'ON' if args.force_vdw else 'off'}/{'ON' if args.force_dipole else 'off'} "
+                    "(config_extra.fdf per image_NN/)", f_out)
+        if args.mode == 1 and not (args.force_spin and args.force_vdw and args.force_dipole):
+            print_dual(color_text(
+                "  [NOTE] --no-force-spin/--no-force-vdw/--no-force-dipole have no effect with "
+                "--mode 1 -- no SIESTA folders (and therefore no config_extra.fdf) are written "
+                "in this mode.", 'yellow'), f_out)
         mace_used_this_mode = args.mode in (1, 2, 3)
         if mace_used_this_mode:
             print_dual(f"  MACE-MP-0 path shaping: yes (model={args.ml_model}, k={args.ml_k}, "
@@ -663,7 +728,7 @@ def main():
 
         initial_pmg = wrap_into_cell(initial_pmg)
         final_pmg = wrap_into_cell(final_pmg)
-        final_pmg_matched = resolve_lattice_mismatch(initial_pmg, final_pmg)
+        final_pmg_matched = require_lattice_match(initial_pmg, final_pmg, f_out)
 
         check_endpoint_displacement(initial_pmg, final_pmg_matched, f_out,
                                      threshold=args.ml_freeze_threshold, idpp_used=args.idpp)
@@ -676,9 +741,9 @@ def main():
             if not pair_ids_match:
                 print_dual(color_text(
                     "  [WARNING] --initial/--final's manifests have different pair_id -- they "
-                    "don't look like they came from the same stb-nebSites invocation (their "
+                    "don't look like they came from the same tool invocation (their "
                     "species_sequence still matches exactly, so interpolation proceeds normally; "
-                    "double-check these really are the intended site_A/site_B pair).", 'yellow'), f_out)
+                    "double-check these really are the intended endpoint pair).", 'yellow'), f_out)
 
         try:
             pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
@@ -698,8 +763,8 @@ def main():
                     f"[WARNING] Could not match atoms at --autosort-tol {args.autosort_tol} Ang "
                     f"({e}). Falling back to using --initial/--final's own atom order directly "
                     "(equivalent to --autosort-tol 0) -- the right correspondence whenever both "
-                    "endpoints share a guaranteed matching atom order (e.g. a stb-nebSites "
-                    "site_A/site_B pair, or any pair built from the same base structure). If "
+                    "endpoints share a guaranteed matching atom order (e.g. any pair built from "
+                    "the same base structure). If "
                     "--initial/--final were instead built independently and may have a genuinely "
                     "different atom order, check the path-quality section below for an implausibly "
                     "large per-image displacement -- that would be the sign this fallback guessed "
@@ -720,21 +785,21 @@ def main():
                     "endpoints -- e.g. real substrate reconstruction near an adsorption/defect site "
                     "can easily exceed pymatgen's own suggested 0.5 Ang default.", 'red'), f_out)
                 print_dual(color_text(
-                    "  If --initial/--final came from stb-nebSites (site_A/site_B): they already "
-                    "share the EXACT same atom order (same base slab, same construction) -- pass "
-                    "--autosort-tol 0 to use that order directly instead of re-matching by distance. "
-                    "This is usually the right fix (and more robust than just raising the tolerance: "
-                    "verified live that even a much larger tolerance can still fail on a small/"
-                    "densely-packed periodic cell, where multiple atoms of the same species sit "
-                    "within any reasonably large distance of each other, making the distance-based "
-                    "match genuinely ambiguous no matter how loose the tolerance is).", 'yellow'), f_out)
+                    "  If --initial/--final were built from the same base structure (e.g. two "
+                    "derived copies of one reference calculation): they already share the EXACT "
+                    "same atom order -- pass --autosort-tol 0 to use that order directly instead "
+                    "of re-matching by distance. This is usually the right fix (and more robust "
+                    "than just raising the tolerance: verified live that even a much larger "
+                    "tolerance can still fail on a small/densely-packed periodic cell, where "
+                    "multiple atoms of the same species sit within any reasonably large distance "
+                    "of each other, making the distance-based match genuinely ambiguous no matter "
+                    "how loose the tolerance is).", 'yellow'), f_out)
                 print_dual(color_text(
-                    "  If the two endpoints were built independently (not from the same "
-                    "stb-nebSites pair) and may have a different atom order: try a moderately "
-                    "larger --autosort-tol first (e.g. 1.0 Ang); if that still fails, --initial/"
-                    "--final may not actually be the same physical system (same atom count/"
-                    "species), or the correspondence is genuinely ambiguous and needs to be fixed "
-                    "by hand.", 'yellow'), f_out)
+                    "  If the two endpoints were built independently and may have a different "
+                    "atom order: try a moderately larger --autosort-tol first (e.g. 1.0 Ang); if "
+                    "that still fails, --initial/--final may not actually be the same physical "
+                    "system (same atom count/species), or the correspondence is genuinely "
+                    "ambiguous and needs to be fixed by hand.", 'yellow'), f_out)
                 if f_out:
                     f_out.close()
                 sys.exit(1)
@@ -801,7 +866,8 @@ def main():
                 label = f"image_{i:02d}"
                 image_dir = os.path.join(images_root, label)
                 write_image_folder(image_dir, pmg_image, single_point_calc_text, species_meta,
-                                    args.pseudo_dir)
+                                    args.pseudo_dir, force_spin=args.force_spin,
+                                    force_vdw=args.force_vdw, force_dipole=args.force_dipole)
                 print_dual(f"  {color_text('[OK]', 'green')} {image_dir}", f_out)
                 report_rows.append((label, i, reaction_coords[i], image_dir))
 

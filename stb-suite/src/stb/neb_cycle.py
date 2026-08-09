@@ -30,10 +30,11 @@ writing this (not assumed):
   SinglePointCalculator wrapping each image's already-finished SIESTA
   energy/forces, not a live MACE calculator.
 
-Endpoints (images[0]/images[-1], the already-relaxed site_A/site_B from
-stb-nebSites) are never moved -- ase.mep.neb.BaseNEB.get_positions/
-set_positions only ever touch the interior images, same guarantee
-core/mace_relax.py::relax_neb already documents and relies on.
+Endpoints (images[0]/images[-1], the already-relaxed --initial/--final
+endpoints stb-neb built the band from) are never moved --
+ase.mep.neb.BaseNEB.get_positions/set_positions only ever touch the
+interior images, same guarantee core/mace_relax.py::relax_neb already
+documents and relies on.
 """
 
 VERSION = "1.0.0"

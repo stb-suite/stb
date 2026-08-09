@@ -237,7 +237,7 @@ def read_relaxed_or_input(path: str) -> tuple[FdfStructure, bool]:
     This is the third consumer of "prefer a finished .XV over structure.fdf"
     (after adsorb_bsse.py's read_relaxed_site_fdf and adsorb_analysis.py's
     read_site_geometry_atoms), extracted here so stb-neb's own directory
-    -input support (--initial/--final pointing at a stb-nebSites site_*/
+    -input support (--initial/--final pointing at any already-relaxed
     folder) doesn't need a fourth copy -- extract-on-(further)-use, same
     policy as the rest of core/.
 

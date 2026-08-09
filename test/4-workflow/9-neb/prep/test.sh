@@ -1,19 +1,18 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-neb (NEB Prep, item 4.9.2). Now a 4-mode tool
-# (--mode 1-4, default 3) instead of a single --ml-neb on/off switch --
-# see examples/README.md / CLAUDE.md for the mode table. Tests that only
-# exercise the common preamble (composition/lattice/interpolation
-# mechanics, not mode-specific output) deliberately use --mode 4 (no
-# MACE, fastest, no model load) unless they're specifically testing a
-# MACE-touching mode.
+# Smoke test for stb-neb (NEB Prep, item 4.9.1 -- this is now Stage 1 of the
+# NEB workflow: the old symmetry-site-enumeration Stage 1, stb-nebSites, was
+# removed since restricting NEB endpoints to symmetry-derived candidate sites
+# defeated the point of NEB -- stb-neb now accepts any pair of already
+# -relaxed structures directly). Now a 4-mode tool (--mode 1-4, default 3)
+# instead of a single --ml-neb on/off switch -- see examples/README.md /
+# CLAUDE.md for the mode table. Tests that only exercise the common preamble
+# (composition/lattice/interpolation mechanics, not mode-specific output)
+# deliberately use --mode 4 (no MACE, fastest, no model load) unless they're
+# specifically testing a MACE-touching mode.
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
-# Bare slab fixture reused from 8-adsorption/prep, same as ../sites/test.sh --
-# needed to run a real stb-nebSites here to get a genuine manifest-carrying
-# site_A/site_B pair (not hand-rolled JSON) for the manifest tests below.
-SLAB_DIR="$(cd "$FIXTURE_DIR/../../8-adsorption/prep" && pwd)"
 
 # Output colors
 GREEN='\033[0;32m'
@@ -61,7 +60,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-Neb prep (item 4.9.2) ---"
+echo "--- Starting tester for STB-Neb prep (item 4.9.1) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/initial.fdf" "$TEST_DIR/"
@@ -131,6 +130,71 @@ print('OK')
 check_contains "OK" log_coord_check.txt
 
 
+# --- 2b. config_extra.fdf / --force-spin / --force-vdw / --force-dipole
+#     (all default ON) -- reuses the cycle_00/ written by Section 2 above,
+#     since defaults are exactly what that run already used. ---
+echo -e "\n--- Testing config_extra.fdf defaults (all three force flags ON by default) ---"
+check_success cycle_00/image_02/config_extra.fdf
+check_contains "Spin.*polarized" cycle_00/image_02/config_extra.fdf
+check_contains "Slab.DipoleCorrection" cycle_00/image_02/config_extra.fdf
+check_contains "DFTD3" cycle_00/image_02/config_extra.fdf
+check_contains "%include config_extra.fdf" cycle_00/image_02/calc.fdf
+echo "Testing: %include config_extra.fdf is the first line of calc.fdf"
+first_line=$(head -1 cycle_00/image_02/calc.fdf)
+if [[ "$first_line" == *"%include config_extra.fdf"* ]]; then
+    echo -e "   -> ${GREEN}Verified:${NC} %include is the first line"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} %include is not the first line (got: '$first_line')"
+    FAIL=$((FAIL+1))
+fi
+rm -rf cycle_00 neb_setup.txt
+
+echo -e "\n--- Testing --no-force-spin --no-force-vdw --no-force-dipole ---"
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --no-force-spin --no-force-vdw \
+    --no-force-dipole --no-intro > log_noforce.txt 2>&1
+check_exit_code $? 0
+echo "Testing: config_extra.fdf still exists (deliberately empty, not skipped)"
+if [ -f cycle_00/image_02/config_extra.fdf ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} file 'cycle_00/image_02/config_extra.fdf' created (empty)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} file 'cycle_00/image_02/config_extra.fdf' was not created"
+    FAIL=$((FAIL+1))
+fi
+if grep -qE "Spin.*polarized|Slab.DipoleCorrection|DFTD3" cycle_00/image_02/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} config_extra.fdf should be empty of forced directives"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no forced directives in config_extra.fdf with all --no-force-*"
+    PASS=$((PASS+1))
+fi
+check_contains "%include config_extra.fdf" cycle_00/image_02/calc.fdf
+rm -rf cycle_00 neb_setup.txt
+
+echo -e "\n--- Testing mixed flags (--force-spin --no-force-vdw --force-dipole) ---"
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --force-spin --no-force-vdw \
+    --force-dipole --no-intro > log_mixed.txt 2>&1
+check_exit_code $? 0
+check_contains "Spin.*polarized" cycle_00/image_02/config_extra.fdf
+check_contains "Slab.DipoleCorrection" cycle_00/image_02/config_extra.fdf
+if grep -q "DFTD3" cycle_00/image_02/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} DFTD3 should be absent with --no-force-vdw"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} DFTD3 correctly absent with --no-force-vdw"
+    PASS=$((PASS+1))
+fi
+rm -rf cycle_00 neb_setup.txt
+
+echo -e "\n--- Testing --mode 1 advisory note when a force flag is toggled off (no effect) ---"
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --no-force-spin --ml-max-steps 30 \
+    --no-intro > log_mode1_noforce.txt 2>&1
+check_exit_code $? 0
+check_contains "\[NOTE\].*no effect with --mode 1" log_mode1_noforce.txt
+rm -rf cycle_00 image_* neb_setup.txt neb_mace_result.json
+
+
 # --- 3. Composition mismatch (hard error, before any mode-dependent code runs) ---
 echo -e "\n--- Testing composition mismatch (hard error) ---"
 stb-neb -i initial.fdf -f final_bad_composition.fdf -c calc.fdf --mode 4 --no-intro \
@@ -139,22 +203,21 @@ check_exit_code $? 1
 check_contains "different composition" log_bad_composition.txt
 
 
-# --- 4. Lattice mismatch (warning, lattice override) ---
-echo -e "\n--- Testing lattice mismatch (warning, not error) ---"
+# --- 4. Lattice mismatch (hard abort -- no more silent override) ---
+echo -e "\n--- Testing lattice mismatch (hard abort) ---"
 rm -rf cycle_00 neb_setup.txt
 stb-neb -i initial.fdf -f final_bad_lattice.fdf -c calc.fdf -n 5 --mode 4 --no-intro \
     > log_bad_lattice.txt 2>&1
-check_exit_code $? 0
-check_contains "WARNING.*different lattices" log_bad_lattice.txt
-python3 -c "
-from stb.core import structure_io
-initial = structure_io.read_fdf('initial.fdf')
-final_image = structure_io.read_fdf('cycle_00/image_04/structure.fdf')
-import numpy as np
-assert np.allclose(initial.lattice, final_image.lattice), 'image_04 lattice should match initial.fdf, not final_bad_lattice.fdf'
-print('OK')
-" > log_lattice_check.txt 2>&1
-check_contains "OK" log_lattice_check.txt
+check_exit_code $? 1
+check_contains "\[ERROR\].*different lattices" log_bad_lattice.txt
+echo "Testing: no cycle_00/ written on lattice-mismatch abort"
+if [ -d cycle_00 ]; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected cycle_00/ written despite lattice-mismatch abort"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no cycle_00/ written -- clean abort before any image is generated"
+    PASS=$((PASS+1))
+fi
 
 
 # --- 4a2. autosort_tol mismatch regression: a real crash found live (a raw
@@ -164,9 +227,9 @@ check_contains "OK" log_lattice_check.txt
 #     interactive menu without knowing to set the advanced --autosort-tol 0
 #     escape hatch by hand. Final fix: stb-neb now retries automatically
 #     with --autosort-tol 0 (index-based, no distance matching -- always
-#     correct once endpoints share a guaranteed matching atom order, e.g. a
-#     stb-nebSites site_A/site_B pair) and only prints a [WARNING], not a
-#     hard [ERROR] -- never a raw traceback either way. ---
+#     correct once endpoints share a guaranteed matching atom order, e.g.
+#     two structures built from the same base structure) and only prints a
+#     [WARNING], not a hard [ERROR] -- never a raw traceback either way. ---
 echo -e "\n--- Testing the autosort_tol mismatch -> automatic fallback (no more dead end) ---"
 rm -rf cycle_00 neb_setup.txt
 stb-neb -i initial.fdf -f final_bad_autosort.fdf -c calc.fdf -n 5 --mode 4 --autosort-tol 0.3 \
@@ -279,28 +342,39 @@ rm -rf cycle_00 neb_setup.txt
 # --- 6c. Manifest-proven atom identity: the real fix for the live-reported
 #     "estrutura completamente bagunçada" bug. read_relaxed_or_input's
 #     --autosort-tol 0 fallback only trusts --initial/--final's own on-disk
-#     atom order -- it was never itself PROOF that order is correct. Now
-#     stb-nebSites writes neb_manifest.json into both site_A/site_B
-#     (species_sequence, proven identical by construction), and stb-neb
-#     uses it -- when present on BOTH sides -- to skip distance-based
-#     matching entirely instead of assuming/guessing. ---
-echo -e "\n--- Testing manifest-proven atom correspondence (stb-nebSites pair) ---"
+#     atom order -- it was never itself PROOF that order is correct. Any
+#     tool that builds two atom-index-corresponding structures can write a
+#     neb_manifest.json into each (species_sequence, proven identical by
+#     construction), and stb-neb uses it -- when present on BOTH sides --
+#     to skip distance-based matching entirely instead of assuming/
+#     guessing. No in-repo tool currently produces one (the symmetry-site
+#     -enumeration tool that used to, stb-nebSites, was removed since it
+#     over-restricted NEB endpoints), so this fabricates a pair by hand to
+#     keep exercising resolve_manifest_pair/validate_manifest_pair. ---
+echo -e "\n--- Testing manifest-proven atom correspondence (hand-built pair) ---"
 
 build_manifest_pair() {
     # (Re)builds nebsites_run/site_A, nebsites_run/site_B (each carrying a
-    # fresh neb_manifest.json) plus a synthetic "relaxed" siesta.XV in each
+    # fresh neb_manifest.json) from initial.fdf/final.fdf (already sharing
+    # composition/lattice) plus a synthetic "relaxed" siesta.XV in each
     # (same species/order as structure.fdf, only the adsorbate height
     # nudged) -- same sisl-write recipe as
     # ../../8-adsorption/bsse/test.sh's own fabricated-.XV fixture, so no
     # real SIESTA run is needed to exercise the manifest-consuming path.
     rm -rf nebsites_run
-    stb-nebSites -s "$SLAB_DIR/structure.fdf" -c "$SLAB_DIR/calc.fdf" --adsorbate H \
-        --site-a 0 --site-b 2 -O nebsites_run --no-intro > log_nebsites_for_manifest.txt 2>&1
+    mkdir -p nebsites_run/site_A nebsites_run/site_B
+    cp initial.fdf nebsites_run/site_A/structure.fdf
+    cp final.fdf nebsites_run/site_B/structure.fdf
     python3 -c "
 import sisl
-from stb.core import structure_io
+from stb.core import structure_io, neb_manifest
 for label, dz in (('site_A', -0.1), ('site_B', -0.2)):
     fdf = structure_io.read_fdf(f'nebsites_run/{label}/structure.fdf')
+    species_sequence = [sym for sym, _ in fdf.atoms]
+    neb_manifest.write_manifest(f'nebsites_run/{label}', pair_id='synthetic-test-pair',
+                                 site_label=label, species_sequence=species_sequence,
+                                 n_substrate=len(species_sequence) - 1, n_adsorbate=1,
+                                 adsorbate='H')
     pmg = structure_io.to_pymatgen(fdf)
     cart = pmg.cart_coords.copy()
     cart[-1, 2] += dz
@@ -613,19 +687,25 @@ check_contains "n-images" log_help.txt
 check_contains "mode" log_help.txt
 check_contains "ml-freeze-substrate" log_help.txt
 check_contains "ml-freeze-threshold" log_help.txt
+check_contains "force-spin" log_help.txt
+check_contains "force-vdw" log_help.txt
+check_contains "force-dipole" log_help.txt
 
 
-# --- 14. Interactive path (stb-suite, shortcut 4.9.2) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.9.2) ---"
+# --- 14. Interactive path (stb-suite, shortcut 4.9.1) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.9.1) ---"
 
-echo "Testing: navigate 4.9.2 -> defaults (mode 3) -> quit"
+echo "Testing: navigate 4.9.1 -> defaults (mode 3) -> quit"
 rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
 {
-  echo "4.9.2"
+  echo "4.9.1"
   echo "initial.fdf"   # initial_file
   echo "final.fdf"     # final_file
   echo "calc.fdf"      # calc_file
   echo ""              # pp_path (skip)
+  echo ""              # force_spin (default Y)
+  echo ""              # force_vdw (default Y)
+  echo ""              # force_dipole (default Y)
   echo "5"             # n_images
   echo ""              # idpp_choice (default N)
   echo ""              # mode_choice (default -> 3)
@@ -642,14 +722,17 @@ check_contains "Success:.*5 image folder" log_menu.txt
 check_success cycle_00/image_00/structure.fdf
 check_success cycle_00/image_04/structure.fdf
 
-echo "Testing: navigate 4.9.2 -> --idpp on, mode 2 -> quit"
+echo "Testing: navigate 4.9.1 -> --idpp on, mode 2 -> quit"
 rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
 {
-  echo "4.9.2"
+  echo "4.9.1"
   echo "initial.fdf"
   echo "final.fdf"
   echo "calc.fdf"
   echo ""
+  echo ""              # force_spin (default Y)
+  echo ""              # force_vdw (default Y)
+  echo ""              # force_dipole (default Y)
   echo "5"
   echo "y"              # idpp_choice -> Y
   echo "2"               # mode_choice -> 2
@@ -665,14 +748,17 @@ rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
 check_contains "Success:.*5 image folder" log_menu_idpp.txt
 check_success image_02/structure.fdf
 
-echo "Testing: navigate 4.9.2 -> mode 1 (JSON only) -> quit"
+echo "Testing: navigate 4.9.1 -> mode 1 (JSON only) -> quit"
 rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz neb_mace_result.json
 {
-  echo "4.9.2"
+  echo "4.9.1"
   echo "initial.fdf"
   echo "final.fdf"
   echo "calc.fdf"
   echo ""
+  echo ""              # force_spin (default Y)
+  echo ""              # force_vdw (default Y)
+  echo ""              # force_dipole (default Y)
   echo "5"
   echo ""               # idpp_choice
   echo "1"               # mode_choice -> 1

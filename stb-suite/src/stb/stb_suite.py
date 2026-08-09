@@ -1010,134 +1010,23 @@ def run_adsorb_gibbs() -> None:
     run_tool("stb-adsorbGibbs", args)
 
 
-def run_neb_sites() -> None:
-    """Interface for the NEB Site Selection (neb_sites.py)"""
-    print("\n" + "="*60)
-    print(color_text("NEB SITE SELECTION", 'bold').center(60))
-    print("="*60)
-    print(color_text(
-        "Enumerates symmetrically distinct adsorption sites on a slab and writes two endpoint "
-        "folders (site_A/, site_B/) for the pair you pick -- run SIESTA (a real relaxation) in "
-        "each, then use Stage 2 (stb-neb) to build the reaction path between them.", 'cyan'))
-    print()
-
-    struct_file = get_input("Input slab/2D structure FDF file, vacuum along c (-s): ").strip()
-    while not os.path.isfile(struct_file):
-        print(color_text("File not found!", 'red'))
-        struct_file = get_input("Input slab/2D structure FDF file (-s): ").strip()
-
-    calc_file = get_input("Calc.fdf template already configured for this slab (-c): ").strip()
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template file (-c): ").strip()
-
-    pp_path = prompt_pseudo_source(optional=True)
-
-    print("\nAdsorbate: an element symbol (e.g. 'H') or an ASE G2 molecule name (e.g. 'H2O') -- "
-          "the ONE species hopping between the two sites you'll pick below. Type 'list' to see "
-          "all G2 names.")
-    adsorbate = get_input("Adsorbate: ").strip()
-    while adsorbate.lower() == "list" or not adsorbate:
-        run_tool("stb-nebSites", ["--list", "--no-intro"])
-        adsorbate = get_input("Adsorbate: ").strip()
-
-    print(f"\n{color_text('Site type:', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = ontop")
-    print(f"  {color_text('2', 'cyan')} = bridge")
-    print(f"  {color_text('3', 'cyan')} = hollow")
-    print(f"  {color_text('4', 'cyan')} = all")
-    site_choice = get_input("Select option (1-4) [default: 4]: ").strip()
-    site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
-    site_type = site_map.get(site_choice, 'all')
-
-    height = get_float_input("\nAdsorption height above the surface, Ang [default: 2.0]: ", 2.0)
-
-    force_spin = get_input(
-        "\nForce Spin polarized in site_A/site_B? A single adsorbate atom bonded to a slab "
-        "commonly leaves the combined system with a net magnetic moment (costs nothing for a "
-        "genuinely closed-shell site). [Y/n]: ").strip().lower() != 'n'
-
-    # Advanced settings (rarely-touched -- gated so the essential flow above
-    # stays short; CLI defaults apply untouched when skipped).
-    symprec, vacuum_gap, output_dir = 0.01, 10.0, "nebsites_run"
-    show_advanced = get_input(
-        "\nConfigure advanced settings (symmetry tolerance, vacuum-gap, output directory)? "
-        "[y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        symprec = get_float_input("Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
-        vacuum_gap = get_float_input(
-            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
-        output_dir = get_input("Output root directory [default: nebsites_run]: ").strip()
-        if not output_dir:
-            output_dir = "nebsites_run"
-
-    base_args = [
-        "-s", struct_file, "-c", calc_file, "--adsorbate", adsorbate,
-        "--site-type", site_type, "--height", str(height),
-        "--symprec", str(symprec), "--vacuum-gap", str(vacuum_gap),
-        "--output-dir", output_dir, "--no-intro",
-        "--force-spin" if force_spin else "--no-force-spin",
-    ]
-    if pp_path:
-        base_args.extend(["-p", pp_path])
-
-    print(color_text(
-        "\nListing candidate sites first (no selection yet) -- pick two from the table below.",
-        'cyan'))
-    run_tool("stb-nebSites", base_args, pause=False)
-
-    site_a = get_int_input("\nFIRST endpoint -- site index (0-based, from the table above): ")
-    site_b = get_int_input("SECOND endpoint -- site index (0-based): ")
-
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    view_plots_choice = get_input(
-        "Show the candidate-site and chosen-sites plots on screen before finishing? "
-        "(y/N): ").strip().lower()
-    view_choice = get_input(
-        "View the clean slab, site_A and site_B interactively via ASE before finishing? "
-        "(y/N): ").strip().lower()
-
-    args = base_args + ["--site-a", str(site_a), "--site-b", str(site_b)]
-    if save_report:
-        args.append("--save-report")
-    if view_plots_choice == 'y':
-        args.append("--view-plots")
-    if view_choice == 'y':
-        args.append("--view")
-
-    summary_rows = [
-        ("Structure file", struct_file),
-        ("Calc template", calc_file),
-        ("Pseudopotentials", pp_path or "(none)"),
-        ("Adsorbate", adsorbate),
-        ("Site type", site_type),
-        ("Height", f"{height} Ang"),
-        ("Site A / Site B", f"{site_a} / {site_b}"),
-        ("Output directory", output_dir),
-        ("Save report", "yes" if save_report else "no"),
-        ("Show plots on screen", "yes" if view_plots_choice == 'y' else "no"),
-        ("View interactively", "yes" if view_choice == 'y' else "no"),
-    ]
-    _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
-
-    run_tool("stb-nebSites", args)
-
-
 def run_neb_setup() -> None:
     """Interface for the NEB Prep (neb.py)"""
     print("\n" + "="*60)
     print(color_text("NEB SETUP", 'bold').center(60))
     print("="*60)
     print(color_text(
-        "Interpolates a reaction-path band between two already-relaxed endpoint structures, "
-        "then builds the path in one of 4 modes (MACE-only, MACE + 1 single-point SIESTA, "
-        "MACE + real-DFT refinement cycles, or 100% real-DFT) -- run SIESTA as directed, then "
-        "use Stage 3 (Analysis) for the energy profile.", 'cyan'))
+        "Interpolates a reaction-path band between two already-relaxed endpoint structures you "
+        "provide (verified to share the same lattice and composition), then builds the path in "
+        "one of 4 modes (MACE-only, MACE + 1 single-point SIESTA, MACE + real-DFT refinement "
+        "cycles, or 100% real-DFT) -- run SIESTA as directed, then use Stage 2 (Analysis) for "
+        "the energy profile.", 'cyan'))
     print()
 
     initial_file = get_input(
         "Initial (already-relaxed) endpoint -- a structure FDF file, or a folder containing one "
-        "(e.g. a stb-nebSites site_A/, whose finished siesta.XV is preferred if present) (-i): "
+        "(that folder's finished siesta.XV, if present, is preferred over its pre-relaxation "
+        "structure.fdf guess) (-i): "
     ).strip()
     while not (os.path.isfile(initial_file) or os.path.isdir(initial_file)):
         print(color_text("Not found!", 'red'))
@@ -1156,6 +1045,16 @@ def run_neb_setup() -> None:
         calc_file = get_input("Calc.fdf template file (-c): ").strip()
 
     pp_path = prompt_pseudo_source(optional=True)
+
+    force_spin = get_input(
+        "\nForce Spin polarized in every image_NN/'s config_extra.fdf? A reacting atom commonly "
+        "leaves the system with a net magnetic moment (costs nothing for a genuinely closed-shell "
+        "path). [Y/n]: ").strip().lower() != 'n'
+    force_vdw = get_input(
+        "Force the DFT-D3 dispersion (van der Waals) correction? [Y/n]: ").strip().lower() != 'n'
+    force_dipole = get_input(
+        "Force the slab dipole correction (only meaningful for a genuinely one-sided "
+        "slab/surface reaction path; harmless otherwise)? [Y/n]: ").strip().lower() != 'n'
 
     n_images = get_int_input("\nTotal images along the band, endpoints included [default: 7]: ", 7)
 
@@ -1229,6 +1128,9 @@ def run_neb_setup() -> None:
         "--autosort-tol", str(autosort_tol),
         "--output-dir", output_dir,
         "--no-intro",
+        "--force-spin" if force_spin else "--no-force-spin",
+        "--force-vdw" if force_vdw else "--no-force-vdw",
+        "--force-dipole" if force_dipole else "--no-force-dipole",
     ]
     if pp_path:
         args.extend(["-p", pp_path])
@@ -1257,6 +1159,9 @@ def run_neb_setup() -> None:
         ("Calc template", calc_file),
         ("Pseudopotentials", pp_path or "(none)"),
         ("N images", n_images),
+        ("Force spin", "ON" if force_spin else "OFF"),
+        ("Force vdW", "ON" if force_vdw else "OFF"),
+        ("Force dipole", "ON" if force_dipole else "OFF"),
         ("IDPP refinement", "ON" if idpp else "OFF"),
         ("Mode", mode_labels[mode]),
         ("MACE k / max steps", f"{ml_k} / {ml_max_steps}" if mode in (1, 2, 3) else "n/a"),
@@ -8579,19 +8484,16 @@ WORKFLOW_TOOLS = {
                 'func': run_adsorb_gibbs},
         }},
     9: {'title': "NEB / Reaction Path",
-        'description': "Enumerate symmetry-distinct sites and pick an endpoint pair, "
-                        "interpolate a reaction-path band between them (optionally refined "
-                        "with MACE-MP-0), then compute the DFT-level energy profile and an "
-                        "approximate barrier.",
+        'description': "Interpolate a reaction-path band between two already-relaxed endpoint "
+                        "structures you provide (verified same lattice + composition), "
+                        "optionally refined with MACE-MP-0, then compute the DFT-level energy "
+                        "profile and an approximate barrier.",
         'stages': {
-            1: {'title': "Stage 1 - Site Selection (stb-nebSites)",
-                'description': "Enumerate symmetry-distinct adsorption sites and write two "
-                                "endpoint folders (site_A/, site_B/) for the pair you pick.",
-                'func': run_neb_sites},
-            2: {'title': "Stage 2 - Prep (stb-neb)",
-                'description': "Generate one single-point image_NN/ folder per band image.",
+            1: {'title': "Stage 1 - Prep (stb-neb)",
+                'description': "Verify --initial/--final's lattice and composition match, then "
+                                "generate one single-point image_NN/ folder per band image.",
                 'func': run_neb_setup},
-            3: {'title': "Stage 3 - Analysis (stb-nebAnalysis)",
+            2: {'title': "Stage 2 - Analysis (stb-nebAnalysis)",
                 'description': "Compute the energy profile and forward/backward barrier.",
                 'func': run_neb_analysis},
         }},

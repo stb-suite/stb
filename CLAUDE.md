@@ -163,12 +163,14 @@ needs it).
   raw peak list directly against a Gaussian-broadened simulated profile is
   apples-to-oranges and silently deflates the score. `--raw-experimental` opts out.
 - `neb_manifest.py` — `neb_manifest.json` read/write/`validate_manifest_pair`: an
-  explicit atom-correspondence proof (`species_sequence`, shared `pair_id`) written
-  by any tool that builds two structures guaranteed to share atom-index
-  correspondence (e.g. `stb-nebSites`'s `site_A`/`site_B`). A consumer (`stb-neb`)
-  that finds a valid manifest on both sides skips distance-based atom matching
-  entirely instead of guessing; missing/inconsistent manifests fall back to the
-  pre-existing distance-based (`--autosort-tol`) behavior.
+  explicit atom-correspondence proof (`species_sequence`, shared `pair_id`) meant to
+  be written by any tool that builds two structures guaranteed to share atom-index
+  correspondence (no in-repo tool currently produces one — the former `stb-nebSites`
+  did, before its symmetry-site-enumeration approach was removed from the NEB
+  workflow — but the format stays as forward-looking infrastructure for a future
+  producer). A consumer (`stb-neb`) that finds a valid manifest on both sides skips
+  distance-based atom matching entirely instead of guessing; missing/inconsistent
+  manifests fall back to the pre-existing distance-based (`--autosort-tol`) behavior.
 - `ase_view.py` — `view_structure_interactive`: shared, graceful (no-display-safe)
   wrapper around ASE's interactive 3D viewer, used by every tool's `--view` flag.
 
@@ -295,9 +297,17 @@ suite's general workflow-placement rule (see also `stb-hubbardu`'s 3-stage split
 `--compute-gibbs` is the single documented exception, not a precedent to extend
 casually.
 
-**4-Workflow item 9, NEB / Reaction Path** — `stb-nebSites` (Stage 1: enumerates
-adsorption-hop candidates on a slab, writes `site_A`/`site_B` + a
-`neb_manifest.json` in each) → `stb-neb` (Stage 2, `--mode 1-4`, default 3):
+**4-Workflow item 9, NEB / Reaction Path** — `stb-neb` (Stage 1: takes
+`--initial`/`--final`, two already-relaxed endpoint structures the user provides
+directly — no symmetry-derived site enumeration; that was the previous Stage 1,
+`stb-nebSites`, removed because restricting NEB endpoints to symmetry-derived
+candidate sites defeated the point of NEB. Hard-validates the two endpoints share
+the same composition and the same lattice — within `1e-3` Å, `require_lattice_match`
+— exiting with a clean `[ERROR]` on either mismatch instead of guessing;
+`--force-spin`/`--force-vdw`/`--force-dipole` (all default ON, `--no-force-*` to
+opt out) control a `config_extra.fdf` written into every image folder, reusing the
+same block constants as `core/adsorption_sites.py`'s `write_reference_folder`. Then
+interpolates the band, `--mode 1-4`, default 3):
 
 | Mode | Path engine | Output | SIESTA's role |
 |---|---|---|---|
@@ -306,16 +316,18 @@ adsorption-hop candidates on a slab, writes `site_A`/`site_B` + a
 | 3 (default) | MACE-MP-0 + real-DFT refinement cycles | `cycle_00/image_NN/` + loop | several rounds, real forces |
 | 4 | 100% real-DFT NEB | `cycle_00/image_NN/` + loop | every round |
 
-`--mode` replaces the older `--ml-neb` boolean outright. When both `--initial`/
-`--final` carry a matching `neb_manifest.json`, atom correspondence is proven (not
-guessed) and `--autosort-tol 0` is forced automatically; otherwise falls back to
+`--mode` replaces the older `--ml-neb` boolean outright. If `--initial`/`--final`
+each carry a matching `neb_manifest.json` (no in-repo tool currently produces one,
+but any future tool that builds two atom-index-corresponding structures may write
+one — see `core/neb_manifest.py` below), atom correspondence is proven rather than
+guessed and `--autosort-tol 0` is forced automatically; otherwise falls back to
 distance-based matching, retrying once at `autosort_tol=0` if the initial distance
 match fails (common for a small/densely-relaxed cell).
 `check_endpoint_displacement()` warns (advisory only, never auto-enables anything)
 when a broad fraction of the structure moved between endpoints and `--idpp` wasn't
 used. → `stb-nebCycle` (CLI-only, not in the menu — see "CLI-only tools" above; one
 call = one real-DFT NEB step for modes 3/4, using the `SinglePointCalculator`
-+`.step()` pattern) → `stb-nebAnalysis` (Stage 3, mode-aware router reading a `#
++`.step()` pattern) → `stb-nebAnalysis` (Stage 2, mode-aware router reading a `#
 MODE: N` marker in `neb_setup.txt`; for modes 3/4 always analyzes the
 highest-numbered `cycle_NN/`, plots barrier-vs-cycle once 2+ complete cycles exist).
 

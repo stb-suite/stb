@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Setup ---
-# Smoke test for stb-nebAnalysis (NEB Analysis, item 4.9.3). Uses stb-neb
+# Smoke test for stb-nebAnalysis (NEB Analysis, item 4.9.2). Uses stb-neb
 # itself (real tool) to build bands against the same fixture as ../prep/,
 # then fabricates "siesta: FreeEng"/SCF/Max-force lines per image
 # (synthetic, same style already used by 8-adsorption/analysis/test.sh) to
@@ -58,7 +58,7 @@ check_exit_code() {
 
 
 # --- 1. Preparation ---
-echo "--- Starting tester for STB-NebAnalysis (item 4.9.3) ---"
+echo "--- Starting tester for STB-NebAnalysis (item 4.9.2) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$PREP_DIR/initial.fdf" "$TEST_DIR/"
@@ -309,14 +309,14 @@ check_contains "file" log_help.txt
 check_contains "apply" log_help.txt
 
 
-# --- 6. Interactive path (stb-suite, shortcut 4.9.3) ---
-echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.9.3) ---"
+# --- 6. Interactive path (stb-suite, shortcut 4.9.2) ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.9.2) ---"
 
-echo "Testing: navigate 4.9.3 -> defaults -> quit"
+echo "Testing: navigate 4.9.2 -> defaults -> quit"
 rm -f neb_curve.dat neb_report.txt
-# 4.9.3 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
+# 4.9.2 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
 # default) / "" (apply_target: skip) / "" (Press Enter to continue) / 0 (quit)
-printf '4.9.3\n.\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.9.2\n.\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Highest-energy image (approx. TS) : image_02" log_menu.txt
 check_success neb_curve.dat
 

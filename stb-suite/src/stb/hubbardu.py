@@ -53,7 +53,6 @@ SINGLE_POINT_BLOCK = (
     "# invalidate the comparison, regardless of what --calc itself sets.\n"
     "MD.TypeOfRun       CG\n"
     "MD.Steps           0\n"
-    "MD.NumCGsteps      0\n"
     "MD.VariableCell    false\n"
 )
 

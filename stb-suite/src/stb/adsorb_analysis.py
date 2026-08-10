@@ -57,7 +57,6 @@ GIBBS_SINGLE_POINT_BLOCK = (
     "MD.VariableCell false\n"
     "MD.TypeOfRun       CG\n"
     "MD.Steps           0\n"
-    "MD.NumCGsteps      0\n"
 )
 
 # Local-mode (partial-Hessian) displacement order (axis, sign) -- same

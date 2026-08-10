@@ -31,7 +31,7 @@ _KGRID_RE = re.compile(r'kgrid[._]MonkhorstPack\s+\[.*?\]', re.IGNORECASE)
 _SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
 _LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
 _RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_NUMCGSTEPS_RE = re.compile(r'MD\.NumCGsteps\s+\d+', re.IGNORECASE)
+_MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _RELAXED_COORDS_RE = re.compile(r'outcoor:\s*Relaxed atomic coordinates\s*\(fractional\)', re.IGNORECASE)
 
 # Local-mode displacement order (axis, sign) -- matches the row order
@@ -64,21 +64,23 @@ def force_spin_polarized(calc_text):
 
 
 def force_relaxation(calc_text, max_steps=200):
-    """Forces 'MD.TypeOfRun CG' + 'MD.NumCGsteps <max_steps>' -- H2's own
+    """Forces 'MD.TypeOfRun CG' + 'MD.Steps <max_steps>' -- H2's own
     bond length must reach ITS equilibrium (unlike every other reference
     folder here, which is forced single-point via
     core.calc_directives.force_single_point instead). The winning site's
     own calc.fdf template isn't guaranteed to already set MD.TypeOfRun
     (some users configure it externally, or rely on the site relaxation
     being driven some other way) -- explicit is safer than silently
-    inheriting whatever (or nothing) the template happens to have.
+    inheriting whatever (or nothing) the template happens to have. Uses
+    MD.Steps, not the older MD.NumCGsteps spelling (deprecated, no longer
+    honored by current SIESTA).
     """
     new_text, count = _RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
     if count == 0:
         new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _NUMCGSTEPS_RE.subn(f'MD.NumCGsteps         {max_steps}', new_text)
+    new_text, count = _MD_STEPS_RE.subn(f'MD.Steps              {max_steps}', new_text)
     if count == 0:
-        new_text += f"MD.NumCGsteps         {max_steps}\n"
+        new_text += f"MD.Steps              {max_steps}\n"
     return new_text
 
 

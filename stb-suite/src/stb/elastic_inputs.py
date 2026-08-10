@@ -33,7 +33,7 @@ pre-exists in a real calc.fdf, this tool needs to force a pure
 SINGLE-POINT SCF (no ionic or cell relaxation at all -- there is no
 --relax-mode here, every generated folder is single-point, since the
 imposed strain itself must stay exactly at the sampled geometry) by
-overriding MD.TypeOfRun/MD.Steps/MD.NumCGsteps/MD.VariableCell --
+overriding MD.TypeOfRun/MD.Steps/MD.VariableCell --
 directives that ARE commonly already set in a real relaxation calc.fdf
 (e.g. this repo's own examples/4.1-strain/calc.fdf has all three). SIESTA's
 fdf reader is first-occurrence-wins for duplicate labels (verified in
@@ -555,7 +555,6 @@ def main():
         "# cell relaxation) at the imposed-strain geometry, regardless of --calc's own settings.\n"
         "MD.TypeOfRun       CG\n"
         "MD.Steps           0\n"
-        "MD.NumCGsteps      0\n"
         "MD.VariableCell    false\n"
     )
     print_dual(f"\n{EXTRA_FDF_FILE} (written into every generated folder):", f_out)

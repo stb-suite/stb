@@ -31,7 +31,7 @@ one arbitrary geometry converged".
 
 '%include config_extra.fdf' is PREPENDED at the very top of the generated
 calc.fdf (SIESTA's fdf reader is first-occurrence-wins for duplicate
-labels), forcing CG relaxation (MD.NumCGsteps/MD.Steps = --relax-steps,
+labels), forcing CG relaxation (MD.Steps = --relax-steps,
 MD.VariableCell true) regardless of what --calc's own template says. The
 swept parameter's own value is ALSO written into config_extra.fdf (not
 regex-substituted into --calc's own body) for the exact same reason -- it's
@@ -224,7 +224,7 @@ def main():
                         help="Custom k-grid density sweep range (1/Ang) (see "
                              "--meshcutoff-range). Only meaningful if 'kgrid' is in --parameter.")
     parser.add_argument("--relax-steps", type=int, default=100,
-                        help="Number of relaxation steps (MD.NumCGsteps/MD.Steps) forced in "
+                        help="Number of relaxation steps (MD.Steps) forced in "
                              "every generated folder (default: 100). Both atomic positions and "
                              "the cell relax (MD.VariableCell true).")
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
@@ -369,7 +369,7 @@ def main():
                "full structure (positions + cell) relaxes at each swept value:", f_out)
     print_table(["Directive", "Forced value"], [
         (["MD.TypeOfRun", "CG"], None),
-        (["MD.NumCGsteps / MD.Steps", str(args.relax_steps)], None),
+        (["MD.Steps", str(args.relax_steps)], None),
         (["MD.VariableCell", "true (full relaxation: positions + cell)"], None),
         (["Swept parameter", f"{', '.join(args.parameter)} -- one value per folder, see [5]"], None),
     ], f_out)
@@ -419,7 +419,6 @@ def main():
                 f"{directive_line}\n"
                 "\n"
                 "MD.TypeOfRun       CG\n"
-                f"MD.NumCGsteps      {args.relax_steps}\n"
                 f"MD.Steps           {args.relax_steps}\n"
                 "MD.VariableCell    true\n"
             )

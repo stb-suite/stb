@@ -10,7 +10,7 @@ the specific point being sampled.
 import re
 
 _MD_RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_MD_NUMCGSTEPS_RE = re.compile(r'MD\.NumCGsteps\s+\d+', re.IGNORECASE)
+_MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _MD_FCDISPL_RE = re.compile(r'MD\.FCDispl\s+[-+0-9.eE]+\s*\S*', re.IGNORECASE)
 _BORNCHARGE_RE = re.compile(r'BornCharge\s+\S+', re.IGNORECASE)
 _POLARIZATION_GRIDS_RE = re.compile(
@@ -20,23 +20,26 @@ _POLARIZATION_GRIDS_RE = re.compile(
 
 
 def force_single_point(calc_text):
-    """Substitutes/appends 'MD.TypeOfRun CG' and 'MD.NumCGsteps 0' onto
+    """Substitutes/appends 'MD.TypeOfRun CG' and 'MD.Steps 0' onto
     calc_text (regex .subn, append if the tag isn't present at all rather
     than erroring, since an absent tag is a normal template, not a
-    malformed one). Moved here from neb.py once stackingfault.py became a
-    second consumer -- same reasoning in both callers: each folder (a NEB
-    image, a stacking-fault grid point) is an independent, single-point
-    evaluation with no inter-folder coupling once written to disk, so
-    letting SIESTA relax one on its own would silently move it away from
-    the specific point/geometry being sampled. Forced unconditionally, no
-    opt-out flag, in both callers.
+    malformed one). Uses MD.Steps, not the older MD.NumCGsteps spelling
+    (deprecated, no longer honored by current SIESTA) -- see
+    structure_io.read_effective_md_steps for the same MD.Steps-preferred
+    convention on the reading side. Moved here from neb.py once
+    stackingfault.py became a second consumer -- same reasoning in both
+    callers: each folder (a NEB image, a stacking-fault grid point) is an
+    independent, single-point evaluation with no inter-folder coupling
+    once written to disk, so letting SIESTA relax one on its own would
+    silently move it away from the specific point/geometry being sampled.
+    Forced unconditionally, no opt-out flag, in both callers.
     """
     new_text, count = _MD_RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
     if count == 0:
         new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _MD_NUMCGSTEPS_RE.subn('MD.NumCGsteps         0', new_text)
+    new_text, count = _MD_STEPS_RE.subn('MD.Steps              0', new_text)
     if count == 0:
-        new_text += "MD.NumCGsteps         0\n"
+        new_text += "MD.Steps              0\n"
     return new_text
 
 

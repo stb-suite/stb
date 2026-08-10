@@ -67,7 +67,7 @@ check_success shift_00_00/structure.fdf
 check_success shift_00_00/calc.fdf
 check_success shift_02_02/structure.fdf
 check_contains "MD.TypeOfRun.*CG" shift_01_01/calc.fdf
-check_contains "MD.NumCGsteps.*0" shift_01_01/calc.fdf
+check_contains "MD.Steps.*0" shift_01_01/calc.fdf
 check_success stackingfault_setup.txt
 check_contains "\[0\] RUN METADATA" stackingfault_setup.txt
 check_contains "\[1\] ZSL MATCH" stackingfault_setup.txt

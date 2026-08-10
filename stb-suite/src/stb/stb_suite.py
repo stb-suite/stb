@@ -1060,8 +1060,8 @@ def run_neb_setup() -> None:
 
     idpp_choice = get_input(
         "\nRefine the interpolated path with ASE's IDPP method (better initial guess, no "
-        "MACE needed)? (y/N): ").strip().lower()
-    idpp = idpp_choice in ('y', 'yes')
+        "MACE needed)? [Y/n]: ").strip().lower()
+    idpp = idpp_choice != 'n'
 
     print(f"\n{color_text('Mode:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = 100% MACE-MP-0 -> a JSON result, no SIESTA at all")
@@ -1074,11 +1074,14 @@ def run_neb_setup() -> None:
 
     ml_k = 0.1
     ml_max_steps = 200
+    ml_fmax = 0.05
     ml_freeze_substrate = True
     ml_freeze_threshold = 0.3
     if mode in (1, 2, 3):
         ml_k = get_float_input("  NEB spring constant, eV/Ang^2 [default: 0.1]: ", 0.1)
         ml_max_steps = get_int_input("  Max optimizer steps [default: 200]: ", 200)
+        ml_fmax = get_float_input(
+            "  Force convergence target, eV/Ang [default: 0.05]: ", 0.05)
         freeze_choice = get_input(
             "  Freeze atoms that barely move between endpoints (faster, avoids spurious "
             "drift)? [Y/n]: ").strip().lower()
@@ -1091,6 +1094,21 @@ def run_neb_setup() -> None:
         "\nPre-relax both endpoints with MACE-MP-0 before interpolating? Independent of the "
         "mode chosen above -- needs the optional 'ml' extra (y/N): ").strip().lower()
     ml_prerelax_endpoints = ml_prerelax_choice in ('y', 'yes')
+
+    max_cycles, siesta_exe, mpirun_np, conda_env, cycle_fmax = 30, "siesta", None, "", 0.05
+    if mode in (3, 4):
+        print(f"\n{color_text('Cluster submission snippet settings (--mode 3/4 only):', 'yellow')}")
+        max_cycles = get_int_input(
+            "  Max stb-nebCycle refinement cycles [default: 30]: ", 30)
+        siesta_exe = get_input(
+            "  SIESTA executable name/path [default: siesta]: ").strip() or "siesta"
+        mpirun_choice = get_input("  Run SIESTA via mpirun? (y/N): ").strip().lower()
+        if mpirun_choice == 'y':
+            mpirun_np = get_int_input("    Number of MPI processes (-np): ", 1)
+        conda_env = get_input(
+            "  Conda environment to activate before running SIESTA (blank to skip): ").strip()
+        cycle_fmax = get_float_input(
+            "  stb-nebCycle's force-convergence threshold, eV/Ang [default: 0.05]: ", 0.05)
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
@@ -1137,7 +1155,8 @@ def run_neb_setup() -> None:
     if idpp:
         args.append("--idpp")
     if mode in (1, 2, 3):
-        args.extend(["--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps)])
+        args.extend(["--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps),
+                     "--ml-fmax", str(ml_fmax)])
         if ml_freeze_substrate:
             args.extend(["--ml-freeze-substrate", "--ml-freeze-threshold", str(ml_freeze_threshold)])
         else:
@@ -1146,6 +1165,13 @@ def run_neb_setup() -> None:
         args.append("--ml-prerelax-endpoints")
     if uses_mace:
         args.extend(["--ml-device", ml_device])
+    if mode in (3, 4):
+        args.extend(["--max-cycles", str(max_cycles), "--siesta-exe", siesta_exe,
+                     "--cycle-fmax", str(cycle_fmax)])
+        if mpirun_np:
+            args.extend(["--mpirun-np", str(mpirun_np)])
+        if conda_env:
+            args.extend(["--conda-env", conda_env])
 
     mode_labels = {
         1: "1 - 100% MACE-MP-0 (JSON, no SIESTA)",
@@ -1164,12 +1190,21 @@ def run_neb_setup() -> None:
         ("Force dipole", "ON" if force_dipole else "OFF"),
         ("IDPP refinement", "ON" if idpp else "OFF"),
         ("Mode", mode_labels[mode]),
-        ("MACE k / max steps", f"{ml_k} / {ml_max_steps}" if mode in (1, 2, 3) else "n/a"),
+        ("MACE k / max steps / fmax",
+         f"{ml_k} / {ml_max_steps} / {ml_fmax} eV/Ang" if mode in (1, 2, 3) else "n/a"),
         ("MACE freeze substrate", (f"ON (threshold {ml_freeze_threshold} Ang)" if ml_freeze_substrate else "OFF")
                                     if mode in (1, 2, 3) else "n/a"),
         ("ML pre-relax endpoints", "ON" if ml_prerelax_endpoints else "OFF"),
         ("Output directory", output_dir),
     ]
+    if mode in (3, 4):
+        summary_rows.extend([
+            ("Cluster: max cycles", max_cycles),
+            ("Cluster: SIESTA exe", siesta_exe),
+            ("Cluster: mpirun", f"-np {mpirun_np}" if mpirun_np else "off"),
+            ("Cluster: conda env", conda_env or "(none)"),
+            ("Cluster: stb-nebCycle fmax", f"{cycle_fmax} eV/Ang"),
+        ])
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-neb", args)
@@ -1185,9 +1220,10 @@ def run_neb_analysis() -> None:
         "with an approximate reaction-barrier estimate from the highest-energy image.", 'cyan'))
     print()
 
-    dir_path = get_input("Root directory with every 'image_NN/' [default: .]: ").strip()
+    dir_path = get_input(
+        "Root directory with every 'image_NN/' [default: neb_run]: ").strip()
     if not dir_path:
-        dir_path = "."
+        dir_path = "neb_run"
 
     out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
     if not out_file:
@@ -1205,6 +1241,22 @@ def run_neb_analysis() -> None:
         "production file? Path to write, or leave blank to skip: ").strip()
     if apply_target:
         args.extend(["--apply", apply_target])
+
+    save_gnuplot = get_input(
+        "\nAlso save the energy-profile curve as gnuplot .dat + .gplot scripts, under "
+        "'<dir>/plot/'? (y/N): ").strip().lower() == 'y'
+    view_plots = get_input(
+        "View the energy-profile plot interactively via matplotlib now? (y/N): ").strip().lower() == 'y'
+    view_path = get_input(
+        "Open every image's structure in ASE's interactive 3D viewer, to step through the "
+        "reaction path? Needs a display (y/N): ").strip().lower() == 'y'
+
+    if save_gnuplot:
+        args.append("--save-gnuplot")
+    if view_plots:
+        args.append("--view")
+    if view_path:
+        args.append("--view-path")
 
     run_tool("stb-nebAnalysis", args)
 

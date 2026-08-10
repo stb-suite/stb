@@ -161,9 +161,9 @@ check_contains "kgrid.MonkhorstPack   \[1  1  1\]" oer_study/02_h2_molecule/calc
 check_contains "Spin.*polarized" oer_study/03_h2o_molecule/calc.fdf
 
 echo "Testing: 00_clean_slab/04_slab_deformed/BSSE folders are forced single-point"
-check_contains "MD.NumCGsteps         0" oer_study/00_clean_slab/calc.fdf
-check_contains "MD.NumCGsteps         0" oer_study/04_slab_deformed/calc.fdf
-check_contains "MD.NumCGsteps         0" oer_study/05_bsse_slab_only/calc.fdf
+check_contains "MD.Steps              0" oer_study/00_clean_slab/calc.fdf
+check_contains "MD.Steps              0" oer_study/04_slab_deformed/calc.fdf
+check_contains "MD.Steps              0" oer_study/05_bsse_slab_only/calc.fdf
 
 
 # --- 4. --bsse-mode full ---

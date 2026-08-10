@@ -307,9 +307,14 @@ the same composition and the same lattice — within `1e-3` Å, `require_lattice
 `--force-spin`/`--force-vdw`/`--force-dipole` (all default ON, `--no-force-*` to
 opt out) control a `config_extra.fdf` written into every image folder, reusing the
 same block constants as `core/adsorption_sites.py`'s `write_reference_folder`. Then
-interpolates the band, `--mode 1-4`, default 3):
+interpolates the band, `--mode 1-4`, default 3). Every generated file/folder
+(the `neb_setup.txt` report, `neb_path.xyz`, and the mode-specific output below)
+is written under a `neb_run/` subfolder of `--output-dir`, not `--output-dir`
+directly — matching `stb-adsorb`'s own `sites/`-nesting convention — so
+`stb-nebCycle`/`stb-nebAnalysis --dir` must point at `<output-dir>/neb_run`, not
+`<output-dir>` itself:
 
-| Mode | Path engine | Output | SIESTA's role |
+| Mode | Path engine | Output (under `neb_run/`) | SIESTA's role |
 |---|---|---|---|
 | 1 | 100% MACE-MP-0 (climbing-image NEB) | `neb_mace_result.json` | none |
 | 2 | 100% MACE-MP-0, then one read | `image_NN/` (single-point) | one round, energy only |

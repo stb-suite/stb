@@ -151,7 +151,6 @@ echo "Testing: BSSE config_extra.fdf forces single-point SCF on a fixed cell"
 check_contains "MD.VariableCell false" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
 check_contains "MD.TypeOfRun       CG" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
 check_contains "MD.Steps           0" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
-check_contains "MD.NumCGsteps      0" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
 check_contains "%include config_extra.fdf" bsse/site_1_ontop_O/bsse_slab/calc.fdf
 
 echo "Testing: BSSE ghost fragments inherit the site's own level of theory"

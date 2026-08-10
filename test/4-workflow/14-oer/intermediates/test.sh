@@ -129,7 +129,7 @@ check_contains "NumberofAtoms      5" oer_study/intermediates/ooh_star/structure
 echo "Testing: every derived folder forces MD.TypeOfRun CG (real relaxation, not single-point)"
 check_contains "MD.TypeOfRun          CG" oer_study/intermediates/o_star/calc.fdf
 check_contains "MD.TypeOfRun          CG" oer_study/intermediates/ooh_star/calc.fdf
-check_not_contains "MD.NumCGsteps         0" oer_study/intermediates/o_star/calc.fdf
+check_not_contains "MD.Steps              0" oer_study/intermediates/o_star/calc.fdf
 
 echo "Testing: Slab.DipoleCorrection forced on both derived folders"
 check_contains "Slab.DipoleCorrection   T" oer_study/intermediates/o_star/calc.fdf

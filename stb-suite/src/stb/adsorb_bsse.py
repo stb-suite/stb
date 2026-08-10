@@ -38,7 +38,6 @@ FIXED_CELL_BLOCK = (
 BSSE_SINGLE_POINT_BLOCK = FIXED_CELL_BLOCK + (
     "MD.TypeOfRun       CG\n"
     "MD.Steps           0\n"
-    "MD.NumCGsteps      0\n"
 )
 
 

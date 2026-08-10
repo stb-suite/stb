@@ -331,7 +331,6 @@ def main():
         "# supercell's exact geometry, regardless of --calc's own settings.\n"
         "MD.TypeOfRun       CG\n"
         "MD.Steps           0\n"
-        "MD.NumCGsteps      0\n"
         "MD.VariableCell    false\n"
     )
     print_dual(f"\n{EXTRA_FDF_FILE} (written into every generated folder):", f_out)

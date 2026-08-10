@@ -77,27 +77,38 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Mode 4 (no MACE, cycle_00/ nesting) -- the common-preamble workhorse ---
+# --- 2. Mode 4 (no MACE, neb_run/cycle_00/ nesting) -- the common-preamble workhorse ---
 echo -e "\n--- Testing --mode 4, -n 5 (interpolation mechanics, no MACE) ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --no-intro > log_mode4.txt 2>&1
 check_exit_code $? 0
-check_success cycle_00/image_00/structure.fdf
-check_success cycle_00/image_00/calc.fdf
-check_success cycle_00/image_04/structure.fdf
-check_contains "MD.TypeOfRun.*CG" cycle_00/image_02/calc.fdf
-check_contains "MD.NumCGsteps.*0" cycle_00/image_02/calc.fdf
-check_success neb_setup.txt
-check_contains "\[0\] RUN METADATA" neb_setup.txt
-check_contains "\[1\] INTERPOLATION" neb_setup.txt
-check_contains "\[2\] IMAGE FOLDERS" neb_setup.txt
-check_contains "\[3\] SUMMARY" neb_setup.txt
-check_contains "\[4\] CLUSTER SUBMISSION" neb_setup.txt
-check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 5" neb_setup.txt
-check_contains "# MODE: 4" neb_setup.txt
-check_contains "MACE-MP-0 path shaping: no" neb_setup.txt
-check_contains "IMAGE_TABLE" neb_setup.txt
-check_success neb_path.xyz
-if grep -q "WARNING" log_mode4.txt; then
+check_success neb_run/cycle_00/image_00/structure.fdf
+check_success neb_run/cycle_00/image_00/calc.fdf
+check_success neb_run/cycle_00/image_04/structure.fdf
+check_contains "MD.TypeOfRun.*CG" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "MD.Steps.*0" neb_run/cycle_00/image_02/config_extra.fdf
+check_success neb_run/neb_setup.txt
+check_contains "\[0\] RUN METADATA" neb_run/neb_setup.txt
+check_contains "\[3\] PATH INTERPOLATION" neb_run/neb_setup.txt
+check_contains "\[6\] IMAGE FOLDERS" neb_run/neb_setup.txt
+check_contains "\[8\] SUMMARY" neb_run/neb_setup.txt
+check_contains "\[7\] CLUSTER SUBMISSION" neb_run/neb_setup.txt
+check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 5 --no-intro" neb_run/neb_setup.txt
+check_contains "TODO: activate your own environment" neb_run/neb_setup.txt
+check_contains "for cyc in \$(seq 0 29)" neb_run/neb_setup.txt
+check_contains 'cycle=$(printf "%02d" "$cyc")' neb_run/neb_setup.txt
+check_contains "siesta calc.fdf --out calc.out" neb_run/neb_setup.txt
+if grep -q "mpirun" neb_run/neb_setup.txt; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected 'mpirun' in the snippet with --mpirun-np unset"
+    FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no mpirun prefix by default"
+    PASS=$((PASS+1))
+fi
+check_contains "# MODE: 4" neb_run/neb_setup.txt
+check_contains "MACE-MP-0 path shaping: no" neb_run/neb_setup.txt
+check_contains "IMAGE_TABLE" neb_run/neb_setup.txt
+check_success neb_run/neb_path.xyz
+if grep -q "\[WARNING\]" log_mode4.txt; then
     echo -e "   -> ${RED}Failed:${NC} unexpected path-quality WARNING for a well-behaved 5-image band"
     FAIL=$((FAIL+1))
 else
@@ -110,7 +121,7 @@ python3 -c "
 import re
 rows = []
 in_table = False
-with open('neb_setup.txt') as f:
+with open('neb_run/neb_setup.txt') as f:
     for line in f:
         if line.startswith('# IMAGE_TABLE'):
             in_table = True
@@ -130,17 +141,45 @@ print('OK')
 check_contains "OK" log_coord_check.txt
 
 
+# --- 2a3. Cluster-submission snippet flags: --max-cycles/--siesta-exe/
+#     --mpirun-np/--conda-env (mode 4, own output dir so it doesn't disturb
+#     the shared neb_run/ fixture other tests below reuse). ---
+echo -e "\n--- Testing cluster-submission snippet flags ---"
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --no-intro \
+    -O cluster_flags_test --max-cycles 150 --siesta-exe /opt/siesta/bin/siesta \
+    --mpirun-np 16 --conda-env stb-dev > log_cluster_flags.txt 2>&1
+check_exit_code $? 0
+S=cluster_flags_test/neb_run/neb_setup.txt
+check_contains "source ~/miniconda3/etc/profile.d/conda.sh" "$S"
+check_contains "conda activate stb-dev" "$S"
+check_contains "for cyc in \$(seq 0 149)" "$S"
+check_contains 'cycle=$(printf "%02d" "$cyc")' "$S"
+check_contains "mpirun -np 16 /opt/siesta/bin/siesta calc.fdf --out calc.out" "$S"
+check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 5 --no-intro" "$S"
+echo "Testing: the generated snippet is syntactically valid bash"
+python3 -c "
+import re
+with open('$S') as f:
+    text = f.read()
+m = re.search(r'source ~.*?\ndone\n', text, re.DOTALL)
+with open('cluster_flags_test/snippet.sh', 'w') as f:
+    f.write('#!/bin/bash\n' + m.group(0))
+"
+bash -n cluster_flags_test/snippet.sh
+check_exit_code $? 0
+
+
 # --- 2b. config_extra.fdf / --force-spin / --force-vdw / --force-dipole
-#     (all default ON) -- reuses the cycle_00/ written by Section 2 above,
+#     (all default ON) -- reuses the neb_run/cycle_00/ written by Section 2 above,
 #     since defaults are exactly what that run already used. ---
 echo -e "\n--- Testing config_extra.fdf defaults (all three force flags ON by default) ---"
-check_success cycle_00/image_02/config_extra.fdf
-check_contains "Spin.*polarized" cycle_00/image_02/config_extra.fdf
-check_contains "Slab.DipoleCorrection" cycle_00/image_02/config_extra.fdf
-check_contains "DFTD3" cycle_00/image_02/config_extra.fdf
-check_contains "%include config_extra.fdf" cycle_00/image_02/calc.fdf
+check_success neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "Spin.*polarized" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "Slab.DipoleCorrection" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "DFTD3" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "%include config_extra.fdf" neb_run/cycle_00/image_02/calc.fdf
 echo "Testing: %include config_extra.fdf is the first line of calc.fdf"
-first_line=$(head -1 cycle_00/image_02/calc.fdf)
+first_line=$(head -1 neb_run/cycle_00/image_02/calc.fdf)
 if [[ "$first_line" == *"%include config_extra.fdf"* ]]; then
     echo -e "   -> ${GREEN}Verified:${NC} %include is the first line"
     PASS=$((PASS+1))
@@ -148,51 +187,48 @@ else
     echo -e "   -> ${RED}Failed:${NC} %include is not the first line (got: '$first_line')"
     FAIL=$((FAIL+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 echo -e "\n--- Testing --no-force-spin --no-force-vdw --no-force-dipole ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --no-force-spin --no-force-vdw \
     --no-force-dipole --no-intro > log_noforce.txt 2>&1
 check_exit_code $? 0
-echo "Testing: config_extra.fdf still exists (deliberately empty, not skipped)"
-if [ -f cycle_00/image_02/config_extra.fdf ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} file 'cycle_00/image_02/config_extra.fdf' created (empty)"
-    PASS=$((PASS+1))
-else
-    echo -e "   -> ${RED}Failed:${NC} file 'cycle_00/image_02/config_extra.fdf' was not created"
-    FAIL=$((FAIL+1))
-fi
-if grep -qE "Spin.*polarized|Slab.DipoleCorrection|DFTD3" cycle_00/image_02/config_extra.fdf; then
-    echo -e "   -> ${RED}Failed:${NC} config_extra.fdf should be empty of forced directives"
+echo "Testing: config_extra.fdf still exists (single-point block is unconditional, not skipped)"
+check_success neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "MD.Steps.*0" neb_run/cycle_00/image_02/config_extra.fdf
+if grep -qE "Spin.*polarized|Slab.DipoleCorrection|DFTD3" neb_run/cycle_00/image_02/config_extra.fdf; then
+    echo -e "   -> ${RED}Failed:${NC} config_extra.fdf should have no opt-in directives with all --no-force-*"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} no forced directives in config_extra.fdf with all --no-force-*"
+    echo -e "   -> ${GREEN}Verified:${NC} no opt-in directives in config_extra.fdf with all --no-force-* "
+    echo "      (single-point block is still there -- it's unconditional)"
     PASS=$((PASS+1))
 fi
-check_contains "%include config_extra.fdf" cycle_00/image_02/calc.fdf
-rm -rf cycle_00 neb_setup.txt
+check_contains "%include config_extra.fdf" neb_run/cycle_00/image_02/calc.fdf
+rm -rf neb_run
 
 echo -e "\n--- Testing mixed flags (--force-spin --no-force-vdw --force-dipole) ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --force-spin --no-force-vdw \
     --force-dipole --no-intro > log_mixed.txt 2>&1
 check_exit_code $? 0
-check_contains "Spin.*polarized" cycle_00/image_02/config_extra.fdf
-check_contains "Slab.DipoleCorrection" cycle_00/image_02/config_extra.fdf
-if grep -q "DFTD3" cycle_00/image_02/config_extra.fdf; then
+check_contains "Spin.*polarized" neb_run/cycle_00/image_02/config_extra.fdf
+check_contains "Slab.DipoleCorrection" neb_run/cycle_00/image_02/config_extra.fdf
+if grep -q "DFTD3" neb_run/cycle_00/image_02/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} DFTD3 should be absent with --no-force-vdw"
     FAIL=$((FAIL+1))
 else
     echo -e "   -> ${GREEN}Verified:${NC} DFTD3 correctly absent with --no-force-vdw"
     PASS=$((PASS+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 echo -e "\n--- Testing --mode 1 advisory note when a force flag is toggled off (no effect) ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --no-force-spin --ml-max-steps 30 \
     --no-intro > log_mode1_noforce.txt 2>&1
 check_exit_code $? 0
 check_contains "\[NOTE\].*no effect with --mode 1" log_mode1_noforce.txt
-rm -rf cycle_00 image_* neb_setup.txt neb_mace_result.json
+rm -rf neb_run
 
 
 # --- 3. Composition mismatch (hard error, before any mode-dependent code runs) ---
@@ -205,17 +241,17 @@ check_contains "different composition" log_bad_composition.txt
 
 # --- 4. Lattice mismatch (hard abort -- no more silent override) ---
 echo -e "\n--- Testing lattice mismatch (hard abort) ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final_bad_lattice.fdf -c calc.fdf -n 5 --mode 4 --no-intro \
     > log_bad_lattice.txt 2>&1
 check_exit_code $? 1
 check_contains "\[ERROR\].*different lattices" log_bad_lattice.txt
-echo "Testing: no cycle_00/ written on lattice-mismatch abort"
-if [ -d cycle_00 ]; then
-    echo -e "   -> ${RED}Failed:${NC} unexpected cycle_00/ written despite lattice-mismatch abort"
+echo "Testing: no neb_run/cycle_00/ written on lattice-mismatch abort"
+if [ -d neb_run/cycle_00 ]; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected neb_run/cycle_00/ written despite lattice-mismatch abort"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} no cycle_00/ written -- clean abort before any image is generated"
+    echo -e "   -> ${GREEN}Verified:${NC} no neb_run/cycle_00/ written -- clean abort before any image is generated"
     PASS=$((PASS+1))
 fi
 
@@ -231,13 +267,13 @@ fi
 #     two structures built from the same base structure) and only prints a
 #     [WARNING], not a hard [ERROR] -- never a raw traceback either way. ---
 echo -e "\n--- Testing the autosort_tol mismatch -> automatic fallback (no more dead end) ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final_bad_autosort.fdf -c calc.fdf -n 5 --mode 4 --autosort-tol 0.3 \
     --no-intro > log_bad_autosort.txt 2>&1
 check_exit_code $? 0
 check_contains "\[WARNING\] Could not match atoms at --autosort-tol 0.3" log_bad_autosort.txt
 check_contains "Falling back to using --initial/--final's own atom order" log_bad_autosort.txt
-check_success cycle_00/image_00/structure.fdf
+check_success neb_run/cycle_00/image_00/structure.fdf
 if grep -q "Traceback (most recent call last)" log_bad_autosort.txt; then
     echo -e "   -> ${RED}Failed:${NC} a raw Python traceback leaked instead of a clean [WARNING]"
     FAIL=$((FAIL+1))
@@ -245,13 +281,13 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no raw traceback -- clean [WARNING] + automatic recovery instead"
     PASS=$((PASS+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 echo "Testing: --autosort-tol 0 directly (no mismatch to warn about, since it's already index-based)"
 stb-neb -i initial.fdf -f final_bad_autosort.fdf -c calc.fdf -n 5 --mode 4 --autosort-tol 0 \
     --no-intro > log_autosort_zero.txt 2>&1
 check_exit_code $? 0
-check_success cycle_00/image_00/structure.fdf
+check_success neb_run/cycle_00/image_00/structure.fdf
 if grep -q "\[WARNING\] Could not match atoms" log_autosort_zero.txt; then
     echo -e "   -> ${RED}Failed:${NC} unexpected fallback warning when already at --autosort-tol 0"
     FAIL=$((FAIL+1))
@@ -259,7 +295,7 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no fallback warning needed -- already index-based"
     PASS=$((PASS+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 
 # --- 4b. Coordinate-wrapping bug regression: two endpoints describing the
@@ -267,13 +303,13 @@ rm -rf cycle_00 neb_setup.txt
 #     (frac z=0.95 vs z=-0.05 in a 10 Ang cell) must interpolate to a
 #     near-static path, not a spurious ~10 Ang round trip through the cell ---
 echo -e "\n--- Testing coordinate-wrapping regression (same point, different wrapping) ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i wrap_initial.fdf -f wrap_final.fdf -c calc.fdf -n 5 --mode 4 --no-intro > log_wrap.txt 2>&1
 check_exit_code $? 0
 python3 -c "
 from stb.core import structure_io
 for i in range(5):
-    s = structure_io.read_fdf(f'cycle_00/image_0{i}/structure.fdf')
+    s = structure_io.read_fdf(f'neb_run/cycle_00/image_0{i}/structure.fdf')
     z = s.atoms[0][1][2]
     assert abs(z - 0.95) < 1e-6, f'image_0{i}: expected frac z ~0.95 (same wrapped point), got {z}'
 print('OK')
@@ -289,11 +325,11 @@ check_exit_code $? 2
 
 # --- 6. --idpp (orthogonal to mode) ---
 echo -e "\n--- Testing --idpp ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --idpp --mode 4 --no-intro > log_idpp.txt 2>&1
 check_exit_code $? 0
 check_contains "IDPP" log_idpp.txt
-check_success cycle_00/image_02/structure.fdf
+check_success neb_run/cycle_00/image_02/structure.fdf
 
 
 # --- 6b. Endpoint-displacement diagnostic: a broad multi-atom rearrangement
@@ -302,14 +338,14 @@ check_success cycle_00/image_02/structure.fdf
 #     never trigger it -- real physics finding from live user data (16/33
 #     atoms > 0.3 Ang, no --idpp, ~47 eV unphysical MACE barrier). ---
 echo -e "\n--- Testing the endpoint-displacement diagnostic ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final_many_moved.fdf -c calc.fdf -n 5 --mode 4 --no-intro \
     > log_displacement.txt 2>&1
 check_exit_code $? 0
 check_contains "Endpoint displacement: max .* mean .*, 4/9 atom(s) moved" log_displacement.txt
 check_contains "\[WARNING\] 4/9 atoms moved more than 0.3 Ang" log_displacement.txt
 check_contains "Consider --idpp" log_displacement.txt
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 echo "Testing: --idpp suppresses the WARNING (info line stays, recommendation doesn't apply anymore)"
 stb-neb -i initial.fdf -f final_many_moved.fdf -c calc.fdf -n 5 --idpp --mode 4 --no-intro \
@@ -323,7 +359,7 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no displacement WARNING once --idpp is used"
     PASS=$((PASS+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 echo "Testing: a normal single-atom reaction hop (final.fdf, 1/9 atoms) never triggers this WARNING"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --no-intro > log_displacement_normal.txt 2>&1
@@ -336,7 +372,7 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no false-positive WARNING for a normal reaction hop"
     PASS=$((PASS+1))
 fi
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 
 
 # --- 6c. Manifest-proven atom identity: the real fix for the live-reported
@@ -390,13 +426,13 @@ check_success nebsites_run/site_B/neb_manifest.json
 check_success nebsites_run/site_A/siesta.XV
 check_success nebsites_run/site_B/siesta.XV
 
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_manifest_proven.txt 2>&1
 check_exit_code $? 0
 check_contains "Atom correspondence: PROVEN via neb_manifest.json" log_manifest_proven.txt
 check_contains "\[OK\] Atom order PROVEN via neb_manifest.json" log_manifest_proven.txt
-check_success cycle_00/image_00/structure.fdf
+check_success neb_run/cycle_00/image_00/structure.fdf
 if grep -q "Could not match atoms" log_manifest_proven.txt; then
     echo -e "   -> ${RED}Failed:${NC} distance-based matching text should never appear when the "
     echo "      manifest proves the correspondence"
@@ -407,7 +443,7 @@ else
 fi
 
 echo "Testing: no manifest on EITHER side -> falls back to today's distance-based behavior"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 rm -f nebsites_run/site_A/neb_manifest.json nebsites_run/site_B/neb_manifest.json
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_no_manifest.txt 2>&1
@@ -424,7 +460,7 @@ fi
 echo "Testing: manifest present on only ONE side also falls back cleanly (not an error)"
 build_manifest_pair
 rm -f nebsites_run/site_B/neb_manifest.json
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_one_manifest.txt 2>&1
 check_exit_code $? 0
@@ -444,7 +480,7 @@ seq[0], seq[-1] = seq[-1], seq[0]
 m['species_sequence'] = seq
 json.dump(m, open(p, 'w'), indent=2)
 "
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_stale_manifest.txt 2>&1
 check_exit_code $? 1
@@ -466,7 +502,7 @@ m = json.load(open(p))
 del m['pair_id']
 json.dump(m, open(p, 'w'), indent=2)
 "
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_incomplete_manifest.txt 2>&1
 check_exit_code $? 1
@@ -506,7 +542,7 @@ seq[0], seq[-1] = seq[-1], seq[0]
 m['species_sequence'] = seq
 json.dump(m, open(p, 'w'), indent=2)
 "
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb --initial nebsites_run/site_A --final nebsites_run/site_B -c calc.fdf -n 5 --mode 4 \
     --no-intro > log_cross_pair_mismatch.txt 2>&1
 check_exit_code $? 1
@@ -518,7 +554,7 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} clean [ERROR], no traceback"
     PASS=$((PASS+1))
 fi
-rm -rf nebsites_run cycle_00 neb_setup.txt
+rm -rf nebsites_run neb_run
 
 
 echo -e "\n--- Testing read_relaxed_or_input's per-index species hardening directly (no CLI) ---"
@@ -554,33 +590,33 @@ rm -rf xv_species_swap_test
 
 # --- 7. Mode 2 (MACE-MP-0, cached locally, then 1 single-point per image) ---
 echo -e "\n--- Testing --mode 2 ---"
-rm -rf cycle_00 image_* neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 2 --ml-max-steps 30 --no-intro \
     > log_mode2.txt 2>&1
 check_exit_code $? 0
 check_contains "MACE-MP-0" log_mode2.txt
 check_contains "barrier" log_mode2.txt
-check_success neb_ml_preview.png
-check_success neb_path.xyz
-check_success image_00/structure.fdf
-check_success image_04/structure.fdf
-check_contains "# MODE: 2" neb_setup.txt
-check_contains "# ML_NEB_USED: yes" neb_setup.txt
-check_contains "ML-NEB freeze substrate: yes" neb_setup.txt
+check_success neb_run/neb_ml_preview.png
+check_success neb_run/neb_path.xyz
+check_success neb_run/image_00/structure.fdf
+check_success neb_run/image_04/structure.fdf
+check_contains "# MODE: 2" neb_run/neb_setup.txt
+check_contains "# ML_NEB_USED: yes" neb_run/neb_setup.txt
+check_contains "ML-NEB freeze substrate: yes" neb_run/neb_setup.txt
 check_contains "Freezing 8/9 atom" log_mode2.txt
-echo "Testing: mode 2 writes directly under the output root, NOT under cycle_00/ (single-shot, no refinement loop)"
-if [ -d cycle_00 ]; then
-    echo -e "   -> ${RED}Failed:${NC} unexpected cycle_00/ written for --mode 2"
+echo "Testing: mode 2 writes directly under the output root, NOT under neb_run/cycle_00/ (single-shot, no refinement loop)"
+if [ -d neb_run/cycle_00 ]; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected neb_run/cycle_00/ written for --mode 2"
     FAIL=$((FAIL+1))
 else
-    echo -e "   -> ${GREEN}Verified:${NC} no cycle_00/ for --mode 2 (image_NN/ directly)"
+    echo -e "   -> ${GREEN}Verified:${NC} no neb_run/cycle_00/ for --mode 2 (image_NN/ directly)"
     PASS=$((PASS+1))
 fi
 
 
 # --- 7b. --no-ml-freeze-substrate (freeze-substrate is default ON) ---
 echo -e "\n--- Testing --no-ml-freeze-substrate ---"
-rm -rf image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 2 --ml-max-steps 10 \
     --no-ml-freeze-substrate --no-intro > log_nofreeze.txt 2>&1
 check_exit_code $? 0
@@ -596,7 +632,7 @@ fi
 
 # --- 7c. Path-quality warning (deliberately dense -n triggers "nearly identical") ---
 echo -e "\n--- Testing path-quality warning (dense -n) ---"
-rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 60 --mode 4 --no-intro > log_dense.txt 2>&1
 check_exit_code $? 0
 check_contains "WARNING.*nearly identical" log_dense.txt
@@ -604,7 +640,7 @@ check_contains "WARNING.*nearly identical" log_dense.txt
 
 # --- 8. --ml-prerelax-endpoints, independent of --mode ---
 echo -e "\n--- Testing --ml-prerelax-endpoints with --mode 4 (no climbing-image NEB) ---"
-rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --ml-prerelax-endpoints \
     --no-intro > log_prerelax_endpoints.txt 2>&1
 check_exit_code $? 0
@@ -621,7 +657,7 @@ fi
 
 # --- 9. Inert ML/IDPP flags without their master mode/flag ---
 echo -e "\n--- Testing inert ML flags with --mode 4 (no MACE stage to use them) ---"
-rm -rf cycle_00 neb_setup.txt
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 4 --ml-k 0.2 --ml-max-steps 50 \
     --idpp-fmax 0.2 --no-intro > log_inert_flags.txt 2>&1
 check_exit_code $? 0
@@ -629,16 +665,16 @@ check_exit_code $? 0
 
 # --- 10. Mode 1 (100% MACE, JSON only, no SIESTA folders) ---
 echo -e "\n--- Testing --mode 1 ---"
-rm -rf cycle_00 image_* neb_setup.txt neb_mace_result.json
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --ml-max-steps 30 --no-intro \
     > log_mode1.txt 2>&1
 check_exit_code $? 0
-check_contains "\[2\] MACE RESULT (JSON)" log_mode1.txt
-check_contains "# MODE: 1" neb_setup.txt
-check_success neb_mace_result.json
+check_contains "\[6\] MACE RESULT (JSON)" log_mode1.txt
+check_contains "# MODE: 1" neb_run/neb_setup.txt
+check_success neb_run/neb_mace_result.json
 python3 -c "
 import json
-with open('neb_mace_result.json') as f:
+with open('neb_run/neb_mace_result.json') as f:
     d = json.load(f)
 assert d['mode'] == 1
 assert len(d['images']) == 5
@@ -648,7 +684,7 @@ print('OK')
 " > log_mode1_json_check.txt 2>&1
 check_contains "OK" log_mode1_json_check.txt
 echo "Testing: mode 1 writes no SIESTA folders at all"
-if [ -d image_00 ] || [ -d cycle_00 ]; then
+if [ -d neb_run/image_00 ] || [ -d neb_run/cycle_00 ]; then
     echo -e "   -> ${RED}Failed:${NC} unexpected SIESTA folder(s) written for --mode 1"
     FAIL=$((FAIL+1))
 else
@@ -657,16 +693,16 @@ else
 fi
 
 
-# --- 11. Mode 3 (MACE + cycle_00/, --climb-after 0 suggested) ---
+# --- 11. Mode 3 (MACE + neb_run/cycle_00/, --climb-after 0 suggested) ---
 echo -e "\n--- Testing --mode 3 (default) ---"
-rm -rf cycle_00 neb_setup.txt neb_ml_preview.png neb_path.xyz
+rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --ml-max-steps 30 --no-intro \
     > log_mode3.txt 2>&1
 check_exit_code $? 0
-check_contains "# MODE: 3" neb_setup.txt
-check_success cycle_00/image_00/structure.fdf
-check_contains "\[4\] CLUSTER SUBMISSION" log_mode3.txt
-check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 0" log_mode3.txt
+check_contains "# MODE: 3" neb_run/neb_setup.txt
+check_success neb_run/cycle_00/image_00/structure.fdf
+check_contains "\[7\] CLUSTER SUBMISSION" log_mode3.txt
+check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 0 --no-intro" log_mode3.txt
 echo "Testing: --mode is not required (default is 3)"
 check_exit_code $? 0
 
@@ -690,13 +726,17 @@ check_contains "ml-freeze-threshold" log_help.txt
 check_contains "force-spin" log_help.txt
 check_contains "force-vdw" log_help.txt
 check_contains "force-dipole" log_help.txt
+check_contains "max-cycles" log_help.txt
+check_contains "siesta-exe" log_help.txt
+check_contains "mpirun-np" log_help.txt
+check_contains "conda-env" log_help.txt
 
 
 # --- 14. Interactive path (stb-suite, shortcut 4.9.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.9.1) ---"
 
 echo "Testing: navigate 4.9.1 -> defaults (mode 3) -> quit"
-rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
+rm -rf neb_run
 {
   echo "4.9.1"
   echo "initial.fdf"   # initial_file
@@ -707,23 +747,27 @@ rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
   echo ""              # force_vdw (default Y)
   echo ""              # force_dipole (default Y)
   echo "5"             # n_images
-  echo ""              # idpp_choice (default N)
+  echo ""              # idpp_choice (default Y)
   echo ""              # mode_choice (default -> 3)
   echo "0.1"            # ml_k (mode 3 needs MACE tuning prompts)
   echo "30"             # ml_max_steps (small, keep the test fast)
   echo ""                # freeze_choice (default Y)
   echo ""                # ml_freeze_threshold (default 0.3)
   echo ""              # ml_prerelax_choice (default N)
+  echo ""              # max_cycles (default 30, mode 3 -> cluster snippet prompts)
+  echo ""              # siesta_exe (default siesta)
+  echo ""              # mpirun_choice (default N, no -np follow-up)
+  echo ""              # conda_env (blank -> skip)
   echo ""              # show_advanced (default -> skip)
   echo ""              # press enter to continue
   echo "0"             # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Success:.*5 image folder" log_menu.txt
-check_success cycle_00/image_00/structure.fdf
-check_success cycle_00/image_04/structure.fdf
+check_success neb_run/cycle_00/image_00/structure.fdf
+check_success neb_run/cycle_00/image_04/structure.fdf
 
 echo "Testing: navigate 4.9.1 -> --idpp on, mode 2 -> quit"
-rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
+rm -rf neb_run
 {
   echo "4.9.1"
   echo "initial.fdf"
@@ -746,10 +790,10 @@ rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz
   echo "0"
 } | stb-suite > log_menu_idpp.txt 2>&1
 check_contains "Success:.*5 image folder" log_menu_idpp.txt
-check_success image_02/structure.fdf
+check_success neb_run/image_02/structure.fdf
 
 echo "Testing: navigate 4.9.1 -> mode 1 (JSON only) -> quit"
-rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz neb_mace_result.json
+rm -rf neb_run
 {
   echo "4.9.1"
   echo "initial.fdf"
@@ -771,9 +815,9 @@ rm -rf cycle_00 image_* neb_setup.txt neb_ml_preview.png neb_path.xyz neb_mace_r
   echo ""               # press enter
   echo "0"
 } | stb-suite > log_menu_mode1.txt 2>&1
-check_success neb_mace_result.json
-check_success neb_ml_preview.png
-check_success neb_path.xyz
+check_success neb_run/neb_mace_result.json
+check_success neb_run/neb_ml_preview.png
+check_success neb_run/neb_path.xyz
 check_contains "MACE freeze substrate.*ON" log_menu_mode1.txt
 
 

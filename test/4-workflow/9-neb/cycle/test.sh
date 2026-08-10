@@ -121,8 +121,8 @@ PYEOF
 echo -e "\n--- Testing a single real-DFT NEB step ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run1 --no-intro > log_prep1.txt 2>&1
 check_exit_code $? 0
-python3 fabricate.py run1 00
-stb-nebCycle --dir run1 --fmax 0.001 --no-intro > log_step1.txt 2>&1
+python3 fabricate.py run1/neb_run 00
+stb-nebCycle --dir run1/neb_run --fmax 0.001 --no-intro > log_step1.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_step1.txt
 check_contains "Current cycle   : cycle_00" log_step1.txt
@@ -130,17 +130,17 @@ check_contains "\[1\] READING SIESTA RESULTS" log_step1.txt
 check_contains "\[2\] NEB STEP" log_step1.txt
 check_contains "fresh, first cycle" log_step1.txt
 check_contains "\[3\] RESULT" log_step1.txt
-check_success run1/cycle_01/image_00/structure.fdf
-check_success run1/cycle_01/image_01/calc.fdf
-check_success run1/neb_cycle_state.json
+check_success run1/neb_run/cycle_01/image_00/structure.fdf
+check_success run1/neb_run/cycle_01/image_01/calc.fdf
+check_success run1/neb_run/neb_cycle_state.json
 echo "Testing: endpoints (image_00/image_03) never move"
 python3 -c "
 import sys
 import numpy as np
 from stb.core import structure_io
 for label in ('image_00', 'image_03'):
-    a = structure_io.to_pymatgen(structure_io.read_fdf(f'run1/cycle_00/{label}/structure.fdf'))
-    b = structure_io.to_pymatgen(structure_io.read_fdf(f'run1/cycle_01/{label}/structure.fdf'))
+    a = structure_io.to_pymatgen(structure_io.read_fdf(f'run1/neb_run/cycle_00/{label}/structure.fdf'))
+    b = structure_io.to_pymatgen(structure_io.read_fdf(f'run1/neb_run/cycle_01/{label}/structure.fdf'))
     if not np.allclose(a.cart_coords, b.cart_coords):
         print(f'{label} moved unexpectedly'); sys.exit(1)
 print('OK')
@@ -151,8 +151,8 @@ python3 -c "
 import sys
 import numpy as np
 from stb.core import structure_io
-a = structure_io.to_pymatgen(structure_io.read_fdf('run1/cycle_00/image_01/structure.fdf'))
-b = structure_io.to_pymatgen(structure_io.read_fdf('run1/cycle_01/image_01/structure.fdf'))
+a = structure_io.to_pymatgen(structure_io.read_fdf('run1/neb_run/cycle_00/image_01/structure.fdf'))
+b = structure_io.to_pymatgen(structure_io.read_fdf('run1/neb_run/cycle_01/image_01/structure.fdf'))
 sys.exit(0 if not np.allclose(a.cart_coords, b.cart_coords) else 1)
 "
 check_exit_code $? 0
@@ -160,11 +160,11 @@ check_exit_code $? 0
 
 # --- 3. State persistence: a second step accelerates (FIRE momentum), a fresh restart doesn't ---
 echo -e "\n--- Testing FIRE restart state persistence across separate process calls ---"
-python3 fabricate.py run1 01
-stb-nebCycle --dir run1 --fmax 0.001 --no-intro > log_step2.txt 2>&1
+python3 fabricate.py run1/neb_run 01
+stb-nebCycle --dir run1/neb_run --fmax 0.001 --no-intro > log_step2.txt 2>&1
 check_exit_code $? 0
 check_contains "loaded from previous cycle" log_step2.txt
-check_success run1/cycle_02/image_01/structure.fdf
+check_success run1/neb_run/cycle_02/image_01/structure.fdf
 
 echo "Testing: displacement of the SAME image accelerates cycle-to-cycle (proves state was reused, not reset)"
 python3 -c "
@@ -172,7 +172,7 @@ import sys
 import numpy as np
 from stb.core import structure_io
 def pos(c, label):
-    return structure_io.to_pymatgen(structure_io.read_fdf(f'run1/cycle_{c}/{label}/structure.fdf')).cart_coords
+    return structure_io.to_pymatgen(structure_io.read_fdf(f'run1/neb_run/cycle_{c}/{label}/structure.fdf')).cart_coords
 d1 = np.linalg.norm(pos('00', 'image_01') - pos('01', 'image_01'))
 d2 = np.linalg.norm(pos('01', 'image_01') - pos('02', 'image_01'))
 print(f'step1={d1:.6f} step2={d2:.6f} ratio={d2/d1:.3f}')
@@ -187,14 +187,14 @@ check_exit_code $? 0
 
 echo "Testing: WITHOUT a restart file, the same starting point gives the SAME first-step displacement"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run2 --no-intro > log_prep2.txt 2>&1
-python3 fabricate.py run2 00
-stb-nebCycle --dir run2 --fmax 0.001 --no-intro > log_run2_step1.txt 2>&1
+python3 fabricate.py run2/neb_run 00
+stb-nebCycle --dir run2/neb_run --fmax 0.001 --no-intro > log_run2_step1.txt 2>&1
 python3 -c "
 import sys
 import numpy as np
 from stb.core import structure_io
 def pos(run, c, label):
-    return structure_io.to_pymatgen(structure_io.read_fdf(f'{run}/cycle_{c}/{label}/structure.fdf')).cart_coords
+    return structure_io.to_pymatgen(structure_io.read_fdf(f'{run}/neb_run/cycle_{c}/{label}/structure.fdf')).cart_coords
 d_run1_step1 = np.linalg.norm(pos('run1', '00', 'image_01') - pos('run1', '01', 'image_01'))
 d_run2_step1 = np.linalg.norm(pos('run2', '00', 'image_01') - pos('run2', '01', 'image_01'))
 print(f'run1 first step={d_run1_step1:.6f}  run2 (independent) first step={d_run2_step1:.6f}')
@@ -219,7 +219,7 @@ python3 -c "
 import numpy as np
 from stb.core import structure_io
 labels = ['image_00', 'image_01', 'image_02', 'image_03']
-coords = [structure_io.to_pymatgen(structure_io.read_fdf(f'degen/cycle_00/{l}/structure.fdf')).cart_coords for l in labels]
+coords = [structure_io.to_pymatgen(structure_io.read_fdf(f'degen/neb_run/cycle_00/{l}/structure.fdf')).cart_coords for l in labels]
 print('all identical:', all(np.allclose(coords[0], c) for c in coords))
 "
 python3 -c "
@@ -234,16 +234,16 @@ def write_out(path, energy):
     with open(path, 'w') as f:
         f.write(f'siesta: FreeEng =    {energy:.6f}\nSCF cycle converged after 10 iterations\n')
 for label in ('image_00', 'image_01', 'image_02', 'image_03'):
-    d = f'degen/cycle_00/{label}'
+    d = f'degen/neb_run/cycle_00/{label}'
     write_fa(os.path.join(d, 'siesta.FA'), np.full((9, 3), 0.01))
     write_out(os.path.join(d, 'calc.out'), -300.0)
 "
-stb-nebCycle --dir degen --fmax 0.001 --no-intro > log_degen_step.txt 2>&1
+stb-nebCycle --dir degen/neb_run --fmax 0.001 --no-intro > log_degen_step.txt 2>&1
 check_exit_code $? 1
 check_contains "non-finite (NaN/Inf)" log_degen_step.txt
 check_contains "path has collapsed" log_degen_step.txt
 echo "Testing: no corrupted cycle_01/ was written after the guard fired"
-if [ -d degen/cycle_01 ]; then
+if [ -d degen/neb_run/cycle_01 ]; then
     echo -e "   -> ${RED}Failed:${NC} cycle_01 unexpectedly written despite the NaN guard"
     FAIL=$((FAIL+1))
 else
@@ -255,12 +255,12 @@ fi
 # --- 5. Convergence: a loose --fmax makes the very first check succeed trivially ---
 echo -e "\n--- Testing convergence (loose --fmax) and the NEB_CONVERGED sentinel ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run3 --no-intro > log_prep3.txt 2>&1
-python3 fabricate.py run3 00
-stb-nebCycle --dir run3 --fmax 10.0 --no-intro > log_converged.txt 2>&1
+python3 fabricate.py run3/neb_run 00
+stb-nebCycle --dir run3/neb_run --fmax 10.0 --no-intro > log_converged.txt 2>&1
 check_exit_code $? 0
 check_contains "\[CONVERGED\]" log_converged.txt
-check_success run3/NEB_CONVERGED
-if [ -d run3/cycle_01 ]; then
+check_success run3/neb_run/NEB_CONVERGED
+if [ -d run3/neb_run/cycle_01 ]; then
     echo -e "   -> ${RED}Failed:${NC} cycle_01 unexpectedly written after declaring convergence"
     FAIL=$((FAIL+1))
 else
@@ -269,7 +269,7 @@ else
 fi
 
 echo "Testing: calling stb-nebCycle again is a clean, harmless no-op"
-stb-nebCycle --dir run3 --fmax 10.0 --no-intro > log_converged_again.txt 2>&1
+stb-nebCycle --dir run3/neb_run --fmax 10.0 --no-intro > log_converged_again.txt 2>&1
 check_exit_code $? 0
 check_contains "already exists from a previous call" log_converged_again.txt
 
@@ -277,11 +277,11 @@ check_contains "already exists from a previous call" log_converged_again.txt
 # --- 6. --climb-after ---
 echo -e "\n--- Testing --climb-after ---"
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run4 --no-intro > log_prep4.txt 2>&1
-python3 fabricate.py run4 00
-stb-nebCycle --dir run4 --fmax 0.001 --climb-after 5 --no-intro > log_climb_off.txt 2>&1
+python3 fabricate.py run4/neb_run 00
+stb-nebCycle --dir run4/neb_run --fmax 0.001 --climb-after 5 --no-intro > log_climb_off.txt 2>&1
 check_contains "Climbing image  : OFF (cycle 0 < --climb-after 5)" log_climb_off.txt
-rm -rf run4/cycle_01 run4/neb_cycle_state.json
-stb-nebCycle --dir run4 --fmax 0.001 --climb-after 0 --no-intro > log_climb_on.txt 2>&1
+rm -rf run4/neb_run/cycle_01 run4/neb_run/neb_cycle_state.json
+stb-nebCycle --dir run4/neb_run --fmax 0.001 --climb-after 0 --no-intro > log_climb_on.txt 2>&1
 check_contains "Climbing image  : ON (cycle 0 >= --climb-after 0)" log_climb_on.txt
 
 
@@ -302,7 +302,7 @@ check_contains "not found" log_no_dir.txt
 echo "Testing: a cycle with an image missing calc.out/.FA"
 mkdir -p incomplete
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O incomplete --no-intro > log_prep_incomplete.txt 2>&1
-stb-nebCycle --dir incomplete --no-intro > log_incomplete.txt 2>&1
+stb-nebCycle --dir incomplete/neb_run --no-intro > log_incomplete.txt 2>&1
 check_exit_code $? 1
 check_contains "has SIESTA finished here yet" log_incomplete.txt
 

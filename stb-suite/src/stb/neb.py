@@ -11,6 +11,7 @@ VERSION = "1.0.0"
 import os
 import sys
 import json
+import time
 import argparse
 from collections import Counter
 import numpy as np
@@ -20,15 +21,16 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import neb_manifest
 from stb.core import adsorption_sites
-from stb.core.cli import color_text, show_intro, print_dual
+from stb.core.cli import (color_text, show_intro, print_dual, print_section,
+                           print_progress_line, finish_progress_line, capture_library_noise)
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.deps import require_mace
-from stb.core.calc_directives import force_single_point
 
 REPORT_FILE = "neb_setup.txt"
 MACE_RESULT_FILE = "neb_mace_result.json"
+RUN_SUBDIR = "neb_run"
 
-_MODE_DESCRIPTIONS = {
+MODE_DESCRIPTIONS = {
     1: "100% MACE-MP-0, JSON result, no SIESTA",
     2: "100% MACE-MP-0, then 1 single-point SIESTA per image",
     3: "MACE-MP-0 + a few real-DFT NEB refinement cycles (default)",
@@ -354,22 +356,28 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
                         force_spin=False, force_vdw=False, force_dipole=False):
     """Writes structure.fdf + config_extra.fdf + calc.fdf + copied
     pseudopotentials for one image_NN/ folder. config_extra.fdf is always
-    written (even empty, if all three flags are False) and always
-    %include'd at the very top of calc.fdf (structure_io.prepend_include)
-    -- same "config_extra.fdf as the standard mechanism for forcing
-    calculation directives" convention as core/adsorption_sites.py's
-    write_reference_folder, but WITHOUT that function's FIXED_CELL_BLOCK
-    (meaningless here -- every image folder is already forced single-point
-    by the caller, via force_single_point, before this loop runs) and
-    without calling write_reference_folder itself (that function is
-    slab/pymatgen-adsorption-specific). `calc_text` is assumed already
-    single-point-forced by the caller.
+    written and always %include'd at the very top of calc.fdf
+    (structure_io.prepend_include) -- same "config_extra.fdf as the
+    standard mechanism for forcing calculation directives" convention as
+    core/adsorption_sites.py's write_reference_folder, but WITHOUT that
+    function's FIXED_CELL_BLOCK (meaningless here -- an image's cell is
+    fixed by construction, shared with every other image on the band, not
+    something that needs a directive to enforce) and without calling
+    write_reference_folder itself (that function is slab/pymatgen
+    -adsorption-specific). Unlike force_spin/force_vdw/force_dipole,
+    SINGLE_POINT_BLOCK is unconditional (no opt-out): a NEB image is one
+    independent, uncoupled sample point on the band, so letting SIESTA
+    relax it on its own would silently move it off the interpolated path
+    -- caught the calc.fdf template's OWN MD.TypeOfRun/MD.Steps
+    always losing to config_extra.fdf's (first-occurrence-wins), so
+    `calc_text` here is the caller's ORIGINAL --calc text, unmodified.
     """
     os.makedirs(out_dir, exist_ok=True)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
                                                 coord_format="fractional")
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
     with open(os.path.join(out_dir, adsorption_sites.CONFIG_EXTRA_FILE), "w") as f:
+        f.write(adsorption_sites.SINGLE_POINT_BLOCK)
         if force_spin:
             f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
         if force_dipole:
@@ -394,7 +402,29 @@ def write_ml_preview_plot(ase_images, out_path):
     plt.close(fig)
 
 
-def _write_mode1_json(output_root, ase_images, reaction_coords, converged, barrier, dE, args, f_out):
+def _print_library_warnings_section(f_out, library_warnings):
+    """Prints the shared '[9] LIBRARY WARNINGS' section. Must be called
+    BEFORE any '# MODE:'/'# IMAGE_TABLE' marker lines are written to f_out
+    -- stb-nebAnalysis's read_image_table() treats every non-blank,
+    non-'#'-prefixed line after '# IMAGE_TABLE' as a table row, with no
+    explicit end-of-table marker, so the marker block must stay the very
+    last thing written to the report file.
+    """
+    print_section('[9] LIBRARY WARNINGS', f_out)
+    if library_warnings:
+        print_dual(color_text(
+            "  Messages emitted by external libraries (MACE/torch/ASE/pymatgen) during this "
+            "run -- collected here instead of interleaved with the report above; harmless in "
+            "almost every case (import-time notices, deprecation-style warnings), but worth a "
+            "glance.", 'cyan'), f_out)
+        for entry in library_warnings:
+            print_dual(f"  {entry}", f_out)
+    else:
+        print_dual("  No library warnings.", f_out)
+
+
+def _write_mode1_json(run_root, ase_images, reaction_coords, converged, barrier, dE, args, f_out,
+                       run_start, library_warnings):
     """Mode 1's entire output: a single JSON (MACE_RESULT_FILE) with every
     image's energy/positions/symbols plus the fitted barrier/reaction
     energy -- stb-nebAnalysis reads this directly, no calc.out anywhere,
@@ -424,19 +454,23 @@ def _write_mode1_json(output_root, ase_images, reaction_coords, converged, barri
             for i, atoms in enumerate(ase_images)
         ],
     }
-    json_path = os.path.join(output_root, MACE_RESULT_FILE)
+    json_path = os.path.join(run_root, MACE_RESULT_FILE)
     with open(json_path, "w") as f:
         json.dump(payload, f, indent=2)
 
-    print_dual(f"\n{color_text('[2] MACE RESULT (JSON)', 'bold')}", f_out)
+    print_section('[6] MACE RESULT (JSON)', f_out)
     print_dual(f"  {color_text('[Saved]', 'cyan')} {json_path} ({len(ase_images)} image(s), "
                 f"barrier {barrier:.4f} eV forward / {backward:.4f} eV backward, reaction "
                 f"energy {dE:.4f} eV)", f_out)
 
-    print_dual(f"\n{color_text('[3] SUMMARY', 'bold')}", f_out)
+    elapsed = time.monotonic() - run_start
+    print_section('[8] SUMMARY', f_out)
     print_dual("  Mode 1: no SIESTA folders written -- the path was fully converged in "
-                "MACE-MP-0. Run stb-nebAnalysis on this directory to read the JSON directly.",
+                f"MACE-MP-0. Run stb-nebAnalysis --dir {run_root} to read the JSON directly.",
                 f_out)
+    print_dual(f"  Total elapsed     : {elapsed:.1f}s", f_out)
+
+    _print_library_warnings_section(f_out, library_warnings)
 
     f_out.write("\n# MODE: 1\n")
     f_out.write(f"# MACE_RESULT_FILE: {MACE_RESULT_FILE}\n")
@@ -445,7 +479,8 @@ def _write_mode1_json(output_root, ase_images, reaction_coords, converged, barri
 _CLIMB_AFTER_SUGGESTION = {3: 0, 4: 5}
 
 
-def _print_cluster_submission_snippet(f_out, mode):
+def _print_cluster_submission_snippet(f_out, mode, run_root, max_cycles, siesta_exe, mpirun_np,
+                                       conda_env, cycle_fmax):
     """Prints the sub.sh-ready loop (modes 3/4 only): run SIESTA in every
     image_* of the current cycle, call stb-nebCycle (a separate, CLI-only
     tool -- deliberately not part of the interactive stb-suite menu) to
@@ -457,21 +492,48 @@ def _print_cluster_submission_snippet(f_out, mode):
     (same reasoning core/mace_relax.py::relax_neb's own two-stage
     climb=False-then-True approach exists for, here spread across
     separate cluster-queued cycles instead of one live process).
+
+    max_cycles/siesta_exe/mpirun_np/conda_env/cycle_fmax only shape this
+    PRINTED snippet -- stb-neb itself never executes SIESTA in modes 3/4,
+    so none of these affect this run's own behavior. cycle_fmax is
+    stb-nebCycle's OWN --fmax (real-DFT NEB force-convergence threshold,
+    eV/Ang) -- a completely different value from this tool's own
+    --ml-fmax (the MACE-MP-0 path-shaping/pre-relax target), just
+    printed here since stb-nebCycle is CLI-only and never runs as part
+    of this call. Cycle numbers are built via
+    `printf "%02d"`, not `seq -w`: `seq -w`'s zero-padding widens to match
+    the LARGEST number in the range (3 digits once max_cycles >= 100,
+    e.g. "005"), which would then fail to match the 2-digit-MINIMUM
+    `cycle_NN` folders stb-nebCycle actually writes via Python's own
+    f"cycle_{{n:02d}}" (minimum-width, so "cycle_05" stays 2 digits
+    regardless of how many cycles exist overall) -- printf "%02d" mirrors
+    that exact minimum-width semantics at any --max-cycles value.
     """
     climb_after = _CLIMB_AFTER_SUGGESTION[mode]
-    print_dual(f"\n{color_text('[4] CLUSTER SUBMISSION', 'bold')}", f_out)
-    print_dual("  stb-nebCycle is a separate CLI-only tool (not in the interactive stb-suite "
-                "menu) that reads the latest finished cycle_NN/ and takes one real-DFT NEB "
-                "step -- run it in a loop from your own submission script, alternating with "
-                "real SIESTA runs:", f_out)
+    print_section('[7] CLUSTER SUBMISSION', f_out)
+    print_dual(f"  stb-nebCycle is a separate CLI-only tool (not in the interactive stb-suite "
+                f"menu) that reads the latest finished cycle_NN/ and takes one real-DFT NEB "
+                f"step -- run it in a loop from your own submission script, alternating with "
+                f"real SIESTA runs (every cycle_NN/ lives under '{run_root}'):", f_out)
+
+    if conda_env:
+        conda_block = f'source ~/miniconda3/etc/profile.d/conda.sh\nconda activate {conda_env}\n'
+    else:
+        conda_block = ('# TODO: activate your own environment (e.g. `conda activate <env>`) '
+                        'if needed\n')
+    mpirun_prefix = f"mpirun -np {mpirun_np} " if mpirun_np else ""
+
     snippet = f"""
-for cycle in $(seq -w 0 29); do
+{conda_block}
+cd "{run_root}"
+for cyc in $(seq 0 {max_cycles - 1}); do
+    cycle=$(printf "%02d" "$cyc")
     cdir="cycle_${{cycle}}"
     [ -d "$cdir" ] || break
     for img in "$cdir"/image_*; do
-        (cd "$img" && siesta < calc.fdf > calc.out)   # adjust to your real queue wrapper
+        (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out)
     done
-    stb-nebCycle --dir . --fmax 0.05 --climb-after {climb_after}
+    stb-nebCycle --dir . --fmax {cycle_fmax} --climb-after {climb_after} --no-intro
     [ -f NEB_CONVERGED ] && {{ echo "NEB converged at cycle $cycle"; break; }}
 done
 """
@@ -503,7 +565,7 @@ def main():
     parser.add_argument("-c", "--calc", type=str, required=True,
                          help="calc.fdf template (kgrid, basis, XC, %%include structure.fdf, "
                               "etc.) -- copied into every image_NN/ folder with MD.TypeOfRun/"
-                              "MD.NumCGsteps forced to a single-point evaluation.")
+                              "MD.Steps forced to a single-point evaluation.")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
                          help="Pseudopotentials source (optional): a bundled bank or a folder path.")
 
@@ -592,6 +654,29 @@ def main():
 
     parser.add_argument("-O", "--output-dir", type=str, default=".",
                          help="Root directory (default: current directory) for every image_NN/.")
+
+    parser.add_argument("--max-cycles", type=int, default=30,
+                         help="Cluster-submission snippet only (--mode 3/4): max number of "
+                              "stb-nebCycle refinement cycles the printed loop will attempt "
+                              "before giving up (default: 30). Has no effect on this run itself.")
+    parser.add_argument("--siesta-exe", type=str, default="siesta",
+                         help="Cluster-submission snippet only (--mode 3/4): SIESTA executable "
+                              "name or path for the printed loop to call (default: 'siesta', "
+                              "assumed already on PATH).")
+    parser.add_argument("--mpirun-np", type=int, default=None, metavar="N",
+                         help="Cluster-submission snippet only (--mode 3/4): prefix the SIESTA "
+                              "call in the printed loop with 'mpirun -np N'. Omit for no mpirun "
+                              "(default).")
+    parser.add_argument("--conda-env", type=str, default="",
+                         help="Cluster-submission snippet only (--mode 3/4): conda environment "
+                              "name to activate at the top of the printed loop. Omit to print a "
+                              "generic placeholder reminder instead (default).")
+    parser.add_argument("--cycle-fmax", type=float, default=0.05,
+                         help="Cluster-submission snippet only (--mode 3/4): the looped "
+                              "stb-nebCycle call's own --fmax (real-DFT NEB force-convergence "
+                              "threshold, eV/Ang, default: 0.05) -- distinct from this tool's own "
+                              "--ml-fmax (the MACE-MP-0 path-shaping target).")
+
     parser.add_argument("-v", "--version", action="version", version=f"stb-neb {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -655,14 +740,23 @@ def main():
 
     with open(args.calc) as f:
         calc_text = f.read()
-    single_point_calc_text = force_single_point(calc_text)
 
     output_root = args.output_dir
-    os.makedirs(output_root, exist_ok=True)
-    report_path = os.path.join(output_root, REPORT_FILE)
+    run_root = os.path.join(output_root, RUN_SUBDIR)
+    os.makedirs(run_root, exist_ok=True)
+    report_path = os.path.join(run_root, REPORT_FILE)
+
+    run_start = time.monotonic()
+    library_warnings = []
+
+    composition_counts = Counter(sym for sym, _ in initial_structure.atoms)
+    composition_str = " ".join(f"{sym}{n}" for sym, n in sorted(composition_counts.items()))
+    n_atoms_total = sum(composition_counts.values())
 
     with open(report_path, 'w') as f_out:
-        print_dual(f"\n{color_text('[0] RUN METADATA', 'bold')}", f_out)
+        print_section('[0] RUN METADATA', f_out)
+        print_dual(f"  Started           : {time.strftime('%Y-%m-%d %H:%M:%S')}", f_out)
+        print_dual(f"  Composition       : {composition_str} ({n_atoms_total} atoms)", f_out)
         print_dual(f"  Initial structure : {args.initial}"
                     + ("" if initial_relaxed else " (NOT YET RELAXED)"), f_out)
         print_dual(f"  Final structure   : {args.final}"
@@ -684,12 +778,18 @@ def main():
         print_dual(f"  Calc template     : {args.calc}", f_out)
         print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}", f_out)
         print_dual(f"  Output dir        : {output_root}", f_out)
+        print_dual(f"  Run folder        : {run_root} (every generated file/folder lives here)", f_out)
         print_dual(f"  N images          : {args.n_images}", f_out)
         print_dual(f"  IDPP refinement   : {'yes' if args.idpp else 'no'}", f_out)
-        print_dual(f"  Mode              : {args.mode} ({_MODE_DESCRIPTIONS[args.mode]})", f_out)
+        print_dual(f"  Mode              : {args.mode} ({MODE_DESCRIPTIONS[args.mode]})", f_out)
         print_dual(f"  Force spin/vdW/dipole: {'ON' if args.force_spin else 'off'}/"
                     f"{'ON' if args.force_vdw else 'off'}/{'ON' if args.force_dipole else 'off'} "
                     "(config_extra.fdf per image_NN/)", f_out)
+        if args.mode != 1:
+            print_dual("  Single-point (MD.TypeOfRun CG / MD.Steps 0): ON, unconditional "
+                        "(config_extra.fdf per image_NN/ -- each image is one independent, "
+                        "uncoupled point on the band; SIESTA must not relax it off the path)",
+                        f_out)
         if args.mode == 1 and not (args.force_spin and args.force_vdw and args.force_dipole):
             print_dual(color_text(
                 "  [NOTE] --no-force-spin/--no-force-vdw/--no-force-dipole have no effect with "
@@ -706,18 +806,29 @@ def main():
             print_dual("  MACE-MP-0 path shaping: no (mode 4 -- real DFT from the start)", f_out)
         print_dual(f"  ML pre-relax endpoints: {'yes' if args.ml_prerelax_endpoints else 'no'}", f_out)
 
-        print_dual(f"\n{color_text('[1] INTERPOLATION', 'bold')}", f_out)
-
         if args.ml_prerelax_endpoints:
-            require_mace()
+            print_section('[1] ML PRE-RELAX ENDPOINTS', f_out)
+            prerelax_max_steps = 200
+            with capture_library_noise(library_warnings, "MACE import"):
+                require_mace()
             from stb.core import mace_relax
-            print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing both endpoints "
-                        "(positions only) with MACE-MP-0 ...", f_out)
-            calc_mace_endpoints = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+            with capture_library_noise(library_warnings, "MACE calculator setup"):
+                calc_mace_endpoints = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
             for label, pmg in (("initial", initial_pmg), ("final", final_pmg)):
+                print_dual(f"  Relaxing the {label} endpoint (positions only, MACE-MP-0) ...", f_out)
                 ase_atoms = AseAtomsAdaptor.get_atoms(pmg)
-                converged, steps = mace_relax.relax(ase_atoms, calc_mace_endpoints,
-                                                     fmax=args.ml_fmax, max_steps=200)
+
+                def _on_step(step, energy, max_force, _label=label):
+                    print_progress_line(
+                        f"    {_label}: step {step}/{prerelax_max_steps}, E = {energy:.4f} eV, "
+                        f"max|F| = {max_force:.4f} eV/Ang (target {args.ml_fmax})",
+                        step, prerelax_max_steps)
+
+                with capture_library_noise(library_warnings, f"MACE pre-relax ({label})"):
+                    converged, steps = mace_relax.relax(ase_atoms, calc_mace_endpoints,
+                                                         fmax=args.ml_fmax, max_steps=prerelax_max_steps,
+                                                         on_step=_on_step)
+                finish_progress_line()
                 relaxed_pmg = AseAtomsAdaptor.get_structure(ase_atoms)
                 if label == "initial":
                     initial_pmg = relaxed_pmg
@@ -726,9 +837,13 @@ def main():
                 print_dual(f"  {'Converged' if converged else 'Hit step cap, not fully converged'} "
                             f"({label}) after {steps} step(s).", f_out)
 
+        print_section('[2] ENDPOINT CHECKS', f_out)
         initial_pmg = wrap_into_cell(initial_pmg)
         final_pmg = wrap_into_cell(final_pmg)
         final_pmg_matched = require_lattice_match(initial_pmg, final_pmg, f_out)
+        print_dual(color_text(
+            "  [OK] Endpoints share the same composition and lattice (validated above).",
+            'green'), f_out)
 
         check_endpoint_displacement(initial_pmg, final_pmg_matched, f_out,
                                      threshold=args.ml_freeze_threshold, idpp_used=args.idpp)
@@ -745,6 +860,7 @@ def main():
                     "species_sequence still matches exactly, so interpolation proceeds normally; "
                     "double-check these really are the intended endpoint pair).", 'yellow'), f_out)
 
+        print_section('[3] PATH INTERPOLATION', f_out)
         try:
             pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
                                                     autosort_tol=args.autosort_tol)
@@ -803,20 +919,27 @@ def main():
                 if f_out:
                     f_out.close()
                 sys.exit(1)
-        print_dual(f"  Linear interpolation: {len(pmg_images)} images.", f_out)
+        print_dual(f"  [OK] Linear interpolation: {len(pmg_images)} images "
+                    f"(image_00 .. image_{len(pmg_images) - 1:02d}).", f_out)
 
         if args.idpp:
-            pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps)
-            print_dual("  IDPP refinement: interior images refined with ASE's Image Dependent "
-                        "Pair Potential method.", f_out)
+            print_dual(f"  Refining interior images with ASE's IDPP method "
+                        f"(fmax={args.idpp_fmax}, max {args.idpp_steps} steps) ...", f_out)
+            with capture_library_noise(library_warnings, "IDPP refinement"):
+                pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps)
+            print_dual("  [OK] IDPP refinement applied to interior images.", f_out)
 
         ml_neb_used = False
         ase_images, mace_converged, mace_barrier, mace_dE = None, None, None, None
         if mace_used_this_mode:
-            require_mace()
+            print_section('[4] MACE-MP-0 PATH SHAPING', f_out)
+            mace_start = time.monotonic()
+            with capture_library_noise(library_warnings, "MACE import"):
+                require_mace()
             from stb.core import mace_relax
-            print_dual(f"  {color_text('MACE-MP-0:', 'cyan')} running a real climbing-image NEB "
-                        "to shape the path ...", f_out)
+            print_dual(f"  Model             : MACE-MP-0 ({args.ml_model}, device={args.ml_device})", f_out)
+            print_dual(f"  Spring constant k : {args.ml_k} eV/Ang^2", f_out)
+            print_dual(f"  Target fmax       : {args.ml_fmax} eV/Ang (max {args.ml_max_steps} steps)", f_out)
             ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
             if args.ml_freeze_substrate:
                 frozen_indices = compute_frozen_indices(pmg_images, threshold=args.ml_freeze_threshold)
@@ -826,14 +949,33 @@ def main():
                         atoms.set_constraint(FixAtoms(indices=frozen_indices))
                 print_dual(f"  Freezing {len(frozen_indices)}/{len(ase_images[0])} atom(s) with "
                             f"< {args.ml_freeze_threshold} Ang displacement between endpoints.", f_out)
-            calc_mace_neb = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
-            mace_converged, s1, s2, energies = mace_relax.relax_neb(
-                ase_images, calc_mace_neb, k=args.ml_k, fmax=args.ml_fmax,
-                max_steps=args.ml_max_steps)
+
+            with capture_library_noise(library_warnings, "MACE calculator setup"):
+                calc_mace_neb = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+
+            _stage_names = {1: "shaping", 2: "climbing"}
+
+            def _on_step(stage, step, residual):
+                stage_steps = max(args.ml_max_steps // 2, 1) if stage == 1 else args.ml_max_steps
+                print_progress_line(
+                    f"    stage {stage}/2 ({_stage_names[stage]}): step {step}, "
+                    f"max residual force {residual:.4f} eV/Ang (target {args.ml_fmax})",
+                    step, stage_steps)
+
+            print_dual("  Running the climbing-image NEB (stage 1: shape the band, "
+                        "stage 2: climb to the saddle) ...", f_out)
+            with capture_library_noise(library_warnings, "MACE NEB relax"):
+                mace_converged, s1, s2, energies = mace_relax.relax_neb(
+                    ase_images, calc_mace_neb, k=args.ml_k, fmax=args.ml_fmax,
+                    max_steps=args.ml_max_steps, on_step=_on_step)
+            finish_progress_line()
             pmg_images = [AseAtomsAdaptor.get_structure(a) for a in ase_images]
             ml_neb_used = True
-            print_dual(f"  {'Converged' if mace_converged else 'Hit step cap, not fully converged'} "
-                        f"after {s1} (stage 1) + {s2} (stage 2, climbing) step(s).", f_out)
+            mace_elapsed = time.monotonic() - mace_start
+            print_dual(f"  [{'OK' if mace_converged else 'WARNING'}] "
+                        f"{'Converged' if mace_converged else 'Hit step cap, not fully converged'} "
+                        f"after {s1} (stage 1) + {s2} (stage 2, climbing) step(s), "
+                        f"{mace_elapsed:.1f}s elapsed.", f_out)
 
             from ase.mep.neb import NEBTools
             mace_barrier, mace_dE = NEBTools(ase_images).get_barrier(fit=True)
@@ -843,43 +985,57 @@ def main():
                 "  Note: an ML-level estimate from a fast surrogate potential, not a DFT "
                 "adsorption/reaction barrier.", 'yellow'), f_out)
 
-            preview_path = os.path.join(output_root, "neb_ml_preview.png")
+            preview_path = os.path.join(run_root, "neb_ml_preview.png")
             write_ml_preview_plot(ase_images, preview_path)
             print_dual(f"  {color_text('[Saved]', 'cyan')} {preview_path}", f_out)
 
+        print_section('[5] PATH QUALITY', f_out)
         reaction_coords = cumulative_reaction_coordinates(pmg_images)
+        print_dual(f"  Total path length : {reaction_coords[-1]:.4f} Ang "
+                    f"(cumulative Cartesian displacement, image_00 to image_{len(pmg_images) - 1:02d})",
+                    f_out)
         check_path_quality(pmg_images, reaction_coords, f_out, manifest_proven=(manifest_pair is not None))
 
-        trajectory_path = os.path.join(output_root, "neb_path.xyz")
+        trajectory_path = os.path.join(run_root, "neb_path.xyz")
         write_path_trajectory(pmg_images, trajectory_path)
         print_dual(f"  {color_text('[Saved]', 'cyan')} {trajectory_path} (all images, viewable in "
                     "VESTA/OVITO/ASE-GUI)", f_out)
 
         if args.mode == 1:
-            _write_mode1_json(output_root, ase_images, reaction_coords, mace_converged,
-                               mace_barrier, mace_dE, args, f_out)
+            _write_mode1_json(run_root, ase_images, reaction_coords, mace_converged,
+                               mace_barrier, mace_dE, args, f_out, run_start, library_warnings)
         else:
-            images_root = output_root if args.mode == 2 else os.path.join(output_root, "cycle_00")
-            print_dual(f"\n{color_text('[2] IMAGE FOLDERS', 'bold')}", f_out)
+            images_root = run_root if args.mode == 2 else os.path.join(run_root, "cycle_00")
+            print_section('[6] IMAGE FOLDERS', f_out)
             report_rows = []  # (label, index, reaction_coord, dir)
             for i, pmg_image in enumerate(pmg_images):
                 label = f"image_{i:02d}"
                 image_dir = os.path.join(images_root, label)
-                write_image_folder(image_dir, pmg_image, single_point_calc_text, species_meta,
+                write_image_folder(image_dir, pmg_image, calc_text, species_meta,
                                     args.pseudo_dir, force_spin=args.force_spin,
                                     force_vdw=args.force_vdw, force_dipole=args.force_dipole)
                 print_dual(f"  {color_text('[OK]', 'green')} {image_dir}", f_out)
                 report_rows.append((label, i, reaction_coords[i], image_dir))
-
-            print_dual(f"\n{color_text('[3] SUMMARY', 'bold')}", f_out)
             print_dual(f"  {len(pmg_images)} image folder(s) written under '{images_root}'.", f_out)
+
+            if args.mode in (3, 4):
+                _print_cluster_submission_snippet(f_out, args.mode, run_root, args.max_cycles,
+                                                   args.siesta_exe, args.mpirun_np, args.conda_env,
+                                                   args.cycle_fmax)
+
+            elapsed = time.monotonic() - run_start
+            print_section('[8] SUMMARY', f_out)
+            print_dual(f"  Mode              : {args.mode} ({MODE_DESCRIPTIONS[args.mode]})", f_out)
+            print_dual(f"  Images written    : {len(pmg_images)} under '{images_root}'", f_out)
+            print_dual(f"  Total elapsed     : {elapsed:.1f}s", f_out)
             if args.mode == 2:
-                print_dual("  Run SIESTA (single-point: MD.NumCGsteps forced to 0) in every "
-                            "image_NN/ folder, then use stb-nebAnalysis.", f_out)
+                print_dual("  Next step: run SIESTA (single-point: MD.Steps forced to 0) in "
+                            f"every image_NN/ folder, then run stb-nebAnalysis --dir {run_root}.", f_out)
             else:
-                print_dual("  Run SIESTA (single-point) in every cycle_00/image_NN/ folder, then "
-                            "start the refinement loop below -- see [4].", f_out)
-                _print_cluster_submission_snippet(f_out, args.mode)
+                print_dual("  Next step: run SIESTA (single-point) in every cycle_00/image_NN/ "
+                            "folder, then start the refinement loop -- see [7].", f_out)
+
+            _print_library_warnings_section(f_out, library_warnings)
 
             f_out.write(f"\n# MODE: {args.mode}\n")
             f_out.write(f"# ML_NEB_USED: {'yes' if ml_neb_used else 'no'}\n")
@@ -890,7 +1046,7 @@ def main():
 
     if args.mode == 1:
         print(f"\n{color_text('Success:', 'green')} MACE-MP-0 NEB complete -- "
-              f"{os.path.join(output_root, MACE_RESULT_FILE)} written, no SIESTA folders "
+              f"{os.path.join(run_root, MACE_RESULT_FILE)} written, no SIESTA folders "
               "(mode 1).")
     else:
         print(f"\n{color_text('Success:', 'green')} {len(pmg_images)} image folder(s) written "

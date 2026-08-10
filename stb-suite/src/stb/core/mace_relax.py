@@ -138,7 +138,7 @@ def describe_model(model_arg, calc):
 
 
 def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=200,
-          step_history=None):
+          step_history=None, on_step=None):
     """Relaxes `atoms` in place (positions, plus cell if `cell_mask` is
     given -- a 6-element Voigt mask from build_cell_mask()). Returns
     (converged, steps_used).
@@ -147,10 +147,13 @@ def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=20
     max|F|) tuple per optimizer iteration via ASE's standard
     Optimizer.attach() observer hook -- lets a caller (stb-mlrelax) plot/
     report the optimizer's own convergence trace without this function
-    reimplementing the step loop itself. None (default) is a no-op, so
-    every other caller of this shared function (stb-defect --ml-rank,
-    stb-amorphize, stb-adsorb, stb-neb, stb-mlsearch, stb-mlconvergence)
-    is unaffected.
+    reimplementing the step loop itself. `on_step`, if given, is called
+    with the same (step_index, energy, max|F|) live, once per iteration --
+    for a caller (stb-neb) that wants to print progress WHILE the
+    optimizer is still running rather than only after it returns. Both are
+    None (default) as a no-op for every other caller of this shared
+    function (stb-defect --ml-rank, stb-amorphize, stb-adsorb,
+    stb-mlsearch, stb-mlconvergence).
     """
     from ase.optimize import FIRE, BFGS, LBFGS
     from ase.filters import FrechetCellFilter
@@ -159,16 +162,22 @@ def relax(atoms, calc, cell_mask=None, optimizer="FIRE", fmax=0.05, max_steps=20
     atoms.calc = calc
     target = FrechetCellFilter(atoms, mask=cell_mask) if cell_mask is not None else atoms
     opt = optimizers[optimizer](target, logfile=None)
-    if step_history is not None:
+    if step_history is not None or on_step is not None:
         def _record():
-            step_history.append((len(step_history), atoms.get_potential_energy(),
-                                  float(np.abs(atoms.get_forces()).max())))
+            step = opt.nsteps
+            energy = atoms.get_potential_energy()
+            max_force = float(np.abs(atoms.get_forces()).max())
+            if step_history is not None:
+                step_history.append((step, energy, max_force))
+            if on_step is not None:
+                on_step(step, energy, max_force)
         opt.attach(_record, interval=1)
     converged = opt.run(fmax=fmax, steps=max_steps)
     return converged, opt.nsteps
 
 
-def relax_neb(images, calc, k=0.1, fmax=0.05, max_steps=200, optimizer="FIRE", climb=True):
+def relax_neb(images, calc, k=0.1, fmax=0.05, max_steps=200, optimizer="FIRE", climb=True,
+              on_step=None):
     """Runs a climbing-image NEB in place on `images` (a list of ASE Atoms
     -- both endpoints plus already-guessed interior images, e.g. from
     linear or IDPP interpolation). All images must share one exact cell --
@@ -178,6 +187,14 @@ def relax_neb(images, calc, k=0.1, fmax=0.05, max_steps=200, optimizer="FIRE", c
     cross-call mutable state that a second concurrent Atoms object sharing
     it would corrupt; building one calculator per image would just reload
     the same model N times for no benefit).
+
+    If `on_step` is given, it's called live, once per optimizer iteration
+    in EITHER stage, as `on_step(stage, step_in_stage, residual)` --
+    `stage` is 1 (shaping) or 2 (climbing), `residual` is
+    NEB.get_residual() (the max force component on any image, reusing the
+    forces already computed for that step -- no extra evaluation). Lets a
+    caller (stb-neb) print live progress against `max_steps` while this
+    call is still blocking. None (default) is a no-op.
 
     Two-stage strategy, standard climbing-image NEB practice: running with
     climb=True from step 0 lets a still badly-shaped band pick the wrong
@@ -215,13 +232,23 @@ def relax_neb(images, calc, k=0.1, fmax=0.05, max_steps=200, optimizer="FIRE", c
     # behavior, just avoids spurious warning noise in the persistent report.
     neb = NEB(images, k=k, climb=False, allow_shared_calculator=True,
               method="improvedtangent")
+
+    def _reporter(stage, opt):
+        def _report():
+            on_step(stage, opt.nsteps, float(neb.get_residual()))
+        return _report
+
     opt1 = optimizers[optimizer](neb, logfile=None)
+    if on_step is not None:
+        opt1.attach(_reporter(1, opt1), interval=1)
     stage1_fmax = max(2 * fmax, 0.1)
     stage1_steps = max(max_steps // 2, 1)
     opt1.run(fmax=stage1_fmax, steps=stage1_steps)
 
     neb.climb = climb
     opt2 = optimizers[optimizer](neb, logfile=None)
+    if on_step is not None:
+        opt2.attach(_reporter(2, opt2), interval=1)
     stage2_steps = max(max_steps - opt1.nsteps, 1)
     converged = opt2.run(fmax=fmax, steps=stage2_steps)
 

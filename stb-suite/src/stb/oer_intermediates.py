@@ -30,7 +30,7 @@ _OOH_BEND_DEG = 100.0     # H2O2-like O-O-H angle -- illustrative starting geome
 
 _DIPOLE_CORR_RE = re.compile(r'Slab\.DipoleCorrection\s+\S+', re.IGNORECASE)
 _RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_NUMCGSTEPS_RE = re.compile(r'MD\.NumCGsteps\s+\d+', re.IGNORECASE)
+_MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
 _RELAXED_COORDS_RE = re.compile(r'outcoor:\s*Relaxed atomic coordinates\s*\(fractional\)', re.IGNORECASE)
 
@@ -51,19 +51,21 @@ def force_dipole_correction(calc_text):
 
 def force_relaxation(calc_text, max_steps=200):
     """Duplicated from her_refs.py::force_relaxation. Forces
-    'MD.TypeOfRun CG' + 'MD.NumCGsteps <max_steps>' -- every geometry
+    'MD.TypeOfRun CG' + 'MD.Steps <max_steps>' -- every geometry
     this module writes (derived O*/OOH* starting guesses, or fresh
     --strategy search candidates) MUST reach its own relaxed minimum
     before any BSSE/ZPE/final-energy calculation trusts it; explicit is
     safer than silently inheriting whatever (or nothing) a borrowed
-    calc.fdf template happens to have.
+    calc.fdf template happens to have. Uses MD.Steps, not the older
+    MD.NumCGsteps spelling (deprecated, no longer honored by current
+    SIESTA).
     """
     new_text, count = _RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
     if count == 0:
         new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _NUMCGSTEPS_RE.subn(f'MD.NumCGsteps         {max_steps}', new_text)
+    new_text, count = _MD_STEPS_RE.subn(f'MD.Steps              {max_steps}', new_text)
     if count == 0:
-        new_text += f"MD.NumCGsteps         {max_steps}\n"
+        new_text += f"MD.Steps              {max_steps}\n"
     return new_text
 
 

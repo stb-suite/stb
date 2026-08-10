@@ -160,7 +160,7 @@ def main():
     parser.add_argument("-c", "--calc", type=str, required=True,
                          help="calc.fdf template (kgrid, basis, XC, %%include structure.fdf, "
                               "etc.) -- copied into every shift_II_JJ/ folder with MD.TypeOfRun/"
-                              "MD.NumCGsteps forced to a single-point evaluation.")
+                              "MD.Steps forced to a single-point evaluation.")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
                          help="Pseudopotentials source (optional): a bundled bank or a folder path.")
 
@@ -393,7 +393,7 @@ def main():
             print_dual(f"  ML preview: predicted equilibrium at shift_{ml_min[0]:02d}_{ml_min[1]:02d}, "
                         f"predicted corrugation {ml_max[2] - ml_min[2]:.4f} eV (MACE-MP-0 -- NOT a "
                         "DFT-level number, use stb-stackingfaultAnalysis for the real one).", f_out)
-        print_dual("  Run SIESTA (single-point: MD.NumCGsteps forced to 0) in every "
+        print_dual("  Run SIESTA (single-point: MD.Steps forced to 0) in every "
                     "shift_II_JJ/ folder, then use stb-stackingfaultAnalysis.", f_out)
 
         f_out.write("\n# GRID_TABLE -- parsed by stb-stackingfaultAnalysis, do not reorder the "

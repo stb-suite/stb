@@ -31,7 +31,7 @@ _KGRID_RE = re.compile(r'kgrid[._]MonkhorstPack\s+\[.*?\]', re.IGNORECASE)
 _SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
 _LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
 _RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_NUMCGSTEPS_RE = re.compile(r'MD\.NumCGsteps\s+\d+', re.IGNORECASE)
+_MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _RELAXED_COORDS_RE = re.compile(r'outcoor:\s*Relaxed atomic coordinates\s*\(fractional\)', re.IGNORECASE)
 
 
@@ -55,9 +55,9 @@ def force_relaxation(calc_text, max_steps=200):
     new_text, count = _RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
     if count == 0:
         new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _NUMCGSTEPS_RE.subn(f'MD.NumCGsteps         {max_steps}', new_text)
+    new_text, count = _MD_STEPS_RE.subn(f'MD.Steps              {max_steps}', new_text)
     if count == 0:
-        new_text += f"MD.NumCGsteps         {max_steps}\n"
+        new_text += f"MD.Steps              {max_steps}\n"
     return new_text
 
 

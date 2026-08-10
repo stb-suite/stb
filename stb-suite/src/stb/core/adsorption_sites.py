@@ -88,6 +88,26 @@ VDW_CORRECTION_BLOCK = (
     "# write_reference_folder's force_vdw docstring for why).\n"
     "DFTD3                   .true.\n"
 )
+# Unconditional (no force_* opt-in flag, unlike the three blocks above) --
+# used by any caller that writes one INDEPENDENT, uncoupled folder per
+# candidate/image (a NEB image, a BSSE ghost fragment) where letting SIESTA
+# relax the geometry on its own would silently move it away from the exact
+# point being sampled. Goes through config_extra.fdf rather than editing the
+# caller's own --calc template text in place (stb-neb's write_image_folder
+# used to do the latter, via core/calc_directives.force_single_point, until
+# a physics review pointed out this file is exactly what that mechanism
+# exists for) -- SIESTA's fdf reader is first-occurrence-wins, so this
+# overrides any MD.TypeOfRun/MD.Steps already present later in the
+# template, same override guarantee as the other blocks here. Uses MD.Steps
+# (not the older MD.NumCGsteps spelling some templates still carry) --
+# see structure_io.read_effective_md_steps for why MD.Steps is preferred.
+SINGLE_POINT_BLOCK = (
+    "# Auto-generated -- forces a single-point evaluation (no relaxation): this\n"
+    "# folder is one independent, uncoupled sample point, not something SIESTA\n"
+    "# should be moving on its own.\n"
+    "MD.TypeOfRun          CG\n"
+    "MD.Steps              0\n"
+)
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 
 _MIN_LATERAL_IMAGE_SEPARATION_ANG = 8.0

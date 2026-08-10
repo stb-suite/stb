@@ -324,7 +324,7 @@ check_contains "Spin                polarized" $GT/gibbs/site_1_ontop/disp_001/c
 check_contains "Slab.DipoleCorrection      .true." $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
 check_contains "DFTD3                   .true." $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
 check_contains "MD.TypeOfRun       CG" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
-check_contains "MD.NumCGsteps      0" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
+check_contains "MD.Steps           0" $GT/gibbs/site_1_ontop/disp_001/config_extra.fdf
 
 echo "Testing: the isolated reference's Hessian folders have Spin + DFTD3 but NO dipole"
 echo "  correction (not a slab -- Slab.DipoleCorrection has no physical meaning for a boxed"
@@ -364,7 +364,7 @@ check_contains "%include config_extra.fdf" $GT3/gibbs/site_1_ontop/disp-001/calc
 check_contains "%include config_extra.fdf" $GT3/gibbs/clean_slab_full/disp-001/calc.fdf
 check_contains "Slab.DipoleCorrection      .true." $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
 check_contains "DFTD3                   .true." $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
-check_contains "MD.NumCGsteps      0" $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
+check_contains "MD.Steps           0" $GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf
 if grep -q "Spin" "$GT3/gibbs/clean_slab_full/disp-001/config_extra.fdf" 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected Spin override in the clean-slab phonon reference's config_extra.fdf"
     FAIL=$((FAIL+1))

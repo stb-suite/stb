@@ -74,7 +74,7 @@ check_success convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/struct
 check_success convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "Mesh.CutOff           250.0000  Ry" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.TypeOfRun       CG" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
-check_contains "MD.NumCGsteps      200" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
+check_contains "MD.Steps.*200" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.VariableCell    true" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 if [ -L convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/Si.psml ]; then
     echo -e "   -> ${GREEN}Verified:${NC} Si.psml linked into the generated folder"
@@ -119,7 +119,7 @@ check_contains "energyshift | suggested default | 0.001 to 0.05, step 0.01 (Ry)"
 check_contains "6 folder(s) written under 'convergence_runs' (1 parameter(s))" log_energyshift.txt
 check_success convergence_runs/energyshift/convergence_energyshift_0.0010/calc.fdf
 check_contains "PAO.EnergyShift     0.0010 Ry" convergence_runs/energyshift/convergence_energyshift_0.0010/config_extra.fdf
-check_contains "MD.NumCGsteps      100" convergence_runs/energyshift/convergence_energyshift_0.0010/config_extra.fdf
+check_contains "MD.Steps.*100" convergence_runs/energyshift/convergence_energyshift_0.0010/config_extra.fdf
 
 
 # --- 5. K-grid density sweep (cross-checked against stb-kgrid directly) ---

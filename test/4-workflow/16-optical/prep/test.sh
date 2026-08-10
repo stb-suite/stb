@@ -81,9 +81,9 @@ check_success optical_study_cubic/dir_y/structure.fdf
 check_success optical_study_cubic/dir_z/structure.fdf
 check_success optical_study_cubic/optical_stage1.txt
 
-echo "Testing: every folder forces MD.TypeOfRun CG + MD.NumCGsteps 0 (single point)"
+echo "Testing: every folder forces MD.TypeOfRun CG + MD.Steps 0 (single point)"
 check_contains "MD.TypeOfRun          CG" optical_study_cubic/dir_x/calc.fdf
-check_contains "MD.NumCGsteps         0" optical_study_cubic/dir_x/calc.fdf
+check_contains "MD.Steps              0" optical_study_cubic/dir_x/calc.fdf
 
 echo "Testing: OpticalCalculation/Optical.Broaden/Optical.Mesh/Optical.Vector blocks are correct per axis"
 check_contains "OpticalCalculation T" optical_study_cubic/dir_x/calc.fdf

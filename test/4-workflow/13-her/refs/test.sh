@@ -141,14 +141,14 @@ check_contains "0.58000000" her_study/07_h_isolated/structure.fdf
 
 echo "Testing: H2 molecule relaxes (not single-point), Gamma-only + spin-polarized"
 check_contains "MD.TypeOfRun          CG" her_study/02_h2_molecule/calc.fdf
-check_not_contains "MD.NumCGsteps         0" her_study/02_h2_molecule/calc.fdf
+check_not_contains "MD.Steps              0" her_study/02_h2_molecule/calc.fdf
 check_contains "kgrid.MonkhorstPack   \[1  1  1\]" her_study/02_h2_molecule/calc.fdf
 check_contains "Spin.*polarized" her_study/02_h2_molecule/calc.fdf
 
 echo "Testing: every other reference folder is forced single-point"
-check_contains "MD.NumCGsteps         0" her_study/00_clean_slab/calc.fdf
-check_contains "MD.NumCGsteps         0" her_study/03_slab_deformed/calc.fdf
-check_contains "MD.NumCGsteps         0" her_study/04_slab_ghost/calc.fdf
+check_contains "MD.Steps              0" her_study/00_clean_slab/calc.fdf
+check_contains "MD.Steps              0" her_study/03_slab_deformed/calc.fdf
+check_contains "MD.Steps              0" her_study/04_slab_ghost/calc.fdf
 
 
 # --- 4. --zpe-mode standard (nothing generated) ---

@@ -3,7 +3,7 @@
 # --- Setup ---
 # Smoke test for stb-nebCycle (item 4.9, CLI-only -- deliberately NOT in
 # the interactive stb-suite menu, see CLAUDE.md). Builds a real cycle_00/
-# via stb-neb --mode 4 (no MACE, fast) against the same fixture as ../prep/,
+# via stb-neb --mode 3 (no MACE, fast) against the same fixture as ../prep/,
 # then fabricates synthetic .FA/calc.out results (a smooth, physically-
 # motivated harmonic "pull toward a fixed per-image target" force field --
 # NOT random noise, which was found live during development to trigger a
@@ -117,9 +117,9 @@ for label in labels:
 PYEOF
 
 
-# --- 2. Build cycle_00 via stb-neb --mode 4, fabricate results, take one step ---
+# --- 2. Build cycle_00 via stb-neb --mode 3, fabricate results, take one step ---
 echo -e "\n--- Testing a single real-DFT NEB step ---"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run1 --no-intro > log_prep1.txt 2>&1
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 3 -O run1 --no-intro > log_prep1.txt 2>&1
 check_exit_code $? 0
 python3 fabricate.py run1/neb_run 00
 stb-nebCycle --dir run1/neb_run --fmax 0.001 --no-intro > log_step1.txt 2>&1
@@ -186,7 +186,7 @@ cat log_acceleration_check.txt
 check_exit_code $? 0
 
 echo "Testing: WITHOUT a restart file, the same starting point gives the SAME first-step displacement"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run2 --no-intro > log_prep2.txt 2>&1
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 3 -O run2 --no-intro > log_prep2.txt 2>&1
 python3 fabricate.py run2/neb_run 00
 stb-nebCycle --dir run2/neb_run --fmax 0.001 --no-intro > log_run2_step1.txt 2>&1
 python3 -c "
@@ -210,7 +210,7 @@ mkdir -p degen
 cp initial.fdf calc.fdf degen/
 (
     cd degen
-    stb-neb -i ../initial.fdf -f ../initial.fdf -c calc.fdf -n 4 --mode 4 \
+    stb-neb -i ../initial.fdf -f ../initial.fdf -c calc.fdf -n 4 --mode 3 \
         --no-intro > log_degen_prep.txt 2>&1
 )
 check_exit_code $? 0
@@ -254,7 +254,7 @@ fi
 
 # --- 5. Convergence: a loose --fmax makes the very first check succeed trivially ---
 echo -e "\n--- Testing convergence (loose --fmax) and the NEB_CONVERGED sentinel ---"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run3 --no-intro > log_prep3.txt 2>&1
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 3 -O run3 --no-intro > log_prep3.txt 2>&1
 python3 fabricate.py run3/neb_run 00
 stb-nebCycle --dir run3/neb_run --fmax 10.0 --no-intro > log_converged.txt 2>&1
 check_exit_code $? 0
@@ -276,7 +276,7 @@ check_contains "already exists from a previous call" log_converged_again.txt
 
 # --- 6. --climb-after ---
 echo -e "\n--- Testing --climb-after ---"
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O run4 --no-intro > log_prep4.txt 2>&1
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 3 -O run4 --no-intro > log_prep4.txt 2>&1
 python3 fabricate.py run4/neb_run 00
 stb-nebCycle --dir run4/neb_run --fmax 0.001 --climb-after 5 --no-intro > log_climb_off.txt 2>&1
 check_contains "Climbing image  : OFF (cycle 0 < --climb-after 5)" log_climb_off.txt
@@ -301,7 +301,7 @@ check_contains "not found" log_no_dir.txt
 
 echo "Testing: a cycle with an image missing calc.out/.FA"
 mkdir -p incomplete
-stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 4 -O incomplete --no-intro > log_prep_incomplete.txt 2>&1
+stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 4 --mode 3 -O incomplete --no-intro > log_prep_incomplete.txt 2>&1
 stb-nebCycle --dir incomplete/neb_run --no-intro > log_incomplete.txt 2>&1
 check_exit_code $? 1
 check_contains "has SIESTA finished here yet" log_incomplete.txt

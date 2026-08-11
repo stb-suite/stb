@@ -1018,9 +1018,9 @@ def run_neb_setup() -> None:
     print(color_text(
         "Interpolates a reaction-path band between two already-relaxed endpoint structures you "
         "provide (verified to share the same lattice and composition), then builds the path in "
-        "one of 4 modes (MACE-only, MACE + 1 single-point SIESTA, MACE + real-DFT refinement "
-        "cycles, or 100% real-DFT) -- run SIESTA as directed, then use Stage 2 (Analysis) for "
-        "the energy profile.", 'cyan'))
+        "one of 3 modes (MACE + 1 single-point SIESTA, MACE + real-DFT refinement cycles, or "
+        "100% real-DFT) -- run SIESTA as directed, then use Stage 2 (Analysis) for the energy "
+        "profile.", 'cyan'))
     print()
 
     initial_file = get_input(
@@ -1064,20 +1064,22 @@ def run_neb_setup() -> None:
     idpp = idpp_choice != 'n'
 
     print(f"\n{color_text('Mode:', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = 100% MACE-MP-0 -> a JSON result, no SIESTA at all")
-    print(f"  {color_text('2', 'cyan')} = 100% MACE-MP-0, then 1 single-point SIESTA per image")
-    print(f"  {color_text('3', 'cyan')} = MACE-MP-0 + a few real-DFT refinement cycles "
+    print(f"  {color_text('1', 'cyan')} = 100% MACE-MP-0, then 1 single-point SIESTA per image")
+    print(f"  {color_text('2', 'cyan')} = MACE-MP-0 + a few real-DFT refinement cycles "
           "(stb-nebCycle, run yourself in a cluster loop) [default]")
-    print(f"  {color_text('4', 'cyan')} = 100% real-DFT NEB from a plain interpolated path, no MACE")
-    mode_choice = get_input("Select option (1-4) [default: 3]: ").strip()
-    mode = int(mode_choice) if mode_choice in ('1', '2', '3', '4') else 3
+    print(f"  {color_text('3', 'cyan')} = 100% real-DFT NEB from a plain interpolated path, no MACE")
+    print(color_text(
+        "  (a pure MACE-MP-0 path with no SIESTA at all now lives exclusively in stb-mlneb, "
+        "ML Simulations menu)", 'cyan'))
+    mode_choice = get_input("Select option (1-3) [default: 2]: ").strip()
+    mode = int(mode_choice) if mode_choice in ('1', '2', '3') else 2
 
     ml_k = 0.1
     ml_max_steps = 200
     ml_fmax = 0.05
     ml_freeze_substrate = True
     ml_freeze_threshold = 0.3
-    if mode in (1, 2, 3):
+    if mode in (1, 2):
         ml_k = get_float_input("  NEB spring constant, eV/Ang^2 [default: 0.1]: ", 0.1)
         ml_max_steps = get_int_input("  Max optimizer steps [default: 200]: ", 200)
         ml_fmax = get_float_input(
@@ -1096,8 +1098,8 @@ def run_neb_setup() -> None:
     ml_prerelax_endpoints = ml_prerelax_choice in ('y', 'yes')
 
     max_cycles, siesta_exe, mpirun_np, conda_env, cycle_fmax = 30, "siesta", None, "", 0.05
-    if mode in (3, 4):
-        print(f"\n{color_text('Cluster submission snippet settings (--mode 3/4 only):', 'yellow')}")
+    if mode in (2, 3):
+        print(f"\n{color_text('Cluster submission snippet settings (--mode 2/3 only):', 'yellow')}")
         max_cycles = get_int_input(
             "  Max stb-nebCycle refinement cycles [default: 30]: ", 30)
         siesta_exe = get_input(
@@ -1113,7 +1115,7 @@ def run_neb_setup() -> None:
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
     autosort_tol, output_dir, ml_device = 0.5, ".", "cpu"
-    uses_mace = mode in (1, 2, 3) or ml_prerelax_endpoints
+    uses_mace = mode in (1, 2) or ml_prerelax_endpoints
     advanced_items = "atom-correspondence tolerance, output directory"
     if uses_mace:
         advanced_items += ", ML device"
@@ -1154,7 +1156,7 @@ def run_neb_setup() -> None:
         args.extend(["-p", pp_path])
     if idpp:
         args.append("--idpp")
-    if mode in (1, 2, 3):
+    if mode in (1, 2):
         args.extend(["--ml-k", str(ml_k), "--ml-max-steps", str(ml_max_steps),
                      "--ml-fmax", str(ml_fmax)])
         if ml_freeze_substrate:
@@ -1165,7 +1167,7 @@ def run_neb_setup() -> None:
         args.append("--ml-prerelax-endpoints")
     if uses_mace:
         args.extend(["--ml-device", ml_device])
-    if mode in (3, 4):
+    if mode in (2, 3):
         args.extend(["--max-cycles", str(max_cycles), "--siesta-exe", siesta_exe,
                      "--cycle-fmax", str(cycle_fmax)])
         if mpirun_np:
@@ -1174,10 +1176,9 @@ def run_neb_setup() -> None:
             args.extend(["--conda-env", conda_env])
 
     mode_labels = {
-        1: "1 - 100% MACE-MP-0 (JSON, no SIESTA)",
-        2: "2 - MACE-MP-0 + 1 single-point SIESTA per image",
-        3: "3 - MACE-MP-0 + real-DFT refinement cycles (default)",
-        4: "4 - 100% real-DFT NEB, no MACE",
+        1: "1 - MACE-MP-0 + 1 single-point SIESTA per image",
+        2: "2 - MACE-MP-0 + real-DFT refinement cycles (default)",
+        3: "3 - 100% real-DFT NEB, no MACE",
     }
     summary_rows = [
         ("Initial structure", initial_file),
@@ -1191,13 +1192,13 @@ def run_neb_setup() -> None:
         ("IDPP refinement", "ON" if idpp else "OFF"),
         ("Mode", mode_labels[mode]),
         ("MACE k / max steps / fmax",
-         f"{ml_k} / {ml_max_steps} / {ml_fmax} eV/Ang" if mode in (1, 2, 3) else "n/a"),
+         f"{ml_k} / {ml_max_steps} / {ml_fmax} eV/Ang" if mode in (1, 2) else "n/a"),
         ("MACE freeze substrate", (f"ON (threshold {ml_freeze_threshold} Ang)" if ml_freeze_substrate else "OFF")
-                                    if mode in (1, 2, 3) else "n/a"),
+                                    if mode in (1, 2) else "n/a"),
         ("ML pre-relax endpoints", "ON" if ml_prerelax_endpoints else "OFF"),
         ("Output directory", output_dir),
     ]
-    if mode in (3, 4):
+    if mode in (2, 3):
         summary_rows.extend([
             ("Cluster: max cycles", max_cycles),
             ("Cluster: SIESTA exe", siesta_exe),
@@ -1250,6 +1251,9 @@ def run_neb_analysis() -> None:
     view_path = get_input(
         "Open every image's structure in ASE's interactive 3D viewer, to step through the "
         "reaction path? Needs a display (y/N): ").strip().lower() == 'y'
+    save_path_xyz = get_input(
+        "Also write the currently-analyzed band as a multi-frame XYZ trajectory "
+        "('<dir>/neb_path_current.xyz')? (y/N): ").strip().lower() == 'y'
 
     if save_gnuplot:
         args.append("--save-gnuplot")
@@ -1257,6 +1261,8 @@ def run_neb_analysis() -> None:
         args.append("--view")
     if view_path:
         args.append("--view-path")
+    if save_path_xyz:
+        args.append("--save-path-xyz")
 
     run_tool("stb-nebAnalysis", args)
 

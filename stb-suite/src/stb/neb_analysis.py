@@ -18,18 +18,16 @@ from collections import Counter
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-from pymatgen.core import Structure, Lattice
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import siesta_log
 from stb.core import structure_io
 from stb.core.siesta_log import check_scf_and_force
 from stb.core.cli import color_text, show_intro, print_dual, print_section, capture_library_noise
 from stb.core.ase_view import view_structure_interactive
-from stb.neb import MODE_DESCRIPTIONS
+from stb.neb import MODE_DESCRIPTIONS, write_path_trajectory
 
 REPORT_FILE = "neb_report.txt"
 SETUP_REPORT_FILE = "neb_setup.txt"
-MACE_RESULT_FILE = "neb_mace_result.json"
 _CYCLE_DIR_RE = re.compile(r"^cycle_(\d+)$")
 _TOTAL_PATH_LENGTH_RE = re.compile(r"Total path length\s*:\s*([0-9.]+)\s*Ang")
 
@@ -82,7 +80,7 @@ def read_image_table(root_dir):
 
 def read_mode(root_dir):
     """Reads '# MODE: N' from SETUP_REPORT_FILE (stb-neb v2's mode marker,
-    see neb.py's own writer). Returns 2 (the original, pre-mode single-
+    see neb.py's own writer). Returns 1 (the original, pre-mode single-
     point behavior) if no marker is found -- either an old neb_setup.txt
     from before this workflow gained modes, or no report at all.
     """
@@ -95,12 +93,12 @@ def read_mode(root_dir):
                         return int(line.split(":", 1)[1].strip())
                     except ValueError:
                         break
-    return 2
+    return 1
 
 
 def find_analysis_cycle(root_dir, out_filename):
-    """For modes 3/4: returns (cycle_dir, converged). (None, False) if no
-    'cycle_NN' exists yet (stb-neb --mode 3/4 hasn't been run, or SIESTA
+    """For modes 2/3: returns (cycle_dir, converged). (None, False) if no
+    'cycle_NN' exists yet (stb-neb --mode 2/3 hasn't been run, or SIESTA
     hasn't finished cycle_00 yet).
 
     Once NEB_CONVERGED exists, stb-nebCycle has stopped writing new
@@ -145,27 +143,6 @@ def find_analysis_cycle(root_dir, out_filename):
         # with its normal wording.
     _cycle_num, cycle_dir = find_latest_cycle(root_dir)
     return cycle_dir, converged
-
-
-def read_mode1_json(json_path):
-    """Reads stb-neb --mode 1's neb_mace_result.json into the exact same
-    ImageRow shape the rest of this module's barrier-fitting/plotting
-    code already works with (fit_energy_spline/write_curve_plot don't
-    care whether the data came from a SIESTA calc.out or straight from
-    MACE) -- scf_ok=True/max_force=None throughout, since neither concept
-    applies to an ML result. Returns None if the file is missing/unreadable.
-    """
-    import json
-    try:
-        with open(json_path) as f:
-            payload = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
-    rows = [
-        ImageRow(img["label"], img["index"], img["reaction_coord"], img["energy_eV"], True, None)
-        for img in payload["images"]
-    ]
-    return payload, rows
 
 
 class ImageRow:
@@ -249,7 +226,7 @@ def find_spline_barrier(energy_spline):
 
 
 def read_band_structures(images_root, image_rows_sorted):
-    """Reads every image's structure.fdf (modes 2/3/4) into pymatgen
+    """Reads every image's structure.fdf (modes 1/2/3) into pymatgen
     Structures, in band order, via structure_io.read_fdf/to_pymatgen --
     the same primitives neb.py itself uses to write these same folders.
     Returns a list of (label, Structure_or_None) -- None for any image
@@ -268,25 +245,9 @@ def read_band_structures(images_root, image_rows_sorted):
     return result
 
 
-def band_structures_from_mode1(payload):
-    """Same (label, Structure) shape as read_band_structures, built
-    directly from neb_mace_result.json's own embedded symbols/positions/
-    cell per image -- no structure.fdf exists in mode 1.
-    """
-    result = []
-    for img in sorted(payload["images"], key=lambda i: i["index"]):
-        try:
-            lattice = Lattice(img["cell"])
-            structure = Structure(lattice, img["symbols"], img["positions"], coords_are_cartesian=True)
-        except (KeyError, ValueError):
-            structure = None
-        result.append((img["label"], structure))
-    return result
-
-
 def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_coord,
                               barrier_fit, setup_report_path, images_root, table_found,
-                              is_refined_cycle, mode1=False):
+                              is_refined_cycle):
     """Prints '[2] CONSISTENCY CHECKS': re-validates the band as it
     actually exists on disk right now (not just what stb-neb reported at
     prep time), each check ending with an explicit [OK]/[WARNING] line --
@@ -295,28 +256,24 @@ def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_co
     print_section('[2] CONSISTENCY CHECKS', f_out)
 
     # (a) declared vs. found image count
-    if mode1:
-        print_dual("  [NOTE] Mode 1: no separate image_NN/ folders to cross-check -- the JSON "
-                    "is the sole data source.", f_out)
+    found_dirs = sorted(d for d in os.listdir(images_root)
+                         if os.path.isdir(os.path.join(images_root, d)) and d.startswith("image_"))
+    declared_labels = {label for label, _i, _c in image_rows}
+    found_labels = set(found_dirs)
+    if declared_labels == found_labels:
+        print_dual(f"  [OK] Image count: {len(found_labels)} folder(s) on disk, matching "
+                    f"{'the declared image table' if table_found else 'the glob fallback'}.", f_out)
     else:
-        found_dirs = sorted(d for d in os.listdir(images_root)
-                             if os.path.isdir(os.path.join(images_root, d)) and d.startswith("image_"))
-        declared_labels = {label for label, _i, _c in image_rows}
-        found_labels = set(found_dirs)
-        if declared_labels == found_labels:
-            print_dual(f"  [OK] Image count: {len(found_labels)} folder(s) on disk, matching "
-                        f"{'the declared image table' if table_found else 'the glob fallback'}.", f_out)
-        else:
-            missing = declared_labels - found_labels
-            extra = found_labels - declared_labels
-            detail = []
-            if missing:
-                detail.append(f"missing: {', '.join(sorted(missing))}")
-            if extra:
-                detail.append(f"unexpected extra: {', '.join(sorted(extra))}")
-            print_dual(color_text(
-                f"  [WARNING] Declared/found image folders disagree ({'; '.join(detail)}).",
-                'yellow'), f_out)
+        missing = declared_labels - found_labels
+        extra = found_labels - declared_labels
+        detail = []
+        if missing:
+            detail.append(f"missing: {', '.join(sorted(missing))}")
+        if extra:
+            detail.append(f"unexpected extra: {', '.join(sorted(extra))}")
+        print_dual(color_text(
+            f"  [WARNING] Declared/found image folders disagree ({'; '.join(detail)}).",
+            'yellow'), f_out)
 
     # (b) reaction-coordinate ordering
     if use_reaction_coord:
@@ -434,15 +391,25 @@ def write_curve_plot(dat_path, rows, use_reaction_coord, smooth):
     duplicate-x guard fit_energy_spline itself uses holds, so this never
     hits gnuplot's own failure modes for smooth on non-monotonic/
     duplicate x.
+
+    Energies are plotted RELATIVE to the first (lowest-index) point --
+    E - E(first point) -- not the raw absolute SIESTA total energy, purely
+    for readability (an absolute LCAO total energy is a large negative
+    number with all the interesting structure squeezed into its last few
+    digits). The report's own [1] IMAGE ENERGIES table still prints the
+    real, absolute per-image energy -- only this plot is shifted.
     """
     rows_sorted = sorted(rows, key=lambda r: r.index)
+    e0 = rows_sorted[0].energy
     xlabel_col = "ReactionCoord(Ang)" if use_reaction_coord else "ImageIndex"
     with open(dat_path, 'w') as f:
         f.write("# NEB energy profile\n")
-        f.write(f"# 1:{xlabel_col} 2:E(eV) 3:Label\n")
+        f.write(f"# Energy relative to the first point ({rows_sorted[0].label}, "
+                f"E = {e0:.6f} eV)\n")
+        f.write(f"# 1:{xlabel_col} 2:E-E0(eV) 3:Label\n")
         for r in rows_sorted:
             x = r.reaction_coord if use_reaction_coord else r.index
-            f.write(f"{x:.6f}  {r.energy:.6f}  {r.label}\n")
+            f.write(f"{x:.6f}  {r.energy - e0:.6f}  {r.label}\n")
 
     base = os.path.splitext(dat_path)[0]
     base_name = os.path.basename(base)
@@ -470,7 +437,7 @@ def write_curve_plot(dat_path, rows, use_reaction_coord, smooth):
             f'set output "{base_name}.pdf"\n\n',
             'set title "NEB energy profile"\n',
             f'set xlabel "{xlabel}"\n',
-            'set ylabel "E (eV)"\n',
+            'set ylabel "E - E(first point) (eV)"\n',
             'set grid\n',
             'set key top right\n',
         ] + plot_lines)
@@ -483,12 +450,19 @@ def build_energy_profile_figure(rows, use_reaction_coord, energy_spline, barrier
     available -- a denser cubic-spline curve (the SAME spline already fit
     for the barrier estimate, reused here rather than refit) with the
     fitted transition-state point marked. Returns the Figure; the caller
-    decides save/close/show timing (see main()/run_mode1_analysis()'s
-    [4] ENERGY PROFILE PLOT section).
+    decides save/close/show timing (see main()'s [4] ENERGY PROFILE PLOT
+    section).
+
+    Energies are plotted RELATIVE to the first (lowest-index) point --
+    E - E(first point) -- not the raw absolute SIESTA total energy, purely
+    for readability (same reasoning/convention as write_curve_plot's own
+    gnuplot .dat; the report's own [1] IMAGE ENERGIES table still prints
+    the real, absolute per-image energy).
     """
     rows_sorted = sorted(rows, key=lambda r: r.index)
     xs = [r.reaction_coord if use_reaction_coord else r.index for r in rows_sorted]
-    ys = [r.energy for r in rows_sorted]
+    e0 = rows_sorted[0].energy
+    ys = [r.energy - e0 for r in rows_sorted]
 
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.plot(xs, ys, '-', color='#b0b0b0', linewidth=1, zorder=1)
@@ -497,16 +471,16 @@ def build_energy_profile_figure(rows, use_reaction_coord, energy_spline, barrier
     if energy_spline is not None:
         x, y0, spline = energy_spline
         x_dense = np.linspace(x[0], x[-1], 400)
-        ax.plot(x_dense, spline(x_dense), '-', color='#cc5522', linewidth=2,
+        ax.plot(x_dense, spline(x_dense) - e0, '-', color='#cc5522', linewidth=2,
                 label='Cubic spline (interpolated)', zorder=1.5)
         if barrier_fit is not None:
             ts_coord, spline_barrier, _dE = barrier_fit
-            ts_energy = y0[0] + spline_barrier
+            ts_energy = y0[0] + spline_barrier - e0
             ax.plot([ts_coord], [ts_energy], '*', color='#22aa44', markersize=16,
                     label=f'TS (fitted): {spline_barrier:.4f} eV', zorder=3)
 
     ax.set_xlabel("Reaction coordinate (Ang)" if use_reaction_coord else "Image index")
-    ax.set_ylabel("E (eV)")
+    ax.set_ylabel("E - E(first point) (eV)")
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
     ax.legend()
@@ -530,7 +504,7 @@ def view_band_path(band_structures):
 
 
 def collect_cycle_barrier_history(root_dir, out_filename):
-    """For modes 3/4: forward barrier (highest-energy image minus the
+    """For modes 2/3: forward barrier (highest-energy image minus the
     first image) per COMPLETE cycle_NN found under root_dir -- 'complete'
     meaning every image_* in that cycle already has a readable energy.
     Incomplete cycles (SIESTA still queued/running, or a stale partial
@@ -565,7 +539,7 @@ def collect_cycle_barrier_history(root_dir, out_filename):
 
 def write_cycle_convergence_plot(history, out_path):
     """Forward barrier vs. cycle number -- shows the real-DFT refinement
-    (modes 3/4) actually settling down (or not) as stb-nebCycle iterates.
+    (modes 2/3) actually settling down (or not) as stb-nebCycle iterates.
     """
     cycles = [c for c, _b in history]
     barriers = [b for _c, b in history]
@@ -597,146 +571,6 @@ def _print_library_warnings_section(f_out, library_warnings, section_label):
         print_dual("  No library warnings.", f_out)
 
 
-def run_mode1_analysis(args):
-    """Mode 1's entire analysis path: reads neb_mace_result.json directly
-    (no calc.out anywhere -- SCF/residual-force diagnostics don't apply to
-    a pure-MACE result) and reports the exact barrier/reaction-energy
-    numbers the JSON's own writer (stb-neb --mode 1) already computed,
-    plus an independent spline-fitted refinement (fit_energy_spline/
-    find_spline_barrier, the same smoothing modes 2/3/4 use) as a cross-
-    check on the same data. Mirrors main()'s report structure/section
-    numbering so downstream tooling and the reader's mental model don't
-    need to know which mode produced a study.
-    """
-    run_start = time.monotonic()
-    library_warnings = []
-
-    json_path = os.path.join(args.dir, MACE_RESULT_FILE)
-    result = read_mode1_json(json_path)
-    if result is None:
-        print(color_text(f"[ERROR] Could not read '{json_path}'. Did you run stb-neb --mode 1?",
-                          'red'))
-        sys.exit(1)
-    payload, rows = result
-    band_structures = band_structures_from_mode1(payload)
-
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
-    f_out = open(report_path, "w") if report_path else None
-
-    print_dual(color_text("===== NEB ENERGY PROFILE REPORT (MODE 1, MACE-MP-0) =====", 'magenta'),
-                f_out)
-
-    print_section('[0] RUN METADATA', f_out)
-    print_dual(f"Started    : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
-    print_dual(f"Directory  : {args.dir}", f_out)
-    print_dual(f"Source     : {json_path}", f_out)
-    print_dual(f"Mode       : 1 ({MODE_DESCRIPTIONS[1]})", f_out)
-    if band_structures and band_structures[0][1] is not None:
-        counts = Counter(str(s.specie) for s in band_structures[0][1])
-        formula = " ".join(f"{sym}{n}" for sym, n in sorted(counts.items()))
-        print_dual(f"Composition: {formula} ({sum(counts.values())} atoms)", f_out)
-    print_dual(color_text(
-        "[NOTE] Mode 1 never touches SIESTA -- every number below is from the MACE-MP-0 "
-        "potential (already reported once by stb-neb itself). This stage exists so the same "
-        "stb-nebAnalysis interface/output files (--apply, --view, ...) work regardless of which "
-        "mode produced the path.", 'yellow'), f_out)
-
-    print_section('[1] IMAGE ENERGIES', f_out)
-    header = f"{'Image':<14}{'Index':<7}{'ReactionCoord':<16}{'E(eV)':<16}"
-    print_dual(header, f_out)
-    print_dual("-" * len(header), f_out)
-    for r in sorted(rows, key=lambda r: r.index):
-        print_dual(f"{r.label:<14}{r.index:<7}{r.reaction_coord:<16.4f}{r.energy:<16.6f}", f_out)
-    print_dual("-" * len(header), f_out)
-
-    image_rows = [(r.label, r.index, r.reaction_coord) for r in rows]
-    setup_report_path = os.path.join(args.dir, SETUP_REPORT_FILE)
-    with capture_library_noise(library_warnings, "scipy cubic spline fit"):
-        energy_spline = fit_energy_spline(rows)
-        barrier_fit = find_spline_barrier(energy_spline)
-
-    print_consistency_checks(f_out, image_rows, band_structures, use_reaction_coord=True,
-                              barrier_fit=barrier_fit, setup_report_path=setup_report_path,
-                              images_root=args.dir, table_found=True, is_refined_cycle=False,
-                              mode1=True)
-
-    print_section('[3] BARRIER ANALYSIS', f_out)
-    print_dual(f"MACE-MP-0 barrier (forward)     : {payload['barrier_forward_eV']:.6f} eV", f_out)
-    print_dual(f"MACE-MP-0 barrier (backward)    : {payload['barrier_backward_eV']:.6f} eV", f_out)
-    rxn_verdict = "exothermic (favorable)" if payload['reaction_energy_eV'] < 0 else "endothermic (unfavorable)"
-    print_dual(f"Reaction energy (final-initial) : {payload['reaction_energy_eV']:.6f} eV, "
-                f"{rxn_verdict}", f_out)
-    print_dual(f"MACE-MP-0 NEB converged         : "
-                f"{'yes' if payload['converged'] else 'no (hit step cap)'}", f_out)
-    if barrier_fit:
-        ts_coord, spline_barrier, _spline_dE = barrier_fit
-        print_dual(f"Spline-fitted barrier (smoothed) : {spline_barrier:.6f} eV at reaction "
-                    f"coordinate {ts_coord:.4f} Ang (cubic spline through the {len(rows)} "
-                    "energies, cross-check on the fitted-in-MACE value above)", f_out)
-    else:
-        print_dual("[NOTE] Not enough images (need >= 4) for a spline-fitted barrier estimate.",
-                    f_out)
-    print_dual(color_text(
-        "[NOTE] An ML-level barrier from a fast surrogate potential, not a DFT result -- use "
-        "--mode 2/3/4 for a SIESTA-grounded number.", 'yellow'), f_out)
-
-    print_section('[4] ENERGY PROFILE PLOT', f_out)
-    png_path = os.path.join(args.dir, "neb_energy_profile.png")
-    with capture_library_noise(library_warnings, "matplotlib energy-profile plot"):
-        fig = build_energy_profile_figure(
-            rows, use_reaction_coord=True, energy_spline=energy_spline, barrier_fit=barrier_fit,
-            title="NEB energy profile (MODE 1, MACE-MP-0)")
-        fig.savefig(png_path, dpi=150)
-    print_dual(f"{color_text('[Saved]', 'cyan')} {png_path}", f_out)
-    if args.save_gnuplot:
-        plot_dir = os.path.join(args.dir, "plot")
-        os.makedirs(plot_dir, exist_ok=True)
-        dat_path = os.path.join(plot_dir, os.path.basename(args.output))
-        gplot_path = write_curve_plot(dat_path, rows, use_reaction_coord=True,
-                                       smooth=energy_spline is not None)
-        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
-                    f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
-    else:
-        print_dual("Gnuplot data+script : not written (off by default -- pass --save-gnuplot to "
-                    "write it under a 'plot/' subfolder).", f_out)
-    if not args.view:
-        plt.close(fig)
-
-    elapsed = time.monotonic() - run_start
-    print_section('[5] SUMMARY', f_out)
-    print_dual(f"Images analyzed : {len(rows)}", f_out)
-    print_dual(f"Total elapsed   : {elapsed:.1f}s", f_out)
-    if report_path:
-        print_dual(f"{color_text('[Saved]', 'cyan')} Report -> {report_path}", f_out)
-
-    if args.apply:
-        print_section('[6] APPLY', f_out)
-        print_dual(color_text(
-            "[NOTE] Mode 1 has no per-image structure.fdf (JSON only, no SIESTA folders were "
-            "ever written) -- --apply isn't available for this mode. Use --mode 2/3/4 if you "
-            "need a production structure.fdf out of this workflow.", 'yellow'), f_out)
-
-    _print_library_warnings_section(f_out, library_warnings, '[7] LIBRARY WARNINGS')
-
-    if f_out:
-        f_out.close()
-
-    print(f"\n{color_text('Success:', 'green')} mode 1 analysis complete "
-          f"({len(rows)} image(s), forward barrier {payload['barrier_forward_eV']:.4f} eV).")
-    if report_path:
-        print(f"Full report: {report_path}")
-
-    if args.view:
-        plt.show()
-    if args.view_path:
-        print(f"\n{color_text('--view-path:', 'cyan')} opening {len(band_structures)} frame(s) "
-              "in ASE's interactive viewer (use the frame slider to step through the reaction "
-              "path):")
-        for i, (label, _s) in enumerate(band_structures):
-            print(f"  {i} = {label}")
-        view_band_path(band_structures)
-
-
 def _default_analysis_dir():
     """Smart default for --dir: prefers 'neb_run' (Stage 1's own
     self-contained run folder), but falls back to '.' when the CURRENT
@@ -744,7 +578,7 @@ def _default_analysis_dir():
     neb_setup.txt) -- otherwise defaulting to 'neb_run' would try to
     descend into a non-existent 'neb_run/neb_run' and fail with a
     misleading "no image folders found". This exact situation happens
-    live: stb-neb's own printed cluster-submission snippet (--mode 3/4)
+    live: stb-neb's own printed cluster-submission snippet (--mode 2/3)
     does `cd "$run_root"` (i.e. into neb_run/) for its SIESTA loop, so a
     user who runs stb-nebAnalysis right after that loop finishes,
     without cd'ing back out first, is standing INSIDE neb_run/ already.
@@ -766,6 +600,7 @@ def main():
                "  %(prog)s --apply ts_guess.fdf\n"
                "  %(prog)s --save-gnuplot --view\n"
                "  %(prog)s --view-path\n"
+               "  %(prog)s --save-path-xyz\n"
     )
 
     parser.add_argument("--dir", type=str, default=_default_analysis_dir(),
@@ -803,6 +638,14 @@ def main():
                               "everything else has finished. Needs a display. Independent of "
                               "--view (which shows the energy-vs-reaction-coordinate plot, not "
                               "structures).")
+    parser.add_argument("--save-path-xyz", dest="save_path_xyz", action="store_true",
+                         help="Write the currently-analyzed band (the same images used for "
+                              "[1] IMAGE ENERGIES above -- the latest complete cycle for "
+                              "--mode 2/3, converged or not) as a single multi-frame XYZ "
+                              "trajectory, '<dir>/neb_path_current.xyz'. Off by default. "
+                              "Distinct from stb-neb's own 'neb_path.xyz', which is written "
+                              "once at prep time from the pre-refinement path and never "
+                              "updated afterwards.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-nebAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -826,19 +669,16 @@ def main():
         sys.exit(1)
 
     mode = read_mode(args.dir)
-    if mode == 1:
-        run_mode1_analysis(args)
-        return
 
     images_root = args.dir
     cycle_note = None
     is_refined_cycle = False
-    if mode in (3, 4):
+    if mode in (2, 3):
         cycle_dir, cycle_converged = find_analysis_cycle(args.dir, args.file)
         if cycle_dir is None:
             print(color_text(
                 f"[ERROR] No 'cycle_NN' folder found in '{args.dir}'. Did you run stb-neb "
-                "--mode 3/4 and at least one stb-nebCycle round?", 'red'))
+                "--mode 2/3 and at least one stb-nebCycle round?", 'red'))
             sys.exit(1)
         images_root = cycle_dir
         is_refined_cycle = os.path.basename(cycle_dir) != "cycle_00"
@@ -950,7 +790,7 @@ def main():
     setup_report_path = os.path.join(args.dir, SETUP_REPORT_FILE)
     print_consistency_checks(f_out, image_rows, band_structures, use_reaction_coord,
                               barrier_fit, setup_report_path, images_root, table_found,
-                              is_refined_cycle, mode1=False)
+                              is_refined_cycle)
 
     print_section('[3] BARRIER ANALYSIS', f_out)
     max_index = max(idx for _, idx, _ in image_rows)
@@ -984,7 +824,7 @@ def main():
     elif use_reaction_coord and len(rows) < 4:
         print_dual("[NOTE] Not enough images (need >= 4) for a spline-fitted barrier estimate.", f_out)
 
-    if mode in (3, 4):
+    if mode in (2, 3):
         caveat = ("This cycle has gone through real-DFT NEB refinement (stb-nebCycle) -- a "
                    "genuine coupled-spring optimization using SIESTA forces, not just "
                    "independent single points on a fixed guess -- but see the convergence "
@@ -997,11 +837,11 @@ def main():
         caveat = ("Approximate, interpolated-path estimate: no real reaction coordinate was "
                    "optimized between these DFT single points (no inter-image spring "
                    "coupling at the DFT level) -- the true saddle point may lie off this "
-                   "fixed path. Re-run stb-neb with --mode 2/3/4 for a physically relaxed band "
+                   "fixed path. Re-run stb-neb with --mode 1/2/3 for a physically relaxed band "
                    "shape before the DFT single points.")
     print_dual(color_text(f"[NOTE] {caveat}", 'yellow'), f_out)
 
-    if mode in (3, 4):
+    if mode in (2, 3):
         print_section('[3b] BARRIER VS. CYCLE (real-DFT refinement history)', f_out)
         cycle_history = collect_cycle_barrier_history(args.dir, args.file)
         if len(cycle_history) >= 2:
@@ -1053,6 +893,27 @@ def main():
             print_dual(color_text(f"[ERROR] Could not copy '{src}' to '{args.apply}': {e}", 'red'), f_out)
         else:
             print_dual(f"{color_text('[Applied]', 'green')} {max_row.label} -> {args.apply}", f_out)
+
+    if args.save_path_xyz:
+        print_section('[6b] PATH EXPORT', f_out)
+        valid_band = [(label, s) for label, s in band_structures if s is not None]
+        if len(valid_band) < 2:
+            print_dual(color_text(
+                "[WARNING] Fewer than 2 structures available (missing structure.fdf files) -- "
+                "not enough to write a path trajectory.", 'yellow'), f_out)
+        else:
+            if mode in (2, 3):
+                status = ("NEB_CONVERGED" if cycle_converged
+                           else f"NOT YET CONVERGED, latest complete cycle "
+                                f"({os.path.basename(images_root)})")
+            elif mode == 1:
+                status = "single-point on Stage 1's MACE-MP-0 path (no DFT-refinement cycles)"
+            else:
+                status = "unrefined interpolated path"
+            xyz_path = os.path.join(args.dir, "neb_path_current.xyz")
+            write_path_trajectory([s for _l, s in valid_band], xyz_path)
+            print_dual(f"{color_text('[Saved]', 'cyan')} {xyz_path} ({len(valid_band)} frame(s), "
+                        f"{status}).", f_out)
 
     _print_library_warnings_section(f_out, library_warnings, '[7] LIBRARY WARNINGS')
 

@@ -8,7 +8,7 @@
 
 """CLI-only tool (deliberately NOT wired into stb-suite's interactive menu):
 one call = one real-DFT NEB step, meant to be called from inside a cluster
-submission script's loop (see stb-neb --mode 3/--mode 4's own printed
+submission script's loop (see stb-neb --mode 2/--mode 3's own printed
 example), alternating with real SIESTA runs -- there is no live Python
 process to keep an optimizer running in memory between cycles, since each
 cycle's forces only exist once a real (queued, possibly hours-later) SIESTA
@@ -121,7 +121,7 @@ def main():
         "(finished SIESTA single-points), takes exactly one climbing-image NEB step (ASE's own "
         "FIRE optimizer, restart-persisted between calls), and either writes cycle_{N+1}/ or "
         "declares convergence. Meant to be called in a loop from a cluster submission script "
-        "-- see stb-neb --mode 3/--mode 4's own printed example. Not available in the "
+        "-- see stb-neb --mode 2/--mode 3's own printed example. Not available in the "
         "interactive stb-suite menu.", 'bold')}""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
@@ -142,7 +142,7 @@ def main():
                          help="Only enable the climbing-image correction once the CURRENT cycle "
                               "number is >= N (default: 0, climb from the start -- appropriate "
                               "once a MACE-shaped path already has a sensible shape, e.g. "
-                              "stb-neb --mode 3; a larger value is recommended for --mode 4, "
+                              "stb-neb --mode 2; a larger value is recommended for --mode 3, "
                               "which starts from a raw interpolated path).")
     parser.add_argument("--save-report", action="store_true",
                          help="Also persist this cycle's report to <dir>/neb_cycle_report.txt. "
@@ -180,7 +180,7 @@ def main():
     if cycle_dir is None:
         print_dual(color_text(
             f"[ERROR] No 'cycle_NN' folder found under '{args.dir}'. Did you run stb-neb "
-            "--mode 3 or --mode 4?", 'red'), f_out)
+            "--mode 2 or --mode 3?", 'red'), f_out)
         if f_out:
             f_out.close()
         sys.exit(1)

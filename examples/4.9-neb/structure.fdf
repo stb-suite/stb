@@ -1,0 +1,30 @@
+# Example fixture: graphene monolayer, primitive 2-atom hexagonal cell
+# (a = 2.46 Ang), free-standing (10 Ang vacuum on each side of the c-axis).
+# Same cell as examples/4.8-adsorption/structure.fdf. Not itself fed to
+# stb-neb (which needs two ALREADY-RELAXED endpoints, not a single bare
+# primitive cell) -- kept here only as the starting point Section 3 of the
+# README shows you how initial.fdf/final.fdf below were actually built
+# from (stb-supercell -d 3 3 1, then stb-adsorb --adsorbate H
+# --site-type ontop, H placed above two nearest-neighbor carbons).
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  2.4600000000   0.0000000000   0.0000000000
+ -1.2300000000   2.1304224390   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

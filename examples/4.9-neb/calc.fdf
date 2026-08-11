@@ -1,0 +1,30 @@
+# Shared calc.fdf template for this walkthrough. MD.TypeOfRun/MD.Steps
+# here represent whatever relaxation you'd have used to converge
+# initial.fdf/final.fdf in the first place (Section 2 of the README) --
+# stb-neb overrides them unconditionally to a single-point evaluation in
+# every image_NN/ it writes (config_extra.fdf, %include-d ahead of this
+# file), so their VALUE here never actually matters to stb-neb itself.
+# What DOES matter and is NOT overridden -- basis, k-grid, mesh cutoff,
+# XC functional -- is deliberately kept IDENTICAL to whatever a real
+# relaxation of initial.fdf/final.fdf would have used (Section 2.2).
+
+SystemLabel      siesta
+SystemName       siesta
+
+%include structure.fdf
+
+MD.TypeOfRun        CG
+MD.Steps             100
+
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+
+kgrid.MonkhorstPack   [1  1  1]
+Mesh.CutOff           200  Ry
+FilterCutoff          150  Ry
+
+XC.Functional       GGA
+XC.Authors          PBE
+
+Spin                non-polarized

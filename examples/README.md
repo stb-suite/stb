@@ -184,6 +184,7 @@ through.
 | 4.6  | `stb-xrdsearch` / `stb-xrdrank` | [`4.6-xrd/`](4.6-xrd/) |
 | 4.7  | `stb-hubbardu` / `stb-hubbarduAlphas` / `stb-hubbarduAnalysis` | [`4.7-hubbardu/`](4.7-hubbardu/) |
 | 4.8  | `stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` | [`4.8-adsorption/`](4.8-adsorption/) |
+| 4.9  | `stb-neb` / `stb-nebCycle` / `stb-nebAnalysis` | [`4.9-neb/`](4.9-neb/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -202,7 +203,11 @@ computed `U`), and `4.8-adsorption/` does the same for `stb-adsorb`
 (`4.8.1`, site prep), `stb-adsorbBsse` (`4.8.2`, BSSE counterpoise prep,
 generated only once Stage 1's sites have actually relaxed), and
 `stb-adsorbAnalysis` (`4.8.3`, the adsorption-energy ranking, with and
-without the BSSE correction).
+without the BSSE correction). `4.9-neb/` covers `stb-neb` (`4.9.1`, path
+interpolation/prep) and `stb-nebAnalysis` (`4.9.2`, the barrier estimate),
+plus `stb-nebCycle`, a CLI-only tool (deliberately not in the interactive
+menu, meant for a cluster submission script's loop) that sits between
+them for modes 2/3's real-DFT refinement cycles.
 
 ## Adding another example
 

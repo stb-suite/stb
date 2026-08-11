@@ -307,19 +307,23 @@ the same composition and the same lattice — within `1e-3` Å, `require_lattice
 `--force-spin`/`--force-vdw`/`--force-dipole` (all default ON, `--no-force-*` to
 opt out) control a `config_extra.fdf` written into every image folder, reusing the
 same block constants as `core/adsorption_sites.py`'s `write_reference_folder`. Then
-interpolates the band, `--mode 1-4`, default 3). Every generated file/folder
-(the `neb_setup.txt` report, `neb_path.xyz`, and the mode-specific output below)
-is written under a `neb_run/` subfolder of `--output-dir`, not `--output-dir`
-directly — matching `stb-adsorb`'s own `sites/`-nesting convention — so
-`stb-nebCycle`/`stb-nebAnalysis --dir` must point at `<output-dir>/neb_run`, not
-`<output-dir>` itself:
+interpolates the band, `--mode 1-3`, default 2). A pure MACE-MP-0 path with no
+SIESTA at all does not exist as a mode here — that capability lives exclusively in
+`stb-mlneb` (5-ML Simulations), which already existed as "the pure-MACE extraction
+of that same capability" (its own module docstring) before this workflow's own
+former `--mode 1` (JSON-only, no SIESTA) was removed as a straight duplicate of it;
+the numbering below was then closed up (old modes 2/3/4 → new 1/2/3) rather than
+leaving a permanent gap. Every generated file/folder (the `neb_setup.txt` report,
+`neb_path.xyz`, and the mode-specific output below) is written under a `neb_run/`
+subfolder of `--output-dir`, not `--output-dir` directly — matching `stb-adsorb`'s
+own `sites/`-nesting convention — so `stb-nebCycle`/`stb-nebAnalysis --dir` must
+point at `<output-dir>/neb_run`, not `<output-dir>` itself:
 
 | Mode | Path engine | Output (under `neb_run/`) | SIESTA's role |
 |---|---|---|---|
-| 1 | 100% MACE-MP-0 (climbing-image NEB) | `neb_mace_result.json` | none |
-| 2 | 100% MACE-MP-0, then one read | `image_NN/` (single-point) | one round, energy only |
-| 3 (default) | MACE-MP-0 + real-DFT refinement cycles | `cycle_00/image_NN/` + loop | several rounds, real forces |
-| 4 | 100% real-DFT NEB | `cycle_00/image_NN/` + loop | every round |
+| 1 | 100% MACE-MP-0, then one read | `image_NN/` (single-point) | one round, energy only |
+| 2 (default) | MACE-MP-0 + real-DFT refinement cycles | `cycle_00/image_NN/` + loop | several rounds, real forces |
+| 3 | 100% real-DFT NEB | `cycle_00/image_NN/` + loop | every round |
 
 `--mode` replaces the older `--ml-neb` boolean outright. If `--initial`/`--final`
 each carry a matching `neb_manifest.json` (no in-repo tool currently produces one,
@@ -331,9 +335,9 @@ match fails (common for a small/densely-relaxed cell).
 `check_endpoint_displacement()` warns (advisory only, never auto-enables anything)
 when a broad fraction of the structure moved between endpoints and `--idpp` wasn't
 used. → `stb-nebCycle` (CLI-only, not in the menu — see "CLI-only tools" above; one
-call = one real-DFT NEB step for modes 3/4, using the `SinglePointCalculator`
+call = one real-DFT NEB step for modes 2/3, using the `SinglePointCalculator`
 +`.step()` pattern) → `stb-nebAnalysis` (Stage 2, mode-aware router reading a `#
-MODE: N` marker in `neb_setup.txt`; for modes 3/4 always analyzes the
+MODE: N` marker in `neb_setup.txt`; for modes 2/3 always analyzes the
 highest-numbered `cycle_NN/`, plots barrier-vs-cycle once 2+ complete cycles exist).
 
 **4-Workflow item 17, MLFF** — `stb-mlff` (Stage 1: generates rattled/AIMD-sampled

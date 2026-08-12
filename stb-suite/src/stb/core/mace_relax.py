@@ -80,7 +80,7 @@ def resolve_device(device):
     return device
 
 
-def get_calculator(model="small", device="cpu", dtype="float64"):
+def get_calculator(model="small", device="cpu", dtype="float64", dispersion=False):
     """Loads a MACE potential as an ASE calculator: the MACE-MP-0 foundation
     model (`model` = "small"/"medium"/"large", downloaded/cached on first
     use) by default, or a custom model file (`model` = a path to a `.model`
@@ -103,13 +103,30 @@ def get_calculator(model="small", device="cpu", dtype="float64"):
     unambiguous that float32 is for MD, not geometry optimization) --
     callers doing MD (e.g. stb-amorphize's melt/quench stages) should pass
     dtype="float32" explicitly.
+
+    `dispersion=True` adds Grimme's D3(BJ) dispersion correction on top of
+    the loaded model, via `mace_mp`'s own built-in `dispersion` kwarg (which
+    wraps the model in an `ase.calculators.mixing.SumCalculator` together
+    with a `torch_dftd.TorchDFTD3Calculator` -- needs the optional
+    'torch-dftd' package, part of the 'ml' extra). This is for callers whose
+    real DFT calculation always forces DFTD3 (e.g. stb-adsorb's --ml-rank/
+    --ml-prerelax, stb-neb's --ml-prerelax-endpoints/path-shaping when
+    --force-vdw is on) -- without it, a MACE-only pre-screen/pre-relax
+    silently uses a different level of theory than the DFT it's meant to
+    approximate, which can flip site rankings or endpoint geometries for
+    vdW-sensitive systems (physisorption, weakly-bound adsorbates).
+    `mace_mp` accepts a local model file path in `model` the same as a
+    foundation-model name, so this routes both cases through it rather than
+    the raw `MACECalculator` class (which has no dispersion support).
     """
     device = resolve_device(device)
     import os
+    from mace.calculators import mace_mp
+    if dispersion:
+        return mace_mp(model=model, device=device, default_dtype=dtype, dispersion=True)
     if os.path.isfile(model):
         from mace.calculators import MACECalculator
         return MACECalculator(model_paths=[model], device=device, default_dtype=dtype)
-    from mace.calculators import mace_mp
     return mace_mp(model=model, device=device, default_dtype=dtype)
 
 

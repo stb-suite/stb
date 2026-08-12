@@ -755,13 +755,14 @@ def run_adsorb_setup() -> None:
 
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
-    symprec, vacuum_gap, vacuum_box, output_dir, ml_device = 0.01, 10.0, 20.0, "adsorption_run", "cpu"
+    symprec, vacuum_gap, vacuum_box, output_dir, ml_device, ml_steps, ml_model, ml_custom_model = \
+        0.01, 10.0, 20.0, "adsorption_run", "cpu", 200, "small", None
     uses_mace = ml_prerelax or ml_rank
     advanced_items = "symmetry tolerance, vacuum-gap, vacuum box, output directory"
     if show_orient:
         advanced_items += ", orientation RMSD tolerance"
     if uses_mace:
-        advanced_items += ", ML device"
+        advanced_items += ", ML model, ML device, ML max steps"
     show_advanced = get_input(f"Configure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         symprec = get_float_input("  Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
@@ -777,6 +778,18 @@ def run_adsorb_setup() -> None:
                 "  RMSD tolerance for merging near-duplicate orientations, Ang "
                 "[default: 0.3]: ", 0.3)
         if uses_mace:
+            print(f"  {color_text('MACE model:', 'yellow')} {color_text('1', 'cyan')}=small  "
+                  f"{color_text('2', 'cyan')}=medium  {color_text('3', 'cyan')}=large  "
+                  f"{color_text('4', 'cyan')}=custom (e.g. fine-tuned via stb-mlffAnalysis)")
+            model_choice = get_input("  Select (1-4) [default: 1]: ").strip()
+            model_map = {'1': 'small', '2': 'medium', '3': 'large'}
+            if model_choice == '4':
+                ml_custom_model = get_input("  Custom model path: ").strip()
+                while not os.path.isfile(ml_custom_model):
+                    print(color_text("  File not found!", 'red'))
+                    ml_custom_model = get_input("  Custom model path: ").strip()
+            else:
+                ml_model = model_map.get(model_choice, 'small')
             device_choice = get_input("  ML device [cpu/cuda, default: cpu]: ").strip().lower()
             ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
             if ml_device == "cuda":
@@ -788,6 +801,8 @@ def run_adsorb_setup() -> None:
                     print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
+            ml_steps = get_int_input(
+                "  Max MACE optimizer steps per relax [default: 200]: ", 200)
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     view_choice = get_input(
@@ -840,6 +855,12 @@ def run_adsorb_setup() -> None:
         args.append("--both-sides")
     if uses_mace:
         args.extend(["--ml-device", ml_device])
+        if ml_steps != 200:
+            args.extend(["--ml-steps", str(ml_steps)])
+        if ml_custom_model:
+            args.extend(["--ml-custom-model", ml_custom_model])
+        elif ml_model != "small":
+            args.extend(["--ml-model", ml_model])
 
     summary_rows = [
         ("Structure file", struct_file),
@@ -859,6 +880,9 @@ def run_adsorb_setup() -> None:
         ("Both faces", "yes" if both_sides else "no"),
         ("Height", f"sweep {height_sweep[0]}-{height_sweep[1]} step {height_sweep[2]} Ang"
                    if height_sweep is not None else f"{height} Ang"),
+        ("ML model", (f"custom ({ml_custom_model})" if ml_custom_model else f"MACE-MP-0 ({ml_model})")
+                     if uses_mace else "N/A"),
+        ("ML max steps", str(ml_steps) if uses_mace else "N/A"),
         ("Output directory", output_dir),
         ("Save report", "yes" if save_report else "no"),
         ("View interactively", "yes" if view_choice == 'y' else "no"),

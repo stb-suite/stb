@@ -301,9 +301,20 @@ def main():
                               "relaxed energy -- a fast pre-screen for which site(s) to prioritize "
                               "for real DFT, not a replacement for stb-adsorbAnalysis. Needs the "
                               "optional 'ml' extra. Only valid with --all-sites.")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
+                         help="MACE-MP-0 model size for --ml-prerelax/--ml-rank: speed/accuracy "
+                              "tradeoff (default: small). Ignored if --ml-custom-model is given.")
+    parser.add_argument("--ml-custom-model", default=None, metavar="PATH",
+                         help="Use a custom MACE model file for --ml-prerelax/--ml-rank instead of "
+                              "the MACE-MP-0 foundation potential -- e.g. one fine-tuned on your own "
+                              "SIESTA data via stb-mlffAnalysis. Overrides --ml-model.")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--ml-fmax", type=float, default=0.05)
+    parser.add_argument("--ml-steps", type=int, default=200,
+                         help="Max MACE-MP-0 optimizer steps per relax, for both --ml-prerelax "
+                              "and --ml-rank (default: 200). Raise it if a candidate is reported "
+                              "as not converged; lower it to speed up screening a large number of "
+                              "sites/orientations at the cost of less-relaxed rankings.")
     parser.add_argument("--top-k", type=int, default=None,
                          help="With --ml-rank: only write SIESTA folders for the N best-ranked "
                               "sites, instead of all of them. Counts SITES, not orientations -- "
@@ -380,6 +391,8 @@ def main():
 
     if not args.adsorbate:
         parser.error("--adsorbate is required (unless --list).")
+    if args.ml_custom_model and not os.path.isfile(args.ml_custom_model):
+        parser.error(f"--ml-custom-model file not found: {args.ml_custom_model}")
     if args.both_sides and args.site_type == "all":
         parser.error("--both-sides requires a concrete --site-type (not 'all').")
     if args.both_sides and args.position is not None:
@@ -410,6 +423,8 @@ def main():
             parser.error("--height-sweep STEP must be > 0.")
         if hmax <= hmin:
             parser.error("--height-sweep MAX must be greater than MIN.")
+
+    ml_model_arg = args.ml_custom_model if args.ml_custom_model else args.ml_model
 
     if not os.path.exists(args.structure):
         print(color_text(f"[ERROR] Structure file '{args.structure}' not found.", 'red'))
@@ -480,6 +495,11 @@ def main():
     print_dual(f"  ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}", f_out)
     print_dual(f"  ML rank         : {'yes' if args.ml_rank else 'no'}"
                 + (f" (top {args.top_k})" if args.ml_rank and args.top_k else ""), f_out)
+    if args.ml_prerelax or args.ml_rank:
+        print_dual(f"  ML model        : "
+                    + (f"custom ({args.ml_custom_model})" if args.ml_custom_model
+                       else f"MACE-MP-0 ({args.ml_model})")
+                    + " + D3(BJ) dispersion (matches the site folders' forced DFTD3)", f_out)
     print_dual(f"  Vacuum gap/box  : {args.vacuum_gap:.1f} / {args.vacuum_box:.1f} Ang", f_out)
     print_dual(f"  symprec         : {args.symprec}", f_out)
     print_dual(f"  Force spin      : "
@@ -524,13 +544,16 @@ def main():
                 require_mace()
                 from stb.core import mace_relax
                 ml_device, gpu_warning = resolve_ml_device(args.ml_device, mace_relax)
-                calc_mace_ads = mace_relax.get_calculator(model=args.ml_model, device=ml_device)
+                # dispersion=True: this tool always forces DFTD3 on the real SIESTA
+                # calc (force_vdw=True below), so the MACE pre-relax should match
+                # that level of theory rather than silently omitting vdW.
+                calc_mace_ads = mace_relax.get_calculator(model=ml_model_arg, device=ml_device, dispersion=True)
             if gpu_warning:
                 print_dual(color_text(f"  [WARNING] {gpu_warning}", 'yellow'), f_out)
             ads_atoms = AseAtomsAdaptor.get_atoms(mol)
             ads_atoms.pbc = False
             with capture_library_noise(library_warnings, "MACE (--ml-prerelax relax)"):
-                converged, steps = mace_relax.relax(ads_atoms, calc_mace_ads, fmax=args.ml_fmax, max_steps=200)
+                converged, steps = mace_relax.relax(ads_atoms, calc_mace_ads, fmax=args.ml_fmax, max_steps=args.ml_steps)
             mol = AseAtomsAdaptor.get_molecule(ads_atoms)
             adsorbates[i] = (name, mol)
             print_dual(f"  {'Converged' if converged else 'Hit step cap, not fully converged'} after "
@@ -745,7 +768,9 @@ def main():
             require_mace()
             from stb.core import mace_relax
             ml_device, gpu_warning = resolve_ml_device(args.ml_device, mace_relax)
-            calc_mace = mace_relax.get_calculator(model=args.ml_model, device=ml_device)
+            # dispersion=True: same level-of-theory-matching rationale as the
+            # --ml-prerelax calculator above -- see its comment.
+            calc_mace = mace_relax.get_calculator(model=ml_model_arg, device=ml_device, dispersion=True)
         if gpu_warning:
             print_dual(color_text(f"  [WARNING] {gpu_warning}", 'yellow'), f_out)
         orientation_sampling = args.n_orientations_polar > 1 or args.n_orientations_azimuthal > 1
@@ -769,7 +794,7 @@ def main():
                     ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
                     with capture_library_noise(library_warnings, "MACE (--ml-rank relax)"):
                         converged, steps = mace_relax.relax(ase_atoms, calc_mace, fmax=args.ml_fmax,
-                                                              max_steps=200)
+                                                              max_steps=args.ml_steps)
                     energy = ase_atoms.get_potential_energy()
                     # Wrap right here, once, for EVERY relaxed orientation -- before anything
                     # downstream sees this structure: deduplicate_orientations' RMSD (raw

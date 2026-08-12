@@ -733,7 +733,7 @@ def main():
         mace_used_this_mode = args.mode in (1, 2)
         if mace_used_this_mode:
             print_dual(f"  MACE-MP-0 path shaping: yes (model={args.ml_model}, k={args.ml_k}, "
-                        f"fmax={args.ml_fmax})", f_out)
+                        f"fmax={args.ml_fmax}, D3 dispersion={'on' if args.force_vdw else 'off'})", f_out)
             print_dual(f"  ML-NEB freeze substrate: {'yes' if args.ml_freeze_substrate else 'no'}"
                         + (f" (threshold {args.ml_freeze_threshold} Ang)"
                            if args.ml_freeze_substrate else ""), f_out)
@@ -748,7 +748,11 @@ def main():
                 require_mace()
             from stb.core import mace_relax
             with capture_library_noise(library_warnings, "MACE calculator setup"):
-                calc_mace_endpoints = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+                # dispersion=args.force_vdw: match the image folders' level of
+                # theory (config_extra.fdf forces DFTD3 whenever --force-vdw is
+                # on) instead of silently pre-relaxing endpoints without vdW.
+                calc_mace_endpoints = mace_relax.get_calculator(
+                    model=args.ml_model, device=args.ml_device, dispersion=args.force_vdw)
             for label, pmg in (("initial", initial_pmg), ("final", final_pmg)):
                 print_dual(f"  Relaxing the {label} endpoint (positions only, MACE-MP-0) ...", f_out)
                 ase_atoms = AseAtomsAdaptor.get_atoms(pmg)
@@ -872,7 +876,8 @@ def main():
             with capture_library_noise(library_warnings, "MACE import"):
                 require_mace()
             from stb.core import mace_relax
-            print_dual(f"  Model             : MACE-MP-0 ({args.ml_model}, device={args.ml_device})", f_out)
+            print_dual(f"  Model             : MACE-MP-0 ({args.ml_model}, device={args.ml_device}, "
+                        f"D3 dispersion={'on' if args.force_vdw else 'off'})", f_out)
             print_dual(f"  Spring constant k : {args.ml_k} eV/Ang^2", f_out)
             print_dual(f"  Target fmax       : {args.ml_fmax} eV/Ang (max {args.ml_max_steps} steps)", f_out)
             ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
@@ -886,7 +891,10 @@ def main():
                             f"< {args.ml_freeze_threshold} Ang displacement between endpoints.", f_out)
 
             with capture_library_noise(library_warnings, "MACE calculator setup"):
-                calc_mace_neb = mace_relax.get_calculator(model=args.ml_model, device=args.ml_device)
+                # dispersion=args.force_vdw: same level-of-theory-matching
+                # rationale as the endpoint pre-relax calculator above.
+                calc_mace_neb = mace_relax.get_calculator(
+                    model=args.ml_model, device=args.ml_device, dispersion=args.force_vdw)
 
             _stage_names = {1: "shaping", 2: "climbing"}
 

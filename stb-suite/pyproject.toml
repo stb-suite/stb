@@ -30,7 +30,8 @@ dependencies = [
 # install. Install with: pip install stb_suite[ml]
 ml = [
     "torch",
-    "mace-torch"
+    "mace-torch",
+    "torch-dftd"
 ]
 
 [project.scripts]

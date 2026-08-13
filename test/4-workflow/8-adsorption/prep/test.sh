@@ -953,6 +953,7 @@ rm -rf $RUN
   echo ""               # pp_path (skip)
   echo "O"               # adsorbate(s)
   echo ""               # ml_prerelax (default N)
+  echo "1"               # site_source_choice (auto-detect via site-finding)
   echo "1"               # site_choice (ontop)
   echo ""               # height (blank = default 2.0, no sweep)
   echo "n"               # all_sites_choice -> single site
@@ -981,6 +982,7 @@ rm -rf $RUN
   echo ""               # pp_path
   echo "O,N"             # adsorbate(s)
   echo ""               # ml_prerelax
+  echo "1"               # site_source_choice (auto-detect via site-finding)
   echo "1"               # site_choice (ontop)
   echo "sweep"           # height -> trigger the approach-curve scan
   echo "1.5"              # h_min
@@ -1012,6 +1014,7 @@ rm -rf $RUN
   echo ""               # pp_path
   echo "H2O"             # adsorbate(s)
   echo ""               # ml_prerelax
+  echo "1"               # site_source_choice (auto-detect via site-finding)
   echo "1"               # site_choice (ontop)
   echo ""               # height (default, no sweep)
   echo "y"               # all_sites_choice -> Y
@@ -1042,6 +1045,7 @@ rm -rf $RUN
   echo ""               # pp_path
   echo "H2O"             # adsorbate(s)
   echo ""               # ml_prerelax
+  echo "1"               # site_source_choice (auto-detect via site-finding)
   echo "1"               # site_choice (ontop)
   echo ""               # height (default, no sweep)
   echo "n"               # all_sites_choice -> single site

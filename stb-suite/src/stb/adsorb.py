@@ -29,6 +29,7 @@ from stb.core.adsorption_sites import (
     center_slab_in_vacuum, write_reference_folder, write_site_plot, min_adsorbate_image_distance,
     cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
     generate_systematic_orientations, deduplicate_orientations,
+    parse_positions_file, write_positions_file,
 )
 from stb.neb import wrap_into_cell
 
@@ -249,6 +250,19 @@ def main():
                          help="Manual Cartesian (X, Y) position in Ang, overriding automatic "
                               "site-finding entirely (--site-type/--site-index/--all-sites are "
                               "ignored when this is given).")
+    parser.add_argument("--positions-file", type=str, default=None, metavar="PATH",
+                         help="'.dat' file with one or more adsorption site positions, as "
+                              "in-plane fractional (a, b) coordinates relative to the file's own "
+                              "LATTICE_A/LATTICE_B/LATTICE_C lines ('number type frac_a frac_b' "
+                              "per site line; '#' comments and blank lines ignored) -- used "
+                              "INSTEAD of automatic site-finding (--site-type/--symprec are "
+                              "ignored). --all-sites/--site-index then select among the file's "
+                              "positions exactly as they would among auto-found ones. stb-adsorb "
+                              "always writes 'sites/site_positions.dat' with the lattice and "
+                              "positions actually used this run (auto-found or manual alike), in "
+                              "the same format, so it can be inspected, hand-edited, and fed back "
+                              "here for a future run. Mutually exclusive with --position and "
+                              "--both-sides.")
     parser.add_argument("--height", type=float, default=2.0,
                          help="Adsorption distance in Ang above the surface (default: 2.0). Ignored "
                               "if --height-sweep is given.")
@@ -397,6 +411,12 @@ def main():
         parser.error("--both-sides requires a concrete --site-type (not 'all').")
     if args.both_sides and args.position is not None:
         parser.error("--both-sides and --position are mutually exclusive.")
+    if args.positions_file and args.position is not None:
+        parser.error("--positions-file and --position are mutually exclusive.")
+    if args.positions_file and not os.path.isfile(args.positions_file):
+        parser.error(f"--positions-file file not found: {args.positions_file}")
+    if args.both_sides and args.positions_file:
+        parser.error("--both-sides and --positions-file are not supported together yet.")
     if args.both_sides and args.ml_rank:
         parser.error("--both-sides and --ml-rank are not supported together yet.")
     if args.both_sides and args.height_sweep is not None:
@@ -609,12 +629,38 @@ def main():
     # of being buried mid-way through a single combined section. ---
     print_section("[2] ADSORPTION SITES: FINDING & COUNT", f_out)
 
-    with capture_library_noise(library_warnings, "pymatgen plot_slab"):
-        plot_path = os.path.join(sites_root, "adsorption_sites.png")
-        write_site_plot(pmg_structure, plot_path, show=args.view_plots)
-    print_dual(f"  {color_text('[Saved]', 'cyan')} {plot_path} (sanity check of the candidate "
-                "site layout, pymatgen's own defaults -- not necessarily this run's --height/"
-                "--symprec/--site-type)", f_out)
+    plot_path = os.path.join(sites_root, "adsorption_sites.png")
+    positions_file_out = os.path.join(sites_root, "site_positions.dat")
+
+    def _save_positions_file(candidates):
+        # `candidates` is [(label, cart_coord), ...] -- the same shape
+        # candidates_by_height[h] already has, whether label is a site type
+        # ("ontop"/"bridge"/"hollow", auto-found) or a --positions-file/
+        # --position label ("manual"/whatever the file's own 'type' column
+        # said). Only in-plane (a, b) round-trips via --positions-file;
+        # z/height is controlled separately on the next run, same as
+        # --position. Written relative to THIS structure's own lattice
+        # (pmg_structure), not whatever lattice a --positions-file input
+        # (if any) originally came from.
+        entries = [(i + 1, label, coord[0], coord[1]) for i, (label, coord) in enumerate(candidates)]
+        write_positions_file(positions_file_out, pmg_structure.lattice.matrix, entries)
+        print_dual(f"  {color_text('[Saved]', 'cyan')} {positions_file_out} ({len(entries)} "
+                    "position(s), fractional -- feed it back via --positions-file to reuse/"
+                    "hand-pick among exactly these sites in a future run)", f_out)
+
+    def _save_site_plot(numbered_sites=None):
+        with capture_library_noise(library_warnings, "pymatgen plot_slab"):
+            write_site_plot(pmg_structure, plot_path, show=args.view_plots,
+                             numbered_sites=numbered_sites)
+        if numbered_sites is not None:
+            print_dual(f"  {color_text('[Saved]', 'cyan')} {plot_path} (each number is the "
+                        "site_N this run's own --height/--symprec/--site-type would write it "
+                        "as with --all-sites -- pass that number - 1 to --site-index to pick "
+                        "just that one)", f_out)
+        else:
+            print_dual(f"  {color_text('[Saved]', 'cyan')} {plot_path} (sanity check of the "
+                        "candidate site layout, pymatgen's own defaults -- not necessarily this "
+                        "run's --height/--symprec/--site-type)", f_out)
 
     variants = None  # (slot, height, site_type, coord) -- position/auto-find modes
 
@@ -636,6 +682,12 @@ def main():
                     "face too, doubling the final count; the exact mirrored count is confirmed "
                     "in [4] once the symmetry mapping is actually applied.)", f_out)
         n_selected_estimate = n_reduced
+        # Unlabeled fallback here: --both-sides re-finds sites on its own
+        # (via adsorb_both_surfaces -> a fresh AdsorbateSiteFinder call on a
+        # Slab-wrapped copy in [4] below) rather than reusing probe_reduced
+        # above, so a number assigned from probe_reduced isn't guaranteed to
+        # line up with the site_N that [4] actually writes.
+        _save_site_plot()
     elif args.position is not None:
         # Offset along the surface normal (finder.mvec = cross(a, b),
         # normalized -- same vector find_adsorption_sites itself uses
@@ -662,6 +714,80 @@ def main():
                 f"  [INFO] Surface normal is not parallel to Cartesian z (tilted "
                 f"{angle_deg:.2f} deg) -- --position's height is measured along the true "
                 f"normal {tuple(round(float(v), 4) for v in mvec)}, not a plain z-offset.", 'yellow'), f_out)
+        _save_site_plot([(1, variants[0][3])])
+        _save_positions_file([("manual", variants[0][3])])
+    elif args.positions_file:
+        # Manual override, but (unlike --position) with possibly many
+        # candidates: reads (number, type, frac_a, frac_b) straight from the
+        # file -- already converted to Cartesian (x, y) by
+        # parse_positions_file, using THAT file's own embedded lattice, not
+        # necessarily this run's -- instead of calling AdsorbateSiteFinder at
+        # all. --site-type/--symprec are meaningless here and skipped
+        # entirely. Every position is offset along the true surface normal
+        # per height, same mvec convention as --position above (see that
+        # branch's own comment for why a naive Cartesian-z offset would be
+        # wrong for a tilted lattice).
+        print_dual("  Manual override (--positions-file): no site-finding performed -- reading "
+                    "candidate positions directly from the file.", f_out)
+        try:
+            file_lattice, file_positions = parse_positions_file(args.positions_file)
+        except ValueError as e:
+            print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+            sys.exit(1)
+        print_dual(f"  {len(file_positions)} position(s) read from {args.positions_file}.", f_out)
+        if not np.allclose(file_lattice, pmg_structure.lattice.matrix, atol=1e-3):
+            print_dual(color_text(
+                "  [WARNING] --positions-file's own LATTICE_A/LATTICE_B/LATTICE_C differ from "
+                "this run's actual structure lattice -- positions were converted to Cartesian "
+                "using the FILE's lattice, so they may not land where expected on this "
+                "structure. Regenerate the file from this exact structure if unsure.", 'yellow'),
+                f_out)
+
+        z_ref = float(np.max(pmg_structure.cart_coords[:, 2]))
+        mvec = np.asarray(finder.mvec, dtype=float)
+        candidates_by_height = {
+            h: [(site_type, np.array([x, y, z_ref]) + h * mvec)
+                for _number, site_type, x, y in file_positions]
+            for h in heights
+        }
+        if abs(mvec[2]) < 0.999:
+            angle_deg = np.degrees(np.arccos(np.clip(abs(mvec[2]), -1.0, 1.0)))
+            print_dual(color_text(
+                f"  [INFO] Surface normal is not parallel to Cartesian z (tilted "
+                f"{angle_deg:.2f} deg) -- --positions-file heights are measured along the true "
+                f"normal {tuple(round(float(v), 4) for v in mvec)}, not a plain z-offset.",
+                'yellow'), f_out)
+
+        n_candidates = len(candidates_by_height[heights[0]])
+        if n_candidates == 0:
+            print_dual(color_text("[ERROR] --positions-file has no usable positions.", 'red'), f_out)
+            sys.exit(1)
+        _save_site_plot([(i + 1, coord) for i, (_st, coord) in
+                          enumerate(candidates_by_height[heights[0]])])
+        _save_positions_file(candidates_by_height[heights[0]])
+        if args.all_sites:
+            selected_indices = list(range(n_candidates))
+        else:
+            if args.site_index >= n_candidates:
+                print_dual(color_text(
+                    f"[ERROR] --site-index {args.site_index} out of range: only "
+                    f"{n_candidates} position(s) in --positions-file.", 'red'), f_out)
+                sys.exit(1)
+            selected_indices = [args.site_index]
+        selected_by_height = {
+            h: [candidates_by_height[h][i] for i in selected_indices] for h in heights
+        }
+
+        n_selected = len(selected_by_height[heights[0]])
+        variants = []  # (slot, height, site_type, coord)
+        for slot in range(n_selected):
+            for h in heights:
+                st, coord = selected_by_height[h][slot]
+                variants.append((slot + 1, h, st, coord))
+        print_dual(f"  Selected: {n_selected} of {n_candidates} position(s) from "
+                    f"--positions-file"
+                    + (" (--all-sites)" if args.all_sites else f" (--site-index {args.site_index})"),
+                    f_out)
     else:
         # Candidate site XY coordinates depend only on the slab + height, not
         # on the adsorbate -- found once per height and shared across every
@@ -712,6 +838,9 @@ def main():
         if n_candidates == 0:
             print_dual(color_text(f"[ERROR] No {'/'.join(site_types)} sites found.", 'red'), f_out)
             sys.exit(1)
+        _save_site_plot([(i + 1, coord) for i, (_st, coord) in
+                          enumerate(candidates_by_height[heights[0]])])
+        _save_positions_file(candidates_by_height[heights[0]])
         if args.all_sites:
             selected_indices = list(range(n_candidates))
         else:
@@ -1036,6 +1165,8 @@ def main():
     print_section("[5] SUMMARY & NEXT STEPS", f_out)
     print_dual(f"  {len(site_records)} site folder(s) written under '{sites_root}'.", f_out)
     print_dual(f"  Site table      : {site_table_path} (machine-readable, read by stb-adsorbAnalysis)", f_out)
+    if os.path.isfile(positions_file_out):
+        print_dual(f"  Site positions  : {positions_file_out} (feed back via --positions-file)", f_out)
     if report_path:
         print_dual(f"  Report          : {report_path}", f_out)
     print_dual("  Run SIESTA in 'clean_slab/', every 'adsorbate*/' and every 'sites/site_*/' "
@@ -1075,6 +1206,8 @@ def main():
     print(f"\n{color_text('Success:', 'green')} {len(site_records)} site folder(s) written under "
           f"'{sites_root}'.")
     print(f"Site table: {site_table_path}")
+    if os.path.isfile(positions_file_out):
+        print(f"Site positions: {positions_file_out}")
     if report_path:
         print(f"Full report: {report_path}")
 

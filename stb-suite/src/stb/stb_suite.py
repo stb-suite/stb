@@ -664,12 +664,37 @@ def run_adsorb_setup() -> None:
     # ---------------------------------------------------------------- [2/4]
     section("2/4 -- Site selection")
 
-    print(f"{color_text('Site type:', 'yellow')} {color_text('1', 'cyan')}=ontop  "
-          f"{color_text('2', 'cyan')}=bridge  {color_text('3', 'cyan')}=hollow  "
-          f"{color_text('4', 'cyan')}=all")
-    site_choice = get_input("Select (1-4) [default: 1]: ").strip()
-    site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
-    site_type = site_map.get(site_choice, 'ontop')
+    print(f"{color_text('Adsorption site(s):', 'yellow')} "
+          f"{color_text('1', 'cyan')}=auto-detect via site-finding  "
+          f"{color_text('2', 'cyan')}=provide a file with positions")
+    site_source_choice = get_input("Select (1-2) [default: 1]: ").strip()
+    site_type = 'ontop'
+    positions_file_path = None
+    n_file_positions = None
+    if site_source_choice == '2':
+        from stb.core.adsorption_sites import parse_positions_file
+        while True:
+            positions_file_path = get_input(
+                "\nPositions file (.dat -- LATTICE_A/B/C lines + one 'number type frac_a "
+                "frac_b' line per site, fractional in-plane coordinates; 'stb-adsorb' always "
+                "writes sites/site_positions.dat, ready to reuse here): ").strip()
+            if not os.path.isfile(positions_file_path):
+                print(color_text("File not found!", 'red'))
+                continue
+            try:
+                n_file_positions = len(parse_positions_file(positions_file_path)[1])
+            except ValueError as e:
+                print(color_text(f"  [ERROR] {e}", 'red'))
+                continue
+            print(color_text(f"  {n_file_positions} position(s) found in the file.", 'green'))
+            break
+    else:
+        print(f"{color_text('Site type:', 'yellow')} {color_text('1', 'cyan')}=ontop  "
+              f"{color_text('2', 'cyan')}=bridge  {color_text('3', 'cyan')}=hollow  "
+              f"{color_text('4', 'cyan')}=all")
+        site_choice = get_input("Select (1-4) [default: 1]: ").strip()
+        site_map = {'1': 'ontop', '2': 'bridge', '3': 'hollow', '4': 'all'}
+        site_type = site_map.get(site_choice, 'ontop')
 
     height_sweep = None
     while True:
@@ -692,12 +717,13 @@ def run_adsorb_setup() -> None:
         except ValueError:
             print(color_text("Enter a number, or 'sweep'.", 'red'))
 
+    sites_noun = "position" if positions_file_path else "symmetrically distinct site"
     all_sites_choice = get_input(
-        "\nWrite a folder for every symmetrically distinct site (Y), or just one (n)? [Y/n]: "
+        f"\nWrite a folder for every {sites_noun} found (Y), or just one (n)? [Y/n]: "
     ).strip().lower()
     all_sites = all_sites_choice not in ('n', 'no')
     if not all_sites:
-        site_index = get_int_input("Which site (0-based index) [default: 0]: ", 0)
+        site_index = get_int_input("Which one (0-based index) [default: 0]: ", 0)
 
     force_spin = get_input(
         "\nForce spin polarization on site folders too (recommended for most adsorbates) "
@@ -745,7 +771,7 @@ def run_adsorb_setup() -> None:
                 orient_top_k = int(orient_top_k_str) if orient_top_k_str.isdigit() else None
 
     both_sides = False
-    if site_type != 'all' and not ml_rank and height_sweep is None:
+    if not positions_file_path and site_type != 'all' and not ml_rank and height_sweep is None:
         both_sides = get_input(
             "\nAlso adsorb on the opposite face (free-standing 2D material)? "
             "(y/N): ").strip().lower() in ('y', 'yes')
@@ -758,14 +784,17 @@ def run_adsorb_setup() -> None:
     symprec, vacuum_gap, vacuum_box, output_dir, ml_device, ml_steps, ml_model, ml_custom_model = \
         0.01, 10.0, 20.0, "adsorption_run", "cpu", 200, "small", None
     uses_mace = ml_prerelax or ml_rank
-    advanced_items = "symmetry tolerance, vacuum-gap, vacuum box, output directory"
+    advanced_items = "vacuum-gap, vacuum box, output directory"
+    if not positions_file_path:
+        advanced_items = "symmetry tolerance, " + advanced_items
     if show_orient:
         advanced_items += ", orientation RMSD tolerance"
     if uses_mace:
         advanced_items += ", ML model, ML device, ML max steps"
     show_advanced = get_input(f"Configure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
-        symprec = get_float_input("  Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
+        if not positions_file_path:
+            symprec = get_float_input("  Site symmetry-reduction tolerance [default: 0.01]: ", 0.01)
         vacuum_gap = get_float_input(
             "  Vacuum-axis detection threshold, Ang [default: 10.0]: ", 10.0)
         vacuum_box = get_float_input(
@@ -815,14 +844,18 @@ def run_adsorb_setup() -> None:
         "-s", struct_file,
         "-c", calc_file,
         "--adsorbate", adsorbate,
-        "--site-type", site_type,
-        "--symprec", str(symprec),
+    ]
+    if positions_file_path:
+        args.extend(["--positions-file", positions_file_path])
+    else:
+        args.extend(["--site-type", site_type, "--symprec", str(symprec)])
+    args.extend([
         "--vacuum-gap", str(vacuum_gap),
         "--vacuum-box", str(vacuum_box),
         "--output-dir", output_dir,
         "--no-intro",
         "--force-spin" if force_spin else "--no-force-spin",
-    ]
+    ])
     if save_report:
         args.append("--save-report")
     if view_choice == 'y':
@@ -868,8 +901,10 @@ def run_adsorb_setup() -> None:
         ("Pseudopotentials", pp_path or "(none)"),
         ("Adsorbate(s)", adsorbate),
         ("ML pre-relax adsorbate", "ON" if ml_prerelax else "OFF"),
-        ("Site type", site_type),
-        ("Sites", "all symmetrically distinct" if all_sites else f"index {site_index}"),
+        ("Site source",
+         f"file: {positions_file_path} ({n_file_positions} position(s))"
+         if positions_file_path else f"auto-detect ({site_type})"),
+        ("Sites", "all found" if all_sites else f"index {site_index}"),
         ("ML pre-screen",
          (f"ON (top {top_k or 'all'} site(s))" if all_sites else "ON (single site)")
          if ml_rank else "OFF"),
@@ -1298,8 +1333,9 @@ def run_stackingfault_setup() -> None:
     print("="*60)
     print(color_text(
         "Rigidly slides one layer of a bilayer across a 2D grid of lateral offsets and writes "
-        "one single-point SIESTA folder per grid point -- run SIESTA in each, then use Stage 2 "
-        "(Analysis) for the equilibrium stacking and the stacking-fault energy landscape.", 'cyan'))
+        "one single-point SIESTA folder per grid point, under 'sf_run/' -- run SIESTA in each, "
+        "then use Stage 2 (Analysis) for the equilibrium stacking and the stacking-fault energy "
+        "landscape.", 'cyan'))
     print()
 
     layer1_file = get_input("Bottom monolayer FDF file (-l1): ").strip()
@@ -1323,7 +1359,12 @@ def run_stackingfault_setup() -> None:
 
     pp_path = prompt_pseudo_source(optional=True)
 
-    grid_n = get_int_input("\nGrid resolution, N x N shifts [default: 7]: ", 7)
+    print(color_text(
+        "\nGrid resolution: shift_x and shift_y are sampled independently -- an anisotropic "
+        "lattice (a != b) often warrants a different sampling density per axis rather than a "
+        "square grid.", 'cyan'))
+    grid_nx = get_int_input("Grid resolution along shift_x (Nx) [default: 7]: ", 7)
+    grid_ny = get_int_input("Grid resolution along shift_y (Ny) [default: 7]: ", 7)
     gap = get_float_input("Interlayer gap, Ang (fixed across the grid, unless --ml-relax-gap "
                            "below) [default: 3.2]: ", 3.2)
 
@@ -1380,11 +1421,15 @@ def run_stackingfault_setup() -> None:
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
 
+    save_report = get_input(
+        "\nAlso save a text report to file (under 'sf_run/')? (y/N): ").strip().lower() == 'y'
+
     args = [
         "-l1", layer1_file,
         "-l2", layer2_file,
         "-c", calc_file,
-        "-n", str(grid_n),
+        "-nx", str(grid_nx),
+        "-ny", str(grid_ny),
         "-g", str(gap),
         "-a", str(max_area),
         "-s", str(max_strain),
@@ -1406,19 +1451,22 @@ def run_stackingfault_setup() -> None:
         args.append("--ml-preview")
     if uses_mace:
         args.extend(["--ml-device", ml_device])
+    if save_report:
+        args.append("--save-report")
 
     summary_rows = [
         ("Layer 1", layer1_file),
         ("Layer 2", layer2_file),
         ("Calc template", calc_file),
         ("Pseudopotentials", pp_path or "(none)"),
-        ("Grid", f"{grid_n} x {grid_n}"),
+        ("Grid", f"{grid_nx} x {grid_ny}" + (" (asymmetric)" if grid_nx != grid_ny else "")),
         ("Gap (fixed)", f"{gap} Ang"),
         ("Twist (fixed)", f"{twist} deg"),
         ("ML pre-relax layers", "ON" if ml_prerelax_layers else "OFF"),
         ("ML relax gap", f"ON (window +/-{ml_relax_gap_window} Ang)" if ml_relax_gap else "OFF"),
         ("ML preview", "ON" if ml_preview else "OFF"),
-        ("Output directory", output_dir),
+        ("Output directory", f"{output_dir} (run folder: {output_dir}/sf_run)"),
+        ("Save report", "yes" if save_report else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
@@ -1436,9 +1484,9 @@ def run_stackingfault_analysis() -> None:
         'cyan'))
     print()
 
-    dir_path = get_input("Root directory with every 'shift_II_JJ/' [default: .]: ").strip()
+    dir_path = get_input("Root directory with every 'shift_II_JJ/' [default: sf_run]: ").strip()
     if not dir_path:
-        dir_path = "."
+        dir_path = "sf_run"
 
     out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
     if not out_file:
@@ -7178,16 +7226,46 @@ def run_dos_parser() -> None:
         print(color_text(f"-> No '{label}.bands'/'{label}.EIG' found; --shift vbm/cbm would "
                           "need --estimate-from-dos.", 'yellow'))
 
-    type_list = ['total', 'atom', 'species']
-    print(f"\n{color_text('Available types:', 'yellow')} {', '.join(type_list)}")
-    dos_types_str = get_input(f"DOS types (space-separated, default: total atom species): ")
-    if not dos_types_str.strip():
-        dos_types = ['total', 'atom', 'species']
+    # Numbered list instead of requiring the keyword typed out by hand (same
+    # fix, and same reasoning, as run_mlphonons_analyzer's EXTRA_ANALYSIS_OPTIONS
+    # above: a typo/old habit here silently matched no keyword and was
+    # dropped with no warning).
+    DOS_TYPE_OPTIONS = [
+        ("total", "Total DOS -- summed over every atom AND every orbital (s+p+d+f)"),
+        ("atom", "Per-atom breakdown (one curve set per atom)"),
+        ("species", "Per-species breakdown (one curve set per element)"),
+    ]
+    print(f"\n{color_text('DOS type(s):', 'yellow')}")
+    for i, (_key, desc) in enumerate(DOS_TYPE_OPTIONS, start=1):
+        print(f"  {color_text(str(i), 'cyan')} = {desc}")
+    type_keys = {key for key, _ in DOS_TYPE_OPTIONS}
+    raw_type_choice = get_input(
+        f"Select by number (1-{len(DOS_TYPE_OPTIONS)}), space/comma-separated, "
+        "or blank for all: ").strip().lower()
+
+    if not raw_type_choice:
+        dos_types = [key for key, _ in DOS_TYPE_OPTIONS]
     else:
-        dos_types = dos_types_str.split()
-        if not all(t in type_list for t in dos_types):
-            print(color_text("Input contains invalid types. Using default.", 'yellow'))
-            dos_types = ['total', 'atom', 'species']
+        dos_types = []
+        unrecognized = []
+        for tok in raw_type_choice.replace(',', ' ').split():
+            if tok.isdigit() and 1 <= int(tok) <= len(DOS_TYPE_OPTIONS):
+                key = DOS_TYPE_OPTIONS[int(tok) - 1][0]
+            elif tok in type_keys:  # old-style keyword still accepted
+                key = tok
+            else:
+                unrecognized.append(tok)
+                continue
+            if key not in dos_types:
+                dos_types.append(key)
+        if unrecognized:
+            print(color_text(
+                f"[WARNING] Ignored unrecognized option(s): {', '.join(unrecognized)} "
+                f"(expected a number 1-{len(DOS_TYPE_OPTIONS)}).", 'yellow'))
+        if not dos_types:
+            print(color_text("No valid type selected. Using default (all types).", 'yellow'))
+            dos_types = [key for key, _ in DOS_TYPE_OPTIONS]
+    print(color_text(f"Selected DOS type(s): {', '.join(dos_types)}", 'green'))
 
     shift_options = {
         '1': ('fermi', "Fermi level"),
@@ -7232,15 +7310,18 @@ def run_dos_parser() -> None:
     print(f"\n{color_text('Select projection mode:', 'yellow')}")
     print(f"  {color_text('1.', 'yellow')} l (s, p, d, f) [Default]")
     print(f"  {color_text('2.', 'yellow')} ml (s, px, py, pz, dxy...)")
+    print(f"  {color_text('3.', 'yellow')} none (no orbital breakdown -- single total curve, "
+          "every orbital summed together)")
 
+    PROJECTION_MODES = {1: 'l', 2: 'ml', 3: 'none'}
     choice = 0
-    while not (1 <= choice <= 2):
+    while choice not in PROJECTION_MODES:
         # Usamos get_int_input com default = 1
-        choice = get_int_input(f"\nSelect mode (1-2) [default: 1]: ", 1)
-        if not (1 <= choice <= 2):
-            print(color_text(f"Invalid choice! Please select 1 or 2.", 'red'))
+        choice = get_int_input(f"\nSelect mode (1-3) [default: 1]: ", 1)
+        if choice not in PROJECTION_MODES:
+            print(color_text("Invalid choice! Please select 1-3.", 'red'))
 
-    projection_mode = 'l' if choice == 1 else 'ml'
+    projection_mode = PROJECTION_MODES[choice]
     print(f"Selected mode: {color_text(projection_mode, 'cyan')}")
 
     output_dir = get_input("\nOutput directory [default: current directory]: ").strip()

@@ -213,6 +213,23 @@ check_contains "py" dos_total.dat
 check_contains "pz" dos_total.dat
 
 
+# --- 5b. --projection none (no orbital breakdown -- a single 'total'
+# column per file, the genuinely unprojected DOS) ---
+echo -e "\n--- Testing --projection none ---"
+rm -rf dos_total.dat dos_per_atom dos_per_species
+stb-dos siesta.PDOS.xml --type total atom species --projection none --no-intro > log_none.txt 2>&1
+check_exit_code $? 0
+check_success dos_total.dat
+check_contains "#Energy(eV)    	total         " dos_total.dat
+check_not_contains "	s	" dos_total.dat
+check_not_contains "	p	" dos_total.dat
+check_not_contains "	d	" dos_total.dat
+check_success dos_per_atom/Sn_1.dat
+check_contains "#Energy(eV)    	total         " dos_per_atom/Sn_1.dat
+check_success dos_per_species/dos_Sn.dat
+check_contains "#Energy(eV)    	total         " dos_per_species/dos_Sn.dat
+
+
 # --- 6. nspin=2: spin-polarized data must survive (regression test for the
 # silent-data-loss bug: <nspin> was never read, so every orbital's data
 # length mismatched num_energy_points and got silently dropped -- output
@@ -249,6 +266,19 @@ check_exit_code $? 0
 check_contains "skipped 1 orbital" log_lmax4.txt
 check_success dos_total.dat
 check_contains "#Energy(eV)" dos_total.dat
+
+
+# --- 8a. --projection none does NOT exclude l>3 orbitals -- they collapse
+# into 'total' like everything else instead of being skipped (the same
+# lmax4.PDOS.xml that triggers "skipped 1 orbital" in 'l' mode above must
+# NOT trigger it here). ---
+echo -e "\n--- Testing --projection none includes l>3 orbitals (not skipped) ---"
+rm -rf dos_total.dat dos_per_atom dos_per_species
+stb-dos lmax4.PDOS.xml --shift 0.0 --projection none --no-intro > log_lmax4_none.txt 2>&1
+check_exit_code $? 0
+check_not_contains "skipped" log_lmax4_none.txt
+check_success dos_total.dat
+check_contains "#Energy(eV)    	total         " dos_total.dat
 
 
 # --- 8b. Standardized report: --save-report/--save-gnuplot/--view,
@@ -403,6 +433,13 @@ check_contains "No '.bands'/'.EIG' found. Estimate VBM/CBM from the DOS itself i
 check_contains "Falling back to --shift fermi" log_menu_vbm_none.txt
 mv siesta.bands.bak siesta.bands
 mv siesta.EIG.bak siesta.EIG
+
+echo "Testing: interactive path, numbered projection menu choice '3' (none -- single total curve)"
+rm -rf dos_total.dat dos_per_atom dos_per_species
+printf '3.2\nsiesta.PDOS.xml\n\n\n3\n\n\n\n\n' | stb-suite > log_menu_projection_none.txt 2>&1
+check_contains "Selected mode:" log_menu_projection_none.txt
+check_success dos_total.dat
+check_contains "#Energy(eV)    	total         " dos_total.dat
 
 
 popd > /dev/null

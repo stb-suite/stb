@@ -504,15 +504,149 @@ def wrap_markers_into_cell(cart_sites, lattice_matrix, symm_op):
     return wrapped
 
 
-def write_site_plot(pmg_structure, out_path, show=False):
+_LATTICE_KEYS = ("LATTICE_A", "LATTICE_B", "LATTICE_C")
+
+
+def parse_positions_file(path):
+    """Reads a user-supplied adsorption-site positions .dat file: three
+    LATTICE_A/LATTICE_B/LATTICE_C lines (the lattice vectors this file's
+    fractional coordinates are relative to, Ang) plus one site per
+    'number type frac_a frac_b' data line -- frac_a/frac_b are IN-PLANE
+    fractional coordinates (relative to LATTICE_A/LATTICE_B only; c/height
+    is irrelevant here, controlled separately by --height/--height-sweep on
+    the run that reads this file back), same convention
+    cluster_candidate_coords/wrap_markers_into_cell already use elsewhere in
+    this module. '#' starts a comment (to end of line, so it can also
+    trail a LATTICE_*/data line); blank lines are skipped. Raises
+    ValueError with a '<path>:<lineno>: ...' message on a malformed line, a
+    missing LATTICE_* line, or a file with no site positions at all --
+    callers report it and exit, same convention as resolve_slab_orientation's
+    own ValueError-not-sys.exit contract.
+
+    Returns (lattice_matrix, positions): `lattice_matrix` is the file's own
+    3x3 array (Ang) -- used to convert every frac_a/frac_b back to Cartesian
+    here, so callers get `positions` as [(number, site_type, x, y), ...] in
+    file order, already in the same Cartesian frame write_site_plot's PNG
+    uses. Callers that also have a "live" structure should compare
+    `lattice_matrix` against it and warn on a mismatch, since a file
+    generated for a different structure would silently misplace sites
+    otherwise (this function doesn't warn/require a match on its own -- it
+    only knows the file, not what the caller's own current run is).
+
+    The companion of write_positions_file: --positions-file (stb-adsorb) is
+    meant to consume exactly what that function (or a user hand-editing its
+    output) writes.
+    """
+    lattice_rows = {}
+    raw_positions = []
+    with open(path) as f:
+        for lineno, raw_line in enumerate(f, start=1):
+            line = raw_line.split('#', 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            key = parts[0].upper()
+            if key in _LATTICE_KEYS:
+                if len(parts) != 4:
+                    raise ValueError(f"{path}:{lineno}: expected '{key} X Y Z', "
+                                      f"got: {raw_line.strip()!r}")
+                try:
+                    lattice_rows[key] = [float(v) for v in parts[1:4]]
+                except ValueError:
+                    raise ValueError(f"{path}:{lineno}: {key} components must be numbers, "
+                                      f"got: {raw_line.strip()!r}")
+                continue
+            if len(parts) < 4:
+                raise ValueError(f"{path}:{lineno}: expected 'number type frac_a frac_b', "
+                                  f"got: {raw_line.strip()!r}")
+            try:
+                number = int(parts[0])
+            except ValueError:
+                raise ValueError(f"{path}:{lineno}: site number must be an integer, "
+                                  f"got: {raw_line.strip()!r}")
+            try:
+                frac_a, frac_b = float(parts[2]), float(parts[3])
+            except ValueError:
+                raise ValueError(f"{path}:{lineno}: frac_a/frac_b must be numbers, "
+                                  f"got: {raw_line.strip()!r}")
+            raw_positions.append((number, parts[1], frac_a, frac_b))
+
+    missing = [k for k in _LATTICE_KEYS if k not in lattice_rows]
+    if missing:
+        raise ValueError(f"{path}: missing {', '.join(missing)} line(s) -- the lattice vectors "
+                          "this file's fractional coordinates are relative to are required.")
+    if not raw_positions:
+        raise ValueError(f"{path}: no site positions found (every line was blank, a comment, "
+                          "or a lattice vector).")
+
+    lattice_matrix = np.array([lattice_rows[k] for k in _LATTICE_KEYS])
+    a2d, b2d = lattice_matrix[0][:2], lattice_matrix[1][:2]
+    positions = [(number, site_type, frac_a * a2d[0] + frac_b * b2d[0],
+                  frac_a * a2d[1] + frac_b * b2d[1])
+                 for number, site_type, frac_a, frac_b in raw_positions]
+    return lattice_matrix, positions
+
+
+def write_positions_file(path, lattice_matrix, entries):
+    """Writes an adsorption-site positions .dat file: LATTICE_A/LATTICE_B/
+    LATTICE_C (the 3x3 `lattice_matrix`, Ang) followed by one
+    'number type frac_a frac_b' line per entry -- frac_a/frac_b are the
+    IN-PLANE fractional coordinates of `entries`' Cartesian (x, y) relative
+    to LATTICE_A/LATTICE_B (inverting the same 2x2 in-plane basis
+    wrap_markers_into_cell already uses). `entries` is
+    [(number, site_type_or_label, x, y), ...] -- x/y Cartesian Ang, same
+    frame as write_site_plot's PNG (each `number` matches that plot's
+    label).
+
+    stb-adsorb always writes this (as sites/site_positions.dat), for every
+    site actually found/used that run -- auto-found via AdsorbateSiteFinder
+    or already manual (--position/--positions-file) alike -- so a user can
+    inspect, hand-edit (e.g. delete the sites they don't want), and feed the
+    SAME file back via --positions-file for a future run. Only in-plane
+    (a, b) round-trips this way; height/z is controlled separately by
+    --height/--height-sweep on the later run, same as --position already
+    works.
+    """
+    a2d, b2d = np.asarray(lattice_matrix[0][:2]), np.asarray(lattice_matrix[1][:2])
+    inv_ab = np.linalg.inv(np.column_stack([a2d, b2d]))
+    with open(path, 'w') as f:
+        f.write("# stb-adsorb site positions (.dat) -- in-plane fractional (a, b)\n")
+        f.write("# coordinates relative to the LATTICE_A/LATTICE_B vectors below (Ang);\n")
+        f.write("# height/z is controlled separately by --height/--height-sweep on the\n")
+        f.write("# run that reads this file back. Each 'number' matches its label in\n")
+        f.write("# adsorption_sites.png. '#' comments and blank lines are ignored.\n")
+        f.write("# Edit/delete lines and pass this file back via --positions-file to\n")
+        f.write("# reuse (or hand-pick among) exactly these positions in a future run.\n")
+        for key, vec in zip(_LATTICE_KEYS, lattice_matrix):
+            f.write(f"{key}  {vec[0]:14.8f}  {vec[1]:14.8f}  {vec[2]:14.8f}\n")
+        f.write("# number  type        frac_a          frac_b\n")
+        for number, label, x, y in entries:
+            frac_a, frac_b = inv_ab @ np.array([x, y])
+            f.write(f"{number:<8d}{(label or 'site'):<12}{frac_a:14.8f}  {frac_b:14.8f}\n")
+
+
+def write_site_plot(pmg_structure, out_path, show=False, numbered_sites=None):
     """Saves a top-view PNG of the slab with every ontop/bridge/hollow
     adsorption site marked (pymatgen.analysis.adsorption.plot_slab for the
     slab itself, already confirmed to work on a plain Structure -- no Slab
-    wrapper needed here). The adsorption-site markers come from
-    AdsorbateSiteFinder.find_adsorption_sites() with pymatgen's own
-    defaults, not the caller's own --height/--symprec/--site-type, so treat
-    it as a quick sanity check of the site layout, not a literal preview of
-    what will be written below.
+    wrapper needed here).
+
+    `numbered_sites`, if given, is the caller's own already-found candidate
+    list as `[(number, cart_coord), ...]` -- typically built from THIS
+    run's actual --height/--symprec/--site-type (not pymatgen's defaults),
+    numbered 1..N to match the site_N folder-naming convention the rest of
+    the run uses, so a candidate's plotted number is directly the site
+    folder it becomes with --all-sites, or the --site-index (number - 1)
+    that selects it -- lets the plot double as an identification key
+    instead of only a rough layout preview. Each point is drawn as its
+    number (a small circled text label) rather than an unmarked 'x'.
+
+    When omitted (default), falls back to the previous behavior: markers
+    come from an independent AdsorbateSiteFinder.find_adsorption_sites()
+    call using pymatgen's own defaults, not the caller's own settings, so
+    treat it as a quick sanity check of the site layout only -- used by
+    stb-mladsorb, which doesn't build a comparable slot-numbered candidate
+    list to pass in here.
 
     Markers are drawn HERE, manually, rather than via plot_slab's own
     `adsorption_sites=True` convenience (which builds its own internal
@@ -528,9 +662,9 @@ def write_site_plot(pmg_structure, out_path, show=False):
     -- see its own docstring for the one tradeoff this implies (two
     genuinely-adjacent-across-a-cell-seam candidates can still land near
     opposite edges of the cell, since each is wrapped independently).
-    Marker style (color/marker/markersize/mew/zorder) copied exactly from
-    plot_slab's own adsorption_sites=True code path, so the plot looks
-    identical apart from this fix.
+    Unlabeled-marker style (color/marker/markersize/mew/zorder) copied
+    exactly from plot_slab's own adsorption_sites=True code path, so that
+    fallback plot looks identical apart from the single-cell-wrapping fix.
 
     `show=True` (--view-plots) additionally blocks on plt.show() before the
     figure is closed -- same blocking-preview convention as every other
@@ -540,13 +674,23 @@ def write_site_plot(pmg_structure, out_path, show=False):
 
     fig, ax = plt.subplots(figsize=(6, 6))
     plot_slab(pmg_structure, ax, adsorption_sites=False)
-    ads_sites = AdsorbateSiteFinder(pmg_structure).find_adsorption_sites()["all"]
-    if ads_sites:
-        symm_op = get_rot(pmg_structure)
-        xy = wrap_markers_into_cell(ads_sites, pmg_structure.lattice.matrix, symm_op)
-        if xy:
-            ax.plot(*zip(*xy, strict=True), color="k", marker="x", markersize=10, mew=1,
-                    linestyle="", zorder=10000)
+    symm_op = get_rot(pmg_structure)
+    if numbered_sites is not None:
+        if numbered_sites:
+            coords = [coord for _, coord in numbered_sites]
+            xy = wrap_markers_into_cell(coords, pmg_structure.lattice.matrix, symm_op)
+            for (number, _coord), (x, y) in zip(numbered_sites, xy, strict=True):
+                ax.text(x, y, str(number), color="k", fontsize=5, fontweight="bold",
+                        ha="center", va="center", zorder=10000,
+                        bbox=dict(boxstyle="circle,pad=0.08", facecolor="white",
+                                  edgecolor="k", linewidth=0.6, alpha=0.85))
+    else:
+        ads_sites = AdsorbateSiteFinder(pmg_structure).find_adsorption_sites()["all"]
+        if ads_sites:
+            xy = wrap_markers_into_cell(ads_sites, pmg_structure.lattice.matrix, symm_op)
+            if xy:
+                ax.plot(*zip(*xy, strict=True), color="k", marker="x", markersize=10, mew=1,
+                        linestyle="", zorder=10000)
     ax.set_title("Candidate adsorption sites (ontop/bridge/hollow)")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     if show:

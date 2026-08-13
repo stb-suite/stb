@@ -232,13 +232,22 @@ def parse_pdos_xml(input_file, projection_mode):
                 orbital_name = get_orbital_name(l_val)
             elif projection_mode == 'ml':
                 orbital_name = get_detailed_orbital_name(l_val, m_val)
+            else:  # 'none' -- no orbital breakdown at all: every orbital,
+                # regardless of l/m, collapses into the same single column,
+                # so a genuinely unprojected total (s+p+d+f+... summed) can
+                # be produced. Deliberately bypasses get_orbital_name/
+                # get_detailed_orbital_name (and their l>3 == None result)
+                # entirely, so g-orbitals and beyond are INCLUDED here even
+                # though 'l'/'ml' mode still drops them below.
+                orbital_name = 'total'
 
             # Skip if orbital is not one we want to process (l > 3, i.e.
-            # g-orbitals and beyond, or an m outside the (l,m) map).
-            # Counted (not silently dropped) so the excluded fraction of
-            # the basis is visible -- a summed 'total' DOS built only
-            # from s/p/d/f will otherwise look complete while quietly
-            # missing any g-orbital contribution.
+            # g-orbitals and beyond, or an m outside the (l,m) map). Only
+            # reachable in 'l'/'ml' mode -- orbital_name is never None in
+            # 'none' mode, see above. Counted (not silently dropped) so the
+            # excluded fraction of the basis is visible -- a summed 'total'
+            # DOS built only from s/p/d/f will otherwise look complete while
+            # quietly missing any g-orbital contribution.
             if orbital_name is None:
                 skipped_lm_orbitals += 1
                 skipped_l_values.add(l_val)
@@ -659,11 +668,13 @@ def main():
     parser.add_argument(
         "--projection",
         type=str,
-        choices=['l', 'ml'],
+        choices=['l', 'ml', 'none'],
         default='l',
         help="Orbital projection detail level.\n"
-             "  l:  Aggregate by angular momentum (s, p, d, f). (default)\n"
-             "  ml: Project by magnetic quantum number (s, px, py, pz, dxy, etc.)."
+             "  l:    Aggregate by angular momentum (s, p, d, f). (default)\n"
+             "  ml:   Project by magnetic quantum number (s, px, py, pz, dxy, etc.).\n"
+             "  none: No orbital breakdown -- every orbital (including l>3, e.g. g) "
+             "collapses into a single 'total' column per atom/species/grand-total."
     )
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",

@@ -480,6 +480,7 @@ def main():
 
     with open(args.calc) as f:
         calc_text = f.read()
+    calc_text, include_status, old_include_name = structure_io.fix_structure_include(calc_text)
 
     finder = AdsorbateSiteFinder(pmg_structure)
     site_types = ["ontop", "bridge", "hollow"] if args.site_type == "all" else [args.site_type]
@@ -501,6 +502,16 @@ def main():
     print_section("[0] RUN METADATA", f_out)
     print_dual(f"  Structure       : {args.structure}", f_out)
     print_dual(f"  Calc template   : {args.calc}", f_out)
+    if include_status == "fixed":
+        print_dual(color_text(
+            f"  [NOTE] --calc's structure include was '%include {old_include_name}' -- "
+            "auto-corrected to '%include structure.fdf' in every generated calc.fdf (every "
+            "folder's structure is always written under that exact name).", 'yellow'), f_out)
+    elif include_status == "not_found":
+        print_dual(color_text(
+            "  [NOTE] Could not find a '%include ...struct....fdf'-style line in --calc to "
+            "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks up "
+            "the generated geometry.", 'yellow'), f_out)
     print_dual(f"  Pseudo dir      : {args.pseudo_dir or '(none)'}", f_out)
     print_dual(f"  Output dir      : {output_root}", f_out)
     for name, mol in adsorbates:

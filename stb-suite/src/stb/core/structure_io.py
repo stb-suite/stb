@@ -902,3 +902,53 @@ def insert_include_after_structure(calc_text: str, structure_basename: str, incl
     if count == 0:
         new_text = include_line + "\n\n" + calc_text
     return new_text
+
+
+_INCLUDE_LINE_RE = re.compile(
+    r'^([ \t]*%include[ \t]+)(\S+)([ \t]*)$', re.IGNORECASE | re.MULTILINE)
+
+# Sidecar %includes that a --calc template may legitimately carry alongside
+# the structure include -- never candidates for the structure include
+# themselves, so they're excluded rather than mistaken for it below. Not
+# 'struct' substring matching (a real-world stb-inputfile-generated
+# template's own structure include is named after whatever file the user
+# fed it at generation time, e.g. '%include graphene.fdf' -- no 'struct' in
+# sight -- so a name-based heuristic can't tell structure from non-structure
+# includes; exclusion by known sidecar name can).
+_NON_STRUCTURE_INCLUDE_NAMES = {"config_extra.fdf", "kpath_bs.fdf", "kpath.fdf"}
+
+
+def fix_structure_include(calc_text: str, target_name: str = "structure.fdf"):
+    """Rewrites the %include line that references the structure file so it
+    points at `target_name` instead. For tools like adsorb.py/neb.py/
+    her.py/oer.py/stackingfault.py that always write the generated
+    structure under a fixed name (`structure.fdf`) regardless of what the
+    user's original --calc template happened to include (often a stale
+    name inherited from stb-inputfile, e.g. '%include graphene.fdf', that
+    no generated folder ever writes) -- copying such a template verbatim
+    leaves every folder with a dangling %include SIESTA can't resolve.
+
+    Identifies the structure include as "the sole %include line that isn't
+    a known non-structure sidecar" (_NON_STRUCTURE_INCLUDE_NAMES) rather
+    than matching on the include's name, since that name is arbitrary (see
+    above). If zero or more than one candidate remains after excluding
+    known sidecars, this can't disambiguate and does nothing rather than
+    guess wrong.
+
+    Returns (new_calc_text, status, old_name): status is 'fixed' (a
+    mismatched name was rewritten), 'ok' (already matched, text
+    unchanged), or 'not_found' (couldn't identify a single structure
+    include to fix -- text unchanged, caller should warn instead of
+    claiming a fix happened).
+    """
+    matches = list(_INCLUDE_LINE_RE.finditer(calc_text))
+    if any(m.group(2) == target_name for m in matches):
+        return calc_text, "ok", None
+    candidates = [m for m in matches if m.group(2).lower() not in _NON_STRUCTURE_INCLUDE_NAMES]
+    if len(candidates) != 1:
+        return calc_text, "not_found", None
+    match = candidates[0]
+    old_name = match.group(2)
+    new_text = (calc_text[:match.start()] + match.group(1) + target_name + match.group(3)
+                + calc_text[match.end():])
+    return new_text, "fixed", old_name

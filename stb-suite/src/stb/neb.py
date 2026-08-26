@@ -681,6 +681,7 @@ def main():
 
     with open(args.calc) as f:
         calc_text = f.read()
+    calc_text, include_status, old_include_name = structure_io.fix_structure_include(calc_text)
 
     output_root = args.output_dir
     run_root = os.path.join(output_root, RUN_SUBDIR)
@@ -717,6 +718,16 @@ def main():
                        if manifest_pair is not None
                        else f"distance-based matching (--autosort-tol {args.autosort_tol})"), f_out)
         print_dual(f"  Calc template     : {args.calc}", f_out)
+        if include_status == "fixed":
+            print_dual(color_text(
+                f"  [NOTE] --calc's structure include was '%include {old_include_name}' -- "
+                "auto-corrected to '%include structure.fdf' in every generated image_NN/calc.fdf "
+                "(every folder's structure is always written under that exact name).", 'yellow'), f_out)
+        elif include_status == "not_found":
+            print_dual(color_text(
+                "  [NOTE] Could not find a '%include ...struct....fdf'-style line in --calc to "
+                "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks "
+                "up the generated geometry.", 'yellow'), f_out)
         print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}", f_out)
         print_dual(f"  Output dir        : {output_root}", f_out)
         print_dual(f"  Run folder        : {run_root} (every generated file/folder lives here)", f_out)

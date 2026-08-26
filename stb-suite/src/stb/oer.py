@@ -235,6 +235,7 @@ stb-oerAnalysis --help for details.""",
 
     with open(args.calc) as f:
         calc_text = force_dipole_correction(f.read())
+    calc_text, include_status, old_include_name = structure_io.fix_structure_include(calc_text)
 
     # O anchored at local origin (the site coordinate), H further along
     # local +z -- AdsorbateSiteFinder.add_adsorbate anchors whichever atom
@@ -262,6 +263,16 @@ stb-oerAnalysis --help for details.""",
     print_section('[0] RUN METADATA', f_out)
     print_dual(f"Structure       : {args.structure}", f_out)
     print_dual(f"Calc template   : {args.calc}", f_out)
+    if include_status == "fixed":
+        print_dual(color_text(
+            f"[NOTE] --calc's structure include was '%include {old_include_name}' -- "
+            "auto-corrected to '%include structure.fdf' in every generated site_*/calc.fdf "
+            "(every folder's structure is always written under that exact name).", 'yellow'), f_out)
+    elif include_status == "not_found":
+        print_dual(color_text(
+            "[NOTE] Could not find a '%include ...struct....fdf'-style line in --calc to "
+            "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks up "
+            "the generated geometry.", 'yellow'), f_out)
     print_dual(f"Site type       : {args.site_type}", f_out)
     print_dual(f"Height          : {args.height:.2f} Ang", f_out)
     print_dual(f"O-H bond length : {args.oh_bond_length:.3f} Ang", f_out)

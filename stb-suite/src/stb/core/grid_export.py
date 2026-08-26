@@ -36,7 +36,7 @@ def check_planar_orthogonality(lattice, axis_idx):
 def write_gnuplot_script(data_filename, output_filename, mode, quantity_label,
                          is_signed, axis_idx=2, pos_val=0.0, plane_angle_deg=90.0,
                          cb_range=None, contour=False, generator_name="plotdensity.py",
-                         units="e/Ang^3"):
+                         units="e/Ang^3", title=None, xlabel=None):
     """
     Generates a .gplot script using the specific templates provided.
     - 3D: Based on '3dplot.gplot'
@@ -60,6 +60,15 @@ def write_gnuplot_script(data_filename, output_filename, mode, quantity_label,
     (charge/spin density) for backward compatibility; a caller plotting a
     different quantity (e.g. an energy landscape) should pass its own,
     e.g. units="eV".
+
+    `title`/`xlabel` (mode='profile' only): override the default
+    "Planar-averaged {quantity_label} along {fixed_axis}" title and
+    "{fixed_axis} (Angstrom)" xlabel -- both None by default, which keeps
+    density.py's original wording unchanged. A caller plotting something
+    that isn't a planar-averaged density profile along a lattice axis
+    (e.g. stackingfaultAnalysis's 1D stacking-fault energy line, where
+    "planar-averaged along X" would be nonsensical/misleading) should pass
+    its own.
 
     `gplot_name` (the actual path this function opens and writes to) keeps
     any directory from `output_filename` -- it has to, to land in the
@@ -98,8 +107,10 @@ def write_gnuplot_script(data_filename, output_filename, mode, quantity_label,
         fileout.append(f'set output "{pdf_name}"\n')
         fileout.append('\n')
 
-        fileout.append(f'set title "Planar-averaged {quantity_label} along {fixed_axis}"\n')
-        fileout.append(f'set xlabel "{fixed_axis} (Angstrom)"\n')
+        title_text = title if title is not None else f"Planar-averaged {quantity_label} along {fixed_axis}"
+        xlabel_text = xlabel if xlabel is not None else f"{fixed_axis} (Angstrom)"
+        fileout.append(f'set title "{title_text}"\n')
+        fileout.append(f'set xlabel "{xlabel_text}"\n')
         fileout.append(f'set ylabel "{quantity_label} ({units})"\n')
         fileout.append('set grid\n')
         if is_signed:

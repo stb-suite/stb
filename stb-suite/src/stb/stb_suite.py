@@ -1357,30 +1357,56 @@ def run_stackingfault_setup() -> None:
         print(color_text("File not found!", 'red'))
         calc_file = get_input("Calc.fdf template file (-c): ").strip()
 
-    pp_path = prompt_pseudo_source(optional=True)
+    print(color_text(
+        "\nInterlayer-gap strategy per grid point:\n"
+        "  1 = SIESTA relaxes z for real (restricted CG, x/y frozen) -- most accurate, most "
+        "expensive.\n"
+        "  2 = MACE-MP-0 relaxes z first (same x/y-frozen definition, cheap), then a plain "
+        "SIESTA single-point at the result -- middle ground.\n"
+        "  3 = fixed gap, plain SIESTA single-point, no relaxation of any kind (cheapest).",
+        'cyan'))
+    mode_choice = get_int_input("Mode [1/2/3, default: 1]: ", 1)
+    mode = mode_choice if mode_choice in (1, 2, 3) else 1
+    relax_z_steps = 200
+    if mode == 1:
+        relax_z_steps = get_int_input("  MD.Steps for the restricted SIESTA relaxation "
+                                       "[default: 200]: ", 200)
 
     print(color_text(
-        "\nGrid resolution: shift_x and shift_y are sampled independently -- an anisotropic "
-        "lattice (a != b) often warrants a different sampling density per axis rather than a "
-        "square grid.", 'cyan'))
-    grid_nx = get_int_input("Grid resolution along shift_x (Nx) [default: 7]: ", 7)
-    grid_ny = get_int_input("Grid resolution along shift_y (Ny) [default: 7]: ", 7)
-    gap = get_float_input("Interlayer gap, Ang (fixed across the grid, unless --ml-relax-gap "
-                           "below) [default: 3.2]: ", 3.2)
+        "\nSweep shape:\n"
+        "  1 = Full 2D surface (Nx x Ny grid) -- output is the gamma-surface heatmap.\n"
+        "  2 = 1D along shift_x only -- output is a line plot.\n"
+        "  3 = 1D along shift_y only -- output is a line plot.\n"
+        "  4 = 1D diagonal (shift_x = shift_y) -- output is a line plot.",
+        'cyan'))
+    scan_choice = get_int_input("Sweep shape [1/2/3/4, default: 1]: ", 1)
+    scan = {1: "surface", 2: "x", 3: "y", 4: "xy"}.get(scan_choice, "surface")
+
+    pp_path = prompt_pseudo_source(optional=True)
+
+    if scan == "surface":
+        print(color_text(
+            "\nGrid resolution: shift_x and shift_y are sampled independently -- an anisotropic "
+            "lattice (a != b) often warrants a different sampling density per axis rather than a "
+            "square grid.", 'cyan'))
+        grid_nx = get_int_input("Grid resolution along shift_x (Nx) [default: 7]: ", 7)
+        grid_ny = get_int_input("Grid resolution along shift_y (Ny) [default: 7]: ", 7)
+        scan_points = 15
+    else:
+        grid_nx = grid_ny = 7
+        scan_points = get_int_input("Number of points along the 1D sweep [default: 15]: ", 15)
+    gap = get_float_input("Interlayer gap, Ang (fixed value under mode 3, starting guess under "
+                           "modes 1/2 -- see above) [default: 3.2]: ", 3.2)
+
+    d3 = get_input(
+        "\nForce the Grimme DFT-D3 dispersion correction? Recommended -- interlayer stacking "
+        "energetics are van-der-Waals dominated, which plain GGA misses [Y/n]: "
+    ).strip().lower() != 'n'
 
     ml_prerelax_choice = get_input(
         "\nPre-relax each monolayer with MACE-MP-0 before stacking? Needs the optional 'ml' "
         "extra (y/N): ").strip().lower()
     ml_prerelax_layers = ml_prerelax_choice in ('y', 'yes')
-
-    ml_relax_gap_choice = get_input(
-        "\nOptimize the interlayer gap per grid point with MACE-MP-0, instead of the fixed "
-        "gap above? Needs the optional 'ml' extra (y/N): ").strip().lower()
-    ml_relax_gap = ml_relax_gap_choice in ('y', 'yes')
-    ml_relax_gap_window = 1.0
-    if ml_relax_gap:
-        ml_relax_gap_window = get_float_input(
-            "  Scan window, +/- Ang around the gap above [default: 1.0]: ", 1.0)
 
     ml_preview_choice = get_input(
         "\nGenerate a fast MACE-MP-0 preview of the gamma-surface (no SIESTA) before writing "
@@ -1391,10 +1417,11 @@ def run_stackingfault_setup() -> None:
     # stays short; CLI defaults apply untouched when skipped).
     max_area, max_strain, match_id, vacuum, strain_mode, twist, output_dir, ml_device = \
         150.0, 0.05, 0, None, "top", 0.0, ".", "cpu"
-    uses_mace = ml_prerelax_layers or ml_relax_gap or ml_preview
+    ml_model, ml_custom_model = "small", None
+    uses_mace = ml_prerelax_layers or mode == 2 or ml_preview
     advanced_items = "ZSL match tolerance, vacuum, strain mode, twist, output directory"
     if uses_mace:
-        advanced_items += ", ML device"
+        advanced_items += ", ML model/device"
     show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         max_area = get_float_input("Max ZSL supercell area, Ang^2 [default: 150.0]: ", 150.0)
@@ -1409,7 +1436,19 @@ def run_stackingfault_setup() -> None:
         if not output_dir:
             output_dir = "."
         if uses_mace:
-            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            print(f"  {color_text('MACE model:', 'yellow')} {color_text('1', 'cyan')}=small  "
+                  f"{color_text('2', 'cyan')}=medium  {color_text('3', 'cyan')}=large  "
+                  f"{color_text('4', 'cyan')}=custom (e.g. fine-tuned via stb-mlffAnalysis)")
+            model_choice = get_input("  Select (1-4) [default: 1]: ").strip()
+            model_map = {'1': 'small', '2': 'medium', '3': 'large'}
+            if model_choice == '4':
+                ml_custom_model = get_input("  Custom model path: ").strip()
+                while not os.path.isfile(ml_custom_model):
+                    print(color_text("  File not found!", 'red'))
+                    ml_custom_model = get_input("  Custom model path: ").strip()
+            else:
+                ml_model = model_map.get(model_choice, 'small')
+            device_choice = get_input("  ML device [cpu/cuda, default: cpu]: ").strip().lower()
             ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
             if ml_device == "cuda":
                 from stb.core.mace_relax import gpu_available
@@ -1428,29 +1467,38 @@ def run_stackingfault_setup() -> None:
         "-l1", layer1_file,
         "-l2", layer2_file,
         "-c", calc_file,
-        "-nx", str(grid_nx),
-        "-ny", str(grid_ny),
+        "--scan", scan,
         "-g", str(gap),
         "-a", str(max_area),
         "-s", str(max_strain),
         "-id", str(match_id),
         "-sm", strain_mode,
         "-t", str(twist),
+        "--mode", str(mode),
         "--output-dir", output_dir,
         "--no-intro",
     ]
+    if scan == "surface":
+        args.extend(["-nx", str(grid_nx), "-ny", str(grid_ny)])
+    else:
+        args.extend(["-n", str(scan_points)])
     if pp_path:
         args.extend(["-p", pp_path])
     if vacuum is not None:
         args.extend(["--vacuum", str(vacuum)])
+    args.append("--d3" if d3 else "--no-d3")
+    if mode == 1:
+        args.extend(["--relax-z-steps", str(relax_z_steps)])
     if ml_prerelax_layers:
         args.append("--ml-prerelax-layers")
-    if ml_relax_gap:
-        args.extend(["--ml-relax-gap", "--ml-relax-gap-window", str(ml_relax_gap_window)])
     if ml_preview:
         args.append("--ml-preview")
     if uses_mace:
         args.extend(["--ml-device", ml_device])
+        if ml_custom_model:
+            args.extend(["--ml-custom-model", ml_custom_model])
+        else:
+            args.extend(["--ml-model", ml_model])
     if save_report:
         args.append("--save-report")
 
@@ -1459,18 +1507,60 @@ def run_stackingfault_setup() -> None:
         ("Layer 2", layer2_file),
         ("Calc template", calc_file),
         ("Pseudopotentials", pp_path or "(none)"),
-        ("Grid", f"{grid_nx} x {grid_ny}" + (" (asymmetric)" if grid_nx != grid_ny else "")),
-        ("Gap (fixed)", f"{gap} Ang"),
+        ("Grid", f"{grid_nx} x {grid_ny} (surface)" + (" (asymmetric)" if grid_nx != grid_ny else "")
+         if scan == "surface" else f"{scan_points} points, 1D ({scan})"),
+        ("Gap", f"{gap} Ang" + (" (starting guess)" if mode in (1, 2) else " (fixed)")),
         ("Twist (fixed)", f"{twist} deg"),
+        ("Mode", f"{mode}" + (f" (relax-z-steps={relax_z_steps})" if mode == 1 else "")),
+        ("D3 dispersion", "ON" if d3 else "OFF"),
         ("ML pre-relax layers", "ON" if ml_prerelax_layers else "OFF"),
-        ("ML relax gap", f"ON (window +/-{ml_relax_gap_window} Ang)" if ml_relax_gap else "OFF"),
         ("ML preview", "ON" if ml_preview else "OFF"),
         ("Output directory", f"{output_dir} (run folder: {output_dir}/sf_run)"),
         ("Save report", "yes" if save_report else "no"),
     ]
+    if uses_mace:
+        summary_rows.insert(-3, ("ML model",
+                                  f"custom ({ml_custom_model})" if ml_custom_model
+                                  else f"MACE-MP-0 ({ml_model})"))
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-stackingfault", args)
+
+
+def run_stackingfault_bsse() -> None:
+    """Interface for the Stacking Fault BSSE Prep (stackingfault_bsse.py)"""
+    print("\n" + "="*60)
+    print(color_text("STACKING FAULT BSSE PREP", 'bold').center(60))
+    print("="*60)
+    print(color_text(
+        "Reads every 'positions/shift_II_JJ/' grid point and writes its BSSE (counterpoise) "
+        "ghost-fragment references -- 'bsse/shift_II_JJ/bsse_layer1/' and "
+        "'bsse/shift_II_JJ/bsse_layer2/' (a sibling of 'positions/') -- at that point's actual "
+        "geometry. Under --mode 1 (Stage 1), only points that have already finished relaxing in "
+        "SIESTA are ready; under --mode 2/3, every point is ready immediately (their geometry "
+        "never changes after Stage 1 writes it). Points not yet ready are reported and skipped, "
+        "not fatal.", 'cyan'))
+    print()
+
+    dir_path = get_input("Root directory with 'positions/shift_II_JJ/' [default: sf_run]: ").strip()
+    if not dir_path:
+        dir_path = "sf_run"
+
+    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
+    if not out_file:
+        out_file = "calc.out"
+
+    force_tolerance = get_float_input(
+        "Force tolerance for the 'is this point relaxed' check, in eV/Ang (default: 0.05): ", 0.05)
+
+    args = ["--dir", dir_path, "--file", out_file,
+            "--force-tolerance", str(force_tolerance), "--no-intro"]
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-stackingfaultBsse", args)
 
 
 def run_stackingfault_analysis() -> None:
@@ -1479,12 +1569,13 @@ def run_stackingfault_analysis() -> None:
     print(color_text("STACKING FAULT (GAMMA-SURFACE) ANALYSIS", 'bold').center(60))
     print("="*60)
     print(color_text(
-        "Reads every 'shift_II_JJ/' folder and reports the equilibrium stacking, the "
-        "highest-energy registry, the corrugation energy, and the full 2D gamma-surface map.",
+        "Reads every 'positions/shift_II_JJ/' folder and reports the equilibrium stacking, the "
+        "highest-energy registry, the corrugation energy, and the full 2D gamma-surface map "
+        "(BSSE-corrected automatically if Stage 2's 'bsse/' folder is present).",
         'cyan'))
     print()
 
-    dir_path = get_input("Root directory with every 'shift_II_JJ/' [default: sf_run]: ").strip()
+    dir_path = get_input("Root directory with 'positions/shift_II_JJ/' [default: sf_run]: ").strip()
     if not dir_path:
         dir_path = "sf_run"
 
@@ -8661,14 +8752,21 @@ WORKFLOW_TOOLS = {
                 'func': run_neb_analysis},
         }},
     10: {'title': "2D Stacking Fault (Gamma-Surface)",
-        'description': "Slide one 2D layer across a grid of lateral offsets, then compute the "
-                        "equilibrium stacking, corrugation energy, and full gamma-surface map.",
+        'description': "Slide one 2D layer across a grid of lateral offsets, optionally correct "
+                        "for BSSE at each point, then compute the equilibrium stacking, "
+                        "corrugation energy, and full gamma-surface map.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-stackingfault)",
-                'description': "Generate one single-point shift_II_JJ/ folder per grid point.",
+                'description': "Generate one single-point positions/shift_II_JJ/ folder per grid "
+                               "point.",
                 'func': run_stackingfault_setup},
-            2: {'title': "Stage 2 - Analysis (stb-stackingfaultAnalysis)",
-                'description': "Compute the equilibrium stacking and corrugation energy.",
+            2: {'title': "Stage 2 - BSSE Prep (stb-stackingfaultBsse)",
+                'description': "Generate BSSE ghost-fragment folders at each grid point's "
+                               "geometry -- run after Stage 1's points are ready.",
+                'func': run_stackingfault_bsse},
+            3: {'title': "Stage 3 - Analysis (stb-stackingfaultAnalysis)",
+                'description': "Compute the equilibrium stacking and corrugation energy, "
+                               "BSSE-corrected where Stage 2's folders have finished.",
                 'func': run_stackingfault_analysis},
         }},
     11: {'title': "Raman Spectrum",

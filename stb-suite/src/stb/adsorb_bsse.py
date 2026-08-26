@@ -11,8 +11,8 @@ VERSION = "1.0.0"
 import os
 import sys
 import argparse
-from pymatgen.core.periodic_table import Element
 from stb.core import structure_io
+from stb.core.bsse import make_ghost_variant, strip_config_extra_include
 from stb.core.siesta_log import report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.pseudopotentials import copy_pseudo
@@ -72,52 +72,6 @@ def read_site_theory_flags(site_dir):
     with open(path) as f:
         text = f.read()
     return "Spin" in text, "Slab.DipoleCorrection" in text, "DFTD3" in text
-
-
-def make_ghost_variant(base_structure, ghost_start, ghost_end):
-    """Returns a copy of `base_structure` (an FdfStructure, atoms in a KNOWN
-    order: slab atoms first, adsorbate atom(s) appended after -- guaranteed
-    by AdsorbateSiteFinder.add_adsorbate/adsorb_both_surfaces, which only
-    ever append, back when stb-adsorb built this same structure) with the
-    atoms in [ghost_start, ghost_end) turned into ghost species:
-    '<symbol>_ghost' label, negative Z, no valence charge, same basis (from
-    the same real pseudopotential file, see copy_pseudo's dest_label) as the
-    real element -- SIESTA's standard ghost-atom convention, already used by
-    cohesive_energy.py's BSSE ghost clusters there for "one atom's real
-    local neighbors". Here it's applied to a whole fragment (the slab, or
-    the adsorbate) instead of a local neighbor shell -- the standard
-    Boys-Bernardi counterpoise scheme for a 2-fragment (slab + adsorbate)
-    interaction, exact by construction (no cutoff to truncate the
-    correction, unlike cohesive_energy.py's --bsse-cutoff, since both
-    fragments here are already complete/finite). Moved here from adsorb.py
-    once BSSE generation moved to this dedicated post-relaxation stage.
-    """
-    species_meta = dict(base_structure.species_meta)
-    new_atoms = []
-    for i, (symbol, pos) in enumerate(base_structure.atoms):
-        if ghost_start <= i < ghost_end:
-            label = f"{symbol}_ghost"
-            if label not in species_meta:
-                real_z = Element(symbol).Z
-                used_ids = {str(info['id']) for info in species_meta.values()}
-                next_id = 1
-                while str(next_id) in used_ids:
-                    next_id += 1
-                species_meta[label] = {'id': str(next_id), 'Z': -abs(real_z)}
-        else:
-            label = symbol
-        new_atoms.append((label, pos))
-
-    species = list(dict.fromkeys(sym for sym, _ in new_atoms))
-    return structure_io.FdfStructure(
-        lattice=base_structure.lattice,
-        lattice_constant=base_structure.lattice_constant,
-        species=species,
-        species_meta=species_meta,
-        atoms=new_atoms,
-        coord_format=base_structure.coord_format,
-        raw_lines=[],
-    )
 
 
 def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
@@ -204,15 +158,13 @@ def read_original_calc_text(site_calc_fdf_path):
     site's own calc.fdf, recovering the original --calc template text --
     needed here so write_bsse_folders can prepend its OWN (different)
     config_extra.fdf (BSSE_SINGLE_POINT_BLOCK instead of FIXED_CELL_BLOCK)
-    without doubling the include line. A no-op if the file doesn't start
-    with that exact prefix (defensive; e.g. a hand-edited calc.fdf).
+    without doubling the include line. Thin wrapper around
+    core.bsse.strip_config_extra_include (shared with
+    stackingfault_bsse.py) that also does the file read.
     """
     with open(site_calc_fdf_path) as f:
         text = f.read()
-    prefix = f"%include {CONFIG_EXTRA_FILE}\n\n"
-    if text.startswith(prefix):
-        return text[len(prefix):]
-    return text
+    return strip_config_extra_include(text, CONFIG_EXTRA_FILE)
 
 
 def main():

@@ -7,7 +7,8 @@
 # graphene/graphene, cheap and deterministic), then fabricates
 # "siesta: FreeEng"/SCF/Max-force lines per grid point (synthetic, same
 # printf style already used by 8-adsorption/9-neb's analysis test.sh) to
-# exercise the analysis side without needing a real SIESTA run.
+# exercise the analysis side without needing a real SIESTA run. Since Stage 1
+# now nests everything under 'sf_run/', all paths below go through it.
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREP_DIR="$(cd "$FIXTURE_DIR/../prep" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
@@ -67,16 +68,17 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Build a real 3x3 grid via stb-stackingfault, fabricate FreeEng/SCF/Max ---
 echo -e "\n--- Testing analysis of a 3x3 stacking-fault grid ---"
-stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -n 3 --no-intro > log_prep.txt 2>&1
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --no-intro > log_prep.txt 2>&1
 check_exit_code $? 0
-n_grid=$(find . -maxdepth 1 -type d -name 'shift_*' | wc -l)
+n_grid=$(find sf_run -maxdepth 1 -type d -name 'shift_*' | wc -l)
 if [ "$n_grid" -eq 9 ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} prep produced 9 grid folders"
+    echo -e "   -> ${GREEN}Verified:${NC} prep produced 9 grid folders under sf_run/"
     PASS=$((PASS+1))
 else
     echo -e "   -> ${RED}Failed:${NC} expected 9 grid folders, found $n_grid"
     FAIL=$((FAIL+1))
 fi
+check_success sf_run/sf_manifest.json
 
 # Non-trivial energy landscape: AA (shift_00_00, eclipsed) is highest, a
 # specific off-symmetry point (shift_01_02) is the minimum, one point
@@ -89,13 +91,13 @@ declare -A energies=(
 for label in "${!energies[@]}"; do
     e="${energies[$label]}"
     if [ "$label" = "shift_02_01" ]; then
-        printf "siesta: FreeEng =    %s\nsiesta: Atomic forces (eV/Ang):\n   Max    0.350000\n" "$e" > "$label/calc.out"
+        printf "siesta: FreeEng =    %s\nsiesta: Atomic forces (eV/Ang):\n   Max    0.350000\n" "$e" > "sf_run/$label/calc.out"
     else
-        printf "siesta: FreeEng =    %s\nSCF cycle converged after 10 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n" "$e" > "$label/calc.out"
+        printf "siesta: FreeEng =    %s\nSCF cycle converged after 10 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n" "$e" > "sf_run/$label/calc.out"
     fi
 done
 
-stb-stackingfaultAnalysis --dir . --no-intro > log_analysis.txt 2>&1
+stb-stackingfaultAnalysis --dir sf_run --no-intro > log_analysis.txt 2>&1
 check_exit_code $? 0
 check_contains "Equilibrium stacking (min)    : shift_01_02" log_analysis.txt
 check_contains "Highest-energy registry (max) : shift_00_00" log_analysis.txt
@@ -104,11 +106,11 @@ check_contains "never confirmed SCF convergence.*shift_02_01" log_analysis.txt
 check_contains "residual force above --force-tolerance.*shift_02_01" log_analysis.txt
 check_success stackingfault_surface.dat
 check_success stackingfault_surface.gplot
-check_success stackingfault_report.txt
-check_contains "\[0\] RUN METADATA" stackingfault_report.txt
-check_contains "\[1\] GRID ENERGIES" stackingfault_report.txt
-check_contains "\[2\] STACKING FAULT ANALYSIS" stackingfault_report.txt
-check_contains "\[3\] SUMMARY" stackingfault_report.txt
+check_contains "\[0\] RUN METADATA" log_analysis.txt
+check_contains "\[1\] GRID ENERGIES" log_analysis.txt
+check_contains "\[2\] STACKING FAULT ANALYSIS" log_analysis.txt
+check_contains "\[3\] SUMMARY" log_analysis.txt
+check_contains "Grid       : 3 x 3" log_analysis.txt
 check_contains "set pm3d map" stackingfault_surface.gplot
 check_contains "stb-stackingfaultAnalysis" stackingfault_surface.gplot
 check_contains "Stacking Fault Energy (eV)" stackingfault_surface.gplot
@@ -122,10 +124,15 @@ fi
 # Hexagonal lattice (120 deg) -> the skewed-plane warning should fire
 check_contains "cut plane is skewed" stackingfault_surface.gplot
 
+echo "Testing: --save-report writes the report under <dir>/, not cwd"
+rm -f sf_run/stackingfault_report.txt
+stb-stackingfaultAnalysis --dir sf_run --save-report --no-intro > log_savereport.txt 2>&1
+check_success sf_run/stackingfault_report.txt
+
 
 # --- 3. --apply copies the equilibrium (min-energy) point's structure.fdf ---
 echo -e "\n--- Testing --apply ---"
-stb-stackingfaultAnalysis --dir . --apply equilibrium.fdf --no-intro > log_apply.txt 2>&1
+stb-stackingfaultAnalysis --dir sf_run --apply equilibrium.fdf --no-intro > log_apply.txt 2>&1
 check_contains "Applied.*shift_01_02" log_apply.txt
 check_success equilibrium.fdf
 check_contains "NumberofAtoms      4" equilibrium.fdf
@@ -133,12 +140,12 @@ check_contains "NumberofAtoms      4" equilibrium.fdf
 
 # --- 4. A grid point missing calc.out is skipped, not fatal ---
 echo -e "\n--- Testing that a grid point missing calc.out is skipped ---"
-mv shift_02_02/calc.out shift_02_02/calc.out.bak
+mv sf_run/shift_02_02/calc.out sf_run/shift_02_02/calc.out.bak
 # clear the surface plot files left by the earlier complete-grid run (test
 # 2) BEFORE the incomplete-grid run below, so we can tell whether THIS run
 # (re)creates them, not whether they were already there from before.
 rm -f stackingfault_surface.dat stackingfault_surface.gplot
-stb-stackingfaultAnalysis --dir . --no-intro > log_partial.txt 2>&1
+stb-stackingfaultAnalysis --dir sf_run --no-intro > log_partial.txt 2>&1
 check_contains "SKIP" log_partial.txt
 check_contains "skipped: 1" log_partial.txt
 
@@ -157,17 +164,30 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no surface plot files written for an incomplete grid"
     PASS=$((PASS+1))
 fi
-mv shift_02_02/calc.out.bak shift_02_02/calc.out
+mv sf_run/shift_02_02/calc.out.bak sf_run/shift_02_02/calc.out
 
 
-# --- 5. stackingfault_setup.txt missing entirely (fallback path) ---
-echo -e "\n--- Testing fallback when stackingfault_setup.txt is missing ---"
-mv stackingfault_setup.txt stackingfault_setup.txt.bak
-stb-stackingfaultAnalysis --dir . --no-intro > log_fallback.txt 2>&1
+# --- 5. sf_manifest.json missing entirely (fallback path) ---
+echo -e "\n--- Testing fallback when sf_manifest.json is missing ---"
+mv sf_run/sf_manifest.json sf_run/sf_manifest.json.bak
+stb-stackingfaultAnalysis --dir sf_run --no-intro > log_fallback.txt 2>&1
 check_exit_code $? 0
-check_contains "No 'stackingfault_setup.txt' grid table found" log_fallback.txt
+check_contains "No 'sf_manifest.json' found" log_fallback.txt
 check_contains "Equilibrium stacking (min)    : shift_01_02" log_fallback.txt
-mv stackingfault_setup.txt.bak stackingfault_setup.txt
+mv sf_run/sf_manifest.json.bak sf_run/sf_manifest.json
+
+
+# --- 5b. --dir smart default: 'sf_run' from the output root, '.' from
+#     inside sf_run/ itself ---
+echo -e "\n--- Testing --dir smart default ---"
+stb-stackingfaultAnalysis --no-intro > log_smartdefault_root.txt 2>&1
+check_contains "Directory  : sf_run" log_smartdefault_root.txt
+check_contains "Equilibrium stacking (min)    : shift_01_02" log_smartdefault_root.txt
+pushd sf_run > /dev/null
+stb-stackingfaultAnalysis --no-intro > ../log_smartdefault_inside.txt 2>&1
+popd > /dev/null
+check_contains "Directory  : \." log_smartdefault_inside.txt
+check_contains "Equilibrium stacking (min)    : shift_01_02" log_smartdefault_inside.txt
 
 
 # --- 6. Error and robustness cases ---
@@ -185,7 +205,7 @@ check_exit_code $? 1
 check_contains "Did you run stb-stackingfault" log_no_grid.txt
 
 echo "Testing: --force-tolerance"
-stb-stackingfaultAnalysis --dir . --force-tolerance 1.0 --no-intro > log_force_tol.txt 2>&1
+stb-stackingfaultAnalysis --dir sf_run --force-tolerance 1.0 --no-intro > log_force_tol.txt 2>&1
 if grep -q "residual force above --force-tolerance.*shift_02_01" log_force_tol.txt; then
     echo -e "   -> ${RED}Failed:${NC} unexpected force warning with a loose --force-tolerance"
     FAIL=$((FAIL+1))
@@ -198,21 +218,43 @@ echo "Testing: --version"
 stb-stackingfaultAnalysis --version > log_version.txt 2>&1
 check_contains "stb-stackingfaultAnalysis" log_version.txt
 
-echo "Testing: --help documents --dir/--file/--apply"
+echo "Testing: --help documents --dir/--file/--apply/--save-report"
 stb-stackingfaultAnalysis --help > log_help.txt 2>&1
 check_contains "dir" log_help.txt
 check_contains "file" log_help.txt
 check_contains "apply" log_help.txt
+check_contains "save-report" log_help.txt
+
+
+# --- 6b. --mode 1 grid: manifest carries mode/n_layer1_atoms, analysis
+#     reports them and adds the GapFinal(A) column (falls back to the
+#     pre-relax structure.fdf when no '*.XV' is present -- no real SIESTA
+#     binary/sisl fixture available in this environment, so this only
+#     exercises the wiring, not a genuinely-relaxed gap value) ---
+echo -e "\n--- Testing --mode 1 grid is recognized/reported by the analysis stage ---"
+rm -rf sf_run_mode1
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 2 -ny 2 --mode 1 \
+    -O mode1_root --no-intro > log_prep_mode1.txt 2>&1
+check_exit_code $? 0
+for label in shift_00_00 shift_00_01 shift_01_00 shift_01_01; do
+    printf "siesta: FreeEng =    -199.000000\nSCF cycle converged after 10 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.010000\n" \
+        > "mode1_root/sf_run/$label/calc.out"
+done
+stb-stackingfaultAnalysis --dir mode1_root/sf_run --no-intro > log_analysis_mode1.txt 2>&1
+check_exit_code $? 0
+check_contains "Mode       : 1" log_analysis_mode1.txt
+check_contains "GapFinal(A)" log_analysis_mode1.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.10.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.10.2) ---"
 
-echo "Testing: navigate 4.10.2 -> defaults -> quit"
-rm -f stackingfault_surface.dat stackingfault_report.txt
-# 4.10.2 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
-# default) / "" (apply_target: skip) / "" (Press Enter to continue) / 0 (quit)
-printf '4.10.2\n.\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+echo "Testing: navigate 4.10.2 -> defaults (sf_run) -> quit"
+rm -f stackingfault_surface.dat sf_run/stackingfault_report.txt
+# 4.10.2 (menu code) / "" (dir default -> sf_run) / "" (out_file default) /
+# "" (force-tolerance default) / "" (apply_target: skip) / "" (Press Enter
+# to continue) / 0 (quit)
+printf '4.10.2\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Equilibrium stacking (min)    : shift_01_02" log_menu.txt
 check_success stackingfault_surface.dat
 

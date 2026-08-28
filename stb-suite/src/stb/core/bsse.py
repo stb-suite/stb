@@ -2,11 +2,16 @@
 adsorb_bsse.py once stackingfault_bsse.py became a second consumer of the
 exact same "turn one fragment of an already-built structure into SIESTA
 ghost atoms" need (same extract-on-second-use policy as the rest of
-core/). Both consumers correct for the same underlying issue: SIESTA's
-localized (PAO) basis set lets two weakly-bound fragments artificially
-lower each other's energy by borrowing basis functions across the gap --
-a plane-wave code wouldn't have this problem at all, but a localized-basis
-code always does for any two-fragment interaction energy.
+core/). stackingfault_bsse.py was later removed (BSSE correction doesn't
+apply to a same-atom-count, same-basis lateral-shift comparison like a
+gamma-surface scan -- there's no genuinely different-basis-size fragment
+comparison to correct there, unlike an adsorption/interaction energy);
+adsorb_bsse.py remains the sole consumer. The underlying issue this module
+corrects for, where it IS applicable: SIESTA's localized (PAO) basis set
+lets two weakly-bound fragments artificially lower each other's energy by
+borrowing basis functions across the gap -- a plane-wave code wouldn't
+have this problem at all, but a localized-basis code always does for a
+genuine two-different-fragment interaction/binding energy.
 """
 
 from pymatgen.core.periodic_table import Element

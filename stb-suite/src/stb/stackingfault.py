@@ -27,13 +27,16 @@ from stb.core.deps import require_mace
 # self-contained subfolder of --output-dir, not scattered directly into it.
 RUN_SUBDIR = "sf_run"
 # POSITIONS_SUBDIR nests every shift_II_JJ/ grid folder one level deeper,
-# under <run_root>/positions/ -- a sibling of stb-stackingfaultBsse's own
-# <run_root>/bsse/ tree, so the run root only ever has 2 "kind of content"
-# subfolders (positions/, bsse/) plus its own manifest/report/preview,
+# under <run_root>/positions/, so the run root only ever has that one
+# "kind of content" subfolder plus its own manifest/report/preview,
 # instead of dozens of shift_II_JJ/ folders mixed in at the same level as
 # those run-level files -- same "one folder per kind of artifact" tidiness
-# stb-adsorb already gets from 'sites/' + 'bsse/' both living under its own
-# --output-dir root.
+# stb-adsorb gets from its own 'sites/' living under its --output-dir root.
+# (An earlier version of this workflow also had a BSSE-correction stage,
+# stb-stackingfaultBsse, writing a sibling <run_root>/bsse/ tree -- removed
+# after determining BSSE correction doesn't apply to a same-atom-count,
+# same-basis lateral-shift comparison like this one; see
+# stackingfault_analysis.py's own history for the reasoning.)
 POSITIONS_SUBDIR = "positions"
 # REPORT_FILE is the optional human narrative ([0]-[3]), written only with
 # --save-report. MANIFEST_FILE is the always-on machine-readable handoff to
@@ -419,11 +422,10 @@ def main():
     parser.add_argument("-O", "--output-dir", type=str, default=".",
                          help=f"Root directory (default: current directory) -- everything lives "
                               f"under its '{RUN_SUBDIR}/' subfolder (see --save-report): every "
-                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/' "
-                              f"(a sibling of stb-stackingfaultBsse's own '{RUN_SUBDIR}/bsse/'), "
+                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/', "
                               f"the manifest, and the optional report directly under "
                               f"'{RUN_SUBDIR}/' -- same self-contained-run-folder convention as "
-                              "stb-adsorb's 'sites/'+'bsse/' and stb-neb's 'neb_run/'.")
+                              "stb-adsorb's 'sites/' and stb-neb's 'neb_run/'.")
     parser.add_argument("--save-report", action="store_true",
                          help=f"Also persist the full run narrative to <output-dir>/{RUN_SUBDIR}/"
                               f"{REPORT_FILE}. Off by default -- the machine-readable "

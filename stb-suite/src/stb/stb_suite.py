@@ -1527,42 +1527,6 @@ def run_stackingfault_setup() -> None:
     run_tool("stb-stackingfault", args)
 
 
-def run_stackingfault_bsse() -> None:
-    """Interface for the Stacking Fault BSSE Prep (stackingfault_bsse.py)"""
-    print("\n" + "="*60)
-    print(color_text("STACKING FAULT BSSE PREP", 'bold').center(60))
-    print("="*60)
-    print(color_text(
-        "Reads every 'positions/shift_II_JJ/' grid point and writes its BSSE (counterpoise) "
-        "ghost-fragment references -- 'bsse/shift_II_JJ/bsse_layer1/' and "
-        "'bsse/shift_II_JJ/bsse_layer2/' (a sibling of 'positions/') -- at that point's actual "
-        "geometry. Under --mode 1 (Stage 1), only points that have already finished relaxing in "
-        "SIESTA are ready; under --mode 2/3, every point is ready immediately (their geometry "
-        "never changes after Stage 1 writes it). Points not yet ready are reported and skipped, "
-        "not fatal.", 'cyan'))
-    print()
-
-    dir_path = get_input("Root directory with 'positions/shift_II_JJ/' [default: sf_run]: ").strip()
-    if not dir_path:
-        dir_path = "sf_run"
-
-    out_file = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip()
-    if not out_file:
-        out_file = "calc.out"
-
-    force_tolerance = get_float_input(
-        "Force tolerance for the 'is this point relaxed' check, in eV/Ang (default: 0.05): ", 0.05)
-
-    args = ["--dir", dir_path, "--file", out_file,
-            "--force-tolerance", str(force_tolerance), "--no-intro"]
-
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
-
-    run_tool("stb-stackingfaultBsse", args)
-
-
 def run_stackingfault_analysis() -> None:
     """Interface for the Stacking Fault Analysis (stackingfault_analysis.py)"""
     print("\n" + "="*60)
@@ -1570,8 +1534,7 @@ def run_stackingfault_analysis() -> None:
     print("="*60)
     print(color_text(
         "Reads every 'positions/shift_II_JJ/' folder and reports the equilibrium stacking, the "
-        "highest-energy registry, the corrugation energy, and the full 2D gamma-surface map "
-        "(BSSE-corrected automatically if Stage 2's 'bsse/' folder is present).",
+        "highest-energy registry, the corrugation energy, and the full 2D gamma-surface map.",
         'cyan'))
     print()
 
@@ -1595,6 +1558,26 @@ def run_stackingfault_analysis() -> None:
         "Path to write, or leave blank to skip: ").strip()
     if apply_target:
         args.extend(["--apply", apply_target])
+
+    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+    save_gnuplot = get_input(
+        "Also save the gamma-surface (or line-scan) data as gnuplot .dat + .gplot scripts, "
+        "under '<dir>/plot/'? (y/N): ").strip().lower() == 'y'
+    if save_gnuplot:
+        args.append("--save-gnuplot")
+    view = get_input(
+        "View the gamma-surface (or line-scan) plot interactively via matplotlib now? "
+        "(y/N): ").strip().lower() == 'y'
+    if view:
+        args.append("--view")
+    view_animation = get_input(
+        "Open every analyzed grid point's structure in ASE's interactive multi-frame 3D "
+        "viewer (the animation is always saved to '<dir>/stackingfault_animation.xyz')? "
+        "Needs a display (y/N): ").strip().lower() == 'y'
+    if view_animation:
+        args.append("--view-animation")
 
     run_tool("stb-stackingfaultAnalysis", args)
 
@@ -8752,21 +8735,15 @@ WORKFLOW_TOOLS = {
                 'func': run_neb_analysis},
         }},
     10: {'title': "2D Stacking Fault (Gamma-Surface)",
-        'description': "Slide one 2D layer across a grid of lateral offsets, optionally correct "
-                        "for BSSE at each point, then compute the equilibrium stacking, "
-                        "corrugation energy, and full gamma-surface map.",
+        'description': "Slide one 2D layer across a grid of lateral offsets, then compute the "
+                        "equilibrium stacking, corrugation energy, and full gamma-surface map.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-stackingfault)",
                 'description': "Generate one single-point positions/shift_II_JJ/ folder per grid "
                                "point.",
                 'func': run_stackingfault_setup},
-            2: {'title': "Stage 2 - BSSE Prep (stb-stackingfaultBsse)",
-                'description': "Generate BSSE ghost-fragment folders at each grid point's "
-                               "geometry -- run after Stage 1's points are ready.",
-                'func': run_stackingfault_bsse},
-            3: {'title': "Stage 3 - Analysis (stb-stackingfaultAnalysis)",
-                'description': "Compute the equilibrium stacking and corrugation energy, "
-                               "BSSE-corrected where Stage 2's folders have finished.",
+            2: {'title': "Stage 2 - Analysis (stb-stackingfaultAnalysis)",
+                'description': "Compute the equilibrium stacking and corrugation energy.",
                 'func': run_stackingfault_analysis},
         }},
     11: {'title': "Raman Spectrum",

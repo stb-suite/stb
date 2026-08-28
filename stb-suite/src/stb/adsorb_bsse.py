@@ -159,8 +159,7 @@ def read_original_calc_text(site_calc_fdf_path):
     needed here so write_bsse_folders can prepend its OWN (different)
     config_extra.fdf (BSSE_SINGLE_POINT_BLOCK instead of FIXED_CELL_BLOCK)
     without doubling the include line. Thin wrapper around
-    core.bsse.strip_config_extra_include (shared with
-    stackingfault_bsse.py) that also does the file read.
+    core.bsse.strip_config_extra_include that also does the file read.
     """
     with open(site_calc_fdf_path) as f:
         text = f.read()

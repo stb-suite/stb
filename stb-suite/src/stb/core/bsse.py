@@ -14,40 +14,47 @@ have this problem at all, but a localized-basis code always does for a
 genuine two-different-fragment interaction/binding energy.
 """
 
-from pymatgen.core.periodic_table import Element
-
 from stb.core import structure_io
 
 
-def make_ghost_variant(base_structure, ghost_start, ghost_end):
-    """Returns a copy of `base_structure` (an FdfStructure, atoms in a KNOWN
-    order such that [ghost_start, ghost_end) is exactly one physical
-    fragment -- e.g. adsorb_bsse.py's slab-then-adsorbate order, or
-    stackingfault_bsse.py's layer1-then-layer2 order from
-    core/heterostructure.py::build_stacked_structure) with those atoms
-    turned into ghost species: '<symbol>_ghost' label, negative Z, no
-    valence charge, same basis (from the same real pseudopotential file)
-    as the real element -- SIESTA's standard ghost-atom convention,
-    already used by cohesive_energy.py's BSSE ghost clusters there for
-    "one atom's real local neighbors". Here it's applied to a whole
-    fragment instead of a local neighbor shell -- the standard
-    Boys-Bernardi counterpoise scheme for a 2-fragment interaction, exact
-    by construction (no cutoff to truncate the correction, unlike
-    cohesive_energy.py's --bsse-cutoff, since both fragments here are
-    already complete/finite).
+def make_ghost_variant(base_structure, ghost_labels):
+    """Returns a copy of `base_structure` (an FdfStructure) with every atom
+    whose CURRENT label is a member of `ghost_labels` (a set of species
+    label strings already declared in base_structure.species_meta) turned
+    into a ghost species: '<label>_ghost', negative Z, no valence charge,
+    same basis (from the same real pseudopotential file) as the real
+    element -- SIESTA's standard ghost-atom convention, already used by
+    cohesive_energy.py's BSSE ghost clusters there for "one atom's real
+    local neighbors". Here it's applied to a whole fragment instead of a
+    local neighbor shell -- the standard Boys-Bernardi counterpoise scheme
+    for a 2-fragment interaction, exact by construction (no cutoff to
+    truncate the correction, unlike cohesive_energy.py's --bsse-cutoff,
+    since both fragments here are already complete/finite).
+
+    Selecting by LABEL membership, not an [start, end) index range, is
+    deliberate: adsorb_bsse.py's `base_structure` comes from a relaxed
+    structure.fdf/.XV, where structure_io.write_fdf has already grouped
+    atoms by species -- a slab/adsorbate fragment boundary is NOT
+    guaranteed to fall at any particular index once the adsorbate shares an
+    element with the slab (see adsorb.py's own '_slab'/'_ads' fragment
+    labels, core/adsorption_sites.py::label_fragments -- this is exactly
+    the label scheme that makes `ghost_labels` unambiguous here). Z is read
+    straight from base_structure.species_meta[symbol] rather than via
+    Element(symbol) -- `symbol` here can already be a compound fragment
+    label (e.g. 'C_ads'), which pymatgen's Element() would reject.
     """
     species_meta = dict(base_structure.species_meta)
     new_atoms = []
-    for i, (symbol, pos) in enumerate(base_structure.atoms):
-        if ghost_start <= i < ghost_end:
+    for symbol, pos in base_structure.atoms:
+        if symbol in ghost_labels:
             label = f"{symbol}_ghost"
             if label not in species_meta:
-                real_z = Element(symbol).Z
+                real_z = abs(species_meta[symbol]['Z'])
                 used_ids = {str(info['id']) for info in species_meta.values()}
                 next_id = 1
                 while str(next_id) in used_ids:
                     next_id += 1
-                species_meta[label] = {'id': str(next_id), 'Z': -abs(real_z)}
+                species_meta[label] = {'id': str(next_id), 'Z': -real_z}
         else:
             label = symbol
         new_atoms.append((label, pos))

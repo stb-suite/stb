@@ -642,9 +642,14 @@ python3 -c "
 import sys
 from stb.core import structure_io
 for h in (1.5, 2.0, 2.5, 3.0):
-    s = structure_io.to_pymatgen(structure_io.read_fdf(f'adsorption_run/sites/site_1_ontop_h{h:.2f}/structure.fdf'))
-    z_slab = max(site.coords[2] for site in s if site.specie.symbol == 'C')
-    z_ads = [site.coords[2] for site in s if site.specie.symbol == 'O'][0]
+    fdf = structure_io.read_fdf(f'adsorption_run/sites/site_1_ontop_h{h:.2f}/structure.fdf')
+    # stb-adsorb now tags every site atom by fragment ('_slab'/'_ads', see
+    # core/adsorption_sites.py) -- select by that label suffix, not the bare
+    # element symbol, and stay in cartesian space via the lattice directly
+    # (to_pymatgen can't parse a compound label like 'C_slab').
+    cart = [(label, pos @ fdf.lattice) for label, pos in fdf.atoms]
+    z_slab = max(pos[2] for label, pos in cart if label.endswith('_slab'))
+    z_ads = [pos[2] for label, pos in cart if label.endswith('_ads')][0]
     actual = round(z_ads - z_slab, 4)
     if abs(actual - h) > 1e-6:
         print(f'height {h}: got {actual}')

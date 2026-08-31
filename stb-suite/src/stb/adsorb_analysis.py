@@ -30,9 +30,9 @@ from stb.core.ase_view import view_structure_interactive
 from stb.core.pseudopotentials import copy_pseudo
 from stb.core.adsorption_sites import (
     CONFIG_EXTRA_FILE, SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK, VDW_CORRECTION_BLOCK,
+    read_fragment_manifest, validate_fragment_manifest,
 )
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
-from stb.adsorb import min_adsorbate_slab_distance
 
 REPORT_FILE = "adsorption_report.txt"
 SITES_REPORT_FILE = "adsorption_sites.txt"
@@ -258,9 +258,56 @@ def read_site_geometry_atoms(folder):
                           positions=geom.xyz, cell=np.array(geom.cell), pbc=True)
     fdf_path = os.path.join(folder, "structure.fdf")
     if os.path.isfile(fdf_path):
-        pmg_structure = structure_io.to_pymatgen(structure_io.read_fdf(fdf_path))
+        # strip_fragment_labels first: `folder` may be a combined site whose
+        # atoms carry stb-adsorb's own '_slab'/'_ads' fragment labels (see
+        # core/adsorption_sites.py), which to_pymatgen's underlying
+        # pymatgen.Structure() constructor cannot parse as a real element.
+        pmg_structure = structure_io.to_pymatgen(structure_io.strip_fragment_labels(structure_io.read_fdf(fdf_path)))
         return AseAtomsAdaptor.get_atoms(pmg_structure)
     return None
+
+
+def resolve_fragment_labels(site_dir, fdf_structure):
+    """Returns (slab_labels, adsorbate_labels) -- sets of species labels --
+    for a combined site's `fdf_structure`, via its own fragment_manifest.json
+    (written by stb-adsorb, see core/adsorption_sites.py). Returns None if
+    `site_dir` has no manifest (an stb-adsorb predating the '_slab'/'_ads'
+    label scheme) or the manifest doesn't match `fdf_structure` -- callers
+    must treat that as "cannot determine which atoms are the adsorbate",
+    never fall back to a bare atom count (exactly the bug this scheme
+    replaces, see BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md).
+    Duplicated from adsorb_bsse.py's identical check (not imported) to
+    avoid an import cycle -- adsorb_bsse.py already imports read_site_table
+    from this module.
+    """
+    manifest = read_fragment_manifest(site_dir)
+    if manifest is None:
+        return None
+    try:
+        return validate_fragment_manifest(manifest, fdf_structure)
+    except ValueError:
+        return None
+
+
+def fragment_min_distance(fdf_structure, slab_labels, adsorbate_labels):
+    """Minimum periodic distance between any slab-fragment atom and any
+    adsorbate-fragment atom in `fdf_structure`, selecting each side by
+    species-LABEL membership (`slab_labels`/`adsorbate_labels`, from
+    resolve_fragment_labels()) rather than an atom-count/index cut --
+    adsorb.py's own min_adsorbate_slab_distance is only safe in-memory,
+    right after AdsorbateSiteFinder.add_adsorbate and before any write_fdf/
+    read_fdf round trip regroups atoms by species (see
+    BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md); this is the on-disk
+    -safe equivalent. Returns None if either side is empty.
+    """
+    labels = [label for label, _ in fdf_structure.atoms]
+    slab_idx = [i for i, label in enumerate(labels) if label in slab_labels]
+    ads_idx = [i for i, label in enumerate(labels) if label in adsorbate_labels]
+    if not slab_idx or not ads_idx:
+        return None
+    pmg = structure_io.to_pymatgen(structure_io.strip_fragment_labels(fdf_structure))
+    dm = pmg.distance_matrix
+    return float(dm[np.ix_(slab_idx, ads_idx)].min())
 
 
 def force_system_label(calc_text, label):
@@ -344,6 +391,14 @@ def write_gibbs_folder(out_dir, fdf_structure, calc_text, pp_path, config_extra_
         calc_text = structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(calc_text)
+    # `pp_path` here is always the ALREADY-POPULATED site/isolated-adsorbate
+    # folder this displacement is derived from (see write_local_hessian_folders'
+    # own callers) -- it already has a pseudopotential file copied under
+    # every label `fdf_structure` uses (whether a bare element or one of
+    # stb-adsorb's own '_slab'/'_ads' fragment labels), so a plain
+    # symbol-for-symbol copy is correct; no real-element resolution needed
+    # (unlike write_reference_folder, whose pp_path is the raw, bare
+    # -element-only pseudopotential source directory).
     symbols = sorted({symbol for symbol, _ in fdf_structure.atoms})
     for symbol in symbols:
         copy_pseudo(pp_path, symbol, out_dir)
@@ -370,7 +425,14 @@ def write_local_hessian_folders(gibbs_dir, base_structure, local_indices, displa
     """
     os.makedirs(gibbs_dir, exist_ok=True)
     inv_lattice = np.linalg.inv(base_structure.lattice)
-    local_symbols = [base_structure.atoms[i][0] for i in local_indices]
+    # Real element, not the raw label -- `base_structure` may carry stb-adsorb's
+    # own '_slab'/'_ads' fragment labels (see core/adsorption_sites.py) when
+    # this is the site side; stb-adsorbGibbs (Stage 4) only ever needs real
+    # chemistry (atomic mass) from gibbs_local_meta.json's "local_symbols",
+    # never fragment identity -- resolving it here means Stage 4 itself needs
+    # no changes at all.
+    local_symbols = [structure_io.real_element(base_structure.atoms[i][0], base_structure.species_meta)
+                      for i in local_indices]
 
     order = []
     for atom_index in local_indices:
@@ -555,8 +617,6 @@ def main():
     print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
     report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
     clean_slab_fdf_path = os.path.join(args.dir, "clean_slab", "structure.fdf")
-    n_substrate = len(structure_io.read_fdf(clean_slab_fdf_path).atoms) \
-        if os.path.isfile(clean_slab_fdf_path) else 0
     if args.view:
         with capture_library_noise(library_warnings, "sisl/ASE (clean_slab geometry)"):
             atoms = read_site_geometry_atoms(os.path.join(args.dir, "clean_slab"))
@@ -671,25 +731,30 @@ def main():
         # E_ads result: dipole/spin come straight from calc.out (None if
         # SIESTA never printed the line, e.g. a non-polarized run for spin);
         # bond_change compares the closest adsorbate-slab distance at the
-        # pre-relaxation guess (structure.fdf) vs. the relaxed geometry
-        # (preferring .XV, same as read_site_geometry_atoms's own default).
+        # pre-relaxation guess (structure.fdf) vs. the relaxed geometry,
+        # selecting each fragment by its '_slab'/'_ads' species label (see
+        # resolve_fragment_labels()/fragment_min_distance() above) -- NOT by
+        # atom count/index, which silently picks the wrong atoms whenever
+        # the adsorbate shares a chemical element with the slab (see
+        # BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md). None (no bond
+        # -length diagnostic) for a site with no fragment_manifest.json
+        # (predates this label scheme) rather than a guessed/wrong value.
         dipole_vec = siesta_log.get_electric_dipole(out_path)
         dipole_mag = float(np.linalg.norm(dipole_vec)) if dipole_vec is not None else None
         spin_moment = siesta_log.get_spin_moment(out_path)
         bond_change = None
-        if n_substrate > 0:
-            try:
-                initial_pmg = structure_io.to_pymatgen(
-                    structure_io.read_fdf(os.path.join(site_dir, "structure.fdf")))
-                dist_initial = min_adsorbate_slab_distance(initial_pmg, n_substrate)
-                relaxed_atoms = read_site_geometry_atoms(site_dir)
-                if relaxed_atoms is not None and dist_initial is not None:
-                    relaxed_pmg = AseAtomsAdaptor.get_structure(relaxed_atoms)
-                    dist_relaxed = min_adsorbate_slab_distance(relaxed_pmg, n_substrate)
-                    if dist_relaxed is not None:
-                        bond_change = dist_relaxed - dist_initial
-            except Exception:
-                bond_change = None
+        try:
+            initial_fdf = structure_io.read_fdf(os.path.join(site_dir, "structure.fdf"))
+            frag_labels = resolve_fragment_labels(site_dir, initial_fdf)
+            if frag_labels is not None:
+                slab_labels, ads_labels = frag_labels
+                dist_initial = fragment_min_distance(initial_fdf, slab_labels, ads_labels)
+                relaxed_fdf, _used_relaxed = structure_io.read_relaxed_or_input(site_dir)
+                dist_relaxed = fragment_min_distance(relaxed_fdf, slab_labels, ads_labels)
+                if dist_initial is not None and dist_relaxed is not None:
+                    bond_change = dist_relaxed - dist_initial
+        except Exception:
+            bond_change = None
 
         rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
                              dipole=dipole_mag, spin_moment=spin_moment, bond_change=bond_change,
@@ -968,7 +1033,16 @@ def main():
                     f"[ERROR] '{ads_dir}' has no finished siesta.XV yet -- the isolated-adsorbate "
                     "reference must also be relaxed before its own Hessian means anything.",
                     'red'), f_out)
+            elif (frag_labels := resolve_fragment_labels(winning_site_dir, site_relaxed)) is None:
+                print_dual(color_text(
+                    f"[ERROR] '{winning_site_dir}' has no fragment_manifest.json (or it no longer "
+                    "matches this site's structure.fdf) -- this site was written by an stb-adsorb "
+                    "predating per-fragment species labels, so which atoms are the adsorbate can't "
+                    "be reliably determined. Re-run stb-adsorb to regenerate this site before "
+                    "--compute-gibbs (see BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md).",
+                    'red'), f_out)
             else:
+                _slab_labels, ads_labels = frag_labels
                 gibbs_root = os.path.join(args.dir, "gibbs")
                 gibbs_site_dir = os.path.join(gibbs_root, apply_source_label)
                 gibbs_ads_dir = os.path.join(gibbs_root, f"{ads_name or 'default'}_isolated")
@@ -1018,11 +1092,17 @@ def main():
                 if vdw_ads:
                     ads_config_extra += VDW_CORRECTION_BLOCK
 
-                n_total_site = len(site_relaxed.atoms)
-                site_local_indices = list(range(n_substrate, n_total_site))
+                # Selected by fragment LABEL (ads_labels, from the site's own
+                # fragment_manifest.json), not an atom-count/index cut -- a
+                # bare substrate atom count silently picks the wrong atoms
+                # once the adsorbate shares an element with the slab (see
+                # BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md, the same
+                # bug adsorb_bsse.py's write_bsse_folders had).
+                site_local_indices = [i for i, (label, _) in enumerate(site_relaxed.atoms)
+                                       if label in ads_labels]
                 ads_local_indices = list(range(len(ads_relaxed.atoms)))
 
-                print_dual(f"  Winning site  : {apply_source_label}  ({n_total_site - n_substrate} "
+                print_dual(f"  Winning site  : {apply_source_label}  ({len(site_local_indices)} "
                             "adsorbate atom(s))", f_out)
                 print_dual(f"  Isolated ref  : {ads_dir}  ({len(ads_local_indices)} atom(s))", f_out)
                 print_dual(f"  ZPE mode (site): {args.zpe_mode}  (isolated reference always uses "

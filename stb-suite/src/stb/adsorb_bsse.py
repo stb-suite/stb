@@ -16,7 +16,10 @@ from stb.core.bsse import make_ghost_variant, strip_config_extra_include
 from stb.core.siesta_log import report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.pseudopotentials import copy_pseudo
-from stb.core.adsorption_sites import SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK, VDW_CORRECTION_BLOCK
+from stb.core.adsorption_sites import (
+    SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK, VDW_CORRECTION_BLOCK,
+    read_fragment_manifest, validate_fragment_manifest,
+)
 from stb.adsorb_analysis import read_site_table
 
 REPORT_FILE = "adsorption_bsse_report.txt"
@@ -74,7 +77,7 @@ def read_site_theory_flags(site_dir):
     return "Spin" in text, "Slab.DipoleCorrection" in text, "DFTD3" in text
 
 
-def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
+def write_bsse_folders(bsse_dir, site_fdf, calc_text, pp_path):
     """Writes the two ghost-fragment references a Boys-Bernardi counterpoise
     (BSSE) correction of this site's adsorption energy needs: '<bsse_dir>/
     bsse_slab/' (real slab + ghost adsorbate, same geometry as the site) and
@@ -92,6 +95,17 @@ def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
     here unchanged from adsorb.py, whose caller used to pass the
     pre-relaxation initial guess instead (the bug this stage fixes).
 
+    Which atoms belong to which fragment is read from `pp_path` (always the
+    site's own directory, see main())'s 'fragment_manifest.json', not
+    re-derived from an atom count -- see core/adsorption_sites.py's
+    label_fragments()/write_fragment_manifest() for why a plain substrate
+    atom count is unreliable whenever the adsorbate shares a chemical
+    element with the slab (BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md).
+    Raises ValueError if the site has no manifest (written by an
+    stb-adsorb older than this fix) or if `site_fdf`'s own species/counts no
+    longer match what the manifest recorded -- callers should catch this
+    per-site and skip, not abort the whole run.
+
     Also inherits the site's own level of theory (spin polarization, slab
     dipole correction, DFT-D3 dispersion) via read_site_theory_flags(pp_path)
     -- pp_path is always the site's own directory here (see main()) -- so
@@ -100,9 +114,16 @@ def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
     geometry. Returns (spin_polarized, dipole_corrected, vdw_corrected) so
     the caller can report it.
     """
-    n_total = len(site_fdf.atoms)
-    slab_variant = make_ghost_variant(site_fdf, n_substrate, n_total)  # ghost the adsorbate part
-    ads_variant = make_ghost_variant(site_fdf, 0, n_substrate)         # ghost the slab part
+    manifest = read_fragment_manifest(pp_path)
+    if manifest is None:
+        raise ValueError(
+            f"no fragment_manifest.json in '{pp_path}' -- this site was written by an stb-adsorb "
+            "predating per-fragment species labels. Re-run stb-adsorb to regenerate it before "
+            "computing BSSE (see BUG_REPORT_stb-adsorbBsse_wrong-ghost-atoms.md)."
+        )
+    slab_labels, ads_labels = validate_fragment_manifest(manifest, site_fdf)
+    slab_variant = make_ghost_variant(site_fdf, ads_labels)   # ghost the adsorbate part
+    ads_variant = make_ghost_variant(site_fdf, slab_labels)   # ghost the slab part
 
     spin_polarized, dipole_corrected, vdw_corrected = read_site_theory_flags(pp_path)
     config_extra_content = BSSE_SINGLE_POINT_BLOCK
@@ -121,10 +142,18 @@ def write_bsse_folders(bsse_dir, site_fdf, n_substrate, calc_text, pp_path):
             f.write(config_extra_content)
         with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
             f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
+        # pp_path (the site's own directory) already has a pseudopotential
+        # file copied under EVERY non-ghost label this site declares (e.g.
+        # 'C_slab.psml', 'C_ads.psml' -- written by stb-adsorb's
+        # write_reference_folder), so only the literal '_ghost' suffix needs
+        # stripping to find the source file to copy -- NOT the fully
+        # -resolved real element (structure_io.real_element() would give
+        # 'C', but pp_path has no bare 'C.psml' any more under the '_slab'/
+        # '_ads' label scheme, only 'C_slab.psml'/'C_ads.psml').
         present_labels = sorted({symbol for symbol, _ in variant.atoms})
         for label in present_labels:
-            real_symbol = label[:-len("_ghost")] if label.endswith("_ghost") else label
-            copy_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
+            source_label = label[:-len("_ghost")] if label.endswith("_ghost") else label
+            copy_pseudo(pp_path, source_label, out_dir, dest_label=label)
 
     return spin_polarized, dipole_corrected, vdw_corrected
 
@@ -232,8 +261,6 @@ def main():
         "time (stb-adsorb) any more; this stage reads each site's own finished 'siesta.XV' "
         "instead. Full explanation: examples/4.8-adsorption/README.md.", 'cyan'), f_out)
 
-    n_substrate = len(structure_io.read_fdf(clean_slab_fdf_path).atoms)
-
     site_table = read_site_table(sites_root)
     site_dirs = sorted(
         d for d in os.listdir(sites_root)
@@ -288,6 +315,7 @@ def main():
     # its own relaxed geometry. ---
     print_section("[2] WRITING BSSE FOLDERS", f_out)
     written = []
+    manifest_errors = []
     for label, site_dir, relaxed_fdf in ready:
         calc_text = read_original_calc_text(os.path.join(site_dir, "calc.fdf"))
         bsse_dir = os.path.join(bsse_root, label)
@@ -295,8 +323,13 @@ def main():
         # this site needs (copied there by stb-adsorb) -- reused directly
         # as the pseudopotential source for the ghost variants too, so this
         # stage never needs its own -p/--pseudo-dir flag.
-        spin_polarized, dipole_corrected, vdw_corrected = write_bsse_folders(
-            bsse_dir, relaxed_fdf, n_substrate, calc_text, site_dir)
+        try:
+            spin_polarized, dipole_corrected, vdw_corrected = write_bsse_folders(
+                bsse_dir, relaxed_fdf, calc_text, site_dir)
+        except ValueError as e:
+            manifest_errors.append(label)
+            print_dual(color_text(f"  [ERROR] {label}: {e}", 'red'), f_out)
+            continue
         written.append(label)
         print_dual(f"  {color_text('[OK]', 'green')} {bsse_dir}/bsse_slab/, {bsse_dir}/bsse_adsorbate/ "
                     f"(relaxed geometry, spin: {'yes' if spin_polarized else 'no'}, "
@@ -311,6 +344,11 @@ def main():
             f"  {len(not_relaxed) + len(mismatched)} site(s) skipped -- re-run stb-adsorbBsse "
             "once they've finished relaxing (already-written folders are left untouched).",
             'yellow'), f_out)
+    if manifest_errors:
+        print_dual(color_text(
+            f"  {len(manifest_errors)} site(s) skipped -- missing/inconsistent "
+            f"fragment_manifest.json ({', '.join(manifest_errors)}); re-run stb-adsorb to "
+            "regenerate them before BSSE can be computed correctly.", 'red'), f_out)
     print_dual(f"  Run SIESTA in every 'bsse/site_*/bsse_slab/' and 'bsse/site_*/bsse_adsorbate/' "
                 "folder above, then use stb-adsorbAnalysis for the BSSE-corrected adsorption "
                 "energy.", f_out)

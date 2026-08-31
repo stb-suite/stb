@@ -84,11 +84,14 @@ check_success sites/site_1_ontop_N/structure.fdf
 # Fake pseudopotential files, standing in for what a real stb-adsorb -p run
 # would have copied into each site's own folder -- stb-adsorbBsse reuses
 # these directly (no -p flag of its own), so the ghost-species dest_label
-# copies (e.g. O_ghost.psml) can be verified below.
-echo "fake C pseudopotential" > sites/site_1_ontop_O/C.psml
-echo "fake O pseudopotential" > sites/site_1_ontop_O/O.psml
-echo "fake C pseudopotential" > sites/site_1_ontop_N/C.psml
-echo "fake N pseudopotential" > sites/site_1_ontop_N/N.psml
+# copies (e.g. O_ads_ghost.psml) can be verified below. Named after stb-
+# adsorb's own '_slab'/'_ads' fragment labels (see core/adsorption_sites.py),
+# not the bare element -- that's what a real stb-adsorb -p run would have
+# copied there now.
+echo "fake C pseudopotential" > sites/site_1_ontop_O/C_slab.psml
+echo "fake O pseudopotential" > sites/site_1_ontop_O/O_ads.psml
+echo "fake C pseudopotential" > sites/site_1_ontop_N/C_slab.psml
+echo "fake N pseudopotential" > sites/site_1_ontop_N/N_ads.psml
 
 printf 'siesta: FreeEng =    -214.100000\nSCF cycle converged after 14 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.020000\n' \
     > sites/site_1_ontop_O/calc.out
@@ -101,14 +104,18 @@ printf 'siesta: FreeEng =    -214.100000\nSCF cycle converged after 14 iteration
 # O-Si bond shrank from a 2.0 Ang guess to ~1.62 Ang after real relaxation).
 python3 -c "
 import sisl
+import numpy as np
 from stb.core import structure_io
 
+# Built straight from the FdfStructure (not via to_pymatgen -- stb-adsorb's
+# own '_slab'/'_ads' fragment labels, e.g. 'C_slab'/'O_ads', aren't valid
+# pymatgen element symbols): a '.XV' only ever records the REAL element
+# (structure_io.real_element), never this suite's own compound label.
 fdf = structure_io.read_fdf('sites/site_1_ontop_O/structure.fdf')
-pmg = structure_io.to_pymatgen(fdf)
-cart = pmg.cart_coords.copy()
+cart = np.array([pos @ fdf.lattice for _, pos in fdf.atoms])
 cart[-1, 2] -= 0.5  # relax the adsorbate ~0.5 Ang closer to the substrate
-atoms = [sisl.Atom(str(s.specie)) for s in pmg]
-geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+atoms = [sisl.Atom(structure_io.real_element(label, fdf.species_meta)) for label, _ in fdf.atoms]
+geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(fdf.lattice))
 sisl.get_sile('sites/site_1_ontop_O/siesta.XV', mode='w').write_geometry(geom)
 with open('relaxed_z.txt', 'w') as f:
     f.write(f'{cart[-1, 2]:.6f}\n')
@@ -143,9 +150,9 @@ check_success bsse/site_1_ontop_O/bsse_slab/structure.fdf
 check_success bsse/site_1_ontop_O/bsse_adsorbate/structure.fdf
 check_absent bsse/site_1_ontop_N
 
-echo "Testing: ghost species labels (Boys-Bernardi counterpoise convention)"
-check_contains "O_ghost" bsse/site_1_ontop_O/bsse_slab/structure.fdf
-check_contains "C_ghost" bsse/site_1_ontop_O/bsse_adsorbate/structure.fdf
+echo "Testing: ghost species labels (Boys-Bernardi counterpoise convention, stacked on stb-adsorb's own '_slab'/'_ads' fragment labels)"
+check_contains "O_ads_ghost" bsse/site_1_ontop_O/bsse_slab/structure.fdf
+check_contains "C_slab_ghost" bsse/site_1_ontop_O/bsse_adsorbate/structure.fdf
 
 echo "Testing: BSSE config_extra.fdf forces single-point SCF on a fixed cell"
 check_contains "MD.VariableCell false" bsse/site_1_ontop_O/bsse_slab/config_extra.fdf
@@ -173,10 +180,10 @@ check_contains "DFTD3                   .true." bsse/site_1_ontop_O/bsse_adsorba
 check_contains "spin: yes, dipole: yes, vdw: yes" log_bsse.txt
 
 echo "Testing: real + ghost pseudopotentials copied directly from the site's own folder"
-check_success bsse/site_1_ontop_O/bsse_slab/C.psml
-check_success bsse/site_1_ontop_O/bsse_slab/O_ghost.psml
-check_success bsse/site_1_ontop_O/bsse_adsorbate/O.psml
-check_success bsse/site_1_ontop_O/bsse_adsorbate/C_ghost.psml
+check_success bsse/site_1_ontop_O/bsse_slab/C_slab.psml
+check_success bsse/site_1_ontop_O/bsse_slab/O_ads_ghost.psml
+check_success bsse/site_1_ontop_O/bsse_adsorbate/O_ads.psml
+check_success bsse/site_1_ontop_O/bsse_adsorbate/C_slab_ghost.psml
 
 echo "Testing: the written BSSE geometry matches the RELAXED position, not the original guess"
 python3 -c "
@@ -211,20 +218,20 @@ cp "$PREP_DIR/calc.fdf" .
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop --no-force-spin -O . --no-intro \
     > log_prep.txt 2>&1
 check_success sites/site_1_ontop/structure.fdf
-echo "fake C pseudopotential" > sites/site_1_ontop/C.psml
-echo "fake O pseudopotential" > sites/site_1_ontop/O.psml
+echo "fake C pseudopotential" > sites/site_1_ontop/C_slab.psml
+echo "fake O pseudopotential" > sites/site_1_ontop/O_ads.psml
 printf 'siesta: FreeEng =    -214.100000\nSCF cycle converged after 14 iterations\nsiesta: Atomic forces (eV/Ang):\n   Max    0.020000\n' \
     > sites/site_1_ontop/calc.out
 python3 -c "
 import sisl
+import numpy as np
 from stb.core import structure_io
 
 fdf = structure_io.read_fdf('sites/site_1_ontop/structure.fdf')
-pmg = structure_io.to_pymatgen(fdf)
-cart = pmg.cart_coords.copy()
+cart = np.array([pos @ fdf.lattice for _, pos in fdf.atoms])
 cart[-1, 2] -= 0.5
-atoms = [sisl.Atom(str(s.specie)) for s in pmg]
-geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+atoms = [sisl.Atom(structure_io.real_element(label, fdf.species_meta)) for label, _ in fdf.atoms]
+geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(fdf.lattice))
 sisl.get_sile('sites/site_1_ontop/siesta.XV', mode='w').write_geometry(geom)
 "
 check_success sites/site_1_ontop/siesta.XV

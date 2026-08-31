@@ -274,14 +274,22 @@ def read_relaxed_or_input(path: str) -> tuple[FdfStructure, bool]:
         )
     xv_symbols = [a.symbol for a in geom.atoms]
     base_symbols = [symbol for symbol, _ in base.atoms]
-    if xv_symbols != base_symbols:
-        mismatches = [i for i, (a, b) in enumerate(zip(xv_symbols, base_symbols)) if a != b]
+    # Compared against the REAL element behind each base label, not the
+    # label itself -- a '.XV' file (sisl/SIESTA) only ever knows a genuine
+    # periodic-table symbol reconstructed from Z, never one of this suite's
+    # own compound species labels (e.g. adsorb.py's '_slab'/'_ads' fragment
+    # tags, or core/bsse.py's '_ghost' suffix) -- comparing xv_symbols
+    # against the raw label directly would report every legitimately
+    # -matching site as "mismatched".
+    base_real_symbols = [real_element(symbol, base.species_meta) for symbol in base_symbols]
+    if xv_symbols != base_real_symbols:
+        mismatches = [i for i, (a, b) in enumerate(zip(xv_symbols, base_real_symbols)) if a != b]
         shown = mismatches[:10]
         raise ValueError(
             f"'{xv_files[0]}' and '{fdf_path}' disagree on atom species at index(es) "
             f"{shown}{'...' if len(mismatches) > 10 else ''} (e.g. index {mismatches[0]}: "
             f"'.XV' has {xv_symbols[mismatches[0]]!r}, structure.fdf expects "
-            f"{base_symbols[mismatches[0]]!r}) -- SIESTA never reorders atoms during a "
+            f"{base_real_symbols[mismatches[0]]!r}) -- SIESTA never reorders atoms during a "
             "relaxation, only updates positions, so a per-index species mismatch means this "
             "'.XV' does not actually belong to this 'structure.fdf' (a stale/regenerated "
             "folder), not a case to silently misread by trusting position-by-index alone."
@@ -417,6 +425,55 @@ def ensure_species_id(species_meta: dict[str, dict], symbol: str) -> dict[str, d
     new_meta = dict(species_meta)
     new_meta[symbol] = {"id": str(next_id), "Z": Element(symbol).Z}
     return new_meta
+
+
+def real_element(label: str, species_meta: dict[str, dict]) -> str:
+    """Recovers the real periodic-table symbol behind any species LABEL
+    already declared in `species_meta`, from its 'Z' alone (sign stripped) --
+    robust to any suffix a label may carry (adsorb.py's fragment labels
+    '<symbol>_slab'/'<symbol>_ads', core/bsse.py's ghost labels
+    '<symbol>_ghost', or a stack of both, e.g. 'C_ads_ghost'), since the
+    declared Z never changes regardless of how the label got its suffixes.
+    Deliberately NOT string-suffix-stripping (label[:-len("_ghost")] and
+    similar) -- that breaks the moment two suffixes stack, or a new suffix
+    convention is added, whereas Z is always authoritative and already on
+    hand in species_meta.
+    """
+    from pymatgen.core.periodic_table import Element
+
+    return Element.from_Z(abs(species_meta[label]["Z"])).symbol
+
+
+def strip_fragment_labels(structure: FdfStructure) -> FdfStructure:
+    """Returns a copy of `structure` with every atom's species label replaced
+    by its real element symbol (via real_element()), species_meta collapsed
+    accordingly (fresh sequential ids, positive Z) -- the one safe way to
+    convert a structure carrying compound fragment labels (adsorb.py's
+    '_slab'/'_ads') into something pymatgen's Structure()/Element() or ASE's
+    Atoms() can accept, since none of those understand a label like
+    'C_slab'. Never used on '_ghost' labels -- a ghosted structure is only
+    ever fed to SIESTA, never round-tripped through pymatgen/ASE anywhere in
+    this codebase.
+    """
+    from pymatgen.core.periodic_table import Element
+
+    new_meta: dict[str, dict] = {}
+    new_atoms = []
+    for label, pos in structure.atoms:
+        symbol = real_element(label, structure.species_meta)
+        if symbol not in new_meta:
+            new_meta[symbol] = {"id": str(len(new_meta) + 1), "Z": Element(symbol).Z}
+        new_atoms.append((symbol, pos))
+
+    return FdfStructure(
+        lattice=structure.lattice,
+        lattice_constant=structure.lattice_constant,
+        species=list(new_meta.keys()),
+        species_meta=new_meta,
+        atoms=new_atoms,
+        coord_format=structure.coord_format,
+        raw_lines=[],
+    )
 
 
 def from_pymatgen(

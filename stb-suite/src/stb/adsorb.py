@@ -1167,7 +1167,8 @@ def main():
 
         site_dir = os.path.join(sites_root, label)
         write_reference_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir,
-                                force_spin=args.force_spin, force_dipole=True, force_vdw=True)
+                                force_spin=args.force_spin, force_dipole=True, force_vdw=True,
+                                n_substrate=n_substrate)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))

@@ -9,6 +9,7 @@ adsorb.py since neb_sites.py doesn't need any of it.
 """
 
 import os
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 from pymatgen.core import Molecule
@@ -18,6 +19,21 @@ from pymatgen.analysis.adsorption import plot_slab
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text
 from stb.core.pseudopotentials import copy_pseudo
+
+# Fragment-identity suffixes stb-adsorb bakes into a combined site's own
+# SIESTA species labels (e.g. slab carbon -> 'C_slab', adsorbate carbon ->
+# 'C_ads') -- see FRAGMENT_MANIFEST_FILE below for why this exists: it
+# replaces the old "cut the atom list at the slab's atom COUNT" scheme
+# (adsorb_bsse.py/adsorb_analysis.py used to slice site_fdf.atoms at
+# n_substrate), which silently picked the wrong atoms whenever the
+# adsorbate shared a chemical element with the slab -- structure_io.write_fdf
+# always groups atoms by species, not by physical origin, so a same-element
+# slab/adsorbate pair could end up split at the wrong index after a
+# write_fdf/read_fdf round trip. A label suffix survives that round trip
+# unconditionally; a bare atom count does not.
+SLAB_LABEL_SUFFIX = "_slab"
+ADSORBATE_LABEL_SUFFIX = "_ads"
+FRAGMENT_MANIFEST_FILE = "fragment_manifest.json"
 
 # Every folder written via write_reference_folder() gets this via a
 # %include sidecar (same prepend_include convention as hubbardu.py/
@@ -307,8 +323,135 @@ def cluster_candidate_coords(coords, lattice, reference=None):
     return wrapped
 
 
+def label_fragments(structure, n_substrate, slab_suffix=SLAB_LABEL_SUFFIX, ads_suffix=ADSORBATE_LABEL_SUFFIX):
+    """Returns a copy of `structure` (an FdfStructure whose `atoms` are STILL
+    in slab-then-adsorbate physical order -- i.e. called right after
+    from_pymatgen(), before write_fdf() has a chance to regroup them by
+    species) with every atom's label suffixed by which fragment it came
+    from: '<symbol>_slab' for atoms[:n_substrate], '<symbol>_ads' for
+    atoms[n_substrate:]. Real (positive) Z is preserved -- this is NOT a
+    ghost transform, just a fragment-identity tag -- and each new compound
+    label gets a fresh sequential id, same bookkeeping as
+    core/bsse.py::make_ghost_variant. Once this label survives a write_fdf/
+    read_fdf round trip, fragment membership can be recovered by checking
+    the label's suffix instead of re-deriving it from a fragile atom count
+    (see this module's own module-level comment on SLAB_LABEL_SUFFIX for
+    why the count-based scheme this replaces was unreliable).
+    """
+    species_meta = dict(structure.species_meta)
+    new_atoms = []
+    for i, (symbol, pos) in enumerate(structure.atoms):
+        suffix = slab_suffix if i < n_substrate else ads_suffix
+        label = f"{symbol}{suffix}"
+        if label not in species_meta:
+            used_ids = {str(info["id"]) for info in species_meta.values()}
+            next_id = 1
+            while str(next_id) in used_ids:
+                next_id += 1
+            species_meta[label] = {"id": str(next_id), "Z": species_meta[symbol]["Z"]}
+        new_atoms.append((label, pos))
+
+    species = list(dict.fromkeys(sym for sym, _ in new_atoms))
+    return structure_io.FdfStructure(
+        lattice=structure.lattice,
+        lattice_constant=structure.lattice_constant,
+        species=species,
+        species_meta=species_meta,
+        atoms=new_atoms,
+        coord_format=structure.coord_format,
+        raw_lines=[],
+    )
+
+
+def write_fragment_manifest(out_dir, fdf_structure, n_substrate,
+                             slab_suffix=SLAB_LABEL_SUFFIX, ads_suffix=ADSORBATE_LABEL_SUFFIX):
+    """Writes `<out_dir>/fragment_manifest.json`: an explicit record of which
+    species labels/counts belong to the slab fragment vs. the adsorbate
+    fragment, for stb-adsorbBsse (and the Gibbs-prep local-Hessian step) to
+    cross-check against the relaxed structure's own species_meta BEFORE
+    trusting the '_slab'/'_ads' label split -- a double-check against manual
+    edits or a stale/mismatched folder, not something correctness actually
+    depends on (the label suffixes alone are already self-describing).
+    """
+    counts = structure_io.atom_counts(fdf_structure)
+    from collections import Counter
+    ads_element_counts: Counter = Counter()
+    slab_species, adsorbate_species = {}, {}
+    for label in fdf_structure.species:
+        info = fdf_structure.species_meta[label]
+        entry = {"id": info["id"], "Z": info["Z"], "count": counts.get(label, 0)}
+        if label.endswith(slab_suffix):
+            slab_species[label] = entry
+        elif label.endswith(ads_suffix):
+            adsorbate_species[label] = entry
+            ads_element_counts[structure_io.real_element(label, fdf_structure.species_meta)] += entry["count"]
+
+    formula = "".join(
+        f"{el}{n if n > 1 else ''}" for el, n in sorted(ads_element_counts.items())
+    )
+    manifest = {
+        "schema": "adsorb_fragment_manifest_v1",
+        "site_label": os.path.basename(os.path.normpath(out_dir)),
+        "slab_suffix": slab_suffix,
+        "adsorbate_suffix": ads_suffix,
+        "n_substrate": n_substrate,
+        "n_adsorbate": len(fdf_structure.atoms) - n_substrate,
+        "slab_species": slab_species,
+        "adsorbate_species": adsorbate_species,
+        "adsorbate_formula": formula,
+    }
+    with open(os.path.join(out_dir, FRAGMENT_MANIFEST_FILE), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def read_fragment_manifest(folder):
+    """Returns the parsed `fragment_manifest.json` dict for `folder`
+    (written by write_reference_folder/write_fragment_manifest when
+    `n_substrate` was given), or None if `folder` has none -- e.g. a
+    single-fragment folder, or a site written by an stb-adsorb that
+    predates this label scheme.
+    """
+    path = os.path.join(folder, FRAGMENT_MANIFEST_FILE)
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def validate_fragment_manifest(manifest, fdf_structure):
+    """Cross-checks `manifest` (from read_fragment_manifest) against
+    `fdf_structure`'s ACTUAL species_meta/atom counts -- every species the
+    manifest recorded for each fragment must still be declared with the
+    same Z, and with the same atom count, in `fdf_structure`. This is the
+    double-check step: the '_slab'/'_ads' label suffixes are already
+    self-describing on their own, but a hand-edited or stale/mismatched
+    structure.fdf (or a manifest copied from a different site by mistake)
+    would otherwise be trusted silently. Raises ValueError with a
+    human-readable reason on the first mismatch found -- callers should
+    treat this as "skip this site", never as "fall back to guessing".
+    Returns (slab_labels, adsorbate_labels) as sets of species labels on
+    success, ready to hand straight to core/bsse.py::make_ghost_variant.
+    """
+    counts = structure_io.atom_counts(fdf_structure)
+    slab_labels, adsorbate_labels = set(), set()
+    for group_key, bucket in (("slab_species", slab_labels), ("adsorbate_species", adsorbate_labels)):
+        for label, info in manifest[group_key].items():
+            if label not in fdf_structure.species_meta:
+                raise ValueError(f"expected species '{label}' not found in structure.fdf")
+            actual_z = fdf_structure.species_meta[label]["Z"]
+            if actual_z != info["Z"]:
+                raise ValueError(f"species '{label}': manifest has Z={info['Z']}, structure.fdf has Z={actual_z}")
+            actual_count = counts.get(label, 0)
+            if actual_count != info["count"]:
+                raise ValueError(
+                    f"species '{label}': manifest expects {info['count']} atom(s), "
+                    f"structure.fdf has {actual_count}")
+            bucket.add(label)
+    return slab_labels, adsorbate_labels
+
+
 def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
-                            force_spin=False, force_dipole=False, force_vdw=False):
+                            force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None):
     """Writes structure.fdf + calc.fdf + config_extra.fdf + copied
     pseudopotentials for one reference/candidate folder (adsorb.py's
     clean_slab/, adsorbate/, sites/site_*/; neb_sites.py's site_A/,
@@ -329,12 +472,25 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
     molecule, or combined site alike), so callers that want it on
     unconditionally (stb-adsorb, see its own force_vdw=True call sites)
     just always pass True, same "hardcoded True at the call site, no
-    opt-out flag" style already used there for force_dipole. Returns the
-    FdfStructure written, in case a caller needs the exact same geometry
-    object again without re-reading the file.
+    opt-out flag" style already used there for force_dipole.
+
+    `n_substrate`, when given, marks `pmg_structure` as a COMBINED
+    slab+adsorbate structure whose first `n_substrate` sites are the slab
+    (stb-adsorb's own site_dir call, right after
+    AdsorbateSiteFinder.add_adsorbate -- see label_fragments()'s docstring
+    for why this must happen here, before write_fdf ever runs): every atom
+    gets relabeled '<symbol>_slab'/'<symbol>_ads' (label_fragments()) before
+    writing, and a fragment_manifest.json double-check is written alongside
+    structure.fdf. Left at the default None for a single-fragment folder
+    (clean_slab/, adsorbate/) -- unchanged, bare-element-symbol behavior.
+
+    Returns the FdfStructure written, in case a caller needs the exact same
+    geometry object again without re-reading the file.
     """
     os.makedirs(out_dir, exist_ok=True)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta, coord_format="fractional")
+    if n_substrate is not None:
+        fdf_structure = label_fragments(fdf_structure, n_substrate)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
     with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
         f.write(FIXED_CELL_BLOCK)
@@ -346,9 +502,10 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
             f.write(VDW_CORRECTION_BLOCK)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
-    symbols = {site.specie.symbol for site in pmg_structure}
-    for sym in sorted(symbols):
-        copy_pseudo(pp_path, sym, out_dir)
+    for label in fdf_structure.species:
+        copy_pseudo(pp_path, structure_io.real_element(label, fdf_structure.species_meta), out_dir, dest_label=label)
+    if n_substrate is not None:
+        write_fragment_manifest(out_dir, fdf_structure, n_substrate)
     return fdf_structure
 
 

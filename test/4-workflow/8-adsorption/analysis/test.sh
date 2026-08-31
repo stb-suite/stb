@@ -286,16 +286,20 @@ fi
 
 python3 -c "
 import sisl
+import numpy as np
 from stb.core import structure_io
 
+# Built straight from the FdfStructure (not via to_pymatgen -- the site's own
+# atoms carry stb-adsorb's own '_slab'/'_ads' fragment labels, e.g. 'C_slab'/
+# 'O_ads', which aren't valid pymatgen element symbols): a '.XV' only ever
+# records the REAL element (structure_io.real_element), never the label.
 for site_dir in ('$GT/sites/site_1_ontop', '$GT/adsorbate'):
     fdf = structure_io.read_fdf(f'{site_dir}/structure.fdf')
-    pmg = structure_io.to_pymatgen(fdf)
-    cart = pmg.cart_coords.copy()
+    cart = np.array([pos @ fdf.lattice for _, pos in fdf.atoms])
     if 'sites' in site_dir:
         cart[-1, 2] -= 0.4  # relax the O atom closer to the substrate
-    atoms = [sisl.Atom(str(s.specie)) for s in pmg]
-    geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(pmg.lattice.matrix))
+    atoms = [sisl.Atom(structure_io.real_element(label, fdf.species_meta)) for label, _ in fdf.atoms]
+    geom = sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(fdf.lattice))
     sisl.get_sile(f'{site_dir}/siesta.XV', mode='w').write_geometry(geom)
 "
 

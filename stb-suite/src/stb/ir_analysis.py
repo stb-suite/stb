@@ -6,7 +6,16 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"  # New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
+                    # path's Born-charge x eigendisplacement formula (in-plane/periodic axes)
+                    # with the NONBULK path's dipole-difference formula (vacuum axis) into one
+                    # physically valid dmu/dQ per mode -- see stb-irModes' own VERSION comment
+                    # for the full root-cause story (a naive dipole moment silently came back
+                    # exactly zero for h-BN's in-plane E' mode, a mode the literature puts as
+                    # the dominant IR peak). The two contributions are additive by construction
+                    # (each is ~0 exactly where the other is valid); axis_mask selects/verifies
+                    # this when the vacuum axis's Cartesian alignment can be confirmed, and
+                    # falls back to plain addition with a warning when it can't.
 
 import os
 import re
@@ -60,8 +69,8 @@ def read_mode_table(report_path):
     frequency_thz, path, sign, dir, [derived_from]) into a list of dicts
     -- same "read the persisted # XXX_TABLE, don't infer from folder
     names" convention as raman_analysis.read_mode_table. `path` is
-    "BULK" or "NONBULK" (replaces Raman's per-axis "axis" column
-    entirely -- IR has no probe-axis concept at all).
+    "BULK", "NONBULK", or "HYBRID" (replaces Raman's per-axis "axis"
+    column entirely -- IR has no probe-axis concept at all).
     """
     rows = []
     in_table = False
@@ -91,11 +100,14 @@ def read_mode_table(report_path):
 
 
 def group_by_mode(rows):
-    """{mode_index: {"frequency_thz": f, "path": "BULK"/"NONBULK",
-    "folders": {"plus": dir, "minus": dir} (non-bulk) or {"-": dir}
-    (bulk, a single shared equilibrium folder), "derived_from": int or
-    None}}. A DERIVED row (--skip-degenerate, non-bulk only) has no
-    folders at all.
+    """{mode_index: {"frequency_thz": f, "path": "BULK"/"NONBULK"/"HYBRID",
+    "folders": {"plus": dir, "minus": dir} (non-bulk), {"-": dir} (bulk, a
+    single shared equilibrium folder), or {"-": dir, "plus": dir,
+    "minus": dir} (hybrid -- both at once), "derived_from": int or None}}.
+    A DERIVED sign row (--skip-degenerate) contributes no folder of its
+    own -- for HYBRID this means the mode's own "-" (Born-charge) entry is
+    still present (always written, see stb-irModes) while "plus"/"minus"
+    are missing (skipped, reused from the representative instead).
     """
     modes = {}
     for row in rows:
@@ -166,6 +178,15 @@ Auto-detects, per mode, which path Stage 2 used (from the MODE_TABLE's own
     single shared born_charge_disp/equilibrium/ folder, combines with each
     mode's own eigendisplacement (a JSON sidecar Stage 2 already wrote) via
     dmu_beta/dQ = sum_atom sum_tau Z*[atom,tau,beta] * e[atom,tau].
+
+  - HYBRID (2D slab): both of the above at once -- the in-plane dmu/dQ
+    components come from the same Born-charge x eigendisplacement formula as
+    BULK (computed with a vacuum-aware PolarizationGrids that only covers
+    the two periodic axes), the vacuum-axis component comes from the same
+    dipole-difference formula as NONBULK. A naive dipole is only valid along
+    a non-periodic direction, and Born-effective-charge/Berry-phase is only
+    valid along a periodic one -- neither method alone covers all 3 axes of
+    a slab correctly, so this combines one component from each.
 
 Either way, IR intensity is |dmu/dQ|^2 -- same formula, only the derivation
 differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
@@ -328,7 +349,7 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
             computed[mode_index] = rep
             continue
 
-        if entry["path"] == "BULK":
+        if entry["path"] in ("BULK", "HYBRID"):
             if born_charges_cache is None:
                 equilibrium_dir = entry["folders"].get("-")
                 bc_path = os.path.join(equilibrium_dir, f"{label}.BC")
@@ -349,7 +370,7 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
                             "intensity may be unreliable.", 'yellow'), f_out)
                     born_charges_cache = (Z_star, scf_ok_bulk)
 
-            Z_star, scf_ok = born_charges_cache
+            Z_star, scf_ok_bulk = born_charges_cache
             if Z_star is None:
                 print_dual(color_text("    -> SKIP (Born effective charges unavailable)", 'yellow'), f_out)
                 continue
@@ -370,11 +391,82 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
                     'yellow'), f_out)
                 continue
 
-            dmu_dq = np.einsum('atb,at->b', Z_star, eigendisp)
+            dmu_dq_bec = np.einsum('atb,at->b', Z_star, eigendisp)
+
+            if entry["path"] == "BULK":
+                dmu_dq = dmu_dq_bec
+                scf_ok = scf_ok_bulk
+                unconverged_note = "  [equilibrium run unconverged]" if not scf_ok else ""
+            else:
+                # HYBRID: dmu_dq_bec already carries the two in-plane (periodic)
+                # components (the vacuum axis's own PolarizationGrids row was
+                # zeroed in Stage 2, so SIESTA never computed a component there --
+                # it comes back ~0 by construction). The vacuum-axis component
+                # instead comes from the same dipole-difference formula NONBULK
+                # uses below, which is ~0 along the periodic axes for the mirror-
+                # image reason (a naive dipole is gauge-ambiguous there -- see
+                # VERSION comment history). The two contributions are therefore
+                # additive by construction; axis_mask (when available) is used
+                # only to select/verify that, not as the sole mechanism, so this
+                # degrades gracefully if the alignment check itself is uncertain.
+                plus_dir = entry["folders"].get("plus")
+                minus_dir = entry["folders"].get("minus")
+                if plus_dir is None or minus_dir is None:
+                    print_dual(color_text(
+                        "    -> SKIP (missing +/-delta dipole folder(s) for the vacuum-axis "
+                        "component)", 'yellow'), f_out)
+                    continue
+
+                scf_ok_dipole = True
+                dipoles = {}
+                for sign, folder in (("plus", plus_dir), ("minus", minus_dir)):
+                    out_path = os.path.join(folder, args.file)
+                    ok, _max_force = check_scf_and_force(out_path)
+                    scf_ok_dipole = scf_ok_dipole and ok
+                    if not ok:
+                        print_dual(color_text(
+                            f"    [WARNING] Could not confirm SCF convergence for {folder} -- "
+                            "this dipole value may be unreliable.", 'yellow'), f_out)
+                    dipole = get_electric_dipole(out_path)
+                    if dipole is None:
+                        print_dual(color_text(
+                            f"    [SKIP] Could not read the electric dipole from '{out_path}'.",
+                            'yellow'), f_out)
+                        dipoles = None
+                        break
+                    dipoles[sign] = dipole
+                if not dipoles:
+                    continue
+
+                dmu_dq_dipole_full = (dipoles["plus"] - dipoles["minus"]) / (2.0 * stage2_delta)
+
+                if axis_mask is not None:
+                    dmu_dq = np.where(axis_mask, dmu_dq_dipole_full, dmu_dq_bec)
+                    bec_leak = dmu_dq_bec[axis_mask]
+                    dipole_leak = dmu_dq_dipole_full[~axis_mask]
+                    if (bec_leak.size and np.max(np.abs(bec_leak)) > 1e-3) or \
+                       (dipole_leak.size and np.max(np.abs(dipole_leak)) > 1e-3):
+                        print_dual(color_text(
+                            "    [WARNING] Unexpected non-negligible signal in the Born-charge "
+                            "component along the vacuum axis, or in the dipole-difference "
+                            "component along an in-plane axis -- one of the two HYBRID methods "
+                            "may not be behaving as expected for this structure; inspect "
+                            "dmu/dQ below before trusting it.", 'yellow'), f_out)
+                else:
+                    dmu_dq = dmu_dq_bec + dmu_dq_dipole_full
+                    print_dual(color_text(
+                        "    [WARNING] Could not verify the vacuum axis's Cartesian alignment "
+                        "-- combining the Born-charge and dipole-difference components by "
+                        "plain addition (each should be ~0 where the other is valid) without "
+                        "being able to check that assumption here.", 'yellow'), f_out)
+
+                scf_ok = scf_ok_bulk and scf_ok_dipole
+                unconverged_note = "  [some folders unconverged]" if not scf_ok else ""
+
             intensity = ir_intensity(dmu_dq)
             print_dual(f"    -> dmu/dQ=({dmu_dq[0]:.6f}, {dmu_dq[1]:.6f}, {dmu_dq[2]:.6f})  "
                         f"intensity~{intensity:.6f}"
-                        + ("" if scf_ok else color_text("  [equilibrium run unconverged]", 'yellow')), f_out)
+                        + ("" if not unconverged_note else color_text(unconverged_note, 'yellow')), f_out)
             mode_results.append((mode_index, freq_thz, dmu_dq, intensity))
             computed[mode_index] = (dmu_dq, intensity, scf_ok)
 

@@ -6,7 +6,23 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.3.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
+                    # Phonopy itself, same fix as stb-phononsCreate: Phonopy's own raw default
+                    # (1e-5) is far tighter than any DFT relaxation's real numerical noise floor
+                    # and can silently misdetect the true point group -- this is the actual
+                    # tolerance driving [1b] SYMMETRY ANALYSIS/--use-symmetry, so a too-tight
+                    # symprec here can artificially split a truly degenerate Raman-active mode
+                    # into separate near-identical frequencies and mislabel a symmetry-silent
+                    # mode as Raman-active. [1b] SYMMETRY ANALYSIS (space group, point group,
+                    # symmetry op count, per-mode Mulliken label/activity) is now always printed,
+                    # not just with --use-symmetry, along with an explicit [CHECK] warning to
+                    # verify the reported group against the crystal's known symmetry and loosen
+                    # --symprec if it looks wrong -- misdetection here is silent, never an error.
+                    # Also: every candidate mode being symmetry-forbidden (e.g. a centrosymmetric
+                    # crystal with no Raman-active Gamma modes at all) now finishes as a
+                    # [WARNING] with exit code 0, not a fatal [ERROR]/exit(1) -- it's a valid
+                    # physical result, not a misconfiguration. Still a hard [ERROR]/exit(1) when
+                    # --modes/--freq-min/--freq-max (not symmetry) are what emptied the selection.
 
 import os
 import sys
@@ -21,13 +37,15 @@ from ase import Atoms
 from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.calc_directives import force_single_point, build_optical_block
+from stb.core.calc_directives import build_optical_block
 from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
 )
 from stb.core.raman_symmetry import classify_modes, tensor_form
+from stb.core.structure_io import read_md_state, prepend_include
+from stb.core.ase_view import view_structure_interactive
 
 # Default THz tolerance for the extra 0D trivial-mode (free rotation)
 # search in get_gamma_modes. Deliberately conservative (LOW), not just
@@ -49,6 +67,10 @@ from stb.core.raman_symmetry import classify_modes, tensor_form
 _DEFAULT_ROTATIONAL_MODE_TOL_THZ = 2.0
 
 REPORT_FILE = "raman_stage2.txt"
+EXTRA_FDF_FILE = "config_extra.fdf"
+
+# 1 THz = 1e12 Hz -> wavenumber (cm^-1) = freq_Hz / c(cm/s) = freq_THz * 1e12 / 2.99792458e10
+_THZ_TO_CM1 = 33.35640951981521
 
 # Diagonal Raman tensor (Rxx, Ryy, Rzz) -- the default/cheap scope, 6
 # Optical calculations per mode (2 signs x 3 axes).
@@ -75,11 +97,13 @@ _SIGNS = [("plus", 1.0), ("minus", -1.0)]
 _ALL_AXIS_VECTORS = dict(_AXES_DIAGONAL + _AXES_OFFDIAG)
 
 
-def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text, pseudos):
+def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text, extra_fdf_text, pseudos):
     os.makedirs(out_dir, exist_ok=True)
     write_siesta(os.path.join(out_dir, os.path.basename(structure_filename)), displaced_atoms)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(calc_text)
+    with open(os.path.join(out_dir, EXTRA_FDF_FILE), "w") as f:
+        f.write(extra_fdf_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
 
@@ -97,27 +121,37 @@ def _phonopy_atoms_to_ase(patoms, internal_to_angstrom):
                  pbc=True)
 
 
-def write_mode_animation(phonon, band_index, amplitude_ang, internal_to_angstrom, out_path, n_frames=20):
-    """Writes a looping animation of one Gamma-point mode's eigendisplacement
-    (a smooth 0 -> +A -> 0 -> -A -> 0 sweep, `n_frames` frames) as an
-    animated XSF (.axsf) file -- readable directly by XCrySDen/VESTA to
-    visually inspect which atoms move in this mode, before interpreting
-    the spectrum. Reuses displace_along_mode (already used to build the
-    real Optical-calculation folders) at each frame's signed amplitude --
-    passing a NEGATIVE amplitude_ang directly (rather than using its
-    `sign` parameter) works identically, since displace_along_mode only
-    ever multiplies the two together internally.
-
-    ase.io.write(..., format='xsf') accepts a list of Atoms directly and
-    produces the ANIMSTEPS-header animated format on its own -- verified
-    during planning (ase.io.formats.ioformats['xsf'].single is False) --
-    so this doesn't hand-roll the AXSF format.
+def build_mode_animation_frames(phonon, band_index, amplitude_ang, internal_to_angstrom, n_frames=20):
+    """Builds a looping animation of one Gamma-point mode's eigendisplacement
+    (a smooth 0 -> +A -> 0 -> -A -> 0 sweep, `n_frames` frames) as a list of
+    ase.Atoms -- pure in-memory build, no disk I/O, shared by
+    --export-animations (written to disk via write_mode_animation below) and
+    --view-animation (opened directly in ASE's interactive viewer). Reuses
+    displace_along_mode (already used to build the real Optical-calculation
+    folders) at each frame's signed amplitude -- passing a NEGATIVE
+    amplitude_ang directly (rather than using its `sign` parameter) works
+    identically, since displace_along_mode only ever multiplies the two
+    together internally.
     """
     amplitudes = amplitude_ang * np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
     frames = []
     for amp in amplitudes:
         displaced = displace_along_mode(phonon, band_index, float(amp), internal_to_angstrom, sign=1.0)
         frames.append(_phonopy_atoms_to_ase(displaced, internal_to_angstrom))
+    return frames
+
+
+def write_mode_animation(frames, out_path):
+    """Writes a pre-built list of ase.Atoms frames (see
+    build_mode_animation_frames) as an animated XSF (.axsf) file --
+    readable directly by XCrySDen/VESTA to visually inspect which atoms
+    move in this mode, before interpreting the spectrum.
+
+    ase.io.write(..., format='xsf') accepts a list of Atoms directly and
+    produces the ANIMSTEPS-header animated format on its own -- verified
+    during planning (ase.io.formats.ioformats['xsf'].single is False) --
+    so this doesn't hand-roll the AXSF format.
+    """
     ase_write(out_path, frames, format='xsf')
 
 
@@ -171,6 +205,19 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                              "a genuinely isolated (0D) structure, which has 3 extra trivial "
                              "(free-rotation) modes at Gamma beyond the usual 3 translations -- "
                              "irrelevant for 3D/2D/1D structures.")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (Ang) Phonopy uses internally when "
+                             "loading the force constants -- drives both the reported point "
+                             "group and, when --use-symmetry is on, the Raman-active/inactive "
+                             "classification and degenerate-mode grouping (default: 0.01, "
+                             "pymatgen's own default -- matches the rest of the suite, and "
+                             "deliberately NOT Phonopy's own raw default of 1e-5, which is far "
+                             "too tight for a real DFT-relaxed structure and can misdetect the "
+                             "true point group: a mode that should be exactly degenerate can "
+                             "come out as two separate near-identical frequencies, and a "
+                             "symmetry-silent mode can be misclassified as Raman-active). Loosen "
+                             "further (e.g. 0.02-0.05) for a structure relaxed with a looser "
+                             "force tolerance.")
     parser.add_argument("--rotational-mode-tol", type=float, default=_DEFAULT_ROTATIONAL_MODE_TOL_THZ,
                         help="0D (molecule) only: a mode within the first 3 bands after the "
                              "translations is treated as free rotation (trivial, excluded) if "
@@ -235,6 +282,13 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                              "the spectrum. Same amplitude as --displacement.")
     parser.add_argument("--animation-frames", type=int, default=20,
                         help="Frames per mode animation, with --export-animations (default: 20).")
+    parser.add_argument("--view-animation", action="store_true",
+                        help="After everything else is written, open each selected mode's "
+                             "eigendisplacement animation in an interactive ASE viewer window "
+                             "(ase-gui), one mode at a time -- close a window to advance to the "
+                             "next. Needs a display (X11/Wayland); off by default. Independent of "
+                             "--export-animations -- works whether or not the .axsf files are also "
+                             "written to disk, and vice versa.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-ramanModes {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -278,6 +332,9 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
 
     with open(args.calc) as f:
         optical_calc_template = f.read()
+    structure_filename = "structure.fdf"  # fixed name every optical_disp/mode_*/ folder writes
+                                           # its displaced geometry under -- needed here for the
+                                           # [2] SINGLE-POINT SCF ENFORCEMENT %include sanity check
 
     if args.pseudo_dir is not None:
         try:
@@ -304,10 +361,11 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
         print_dual(f"Optical mesh      : {args.optical_mesh[0]} x {args.optical_mesh[1]} x {args.optical_mesh[2]}", f_out)
         print_dual(f"Optical broaden   : {args.optical_broaden} eV", f_out)
         print_dual(f"Tensor scope      : {'full symmetric tensor' if args.full_tensor else 'diagonal only'}", f_out)
+        print_dual(f"Symmetry tolerance: symprec={args.symprec:g} Ang", f_out)
 
         print_section('[1] PHONON MODES AT GAMMA', f_out)
         phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
-            phonon_dir, system_label, has_embedded_fc, f_out)
+            phonon_dir, system_label, has_embedded_fc, f_out, symprec=args.symprec)
         try:
             unique_elements = list(set(phonon.primitive.symbols))
             lattice_ang = np.array(phonon.primitive.cell) * internal_to_angstrom
@@ -318,6 +376,8 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 phonon, exclude_acoustic=True,
                 extra_trivial_tol_thz=args.rotational_mode_tol if is_0d else None)
             mode_symmetries, point_group, symmetry_error = classify_modes(phonon)
+            space_group = phonon.symmetry.get_international_table() or "unknown"
+            n_sym_ops = len(phonon.symmetry.symmetry_operations['rotations'])
         finally:
             os.chdir(original_dir)
 
@@ -344,38 +404,102 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             flag = color_text(" [IMAGINARY]", 'red') if freq < 0 else ""
             ms = band_to_symmetry.get(int(band_idx))
             sym_note = ""
-            if args.use_symmetry and ms is not None:
+            if ms is not None:
                 label_str = f" ({ms.label})" if ms.label else ""
                 sym_note = (color_text(f"{label_str} [Raman-active]", 'green') if ms.is_raman_active
                             else color_text(f"{label_str} [symmetry-forbidden]", 'yellow'))
-            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
+            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz "
+                       f"({freq * _THZ_TO_CM1:9.3f} cm^-1){flag} {sym_note}", f_out)
 
-        if args.use_symmetry:
-            print_section('[1b] SYMMETRY ANALYSIS', f_out)
-            print_dual(f"Point group       : {point_group}", f_out)
-            if symmetry_error:
+        print_section('[1b] SYMMETRY ANALYSIS', f_out)
+        print_dual(f"Symmetry precision: symprec={args.symprec:g} Ang", f_out)
+        print_dual(f"Space group       : {space_group}", f_out)
+        print_dual(f"Point group       : {point_group}", f_out)
+        print_dual(f"Symmetry ops      : {n_sym_ops}", f_out)
+        if symmetry_error:
+            print_dual(color_text(
+                f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
+                "every mode is kept/probed, same as without --use-symmetry. If your structure "
+                "is a conventional (non-primitive) cell, try reducing it first with "
+                "stb-unitcell --mode primitive.", 'yellow'), f_out)
+        else:
+            n_forbidden = sum(1 for band_idx in mode_band_indices
+                               if band_to_symmetry.get(int(band_idx)) is not None
+                               and not band_to_symmetry[int(band_idx)].is_raman_active)
+            n_unknown = sum(1 for band_idx in mode_band_indices
+                             if band_to_symmetry.get(int(band_idx)) is None)
+            print_dual(f"Symmetry-forbidden (Raman-inactive) : {n_forbidden}/{len(mode_band_indices)}", f_out)
+            if n_unknown:
                 print_dual(color_text(
-                    f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
-                    "running every mode, same as without --use-symmetry. If your structure is "
-                    "a conventional (non-primitive) cell, try reducing it first with "
-                    "stb-unitcell --mode primitive.", 'yellow'), f_out)
-            else:
-                n_forbidden = sum(1 for band_idx in mode_band_indices
-                                   if band_to_symmetry.get(int(band_idx)) is not None
-                                   and not band_to_symmetry[int(band_idx)].is_raman_active)
-                n_unknown = sum(1 for band_idx in mode_band_indices
-                                 if band_to_symmetry.get(int(band_idx)) is None)
-                print_dual(f"Symmetry-forbidden (Raman-inactive) : {n_forbidden}/{len(mode_band_indices)}", f_out)
-                if n_unknown:
-                    print_dual(color_text(
-                        f"[NOTE] {n_unknown} mode(s) could not be classified (label matching "
-                        "failed) -- kept, never auto-skipped when uncertain.", 'yellow'), f_out)
-                if args.modes is not None:
-                    print_dual(color_text(
-                        "--modes was given explicitly -- symmetry filtering is informational "
-                        "only here, no mode is auto-skipped.", 'yellow'), f_out)
+                    f"[NOTE] {n_unknown} mode(s) could not be classified (label matching "
+                    "failed) -- kept, never auto-skipped when uncertain.", 'yellow'), f_out)
+            if args.use_symmetry and args.modes is not None:
+                print_dual(color_text(
+                    "--modes was given explicitly -- symmetry filtering is informational "
+                    "only here, no mode is auto-skipped.", 'yellow'), f_out)
+            if not args.use_symmetry:
+                print_dual(
+                    "(--use-symmetry not given -- the labels/tags above are informational "
+                    "only, every mode is still probed regardless of activity.)", f_out)
+        print_dual(color_text(
+            "\n[CHECK] Confirm the space/point group above is the one you actually expect for "
+            "this crystal (e.g. from its known/published structure) BEFORE trusting the "
+            "Raman-active/forbidden labels or any near-degenerate mode split reported above. "
+            "A too-tight --symprec silently detects a LOWER symmetry than the real one -- it "
+            "will not raise an error, it will just misclassify some modes as active/forbidden "
+            "and split a truly degenerate mode into two slightly different frequencies. If the "
+            "reported group looks wrong (e.g. an orthorhombic label like 'mmm' for what should "
+            "be a hexagonal/cubic crystal), rerun this stage with a looser --symprec (e.g. 0.02, "
+            "0.05, 0.1) until the expected group is recovered -- and re-check that a much looser "
+            "value doesn't overshoot into a HIGHER symmetry than the real (possibly slightly "
+            "distorted) relaxed structure actually has.", 'yellow'), f_out)
 
-        print_section('[2] PSEUDOPOTENTIALS', f_out)
+        print_section('[2] SINGLE-POINT SCF ENFORCEMENT', f_out)
+        calc_basename = os.path.basename(args.calc)
+        if "%include" not in optical_calc_template or structure_filename not in optical_calc_template:
+            print_dual(color_text(
+                f"[NOTE] Could not confirm '{calc_basename}' references '{structure_filename}' via "
+                f"%include -- if your calc.fdf doesn't already include the structure file by this "
+                f"exact name, add '%include {structure_filename}' to it (or the equivalent for your "
+                "own convention) so SIESTA picks up each displaced mode's exact geometry.",
+                'yellow'), f_out)
+
+        before = read_md_state(optical_calc_template)
+        steps_label = f"{before['steps_key']}={before['steps']}" if before['steps_key'] else "(absent)"
+        print_dual("Calc template (current state, before forcing):", f_out)
+        print_dual(f"  MD.TypeOfRun={before['typeofrun'] or '(absent)'}  Steps: {steps_label}  "
+                   f"MD.VariableCell={before['variablecell'] or '(absent)'}", f_out)
+        print_dual(
+            "Every Optical calculation here is a single-point evaluation of the dielectric response "
+            "at ONE displaced geometry (one mode, one sign, one probe axis) -- NO ionic relaxation, "
+            "NO cell relaxation -- regardless of the state above, since letting SIESTA move the atoms "
+            "would mean the measured response no longer corresponds to the intended finite-difference "
+            f"displacement, silently corrupting the Raman tensor derivative. Forced via "
+            f"'%include {EXTRA_FDF_FILE}' PREPENDED at the very top of every generated {calc_basename} "
+            "(before your own directives, including the structure %include) -- SIESTA's fdf reader is "
+            "first-occurrence-wins for duplicate labels, so this ordering guarantees the forced values "
+            "win even if your own template already sets any of them. No k-grid override is needed here "
+            "(unlike Stage 1's supercell) -- these run on the small unit cell, so the template's own "
+            "k-grid is already correctly sized.", f_out)
+
+        extra_fdf_forced_block = (
+            "# Auto-generated by stb-ramanModes.\n"
+            "# Forces a pure single-point SCF (no ionic or cell relaxation) at this mode's exact\n"
+            "# displaced geometry, regardless of --calc's own settings. This mode/axis folder's\n"
+            "# Optical.* block (see [4] below) is appended after this.\n"
+            "MD.TypeOfRun       CG\n"
+            "MD.Steps           0\n"
+            "MD.VariableCell    false\n"
+        )
+        print_dual(f"\n{EXTRA_FDF_FILE} (written into every generated folder; MD-forcing part shown "
+                   "below -- each folder additionally gets its own mode/axis-specific Optical.* block "
+                   "appended after it, varying per folder, see [4]):", f_out)
+        for line in extra_fdf_forced_block.rstrip("\n").split("\n"):
+            print_dual(f"  {line}", f_out)
+
+        forced_calc_text = prepend_include(optical_calc_template, EXTRA_FDF_FILE)
+
+        print_section('[3] PSEUDOPOTENTIALS', f_out)
         print_dual(f"Elements needed   : {', '.join(sorted(unique_elements))}", f_out)
         if args.pseudo_dir is not None:
             pseudo_source = args.pseudo_dir
@@ -406,6 +530,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
         apply_symmetry_skip = (args.use_symmetry and args.modes is None and not symmetry_error)
         selected = []
         n_actually_skipped = 0
+        n_passed_filters = 0
         for k, (freq, band_idx) in enumerate(zip(frequencies, mode_band_indices), start=1):
             if args.modes is not None and k not in args.modes:
                 continue
@@ -413,6 +538,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 continue
             if args.freq_max is not None and freq > args.freq_max:
                 continue
+            n_passed_filters += 1
             if apply_symmetry_skip:
                 ms = band_to_symmetry.get(int(band_idx))
                 if ms is not None and not ms.is_raman_active:
@@ -426,11 +552,28 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                         "[1b] SYMMETRY ANALYSIS above).", f_out)
 
         if not selected:
-            print_dual(color_text(
-                "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max"
-                + ("/--use-symmetry" if apply_symmetry_skip else "")
-                + " -- nothing to do.", 'red'), f_out)
-            sys.exit(1)
+            # Every candidate mode being symmetry-forbidden is a valid physical
+            # result (e.g. a centrosymmetric crystal where every Gamma mode
+            # happens to be Raman-silent) -- not a misconfiguration, so it's a
+            # [WARNING] and the run finishes cleanly with zero folders rather
+            # than exiting non-zero. Only downgrade when --modes/--freq-min/
+            # --freq-max weren't ALSO responsible (n_passed_filters > 0 means
+            # symmetry alone emptied the selection).
+            all_symmetry_forbidden = (apply_symmetry_skip and n_passed_filters > 0
+                                       and n_actually_skipped == n_passed_filters)
+            if all_symmetry_forbidden:
+                print_dual(color_text(
+                    "\n[WARNING] Every mode that passed --modes/--freq-min/--freq-max is "
+                    "symmetry-forbidden from being Raman-active -- nothing to compute. This is "
+                    "a valid physical result (e.g. a centrosymmetric crystal with no "
+                    "Raman-active Gamma modes), not an error. No Optical displacement folders "
+                    "written.", 'yellow'), f_out)
+            else:
+                print_dual(color_text(
+                    "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max"
+                    + ("/--use-symmetry" if apply_symmetry_skip else "")
+                    + " -- nothing to do.", 'red'), f_out)
+                sys.exit(1)
 
         # --skip-degenerate: within a degenerate group of selected modes
         # (2+ bands sharing one irrep), keep only the first-encountered band
@@ -490,7 +633,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
             else:
                 mode_axes[k] = axes
 
-        print_section('[3] OPTICAL DISPLACEMENT FOLDERS', f_out)
+        print_section('[4] OPTICAL DISPLACEMENT FOLDERS', f_out)
         n_folders = sum(len(mode_axes[k]) for k, _, _ in selected
                          if representative_of[k] == k) * len(_SIGNS)
         print_dual(f"Selected modes    : {len(selected)}", f_out)
@@ -522,16 +665,31 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
 
         if args.export_animations:
             os.makedirs(optical_root, exist_ok=True)
-            print_dual(f"Mode animations   : {len(selected)} .axsf file(s), "
-                        f"{args.animation_frames} frames each.", f_out)
+        if args.export_animations or args.view_animation:
+            if args.export_animations:
+                print_dual(f"Mode animations   : {len(selected)} .axsf file(s) under '{optical_root}', "
+                            f"{args.animation_frames} frames each.", f_out)
+            else:
+                print_dual("Mode animations   : not written to disk (pass --export-animations to "
+                            "also keep the .axsf files).", f_out)
+            if args.view_animation:
+                print_dual("                    Will open interactively (ASE viewer, one window "
+                            "per mode, close to advance) after this report finishes writing.", f_out)
 
         report_rows = []  # (label, mode_index, band_index, frequency, sign, axis, dir, derived_from)
-        structure_filename = "structure.fdf"
+        animation_targets = []  # (k, band_idx, freq) -- populated whenever export_animations or
+                                 # view_animation is requested, INCLUDING derived (--skip-degenerate)
+                                 # modes: their vibration is real even though no Optical folders are
+                                 # written for them
         for k, freq, band_idx in selected:
+            if args.export_animations or args.view_animation:
+                animation_targets.append((k, band_idx, freq))
             if args.export_animations:
+                frames = build_mode_animation_frames(
+                    phonon, band_idx, args.displacement, internal_to_angstrom,
+                    n_frames=args.animation_frames)
                 animation_path = os.path.join(optical_root, f"mode_{k:02d}_animation.axsf")
-                write_mode_animation(phonon, band_idx, args.displacement, internal_to_angstrom,
-                                      animation_path, n_frames=args.animation_frames)
+                write_mode_animation(frames, animation_path)
                 print_dual(f"  {color_text('[OK]', 'green')} {animation_path}", f_out)
             if representative_of[k] != k:
                 rep_k = representative_of[k]
@@ -546,8 +704,9 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                     mode_dir = os.path.join(optical_root, label)
                     optical_block = build_optical_block(
                         args.optical_mesh, args.optical_broaden, axis_vec, args.optical_nbands)
-                    calc_text = force_single_point(optical_calc_template) + "\n" + optical_block
-                    write_optical_folder(mode_dir, displaced, structure_filename, calc_text, pseudos)
+                    extra_fdf_text = extra_fdf_forced_block + "\n" + optical_block
+                    write_optical_folder(mode_dir, displaced, structure_filename,
+                                          forced_calc_text, extra_fdf_text, pseudos)
                     report_rows.append((label, k, band_idx, freq, sign_name, axis_name, mode_dir, None))
                     print_dual(f"  {color_text('[OK]', 'green')} {mode_dir}", f_out)
             if k in mode_reductions:
@@ -557,12 +716,18 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                     json.dump({"T0": t0.tolist(), "probe_axis": mode_reductions[k]["probe_axis"]}, f)
 
         n_real_folders = sum(1 for row in report_rows if row[4] != "DERIVED")
-        print_section('[4] SUMMARY & NEXT STEPS', f_out)
+        print_section('[5] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"{n_real_folders} folder(s) written under '{optical_root}'.", f_out)
         print_dual(f"Report               : {report_path}", f_out)
-        print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-        print_dual(f"  1. Run SIESTA in every '{optical_root}/mode_*/' folder.", f_out)
-        print_dual(f"  2. Once they're done, run: stb-ramanAnalysis --directory {output_root}", f_out)
+        if n_real_folders:
+            print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+            print_dual(f"  1. Run SIESTA in every '{optical_root}/mode_*/' folder.", f_out)
+            print_dual(f"  2. Once they're done, run: stb-ramanAnalysis --directory {output_root}", f_out)
+        else:
+            print_dual(color_text(
+                "\nNo SIESTA runs needed -- every candidate mode was symmetry-forbidden from "
+                "being Raman-active (see [1b]/[3] above). Nothing further to do for this "
+                "structure's Raman spectrum.", 'yellow'), f_out)
 
         f_out.write("\n# MODE_TABLE -- parsed by stb-ramanAnalysis, do not reorder the "
                      "first 6 columns\n")
@@ -575,7 +740,23 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)
-    print(color_text("Optical displacement folders ready for Stage 3 (stb-ramanAnalysis).\n", 'bold'))
+    if n_real_folders:
+        print(color_text("Optical displacement folders ready for Stage 3 (stb-ramanAnalysis).\n", 'bold'))
+    else:
+        print(color_text(
+            "No Optical displacement folders were needed -- every candidate mode is "
+            "symmetry-forbidden from being Raman-active.\n", 'bold'))
+
+    if args.view_animation:
+        print(color_text(f"\nOpening interactive animation viewer for {len(animation_targets)} "
+                          "mode(s) -- close each ASE window to advance to the next.", 'cyan'))
+        for k, band_idx, freq in animation_targets:
+            print(f"  mode {k:3d} (band {band_idx:3d}, {freq:10.4f} THz / "
+                  f"{freq * _THZ_TO_CM1:9.3f} cm^-1) -- close window to continue...")
+            frames = build_mode_animation_frames(
+                phonon, band_idx, args.displacement, internal_to_angstrom,
+                n_frames=args.animation_frames)
+            view_structure_interactive(frames)
 
 
 if __name__ == "__main__":

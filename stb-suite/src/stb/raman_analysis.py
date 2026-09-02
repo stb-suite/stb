@@ -40,8 +40,18 @@ def detect_optical_label(optical_root):
     reimplemented locally (not extracted to core) since it globs a
     different folder-naming pattern (mode_* vs. disp-*) with only one real
     consumer so far.
+
+    Filters to directories only: "mode_*" also matches stb-ramanModes'
+    --export-animations siblings written directly under optical_root
+    (mode_XX_animation.axsf, mode_XX_tensor_form.json) -- e.g.
+    "mode_01_animation.axsf" sorts alphabetically before "mode_01_minus_x"
+    ('a' < 'm'), so without this filter glob's first match can be one of
+    those FILES, not a folder, and os.path.join(..., "calc.fdf") silently
+    fails to open (NotADirectoryError, an OSError subclass) -- caught below
+    and misreported as "could not detect SystemLabel" rather than the real
+    cause.
     """
-    mode_dirs = sorted(glob.glob(os.path.join(optical_root, "mode_*")))
+    mode_dirs = sorted(d for d in glob.glob(os.path.join(optical_root, "mode_*")) if os.path.isdir(d))
     if not mode_dirs:
         return None
     fdf_path = os.path.join(mode_dirs[0], "calc.fdf")
@@ -384,6 +394,38 @@ def write_spectrum_plot(dat_path, gplot_path, grid, intensity, all_full, tempera
         f.writelines(lines)
 
 
+def view_spectrum_plot(grid, intensity, all_full, temperature_k=None, experimental=None):
+    """Interactive matplotlib preview of the Raman spectrum -- the on-screen
+    counterpart to write_spectrum_plot's saved gnuplot .dat/.gplot pair,
+    same data, never written to disk (see CLAUDE.md: WORKFLOW_TOOLS writes
+    gnuplot pairs, matplotlib here is preview-only). Experimental overlay
+    on a separate right-hand y-axis (ax.twinx()), same rationale as the
+    gnuplot y2 axis in write_spectrum_plot -- simulated activity and real
+    experimental intensity are on incomparable scales. matplotlib is
+    imported lazily, only when --view was actually passed.
+    """
+    import matplotlib.pyplot as plt
+    scope = "full tensor" if all_full else "diagonal tensor only, approximate"
+    if temperature_k is not None:
+        scope += f", {temperature_k:.0f} K Bose weighting"
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(grid, intensity, color='#2255cc', lw=2, label="Simulated")
+    ax.set_xlabel("Raman shift (cm$^{-1}$)")
+    ax.set_ylabel("Simulated intensity (arb. units)")
+    ax.set_title(f"Raman Spectrum ({scope})")
+    ax.grid(True, alpha=0.3)
+    if experimental is not None:
+        exp_freq, exp_intensity = experimental
+        ax2 = ax.twinx()
+        ax2.plot(exp_freq, exp_intensity, color='#cc5522', lw=2, label="Experimental")
+        ax2.set_ylabel("Experimental intensity (arb. units)")
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+    fig.tight_layout()
+    plt.show()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 3 of 3: analyzes a stb-ramanModes Optical-calculation "
@@ -420,7 +462,8 @@ spectrum (.dat/.gplot).""",
                              "activity alone, as before this option existed).")
     parser.add_argument("-o", "--output", type=str, default="raman_spectrum",
                         help="Base filename (no extension) for the spectrum .dat/.gplot pair "
-                             "(default: raman_spectrum).")
+                             "(default: raman_spectrum), written under '<directory>/plot/' -- "
+                             "only relevant with --save-gnuplot.")
     parser.add_argument("--experimental", type=str, default=None, metavar="FILE",
                         help="Overlay a measured Raman spectrum (2-column text file: frequency "
                              "cm^-1, intensity) on the simulated one, and report a nearest-"
@@ -433,6 +476,15 @@ spectrum (.dat/.gplot).""",
                              "filters out sub-1%% noise bumps in both spectra).")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also save the spectrum (and, with --experimental, the overlaid "
+                             "measured spectrum) as gnuplot .dat + .gplot scripts, under "
+                             "'<directory>/plot/'. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="View the Raman spectrum (and, with --experimental, the overlaid "
+                             "measured spectrum on a second y-axis) interactively via matplotlib "
+                             "now. Off by default. Needs a display. Independent of --save-gnuplot "
+                             "-- matplotlib here is only an on-screen preview, never written to disk.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-ramanAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -653,19 +705,39 @@ spectrum (.dat/.gplot).""",
                 f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
                 "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
     grid, intensity = build_lorentzian_spectrum(freqs_cm1, activities, args.linewidth)
-    dat_path = os.path.join(args.directory, f"{args.output}.dat")
-    gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+    print_dual(f"Grid              : {grid[0]:.1f} - {grid[-1]:.1f} cm^-1, {len(grid)} points, "
+                f"{args.linewidth:.2f} cm^-1 linewidth", f_out)
+
+    sim_peaks_all = find_spectrum_peaks(grid, intensity, args.peak_prominence)
+    max_intensity = float(np.max(intensity)) if len(intensity) else 0.0
+    print_dual(f"Peaks detected    : {len(sim_peaks_all)} (prominence >= "
+                f"{args.peak_prominence * 100:.1f}% of max intensity)", f_out)
+    if len(sim_peaks_all) and max_intensity > 0:
+        peak_intensities = intensity[np.searchsorted(grid, sim_peaks_all)]
+        print_dual(f"  {'Position (cm^-1)':<20}{'Rel. intensity (%)'}", f_out)
+        for peak_f, peak_i in zip(sim_peaks_all, peak_intensities):
+            print_dual(f"  {peak_f:<20.2f}{100.0 * peak_i / max_intensity:.1f}", f_out)
 
     experimental, experimental_dat_path = None, None
     if args.experimental is not None:
         exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
         experimental = (exp_freq, exp_intensity)
-        experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
 
-    write_spectrum_plot(dat_path, gplot_path, grid, intensity, all_full, args.temperature,
-                         experimental, experimental_dat_path)
-    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
-                f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    if args.save_gnuplot:
+        plot_dir = os.path.join(args.directory, "plot")
+        os.makedirs(plot_dir, exist_ok=True)
+        dat_path = os.path.join(plot_dir, f"{args.output}.dat")
+        gplot_path = os.path.join(plot_dir, f"{args.output}.gplot")
+        if experimental is not None:
+            experimental_dat_path = os.path.join(plot_dir, f"{args.output}_experimental.dat")
+        write_spectrum_plot(dat_path, gplot_path, grid, intensity, all_full, args.temperature,
+                             experimental, experimental_dat_path)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    else:
+        dat_path = gplot_path = None
+        print_dual("Gnuplot data+script : not written (off by default -- pass --save-gnuplot to "
+                    "write it, under '<directory>/plot/').", f_out)
 
     extra_files = ""
     if experimental is not None:
@@ -689,14 +761,19 @@ spectrum (.dat/.gplot).""",
             mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
             print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
                         f"{len(matches)} matched pair(s))", f_out)
-        print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
-        extra_files = f", {experimental_dat_path}"
+        if experimental_dat_path:
+            print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
+            extra_files = f", {experimental_dat_path}"
 
     print_section('[4] SUMMARY & FILES', f_out)
     print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
     if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-    print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+    if dat_path:
+        print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+    else:
+        print_dual("Files               : none (pass --save-gnuplot to write the spectrum "
+                    "data/script under '<directory>/plot/').", f_out)
 
 
     if f_out:
@@ -705,6 +782,10 @@ spectrum (.dat/.gplot).""",
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)
     print(color_text("Raman analysis complete.\n", 'bold'))
+
+    if args.view:
+        print(color_text("\n--view: opening the spectrum in matplotlib...", 'cyan'))
+        view_spectrum_plot(grid, intensity, all_full, args.temperature, experimental)
 
 
 if __name__ == "__main__":

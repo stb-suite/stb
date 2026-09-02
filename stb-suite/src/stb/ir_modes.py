@@ -6,7 +6,45 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.3.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
+                    # Phonopy itself, same fix as stb-ramanModes (VERSION 1.2.0): Phonopy's own
+                    # raw default (1e-5) is far tighter than any DFT relaxation's real numerical
+                    # noise floor and can silently misdetect the true point group -- this is the
+                    # actual tolerance driving [1b] SYMMETRY ANALYSIS/--use-symmetry, so a
+                    # too-tight symprec here can artificially split a truly degenerate IR-active
+                    # mode into separate near-identical frequencies and mislabel a symmetry-silent
+                    # mode as IR-active. [1b] SYMMETRY ANALYSIS (space group, point group,
+                    # symmetry op count, per-mode Mulliken label/activity) is now always printed,
+                    # not just with --use-symmetry, along with an explicit [CHECK] warning to
+                    # verify the reported group against the crystal's known symmetry and loosen
+                    # --symprec if it looks wrong -- misdetection here is silent, never an error.
+                    # Also: every candidate mode being symmetry-forbidden (e.g. a centrosymmetric
+                    # crystal with no IR-active Gamma modes at all) now finishes as a [WARNING]
+                    # with exit code 0, not a fatal [ERROR]/exit(1) -- it's a valid physical
+                    # result, not a misconfiguration. Still a hard [ERROR]/exit(1) when
+                    # --modes/--freq-min/--freq-max (not symmetry) are what emptied the selection.
+                    # New HYBRID path for exactly-one-vacuum-axis (2D slab) structures. A naive
+                    # real-space dipole moment (the old "non-bulk" path, still used as-is for
+                    # 0D/1D) is only physically valid along a genuinely NON-periodic direction --
+                    # confirmed live on monolayer h-BN: SIESTA itself printed an EXACT ZERO
+                    # dipole change for the in-plane E' mode's +/-delta displacement (not a
+                    # parsing bug), silently reporting zero IR intensity for a mode the
+                    # literature puts as the DOMINANT IR peak (~1420 cm^-1). The two in-plane
+                    # (periodic) axes of a slab need the same Born-effective-charge/Berry-phase
+                    # machinery the "bulk" path already uses; the vacuum axis is still fine via
+                    # the old dipole-difference method (verified: the out-of-plane A2'' mode's
+                    # dmu_z/dQ came out correct, matching the literature TO/LO range). HYBRID
+                    # writes BOTH a shared born_charge_disp/equilibrium/ folder (PolarizationGrids
+                    # built vacuum-aware via build_slab_polarization_grid -- the vacuum axis's own
+                    # row zeroed, since SIESTA skips the polarization calculation entirely for any
+                    # zero grid-count direction) AND per-mode dipole_disp/mode_XX_plus|minus/
+                    # folders; stb-irAnalysis combines one component from each. Empirically
+                    # validated before writing this code: a manual BornCharge T run on the relaxed
+                    # h-BN structure with this exact grid shape gave a sane, sign-correct,
+                    # sum-rule-satisfying in-plane Z* (B ~+2.76/+2.78, N ~-2.76/-2.74 |e|, in-plane
+                    # sum ~0.01-0.04 |e|, out-of-plane row correctly ~0). Deliberately scoped to 2D
+                    # only (exactly 1 vacuum axis) -- 1D (2 vacuum axes) stays on the old non-bulk
+                    # path for now, same limitation, no test case yet.
 
 import os
 import sys
@@ -45,6 +83,44 @@ REPORT_FILE = "ir_stage2.txt"
 # example shape as SIESTA's own PolarizationGrids tutorial material.
 _DEFAULT_POLARIZATION_GRID = [10, 4, 4, 4, 10, 4, 4, 4, 10]
 _DEFAULT_FC_DISPL_BOHR = 0.02
+# In-plane diagonal/cross-term Berry-phase k-point counts for the HYBRID
+# (2D slab) path's PolarizationGrids -- same magnitude as
+# _DEFAULT_POLARIZATION_GRID's own in-plane entries, empirically validated
+# live on monolayer h-BN (see VERSION comment above) before this code was
+# written.
+_SLAB_IN_PLANE_GRID = 10
+_SLAB_CROSS_TERM_GRID = 4
+
+
+def build_slab_polarization_grid(vacuum_axes, in_plane=_SLAB_IN_PLANE_GRID,
+                                  cross_term=_SLAB_CROSS_TERM_GRID):
+    """Vacuum-aware %block PolarizationGrids for the HYBRID (2D slab) path:
+    a row-major 3x3 grid (flattened to 9 ints, same shape
+    force_born_charge_run already expects) where any entry touching the
+    vacuum-padded lattice vector is forced to 1 (mirrors the slab SCF
+    k-grid's own Nx x Ny x 1 convention -- a large real-space vacuum gives a
+    tiny reciprocal extent), EXCEPT the vacuum axis's own diagonal entry,
+    forced to exactly 0 -- SIESTA's documented behavior is to skip the
+    polarization calculation entirely for any direction whose grid count is
+    0, which is exactly what's wanted here: the out-of-plane component is
+    physically ill-defined via Berry phase for a slab's non-periodic axis
+    (the existing dipole-difference path already covers it correctly, see
+    ir_analysis.py's HYBRID combination). The two genuinely periodic
+    in-plane axes get `in_plane`/`cross_term`, matching
+    _DEFAULT_POLARIZATION_GRID's own in-plane values.
+
+    `vacuum_axes` must have exactly one True entry (a 2D slab) -- callers
+    only invoke this for the HYBRID path, which is gated on exactly that.
+    """
+    grid = [[0, 0, 0] for _ in range(3)]
+    for i in range(3):
+        for j in range(3):
+            touches_vacuum = vacuum_axes[i] or vacuum_axes[j]
+            if i == j:
+                grid[i][j] = 0 if vacuum_axes[i] else in_plane
+            else:
+                grid[i][j] = 1 if touches_vacuum else cross_term
+    return [v for row in grid for v in row]
 
 
 def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
@@ -94,19 +170,33 @@ def main():
 The path is AUTO-SELECTED by structure dimensionality (core.kspace.detect_vacuum_axes on the
 primitive cell), no flag needed:
 
-  - Non-bulk (0D/1D/2D -- at least one vacuum-padded axis): SIESTA prints the total dipole
-    moment automatically for a non-periodic direction, no special fdf block needed. Writes
-    exactly 2 folders per selected mode (dipole_disp/mode_XX_plus/, mode_XX_minus/) -- a
-    simple single-point SCF, no per-axis probing (unlike stb-ramanModes' Optical.Vector sweep):
-    the dipole derivative dmu/dQ already comes out as a full 3-vector from one +/-delta pair.
+  - Non-bulk (0D molecule, or 1D wire -- zero or two vacuum-padded axes): SIESTA prints the
+    total dipole moment automatically for a non-periodic direction, no special fdf block
+    needed. Writes exactly 2 folders per selected mode (dipole_disp/mode_XX_plus/,
+    mode_XX_minus/) -- a simple single-point SCF, no per-axis probing (unlike
+    stb-ramanModes' Optical.Vector sweep): the dipole derivative dmu/dQ already comes out as
+    a full 3-vector from one +/-delta pair. NOTE: for a 1D wire this is only valid along the
+    two genuinely non-periodic transverse directions -- the along-axis component is subject
+    to the same periodic-direction caveat the HYBRID path below exists to fix for 2D; 1D isn't
+    covered by that fix yet.
 
-  - Bulk (3D periodic, no vacuum axis): a naive dipole moment is gauge-ambiguous for a fully
+  - Bulk (3D periodic, zero vacuum axes): a naive dipole moment is gauge-ambiguous for a fully
     periodic system. Writes exactly ONE equilibrium folder (born_charge_disp/equilibrium/,
     the undisplaced structure) using SIESTA's own native Born-effective-charge automation
     (MD.TypeOfRun FC + BornCharge T + %block PolarizationGrids) -- independent of how many
     modes are selected. Also writes a small eigendisplacement JSON sidecar per selected mode
     (born_charge_disp/mode_XX_eigendisplacement.json) so stb-irAnalysis can combine it with the
     Born-charge tensors without reloading Phonopy itself.
+
+  - Hybrid (2D slab, exactly one vacuum-padded axis): a naive dipole moment is only valid
+    along the slab's non-periodic (vacuum) axis -- the two in-plane axes are genuinely
+    periodic, same gauge-ambiguity problem the bulk path exists to solve. Writes BOTH the
+    bulk path's single shared born_charge_disp/equilibrium/ folder (PolarizationGrids built
+    vacuum-aware -- the vacuum axis's own row zeroed, so SIESTA skips its ill-defined
+    out-of-plane polarization component entirely) AND the non-bulk path's per-mode
+    dipole_disp/mode_XX_plus/mode_XX_minus/ folders. stb-irAnalysis takes the in-plane
+    dmu/dQ components from the Born-charge run and the vacuum-axis component from the
+    dipole-difference pair, combining them into one physically valid 3-vector per mode.
 
 Doesn't run SIESTA itself -- run each folder's calculation yourself, then use stb-irAnalysis.""",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -148,6 +238,19 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                              "same convention as stb-ir (default: 10.0). Used both for the 0D "
                              "extra-trivial-mode detection AND to auto-select the bulk vs. "
                              "non-bulk IR path.")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (Ang) Phonopy uses internally when "
+                             "loading the force constants -- drives both the reported point "
+                             "group and, when --use-symmetry is on, the IR-active/inactive "
+                             "classification and degenerate-mode grouping (default: 0.01, "
+                             "pymatgen's own default -- matches the rest of the suite, and "
+                             "deliberately NOT Phonopy's own raw default of 1e-5, which is far "
+                             "too tight for a real DFT-relaxed structure and can misdetect the "
+                             "true point group: a mode that should be exactly degenerate can "
+                             "come out as two separate near-identical frequencies, and a "
+                             "symmetry-silent mode can be misclassified as IR-active). Loosen "
+                             "further (e.g. 0.02-0.05) for a structure relaxed with a looser "
+                             "force tolerance.")
     parser.add_argument("--rotational-mode-tol", type=float, default=_DEFAULT_ROTATIONAL_MODE_TOL_THZ,
                         help="0D (molecule) only: a mode within the first 3 bands after the "
                              "translations is treated as free rotation (trivial, excluded) if "
@@ -266,25 +369,34 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         print_dual(f"Directory         : {output_root}", f_out)
         print_dual(f"SystemLabel       : {'N/A (ML-computed force constants)' if has_embedded_fc else f'{system_label} ({label_source})'}", f_out)
         print_dual(f"Calc template     : {args.calc}", f_out)
-        print_dual(f"Displacement      : {args.displacement} Ang (non-bulk path only)", f_out)
-        print_dual(f"FC displacement   : {args.fc_displ} Bohr (bulk path only)", f_out)
+        print_dual(f"Displacement      : {args.displacement} Ang (non-bulk/hybrid path only)", f_out)
+        print_dual(f"FC displacement   : {args.fc_displ} Bohr (bulk/hybrid path only)", f_out)
         print_dual(f"Polarization grid : {' '.join(str(v) for v in args.polarization_grid)} "
-                    "(bulk path only)", f_out)
+                    "(bulk path only -- hybrid path auto-builds its own vacuum-aware grid, "
+                    "see [1])", f_out)
+        print_dual(f"Symmetry tolerance: symprec={args.symprec:g} Ang", f_out)
 
         print_section('[1] PHONON MODES AT GAMMA', f_out)
         phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
-            phonon_dir, system_label, has_embedded_fc, f_out)
+            phonon_dir, system_label, has_embedded_fc, f_out, symprec=args.symprec)
         try:
             unique_elements = list(set(phonon.primitive.symbols))
             lattice_ang = np.array(phonon.primitive.cell) * internal_to_angstrom
             frac_coords = np.array(phonon.primitive.scaled_positions)
             vacuum_axes = kspace.detect_vacuum_axes(frac_coords, lattice_ang, args.vacuum_gap)
-            is_0d = all(vacuum_axes)
-            is_bulk = not any(vacuum_axes)
+            n_vacuum_axes = sum(vacuum_axes)
+            is_0d = n_vacuum_axes == 3
+            is_bulk = n_vacuum_axes == 0
+            # Exactly one vacuum axis == a 2D slab -- the HYBRID path (see VERSION comment
+            # above). Two vacuum axes (1D wire) deliberately stays on the plain non-bulk path
+            # for now (out of scope, see the argparse description's own 1D caveat).
+            is_hybrid_2d = n_vacuum_axes == 1
             frequencies, mode_band_indices, n_extra_trivial = get_gamma_modes(
                 phonon, exclude_acoustic=True,
                 extra_trivial_tol_thz=args.rotational_mode_tol if is_0d else None)
             mode_symmetries, point_group, symmetry_error = classify_ir_modes(phonon)
+            space_group = phonon.symmetry.get_international_table() or "unknown"
+            n_sym_ops = len(phonon.symmetry.symmetry_operations['rotations'])
         finally:
             os.chdir(original_dir)
 
@@ -303,11 +415,19 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 "[Path] Bulk (3D periodic) -- one equilibrium Born-effective-charge SIESTA run "
                 "(MD.TypeOfRun FC + BornCharge T + PolarizationGrids) covers every selected "
                 "mode's IR intensity.", 'cyan'), f_out)
+        elif is_hybrid_2d:
+            print_dual(color_text(
+                "[Path] Hybrid (2D slab, one vacuum-padded axis) -- one shared equilibrium "
+                "Born-effective-charge SIESTA run covers the two in-plane dmu/dQ components "
+                "(PolarizationGrids built vacuum-aware, out-of-plane row zeroed), PLUS a "
+                "+/-delta dipole-moment displacement pair per selected mode for the "
+                "vacuum-axis component (a naive dipole is only valid along that non-periodic "
+                "direction). See --help for why.", 'cyan'), f_out)
         else:
             print_dual(color_text(
-                "[Path] Non-bulk (0D/1D/2D) -- a +/-delta dipole-moment displacement pair per "
-                "selected mode (plain single-point SCF, SIESTA prints the total dipole "
-                "automatically).", 'cyan'), f_out)
+                "[Path] Non-bulk (0D molecule / 1D wire) -- a +/-delta dipole-moment "
+                "displacement pair per selected mode (plain single-point SCF, SIESTA prints "
+                "the total dipole automatically).", 'cyan'), f_out)
         if n_extra_trivial:
             print_dual(color_text(
                 f"[NOTE] 0D structure detected -- excluded {n_extra_trivial} extra trivial "
@@ -325,36 +445,54 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             flag = color_text(" [IMAGINARY]", 'red') if freq < 0 else ""
             ms = band_to_symmetry.get(int(band_idx))
             sym_note = ""
-            if args.use_symmetry and ms is not None:
+            if ms is not None:
                 label_str = f" ({ms.label})" if ms.label else ""
                 sym_note = (color_text(f"{label_str} [IR-active]", 'green') if ms.is_ir_active
                             else color_text(f"{label_str} [symmetry-forbidden]", 'yellow'))
             print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
 
-        if args.use_symmetry:
-            print_section('[1b] SYMMETRY ANALYSIS', f_out)
-            print_dual(f"Point group       : {point_group}", f_out)
-            if symmetry_error:
+        print_section('[1b] SYMMETRY ANALYSIS', f_out)
+        print_dual(f"Symmetry precision: symprec={args.symprec:g} Ang", f_out)
+        print_dual(f"Space group       : {space_group}", f_out)
+        print_dual(f"Point group       : {point_group}", f_out)
+        print_dual(f"Symmetry ops      : {n_sym_ops}", f_out)
+        if symmetry_error:
+            print_dual(color_text(
+                f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
+                "every mode is kept/probed, same as without --use-symmetry. If your structure "
+                "is a conventional (non-primitive) cell, try reducing it first with "
+                "stb-unitcell --mode primitive.", 'yellow'), f_out)
+        else:
+            n_forbidden = sum(1 for band_idx in mode_band_indices
+                               if band_to_symmetry.get(int(band_idx)) is not None
+                               and not band_to_symmetry[int(band_idx)].is_ir_active)
+            n_unknown = sum(1 for band_idx in mode_band_indices
+                             if band_to_symmetry.get(int(band_idx)) is None)
+            print_dual(f"Symmetry-forbidden (IR-inactive) : {n_forbidden}/{len(mode_band_indices)}", f_out)
+            if n_unknown:
                 print_dual(color_text(
-                    f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
-                    "running every mode, same as without --use-symmetry. If your structure is "
-                    "a conventional (non-primitive) cell, try reducing it first with "
-                    "stb-unitcell --mode primitive.", 'yellow'), f_out)
-            else:
-                n_forbidden = sum(1 for band_idx in mode_band_indices
-                                   if band_to_symmetry.get(int(band_idx)) is not None
-                                   and not band_to_symmetry[int(band_idx)].is_ir_active)
-                n_unknown = sum(1 for band_idx in mode_band_indices
-                                 if band_to_symmetry.get(int(band_idx)) is None)
-                print_dual(f"Symmetry-forbidden (IR-inactive) : {n_forbidden}/{len(mode_band_indices)}", f_out)
-                if n_unknown:
-                    print_dual(color_text(
-                        f"[NOTE] {n_unknown} mode(s) could not be classified (label matching "
-                        "failed) -- kept, never auto-skipped when uncertain.", 'yellow'), f_out)
-                if args.modes is not None:
-                    print_dual(color_text(
-                        "--modes was given explicitly -- symmetry filtering is informational "
-                        "only here, no mode is auto-skipped.", 'yellow'), f_out)
+                    f"[NOTE] {n_unknown} mode(s) could not be classified (label matching "
+                    "failed) -- kept, never auto-skipped when uncertain.", 'yellow'), f_out)
+            if args.use_symmetry and args.modes is not None:
+                print_dual(color_text(
+                    "--modes was given explicitly -- symmetry filtering is informational "
+                    "only here, no mode is auto-skipped.", 'yellow'), f_out)
+            if not args.use_symmetry:
+                print_dual(
+                    "(--use-symmetry not given -- the labels/tags above are informational "
+                    "only, every mode is still probed regardless of activity.)", f_out)
+        print_dual(color_text(
+            "\n[CHECK] Confirm the space/point group above is the one you actually expect for "
+            "this crystal (e.g. from its known/published structure) BEFORE trusting the "
+            "IR-active/forbidden labels or any near-degenerate mode split reported above. A "
+            "too-tight --symprec silently detects a LOWER symmetry than the real one -- it "
+            "will not raise an error, it will just misclassify some modes as active/forbidden "
+            "and split a truly degenerate mode into two slightly different frequencies. If the "
+            "reported group looks wrong (e.g. an orthorhombic label like 'mmm' for what should "
+            "be a hexagonal/cubic crystal), rerun this stage with a looser --symprec (e.g. 0.02, "
+            "0.05, 0.1) until the expected group is recovered -- and re-check that a much looser "
+            "value doesn't overshoot into a HIGHER symmetry than the real (possibly slightly "
+            "distorted) relaxed structure actually has.", 'yellow'), f_out)
 
         print_section('[2] PSEUDOPOTENTIALS', f_out)
         print_dual(f"Elements needed   : {', '.join(sorted(unique_elements))}", f_out)
@@ -387,6 +525,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         apply_symmetry_skip = (args.use_symmetry and args.modes is None and not symmetry_error)
         selected = []
         n_actually_skipped = 0
+        n_passed_filters = 0
         for k, (freq, band_idx) in enumerate(zip(frequencies, mode_band_indices), start=1):
             if args.modes is not None and k not in args.modes:
                 continue
@@ -394,6 +533,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 continue
             if args.freq_max is not None and freq > args.freq_max:
                 continue
+            n_passed_filters += 1
             if apply_symmetry_skip:
                 ms = band_to_symmetry.get(int(band_idx))
                 if ms is not None and not ms.is_ir_active:
@@ -406,12 +546,30 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                         "mode(s) confirmed symmetry-forbidden from being IR-active (see "
                         "[1b] SYMMETRY ANALYSIS above).", f_out)
 
+        all_symmetry_forbidden = False
         if not selected:
-            print_dual(color_text(
-                "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max"
-                + ("/--use-symmetry" if apply_symmetry_skip else "")
-                + " -- nothing to do.", 'red'), f_out)
-            sys.exit(1)
+            # Every candidate mode being symmetry-forbidden is a valid physical
+            # result (e.g. a centrosymmetric crystal where every Gamma mode
+            # happens to be IR-silent, per the rule of mutual exclusion) -- not
+            # a misconfiguration, so it's a [WARNING] and the run finishes
+            # cleanly with zero folders rather than exiting non-zero. Only
+            # downgrade when --modes/--freq-min/--freq-max weren't ALSO
+            # responsible (n_passed_filters > 0 means symmetry alone emptied
+            # the selection).
+            all_symmetry_forbidden = (apply_symmetry_skip and n_passed_filters > 0
+                                       and n_actually_skipped == n_passed_filters)
+            if all_symmetry_forbidden:
+                print_dual(color_text(
+                    "\n[WARNING] Every mode that passed --modes/--freq-min/--freq-max is "
+                    "symmetry-forbidden from being IR-active -- nothing to compute. This is a "
+                    "valid physical result (e.g. a centrosymmetric crystal with no IR-active "
+                    "Gamma modes), not an error. No displacement folders written.", 'yellow'), f_out)
+            else:
+                print_dual(color_text(
+                    "\n[ERROR] No modes selected after applying --modes/--freq-min/--freq-max"
+                    + ("/--use-symmetry" if apply_symmetry_skip else "")
+                    + " -- nothing to do.", 'red'), f_out)
+                sys.exit(1)
 
         # --skip-degenerate (non-bulk path only -- see the flag's own
         # --help): within a degenerate group of selected modes, keep only
@@ -473,7 +631,13 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         report_rows = []  # (label, mode_index, band_index, frequency, path, sign, dir, derived_from)
         structure_filename = "structure.fdf"
 
-        if is_bulk:
+        if (is_bulk or is_hybrid_2d) and not selected:
+            print_dual(
+                "Folders to write  : 0 -- every candidate mode is symmetry-forbidden from "
+                "being IR-active, so the equilibrium Born-effective-charge run would have "
+                "nothing to report on.", f_out)
+            n_real_folders = 0
+        elif is_bulk:
             n_representative = sum(1 for k, _, _ in selected if representative_of[k] == k)
             print_dual(f"Folders to write  : 1 equilibrium Born-effective-charge SIESTA run "
                         f"(covers {n_representative} representative mode(s) out of "
@@ -501,6 +665,59 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 report_rows.append((label, k, band_idx, freq, "BULK", "-", equilibrium_dir, None))
 
             n_real_folders = 1
+        elif is_hybrid_2d:
+            n_representative = sum(1 for k, _, _ in selected if representative_of[k] == k)
+            print_dual(f"Folders to write  : 1 equilibrium Born-effective-charge SIESTA run "
+                        f"(in-plane components) + {n_representative * 2} independent "
+                        f"single-point SIESTA runs (2 signs x per-mode dipole displacement, "
+                        f"vacuum-axis component), across {n_representative} representative "
+                        f"mode(s) out of {len(selected)} selected).", f_out)
+
+            equilibrium_dir = os.path.join(born_charge_root, "equilibrium")
+            slab_grid = build_slab_polarization_grid(vacuum_axes)
+            calc_text = force_born_charge_run(calc_template, args.fc_displ, slab_grid)
+            write_ir_folder(equilibrium_dir, phonon.primitive, structure_filename, calc_text, pseudos)
+            print_dual(f"  {color_text('[OK]', 'green')} {equilibrium_dir} "
+                        f"(PolarizationGrids {slab_grid})", f_out)
+
+            os.makedirs(born_charge_root, exist_ok=True)
+            for k, freq, band_idx in selected:
+                if args.export_animations:
+                    animation_path = os.path.join(dipole_root, f"mode_{k:02d}_animation.axsf")
+                    write_mode_animation(phonon, band_idx, args.displacement, internal_to_angstrom,
+                                          animation_path, n_frames=args.animation_frames)
+                    print_dual(f"  {color_text('[OK]', 'green')} {animation_path}", f_out)
+
+                # The Born-charge/eigendisplacement combination is free (shared equilibrium
+                # run, no extra SIESTA cost) -- write it for every selected mode regardless of
+                # --skip-degenerate, same "no folder cost to save" reasoning the bulk path
+                # already uses. Only the per-mode dipole PAIR (the real SIESTA cost) is
+                # actually skippable for a derived mode.
+                eigendisp = mode_eigendisplacement(phonon, band_idx, internal_to_angstrom)
+                sidecar_path = os.path.join(born_charge_root, f"mode_{k:02d}_eigendisplacement.json")
+                with open(sidecar_path, "w") as f:
+                    json.dump({"eigendisplacement": eigendisp.tolist()}, f)
+                report_rows.append((f"mode_{k:02d}_born_charge", k, band_idx, freq, "HYBRID",
+                                     "-", equilibrium_dir, None))
+
+                if representative_of[k] != k:
+                    rep_k = representative_of[k]
+                    report_rows.append((f"mode_{k:02d}_dipole_derived", k, band_idx, freq,
+                                         "HYBRID", "DERIVED", "-", rep_k))
+                    continue
+
+                for sign_name, sign_val in (("plus", 1.0), ("minus", -1.0)):
+                    displaced = displace_along_mode(
+                        phonon, band_idx, args.displacement, internal_to_angstrom, sign=sign_val)
+                    label = f"mode_{k:02d}_{sign_name}"
+                    mode_dir = os.path.join(dipole_root, label)
+                    dipole_calc_text = force_single_point(calc_template)
+                    write_ir_folder(mode_dir, displaced, structure_filename, dipole_calc_text, pseudos)
+                    report_rows.append((label, k, band_idx, freq, "HYBRID", sign_name, mode_dir, None))
+                    print_dual(f"  {color_text('[OK]', 'green')} {mode_dir}", f_out)
+
+            n_real_folders = 1 + sum(1 for row in report_rows
+                                      if row[4] == "HYBRID" and row[5] in ("plus", "minus"))
         else:
             n_folders = sum(1 for k, _, _ in selected if representative_of[k] == k) * 2
             print_dual(f"Folders to write  : {n_folders} independent single-point SIESTA runs "
@@ -536,12 +753,21 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
         print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"{n_real_folders} folder(s) written under '{output_root}'.", f_out)
         print_dual(f"Report               : {report_path}", f_out)
-        print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-        if is_bulk:
-            print_dual(f"  1. Run SIESTA in '{born_charge_root}/equilibrium/'.", f_out)
+        if n_real_folders:
+            print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+            if is_bulk:
+                print_dual(f"  1. Run SIESTA in '{born_charge_root}/equilibrium/'.", f_out)
+            elif is_hybrid_2d:
+                print_dual(f"  1. Run SIESTA in '{born_charge_root}/equilibrium/' AND in every "
+                            f"'{dipole_root}/mode_*/' folder.", f_out)
+            else:
+                print_dual(f"  1. Run SIESTA in every '{dipole_root}/mode_*/' folder.", f_out)
+            print_dual(f"  2. Once they're done, run: stb-irAnalysis --directory {output_root}", f_out)
         else:
-            print_dual(f"  1. Run SIESTA in every '{dipole_root}/mode_*/' folder.", f_out)
-        print_dual(f"  2. Once they're done, run: stb-irAnalysis --directory {output_root}", f_out)
+            print_dual(color_text(
+                "\nNo SIESTA runs needed -- every candidate mode was symmetry-forbidden from "
+                "being IR-active (see [1b] above). Nothing further to do for this structure's "
+                "IR spectrum.", 'yellow'), f_out)
 
         f_out.write("\n# MODE_TABLE -- parsed by stb-irAnalysis, do not reorder the "
                      "first 7 columns\n")
@@ -554,7 +780,12 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)
-    print(color_text("Displacement folder(s) ready for Stage 3 (stb-irAnalysis).\n", 'bold'))
+    if n_real_folders:
+        print(color_text("Displacement folder(s) ready for Stage 3 (stb-irAnalysis).\n", 'bold'))
+    else:
+        print(color_text(
+            "No displacement folders were needed -- every candidate mode is symmetry-forbidden "
+            "from being IR-active.\n", 'bold'))
 
 
 if __name__ == "__main__":

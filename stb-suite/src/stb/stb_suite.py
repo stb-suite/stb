@@ -5090,20 +5090,44 @@ def run_raman_prep() -> None:
     if not output_dir:
         output_dir = "raman_study"
 
-    vacuum_gap = 10.0
-    show_advanced = get_input("\nConfigure advanced settings (vacuum-gap)? [y/N]: ").strip().lower()
+    vacuum_gap, symprec = 10.0, 0.01
+    args_extra = []
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap/symprec/k-point density)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for the supercell-dimension advisory "
             "(default: 10.0): ", 10.0)
+        symprec = get_float_input(
+            "Symmetry-detection tolerance in Ang, used to reduce the number of "
+            "displacement folders (default: 0.01): ", 0.01)
+        kgrid_input = get_input(
+            "\nExplicit supercell k-grid, 3 integers (e.g. '3 3 1') [optional, blank = "
+            "auto-suggest from density below]: ").strip()
+        if kgrid_input:
+            try:
+                kgrid_vals = [int(x) for x in kgrid_input.split()]
+                if len(kgrid_vals) == 3:
+                    args_extra.extend(["--kgrid"] + [str(v) for v in kgrid_vals])
+                else:
+                    print(color_text("Expected 3 integers -- auto-suggesting from density instead.", 'yellow'))
+            except ValueError:
+                print(color_text("Invalid input -- auto-suggesting from density instead.", 'yellow'))
+        if not kgrid_input or "--kgrid" not in args_extra:
+            kgrid_density = get_float_input(
+                "Target k-point density (1/Ang) for the supercell's own SCF -- this is what the "
+                "computed phonon frequencies are actually built from; too coarse and the result "
+                "can end up far from experiment, especially for a metal/semimetal (default: "
+                "0.2): ", 0.2)
+            args_extra.extend(["--kgrid-density", str(kgrid_density)])
 
     args = [
         "-s", structure_file, "-c", calc_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
         "-d", str(distance), "-p", pseudo_dir,
-        "--vacuum-gap", str(vacuum_gap),
+        "--vacuum-gap", str(vacuum_gap), "--symprec", str(symprec),
         "-O", output_dir, "--no-intro"
-    ]
+    ] + args_extra
 
     print(color_text("\nGenerating Raman workflow phonon displacement folders...", 'green'))
     run_tool("stb-raman", args)
@@ -5166,15 +5190,26 @@ def run_raman_modes() -> None:
     animations_choice = get_input(
         "\nExport a looping animation (.axsf, viewable in XCrySDen/VESTA) of each selected "
         "mode's eigendisplacement (y/N): ").strip().lower()
-    if animations_choice in ('y', 'yes'):
+    export_animations = animations_choice in ('y', 'yes')
+    if export_animations:
         args.append("--export-animations")
+
+    view_animation_choice = get_input(
+        "\nOpen each selected mode's eigendisplacement animation interactively in ASE's 3D "
+        "viewer once every folder is written -- needs a display, close a window to advance "
+        "to the next mode (y/N): ").strip().lower()
+    view_animation = view_animation_choice in ('y', 'yes')
+    if view_animation:
+        args.append("--view-animation")
+
+    if export_animations or view_animation:
         animation_frames = get_int_input("Frames per mode animation [default: 20]: ", 20)
         args.extend(["--animation-frames", str(animation_frames)])
 
     optical_mesh, optical_broaden = [10, 10, 10], 0.2
     show_advanced = get_input(
         "\nConfigure advanced settings (Optical mesh/broadening/frequency range/pseudopotential "
-        "override/vacuum-gap/rotational-mode tolerance)? [y/N]: ").strip().lower()
+        "override/vacuum-gap/rotational-mode tolerance/symprec)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         mesh_input = get_input("Optical.Mesh k-grid (e.g. '10 10 10') [default: 10 10 10]: ").strip()
         if mesh_input:
@@ -5207,6 +5242,12 @@ def run_raman_modes() -> None:
             "rather than a real vibration -- lower it if your molecule has genuine low-frequency "
             "skeletal/torsional modes (default: 2.0): ", 2.0)
         args.extend(["--rotational-mode-tol", str(rotational_mode_tol)])
+        symprec = get_float_input(
+            "Symmetry-detection tolerance in Ang, drives the reported point group and (with "
+            "--use-symmetry) the Raman-active/inactive classification -- too tight a value can "
+            "misdetect the true point group for a real DFT-relaxed structure (default: 0.01): ",
+            0.01)
+        args.extend(["--symprec", str(symprec)])
 
     args.extend(["--optical-mesh", str(optical_mesh[0]), str(optical_mesh[1]), str(optical_mesh[2])])
     args.extend(["--optical-broaden", str(optical_broaden)])
@@ -5251,6 +5292,18 @@ def run_raman_analysis() -> None:
             "[default: 0.01]: ", 0.01)
         args.extend(["--peak-prominence", str(peak_prominence)])
 
+    save_gnuplot = get_input(
+        "\nAlso save the spectrum as gnuplot .dat + .gplot scripts, under 'raman_study/plot/' "
+        "(y/N): ").strip().lower()
+    if save_gnuplot in ('y', 'yes'):
+        args.append("--save-gnuplot")
+
+    view_choice = get_input(
+        "\nView the spectrum interactively via matplotlib now? Needs a display (y/N): "
+    ).strip().lower()
+    if view_choice in ('y', 'yes'):
+        args.append("--view")
+
     run_tool("stb-ramanAnalysis", args)
 
 
@@ -5294,20 +5347,44 @@ def run_ir_prep() -> None:
     if not output_dir:
         output_dir = "ir_study"
 
-    vacuum_gap = 10.0
-    show_advanced = get_input("\nConfigure advanced settings (vacuum-gap)? [y/N]: ").strip().lower()
+    vacuum_gap, symprec = 10.0, 0.01
+    args_extra = []
+    show_advanced = get_input(
+        "\nConfigure advanced settings (vacuum-gap/symprec/k-point density)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         vacuum_gap = get_float_input(
             "Vacuum gap threshold in Ang, for the supercell-dimension advisory and the Stage 2 "
             "dipole-path preview (default: 10.0): ", 10.0)
+        symprec = get_float_input(
+            "Symmetry-detection tolerance in Ang, used to reduce the number of "
+            "displacement folders (default: 0.01): ", 0.01)
+        kgrid_input = get_input(
+            "\nExplicit supercell k-grid, 3 integers (e.g. '3 3 1') [optional, blank = "
+            "auto-suggest from density below]: ").strip()
+        if kgrid_input:
+            try:
+                kgrid_vals = [int(x) for x in kgrid_input.split()]
+                if len(kgrid_vals) == 3:
+                    args_extra.extend(["--kgrid"] + [str(v) for v in kgrid_vals])
+                else:
+                    print(color_text("Expected 3 integers -- auto-suggesting from density instead.", 'yellow'))
+            except ValueError:
+                print(color_text("Invalid input -- auto-suggesting from density instead.", 'yellow'))
+        if not kgrid_input or "--kgrid" not in args_extra:
+            kgrid_density = get_float_input(
+                "Target k-point density (1/Ang) for the supercell's own SCF -- this is what the "
+                "computed phonon frequencies are actually built from; too coarse and the result "
+                "can end up far from experiment, especially for a metal/semimetal (default: "
+                "0.2): ", 0.2)
+            args_extra.extend(["--kgrid-density", str(kgrid_density)])
 
     args = [
         "-s", structure_file, "-c", calc_file,
         "-dim", str(dim_x), str(dim_y), str(dim_z),
         "-d", str(distance), "-p", pseudo_dir,
-        "--vacuum-gap", str(vacuum_gap),
+        "--vacuum-gap", str(vacuum_gap), "--symprec", str(symprec),
         "-O", output_dir, "--no-intro"
-    ]
+    ] + args_extra
 
     print(color_text("\nGenerating IR workflow phonon displacement folders...", 'green'))
     run_tool("stb-ir", args)
@@ -5365,7 +5442,7 @@ def run_ir_modes() -> None:
 
     show_advanced = get_input(
         "\nConfigure advanced settings (frequency range/pseudopotential override/vacuum-gap/"
-        "rotational-mode tolerance/bulk Born-charge settings)? [y/N]: ").strip().lower()
+        "rotational-mode tolerance/bulk Born-charge settings/symprec)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         freq_min = get_input("Skip modes below this frequency in THz [optional]: ").strip()
         if freq_min:
@@ -5403,6 +5480,12 @@ def run_ir_modes() -> None:
                     print(color_text("Expected 9 integers -- using default.", 'yellow'))
             except ValueError:
                 print(color_text("Invalid input -- using default.", 'yellow'))
+        symprec = get_float_input(
+            "Symmetry-detection tolerance in Ang, drives the reported point group and (with "
+            "--use-symmetry) the IR-active/inactive classification -- too tight a value can "
+            "misdetect the true point group for a real DFT-relaxed structure (default: 0.01): ",
+            0.01)
+        args.extend(["--symprec", str(symprec)])
 
     print(color_text("\nBuilding phonon force constants and IR displacement folder(s)...", 'green'))
     run_tool("stb-irModes", args)

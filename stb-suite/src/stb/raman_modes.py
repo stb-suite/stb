@@ -33,8 +33,6 @@ import argparse
 from datetime import datetime
 import numpy as np
 import yaml
-from ase import Atoms
-from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import build_optical_block
@@ -42,6 +40,7 @@ from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_sourc
 from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
+    build_mode_animation_frames, write_mode_animation,
 )
 from stb.core.raman_symmetry import classify_modes, tensor_form
 from stb.core.structure_io import read_md_state, prepend_include
@@ -106,53 +105,6 @@ def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text
         f.write(extra_fdf_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
-
-
-def _phonopy_atoms_to_ase(patoms, internal_to_angstrom):
-    """PhonopyAtoms (internal units -- bohr for a SIESTA-sourced phonon
-    object, already Angstrom for an ML-sourced one, same convention as
-    everywhere else in this workflow) -> ase.Atoms in real Angstrom, ready
-    for ase.io.write (xsf/axsf expects real physical units, no internal-
-    unit ambiguity of its own).
-    """
-    return Atoms(symbols=patoms.symbols,
-                 positions=np.array(patoms.positions) * internal_to_angstrom,
-                 cell=np.array(patoms.cell) * internal_to_angstrom,
-                 pbc=True)
-
-
-def build_mode_animation_frames(phonon, band_index, amplitude_ang, internal_to_angstrom, n_frames=20):
-    """Builds a looping animation of one Gamma-point mode's eigendisplacement
-    (a smooth 0 -> +A -> 0 -> -A -> 0 sweep, `n_frames` frames) as a list of
-    ase.Atoms -- pure in-memory build, no disk I/O, shared by
-    --export-animations (written to disk via write_mode_animation below) and
-    --view-animation (opened directly in ASE's interactive viewer). Reuses
-    displace_along_mode (already used to build the real Optical-calculation
-    folders) at each frame's signed amplitude -- passing a NEGATIVE
-    amplitude_ang directly (rather than using its `sign` parameter) works
-    identically, since displace_along_mode only ever multiplies the two
-    together internally.
-    """
-    amplitudes = amplitude_ang * np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
-    frames = []
-    for amp in amplitudes:
-        displaced = displace_along_mode(phonon, band_index, float(amp), internal_to_angstrom, sign=1.0)
-        frames.append(_phonopy_atoms_to_ase(displaced, internal_to_angstrom))
-    return frames
-
-
-def write_mode_animation(frames, out_path):
-    """Writes a pre-built list of ase.Atoms frames (see
-    build_mode_animation_frames) as an animated XSF (.axsf) file --
-    readable directly by XCrySDen/VESTA to visually inspect which atoms
-    move in this mode, before interpreting the spectrum.
-
-    ase.io.write(..., format='xsf') accepts a list of Atoms directly and
-    produces the ANIMSTEPS-header animated format on its own -- verified
-    during planning (ase.io.formats.ioformats['xsf'].single is False) --
-    so this doesn't hand-roll the AXSF format.
-    """
-    ase_write(out_path, frames, format='xsf')
 
 
 def main():

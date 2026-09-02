@@ -5527,6 +5527,29 @@ def run_ir_analysis() -> None:
             "[default: 0.01]: ", 0.01)
         args.extend(["--peak-prominence", str(peak_prominence)])
 
+    save_gnuplot = get_input(
+        "\nAlso save the spectrum as gnuplot .dat + .gplot scripts, under "
+        f"'{run_dir}/plot/' (y/N): ").strip().lower()
+    if save_gnuplot in ('y', 'yes'):
+        args.append("--save-gnuplot")
+
+    view_choice = get_input(
+        "\nView the spectrum interactively via matplotlib now? Needs a display (y/N): "
+    ).strip().lower()
+    if view_choice in ('y', 'yes'):
+        args.append("--view")
+
+    print(color_text(
+        "\nAn extended-XYZ vibration animation is always written for every analyzed mode, "
+        f"under '{run_dir}/mode_animations/', regardless of the choice below.", 'cyan'))
+    view_modes_choice = get_input(
+        "View each mode's vibration interactively in ASE's 3D viewer too, one at a time (close "
+        "a window to advance) -- needs a display (y/N): ").strip().lower()
+    if view_modes_choice in ('y', 'yes'):
+        args.append("--view-modes")
+        animation_frames = get_int_input("Frames per mode animation [default: 20]: ", 20)
+        args.extend(["--animation-frames", str(animation_frames)])
+
     run_tool("stb-irAnalysis", args)
 
 

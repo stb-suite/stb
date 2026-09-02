@@ -23,6 +23,8 @@ import shutil
 import subprocess
 
 import numpy as np
+from ase import Atoms
+from ase.io import write as ase_write
 from phonopy import Phonopy
 from phonopy.interface.siesta import write_siesta, get_physical_units
 
@@ -368,3 +370,66 @@ def mode_eigendisplacement(phonon, band_index, internal_to_angstrom):
     """
     delta_positions_ang, probe_shift = _unit_mode_probe(phonon, band_index, internal_to_angstrom)
     return delta_positions_ang / probe_shift
+
+
+def phonopy_atoms_to_ase(patoms, internal_to_angstrom):
+    """PhonopyAtoms (internal units -- bohr for a SIESTA-sourced phonon
+    object, already Angstrom for an ML-sourced one, same convention as
+    everywhere else in this workflow) -> ase.Atoms in real Angstrom, ready
+    for ase.io.write (xsf/pdb/xyz all expect real physical units, no
+    internal-unit ambiguity of their own).
+
+    Extracted from raman_modes.py/ir_modes.py's own identical
+    _phonopy_atoms_to_ase once ir_analysis.py became a third consumer
+    (Stage 3's mode-animation/--view-modes export needs the exact same
+    conversion Stage 2's --export-animations/--view-animation already
+    used) -- same extract-on-second-use policy as the rest of this module.
+    """
+    return Atoms(symbols=patoms.symbols,
+                 positions=np.array(patoms.positions) * internal_to_angstrom,
+                 cell=np.array(patoms.cell) * internal_to_angstrom,
+                 pbc=True)
+
+
+def build_mode_animation_frames(phonon, band_index, amplitude_ang, internal_to_angstrom, n_frames=20):
+    """Builds a looping animation of one Gamma-point mode's eigendisplacement
+    (a smooth 0 -> +A -> 0 -> -A -> 0 sweep, `n_frames` frames) as a list of
+    ase.Atoms -- pure in-memory build, no disk I/O, shared by
+    --export-animations (written to disk via write_mode_animation below) and
+    --view-animation (opened directly in ASE's interactive viewer). Reuses
+    displace_along_mode (already used to build the real Optical/dipole
+    calculation folders) at each frame's signed amplitude -- passing a
+    NEGATIVE amplitude_ang directly (rather than using its `sign` parameter)
+    works identically, since displace_along_mode only ever multiplies the
+    two together internally.
+    """
+    amplitudes = amplitude_ang * np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
+    frames = []
+    for amp in amplitudes:
+        displaced = displace_along_mode(phonon, band_index, float(amp), internal_to_angstrom, sign=1.0)
+        frames.append(phonopy_atoms_to_ase(displaced, internal_to_angstrom))
+    return frames
+
+
+def write_mode_animation(frames, out_path, fmt='xsf'):
+    """Writes a pre-built list of ase.Atoms frames (see
+    build_mode_animation_frames) as an animated trajectory file. `fmt` is
+    the raw ASE format string, not this suite's own user-facing "xyz"
+    choice -- default 'xsf' (animated .axsf, readable directly by
+    XCrySDen/VESTA) matches stb-ramanModes/stb-irModes' own
+    --export-animations default; stb-irAnalysis's always-on mode-vibration
+    export instead passes 'extxyz' (extended XYZ, carries a Lattice= tag
+    per frame) -- the SAME ASE format string stb-ani2traj's own "xyz"
+    output choice maps to internally (OUTPUT_FORMATS["xyz"] =
+    ("extxyz", ".xyz")), part of the shared xsf/pdb/xyz trajectory-format
+    convention documented for every other trajectory writer in this suite.
+    Plain ASE 'xyz' (no `fmt='extxyz'`) silently drops the Lattice=/pbc
+    info -- always pass 'extxyz' for a periodic structure's animation.
+
+    ase.io.write(..., format=fmt) accepts a list of Atoms directly and
+    produces the multi-frame format on its own for all three -- verified
+    during planning (ase.io.formats.ioformats['xsf'].single is False, and
+    likewise for 'extxyz'/'proteindatabank') -- so this doesn't hand-roll
+    any of the animated formats itself.
+    """
+    ase_write(out_path, frames, format=fmt)

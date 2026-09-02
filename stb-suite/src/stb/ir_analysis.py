@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.1.0"  # New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
+VERSION = "1.2.0"  # New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
                     # path's Born-charge x eigendisplacement formula (in-plane/periodic axes)
                     # with the NONBULK path's dipole-difference formula (vacuum axis) into one
                     # physically valid dmu/dQ per mode -- see stb-irModes' own VERSION comment
@@ -16,6 +16,21 @@ VERSION = "1.1.0"  # New HYBRID path (2D slab, exactly one vacuum axis): combine
                     # (each is ~0 exactly where the other is valid); axis_mask selects/verifies
                     # this when the vacuum axis's Cartesian alignment can be confirmed, and
                     # falls back to plain addition with a warning when it can't.
+                    # Also: [3] SPECTRUM now always lists detected peaks (not just with
+                    # --experimental), [2] reports combined intensity for near-degenerate mode
+                    # groups (the basis-independent quantity, since individual dmu/dQ directions
+                    # within a degenerate subspace are an arbitrary Phonopy eigenvector choice),
+                    # the gnuplot .dat/.gplot pair is now opt-in via --save-gnuplot (written
+                    # under <directory>/plot/, same convention stb-ramanAnalysis already uses)
+                    # instead of always-on, --view opens an interactive matplotlib preview, and
+                    # a new [3c] MODE VIBRATIONS section always reloads Stage 1's force constants
+                    # to write an extended-XYZ animation per analyzed mode under
+                    # <directory>/mode_animations/ (skipped gracefully, never a hard error, if
+                    # phonon_disp/ is no longer present) -- --view-modes additionally opens each
+                    # one interactively in ASE's viewer. build_mode_animation_frames/
+                    # write_mode_animation/phonopy_atoms_to_ase moved to core/phonon_workflow.py
+                    # (were duplicated in raman_modes.py/ir_modes.py) now that this module is a
+                    # third consumer -- extract-on-second-use, per this suite's own policy.
 
 import os
 import re
@@ -25,13 +40,18 @@ import json
 import argparse
 from datetime import datetime
 import numpy as np
-from stb.core.cli import color_text, show_intro, print_dual, print_section
+import yaml
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.siesta_log import get_electric_dipole, check_scf_and_force
 from stb.core.born_charges import read_born_charges
 from stb.core.spectrum import (
     bose_einstein_weight, build_lorentzian_spectrum, read_experimental_spectrum,
     find_spectrum_peaks, match_peaks,
 )
+from stb.core.phonon_workflow import (
+    load_phonon_with_force_constants, build_mode_animation_frames, write_mode_animation,
+)
+from stb.core.ase_view import view_structure_interactive
 
 REPORT_FILE = "ir_stage3.txt"
 # Same conventional spectroscopy unit Raman's Stage 3 uses -- Phonopy's own
@@ -100,20 +120,24 @@ def read_mode_table(report_path):
 
 
 def group_by_mode(rows):
-    """{mode_index: {"frequency_thz": f, "path": "BULK"/"NONBULK"/"HYBRID",
-    "folders": {"plus": dir, "minus": dir} (non-bulk), {"-": dir} (bulk, a
-    single shared equilibrium folder), or {"-": dir, "plus": dir,
-    "minus": dir} (hybrid -- both at once), "derived_from": int or None}}.
-    A DERIVED sign row (--skip-degenerate) contributes no folder of its
-    own -- for HYBRID this means the mode's own "-" (Born-charge) entry is
-    still present (always written, see stb-irModes) while "plus"/"minus"
-    are missing (skipped, reused from the representative instead).
+    """{mode_index: {"frequency_thz": f, "band_index": b,
+    "path": "BULK"/"NONBULK"/"HYBRID", "folders": {"plus": dir, "minus": dir}
+    (non-bulk), {"-": dir} (bulk, a single shared equilibrium folder), or
+    {"-": dir, "plus": dir, "minus": dir} (hybrid -- both at once),
+    "derived_from": int or None}}. A DERIVED sign row (--skip-degenerate)
+    contributes no folder of its own -- for HYBRID this means the mode's
+    own "-" (Born-charge) entry is still present (always written, see
+    stb-irModes) while "plus"/"minus" are missing (skipped, reused from the
+    representative instead). `band_index` is the same 0-based Phonopy band
+    for every row of a given mode_index -- carried through so a later stage
+    (mode-animation export) can reload the phonon object and reconstruct
+    this exact mode's eigendisplacement without re-deriving it from scratch.
     """
     modes = {}
     for row in rows:
         entry = modes.setdefault(row["mode_index"], {
-            "frequency_thz": row["frequency_thz"], "path": row["path"],
-            "folders": {}, "derived_from": None})
+            "frequency_thz": row["frequency_thz"], "band_index": row["band_index"],
+            "path": row["path"], "folders": {}, "derived_from": None})
         if row["derived_from"] is not None:
             entry["derived_from"] = row["derived_from"]
         if row["sign"] != "DERIVED":
@@ -189,10 +213,20 @@ Auto-detects, per mode, which path Stage 2 used (from the MODE_TABLE's own
     a slab correctly, so this combines one component from each.
 
 Either way, IR intensity is |dmu/dQ|^2 -- same formula, only the derivation
-differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
+differs. Builds a Lorentzian-summed spectrum and always lists its detected
+peaks; the gnuplot .dat/.gplot pair itself is opt-in (--save-gnuplot, under
+<directory>/plot/) and an on-screen matplotlib preview is available too
+(--view). Also always reloads Stage 1's force constants to write an
+extended-XYZ vibration animation per analyzed mode under
+<directory>/mode_animations/ (skipped gracefully if phonon_disp/ is gone),
+optionally opened one at a time in ASE's interactive viewer (--view-modes).
+Near-degenerate mode groups get a combined, basis-independent intensity
+alongside their individual (basis-dependent) values.""",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="Usage example:\n"
+        epilog="Usage examples:\n"
                "  %(prog)s --directory ir_study\n"
+               "  %(prog)s --directory ir_study --save-gnuplot --view\n"
+               "  %(prog)s --directory ir_study --view-modes --animation-frames 30\n"
     )
 
     parser.add_argument("-dir", "--directory", type=str, default="ir_study",
@@ -219,10 +253,46 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
                              "(simulated intensity and real intensity aren't on the same scale).")
     parser.add_argument("--peak-prominence", type=float, default=0.01, metavar="FRACTION",
                         help="Minimum peak prominence, as a fraction of that spectrum's own max "
-                             "intensity, for --experimental's peak-finding (default: 0.01 -- "
-                             "filters out sub-1%% noise bumps in both spectra).")
+                             "intensity, for peak detection (both the standalone [3] SPECTRUM "
+                             "peak list and --experimental's matching) (default: 0.01 -- filters "
+                             "out sub-1%% noise bumps).")
+    parser.add_argument("--degenerate-tol", type=float, default=1e-3, metavar="THZ",
+                        help="Two modes within this frequency tolerance (THz) are reported as a "
+                             "degenerate group with a combined intensity, in addition to their "
+                             "individual values -- |dmu/dQ|^2 is not itself basis-independent "
+                             "within a degenerate subspace (Phonopy's returned eigenvectors are "
+                             "an arbitrary orthogonal basis of it), but the GROUP's summed "
+                             "intensity is the physically meaningful, basis-independent quantity "
+                             "(default: 0.001 THz, comfortably above float round-trip noise "
+                             "through the MODE_TABLE's 6-decimal text format, comfortably below "
+                             "any real frequency splitting between genuinely distinct modes).")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+    parser.add_argument("--save-gnuplot", action="store_true",
+                        help="Also save the spectrum (and, with --experimental, the overlaid "
+                             "measured spectrum) as gnuplot .dat + .gplot scripts, under "
+                             "'<directory>/plot/'. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="View the IR spectrum (and, with --experimental, the overlaid "
+                             "measured spectrum on a second y-axis) interactively via matplotlib "
+                             "now. Off by default. Needs a display. Independent of --save-gnuplot "
+                             "-- matplotlib here is only an on-screen preview, never written to disk.")
+    parser.add_argument("--view-modes", action="store_true",
+                        help="Open each analyzed mode's eigendisplacement animation interactively "
+                             "in ASE's 3D viewer, one at a time (close a window to advance to the "
+                             "next) -- needs a display and Stage 1's 'phonon_disp/' folder to "
+                             "still be present (reloads the same force constants Stage "
+                             "2/this stage's own always-on XYZ export already use). Off by default.")
+    parser.add_argument("--animation-frames", type=int, default=20,
+                        help="Frames per mode animation, for both --view-modes and the always-on "
+                             "extended-XYZ export below (default: 20).")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance (Ang), only used when reloading the "
+                             "phonon force constants for mode animations (--view-modes and the "
+                             "always-on XYZ export) -- same default as every other stage of this "
+                             "workflow (0.01, pymatgen's own default). Does not affect the "
+                             "IR-active/inactive classification (that was already decided in "
+                             "Stage 2) or the spectrum itself.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-irAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -533,6 +603,37 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
         print_dual(f"  {mode_index:<6}{freq_thz:<10.4f}{freq_thz * THZ_TO_CM1:<10.2f}"
                     f"{dmu_dq[0]:<12.6f}{dmu_dq[1]:<12.6f}{dmu_dq[2]:<12.6f}{intensity:.6f}", f_out)
 
+    # Degenerate groups: modes within --degenerate-tol of each other come from
+    # the same physical vibration -- Phonopy's own choice of eigenvector basis
+    # within a degenerate subspace is arbitrary (any orthogonal rotation of it
+    # is equally valid), so each individual partner's dmu/dQ DIRECTION (and
+    # therefore its own reported intensity) is basis-dependent, not itself
+    # physically meaningful in isolation. Only the GROUP's summed intensity is
+    # basis-independent (sum of |projection|^2 over an orthonormal basis of a
+    # subspace is invariant under any orthogonal change of basis within it) --
+    # this is exactly the quantity that should be compared against a single
+    # experimental peak when several modes land on top of each other.
+    sorted_results = sorted(mode_results, key=lambda r: r[1])
+    degenerate_groups = []
+    for entry in sorted_results:
+        if degenerate_groups and abs(entry[1] - degenerate_groups[-1][-1][1]) <= args.degenerate_tol:
+            degenerate_groups[-1].append(entry)
+        else:
+            degenerate_groups.append([entry])
+    degenerate_groups = [g for g in degenerate_groups if len(g) > 1]
+    if degenerate_groups:
+        print_dual(f"\n{color_text('[Degenerate groups]', 'cyan')} modes within "
+                    f"{args.degenerate_tol:g} THz of each other -- individual dmu/dQ directions "
+                    "are an arbitrary basis choice, the GROUP's summed intensity below is the "
+                    "physically meaningful quantity to compare against a single experimental peak:",
+                    f_out)
+        for group in degenerate_groups:
+            mode_ids = ", ".join(str(m[0]) for m in group)
+            combined = sum(m[3] for m in group)
+            avg_freq = sum(m[1] for m in group) / len(group)
+            print_dual(f"  modes {mode_ids} ({avg_freq:.4f} THz / {avg_freq * THZ_TO_CM1:.2f} "
+                        f"cm^-1) -> combined intensity {combined:.6f}", f_out)
+
     print_section('[3] SPECTRUM', f_out)
     freqs_cm1 = [freq_thz * THZ_TO_CM1 for _, freq_thz, _, _ in mode_results]
     intensities = [intensity for _, _, _, intensity in mode_results]
@@ -555,50 +656,115 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
                 f"[WARNING] {n_imaginary_skipped} imaginary-frequency mode(s) left unweighted "
                 "(Bose-Einstein occupation is undefined for a non-real vibration).", 'yellow'), f_out)
     grid, intensity_grid = build_lorentzian_spectrum(freqs_cm1, intensities, args.linewidth)
-    dat_path = os.path.join(args.directory, f"{args.output}.dat")
-    gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
+    print_dual(f"Grid              : {grid[0]:.1f} - {grid[-1]:.1f} cm^-1, {len(grid)} points, "
+                f"{args.linewidth:.2f} cm^-1 linewidth", f_out)
+
+    sim_peaks_all = find_spectrum_peaks(grid, intensity_grid, args.peak_prominence)
+    max_intensity = float(np.max(intensity_grid)) if len(intensity_grid) else 0.0
+    print_dual(f"Peaks detected    : {len(sim_peaks_all)} (prominence >= "
+                f"{args.peak_prominence * 100:.1f}% of max intensity)", f_out)
+    if len(sim_peaks_all) and max_intensity > 0:
+        peak_intensities = intensity_grid[np.searchsorted(grid, sim_peaks_all)]
+        print_dual(f"  {'Position (cm^-1)':<20}{'Rel. intensity (%)'}", f_out)
+        for peak_f, peak_i in zip(sim_peaks_all, peak_intensities):
+            print_dual(f"  {peak_f:<20.2f}{100.0 * peak_i / max_intensity:.1f}", f_out)
 
     experimental, experimental_dat_path = None, None
     if args.experimental is not None:
         exp_freq, exp_intensity = read_experimental_spectrum(args.experimental)
         experimental = (exp_freq, exp_intensity)
-        experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
 
-    write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity_grid, args.temperature,
-                            experimental, experimental_dat_path)
-    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
-                f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    if args.save_gnuplot:
+        plot_dir = os.path.join(args.directory, "plot")
+        os.makedirs(plot_dir, exist_ok=True)
+        dat_path = os.path.join(plot_dir, f"{args.output}.dat")
+        gplot_path = os.path.join(plot_dir, f"{args.output}.gplot")
+        if experimental is not None:
+            experimental_dat_path = os.path.join(plot_dir, f"{args.output}_experimental.dat")
+        write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity_grid, args.temperature,
+                                experimental, experimental_dat_path)
+        print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path}, {gplot_path} "
+                    f"(cd {plot_dir} && gnuplot {os.path.basename(gplot_path)})", f_out)
+    else:
+        dat_path = gplot_path = None
+        print_dual("Gnuplot data+script : not written (off by default -- pass --save-gnuplot to "
+                    "write it, under '<directory>/plot/').", f_out)
 
     extra_files = ""
     if experimental is not None:
         print_section('[3b] EXPERIMENTAL COMPARISON', f_out)
         print_dual(f"Experimental file : {args.experimental} ({len(exp_freq)} point(s))", f_out)
-        sim_peaks = find_spectrum_peaks(grid, intensity_grid, args.peak_prominence)
         exp_peaks = find_spectrum_peaks(exp_freq, exp_intensity, args.peak_prominence)
-        print_dual(f"Peaks found       : {len(sim_peaks)} simulated, {len(exp_peaks)} experimental", f_out)
+        print_dual(f"Peaks found       : {len(sim_peaks_all)} simulated, {len(exp_peaks)} experimental", f_out)
         if len(exp_peaks) == 0:
             print_dual(color_text(
                 "[WARNING] No experimental peaks found above the prominence threshold -- "
                 "try lowering --peak-prominence.", 'yellow'), f_out)
-        elif len(sim_peaks) == 0:
+        elif len(sim_peaks_all) == 0:
             print_dual(color_text(
                 "[WARNING] No simulated peaks found -- nothing to match against.", 'yellow'), f_out)
         else:
-            matches = match_peaks(sim_peaks, exp_peaks)
+            matches = match_peaks(sim_peaks_all, exp_peaks)
             print_dual(f"  {'Exp. peak (cm^-1)':<20}{'Sim. peak (cm^-1)':<20}{'Delta (cm^-1)'}", f_out)
             for exp_f, sim_f, delta in matches:
                 print_dual(f"  {exp_f:<20.2f}{sim_f:<20.2f}{delta:+.2f}", f_out)
             mean_abs_delta = float(np.mean([abs(d) for _, _, d in matches]))
             print_dual(f"Mean |delta|      : {mean_abs_delta:.2f} cm^-1 (average across "
                         f"{len(matches)} matched pair(s))", f_out)
-        print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
-        extra_files = f", {experimental_dat_path}"
+        if experimental_dat_path:
+            print_dual(f"{color_text('[Saved]', 'cyan')} {experimental_dat_path}", f_out)
+            extra_files = f", {experimental_dat_path}"
+
+    print_section('[3c] MODE VIBRATIONS', f_out)
+    phonon_dir = os.path.join(args.directory, "phonon_disp")
+    animation_targets = []
+    if not os.path.isdir(phonon_dir):
+        print_dual(color_text(
+            f"[NOTE] '{phonon_dir}' not found -- skipping mode-vibration export/--view-modes. "
+            "This folder is only needed here to reload the force constants (to reconstruct each "
+            "mode's eigendisplacement pattern); the spectrum above is unaffected.", 'yellow'), f_out)
+    else:
+        yaml_file = os.path.join(phonon_dir, "phonopy_disp.yaml")
+        with open(yaml_file) as f:
+            has_embedded_fc = "force_constants" in (yaml.safe_load(f) or {})
+        phonon, internal_to_angstrom, original_dir = load_phonon_with_force_constants(
+            phonon_dir, label, has_embedded_fc, f_out, symprec=args.symprec)
+        # load_phonon_with_force_constants leaves the process chdir'd into
+        # phonon_dir -- restore it BEFORE writing anything below via a
+        # relative path (args.directory-relative), same "chdir back
+        # immediately, before any folder-writing" ordering stb-irModes
+        # itself uses. Everything from here on (frame-building, file
+        # writes) only touches the already-loaded `phonon` object in
+        # memory, no further need to be inside phonon_dir.
+        os.chdir(original_dir)
+        anim_dir = os.path.join(args.directory, "mode_animations")
+        os.makedirs(anim_dir, exist_ok=True)
+        print_dual(f"Writing {len(mode_results)} mode animation(s) (extended XYZ, "
+                    f"{args.animation_frames} frames each, {stage2_delta} Ang amplitude -- "
+                    "same displacement Stage 2 used) under "
+                    f"'{anim_dir}':", f_out)
+        for mode_index, freq_thz, dmu_dq, intensity in mode_results:
+            band_idx = modes[mode_index]["band_index"]
+            frames = build_mode_animation_frames(
+                phonon, band_idx, stage2_delta, internal_to_angstrom,
+                n_frames=args.animation_frames)
+            xyz_path = os.path.join(anim_dir, f"mode_{mode_index:02d}_animation.xyz")
+            write_mode_animation(frames, xyz_path, fmt='extxyz')
+            print_dual(f"  {color_text('[OK]', 'green')} {xyz_path}", f_out)
+            animation_targets.append((mode_index, band_idx, freq_thz, frames))
 
     print_section('[4] SUMMARY & FILES', f_out)
     print_dual(f"Modes analyzed      : {len(mode_results)}/{len(modes)}", f_out)
     if report_path:
         print_dual(f"Report              : {report_path}", f_out)
-    print_dual(f"Files               : {dat_path}, {gplot_path}{extra_files}", f_out)
+    if dat_path:
+        print_dual(f"Spectrum files      : {dat_path}, {gplot_path}{extra_files}", f_out)
+    else:
+        print_dual("Spectrum files      : none (pass --save-gnuplot to write the spectrum "
+                    "data/script under '<directory>/plot/').", f_out)
+    if animation_targets:
+        print_dual(f"Mode animations     : {len(animation_targets)} file(s) under "
+                    f"'{os.path.join(args.directory, 'mode_animations')}'.", f_out)
 
     if f_out:
         f_out.close()
@@ -606,6 +772,23 @@ differs. Writes a Lorentzian-summed spectrum (.dat/.gplot).""",
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)
     print(color_text("IR analysis complete.\n", 'bold'))
+
+    if args.view_modes:
+        if not animation_targets:
+            print(color_text(
+                "\n--view-modes requested but no mode animations were built (see [3c] above).",
+                'yellow'))
+        else:
+            print(color_text(f"\nOpening interactive animation viewer for {len(animation_targets)} "
+                              "mode(s) -- close each ASE window to advance to the next.", 'cyan'))
+            for mode_index, band_idx, freq_thz, frames in animation_targets:
+                print(f"  mode {mode_index:3d} (band {band_idx:3d}, {freq_thz:10.4f} THz / "
+                      f"{freq_thz * THZ_TO_CM1:9.3f} cm^-1) -- close window to continue...")
+                view_structure_interactive(frames)
+
+    if args.view:
+        print(color_text("\n--view: opening the spectrum in matplotlib...", 'cyan'))
+        view_ir_spectrum_plot(grid, intensity_grid, args.temperature, experimental)
 
 
 def write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity, temperature_k=None,
@@ -661,6 +844,39 @@ def write_ir_spectrum_plot(dat_path, gplot_path, grid, intensity, temperature_k=
                 f'plot "{os.path.basename(dat_path)}" using 1:2 with lines lw 2 lc rgb "#2255cc"\n',
             ]
         f.writelines(lines)
+
+
+def view_ir_spectrum_plot(grid, intensity, temperature_k=None, experimental=None):
+    """Interactive matplotlib preview of the IR spectrum -- the on-screen
+    counterpart to write_ir_spectrum_plot's saved gnuplot .dat/.gplot pair,
+    same data, never written to disk (see CLAUDE.md: WORKFLOW_TOOLS writes
+    gnuplot pairs, matplotlib here is preview-only, matching
+    raman_analysis.view_spectrum_plot). Experimental overlay on a separate
+    right-hand y-axis (ax.twinx()), same rationale as the gnuplot y2 axis
+    in write_ir_spectrum_plot -- simulated intensity and real experimental
+    intensity are on incomparable scales. matplotlib is imported lazily,
+    only when --view was actually passed.
+    """
+    import matplotlib.pyplot as plt
+    scope = "IR spectrum"
+    if temperature_k is not None:
+        scope += f", {temperature_k:.0f} K Bose weighting"
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(grid, intensity, color='#2255cc', lw=2, label="Simulated")
+    ax.set_xlabel("Wavenumber (cm$^{-1}$)")
+    ax.set_ylabel("Simulated intensity (arb. units)")
+    ax.set_title(scope)
+    ax.grid(True, alpha=0.3)
+    if experimental is not None:
+        exp_freq, exp_intensity = experimental
+        ax2 = ax.twinx()
+        ax2.plot(exp_freq, exp_intensity, color='#cc5522', lw=2, label="Experimental")
+        ax2.set_ylabel("Experimental intensity (arb. units)")
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+    fig.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":

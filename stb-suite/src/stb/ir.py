@@ -27,10 +27,11 @@ import os
 import sys
 import argparse
 import glob
+from collections import Counter
 from datetime import datetime
 import numpy as np
 from phonopy.interface.siesta import read_siesta, get_physical_units
-from stb.core.cli import color_text, show_intro, print_dual, print_section
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
@@ -90,7 +91,7 @@ phonon_disp/ tree).""",
                "    G-band case: >100 cm^-1 shift from doubling the k-density alone, after\n"
                "    supercell size (-dim) had stopped mattering). If a computed frequency looks far\n"
                "    from the literature/experimental value, suspect --kgrid-density before -dim.\n"
-               "  - This flag only tunes the k-grid HERE, for [3]'s big supercell SCF. Stage 2's\n"
+               "  - This flag only tunes the k-grid HERE, for [4]'s big supercell SCF. Stage 2's\n"
                "    own single-point dipole/Born-charge runs are small, unit-cell-sized\n"
                "    calculations that reuse whatever kgrid.MonkhorstPack is already inside the\n"
                "    --calc file YOU pass to stb-irModes -- there is no equivalent --kgrid-density\n"
@@ -115,7 +116,7 @@ phonon_disp/ tree).""",
                         help="Explicit Monkhorst-Pack grid for the supercell's forced "
                              "single-point SCF (e.g. --kgrid 2 2 2). Overrides the automatic "
                              "--kgrid-density suggestion. Written into config_extra.fdf (see "
-                             "[1]).")
+                             "[2]).")
     parser.add_argument("--kgrid-density", type=float, default=0.2,
                         help="Target k-point density (1/Ang), used to auto-suggest the supercell "
                              "k-grid when --kgrid isn't given (default: 0.2, same convention as "
@@ -216,7 +217,27 @@ phonon_disp/ tree).""",
     n_vacuum_axes = sum(vacuum_axes)
     is_bulk = n_vacuum_axes == 0
     is_hybrid_2d = n_vacuum_axes == 1
-    print_dual(f"Dimensionality    : {kspace.dimensionality_label(vacuum_axes)}", f_out)
+
+    print_section('[1] INPUT STRUCTURE', f_out)
+    elements = sorted(set(unitcell.symbols))
+    counts = Counter(unitcell.symbols)
+    composition = ", ".join(f"{sp}{n}" for sp, n in counts.items())
+    n_atoms = len(unitcell.symbols)
+    cell_volume = abs(np.linalg.det(lattice_ang))
+    supercell_atoms = n_atoms * args.dim[0] * args.dim[1] * args.dim[2]
+    print_table(["Quantity", "Value"], [
+        (["Composition", composition], None),
+        (["Total atoms (unit cell)", str(n_atoms)], None),
+        (["Cell volume (unit cell)", f"{cell_volume:.4f} Ang^3"], None),
+        (["Dimensionality", kspace.dimensionality_label(vacuum_axes)], None),
+        (["Supercell", f"{args.dim[0]} x {args.dim[1]} x {args.dim[2]} "
+                        f"({supercell_atoms} atoms)"], None),
+    ], f_out)
+    print_dual(
+        "Full space-group/point-group symmetry analysis happens in Stage 2 "
+        "(stb-irModes' own [1b] SYMMETRY ANALYSIS), from the actual force-constant-loaded "
+        "phonon object -- more reliable there than a pre-phonon guess here would be.", f_out)
+
     if is_bulk:
         print_dual(color_text(
             "[NOTE] Bulk (3D) structure detected -- Stage 2 (stb-irModes) will need SIESTA's "
@@ -246,7 +267,7 @@ phonon_disp/ tree).""",
             "Replicating a supercell across vacuum only multiplies the SIESTA cost without "
             "adding real periodicity -- consider -dim 1 on that axis.", 'yellow'), f_out)
 
-    print_section('[1] SINGLE-POINT SCF ENFORCEMENT', f_out)
+    print_section('[2] SINGLE-POINT SCF ENFORCEMENT', f_out)
     with open(args.calc) as f:
         original_calc_text = f.read()
     structure_basename = os.path.basename(args.structure)
@@ -318,7 +339,7 @@ phonon_disp/ tree).""",
         print_dual(f"  {line}", f_out)
     forced_calc_text = prepend_include(original_calc_text, EXTRA_FDF_FILE)
 
-    print_section('[2] PSEUDOPOTENTIALS', f_out)
+    print_section('[3] PSEUDOPOTENTIALS', f_out)
     symbols = unitcell.symbols
     unique_elements = list(set(symbols))
     print_dual(f"Elements in unit cell : {', '.join(unique_elements)}", f_out)
@@ -339,7 +360,7 @@ phonon_disp/ tree).""",
     print_dual(f"Found all required    : "
                 f"{', '.join(os.path.basename(p) for p in pseudos_to_copy)}", f_out)
 
-    print_section('[3] PHONON DISPLACEMENTS', f_out)
+    print_section('[4] PHONON DISPLACEMENTS', f_out)
     print(f"[INFO] Generating supercell {args.dim} with {args.distance} Ang displacements ...")
     supercell_matrix = [
         [args.dim[0], 0, 0],
@@ -374,14 +395,14 @@ phonon_disp/ tree).""",
 
     print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
 
-    print_section('[4] SUMMARY & NEXT STEPS', f_out)
+    print_section('[5] SUMMARY & NEXT STEPS', f_out)
     print_dual(f"Displacement folders : {len(folders)} (disp-001 .. disp-{len(folders):03d})", f_out)
     if report_path:
         print_dual(f"Report               : {report_path}", f_out)
     print_dual(f"Files                : {yaml_path}, {phonon_disp_dir}/disp-*/", f_out)
     print_dual(color_text(
         f"\n[NOTE] '{os.path.basename(args.calc)}' was forced to single-point SCF with its own "
-        f"supercell k-grid ({kgrid[0]} {kgrid[1]} {kgrid[2]}, see [1]) in every disp-* folder.",
+        f"supercell k-grid ({kgrid[0]} {kgrid[1]} {kgrid[2]}, see [2]) in every disp-* folder.",
         'yellow'), f_out)
     print_dual(color_text("\nNext steps:", 'yellow'), f_out)
     print_dual(f"  1. Run SIESTA in every '{phonon_disp_dir}/disp-*/' folder.", f_out)

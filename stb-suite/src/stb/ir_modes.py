@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.3.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
+VERSION = "1.4.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
                     # Phonopy itself, same fix as stb-ramanModes (VERSION 1.2.0): Phonopy's own
                     # raw default (1e-5) is far tighter than any DFT relaxation's real numerical
                     # noise floor and can silently misdetect the true point group -- this is the
@@ -45,6 +45,14 @@ VERSION = "1.3.0"  # --symprec (default 0.01, pymatgen's own default) now thread
                     # sum ~0.01-0.04 |e|, out-of-plane row correctly ~0). Deliberately scoped to 2D
                     # only (exactly 1 vacuum axis) -- 1D (2 vacuum axes) stays on the old non-bulk
                     # path for now, same limitation, no test case yet.
+                    # Also: [1] now tags each mode with a Cartesian-polarization character label
+                    # (mode_character_label, e.g. "98% z" or "51% x, 47% y", from its
+                    # eigendisplacement -- purely descriptive, compare against the Vacuum
+                    # axes/Lattice vectors already printed to interpret in-plane vs. out-of-plane
+                    # for a given structure), and [1b] always lists degenerate mode groups by
+                    # symmetry (band indices sharing one irrep -- Phonopy's own eigenvector basis
+                    # choice within such a group is arbitrary, informational regardless of
+                    # --use-symmetry/--skip-degenerate).
 
 import os
 import sys
@@ -55,8 +63,6 @@ import argparse
 from datetime import datetime
 import numpy as np
 import yaml
-from ase import Atoms
-from ase.io import write as ase_write
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, force_born_charge_run
@@ -64,7 +70,7 @@ from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_sourc
 from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
-    mode_eigendisplacement,
+    mode_eigendisplacement, build_mode_animation_frames, write_mode_animation,
 )
 from stb.core.ir_symmetry import classify_ir_modes
 
@@ -123,6 +129,36 @@ def build_slab_polarization_grid(vacuum_axes, in_plane=_SLAB_IN_PLANE_GRID,
     return [v for row in grid for v in row]
 
 
+def mode_character_label(eigendisp):
+    """Short descriptive tag for a mode's dominant Cartesian polarization,
+    from its (n_atoms, 3) eigendisplacement pattern -- e.g. "98% z" for a
+    purely out-of-plane-polarized mode, "51% x, 47% y" for an in-plane one.
+    Purely descriptive of the raw Cartesian weights (sum of squared
+    displacement per axis, normalized to fractions of the total) -- makes
+    no assumption about which Cartesian axis is this particular
+    structure's own vacuum/surface-normal direction, so compare against
+    the "Lattice vectors"/"Vacuum axes" already printed above to interpret
+    it as in-plane vs. out-of-plane for THIS structure. Lists axes by
+    descending weight until >=97% of the total is accounted for (never
+    more than all 3), so a clearly one-axis-dominated mode gets a single
+    short entry instead of three near-zero trailing ones.
+    """
+    weights = np.sum(np.asarray(eigendisp, dtype=float) ** 2, axis=0)
+    total = float(np.sum(weights))
+    if total <= 0:
+        return ""
+    fractions = weights / total
+    order = np.argsort(fractions)[::-1]
+    axis_names = "xyz"
+    parts, cumulative = [], 0.0
+    for idx in order:
+        if cumulative >= 0.97 and parts:
+            break
+        parts.append(f"{fractions[idx] * 100:.0f}% {axis_names[idx]}")
+        cumulative += fractions[idx]
+    return ", ".join(parts)
+
+
 def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
     """Writes one SIESTA input folder: structure + calc.fdf + copied
     pseudos -- used for both the non-bulk path's +/-delta dipole
@@ -138,28 +174,6 @@ def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
 
 
-def _phonopy_atoms_to_ase(patoms, internal_to_angstrom):
-    """Same helper as raman_modes.py -- PhonopyAtoms (internal units) ->
-    ase.Atoms in real Angstrom, ready for ase.io.write.
-    """
-    return Atoms(symbols=patoms.symbols,
-                 positions=np.array(patoms.positions) * internal_to_angstrom,
-                 cell=np.array(patoms.cell) * internal_to_angstrom,
-                 pbc=True)
-
-
-def write_mode_animation(phonon, band_index, amplitude_ang, internal_to_angstrom, out_path, n_frames=20):
-    """Same as raman_modes.py's write_mode_animation -- a looping .axsf
-    animation of one Gamma-point mode's eigendisplacement, independent of
-    which IR path (dipole-derivative or Born-charge) is being used, since
-    it's pure visualization of the phonon mode itself.
-    """
-    amplitudes = amplitude_ang * np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
-    frames = []
-    for amp in amplitudes:
-        displaced = displace_along_mode(phonon, band_index, float(amp), internal_to_angstrom, sign=1.0)
-        frames.append(_phonopy_atoms_to_ase(displaced, internal_to_angstrom))
-    ase_write(out_path, frames, format='xsf')
 
 
 def main():
@@ -441,6 +455,7 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 f"[WARNING] {n_imaginary} mode(s) have imaginary (negative) frequency -- the "
                 "structure/supercell may not be at a real energy minimum. Their IR intensity "
                 "is not physically meaningful.", 'yellow'), f_out)
+        band_to_k = {int(band_idx): k for k, band_idx in enumerate(mode_band_indices, start=1)}
         for k, (freq, band_idx) in enumerate(zip(frequencies, mode_band_indices), start=1):
             flag = color_text(" [IMAGINARY]", 'red') if freq < 0 else ""
             ms = band_to_symmetry.get(int(band_idx))
@@ -449,13 +464,26 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 label_str = f" ({ms.label})" if ms.label else ""
                 sym_note = (color_text(f"{label_str} [IR-active]", 'green') if ms.is_ir_active
                             else color_text(f"{label_str} [symmetry-forbidden]", 'yellow'))
-            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} {sym_note}", f_out)
+            eigendisp = mode_eigendisplacement(phonon, int(band_idx), internal_to_angstrom)
+            character = mode_character_label(eigendisp)
+            character_note = f"  [{character}]" if character else ""
+            print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} "
+                       f"{sym_note}{character_note}", f_out)
 
         print_section('[1b] SYMMETRY ANALYSIS', f_out)
         print_dual(f"Symmetry precision: symprec={args.symprec:g} Ang", f_out)
         print_dual(f"Space group       : {space_group}", f_out)
         print_dual(f"Point group       : {point_group}", f_out)
         print_dual(f"Symmetry ops      : {n_sym_ops}", f_out)
+        degenerate_groups = [ms for ms in mode_symmetries if len(ms.band_indices) > 1]
+        if degenerate_groups:
+            print_dual(f"Degenerate groups : {len(degenerate_groups)} group(s) by symmetry "
+                        "(same irrep -- Phonopy's own choice of basis within each group is "
+                        "arbitrary, treat individual partners' directions accordingly):", f_out)
+            for ms in degenerate_groups:
+                mode_ids = sorted(band_to_k[b] for b in ms.band_indices if b in band_to_k)
+                label_str = f" ({ms.label})" if ms.label else ""
+                print_dual(f"  modes {', '.join(str(m) for m in mode_ids)}{label_str}", f_out)
         if symmetry_error:
             print_dual(color_text(
                 f"[WARNING] Symmetry classification unavailable ({symmetry_error}) -- "
@@ -652,8 +680,10 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             for k, freq, band_idx in selected:
                 if args.export_animations:
                     animation_path = os.path.join(born_charge_root, f"mode_{k:02d}_animation.axsf")
-                    write_mode_animation(phonon, band_idx, args.displacement, internal_to_angstrom,
-                                          animation_path, n_frames=args.animation_frames)
+                    frames = build_mode_animation_frames(
+                        phonon, band_idx, args.displacement, internal_to_angstrom,
+                        n_frames=args.animation_frames)
+                    write_mode_animation(frames, animation_path)
                     print_dual(f"  {color_text('[OK]', 'green')} {animation_path}", f_out)
 
                 eigendisp = mode_eigendisplacement(phonon, band_idx, internal_to_angstrom)
@@ -684,8 +714,10 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             for k, freq, band_idx in selected:
                 if args.export_animations:
                     animation_path = os.path.join(dipole_root, f"mode_{k:02d}_animation.axsf")
-                    write_mode_animation(phonon, band_idx, args.displacement, internal_to_angstrom,
-                                          animation_path, n_frames=args.animation_frames)
+                    frames = build_mode_animation_frames(
+                        phonon, band_idx, args.displacement, internal_to_angstrom,
+                        n_frames=args.animation_frames)
+                    write_mode_animation(frames, animation_path)
                     print_dual(f"  {color_text('[OK]', 'green')} {animation_path}", f_out)
 
                 # The Born-charge/eigendisplacement combination is free (shared equilibrium
@@ -728,8 +760,10 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             for k, freq, band_idx in selected:
                 if args.export_animations:
                     animation_path = os.path.join(dipole_root, f"mode_{k:02d}_animation.axsf")
-                    write_mode_animation(phonon, band_idx, args.displacement, internal_to_angstrom,
-                                          animation_path, n_frames=args.animation_frames)
+                    frames = build_mode_animation_frames(
+                        phonon, band_idx, args.displacement, internal_to_angstrom,
+                        n_frames=args.animation_frames)
+                    write_mode_animation(frames, animation_path)
                     print_dual(f"  {color_text('[OK]', 'green')} {animation_path}", f_out)
 
                 if representative_of[k] != k:

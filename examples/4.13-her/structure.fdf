@@ -1,0 +1,30 @@
+# Free-standing graphene monolayer (HER tutorial fixture): 2 C atoms,
+# primitive hexagonal cell (a = 2.46 Ang), 20 Ang vacuum along c, split
+# evenly on both sides (frac z = 0.5) -- deliberately free-standing rather
+# than a one-sided slab, so this one structure can also exercise stb-her's
+# --both-sides flag (Section 3.3 of the README). Small and fast on purpose:
+# every real SIESTA-relaxation step in this walkthrough is FABRICATED
+# (Section 6), so this structure only ever needs to be big enough to
+# exercise stb-her/stb-herRefs' own file-writing mechanics, never actually
+# relaxed for real.
+SystemName graphene monolayer (HER tutorial fixture)
+SystemLabel siesta
+
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+  2.4600000000   0.0000000000   0.0000000000
+ -1.2300000000   2.1304224390   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

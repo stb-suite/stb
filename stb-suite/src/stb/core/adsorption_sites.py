@@ -72,10 +72,12 @@ SPIN_POLARIZED_BLOCK = (
 # a slab breaks whatever inversion/mirror symmetry the clean slab had along the
 # surface normal, giving the cell a net dipole moment along a PERIODIC direction;
 # without the correction, that spurious periodic-image field contaminates the
-# total energy -- same reasoning stb-her/stb-oer already apply unconditionally to
-# their own one-sided-adsorbate site folders (their own force_dipole_correction,
-# which edits calc_text directly instead of going through config_extra.fdf, since
-# neither tool has this file at all). Free when the true dipole is already zero
+# total energy -- same reasoning stb-her already applies unconditionally to its
+# own one-sided-adsorbate site folders (her.py's write_site_folder, which imports
+# this exact constant) and stb-oer still applies via its own local
+# force_dipole_correction (edits calc_text directly instead of going through
+# config_extra.fdf -- oer.py has no sidecar of its own yet). Free when the true
+# dipole is already zero
 # (a symmetric/clean slab): the correction itself evaluates to zero, so there's
 # no downside to applying it whenever the caller actually wants it.
 DIPOLE_CORRECTION_BLOCK = (

@@ -65,27 +65,56 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Default run (--site-type all) ---
 echo -e "\n--- Testing default generation (--site-type all) ---"
-stb-her -s structure.fdf -c calc.fdf -p . --height 1.2 --no-intro > log_basic.txt 2>&1
+stb-her -s structure.fdf -c calc.fdf -p . --height 1.2 --save-report --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_success her_study/clean_slab_source/structure.fdf
 check_success her_study/sites/site_1_ontop/structure.fdf
 check_success her_study/sites/site_1_ontop/calc.fdf
-check_success her_study/sites/site_1_ontop/C.psf
-check_success her_study/sites/site_1_ontop/H.psf
+echo "Testing: pseudopotentials are copied per fragment-labeled species (SIESTA resolves a"
+echo "         species' pseudopotential by its declared ChemicalSpeciesLabel, not by real Z)"
+check_success her_study/sites/site_1_ontop/C_slab.psf
+check_success her_study/sites/site_1_ontop/H_ads.psf
 check_success her_study/her_stage1.txt
 check_contains "\[0\] RUN METADATA" her_study/her_stage1.txt
-check_contains "\[1\] CLEAN SLAB REFERENCE" her_study/her_stage1.txt
-check_contains "\[2\] ADSORPTION SITES" her_study/her_stage1.txt
-check_contains "\[3\] SUMMARY & NEXT STEPS" her_study/her_stage1.txt
+check_contains "\[1\] SLAB SYMMETRY" her_study/her_stage1.txt
+check_contains "\[2\] CLEAN SLAB REFERENCE" her_study/her_stage1.txt
+check_contains "\[3\] ADSORPTION SITES: FINDING & COUNT" her_study/her_stage1.txt
+check_contains "\[4\] WRITING SITE FOLDERS" her_study/her_stage1.txt
+check_contains "\[5\] SUMMARY & NEXT STEPS" her_study/her_stage1.txt
+check_contains "\[6\] LIBRARY WARNINGS" her_study/her_stage1.txt
 check_contains "stb-herRefs --directory her_study" her_study/her_stage1.txt
 
-echo "Testing: H is appended as the LAST atom (3rd), Slab.DipoleCorrection forced on"
+echo "Testing: H is appended as the LAST atom (3rd)"
 check_contains "NumberofAtoms      3" her_study/sites/site_1_ontop/structure.fdf
-check_contains "Slab.DipoleCorrection   T" her_study/sites/site_1_ontop/calc.fdf
+
+echo "Testing: fixed cell + Slab.DipoleCorrection + Spin polarized + DFTD3 (all mandatory)"
+echo "         forced via config_extra.fdf (4.8/4.11/4.12 model), %include'd on top of the"
+echo "         untouched --calc template, not edited in place"
+check_success her_study/sites/site_1_ontop/config_extra.fdf
+check_contains "MD.VariableCell false" her_study/sites/site_1_ontop/config_extra.fdf
+check_contains "Slab.DipoleCorrection      .true." her_study/sites/site_1_ontop/config_extra.fdf
+check_contains "Spin                polarized" her_study/sites/site_1_ontop/config_extra.fdf
+check_contains "DFTD3                   .true." her_study/sites/site_1_ontop/config_extra.fdf
+check_contains "%include config_extra.fdf" her_study/sites/site_1_ontop/calc.fdf
+
+echo "Testing: site atoms are fragment-labeled (C_slab/H_ads), so the adsorbed H can never be"
+echo "         confused with a slab atom of the same element -- fragment_manifest.json written too"
+check_contains "C_slab" her_study/sites/site_1_ontop/structure.fdf
+check_contains "H_ads" her_study/sites/site_1_ontop/structure.fdf
+check_success her_study/sites/site_1_ontop/fragment_manifest.json
+check_contains "adsorb_fragment_manifest_v1" her_study/sites/site_1_ontop/fragment_manifest.json
 
 echo "Testing: SITE_TABLE written, only 2 columns (label, dir -- no adsorbate/height column, always H)"
 check_contains "# SITE_TABLE" her_study/her_stage1.txt
 check_contains "site_1_ontop" her_study/her_stage1.txt
+
+echo "Testing: [1] SLAB SYMMETRY reports graphene's real space group + Wyckoff sites"
+check_contains "Space Group" her_study/her_stage1.txt
+check_contains "Wyckoff" her_study/her_stage1.txt
+
+echo "Testing: numbered site plot + reusable positions file are written"
+check_success her_study/sites/adsorption_sites.png
+check_success her_study/sites/site_positions.dat
 
 
 # --- 3. --site-type ontop, single site, explicit height ---
@@ -95,9 +124,9 @@ stb-her -s structure.fdf -c calc.fdf -p . --site-type ontop --height 1.5 --no-in
     > log_ontop.txt 2>&1
 check_exit_code $? 0
 python3 -c "
-import glob
-dirs = sorted(glob.glob('her_study/sites/site_*'))
-assert all('ontop' in d for d in dirs), f'expected only ontop sites, got {dirs}'
+import glob, os
+dirs = sorted(d for d in glob.glob('her_study/sites/site_*') if os.path.isdir(d))
+assert dirs and all('ontop' in d for d in dirs), f'expected only ontop sites, got {dirs}'
 print('OK')
 " > log_ontop_check.txt 2>&1
 check_contains "OK" log_ontop_check.txt
@@ -115,8 +144,42 @@ echo "Testing: --both-sides requires a concrete --site-type"
 rm -rf her_study
 stb-her -s structure.fdf -c calc.fdf -p . --site-type all --both-sides --no-intro \
     > log_bothsides_all.txt 2>&1
-check_exit_code $? 1
+check_exit_code $? 2
 check_contains "concrete --site-type" log_bothsides_all.txt
+
+
+# --- 4b. Manual site override: --position and --positions-file ---
+echo -e "\n--- Testing --position (manual single site) ---"
+rm -rf her_study
+stb-her -s structure.fdf -c calc.fdf -p . --position 0.0 0.0 --height 1.5 --no-intro \
+    > log_position.txt 2>&1
+check_exit_code $? 0
+check_success her_study/sites/site_1_manual/structure.fdf
+check_contains "manual" her_study/sites/site_positions.dat
+
+echo -e "\n--- Testing --positions-file (round trip through a previous run's site_positions.dat) ---"
+rm -rf her_study_src her_study_roundtrip
+stb-her -s structure.fdf -c calc.fdf -p . --site-type ontop --height 1.5 \
+    -O her_study_src --no-intro > log_positionsfile_src.txt 2>&1
+check_exit_code $? 0
+cp her_study_src/sites/site_positions.dat roundtrip_positions.dat
+stb-her -s structure.fdf -c calc.fdf -p . --positions-file roundtrip_positions.dat --height 1.5 \
+    -O her_study_roundtrip --no-intro > log_positionsfile.txt 2>&1
+check_exit_code $? 0
+python3 -c "
+import glob, os
+src = sorted(d for d in glob.glob('her_study_src/sites/site_*') if os.path.isdir(d))
+rt = sorted(d for d in glob.glob('her_study_roundtrip/sites/site_*') if os.path.isdir(d))
+assert len(src) == len(rt) and len(rt) > 0, f'expected matching non-empty counts, got src={src} rt={rt}'
+print('OK')
+" > log_positionsfile_check.txt 2>&1
+check_contains "OK" log_positionsfile_check.txt
+
+echo "Testing: --position and --positions-file are mutually exclusive (argparse error, exit 2)"
+stb-her -s structure.fdf -c calc.fdf -p . --position 0 0 \
+    --positions-file roundtrip_positions.dat --no-intro > log_mutex.txt 2>&1
+check_exit_code $? 2
+check_contains "mutually exclusive" log_mutex.txt
 
 
 # --- 5. Overlap warning (unrealistically small height) ---
@@ -167,12 +230,13 @@ echo "Testing: --version"
 stb-her --version > log_version.txt 2>&1
 check_contains "stb-her" log_version.txt
 
-echo "Testing: --help documents --site-type/--height/--both-sides/--symprec"
+echo "Testing: --help documents --site-type/--height/--both-sides/--symprec/--position/--positions-file"
 stb-her --help > log_help.txt 2>&1
 check_contains "site-type" log_help.txt
 check_contains "height" log_help.txt
 check_contains "both-sides" log_help.txt
 check_contains "symprec" log_help.txt
+check_contains "positions-file" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.13.1) ---

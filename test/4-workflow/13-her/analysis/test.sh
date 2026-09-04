@@ -54,6 +54,16 @@ check_exit_code() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' unexpectedly found in '$2'"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' NOT found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 # Writes the 6 common reference-energy calc.out files shared by every
 # scenario below (only the ZPE-mode-specific pieces differ).
 write_common_energies() {
@@ -109,10 +119,18 @@ python3 -c "
 with open('her_study/her_stage2.txt', 'a') as f:
     f.write('ZPE mode       : standard\n')
 "
-stb-herAnalysis --directory her_study --no-intro > log_standard.txt 2>&1
+stb-herAnalysis --directory her_study --save-report --no-plot --no-show --no-intro > log_standard.txt 2>&1
 check_exit_code $? 0
 check_contains "Standard Norskov offset" log_standard.txt
 check_contains "+0.2400 eV" log_standard.txt
+
+echo "Testing: [1]/[2] energy tables and [4] Delta-G_H* breakdown table are present"
+check_contains "Term" log_standard.txt
+check_contains "E_slab+H" log_standard.txt
+check_contains "BSSE (total)" log_standard.txt
+check_contains "Energy breakdown" log_standard.txt
+check_contains "Delta-G_H\* (TOTAL)" log_standard.txt
+check_contains "No plot generated" log_standard.txt
 
 echo "Testing: BSSE correction and Delta-E_H match hand-computed values"
 python3 -c "
@@ -135,6 +153,44 @@ assert abs(got - delta_g_expected) < 1e-6, f'got {got} vs expected {delta_g_expe
 print('OK')
 " > log_standard_check.txt 2>&1
 check_contains "OK" log_standard_check.txt
+
+
+# --- 3b. 03_slab_deformed/04_slab_ghost never get a force warning/note ---
+echo -e "\n--- Testing that 03_slab_deformed/04_slab_ghost skip the force-quality check entirely ---"
+rm -rf her_study
+write_common_energies
+python3 -c "
+with open('her_study/her_stage2.txt', 'a') as f:
+    f.write('ZPE mode       : standard\n')
+"
+python3 -c "
+for path in ('her_study/03_slab_deformed/calc.out', 'her_study/04_slab_ghost/calc.out'):
+    with open(path) as f:
+        text = f.read()
+    text = text.replace('Max    0.001', 'Max    3.4114')
+    with open(path, 'w') as f:
+        f.write(text)
+"
+echo "Testing: even with a huge residual force, 03_slab_deformed/04_slab_ghost print no"
+echo "         [WARNING]/[NOTE] about it at all -- the check is skipped, not softened"
+stb-herAnalysis --directory her_study --no-plot --no-show --no-intro > log_largeforce.txt 2>&1
+check_exit_code $? 0
+check_not_contains "Residual force on E_deformed" log_largeforce.txt
+check_not_contains "Residual force on E_ghost" log_largeforce.txt
+
+echo "Testing: the same large-force check still uses the generic [WARNING]/'may not be"
+echo "         relaxed' wording for a folder that ISN'T known to be a deliberate"
+echo "         non-equilibrium snapshot (E_clean, via 00_clean_slab)"
+python3 -c "
+with open('her_study/00_clean_slab/calc.out') as f:
+    text = f.read()
+text = text.replace('Max    0.001', 'Max    3.4114')
+with open('her_study/00_clean_slab/calc.out', 'w') as f:
+    f.write(text)
+"
+stb-herAnalysis --directory her_study --no-plot --no-show --no-intro > log_largeforce_clean.txt 2>&1
+check_contains "\[WARNING\] Residual force on E_clean" log_largeforce_clean.txt
+check_contains "may not be relaxed" log_largeforce_clean.txt
 
 
 # --- 4. --zpe-mode local ---
@@ -175,7 +231,7 @@ for i, entry in enumerate(order, start=1):
         f.write(f"3   {fxyz[0]: .9E}   {fxyz[1]: .9E}   {fxyz[2]: .9E}\n")
 print("fixture ready")
 PYEOF
-stb-herAnalysis --directory her_study --temp 298.15 --no-intro > log_local.txt 2>&1
+stb-herAnalysis --directory her_study --temp 298.15 --save-report --no-plot --no-show --no-intro > log_local.txt 2>&1
 check_exit_code $? 0
 check_contains "Local (partial-Hessian) H\* vibrational modes" log_local.txt
 
@@ -204,6 +260,53 @@ print('OK')
 check_contains "OK" log_local_check.txt
 
 
+# --- 4b. --plot (gnuplot energy-breakdown chart) ---
+echo -e "\n--- Testing --plot (gnuplot .dat/.gplot energy-breakdown chart) ---"
+rm -rf her_study
+write_common_energies
+python3 -c "
+with open('her_study/her_stage2.txt', 'a') as f:
+    f.write('ZPE mode       : standard\n')
+"
+stb-herAnalysis --directory her_study --plot --no-show --no-intro > log_plot.txt 2>&1
+check_exit_code $? 0
+check_contains "\[Saved\]" log_plot.txt
+check_success her_study/plot/her_energy_breakdown.dat
+check_success her_study/plot/her_energy_breakdown.gplot
+
+echo "Testing: .dat columns (index, value, quoted label, 0xRRGGBB color) and known values"
+check_contains '"Delta-E_H (raw)"' her_study/plot/her_energy_breakdown.dat
+check_contains "0x22aa55" her_study/plot/her_energy_breakdown.dat
+python3 -c "
+with open('her_study/plot/her_energy_breakdown.dat') as f:
+    lines = [l for l in f if not l.startswith('#') and l.strip()]
+assert len(lines) == 5, f'expected 5 data rows (raw/BSSE/corrected/offset/TOTAL), got {len(lines)}'
+last = lines[-1].split(None, 3)
+assert abs(float(last[1]) - (-83.86)) < 1e-6, f'TOTAL row value mismatch: {last[1]}'
+print('OK')
+" > log_plot_check.txt 2>&1
+check_contains "OK" log_plot_check.txt
+
+echo "Testing: .gplot uses the explicit-x form (histogram-style implicit x is known to fail"
+echo "         with a variable-color column -- verified live against a real gnuplot install)"
+check_contains "using 1:2:4:xtic(3) with boxes lc rgb variable" her_study/plot/her_energy_breakdown.gplot
+check_not_contains "set style data histograms" her_study/plot/her_energy_breakdown.gplot
+
+echo "Testing: .gplot sets an explicit yrange with extra bottom headroom (data-span-scaled),"
+echo "         so rotated xtic labels land below the zero line instead of running back up"
+echo "         into the bars themselves -- verified live against a real gnuplot install)"
+check_contains "set yrange \[" her_study/plot/her_energy_breakdown.gplot
+
+if command -v gnuplot > /dev/null 2>&1; then
+    echo "Testing: gnuplot actually renders the .gplot into a PDF (real render, not just a syntax check)"
+    ( cd her_study/plot && gnuplot her_energy_breakdown.gplot ) > log_gnuplot_render.txt 2>&1
+    check_exit_code $? 0
+    check_success her_study/plot/her_energy_breakdown.pdf
+else
+    echo "gnuplot not installed -- skipping the real-render check (files-written checks above still apply)."
+fi
+
+
 # --- 5. Error cases ---
 echo -e "\n--- Testing error cases ---"
 
@@ -211,11 +314,13 @@ echo "Testing: --version"
 stb-herAnalysis --version > log_version.txt 2>&1
 check_contains "stb-herAnalysis" log_version.txt
 
-echo "Testing: --help documents --temp/--force-tolerance"
+echo "Testing: --help documents --temp/--force-tolerance/--plot/--no-plot"
 stb-herAnalysis --help > log_help.txt 2>&1
 check_contains "temp" log_help.txt
 check_contains "force-tolerance" log_help.txt
 check_contains "clean slab's own" log_help.txt
+check_contains "no-plot" log_help.txt
+check_contains "no-show" log_help.txt
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.13.3) ---

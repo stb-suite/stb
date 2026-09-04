@@ -127,28 +127,66 @@ check_success her_study/05_zpe_calc/disp_006/structure.fdf
 check_success her_study/05_zpe_calc/zpe_local_meta.json
 check_success her_study/her_stage2.txt
 
+echo "Testing: enriched [0]/[1]/[2]/[4] report content (pseudo dir, site-scan summary,"
+echo "         per-folder formula table, [4] folder-count summary)"
+check_contains "Pseudo dir      : ." her_study/her_stage2.txt
+check_contains "1 site(s) scanned, 1 with a readable FreeEng" her_study/her_stage2.txt
+check_contains "Folder" her_study/her_stage2.txt
+check_contains "Formula" her_study/her_stage2.txt
+check_contains "00_clean_slab" her_study/her_stage2.txt
+check_contains "Reference folders    : 6" her_study/her_stage2.txt
+check_contains "ZPE folders          : 6 (local mode)" her_study/her_stage2.txt
+
 echo "Testing: 03_slab_deformed has no H (2 atoms, C only)"
 check_contains "NumberofAtoms      2" her_study/03_slab_deformed/structure.fdf
 check_not_contains "   1   H" her_study/03_slab_deformed/structure.fdf
 
-echo "Testing: 04_slab_ghost has H_ghost (negative Z), 06_h_ghost_slab has C_ghost"
-check_contains "H_ghost" her_study/04_slab_ghost/structure.fdf
-check_contains "C_ghost" her_study/06_h_ghost_slab/structure.fdf
+echo "Testing: 04_slab_ghost has H_ads_ghost (Stage 1's H fragment label + _ghost, negative Z)"
+echo "         06_h_ghost_slab has C_slab_ghost (Stage 1's slab fragment label + _ghost)"
+check_contains "H_ads_ghost" her_study/04_slab_ghost/structure.fdf
+check_contains "C_slab_ghost" her_study/06_h_ghost_slab/structure.fdf
 
-echo "Testing: 07_h_isolated is a single H atom at the RELAXED z=0.58 (not Stage 1's input z=0.56)"
+echo "Testing: 07_h_isolated is a single H atom at the RELAXED z=0.58 (not Stage 1's input z=0.56),"
+echo "         with its Stage-1 'H_ads' fragment label reverted to bare 'H' (no slab left to"
+echo "         disambiguate from in a single-fragment folder)"
 check_contains "NumberofAtoms      1" her_study/07_h_isolated/structure.fdf
 check_contains "0.58000000" her_study/07_h_isolated/structure.fdf
+check_contains " 1   1   H" her_study/07_h_isolated/structure.fdf
+check_not_contains "H_ads" her_study/07_h_isolated/structure.fdf
 
-echo "Testing: H2 molecule relaxes (not single-point), Gamma-only + spin-polarized"
-check_contains "MD.TypeOfRun          CG" her_study/02_h2_molecule/calc.fdf
-check_not_contains "MD.Steps              0" her_study/02_h2_molecule/calc.fdf
-check_contains "kgrid.MonkhorstPack   \[1  1  1\]" her_study/02_h2_molecule/calc.fdf
-check_contains "Spin.*polarized" her_study/02_h2_molecule/calc.fdf
+echo "Testing: the winning site's own structure.fdf (Stage 1 output) labels fragments"
+echo "         'C_slab'/'H_ads', and carries a fragment_manifest.json"
+check_contains "C_slab" her_study/sites/site_1_ontop/structure.fdf
+check_contains "H_ads" her_study/sites/site_1_ontop/structure.fdf
+check_success her_study/sites/site_1_ontop/fragment_manifest.json
+check_contains "adsorb_fragment_manifest_v1" her_study/sites/site_1_ontop/fragment_manifest.json
 
-echo "Testing: every other reference folder is forced single-point"
-check_contains "MD.Steps              0" her_study/00_clean_slab/calc.fdf
-check_contains "MD.Steps              0" her_study/03_slab_deformed/calc.fdf
-check_contains "MD.Steps              0" her_study/04_slab_ghost/calc.fdf
+echo "Testing: every derived folder %includes its own config_extra.fdf (4.8/4.11/4.12 model),"
+echo "         not a directive edited into calc.fdf directly"
+check_contains "%include config_extra.fdf" her_study/02_h2_molecule/calc.fdf
+check_contains "%include config_extra.fdf" her_study/00_clean_slab/calc.fdf
+check_success her_study/02_h2_molecule/config_extra.fdf
+check_success her_study/00_clean_slab/config_extra.fdf
+
+echo "Testing: H2 molecule's config_extra.fdf relaxes (not single-point), Gamma-only + DFTD3,"
+echo "         and Spin NON-polarized (forced singlet -- unlike every other folder, which is"
+echo "         spin-polarized like the winning site itself)"
+check_contains "MD.TypeOfRun          CG" her_study/02_h2_molecule/config_extra.fdf
+check_not_contains "MD.Steps              0" her_study/02_h2_molecule/config_extra.fdf
+check_contains "kgrid.MonkhorstPack   \[1  1  1\]" her_study/02_h2_molecule/config_extra.fdf
+check_contains "Spin                non-polarized" her_study/02_h2_molecule/config_extra.fdf
+check_not_contains "^Spin                polarized" her_study/02_h2_molecule/config_extra.fdf
+check_contains "DFTD3                   .true." her_study/02_h2_molecule/config_extra.fdf
+
+echo "Testing: every other reference folder's config_extra.fdf forces single-point + fixed cell"
+echo "         + the winning site's own mandatory Slab.DipoleCorrection/Spin polarized/DFTD3"
+for d in 00_clean_slab 03_slab_deformed 04_slab_ghost 06_h_ghost_slab 07_h_isolated; do
+    check_contains "MD.Steps              0" "her_study/$d/config_extra.fdf"
+    check_contains "MD.VariableCell false" "her_study/$d/config_extra.fdf"
+    check_contains "Slab.DipoleCorrection      .true." "her_study/$d/config_extra.fdf"
+    check_contains "Spin                polarized" "her_study/$d/config_extra.fdf"
+    check_contains "DFTD3                   .true." "her_study/$d/config_extra.fdf"
+done
 
 
 # --- 4. --zpe-mode standard (nothing generated) ---
@@ -178,6 +216,16 @@ check_success her_study/05_zpe_calc_clean/disp-001/structure.fdf
 check_success her_study/05_zpe_calc_clean/phonopy_disp.yaml
 check_contains "SystemLabel her_zpe_site" her_study/05_zpe_calc_site/disp-001/calc.fdf
 check_contains "SystemLabel her_zpe_clean" her_study/05_zpe_calc_clean/disp-001/calc.fdf
+check_contains "%include config_extra.fdf" her_study/05_zpe_calc_site/disp-001/calc.fdf
+check_success her_study/05_zpe_calc_site/disp-001/config_extra.fdf
+check_contains "MD.Steps              0" her_study/05_zpe_calc_site/disp-001/config_extra.fdf
+check_contains "Spin                polarized" her_study/05_zpe_calc_site/disp-001/config_extra.fdf
+check_contains "DFTD3                   .true." her_study/05_zpe_calc_site/disp-001/config_extra.fdf
+
+echo "Testing: [3] reports supercell size + raw/symmetry-reduced displacement counts"
+check_contains "Site supercell  : 1x1x1" log_full.txt
+check_contains "Clean supercell : 1x1x1" log_full.txt
+check_contains "symmetry-reduced from the" log_full.txt
 
 
 # --- 6. Error cases ---

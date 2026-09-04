@@ -14,11 +14,14 @@ import sys
 import json
 import argparse
 import numpy as np
-from pymatgen.core.periodic_table import Element
 from stb.core import structure_io
-from stb.core.cli import color_text, show_intro, print_dual, print_section
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
-from stb.core.calc_directives import force_single_point
+from stb.core.adsorption_sites import (
+    CONFIG_EXTRA_FILE, FIXED_CELL_BLOCK, SPIN_POLARIZED_BLOCK, DIPOLE_CORRECTION_BLOCK,
+    VDW_CORRECTION_BLOCK, SINGLE_POINT_BLOCK,
+)
+from stb.core.bsse import strip_config_extra_include
 from stb.core.siesta_log import get_free_energy, get_outcell, check_scf_and_force, report_quality_diagnostics
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
@@ -27,61 +30,74 @@ _DEFAULT_LOCAL_DISPLACEMENT_ANG = 0.015
 _DEFAULT_VACUUM_BOX_ANG = 15.0
 _H2_BOND_LENGTH_ANG = 0.741  # experimental equilibrium bond length -- CG relaxation refines it
 
-_KGRID_RE = re.compile(r'kgrid[._]MonkhorstPack\s+\[.*?\]', re.IGNORECASE)
-_SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
 _LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
-_RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
-_MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _RELAXED_COORDS_RE = re.compile(r'outcoor:\s*Relaxed atomic coordinates\s*\(fractional\)', re.IGNORECASE)
 
 # Local-mode displacement order (axis, sign) -- matches the row order
 # written to disp_NNN/ folders and the sidecar metadata Stage 3 reads back.
 _LOCAL_DISPLACEMENTS = [(0, 1.0), (0, -1.0), (1, 1.0), (1, -1.0), (2, 1.0), (2, -1.0)]
 
+# Gamma-only k-grid + CG relaxation, forced into 02_h2_molecule/config_extra.fdf
+# only -- H2's own bond length must reach ITS equilibrium (unlike every other
+# reference folder here, which is forced single-point via SINGLE_POINT_BLOCK
+# instead). HER-specific combination (not shared with stb-adsorb), so kept
+# local rather than added to core/adsorption_sites.py's own block constants,
+# same "don't pre-extract until a second consumer needs it" policy as the
+# rest of core/.
+_GAMMA_KGRID_BLOCK = (
+    "# Auto-generated -- Gamma-only k-grid, always correct for an isolated\n"
+    "# molecule in a vacuum box.\n"
+    "kgrid.MonkhorstPack   [1  1  1]\n"
+)
+_H2_RELAXATION_BLOCK = (
+    "# Auto-generated -- H2's own bond length must reach ITS equilibrium (unlike\n"
+    "# every other reference folder here, which is forced single-point instead).\n"
+    "# Uses MD.Steps, not the older MD.NumCGsteps spelling (deprecated, no longer\n"
+    "# honored by current SIESTA).\n"
+    "MD.TypeOfRun          CG\n"
+    "MD.Steps              200\n"
+)
+# H2's ground state is an unambiguous closed-shell singlet (2 electrons filling
+# the bonding sigma orbital, no radical/open-shell character at all) -- unlike
+# the winning SITE (which can genuinely be open-shell, hence SPIN_POLARIZED_BLOCK
+# there), forcing Spin polarized on the isolated H2 molecule is not just
+# unnecessary but actively wrong: it explicitly OVERRIDES the correct
+# non-polarized/restricted state instead of just "costing nothing" the way it
+# does for a genuinely closed-shell slab (DIPOLE_CORRECTION_BLOCK/
+# SPIN_POLARIZED_BLOCK's own docstrings) -- a spin-polarized SCF can converge
+# to a spurious nonzero moment for H2 depending on the initial spin guess,
+# silently biasing 0.5*E(H2) in Delta-G_H*. Forcing it explicitly (rather than
+# just omitting Spin and relying on SIESTA's own non-polarized default) makes
+# the choice self-documenting in config_extra.fdf and immune to whatever the
+# user's own --calc template happens to set.
+_SPIN_NONPOLARIZED_BLOCK = (
+    "# Auto-generated -- forces a spin-unpolarized (restricted) SCF: H2's ground\n"
+    "# state is an unambiguous closed-shell singlet, not an open question the\n"
+    "# way the adsorbed site can be (see SPIN_POLARIZED_BLOCK elsewhere in this\n"
+    "# file) -- a spin-polarized run here risks converging to a spurious nonzero\n"
+    "# moment instead of the true singlet.\n"
+    "Spin                non-polarized\n"
+)
 
-def force_gamma_kgrid(calc_text):
-    """Same substitution as stb-adsorb's own force_gamma_kgrid
-    (duplicated, not imported -- HER is self-contained, see her.py's
-    module docstring): Gamma-only k-grid, always correct for an isolated
-    molecule in a vacuum box.
-    """
-    new_text, count = _KGRID_RE.subn('kgrid.MonkhorstPack   [1  1  1]', calc_text)
-    if count == 0:
-        raise ValueError("Could not find a 'kgrid.MonkhorstPack' tag in the calc.fdf template.")
-    return new_text
-
-
-def force_spin_polarized(calc_text):
-    """Same as stb-adsorb's own force_spin_polarized (duplicated) --
-    forces Spin polarized, appending the tag if absent rather than
-    erroring (SIESTA defaults to non-polarized, so an absent tag is a
-    normal template).
-    """
-    new_text, count = _SPIN_RE.subn(r'\g<1>polarized', calc_text)
-    if count == 0:
-        return calc_text + "\nSpin                polarized\n"
-    return new_text
-
-
-def force_relaxation(calc_text, max_steps=200):
-    """Forces 'MD.TypeOfRun CG' + 'MD.Steps <max_steps>' -- H2's own
-    bond length must reach ITS equilibrium (unlike every other reference
-    folder here, which is forced single-point via
-    core.calc_directives.force_single_point instead). The winning site's
-    own calc.fdf template isn't guaranteed to already set MD.TypeOfRun
-    (some users configure it externally, or rely on the site relaxation
-    being driven some other way) -- explicit is safer than silently
-    inheriting whatever (or nothing) the template happens to have. Uses
-    MD.Steps, not the older MD.NumCGsteps spelling (deprecated, no longer
-    honored by current SIESTA).
-    """
-    new_text, count = _RUNTYPE_RE.subn('MD.TypeOfRun          CG', calc_text)
-    if count == 0:
-        new_text += "\nMD.TypeOfRun          CG\n"
-    new_text, count = _MD_STEPS_RE.subn(f'MD.Steps              {max_steps}', new_text)
-    if count == 0:
-        new_text += f"MD.Steps              {max_steps}\n"
-    return new_text
+# config_extra.fdf content shared by every single-point derived folder here
+# (00_clean_slab, 03_slab_deformed, the BSSE ghost triad, every local/full ZPE
+# displacement folder): fixed cell (this is one independent, uncoupled sample
+# point, not something SIESTA should be moving on its own) plus the same
+# Slab.DipoleCorrection/Spin polarized/DFTD3 the winning site itself needed
+# (her.py's write_site_folder, where all three are mandatory, not opt-in) --
+# propagating the winning site's own numerical settings into every derived
+# single-point folder is required for a physically meaningful energy
+# difference (the "level-of-theory propagation" convention documented in
+# CLAUDE.md); harmless where the true dipole/moment is already zero
+# (DIPOLE_CORRECTION_BLOCK's own docstring -- same reasoning applies to
+# SPIN_POLARIZED_BLOCK, converges to zero moment for a genuinely closed-shell
+# folder like 00_clean_slab); DFTD3 must match too, since a dispersion
+# correction applied on one side of an energy difference but not the other
+# would bias it.
+_SINGLE_POINT_CONFIG_EXTRA = (FIXED_CELL_BLOCK + DIPOLE_CORRECTION_BLOCK + SPIN_POLARIZED_BLOCK
+                               + VDW_CORRECTION_BLOCK + SINGLE_POINT_BLOCK)
+_H2_CONFIG_EXTRA = (FIXED_CELL_BLOCK + DIPOLE_CORRECTION_BLOCK + _GAMMA_KGRID_BLOCK
+                     + _SPIN_NONPOLARIZED_BLOCK + VDW_CORRECTION_BLOCK + _H2_RELAXATION_BLOCK)
 
 
 def force_system_label(calc_text, label):
@@ -216,7 +232,12 @@ def make_ghost_variant(base_structure, ghost_start, ghost_end):
     `base_structure.atoms` must have the slab atoms first and H last
     (guaranteed here: Stage 1 always appends H via
     AdsorbateSiteFinder.add_adsorbate/adsorb_both_surfaces, which only
-    ever appends).
+    ever appends). `symbol` here is already a Stage-1 fragment label
+    ('<real>_slab'/'<real>_ads', see her.py's write_site_folder) rather
+    than a bare element symbol, so the real Z is read straight out of
+    `species_meta` (already declared for every label present) instead of
+    constructing a pymatgen Element from the label text -- Element(symbol)
+    would raise on a non-bare label like 'H_ads'.
     """
     species_meta = dict(base_structure.species_meta)
     new_atoms = []
@@ -224,7 +245,7 @@ def make_ghost_variant(base_structure, ghost_start, ghost_end):
         if ghost_start <= i < ghost_end:
             label = f"{symbol}_ghost"
             if label not in species_meta:
-                real_z = Element(symbol).Z
+                real_z = species_meta[symbol]['Z']
                 used_ids = {str(info['id']) for info in species_meta.values()}
                 next_id = 1
                 while str(next_id) in used_ids:
@@ -263,32 +284,81 @@ def isolate_atom(base_structure, index):
     `index` (same cell/lattice, every other atom removed entirely, not
     ghosted) -- used for '07_h_isolated' (H alone, no slab atoms at all,
     real or ghost -- the reference the H-Ghost-Slab BSSE term needs).
+    Reverts the atom's Stage-1 fragment label ('<real>_ads') back to the
+    bare real element symbol via structure_io.real_element: with no slab
+    atoms left in this single-fragment folder, there is nothing left to
+    disambiguate from (same "bare label for a single-fragment folder"
+    convention stb-adsorb's own write_reference_folder uses for its
+    isolated-adsorbate reference).
     """
     symbol, pos = base_structure.atoms[index]
+    real_symbol = structure_io.real_element(symbol, base_structure.species_meta)
+    real_z = base_structure.species_meta[symbol]['Z']
     return structure_io.FdfStructure(
         lattice=base_structure.lattice, lattice_constant=base_structure.lattice_constant,
-        species=[symbol], species_meta={symbol: {'id': '1', 'Z': Element(symbol).Z}},
-        atoms=[(symbol, pos)], coord_format=base_structure.coord_format, raw_lines=[],
+        species=[real_symbol], species_meta={real_symbol: {'id': '1', 'Z': real_z}},
+        atoms=[(real_symbol, pos)], coord_format=base_structure.coord_format, raw_lines=[],
     )
 
 
-def write_folder(out_dir, fdf_structure, calc_text, pp_path):
-    """Writes structure.fdf + calc.fdf + copied pseudos for one derived
-    reference folder. Handles ghost species (a '<symbol>_ghost' label
-    resolves back to the real element's pseudopotential via
-    copy_pseudo's dest_label) transparently.
+def formula_summary(fdf_structure):
+    """Returns a compact, human-readable formula string for a written
+    folder's [2]/[3] report row, e.g. 'B9N9' or 'B9N9 +H(ghost)' -- real
+    atoms grouped by element (via structure_io.real_element, so a Stage-1
+    fragment label like 'B_slab' or a ghost label like 'H_ads_ghost' both
+    collapse to their real element), ghost atoms (negative Z) called out
+    separately since they contribute zero electrons/charge despite sharing
+    the real pseudopotential.
+    """
+    from collections import Counter
+    real_counts, ghost_counts = Counter(), Counter()
+    for label, _ in fdf_structure.atoms:
+        element = structure_io.real_element(label, fdf_structure.species_meta)
+        if fdf_structure.species_meta[label]['Z'] < 0:
+            ghost_counts[element] += 1
+        else:
+            real_counts[element] += 1
+    formula = "".join(f"{el}{n if n > 1 else ''}" for el, n in sorted(real_counts.items())) or "-"
+    if ghost_counts:
+        formula += " +" + "".join(f"{el}{n if n > 1 else ''}" for el, n in sorted(ghost_counts.items()))
+        formula += "(ghost)"
+    return formula
+
+
+def write_folder(out_dir, fdf_structure, calc_text, pp_path, config_extra_content):
+    """Writes structure.fdf + calc.fdf + config_extra.fdf + copied pseudos
+    for one derived reference folder, following the same config_extra.fdf
+    sidecar convention as stb-adsorb/stb-raman/stb-ir (menu 4.8/4.11/4.12):
+    `config_extra_content` (this folder's own combination of forced
+    directives -- single-point vs. relaxation, spin, k-grid, dipole
+    correction, fixed cell) is written as-is to config_extra.fdf, and
+    `%include config_extra.fdf` is prepended to the UNTOUCHED `calc_text`
+    (structure_io.prepend_include) rather than editing directives into it
+    in place. Handles both a Stage-1 fragment label
+    ('<real>_slab'/'<real>_ads') and a ghost label stacked on top of one
+    ('<real>_slab_ghost', from make_ghost_variant) transparently for
+    pseudopotential copying: the real element behind ANY label is
+    recovered via structure_io.real_element (Z-based, robust to any
+    suffix or stack of suffixes -- naive string-slicing off '_ghost'
+    alone, this function's previous approach, silently mis-resolved a
+    plain fragment label like 'H_ads' to a nonexistent 'H_ads.psf' source
+    pseudopotential).
     """
     os.makedirs(out_dir, exist_ok=True)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
+    with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
+        f.write(config_extra_content)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
-        f.write(calc_text)
+        f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
     present_labels = sorted({symbol for symbol, _ in fdf_structure.atoms})
     for label in present_labels:
-        real_symbol = label[:-len("_ghost")] if label.endswith("_ghost") else label
+        real_symbol = structure_io.real_element(label, fdf_structure.species_meta)
         copy_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
+    return fdf_structure
 
 
-def write_local_zpe_folders(zpe_dir, relaxed_structure, h_index, displacement_ang, calc_text, pp_path):
+def write_local_zpe_folders(zpe_dir, relaxed_structure, h_index, displacement_ang, calc_text,
+                             pp_path, config_extra_content):
     """Writes 6 single-point folders (H displaced +/-x, +/-y, +/-z by
     `displacement_ang` from its relaxed position, every other atom held
     fixed at ITS relaxed position) for the partial-Hessian 'local' ZPE
@@ -318,7 +388,7 @@ def write_local_zpe_folders(zpe_dir, relaxed_structure, h_index, displacement_an
             atoms=new_atoms, coord_format=relaxed_structure.coord_format, raw_lines=[],
         )
         disp_dir = os.path.join(zpe_dir, f"disp_{i:03d}")
-        write_folder(disp_dir, disp_structure, calc_text, pp_path)
+        write_folder(disp_dir, disp_structure, calc_text, pp_path, config_extra_content)
 
     with open(os.path.join(zpe_dir, "zpe_local_meta.json"), "w") as f:
         json.dump({
@@ -410,15 +480,29 @@ stb-herAnalysis.""",
 
         print_section('[0] RUN METADATA', f_out)
         print_dual(f"Directory       : {output_root}", f_out)
+        print_dual(f"SIESTA output   : {args.file} (scanned in every site_*/ and read back below)", f_out)
+        print_dual(f"Pseudo dir      : {args.pseudo_dir or '(reuse the winning site itself has)'}", f_out)
         print_dual(f"ZPE mode        : {args.zpe_mode}", f_out)
         print_dual(f"Displacement    : {args.displacement} Ang", f_out)
+        print_dual(f"Vacuum box      : {args.vacuum_box:.1f} Ang (H2 gas-phase reference)", f_out)
+        if args.zpe_mode == "full":
+            print_dual(f"Supercell       : {args.supercell[0]} {args.supercell[1]} {args.supercell[2]} "
+                        "(--zpe-mode full's phonon calculation)", f_out)
+        print_dual(f"Report          : {report_path}", f_out)
 
         print_section('[1] WINNING SITE', f_out)
         winning_dir, winning_energy, all_results = find_winning_site(sites_root, args.file, f_out)
+        n_readable = sum(1 for _label, energy in all_results if energy is not None)
+        print_dual(f"  {len(all_results)} site(s) scanned, {n_readable} with a readable FreeEng.",
+                    f_out)
         for label, energy in all_results:
             marker = color_text(" <-- winner", 'green') if os.path.join(sites_root, label) == winning_dir else ""
             energy_str = f"{energy:.6f} eV" if energy is not None else "(no energy)"
             print_dual(f"  {label:<28}{energy_str}{marker}", f_out)
+        readable = [e for _l, e in all_results if e is not None]
+        if len(readable) > 1:
+            spread = max(readable) - min(readable)
+            print_dual(f"  Energy spread across readable sites: {spread:.4f} eV (max - min).", f_out)
         print_dual(f"Winning site    : {os.path.basename(winning_dir)} ({winning_energy:.6f} eV)", f_out)
         report_quality_diagnostics(os.path.basename(winning_dir),
                                     os.path.join(winning_dir, args.file), 0.05, f_out)
@@ -434,39 +518,59 @@ stb-herAnalysis.""",
         h_index = n_total - 1  # H is always appended last by stb-her (AdsorbateSiteFinder.add_adsorbate)
 
         with open(winning_dir + "/calc.fdf") as f:
-            site_calc_text = f.read()
+            # The winning site's own calc.fdf (written by her.py's
+            # write_site_folder) is itself '%include config_extra.fdf' +
+            # the untouched user template -- strip that include before
+            # using this text as the base for THIS stage's own derived
+            # folders, each of which gets its OWN, different
+            # config_extra.fdf (see write_folder). A no-op if the site
+            # folder predates this convention (plain calc_text already).
+            site_calc_text = strip_config_extra_include(f.read())
 
         print_section('[2] REFERENCE FOLDERS', f_out)
+        print_dual("  Every folder below %includes its own config_extra.fdf (fixed cell + the "
+                    "winning site's own mandatory Slab.DipoleCorrection/DFTD3, plus single-point "
+                    "or the H2 molecule's own Gamma-kgrid/relaxation directives, as appropriate) "
+                    "instead of editing your --calc template in place. Spin is the one exception: "
+                    "polarized (the site's own setting) everywhere except 02_h2_molecule, forced "
+                    "NON-polarized there instead -- H2 is an unambiguous closed-shell singlet.",
+                    f_out)
+        folder_rows = []  # (label, written_fdf_structure, run_type) -- table at the end
 
         # 00_clean_slab: pristine geometry (Stage 1's own input, already
         # relaxed by the user BEFORE stb-her), single-point with the
         # winning site's exact numerical settings for consistency.
         clean_template = structure_io.read_fdf(clean_slab_source)
         clean_dir = os.path.join(output_root, "00_clean_slab")
-        clean_calc = force_system_label(force_single_point(site_calc_text), "her_clean_slab")
-        write_folder(clean_dir, clean_template, clean_calc, args.pseudo_dir)
+        clean_calc = force_system_label(site_calc_text, "her_clean_slab")
+        written = write_folder(clean_dir, clean_template, clean_calc, args.pseudo_dir,
+                               _SINGLE_POINT_CONFIG_EXTRA)
+        folder_rows.append(("00_clean_slab", written, "single-point"))
         print_dual(f"  {color_text('[OK]', 'green')} {clean_dir}", f_out)
 
         # 02_h2_molecule: gas-phase CHE reference, RELAXES (not single-point).
         # Derived from the winning site's own calc.fdf (same XC functional/
         # basis/mesh cutoff -- numerical consistency with the slab-side
-        # calculations matters for an energy difference), just forced to
-        # Gamma-only + spin-polarized.
+        # calculations matters for an energy difference), forced to Gamma-only
+        # + spin-UNpolarized (H2's closed-shell singlet ground state, unlike the
+        # site's own Spin polarized) via config_extra.fdf (_H2_CONFIG_EXTRA).
         h2_dir = os.path.join(output_root, "02_h2_molecule")
         h2_structure = build_h2_structure(args.vacuum_box)
-        h2_calc = force_system_label(
-            force_spin_polarized(force_gamma_kgrid(force_relaxation(site_calc_text))),
-            "her_h2_molecule")
-        write_folder(h2_dir, h2_structure, h2_calc, args.pseudo_dir)
-        print_dual(f"  {color_text('[OK]', 'green')} {h2_dir} (Gamma-only, spin-polarized, relaxes)", f_out)
+        h2_calc = force_system_label(site_calc_text, "her_h2_molecule")
+        written = write_folder(h2_dir, h2_structure, h2_calc, args.pseudo_dir, _H2_CONFIG_EXTRA)
+        folder_rows.append(("02_h2_molecule", written, "CG relax (Gamma-only)"))
+        print_dual(f"  {color_text('[OK]', 'green')} {h2_dir} (Gamma-only, spin-unpolarized "
+                    "singlet, relaxes)", f_out)
 
         # 03_slab_deformed: winning site's relaxed geometry minus H --
         # diagnostic only (E_deformed - E_clean), not part of the final
         # Delta-G_H* formula.
         deformed_dir = os.path.join(output_root, "03_slab_deformed")
         deformed_structure = remove_atom(relaxed, h_index)
-        deformed_calc = force_system_label(force_single_point(site_calc_text), "her_slab_deformed")
-        write_folder(deformed_dir, deformed_structure, deformed_calc, args.pseudo_dir)
+        deformed_calc = force_system_label(site_calc_text, "her_slab_deformed")
+        written = write_folder(deformed_dir, deformed_structure, deformed_calc, args.pseudo_dir,
+                               _SINGLE_POINT_CONFIG_EXTRA)
+        folder_rows.append(("03_slab_deformed", written, "single-point (diagnostic)"))
         print_dual(f"  {color_text('[OK]', 'green')} {deformed_dir} (diagnostic, not used in "
                     "Delta-G_H* itself)", f_out)
 
@@ -474,34 +578,48 @@ stb-herAnalysis.""",
         # site's relaxed geometry.
         ghost_dir = os.path.join(output_root, "04_slab_ghost")
         ghost_variant = make_ghost_variant(relaxed, h_index, n_total)  # ghost H
-        ghost_calc = force_system_label(force_single_point(site_calc_text), "her_slab_ghost")
-        write_folder(ghost_dir, ghost_variant, ghost_calc, args.pseudo_dir)
+        ghost_calc = force_system_label(site_calc_text, "her_slab_ghost")
+        written = write_folder(ghost_dir, ghost_variant, ghost_calc, args.pseudo_dir,
+                               _SINGLE_POINT_CONFIG_EXTRA)
+        folder_rows.append(("04_slab_ghost", written, "single-point (BSSE)"))
         print_dual(f"  {color_text('[OK]', 'green')} {ghost_dir}", f_out)
 
         h_ghost_dir = os.path.join(output_root, "06_h_ghost_slab")
         h_ghost_variant = make_ghost_variant(relaxed, 0, h_index)  # ghost everything but H
-        h_ghost_calc = force_system_label(force_single_point(site_calc_text), "her_h_ghost_slab")
-        write_folder(h_ghost_dir, h_ghost_variant, h_ghost_calc, args.pseudo_dir)
+        h_ghost_calc = force_system_label(site_calc_text, "her_h_ghost_slab")
+        written = write_folder(h_ghost_dir, h_ghost_variant, h_ghost_calc, args.pseudo_dir,
+                               _SINGLE_POINT_CONFIG_EXTRA)
+        folder_rows.append(("06_h_ghost_slab", written, "single-point (BSSE)"))
         print_dual(f"  {color_text('[OK]', 'green')} {h_ghost_dir}", f_out)
 
         h_iso_dir = os.path.join(output_root, "07_h_isolated")
         h_iso_structure = isolate_atom(relaxed, h_index)
-        h_iso_calc = force_system_label(force_single_point(site_calc_text), "her_h_isolated")
-        write_folder(h_iso_dir, h_iso_structure, h_iso_calc, args.pseudo_dir)
+        h_iso_calc = force_system_label(site_calc_text, "her_h_isolated")
+        written = write_folder(h_iso_dir, h_iso_structure, h_iso_calc, args.pseudo_dir,
+                               _SINGLE_POINT_CONFIG_EXTRA)
+        folder_rows.append(("07_h_isolated", written, "single-point (BSSE)"))
         print_dual(f"  {color_text('[OK]', 'green')} {h_iso_dir}", f_out)
 
+        print_dual("", f_out)
+        print_table(["Folder", "Atoms", "Formula", "Run type"],
+                    [([label, str(len(fdf.atoms)), formula_summary(fdf), run_type], None)
+                     for label, fdf, run_type in folder_rows], f_out)
+
         print_section('[3] ZPE PREPARATION', f_out)
+        n_zpe_folders = 0
         if args.zpe_mode == "standard":
             print_dual("Standard mode -- no folders generated. stb-herAnalysis will use the "
                         "fixed Norskov offset (Delta-ZPE - T*Delta-S ~= +0.24 eV).", f_out)
         elif args.zpe_mode == "local":
             zpe_dir = os.path.join(output_root, "05_zpe_calc")
-            local_calc = force_system_label(force_single_point(site_calc_text), "her_zpe")
+            local_calc = force_system_label(site_calc_text, "her_zpe")
             write_local_zpe_folders(zpe_dir, relaxed, h_index, args.displacement, local_calc,
-                                     args.pseudo_dir)
-            print_dual(f"  {color_text('[OK]', 'green')} {zpe_dir}/disp_001..disp_006 (H only, "
-                        "partial Hessian -- decoupled-oscillator approximation, ignores "
-                        "adsorbate-substrate vibrational coupling)", f_out)
+                                     args.pseudo_dir, _SINGLE_POINT_CONFIG_EXTRA)
+            print_dual(f"  {color_text('[OK]', 'green')} {zpe_dir}/disp_001..disp_006 (6 folders, "
+                        f"{n_total} atom(s) each, +/-{args.displacement} Ang finite-difference "
+                        "displacements of H only -- partial Hessian, decoupled-oscillator "
+                        "approximation, ignores adsorbate-substrate vibrational coupling)", f_out)
+            n_zpe_folders = 6
         else:  # full
             print_dual(color_text(
                 "[NOTE] 'full' mode needs a full phonon calculation of BOTH the winning site AND "
@@ -517,18 +635,35 @@ stb-herAnalysis.""",
             supercell_matrix = [[args.supercell[0], 0, 0], [0, args.supercell[1], 0], [0, 0, args.supercell[2]]]
             site_phonon, site_supercells = build_phonon_displacements(
                 site_unitcell, supercell_matrix, args.displacement)
-            site_zpe_calc = force_system_label(force_single_point(site_calc_text), "her_zpe_site")
+            n_supercell_atoms = n_total * args.supercell[0] * args.supercell[1] * args.supercell[2]
+            print_dual(f"  Site supercell  : {args.supercell[0]}x{args.supercell[1]}x{args.supercell[2]} "
+                        f"({n_supercell_atoms} atom(s)) -- {len(site_supercells)} raw candidate "
+                        "displacement(s) (before symmetry reduction).", f_out)
+            site_zpe_calc = structure_io.prepend_include(
+                force_system_label(site_calc_text, "her_zpe_site"), CONFIG_EXTRA_FILE)
             site_folders, site_yaml = write_displacement_folders(
                 os.path.join(output_root, "05_zpe_calc_site"), site_phonon, site_supercells,
                 "structure.fdf", winning_dir + "/calc.fdf", [])
             for d in site_folders:
-                symbols = sorted({sym for sym, _ in relaxed.atoms})
-                for sym in symbols:
+                # phonopy's own siesta writer (write_displacement_folders ->
+                # write_siesta) rebuilds each disp-NNN/structure.fdf from
+                # PhonopyAtoms, which tracks only atomic numbers -- it always
+                # declares bare real-element species labels, never `relaxed`'s
+                # Stage-1 fragment labels ('<real>_slab'/'<real>_ads'). Resolve
+                # to the real element before copying, or a fragment-labeled
+                # pseudopotential name (e.g. 'H_ads.psf', which doesn't exist)
+                # would silently fail to copy.
+                real_symbols = sorted({structure_io.real_element(sym, relaxed.species_meta)
+                                        for sym, _ in relaxed.atoms})
+                for sym in real_symbols:
                     copy_pseudo(args.pseudo_dir, sym, d)
+                with open(os.path.join(d, CONFIG_EXTRA_FILE), "w") as f:
+                    f.write(_SINGLE_POINT_CONFIG_EXTRA)
                 with open(os.path.join(d, "calc.fdf"), "w") as f:
                     f.write(site_zpe_calc)
             print_dual(f"  {color_text('[OK]', 'green')} {len(site_folders)} displacement folder(s) "
-                        f"under 05_zpe_calc_site/", f_out)
+                        f"under 05_zpe_calc_site/ (symmetry-reduced from the {len(site_supercells)} "
+                        "raw candidates above)", f_out)
 
             clean_fdf_path = os.path.join(output_root, "05_zpe_calc_clean", "_reference.fdf")
             os.makedirs(os.path.dirname(clean_fdf_path), exist_ok=True)
@@ -536,7 +671,13 @@ stb-herAnalysis.""",
             clean_unitcell = read_siesta(clean_fdf_path)
             clean_phonon, clean_supercells = build_phonon_displacements(
                 clean_unitcell, supercell_matrix, args.displacement)
-            clean_zpe_calc = force_system_label(force_single_point(site_calc_text), "her_zpe_clean")
+            n_clean_atoms = len(clean_template.atoms)
+            n_clean_supercell_atoms = n_clean_atoms * args.supercell[0] * args.supercell[1] * args.supercell[2]
+            print_dual(f"  Clean supercell : {args.supercell[0]}x{args.supercell[1]}x{args.supercell[2]} "
+                        f"({n_clean_supercell_atoms} atom(s)) -- {len(clean_supercells)} raw candidate "
+                        "displacement(s) (before symmetry reduction).", f_out)
+            clean_zpe_calc = structure_io.prepend_include(
+                force_system_label(site_calc_text, "her_zpe_clean"), CONFIG_EXTRA_FILE)
             clean_folders, clean_yaml = write_displacement_folders(
                 os.path.join(output_root, "05_zpe_calc_clean"), clean_phonon, clean_supercells,
                 "structure.fdf", winning_dir + "/calc.fdf", [])
@@ -544,12 +685,22 @@ stb-herAnalysis.""",
                 symbols = sorted({sym for sym, _ in clean_template.atoms})
                 for sym in symbols:
                     copy_pseudo(args.pseudo_dir, sym, d)
+                with open(os.path.join(d, CONFIG_EXTRA_FILE), "w") as f:
+                    f.write(_SINGLE_POINT_CONFIG_EXTRA)
                 with open(os.path.join(d, "calc.fdf"), "w") as f:
                     f.write(clean_zpe_calc)
             print_dual(f"  {color_text('[OK]', 'green')} {len(clean_folders)} displacement folder(s) "
-                        f"under 05_zpe_calc_clean/", f_out)
+                        f"under 05_zpe_calc_clean/ (symmetry-reduced from the {len(clean_supercells)} "
+                        "raw candidates above)", f_out)
+            n_zpe_folders = len(site_folders) + len(clean_folders)
 
         print_section('[4] SUMMARY & NEXT STEPS', f_out)
+        print_dual(f"Winning site         : {os.path.basename(winning_dir)}", f_out)
+        print_dual(f"Reference folders    : {len(folder_rows)} ({', '.join(label for label, _f, _r in folder_rows)})",
+                    f_out)
+        print_dual(f"ZPE folders          : {n_zpe_folders} ({args.zpe_mode} mode)", f_out)
+        print_dual(f"Pseudo dir           : {args.pseudo_dir or '(reused per-folder from the winning site)'}",
+                    f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)
         print_dual("  1. Run SIESTA in every folder written above.", f_out)

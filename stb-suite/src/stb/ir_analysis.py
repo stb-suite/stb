@@ -6,7 +6,13 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.2.0"  # New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
+VERSION = "1.2.1"  # New [LIMITATION] note at the top of [2] IR-ACTIVE MODES SUMMARY, shown
+                    # whenever any mode used the BULK path: those frequencies have no
+                    # non-analytic (LO-TO) correction, so for a polar bulk crystal they can land
+                    # between the true TO and LO values -- see stb-irModes' VERSION 1.4.1 comment
+                    # for the full root-cause story and literature references. Documented as a
+                    # known limitation only; a real fix is planned for a future version.
+                    # (previously 1.2.0: New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
                     # path's Born-charge x eigendisplacement formula (in-plane/periodic axes)
                     # with the NONBULK path's dipole-difference formula (vacuum axis) into one
                     # physically valid dmu/dQ per mode -- see stb-irModes' own VERSION comment
@@ -395,6 +401,7 @@ alongside their individual (basis-dependent) values.""",
 
     mode_results = []  # (mode_index, freq_thz, dmu_dq, intensity)
     computed = {}  # mode_index -> (dmu_dq, intensity, scf_ok), for --skip-degenerate reuse
+    any_bulk_path = False  # any mode using the BULK (3D polar-crystal) intensity path -- see [2]'s LO-TO caveat
     for mode_index in sorted(modes):
         entry = modes[mode_index]
         freq_thz = entry["frequency_thz"]
@@ -464,6 +471,7 @@ alongside their individual (basis-dependent) values.""",
             dmu_dq_bec = np.einsum('atb,at->b', Z_star, eigendisp)
 
             if entry["path"] == "BULK":
+                any_bulk_path = True
                 dmu_dq = dmu_dq_bec
                 scf_ok = scf_ok_bulk
                 unconverged_note = "  [equilibrium run unconverged]" if not scf_ok else ""
@@ -597,6 +605,14 @@ alongside their individual (basis-dependent) values.""",
         sys.exit(1)
 
     print_section('[2] IR-ACTIVE MODES SUMMARY', f_out)
+    if any_bulk_path:
+        print_dual(color_text(
+            "[LIMITATION] Frequencies below (for the BULK/3D-periodic path) have no "
+            "non-analytic (LO-TO) correction applied -- for a POLAR bulk crystal (nonzero "
+            "Born effective charges) they can land between the true TO and LO frequencies "
+            "rather than matching either. See stb-irModes' Stage 2 report ([1] PHONON MODES "
+            "AT GAMMA) for the full explanation and literature references; not yet "
+            "implemented in stb-ir, planned for a future version.", 'yellow'), f_out)
     print_dual(f"  {'Mode':<6}{'THz':<10}{'cm^-1':<10}{'dmu/dQ_x':<12}{'dmu/dQ_y':<12}"
                 f"{'dmu/dQ_z':<12}{'Intensity'}", f_out)
     for mode_index, freq_thz, dmu_dq, intensity in mode_results:

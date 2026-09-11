@@ -6,7 +6,13 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.2.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
+VERSION = "1.2.1"  # New [LIMITATION] note in [1] INPUT STRUCTURE's bulk-path advisory: a
+                    # polar bulk crystal's Stage 1 phonon frequencies get no non-analytic
+                    # (LO-TO) correction, so they can land between the true TO and LO values
+                    # (root-caused, not fixed, on NaCl -- see stb-irModes' VERSION 1.4.1 comment
+                    # for the full explanation and literature references). Documented as a known
+                    # limitation only; a real fix is planned for a future version.
+                    # (previously 1.2.0: --symprec (default 0.01, pymatgen's own default) threaded through to
                     # Phonopy itself, and --kgrid/--kgrid-density auto-suggest + force the
                     # supercell's own k-grid via a new [1] SINGLE-POINT SCF ENFORCEMENT section --
                     # both ported from stb-raman's own fix (VERSION 1.1.1): Phonopy's raw symprec
@@ -244,6 +250,19 @@ phonon_disp/ tree).""",
             "own native Born-effective-charge automation (BornCharge T + MD.TypeOfRun FC + "
             "PolarizationGrids), a single equilibrium run independent of which phonon modes "
             "are later selected. See stb-irModes --help.", 'cyan'), f_out)
+        print_dual(color_text(
+            "[LIMITATION] For a POLAR bulk crystal (nonzero Born effective charges), the "
+            "Gamma-point frequency computed from this stage's real-space finite-displacement "
+            "force constants is NOT corrected for the long-range dipole-dipole (non-analytic, "
+            "'NAC') term -- it can land noticeably between the true TO and LO frequencies "
+            "rather than matching either (verified on NaCl: 185.6 cm^-1 computed vs. "
+            "~164 cm^-1 TO / ~264 cm^-1 LO from the literature, right in between). Proper "
+            "treatment (Gonze & Lee, Phys. Rev. B 55, 10355 (1997)) needs the high-frequency "
+            "dielectric tensor (eps_inf) in addition to Z*, and would subtract the spurious "
+            "supercell-truncated dipole-dipole contribution before diagonalizing -- not yet "
+            "implemented in stb-ir; a planned future addition. See stb-irModes' own [1] "
+            "PHONON MODES AT GAMMA section for the same caveat repeated at the point it "
+            "actually matters.", 'yellow'), f_out)
     elif is_hybrid_2d:
         print_dual(color_text(
             "[NOTE] 2D slab (one vacuum-padded axis) detected -- Stage 2 (stb-irModes) will "

@@ -6,7 +6,24 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.4.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
+VERSION = "1.4.1"  # [1b] SYMMETRY ANALYSIS's degenerate-groups listing no longer prints an empty
+                    # "modes  (T1u)" line for a group made entirely of ACOUSTIC bands (not in
+                    # band_to_k, e.g. NaCl's own T1u translational mode shares its irrep label with
+                    # the real IR-active T1u optical mode) -- now built as (ms, mode_ids) pairs and
+                    # filtered to drop any group with no displayed (non-acoustic) member.
+                    # Also: new [LIMITATION] note after [1]'s per-mode frequency listing, for the
+                    # BULK (3D) path only -- these Gamma frequencies have no non-analytic (LO-TO)
+                    # correction applied, so for a genuinely POLAR bulk crystal they can land
+                    # between the true TO and LO values rather than matching either. Root-caused
+                    # (not fixed) on NaCl: T1u computed at 185.6 cm^-1 vs. ~164/~264 cm^-1
+                    # (TO/LO, Raunio et al. 1969), landing almost exactly midway -- the textbook
+                    # symptom of a finite-supercell frozen-phonon calculation missing the Gonze &
+                    # Lee (1997) dipole-dipole subtraction, which needs eps_inf (not currently
+                    # computed by any stb tool) alongside the Z* this stage already computes.
+                    # Documented as a known limitation, not fixed -- a real fix needs a new
+                    # eps_inf-producing SIESTA Optical-module run plus a dynamical-matrix-level
+                    # change in core/phonon_workflow.py, planned for a future version.
+                    # (previously 1.4.0: --symprec (default 0.01, pymatgen's own default) threaded through to
                     # Phonopy itself, same fix as stb-ramanModes (VERSION 1.2.0): Phonopy's own
                     # raw default (1e-5) is far tighter than any DFT relaxation's real numerical
                     # noise floor and can silently misdetect the true point group -- this is the
@@ -52,7 +69,7 @@ VERSION = "1.4.0"  # --symprec (default 0.01, pymatgen's own default) now thread
                     # for a given structure), and [1b] always lists degenerate mode groups by
                     # symmetry (band indices sharing one irrep -- Phonopy's own eigenvector basis
                     # choice within such a group is arbitrary, informational regardless of
-                    # --use-symmetry/--skip-degenerate).
+                    # --use-symmetry/--skip-degenerate).)
 
 import os
 import sys
@@ -470,18 +487,52 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
             print_dual(f"  mode {k:3d} (band {int(band_idx):3d}) : {freq:10.4f} THz{flag} "
                        f"{sym_note}{character_note}", f_out)
 
+        if is_bulk:
+            print_dual(color_text(
+                "[LIMITATION] These Gamma-point frequencies come from real-space "
+                "finite-displacement force constants with NO non-analytic (long-range "
+                "dipole-dipole, 'LO-TO') correction applied. For a non-polar bulk crystal "
+                "(Born effective charges ~0, e.g. Si, diamond, graphene) this is exact. For a "
+                "POLAR bulk crystal (ionic/partially-ionic bonding, nonzero Z*), a finite "
+                "periodic supercell cannot fully decay the 1/r^3 dipole-dipole interaction "
+                "between a displaced atom and its own periodic images, so the frequency "
+                "reported here for an IR-active mode is contaminated and can land noticeably "
+                "BETWEEN the true TO and LO frequencies rather than matching either -- verified "
+                "on NaCl's T1u mode: 185.6 cm^-1 computed vs. ~164 cm^-1 (TO) / ~264 cm^-1 (LO) "
+                "from inelastic-neutron-scattering literature (Raunio, Almqvist & Stedman, "
+                "Phys. Rev. 178, 1496 (1969)), landing almost exactly midway. A correct "
+                "treatment (Gonze & Lee, Phys. Rev. B 55, 10355 (1997); see also Togo & Tanaka, "
+                "J. Phys. Soc. Jpn. 92, 012001 (2023) Sec. on non-analytic term correction) "
+                "needs the high-frequency dielectric tensor (eps_inf, not currently computed by "
+                "any stb tool) in addition to the Born charges already computed in this stage's "
+                "[Path] Bulk run, and would subtract the spurious supercell-truncated "
+                "dipole-dipole contribution from the force constants before diagonalizing. Not "
+                "yet implemented in stb-ir -- planned for a future version. Until then, treat "
+                "a bulk polar crystal's reported Gamma frequency as a rough (TO,LO) bracket "
+                "midpoint, not a clean TO value, and prefer comparing to experiment only "
+                "qualitatively (mode symmetry, activity, relative ordering) rather than "
+                "quantitatively.", 'yellow'), f_out)
+
         print_section('[1b] SYMMETRY ANALYSIS', f_out)
         print_dual(f"Symmetry precision: symprec={args.symprec:g} Ang", f_out)
         print_dual(f"Space group       : {space_group}", f_out)
         print_dual(f"Point group       : {point_group}", f_out)
         print_dual(f"Symmetry ops      : {n_sym_ops}", f_out)
-        degenerate_groups = [ms for ms in mode_symmetries if len(ms.band_indices) > 1]
+        # len(ms.band_indices) > 1 alone also matches a degenerate ACOUSTIC
+        # group (e.g. NaCl's T1u translation at Gamma) -- exclude any group
+        # with no band in band_to_k (i.e. nothing among the displayed
+        # non-acoustic modes above), or it prints an empty "modes  (T1u)"
+        # line for a group the user never sees listed anywhere else.
+        degenerate_groups = [
+            (ms, sorted(band_to_k[b] for b in ms.band_indices if b in band_to_k))
+            for ms in mode_symmetries if len(ms.band_indices) > 1
+        ]
+        degenerate_groups = [(ms, ids) for ms, ids in degenerate_groups if ids]
         if degenerate_groups:
             print_dual(f"Degenerate groups : {len(degenerate_groups)} group(s) by symmetry "
                         "(same irrep -- Phonopy's own choice of basis within each group is "
                         "arbitrary, treat individual partners' directions accordingly):", f_out)
-            for ms in degenerate_groups:
-                mode_ids = sorted(band_to_k[b] for b in ms.band_indices if b in band_to_k)
+            for ms, mode_ids in degenerate_groups:
                 label_str = f" ({ms.label})" if ms.label else ""
                 print_dual(f"  modes {', '.join(str(m) for m in mode_ids)}{label_str}", f_out)
         if symmetry_error:

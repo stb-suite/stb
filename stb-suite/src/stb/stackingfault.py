@@ -407,8 +407,8 @@ def main():
                               "check of the gamma-surface's shape before committing to the full "
                               "Nx x Ny DFT single-points. Written alongside the normal SIESTA "
                               "folders, not instead of them. Needs the optional 'ml' extra.")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
-                         help="MACE-MP-0 model size (default: small). Ignored if "
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="medium",
+                         help="MACE-MP-0 model size (default: medium). Ignored if "
                               "--ml-custom-model is given.")
     parser.add_argument("--ml-custom-model", default=None, metavar="PATH",
                          help="Use a custom MACE model file instead of the MACE-MP-0 foundation "

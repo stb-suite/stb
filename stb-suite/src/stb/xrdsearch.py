@@ -167,8 +167,8 @@ or later, on your relaxed .STRUCT_OUT results).""",
                              "RANK/select candidates during casting -- the geometry it uses "
                              "for that is discarded, not kept. Needs the optional 'ml' extra "
                              "(pip install stb_suite[ml]).")
-    parser.add_argument("--mace-model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size for --mace-relax (default: small). Ignored "
+    parser.add_argument("--mace-model", choices=["small", "medium", "large"], default=None,
+                        help="MACE-MP-0 model size for --mace-relax (default: medium). Ignored "
                              "if --mace-custom-model is given. Only valid together with "
                              "--mace-relax.")
     parser.add_argument("--mace-custom-model", default=None, metavar="PATH",
@@ -226,9 +226,11 @@ or later, on your relaxed .STRUCT_OUT results).""",
         parser.error("--d3/--spin-polarized only apply when auto-generating calc.fdf -- they "
                      "have no effect together with --calc (a custom template is copied "
                      "verbatim); drop --calc or drop --d3/--spin-polarized.")
-    if not args.mace_relax and (args.mace_custom_model or args.mace_model != "small"):
+    if not args.mace_relax and (args.mace_custom_model or args.mace_model is not None):
         parser.error("--mace-model/--mace-custom-model are only valid together with "
                      "--mace-relax.")
+    if args.mace_model is None:
+        args.mace_model = "medium"
 
     if len(args.species) != len(args.num_ions):
         parser.error(f"--species has {len(args.species)} entries but --num-ions has "

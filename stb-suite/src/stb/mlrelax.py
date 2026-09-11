@@ -86,8 +86,8 @@ that distribution.""",
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
                         help="Gap (Ang) used to detect vacuum-padded axes for --relax-cell "
                              "(default: 10.0, matches stb-kgrid).")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: small). "
+    parser.add_argument("--model", choices=["small", "medium", "large"], default="medium",
+                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: medium). "
                              "Ignored if --custom-model is given.")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "

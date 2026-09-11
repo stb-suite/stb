@@ -588,8 +588,8 @@ stb-symmetry or stb-unitcell.)""",
                              "prints them ranked by relaxed energy, and writes each output file "
                              "with its relaxed geometry. A relative comparison from a fast ML "
                              "potential, not an absolute DFT formation energy.")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 foundation model size for --ml-rank (default: small). "
+    parser.add_argument("--model", choices=["small", "medium", "large"], default=None,
+                        help="MACE-MP-0 foundation model size for --ml-rank (default: medium). "
                              "Only valid together with --ml-rank.")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-rank, instead "
@@ -661,8 +661,10 @@ stb-symmetry or stb-unitcell.)""",
             parser.error("--supergroup requires --target-group (the installed pyxtal doesn't "
                          "support auto-searching all possible supergroups).")
 
-    if (args.custom_model or args.model != "small") and not args.ml_rank:
+    if (args.custom_model or args.model is not None) and not args.ml_rank:
         parser.error("--model/--custom-model are only valid together with --ml-rank.")
+    if args.model is None:
+        args.model = "medium"
 
     require_pyxtal()
     if args.ml_rank:

@@ -118,8 +118,8 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
                         help="With --ml-relax, also relax the cell -- any vacuum-padded "
                              "axis always stays exactly fixed. Only valid together with "
                              "--ml-relax.")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 foundation model size for --ml-relax (default: small).")
+    parser.add_argument("--model", choices=["small", "medium", "large"], default=None,
+                        help="MACE-MP-0 foundation model size for --ml-relax (default: medium).")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, "
                              "instead of a MACE-MP-0 foundation size.")
@@ -142,8 +142,10 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
 
     if args.ml_relax_cell and not args.ml_relax:
         parser.error("--ml-relax-cell is only valid together with --ml-relax.")
-    if (args.custom_model or args.model != "small") and not args.ml_relax:
+    if (args.custom_model or args.model is not None) and not args.ml_relax:
         parser.error("--model/--custom-model are only valid together with --ml-relax.")
+    if args.model is None:
+        args.model = "medium"
     if args.ml_relax:
         require_mace()
 

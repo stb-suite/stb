@@ -208,8 +208,8 @@ automatically at every symmetrically distinct site.""",
     parser.add_argument("--ml-relax-cell", action="store_true",
                         help="With --ml-relax, also relax the cell -- any vacuum-padded axis "
                              "always stays exactly fixed. Only valid together with --ml-relax.")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 foundation model size for --ml-relax/--ml-rank (default: small).")
+    parser.add_argument("--model", choices=["small", "medium", "large"], default=None,
+                        help="MACE-MP-0 foundation model size for --ml-relax/--ml-rank (default: medium).")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax/--ml-rank, "
                              "instead of a MACE-MP-0 foundation size.")
@@ -256,8 +256,10 @@ automatically at every symmetrically distinct site.""",
                       "every candidate, just without --ml-relax-cell's cell relaxation).")
     if args.ml_relax_cell and not args.ml_relax:
         parser.error("--ml-relax-cell is only valid together with --ml-relax.")
-    if (args.custom_model or args.model != "small") and not (args.ml_relax or args.ml_rank):
+    if (args.custom_model or args.model is not None) and not (args.ml_relax or args.ml_rank):
         parser.error("--model/--custom-model are only valid together with --ml-relax/--ml-rank.")
+    if args.model is None:
+        args.model = "medium"
 
     if args.ml_rank or args.ml_relax:
         require_mace()

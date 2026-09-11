@@ -128,8 +128,8 @@ def main():
                              "generates displacements from the original --structure file "
                              "unchanged; the ML-relaxed structure is written out separately "
                              "for you to review/use in a follow-up run.")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size for --ml-prerelax (default: small).")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="medium",
+                        help="MACE-MP-0 model size for --ml-prerelax (default: medium).")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu",
                         help="Device for --ml-prerelax (default: cpu).")
     parser.add_argument("--ml-fmax", type=float, default=0.05,

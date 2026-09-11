@@ -80,7 +80,7 @@ def resolve_device(device):
     return device
 
 
-def get_calculator(model="small", device="cpu", dtype="float64", dispersion=False):
+def get_calculator(model="medium", device="cpu", dtype="float64", dispersion=False):
     """Loads a MACE potential as an ASE calculator: the MACE-MP-0 foundation
     model (`model` = "small"/"medium"/"large", downloaded/cached on first
     use) by default, or a custom model file (`model` = a path to a `.model`

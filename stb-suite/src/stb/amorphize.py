@@ -244,8 +244,8 @@ vacuum-padded axis is detected.""",
                         help="Compressibility in eV/Ang^3 for the Berendsen barostat "
                              "(default: 4.57e-5, water's value -- a generic placeholder; "
                              "override with your material's real compressibility if known).")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: small).")
+    parser.add_argument("--model", choices=["small", "medium", "large"], default="medium",
+                        help="MACE-MP-0 model size: speed/accuracy tradeoff (default: medium).")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file, instead of a "
                              "MACE-MP-0 foundation size.")

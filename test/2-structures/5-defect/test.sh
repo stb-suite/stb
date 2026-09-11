@@ -165,14 +165,14 @@ check_exit_code $? 2
 check_contains "mutually exclusive" log_ml_rank_relax_mutex.txt
 
 if python3 -c "import mace" 2>/dev/null; then
-    echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe --ml-rank (site #1 ranked above #5)"
+    echo "Testing: vacancy, --all-inequivalent-sites --filter-species Fe --ml-rank (site #5 ranked above #1, medium model)"
     rm -f magrank_site*.fdf
     stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species Fe --ml-rank \
         -o magrank.fdf --no-intro > log_ml_rank.txt 2>&1
     check_exit_code $? 0
     check_contains "ML-ranked sites" log_ml_rank.txt
-    check_contains "1    #1     Fe       d" log_ml_rank.txt
-    check_contains "2    #5     Fe       a" log_ml_rank.txt
+    check_contains "1    #5     Fe       a" log_ml_rank.txt
+    check_contains "2    #1     Fe       d" log_ml_rank.txt
     check_success magrank_site1.fdf
     check_success magrank_site5.fdf
 else

@@ -351,12 +351,12 @@ def run_phonon_generator() -> None:
         "Catches an unrelaxed reference structure (a common cause of spurious "
         "imaginary modes) before spending SIESTA time on it (y/N): ").strip().lower()
     ml_prerelax = ml_choice in ('y', 'yes')
-    ml_model, ml_fmax = "small", 0.05
+    ml_model, ml_fmax = "medium", 0.05
     if ml_prerelax:
         ml_model = get_input(
-            "  MACE-MP-0 model size [small/medium/large, default: small]: ").strip().lower()
+            "  MACE-MP-0 model size [small/medium/large, default: medium]: ").strip().lower()
         if ml_model not in ("small", "medium", "large"):
-            ml_model = "small"
+            ml_model = "medium"
         ml_fmax = get_float_input(
             "  Force threshold above which a relax is offered, eV/Ang [default: 0.05]: ", 0.05)
 
@@ -782,7 +782,7 @@ def run_adsorb_setup() -> None:
     # Advanced settings (rarely-touched -- gated so the essential flow above
     # stays short; CLI defaults apply untouched when skipped).
     symprec, vacuum_gap, vacuum_box, output_dir, ml_device, ml_steps, ml_model, ml_custom_model = \
-        0.01, 10.0, 20.0, "adsorption_run", "cpu", 200, "small", None
+        0.01, 10.0, 20.0, "adsorption_run", "cpu", 200, "medium", None
     uses_mace = ml_prerelax or ml_rank
     advanced_items = "vacuum-gap, vacuum box, output directory"
     if not positions_file_path:
@@ -892,7 +892,7 @@ def run_adsorb_setup() -> None:
             args.extend(["--ml-steps", str(ml_steps)])
         if ml_custom_model:
             args.extend(["--ml-custom-model", ml_custom_model])
-        elif ml_model != "small":
+        elif ml_model != "medium":
             args.extend(["--ml-model", ml_model])
 
     summary_rows = [
@@ -1417,7 +1417,7 @@ def run_stackingfault_setup() -> None:
     # stays short; CLI defaults apply untouched when skipped).
     max_area, max_strain, match_id, vacuum, strain_mode, twist, output_dir, ml_device = \
         150.0, 0.05, 0, None, "top", 0.0, ".", "cpu"
-    ml_model, ml_custom_model = "small", None
+    ml_model, ml_custom_model = "medium", None
     uses_mace = ml_prerelax_layers or mode == 2 or ml_preview
     advanced_items = "ZSL match tolerance, vacuum, strain mode, twist, output directory"
     if uses_mace:
@@ -1700,9 +1700,9 @@ def run_2d_stacker() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3408,9 +3408,9 @@ def run_supercell_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3535,9 +3535,9 @@ def run_slab_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3657,9 +3657,9 @@ def run_nanotube_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3786,9 +3786,9 @@ def run_defect_generator() -> None:
                     custom_model = get_input("Custom model path: ").strip()
                 args.extend(["--custom-model", custom_model])
             else:
-                model = get_input("Model size, small/medium/large [default: small]: ").strip()
+                model = get_input("Model size, small/medium/large [default: medium]: ").strip()
                 if not model:
-                    model = "small"
+                    model = "medium"
                 args.extend(["--model", model])
 
             device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3880,9 +3880,9 @@ def run_sqs_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -3963,9 +3963,9 @@ def run_unitcell_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4071,9 +4071,9 @@ def run_crystalbuilder_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4298,9 +4298,9 @@ def run_crystalcast_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4476,9 +4476,9 @@ def run_passivate_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4542,9 +4542,9 @@ def run_molecule_generator() -> None:
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
         else:
-            model = get_input("Model size, small/medium/large [default: small]: ").strip()
+            model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
-                model = "small"
+                model = "medium"
             args.extend(["--model", model])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4606,9 +4606,9 @@ def run_mlrelax_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         if not model:
-            model = "small"
+            model = "medium"
         args.extend(["--model", model])
 
     device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -4712,9 +4712,9 @@ def run_amorphize_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         if not model:
-            model = "small"
+            model = "medium"
         args.extend(["--model", model])
 
     device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
@@ -6387,8 +6387,8 @@ def run_mlmd_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
     print(f"\n{color_text('Ensemble:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = NVT (Langevin thermostat, default)")
@@ -6474,8 +6474,8 @@ def run_mlphonons_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -6602,8 +6602,8 @@ def run_mlelastic_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -6697,8 +6697,8 @@ def run_mlsearch_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -6793,8 +6793,8 @@ def run_mlmelting_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -6945,8 +6945,8 @@ def run_mlneb_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -7017,8 +7017,8 @@ def run_mldiffusion_generator() -> None:
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -7172,8 +7172,8 @@ def run_mladsorb_generator() -> None:
         if skip_compare == 'n':
             args.append("--skip-foundation-comparison")
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -7257,8 +7257,8 @@ def run_mleos_generator() -> None:
         if skip_compare == 'n':
             args.append("--skip-foundation-comparison")
     else:
-        model = get_input("Model size, small/medium/large [default: small]: ").strip()
-        args.extend(["--model", model or "small"])
+        model = get_input("Model size, small/medium/large [default: medium]: ").strip()
+        args.extend(["--model", model or "medium"])
 
         device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"

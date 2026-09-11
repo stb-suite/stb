@@ -315,9 +315,9 @@ def main():
                               "relaxed energy -- a fast pre-screen for which site(s) to prioritize "
                               "for real DFT, not a replacement for stb-adsorbAnalysis. Needs the "
                               "optional 'ml' extra. Only valid with --all-sites.")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="medium",
                          help="MACE-MP-0 model size for --ml-prerelax/--ml-rank: speed/accuracy "
-                              "tradeoff (default: small). Ignored if --ml-custom-model is given.")
+                              "tradeoff (default: medium). Ignored if --ml-custom-model is given.")
     parser.add_argument("--ml-custom-model", default=None, metavar="PATH",
                          help="Use a custom MACE model file for --ml-prerelax/--ml-rank instead of "
                               "the MACE-MP-0 foundation potential -- e.g. one fine-tuned on your own "

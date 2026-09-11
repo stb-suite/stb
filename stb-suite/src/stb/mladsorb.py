@@ -305,8 +305,8 @@ def main():
     parser.add_argument("--adsorbate", required=True,
                         help="Adsorbate(s): an ASE G2 molecule name (e.g. 'H2O') or element "
                              "symbol, comma-separated for multiple (e.g. 'H,O').")
-    parser.add_argument("--model", choices=["small", "medium", "large"], default="small",
-                        help="MACE-MP-0 model size (default: small). Ignored if --custom-model is given.")
+    parser.add_argument("--model", choices=["small", "medium", "large"], default="medium",
+                        help="MACE-MP-0 model size (default: medium). Ignored if --custom-model is given.")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")

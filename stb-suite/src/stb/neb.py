@@ -569,7 +569,7 @@ def main():
                               "  3 = 100%% real-DFT NEB from a plain interpolated path, no MACE "
                               "at all -> cycle_00/image_NN/ + a printed loop snippet (same "
                               "stb-nebCycle tool as mode 2, more cycles expected).")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="medium")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--ml-fmax", type=float, default=0.05)
     parser.add_argument("--ml-k", type=float, default=0.1,

@@ -13,13 +13,18 @@ import re
 import sys
 import argparse
 import numpy as np
-from pymatgen.core import Molecule
-from pymatgen.analysis.adsorption import AdsorbateSiteFinder
+import ase.io as ase_io
+from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.siesta_log import get_free_energy, get_outcell, report_quality_diagnostics
 from stb.core.deps import require_mace
+from stb.core.adsorption_sites import (
+    ADSORBATE_LABEL_SUFFIX, CONFIG_EXTRA_FILE, FIXED_CELL_BLOCK, DIPOLE_CORRECTION_BLOCK,
+    SPIN_POLARIZED_BLOCK, VDW_CORRECTION_BLOCK, deduplicate_orientations,
+)
+from stb.core.bsse import strip_config_extra_include
 
 REPORT_FILE = "oer_stage2.txt"
 _OOH_OO_BOND_ANG = 1.45   # illustrative peroxo-like O-O starting bond length -- NOT pinned to a
@@ -28,32 +33,43 @@ _OOH_OO_BOND_ANG = 1.45   # illustrative peroxo-like O-O starting bond length --
 _OOH_OH_BOND_ANG = 0.970  # experimental gas-phase OH bond length, reused for the new terminal H.
 _OOH_BEND_DEG = 100.0     # H2O2-like O-O-H angle -- illustrative starting geometry, not fitted.
 
-_DIPOLE_CORR_RE = re.compile(r'Slab\.DipoleCorrection\s+\S+', re.IGNORECASE)
+# config_extra.fdf content for the O*/OOH* folders this module writes: these
+# are independent SITE RELAXATIONS, same physical situation as stb-oer's own Stage 1 sites
+# (a fixed cell, forced Slab.DipoleCorrection/Spin polarized/DFTD3 -- see
+# oer.py's write_site_folder docstring for why each is mandatory), not
+# single-point references (contrast HER's Stage 2, her_refs.py, which
+# writes mostly single-point folders and therefore needs its own
+# SINGLE_POINT_BLOCK-bearing constant instead).
+_CONFIG_EXTRA = FIXED_CELL_BLOCK + DIPOLE_CORRECTION_BLOCK + SPIN_POLARIZED_BLOCK + VDW_CORRECTION_BLOCK
+
 _RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
 _MD_STEPS_RE = re.compile(r'MD\.Steps\s+\d+', re.IGNORECASE)
 _LABEL_RE = re.compile(r'SystemLabel\s+\S+', re.IGNORECASE)
 _RELAXED_COORDS_RE = re.compile(r'outcoor:\s*Relaxed atomic coordinates\s*\(fractional\)', re.IGNORECASE)
 
 
-def force_dipole_correction(calc_text):
-    """Duplicated from oer.py (self-contained stage -- each stage in this
-    suite re-reads persisted files/duplicates helpers rather than
-    importing a sibling stage's module, same policy her_refs.py/
-    her_analysis.py already follow for HER). Structurally required: ANY
-    one-sided adsorbate (OH, bare O, or OOH alike) breaks the clean
-    slab's inversion/mirror symmetry along the surface normal.
+def _bare_ase_atoms(fdf_structure):
+    """Converts fdf_structure (which may carry a Stage-1/2 fragment label
+    like 'O_ads', or a stack of them) to a bare-element ase.Atoms for
+    extended-XYZ export -- OVITO/VMD need real chemical symbols, and
+    structure_io.to_pymatgen (which AseAtomsAdaptor.get_atoms would need)
+    cannot parse a fragment label as an element. Used for O*/OOH*'s
+    single-frame trajectories, where no bare-label pymatgen
+    Structure exists at any point (build_o_structure/build_ooh_structure
+    build directly on relaxed_oh's own already-fragment-labeled atoms).
     """
-    new_text, count = _DIPOLE_CORR_RE.subn('Slab.DipoleCorrection   T', calc_text)
-    if count == 0:
-        new_text += "\nSlab.DipoleCorrection   T\n"
-    return new_text
+    from ase import Atoms
+    symbols = [structure_io.real_element(sym, fdf_structure.species_meta)
+               for sym, _pos in fdf_structure.atoms]
+    frac = np.array([pos for _, pos in fdf_structure.atoms])
+    cart = frac @ fdf_structure.lattice if fdf_structure.coord_format == "fractional" else frac
+    return Atoms(symbols=symbols, positions=cart, cell=fdf_structure.lattice, pbc=True)
 
 
 def force_relaxation(calc_text, max_steps=200):
     """Duplicated from her_refs.py::force_relaxation. Forces
-    'MD.TypeOfRun CG' + 'MD.Steps <max_steps>' -- every geometry
-    this module writes (derived O*/OOH* starting guesses, or fresh
-    --strategy search candidates) MUST reach its own relaxed minimum
+    'MD.TypeOfRun CG' + 'MD.Steps <max_steps>' -- every O*/OOH* starting
+    guess this module writes MUST reach its own relaxed minimum
     before any BSSE/ZPE/final-energy calculation trusts it; explicit is
     safer than silently inheriting whatever (or nothing) a borrowed
     calc.fdf template happens to have. Uses MD.Steps, not the older
@@ -211,6 +227,14 @@ def build_ooh_structure(relaxed_oh, o_index, h_index,
     (unchanged), O2 (new), H (new) appended last, preserving the "slab
     first, adsorbate last" invariant later BSSE/ZPE code in stb-oerRefs
     assumes.
+
+    `relaxed_oh.atoms[o_index]`'s own label (e.g. 'O_ads', a Stage-1
+    fragment label -- see oer.py's write_site_folder) is reused verbatim
+    for O1; the two brand-new atoms (O2, H-new) are given that SAME
+    '<element>_ads' fragment suffix (not a bare 'O'/'H') so every
+    adsorbate atom in the returned structure is consistently
+    fragment-labeled, matching label_fragments' own convention, with a
+    fresh species id/Z registered in species_meta for each.
     """
     o_symbol, o_frac = relaxed_oh.atoms[o_index]
     h_symbol, h_frac = relaxed_oh.atoms[h_index]
@@ -230,168 +254,355 @@ def build_ooh_structure(relaxed_oh, o_index, h_index,
     o2_frac = o2_cart @ inv_lattice
     hnew_frac = hnew_cart @ inv_lattice
 
-    new_atoms = [a for i, a in enumerate(relaxed_oh.atoms) if i != h_index]
-    new_atoms.append(("O", o2_frac))
-    new_atoms.append(("H", hnew_frac))
+    species_meta = dict(relaxed_oh.species_meta)
 
+    def _new_ads_label(element_symbol, z):
+        label = f"{element_symbol}{ADSORBATE_LABEL_SUFFIX}"
+        if label not in species_meta:
+            used_ids = {str(info['id']) for info in species_meta.values()}
+            next_id = 1
+            while str(next_id) in used_ids:
+                next_id += 1
+            species_meta[label] = {'id': str(next_id), 'Z': z}
+        return label
+
+    o2_label = _new_ads_label("O", 8)
+    hnew_label = _new_ads_label("H", 1)
+
+    new_atoms = [a for i, a in enumerate(relaxed_oh.atoms) if i != h_index]
+    new_atoms.append((o2_label, o2_frac))
+    new_atoms.append((hnew_label, hnew_frac))
+
+    species = list(dict.fromkeys(sym for sym, _ in new_atoms))
     return structure_io.FdfStructure(
         lattice=lattice, lattice_constant=relaxed_oh.lattice_constant,
-        species=list(relaxed_oh.species), species_meta=dict(relaxed_oh.species_meta),
+        species=species, species_meta=species_meta,
         atoms=new_atoms, coord_format=relaxed_oh.coord_format, raw_lines=[],
     )
 
 
-def build_ooh_molecule(oo_bond_ang=_OOH_OO_BOND_ANG, oh_bond_ang=_OOH_OH_BOND_ANG,
-                        bend_deg=_OOH_BEND_DEG):
-    """Standalone OOH group for --ooh-strategy search's fresh site-finding
-    (as opposed to build_ooh_structure's derive-from-OH* path): O1
-    anchored at the local origin (bonds to the surface, same anchor
-    convention as oer.py's oh_molecule -- AdsorbateSiteFinder.add_adsorbate
-    anchors the most-negative-local-z atom), O2 along local +z at
-    `oo_bond_ang`, H bent off O2 by `bend_deg` -- same illustrative
-    starting geometry as build_ooh_structure's, just built fresh instead
-    of continuing an existing OH* orientation.
-    """
-    o1 = np.array([0.0, 0.0, 0.0])
-    axis1 = np.array([0.0, 0.0, 1.0])
-    o2 = o1 + axis1 * oo_bond_ang
-    rot_axis = _perpendicular_axis(axis1)
-    bend_dir = _rodrigues_rotate(-axis1, rot_axis, np.radians(bend_deg))
-    hnew = o2 + bend_dir * oh_bond_ang
-    return Molecule(["O", "O", "H"], [o1, o2, hnew])
-
-
 def write_relax_folder(out_dir, fdf_structure, calc_text, pp_path):
-    """Writes structure.fdf + calc.fdf + copied pseudos for one
-    relaxation folder (derived single candidate, or one --strategy
-    search candidate). Same shape as oer.py's write_site_folder /
-    her_refs.py's write_folder, duplicated locally (self-contained
-    stage).
+    """Writes structure.fdf + calc.fdf + config_extra.fdf + copied
+    pseudos for one derived-intermediate relaxation folder (O* or OOH*,
+    built from the winning OH* site). Same config_extra.fdf sidecar
+    convention as oer.py's write_site_folder / her_refs.py's write_folder
+    (4.8/4.11/4.12/4.13 model), duplicated locally (self-contained
+    stage): `_CONFIG_EXTRA` (fixed cell + mandatory Slab.DipoleCorrection/
+    Spin polarized/DFTD3, same combination as a Stage-1 site -- these ARE
+    independent site relaxations) is written to config_extra.fdf, and
+    `%include config_extra.fdf` is prepended to the UNTOUCHED calc_text
+    (structure_io.prepend_include) rather than editing directives into it
+    in place. Pseudopotential copying resolves the real element behind
+    any Stage-1 fragment label ('<real>_slab'/'<real>_ads') via
+    structure_io.real_element (Z-based, robust to any suffix), with
+    dest_label preserving the fragment-suffixed filename SIESTA's own
+    ChemicalSpeciesLabel block expects.
     """
     os.makedirs(out_dir, exist_ok=True)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
+    with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
+        f.write(_CONFIG_EXTRA)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
-        f.write(calc_text)
-    symbols = sorted({sym for sym, _ in fdf_structure.atoms})
-    for sym in symbols:
-        copy_pseudo(pp_path, sym, out_dir)
+        f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
+    present_labels = sorted({sym for sym, _ in fdf_structure.atoms})
+    for label in present_labels:
+        real_symbol = structure_io.real_element(label, fdf_structure.species_meta)
+        copy_pseudo(pp_path, real_symbol, out_dir, dest_label=label)
 
 
-def ml_prerelax_adsorbate(fdf_structure, n_substrate, model, device, fmax):
+def _mace_relax_adsorbate_scored(fdf_structure, n_substrate, model, device, fmax):
     """Positions-only MACE-MP-0 relax of ONLY the adsorbate atoms (every
     index >= n_substrate), with the substrate held fixed via ase's
     FixAtoms -- same pattern as stb-adsorb's own --ml-rank
     (mace_relax.get_calculator + relax + FixAtoms(indices=range(n_substrate))),
     just operating on this module's FdfStructure representation instead
-    of a pymatgen Structure directly. A fast classical-potential
-    pre-screen to improve O*/OOH*'s starting geometry -- especially
-    --strategy derived's hand-built guess (build_ooh_structure's O-O bond
-    length/bend angle are explicitly illustrative, not literature-fitted)
-    -- before the real, much more expensive SIESTA CG relaxation this
-    module always still writes a folder for. NOT a substitute for that
-    real relaxation, just a better-informed starting point for it.
-    Callers must call core.deps.require_mace() themselves first (see
-    main()), matching every other MACE consumer in this suite.
+    of a pymatgen Structure directly. Returns (energy_eV, relaxed_fdf_structure)
+    -- the energy is what lets sample_ooh_orientations rank candidates;
+    ml_prerelax_adsorbate (below) is a thin wrapper for callers that only
+    want the relaxed geometry, discarding the energy.
+
+    `fdf_structure` may carry Stage-1 fragment labels ('<real>_slab'/
+    '<real>_ads') -- structure_io.to_pymatgen/AseAtomsAdaptor cannot parse
+    those as real elements (pymatgen's Structure constructor tries to
+    resolve each species string as an actual element/species), so the
+    MACE relax runs on a BARE-element copy instead, and only the relaxed
+    POSITIONS (same atom count/order -- FixAtoms never adds, removes, or
+    reorders atoms) are copied back onto the ORIGINAL fragment-labeled
+    species/species_meta afterward. No fragment-identity information is
+    lost: only Cartesian positions change during this relax. Callers must
+    call core.deps.require_mace() themselves first (see main()), matching
+    every other MACE consumer in this suite.
     """
     from ase.constraints import FixAtoms
-    from pymatgen.io.ase import AseAtomsAdaptor
     from stb.core import mace_relax
 
-    pmg_structure = structure_io.to_pymatgen(fdf_structure)
+    bare_species_meta = {}
+    for orig_sym, _pos in fdf_structure.atoms:
+        real_sym = structure_io.real_element(orig_sym, fdf_structure.species_meta)
+        if real_sym not in bare_species_meta:
+            bare_species_meta[real_sym] = {'id': str(len(bare_species_meta) + 1),
+                                            'Z': abs(fdf_structure.species_meta[orig_sym]['Z'])}
+    bare_atoms = [(structure_io.real_element(sym, fdf_structure.species_meta), pos)
+                  for sym, pos in fdf_structure.atoms]
+    bare_structure = structure_io.FdfStructure(
+        lattice=fdf_structure.lattice, lattice_constant=fdf_structure.lattice_constant,
+        species=list(dict.fromkeys(sym for sym, _ in bare_atoms)), species_meta=bare_species_meta,
+        atoms=bare_atoms, coord_format=fdf_structure.coord_format, raw_lines=[],
+    )
+
+    pmg_structure = structure_io.to_pymatgen(bare_structure)
     ase_atoms = AseAtomsAdaptor.get_atoms(pmg_structure)
     ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
-    calc = mace_relax.get_calculator(model=model, device=device)
+    # dispersion=True: level-of-theory-matching with the real SIESTA
+    # relaxation this is a starting point for -- config_extra.fdf forces
+    # DFTD3 unconditionally on every folder this module writes (_CONFIG_EXTRA),
+    # so the MACE pre-relax should include dispersion too, same rationale as
+    # stb-adsorb's own --ml-rank/--ml-prerelax calculators.
+    calc = mace_relax.get_calculator(model=model, device=device, dispersion=True)
     mace_relax.relax(ase_atoms, calc, fmax=fmax, max_steps=200)
-    relaxed_pmg = AseAtomsAdaptor.get_structure(ase_atoms)
-    species_meta = structure_io.species_dict(fdf_structure)
-    return structure_io.from_pymatgen(relaxed_pmg, species_meta=species_meta, coord_format="fractional")
+    energy = ase_atoms.get_potential_energy()
+    ase_atoms.wrap()
+    relaxed_frac = AseAtomsAdaptor.get_structure(ase_atoms).frac_coords
+
+    new_atoms = [(orig_sym, relaxed_frac[i]) for i, (orig_sym, _pos) in enumerate(fdf_structure.atoms)]
+    relaxed_structure = structure_io.FdfStructure(
+        lattice=fdf_structure.lattice, lattice_constant=fdf_structure.lattice_constant,
+        species=fdf_structure.species, species_meta=fdf_structure.species_meta,
+        atoms=new_atoms, coord_format=fdf_structure.coord_format, raw_lines=[],
+    )
+    return energy, relaxed_structure
 
 
-def search_intermediate_sites(pmg_clean, clean_species_meta, ads_molecule, site_type, height,
-                               symprec, label_prefix, out_root, base_calc_text, pp_path,
-                               ml_prerelax, ml_model, ml_device, ml_fmax, f_out):
-    """--strategy search: an independent AdsorbateSiteFinder sweep for
-    `ads_molecule` on the CLEAN slab -- same site-finding machinery as
-    Stage 1's own OH* search (oer.py's main()), duplicated here rather
-    than imported (self-contained stage, see module docstring). Writes
-    one CG-relaxation folder per symmetrically distinct site under
-    `out_root/<label_prefix>_candidates/site_N_type/`. If `ml_prerelax`,
-    every candidate's adsorbate geometry is MACE-MP-0 pre-relaxed
-    (substrate fixed) before being written out, same idea as
-    ml_prerelax_adsorbate but applied per-candidate here since each one
-    starts from AdsorbateSiteFinder's own fixed-height, non-relaxed
-    placement. Returns the number of folders written.
+def ml_prerelax_adsorbate(fdf_structure, n_substrate, model, device, fmax):
+    """Thin wrapper around _mace_relax_adsorbate_scored for the single-
+    geometry (no orientation sampling) pre-relax path -- a fast classical
+    -potential pre-screen to improve O*/OOH*'s starting geometry -- especially
+    OOH*'s hand-built guess (build_ooh_structure's O-O bond length/bend
+    angle are explicitly illustrative, not literature-fitted) -- before the
+    real, much more expensive SIESTA CG relaxation this module always still
+    writes a folder for. NOT a substitute for that real relaxation, just a
+    better-informed starting point for it. Discards the MACE energy (only
+    sample_ooh_orientations' ranking needs it).
     """
-    finder = AdsorbateSiteFinder(pmg_clean)
-    site_types = ["ontop", "bridge", "hollow"] if site_type == "all" else [site_type]
-    found = finder.find_adsorption_sites(distance=height, symm_reduce=symprec, positions=site_types)
-    candidates = [(st, coord) for st in site_types for coord in found[st]]
-    if not candidates:
+    _energy, relaxed_structure = _mace_relax_adsorbate_scored(fdf_structure, n_substrate, model, device, fmax)
+    return relaxed_structure
+
+
+_OOH_ORIENTATION_MAX_POLAR_DEG = 70.0  # illustrative cap, not literature-pinned (see
+                                        # _sample_ooh_directions' docstring for why it can't be 180)
+
+
+def _sample_ooh_directions(n_polar, n_azimuthal, max_polar_deg=_OOH_ORIENTATION_MAX_POLAR_DEG):
+    """Systematically samples n_polar x n_azimuthal unit directions for the
+    O1->O2 bond, restricted to the HEMISPHERE pointing away from the
+    surface (local +z, the module's own vacuum-normal convention) -- polar
+    angle from 0 (straight up, build_ooh_structure's own default) to
+    `max_polar_deg`, never all the way to 180 deg.
+
+    core.adsorption_sites.generate_systematic_orientations' FULL-sphere
+    Fibonacci-lattice sampling is the wrong tool here: it's built for
+    AdsorbateSiteFinder's TOUCHDOWN convention, where a translation step
+    afterward guarantees the molecule's own most-negative-z atom lands
+    exactly AT the surface regardless of which way the rest of it
+    initially points. build_ooh_structure_oriented has no such
+    translation -- a sampled direction is used DIRECTLY as an offset from
+    O1's own already-fixed real position, so a downward-pointing sample
+    (verified live: it drove O2 to within 0.32 Ang of a substrate atom,
+    producing a ~-134800 eV MACE 'energy' from the resulting force
+    explosion) would send O2 straight into the substrate. Restricting to
+    this hemisphere is the fix.
+
+    n_polar=1 (default) returns [(0,0,1)] alone (straight up), matching
+    build_ooh_structure's own unsampled default exactly.
+    """
+    n_polar = max(1, n_polar)
+    n_azimuthal = max(1, n_azimuthal)
+    polar_degs = [0.0] if n_polar == 1 else np.linspace(0.0, max_polar_deg, n_polar)
+    az_degs = [0.0] if n_azimuthal == 1 else np.linspace(0.0, 360.0, n_azimuthal, endpoint=False)
+    directions = []
+    for polar_deg in polar_degs:
+        polar = np.radians(polar_deg)
+        for az_deg in az_degs:
+            az = np.radians(az_deg)
+            directions.append(np.array([
+                np.sin(polar) * np.cos(az),
+                np.sin(polar) * np.sin(az),
+                np.cos(polar),
+            ]))
+    return directions
+
+
+def build_ooh_structure_oriented(relaxed_oh, o_index, h_index, direction,
+                                  oo_bond_ang=_OOH_OO_BOND_ANG, oh_bond_ang=_OOH_OH_BOND_ANG,
+                                  bend_deg=_OOH_BEND_DEG):
+    """Like build_ooh_structure, but O2 continues from the REAL O1 (
+    relaxed_oh.atoms[o_index]'s own position -- the winning OH* site's own
+    relaxed oxygen, which never moves) along `direction` (a unit vector,
+    see _sample_ooh_directions) instead of continuing OH*'s own O-H bond
+    direction; H is then bent off that SAME axis by `bend_deg`, exactly
+    the Rodrigues construction build_ooh_structure itself uses.
+    """
+    o_symbol, o_frac = relaxed_oh.atoms[o_index]
+    h_symbol, _h_frac = relaxed_oh.atoms[h_index]
+    lattice = relaxed_oh.lattice
+    inv_lattice = np.linalg.inv(lattice)
+    o1_cart = o_frac @ lattice
+
+    axis1 = direction / np.linalg.norm(direction)
+    o2_cart = o1_cart + axis1 * oo_bond_ang
+    rot_axis = _perpendicular_axis(axis1)
+    bend_dir = _rodrigues_rotate(-axis1, rot_axis, np.radians(bend_deg))
+    hnew_cart = o2_cart + bend_dir * oh_bond_ang
+
+    o2_frac = o2_cart @ inv_lattice
+    hnew_frac = hnew_cart @ inv_lattice
+
+    species_meta = dict(relaxed_oh.species_meta)
+
+    def _new_ads_label(element_symbol, z):
+        label = f"{element_symbol}{ADSORBATE_LABEL_SUFFIX}"
+        if label not in species_meta:
+            used_ids = {str(info['id']) for info in species_meta.values()}
+            next_id = 1
+            while str(next_id) in used_ids:
+                next_id += 1
+            species_meta[label] = {'id': str(next_id), 'Z': z}
+        return label
+
+    o2_label = _new_ads_label("O", 8)
+    hnew_label = _new_ads_label("H", 1)
+
+    new_atoms = [a for i, a in enumerate(relaxed_oh.atoms) if i != h_index]
+    new_atoms.append((o2_label, o2_frac))
+    new_atoms.append((hnew_label, hnew_frac))
+
+    species = list(dict.fromkeys(sym for sym, _ in new_atoms))
+    return structure_io.FdfStructure(
+        lattice=lattice, lattice_constant=relaxed_oh.lattice_constant,
+        species=species, species_meta=species_meta,
+        atoms=new_atoms, coord_format=relaxed_oh.coord_format, raw_lines=[],
+    )
+
+
+def sample_ooh_orientations(relaxed_oh, o_index, h_index, n_orientations_polar, n_orientations_azimuthal,
+                             oo_bond_ang, oh_bond_ang, bend_deg, ml_rank, ml_model, ml_device, ml_fmax,
+                             orientation_top_k, orientation_rmsd_tol, f_out):
+    """Samples n_polar x n_azimuthal OOH* starting-orientation candidates,
+    all anchored at the SAME O1 (the winning OH* site's own relaxed
+    oxygen -- see build_ooh_structure_oriented's docstring; this is
+    orientation sampling WITHIN one fixed site, never the old, now-removed
+    per-intermediate SITE search). Without `ml_rank`, every sampled
+    orientation is returned unranked (energy=None). With `ml_rank`, each is
+    MACE-MP-0 relaxed (substrate fixed, O1/O2/H free -- same convention as
+    ml_prerelax_adsorbate) and scored, then ranked, deduplicated
+    (`orientation_rmsd_tol`, RMSD over the O1/O2/H adsorbate atoms only),
+    and optionally trimmed to the `orientation_top_k` best.
+
+    Returns a list of (fdf_structure, energy_or_None) for the kept
+    candidates, best-first when ml_rank is True.
+    """
+    directions = _sample_ooh_directions(n_orientations_polar, n_orientations_azimuthal)
+
+    if not ml_rank:
         print_dual(color_text(
-            f"[ERROR] No {'/'.join(site_types)} sites found for the {label_prefix} search.", 'red'), f_out)
-        sys.exit(1)
+            f"  [NOTE] Orientation sampling without --ml-prerelax: all {len(directions)} OOH* "
+            "orientation(s) at the winning OH* site are written as their own relaxation folder "
+            "below, unscreened.", 'yellow'), f_out)
+        return [(build_ooh_structure_oriented(relaxed_oh, o_index, h_index, d,
+                                               oo_bond_ang, oh_bond_ang, bend_deg), None)
+                for d in directions]
 
-    candidates_root = os.path.join(out_root, f"{label_prefix}_candidates")
-    os.makedirs(candidates_root, exist_ok=True)
-    n_substrate = len(pmg_clean)
+    n_substrate = o_index  # every index before O1 is substrate (O1/H were OH*'s own adsorbate atoms)
+    scored = []  # (energy, ase_atoms) -- same shape deduplicate_orientations expects
+    structures = []  # fdf_structure per candidate, same order as `scored`, pre-relax (unused if kept)
+    for d in directions:
+        candidate = build_ooh_structure_oriented(relaxed_oh, o_index, h_index, d,
+                                                  oo_bond_ang, oh_bond_ang, bend_deg)
+        energy, relaxed_structure = _mace_relax_adsorbate_scored(
+            candidate, n_substrate, ml_model, ml_device, ml_fmax)
+        ase_atoms = AseAtomsAdaptor.get_atoms(structure_io.to_pymatgen(
+            _bare_copy_for_ase(relaxed_structure)))
+        scored.append((energy, ase_atoms))
+        structures.append(relaxed_structure)
 
-    mace_calc = None
-    if ml_prerelax:
-        from stb.core import mace_relax
-        from ase.constraints import FixAtoms
-        from pymatgen.io.ase import AseAtomsAdaptor
-        mace_calc = mace_relax.get_calculator(model=ml_model, device=ml_device)
-        print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing each {label_prefix.upper()} "
-                    "candidate's adsorbate atoms with MACE-MP-0 (substrate fixed) before writing "
-                    "it out ...", f_out)
+    order = sorted(range(len(scored)), key=lambda i: scored[i][0])
+    scored_sorted = [scored[i] for i in order]
+    structures_sorted = [structures[i] for i in order]
+    e_min = scored_sorted[0][0]
 
-    n_written = 0
-    for i, (st, coord) in enumerate(candidates, start=1):
-        ads_struct = finder.add_adsorbate(ads_molecule, coord)
-        if mace_calc is not None:
-            ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
-            ase_atoms.set_constraint(FixAtoms(indices=list(range(n_substrate))))
-            mace_relax.relax(ase_atoms, mace_calc, fmax=ml_fmax, max_steps=200)
-            ads_struct = AseAtomsAdaptor.get_structure(ase_atoms)
-        label = f"site_{i}_{st}"
-        site_dir = os.path.join(candidates_root, label)
-        fdf_structure = structure_io.from_pymatgen(
-            ads_struct, species_meta=clean_species_meta, coord_format="fractional")
-        calc_text = force_system_label(
-            force_relaxation(force_dipole_correction(base_calc_text)), f"oer_{label_prefix}_{label}")
-        write_relax_folder(site_dir, fdf_structure, calc_text, pp_path)
-        print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
-        n_written += 1
-    return n_written
+    kept = deduplicate_orientations(scored_sorted, n_substrate, rmsd_tol=orientation_rmsd_tol)
+    if orientation_top_k is not None:
+        kept = kept[:orientation_top_k]
+
+    for rank, i in enumerate(kept, start=1):
+        energy = scored_sorted[i][0]
+        print_dual(f"    orientation {rank}/{len(kept)}: E_MACE = {energy:.4f} eV, "
+                    f"dE = {energy - e_min:+.4f} eV vs. best", f_out)
+    print_dual(f"  {len(directions)} OOH* orientation(s) sampled at the winning OH* site -> "
+                f"{len(kept)} unique kept"
+                + (f" (--orientation-top-k {orientation_top_k})" if orientation_top_k is not None else ""),
+                f_out)
+    return [(structures_sorted[i], scored_sorted[i][0]) for i in kept]
+
+
+def _bare_copy_for_ase(fdf_structure):
+    """Bare-element copy of fdf_structure (fragment labels resolved to
+    real elements) suitable for structure_io.to_pymatgen/AseAtomsAdaptor,
+    used only to build an ase.Atoms for deduplicate_orientations' RMSD
+    check (which needs .get_positions(), not fragment identity).
+    """
+    bare_species_meta = {}
+    for orig_sym, _pos in fdf_structure.atoms:
+        real_sym = structure_io.real_element(orig_sym, fdf_structure.species_meta)
+        if real_sym not in bare_species_meta:
+            bare_species_meta[real_sym] = {'id': str(len(bare_species_meta) + 1),
+                                            'Z': abs(fdf_structure.species_meta[orig_sym]['Z'])}
+    bare_atoms = [(structure_io.real_element(sym, fdf_structure.species_meta), pos)
+                  for sym, pos in fdf_structure.atoms]
+    return structure_io.FdfStructure(
+        lattice=fdf_structure.lattice, lattice_constant=fdf_structure.lattice_constant,
+        species=list(dict.fromkeys(sym for sym, _ in bare_atoms)), species_meta=bare_species_meta,
+        atoms=bare_atoms, coord_format=fdf_structure.coord_format, raw_lines=[],
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description=f"""{color_text("Stage 2 of 4: derives (or independently searches for) the O* and "
-        "OOH* intermediates from the winning OH* site, and writes their own CG-relaxation "
-        "folder(s).", 'bold')}
-Picks the lowest-FreeEng OH* site from Stage 1's 'sites/site_*/', reads its RELAXED geometry, then
-for O* and OOH* independently (--o-strategy/--ooh-strategy):
+        description=f"""{color_text("Stage 2 of 4: derives the O* and OOH* intermediates from the "
+        "winning OH* site, and writes their own CG-relaxation folder.", 'bold')}
+Picks the lowest-FreeEng OH* site from Stage 1's 'sites/site_*/', reads its RELAXED geometry, and
+builds starting geometries for O* and OOH* from it (O* = OH* minus H, always ONE folder -- a bare
+O atom has no orientation to sample; OOH* = OH* plus a second O-H group in a chemically plausible
+but illustrative starting orientation -- see build_ooh_structure --help/docstring), writing
+'intermediates/o_star/' and 'intermediates/ooh_star/'. With --ooh-n-orientations-polar/-azimuthal
+(> 1), OOH*'s new O-H group is instead sampled over several orientations AT THAT SAME SITE (O1,
+the site's own relaxed oxygen, never moves -- see --help), optionally MACE-MP-0 ranked
+(--ml-prerelax) down to the --orientation-top-k best, writing 'intermediates/ooh_star_orientN/'
+folders instead of a single one.
 
-  - 'derived' (default): builds ONE starting geometry from the winning OH* site (O* = OH* minus
-    H; OOH* = OH* plus a second O-H group in a chemically plausible but illustrative starting
-    orientation -- see build_ooh_structure --help/docstring) and writes ONE CG-relaxation folder
-    ('intermediates/o_star/', 'intermediates/ooh_star/'). Cheap: no extra site search.
-
-  - 'search': an independent AdsorbateSiteFinder sweep for that one adsorbate on the CLEAN slab
-    (same machinery as Stage 1's own OH* search), writing MULTIPLE CG-relaxation candidate
-    folders ('intermediates/o_candidates/site_*/', 'intermediates/ooh_candidates/site_*/') --
-    stb-oerRefs (Stage 3) picks the winner once you've relaxed them all. More rigorous (the true
-    global-minimum O*/OOH* site need not be the same as OH*'s), at the cost of N extra SIESTA
-    relaxations per intermediate searched this way.
+[IMPORTANT] O*/OOH* are ALWAYS derived from the SAME winning OH* site, never independently
+site-searched: the computational hydrogen electrode (CHE) descriptor's overpotential/PDS is only
+physically meaningful as a single active site progressing through OH*->O*->OOH* (Rossmeisl et al.
+2007; Man et al. 2011) -- the well-known ~3.2 eV universal scaling relation between
+Delta-G(OOH*) and Delta-G(OH*) is itself derived assuming exactly this shared M-O bond across all
+three intermediates. Deriving each intermediate from a DIFFERENT site (an earlier, now-removed
+--o-strategy/--ooh-strategy search mode) mixes three different local bonding environments into
+one nominal 'pathway', silently breaking that assumption and producing an eta/PDS that does not
+correspond to any single physically realizable active site.
 
 Every folder written here MUST be relaxed via SIESTA (MD.TypeOfRun CG is forced on) before
-running stb-oerRefs -- unlike a single-point evaluation, O*/OOH*'s starting geometry (especially
-in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
+running stb-oerRefs -- O*/OOH*'s starting geometry is only a reasonable guess, not already at
+equilibrium. Every folder gets its own config_extra.fdf sidecar (fixed cell,
+Slab.DipoleCorrection, Spin polarized, DFTD3, all mandatory -- same combination Stage 1's own
+site folders get, %include'd on top of your untouched --calc template, never edited in place).
+Each derived geometry is also saved as a 1-frame extended-XYZ trajectory, viewable in OVITO/VMD.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --directory oer_study\n"
-               "  %(prog)s --directory oer_study --ooh-strategy search --ooh-site-type ontop\n"
+               "  %(prog)s --directory oer_study --ml-prerelax\n"
+               "  %(prog)s --directory oer_study --ooh-n-orientations-polar 4 "
+               "--ooh-n-orientations-azimuthal 4 --ml-prerelax --ml-device cuda "
+               "--orientation-top-k 2\n"
     )
 
     parser.add_argument("-dir", "--directory", type=str, default="oer_study",
@@ -400,10 +611,6 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
                          help="SIESTA output filename inside each site folder (default: calc.out).")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
                          help="Pseudopotentials source: a bundled bank or a folder path.")
-    parser.add_argument("--o-strategy", choices=["derived", "search"], default="derived",
-                         help="How to obtain O*'s starting geometry (default: derived).")
-    parser.add_argument("--ooh-strategy", choices=["derived", "search"], default="derived",
-                         help="How to obtain OOH*'s starting geometry (default: derived).")
     parser.add_argument("--oo-bond-length", type=float, default=_OOH_OO_BOND_ANG,
                          help="Illustrative starting O-O bond length for OOH*, in Ang (default: "
                               f"{_OOH_OO_BOND_ANG}). Refined by CG relaxation.")
@@ -413,29 +620,42 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
     parser.add_argument("--ooh-bend-deg", type=float, default=_OOH_BEND_DEG,
                          help="Illustrative starting O-O-H bend angle for OOH*, in degrees "
                               f"(default: {_OOH_BEND_DEG}, H2O2-like).")
-    parser.add_argument("--o-site-type", choices=["ontop", "bridge", "hollow", "all"], default="all",
-                         help="--o-strategy search only: which site type(s) to search (default: all).")
-    parser.add_argument("--o-height", type=float, default=1.5,
-                         help="--o-strategy search only: O adsorption height in Ang (default: 1.5).")
-    parser.add_argument("--o-symprec", type=float, default=0.01,
-                         help="--o-strategy search only: symmetry-reduction tolerance (default: 0.01).")
-    parser.add_argument("--ooh-site-type", choices=["ontop", "bridge", "hollow", "all"], default="all",
-                         help="--ooh-strategy search only: which site type(s) to search (default: all).")
-    parser.add_argument("--ooh-height", type=float, default=2.0,
-                         help="--ooh-strategy search only: OOH adsorption height in Ang (default: 2.0).")
-    parser.add_argument("--ooh-symprec", type=float, default=0.01,
-                         help="--ooh-strategy search only: symmetry-reduction tolerance (default: 0.01).")
+    parser.add_argument("--ooh-n-orientations-polar", type=int, default=1,
+                         help="Systematically sample this many initial OOH* orientations AT THE "
+                              "WINNING OH* SITE before relaxing (default: 1, the single-"
+                              "orientation behavior). O1 (the site's own relaxed oxygen) NEVER "
+                              "moves -- only where O2/H point FROM it varies (same Fibonacci-"
+                              "sphere sampling as stb-oer's own --n-orientations-polar, applied "
+                              "to the local O1-O2-H template). No equivalent flag exists for O* "
+                              "(a bare O atom has no orientation to sample). Combined with "
+                              "--ooh-n-orientations-azimuthal below (total = polar x azimuthal). "
+                              "Without --ml-prerelax, EVERY sampled orientation is written as its "
+                              "own 'ooh_star_orientN/' folder directly. With --ml-prerelax, each "
+                              "is MACE-MP-0 relaxed and ranked first, and only the unique/"
+                              "--orientation-top-k survivors become relaxation folders.")
+    parser.add_argument("--ooh-n-orientations-azimuthal", type=int, default=1,
+                         help="Evenly spaced in-plane rotations sampled per polar direction (see "
+                              "--ooh-n-orientations-polar). Default 1.")
+    parser.add_argument("--orientation-top-k", type=int, default=None,
+                         help="With --ml-prerelax and OOH* orientation sampling: keep only the N "
+                              "best-ranked unique (post-deduplication) orientations, instead of "
+                              "every surviving one. Unset (default) keeps every unique orientation.")
+    parser.add_argument("--orientation-rmsd-tol", type=float, default=0.3,
+                         help="With --ml-prerelax and OOH* orientation sampling: two relaxed "
+                              "orientations within this RMSD (Ang, O1/O2/H only) AND within 0.01 "
+                              "eV of each other are treated as duplicates (default: 0.3).")
     parser.add_argument("--ml-prerelax", action="store_true",
                          help="Relax O*/OOH*'s adsorbate atoms (positions only, substrate fixed) "
-                              "with MACE-MP-0 before writing the CG-relaxation folder(s) -- same "
-                              "idea as stb-adsorb --ml-rank. Mainly useful for --strategy derived's "
-                              "hand-built starting geometry (the O-O bond length/bend angle are "
-                              "illustrative, not literature-fitted), but also applies to --strategy "
-                              "search's AdsorbateSiteFinder placements. A better-informed starting "
-                              "point for the real SIESTA relaxation, NOT a substitute for it. Needs "
-                              "the optional 'ml' extra.")
-    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="small",
-                         help="MACE-MP-0 model size, with --ml-prerelax (default: small).")
+                              "with MACE-MP-0 before writing the CG-relaxation folder -- same "
+                              "idea as stb-adsorb --ml-rank. Useful because the hand-built OOH* "
+                              "starting geometry (O-O bond length/bend angle) is illustrative, "
+                              "not literature-fitted. With OOH* orientation sampling (see "
+                              "--ooh-n-orientations-polar/-azimuthal above), also drives the "
+                              "MACE-MP-0 ranking/deduplication of sampled orientations. A "
+                              "better-informed starting point for the real SIESTA relaxation, NOT "
+                              "a substitute for it. Needs the optional 'ml' extra.")
+    parser.add_argument("--ml-model", choices=["small", "medium", "large"], default="medium",
+                         help="MACE-MP-0 model size, with --ml-prerelax (default: medium).")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu",
                          help="Device for --ml-prerelax (default: cpu).")
     parser.add_argument("--ml-fmax", type=float, default=0.05,
@@ -453,6 +673,11 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
             f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
+
+    if args.ooh_n_orientations_polar < 1 or args.ooh_n_orientations_azimuthal < 1:
+        parser.error("--ooh-n-orientations-polar/--ooh-n-orientations-azimuthal must be >= 1.")
+    if args.orientation_top_k is not None and not args.ml_prerelax:
+        parser.error("--orientation-top-k is only valid with --ml-prerelax.")
 
     print("\n" + color_text("OER WORKFLOW -- STAGE 2: O*/OOH* INTERMEDIATES", 'bold'))
     print("-" * 60)
@@ -481,8 +706,6 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
 
         print_section('[0] RUN METADATA', f_out)
         print_dual(f"Directory       : {output_root}", f_out)
-        print_dual(f"O* strategy     : {args.o_strategy}", f_out)
-        print_dual(f"OOH* strategy   : {args.ooh_strategy}", f_out)
         print_dual(f"ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}"
                     + (f" (model={args.ml_model}, device={args.ml_device})" if args.ml_prerelax else ""),
                     f_out)
@@ -509,38 +732,40 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
         h_index = n_total - 1
 
         with open(winning_dir + "/calc.fdf") as f:
-            site_calc_text = f.read()
-
-        clean_fdf_structure = structure_io.read_fdf(clean_slab_source)
-        pmg_clean = structure_io.to_pymatgen(clean_fdf_structure)
-        clean_species_meta = structure_io.species_dict(clean_fdf_structure)
+            # The winning OH* site's own calc.fdf (written by oer.py's
+            # write_site_folder) is itself '%include config_extra.fdf' +
+            # the untouched user template -- strip that include before
+            # using this text as the base for THIS stage's own derived
+            # folders, each of which gets its OWN config_extra.fdf (see
+            # write_relax_folder). A no-op if the site folder predates
+            # this convention (plain calc_text already).
+            site_calc_text = strip_config_extra_include(f.read())
 
         print_section('[2] O* GEOMETRY', f_out)
-        if args.o_strategy == "derived":
-            o_dir = os.path.join(output_root, "intermediates", "o_star")
-            o_structure = build_o_structure(relaxed_oh, h_index)
-            prerelax_note = ""
-            if args.ml_prerelax:
-                print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing O*'s adsorbate atom "
-                            "with MACE-MP-0 (substrate fixed) ...", f_out)
-                o_structure = ml_prerelax_adsorbate(o_structure, o_index, args.ml_model,
-                                                     args.ml_device, args.ml_fmax)
-                prerelax_note = ", ML pre-relaxed"
-            o_calc = force_system_label(force_relaxation(site_calc_text), "oer_o_star")
-            write_relax_folder(o_dir, o_structure, o_calc, args.pseudo_dir)
-            print_dual(f"  {color_text('[OK]', 'green')} {o_dir} (derived from the winning OH* "
-                        f"site: H removed{prerelax_note})", f_out)
-        else:
-            o_molecule = Molecule(["O"], [[0.0, 0.0, 0.0]])
-            n_written = search_intermediate_sites(
-                pmg_clean, clean_species_meta, o_molecule, args.o_site_type, args.o_height,
-                args.o_symprec, "o", os.path.join(output_root, "intermediates"), site_calc_text,
-                args.pseudo_dir, args.ml_prerelax, args.ml_model, args.ml_device, args.ml_fmax, f_out)
-            print_dual(f"{n_written} O* candidate folder(s) written -- run SIESTA in all of them, "
-                        "stb-oerRefs will pick the winner.", f_out)
+        o_dir = os.path.join(output_root, "intermediates", "o_star")
+        o_structure = build_o_structure(relaxed_oh, h_index)
+        prerelax_note = ""
+        if args.ml_prerelax:
+            print_dual(f"  {color_text('ML pre-relax:', 'cyan')} relaxing O*'s adsorbate atom "
+                        "with MACE-MP-0 (substrate fixed) ...", f_out)
+            o_structure = ml_prerelax_adsorbate(o_structure, o_index, args.ml_model,
+                                                 args.ml_device, args.ml_fmax)
+            prerelax_note = ", ML pre-relaxed"
+        o_calc = force_system_label(force_relaxation(site_calc_text), "oer_o_star")
+        write_relax_folder(o_dir, o_structure, o_calc, args.pseudo_dir)
+        print_dual(f"  {color_text('[OK]', 'green')} {o_dir} (derived from the winning OH* "
+                    f"site: H removed{prerelax_note})", f_out)
+        o_traj_path = os.path.join(output_root, "intermediates", "o_trajectory.xyz")
+        o_frame = _bare_ase_atoms(o_structure)
+        o_frame.info["site_label"] = "o_star"
+        ase_io.write(o_traj_path, [o_frame], format="extxyz")
+        print_dual(f"  {color_text('[Saved]', 'cyan')} {o_traj_path} (1 frame, OVITO/VMD-"
+                    "viewable)", f_out)
 
         print_section('[3] OOH* GEOMETRY', f_out)
-        if args.ooh_strategy == "derived":
+        ooh_orientation_sampling = (args.ooh_n_orientations_polar > 1
+                                     or args.ooh_n_orientations_azimuthal > 1)
+        if not ooh_orientation_sampling:
             ooh_dir = os.path.join(output_root, "intermediates", "ooh_star")
             ooh_structure = build_ooh_structure(relaxed_oh, o_index, h_index,
                                                  args.oo_bond_length, args.ooh_oh_bond_length,
@@ -558,24 +783,48 @@ in 'derived' mode) is only a reasonable guess, not already at equilibrium.""",
                         f"site: +O at {args.oo_bond_length:.3f} Ang, +H bent "
                         f"{args.ooh_bend_deg:.1f} deg -- illustrative starting geometry, refined "
                         f"by CG relaxation{prerelax_note})", f_out)
+            ooh_traj_path = os.path.join(output_root, "intermediates", "ooh_trajectory.xyz")
+            ooh_frame = _bare_ase_atoms(ooh_structure)
+            ooh_frame.info["site_label"] = "ooh_star"
+            ase_io.write(ooh_traj_path, [ooh_frame], format="extxyz")
+            print_dual(f"  {color_text('[Saved]', 'cyan')} {ooh_traj_path} (1 frame, OVITO/VMD-"
+                        "viewable)", f_out)
         else:
-            ooh_molecule = build_ooh_molecule(args.oo_bond_length, args.ooh_oh_bond_length,
-                                               args.ooh_bend_deg)
-            n_written = search_intermediate_sites(
-                pmg_clean, clean_species_meta, ooh_molecule, args.ooh_site_type, args.ooh_height,
-                args.ooh_symprec, "ooh", os.path.join(output_root, "intermediates"), site_calc_text,
-                args.pseudo_dir, args.ml_prerelax, args.ml_model, args.ml_device, args.ml_fmax, f_out)
-            print_dual(f"{n_written} OOH* candidate folder(s) written -- run SIESTA in all of "
-                        "them, stb-oerRefs will pick the winner.", f_out)
+            if args.ml_prerelax:
+                print_dual(f"  {color_text('ML pre-relax:', 'cyan')} sampling "
+                            f"{args.ooh_n_orientations_polar}x{args.ooh_n_orientations_azimuthal} "
+                            "OOH* orientations AT THE WINNING OH* SITE (O1 fixed), relaxing/"
+                            "ranking each with MACE-MP-0 (substrate fixed) ...", f_out)
+            kept = sample_ooh_orientations(
+                relaxed_oh, o_index, h_index, args.ooh_n_orientations_polar,
+                args.ooh_n_orientations_azimuthal, args.oo_bond_length, args.ooh_oh_bond_length,
+                args.ooh_bend_deg, args.ml_prerelax, args.ml_model, args.ml_device, args.ml_fmax,
+                args.orientation_top_k, args.orientation_rmsd_tol, f_out)
+            trajectory_frames = []
+            for rank, (ooh_structure, energy) in enumerate(kept, start=1):
+                ooh_dir = os.path.join(output_root, "intermediates", f"ooh_star_orient{rank}")
+                ooh_calc = force_system_label(force_relaxation(site_calc_text),
+                                               f"oer_ooh_star_orient{rank}")
+                write_relax_folder(ooh_dir, ooh_structure, ooh_calc, args.pseudo_dir)
+                energy_note = f", E_MACE = {energy:.4f} eV" if energy is not None else ""
+                print_dual(f"  {color_text('[OK]', 'green')} {ooh_dir} (orientation {rank}/"
+                            f"{len(kept)}, anchored at the winning OH* site's own O1{energy_note})",
+                            f_out)
+                frame = _bare_ase_atoms(ooh_structure)
+                frame.info["site_label"] = f"ooh_star_orient{rank}"
+                if energy is not None:
+                    frame.info["energy_eV"] = round(energy, 6)
+                trajectory_frames.append(frame)
+            ooh_traj_path = os.path.join(output_root, "intermediates", "ooh_trajectory.xyz")
+            ase_io.write(ooh_traj_path, trajectory_frames, format="extxyz")
+            print_dual(f"  {color_text('[Saved]', 'cyan')} {ooh_traj_path} "
+                        f"({len(trajectory_frames)} frame(s), OVITO/VMD-viewable)", f_out)
 
         print_section('[4] SUMMARY & NEXT STEPS', f_out)
         print_dual(f"Report               : {report_path}", f_out)
         print_dual(color_text("\nNext steps:", 'yellow'), f_out)
         print_dual("  1. Run SIESTA in every folder written above.", f_out)
         print_dual(f"  2. Once they're done, run: stb-oerRefs --directory {output_root}", f_out)
-
-        f_out.write("\nO* strategy     : " + args.o_strategy + "\n")
-        f_out.write("OOH* strategy   : " + args.ooh_strategy + "\n")
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

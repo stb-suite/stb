@@ -5712,6 +5712,31 @@ def run_oer_prep() -> None:
     both_sides_choice = get_input(
         "\nAdsorb on both faces (free-standing 2D material with vacuum on both sides) "
         "(y/N): ").strip().lower()
+    both_sides = both_sides_choice in ('y', 'yes')
+
+    n_orient_polar, n_orient_azimuthal, ml_rank, orient_top_k = 1, 1, False, None
+    if not both_sides:
+        orient_grid = get_input(
+            "\nSample multiple OH orientations per site, polar x azimuthal grid (e.g. 4x2), "
+            "blank to skip: ").strip()
+        if orient_grid:
+            try:
+                p_str, a_str = orient_grid.lower().split('x')
+                n_orient_polar, n_orient_azimuthal = int(p_str), int(a_str)
+            except ValueError:
+                print(color_text(
+                    "Invalid grid (expected e.g. '4x2') -- orientation sampling skipped.", 'red'))
+                n_orient_polar, n_orient_azimuthal = 1, 1
+            else:
+                ml_rank = get_input(
+                    "  Pre-screen each orientation with MACE-MP-0 before writing SIESTA folders? "
+                    "Without this, EVERY sampled orientation is written directly, unscreened "
+                    "(y/N): ").strip().lower() in ('y', 'yes')
+                if ml_rank:
+                    top_k_str = get_input(
+                        "  Keep only the N best unique orientations per site (blank = keep "
+                        "all): ").strip()
+                    orient_top_k = int(top_k_str) if top_k_str.isdigit() else None
 
     output_dir = get_input("\nOutput root directory [default: oer_study]: ").strip()
     if not output_dir:
@@ -5724,11 +5749,21 @@ def run_oer_prep() -> None:
     ]
     if pseudo_dir:
         args.extend(["-p", pseudo_dir])
-    if both_sides_choice in ('y', 'yes'):
+    if both_sides:
         args.append("--both-sides")
+    if n_orient_polar > 1 or n_orient_azimuthal > 1:
+        args.extend(["--n-orientations-polar", str(n_orient_polar),
+                      "--n-orientations-azimuthal", str(n_orient_azimuthal)])
+        if ml_rank:
+            args.append("--ml-rank")
+            if orient_top_k is not None:
+                args.extend(["--orientation-top-k", str(orient_top_k)])
 
+    advanced_items = "O-H bond length/symprec/vacuum-gap"
+    if ml_rank:
+        advanced_items += ", ML model/device, orientation RMSD tolerance"
     show_advanced = get_input(
-        "\nConfigure advanced settings (O-H bond length/symprec/vacuum-gap)? [y/N]: ").strip().lower()
+        f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         oh_bond_length = get_float_input(
             "O-H bond length of the adsorbing OH group, in Ang [default: 0.970]: ", 0.970)
@@ -5739,6 +5774,24 @@ def run_oer_prep() -> None:
         vacuum_gap = get_float_input(
             "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
         args.extend(["--vacuum-gap", str(vacuum_gap)])
+        if ml_rank:
+            model_choice = get_input("ML model size [small/medium/large, default: medium]: ").strip().lower()
+            if model_choice in ("small", "medium", "large"):
+                args.extend(["--ml-model", model_choice])
+            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
+            if device_choice == "cuda":
+                from stb.core.mace_relax import gpu_available
+                available, detail = gpu_available()
+                if available:
+                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
+                else:
+                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
+                                      "the tool will report a clear error when it runs unless you "
+                                      "switch back to cpu.", 'yellow'))
+                args.extend(["--ml-device", "cuda"])
+            orient_rmsd_tol = get_float_input(
+                "Orientation RMSD duplicate tolerance in Ang [default: 0.3]: ", 0.3)
+            args.extend(["--orientation-rmsd-tol", str(orient_rmsd_tol)])
 
     print(color_text("\nSearching OH-adsorption sites...", 'green'))
     run_tool("stb-oer", args)
@@ -5761,50 +5814,51 @@ def run_oer_intermediates() -> None:
 
     pseudo_dir = prompt_pseudo_source(optional=True)
 
-    o_strategy = get_input(
-        "\nO* starting geometry: derived (from the winning OH* site, cheap)/search (independent "
-        "site search, more rigorous) [default: derived]: ").strip().lower()
-    if o_strategy not in ("derived", "search"):
-        o_strategy = "derived"
-
-    ooh_strategy = get_input(
-        "OOH* starting geometry: derived/search [default: derived]: ").strip().lower()
-    if ooh_strategy not in ("derived", "search"):
-        ooh_strategy = "derived"
+    print(color_text(
+        "\nO* and OOH* are always derived from the same winning OH* site (the physically "
+        "consistent single-active-site pathway the CHE overpotential descriptor assumes).",
+        'cyan'))
 
     ml_prerelax_choice = get_input(
         "\nPre-relax O*/OOH*'s adsorbate atoms with MACE-MP-0 before writing the CG-relaxation "
         "folder(s) (substrate fixed)? Needs the optional 'ml' extra (y/N): ").strip().lower()
     ml_prerelax = ml_prerelax_choice in ('y', 'yes')
 
-    args = ["--directory", run_dir, "--file", output_filename,
-            "--o-strategy", o_strategy, "--ooh-strategy", ooh_strategy, "--no-intro"]
+    args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
     if pseudo_dir:
         args.extend(["-p", pseudo_dir])
     if ml_prerelax:
         args.append("--ml-prerelax")
 
-    if o_strategy == "search":
-        print(color_text("\nO* search settings:", 'yellow'))
-        o_site_type = get_input("  Site type: ontop/bridge/hollow/all [default: all]: ").strip().lower()
-        if o_site_type not in ("ontop", "bridge", "hollow", "all"):
-            o_site_type = "all"
-        args.extend(["--o-site-type", o_site_type])
-        o_height = get_float_input("  O adsorption height in Ang [default: 1.5]: ", 1.5)
-        args.extend(["--o-height", str(o_height)])
-
-    if ooh_strategy == "search":
-        print(color_text("\nOOH* search settings:", 'yellow'))
-        ooh_site_type = get_input("  Site type: ontop/bridge/hollow/all [default: all]: ").strip().lower()
-        if ooh_site_type not in ("ontop", "bridge", "hollow", "all"):
-            ooh_site_type = "all"
-        args.extend(["--ooh-site-type", ooh_site_type])
-        ooh_height = get_float_input("  OOH adsorption height in Ang [default: 2.0]: ", 2.0)
-        args.extend(["--ooh-height", str(ooh_height)])
+    ooh_orient_grid = get_input(
+        "\nSample multiple OOH* orientations AT THE WINNING OH* SITE (O1 never moves), polar x "
+        "azimuthal grid (e.g. 4x4), blank to skip -- no equivalent exists for O* (a bare atom has "
+        "no orientation to sample): ").strip()
+    ooh_orient_top_k = None
+    if ooh_orient_grid:
+        try:
+            p_str, a_str = ooh_orient_grid.lower().split('x')
+            n_p, n_a = int(p_str), int(a_str)
+        except ValueError:
+            print(color_text("Invalid grid (expected e.g. '4x4') -- orientation sampling skipped.", 'red'))
+        else:
+            args.extend(["--ooh-n-orientations-polar", str(n_p),
+                          "--ooh-n-orientations-azimuthal", str(n_a)])
+            if not ml_prerelax:
+                print(color_text("  [NOTE] Without --ml-prerelax, all sampled orientations are "
+                                  "written unscreened as separate folders.", 'yellow'))
+            else:
+                top_k_str = get_input(
+                    "  Keep only the N best unique orientations (blank = keep all): ").strip()
+                if top_k_str.isdigit():
+                    ooh_orient_top_k = int(top_k_str)
+                    args.extend(["--orientation-top-k", str(ooh_orient_top_k)])
 
     advanced_items = "OOH* starting bond lengths/bend angle"
     if ml_prerelax:
         advanced_items += ", ML device"
+    if ooh_orient_top_k is not None:
+        advanced_items += ", orientation RMSD tolerance"
     show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         oo_bond_length = get_float_input(
@@ -5829,6 +5883,10 @@ def run_oer_intermediates() -> None:
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
             args.extend(["--ml-device", ml_device])
+        if ooh_orient_top_k is not None:
+            rmsd_tol = get_float_input(
+                "Orientation RMSD duplicate tolerance, in Ang [default: 0.3]: ", 0.3)
+            args.extend(["--orientation-rmsd-tol", str(rmsd_tol)])
 
     print(color_text("\nBuilding O*/OOH* intermediate geometries...", 'green'))
     run_tool("stb-oerIntermediates", args)
@@ -5851,18 +5909,12 @@ def run_oer_refs() -> None:
 
     pseudo_dir = prompt_pseudo_source(optional=True)
 
-    bsse_mode = get_input(
-        "\nBSSE mode: shared (one triad at OOH*'s geometry, cheaper)/full (one triad per "
-        "intermediate) [default: shared]: ").strip().lower()
-    if bsse_mode not in ("shared", "full"):
-        bsse_mode = "shared"
-
     zpe_mode = get_input(
         "\nZPE/entropy mode: local/full [default: local]: ").strip().lower()
     if zpe_mode not in ("local", "full"):
         zpe_mode = "local"
 
-    args = ["--directory", run_dir, "--file", output_filename, "--bsse-mode", bsse_mode,
+    args = ["--directory", run_dir, "--file", output_filename,
             "--zpe-mode", zpe_mode, "--no-intro"]
     if pseudo_dir:
         args.extend(["-p", pseudo_dir])
@@ -8911,18 +8963,18 @@ WORKFLOW_TOOLS = {
         }},
     14: {'title': "Oxygen Evolution Reaction (OER)",
         'description': "Self-contained: finds the most stable OH-adsorption site on a slab, derives "
-                        "(or independently searches for) the O*/OOH* intermediates from it, then the "
-                        "H2/H2O/BSSE/ZPE references needed for the 4-electron CHE descriptor "
-                        "(Delta-G1..4, overpotential eta, potential-determining step; Rossmeisl et "
-                        "al. 2007, Man et al. 2011).",
+                        "the O*/OOH* intermediates from that SAME site, then the H2/H2O/BSSE/ZPE "
+                        "references needed for the 4-electron CHE descriptor (Delta-G1..4, "
+                        "overpotential eta, potential-determining step; Rossmeisl et al. 2007, "
+                        "Man et al. 2011).",
         'stages': {
             1: {'title': "Stage 1 - Adsorption Sites (stb-oer)",
                 'description': "Find every symmetrically distinct OH-adsorption site and write "
                                 "one relaxation folder per site.",
                 'func': run_oer_prep},
             2: {'title': "Stage 2 - O*/OOH* Intermediates (stb-oerIntermediates)",
-                'description': "Derive (or independently search for) O*/OOH* from the winning OH* "
-                                "site and write their own CG-relaxation folder(s).",
+                'description': "Derive O*/OOH* from the winning OH* site and write their own "
+                                "CG-relaxation folder(s).",
                 'func': run_oer_intermediates},
             3: {'title': "Stage 3 - References, BSSE & ZPE Prep (stb-oerRefs)",
                 'description': "Build the H2/H2O/BSSE/ZPE reference folders from the final relaxed "

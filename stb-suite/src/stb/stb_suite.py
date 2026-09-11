@@ -8248,7 +8248,7 @@ def run_xrdsearch_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 mace_custom_model = get_input("Custom model path: ").strip()
         else:
-            mace_model = get_input("Model size, small/medium/large [default: small]: ").strip() or "small"
+            mace_model = get_input("Model size, small/medium/large [default: medium]: ").strip() or "medium"
 
         mace_device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
         mace_device = mace_device_choice if mace_device_choice in ("cpu", "cuda") else "cpu"

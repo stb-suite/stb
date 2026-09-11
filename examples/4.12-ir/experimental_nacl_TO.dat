@@ -1,0 +1,6 @@
+# NaCl transverse-optical (T1u) zone-center phonon, from inelastic neutron
+# scattering: Raunio, Almqvist & Stedman, "Phonon Dispersion Relations in
+# NaCl", Phys. Rev. 178, 1496 (1969). Intensity is arbitrary (100 = the
+# single reported peak) -- this file exists to mark the literature TO
+# *position*, not to compare absolute intensities.
+164.0   100.0

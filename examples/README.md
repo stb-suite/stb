@@ -185,6 +185,7 @@ through.
 | 4.7  | `stb-hubbardu` / `stb-hubbarduAlphas` / `stb-hubbarduAnalysis` | [`4.7-hubbardu/`](4.7-hubbardu/) |
 | 4.8  | `stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` | [`4.8-adsorption/`](4.8-adsorption/) |
 | 4.9  | `stb-neb` / `stb-nebCycle` / `stb-nebAnalysis` | [`4.9-neb/`](4.9-neb/) |
+| 4.12 | `stb-ir` / `stb-irModes` / `stb-irAnalysis` | [`4.12-ir/`](4.12-ir/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -207,7 +208,12 @@ without the BSSE correction). `4.9-neb/` covers `stb-neb` (`4.9.1`, path
 interpolation/prep) and `stb-nebAnalysis` (`4.9.2`, the barrier estimate),
 plus `stb-nebCycle`, a CLI-only tool (deliberately not in the interactive
 menu, meant for a cluster submission script's loop) that sits between
-them for modes 2/3's real-DFT refinement cycles.
+them for modes 2/3's real-DFT refinement cycles. `4.12-ir/` extends the
+pattern across **three** stages like `4.7-hubbardu/`: `stb-ir` (`4.12.1`,
+phonon displacement prep), `stb-irModes` (`4.12.2`, Γ-point mode/symmetry
+analysis plus whichever dipole/Born-charge displacement folder(s) the
+structure's dimensionality needs), and `stb-irAnalysis` (`4.12.3`,
+per-mode intensities, degenerate-group combining, and the spectrum).
 
 ## Adding another example
 

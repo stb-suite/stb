@@ -1,0 +1,22 @@
+# Shared calc.fdf template for the whole OER workflow. Left as non-polarized
+# and with MD.VariableCell true on purpose: stb-oer's own config_extra.fdf
+# unconditionally overrides BOTH (fixed cell, Spin polarized, DFTD3 -- see
+# the README's Section 1.5) -- this template proves those overrides
+# actually win over whatever the template itself says, the same
+# "%include'd ahead of your own settings, first-occurrence-wins" mechanism
+# every config_extra.fdf-based tool in this suite uses.
+SystemLabel siesta
+%include structure.fdf
+
+PAO.BasisType split
+PAO.BasisSize DZP
+kgrid.MonkhorstPack [4 4 1]
+Mesh.CutOff 200 Ry
+XC.functional GGA
+XC.authors PBE
+Spin non-polarized
+
+MD.TypeOfRun CG
+MD.VariableCell true
+MD.MaxForceTol 0.01 eV/Ang
+MD.Steps 150

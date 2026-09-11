@@ -6413,6 +6413,112 @@ def run_eos_analysis_generator() -> None:
     run_tool("stb-eosAnalysis", args)
 
 
+def run_chargediff_prep() -> None:
+    """Interface for the Charge Density Difference Prep (chargediff_prep.py)"""
+    print("\n" + "="*60)
+    print(color_text("CHARGE DENSITY DIFFERENCE - STAGE 1: PREP", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Writes a 'combined/' SIESTA input folder (every atom real) plus one fragment folder "
+        "per fragment of an N-fragment system (bilayer, molecule-on-slab, etc.) -- all sharing "
+        "the identical cell/mesh/level of theory. Every fragment folder ALWAYS includes every "
+        "other fragment as ghost atoms (no opt-out), so every calculation feeding Delta rho "
+        "shares the same basis set.",
+        'cyan'))
+    print()
+
+    structure_file = get_input(
+        "Path to the combined system's own .fdf structure file [default: structure.fdf]: "
+        ).strip() or "structure.fdf"
+    structure_dir = os.path.dirname(os.path.abspath(structure_file)) or "."
+
+    print(f"\n{color_text('Fragment definition:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = By atom count (--fragment-sizes, e.g. bilayers)")
+    print(f"  {color_text('2', 'cyan')} = By chemical species (--fragment-species, e.g. heterostructures)")
+    print(f"  {color_text('3', 'cyan')} = Reuse an stb-adsorb fragment_manifest.json (--fragment-manifest)")
+    frag_choice = get_input("Select option (1-3) [default: 1]: ").strip() or "1"
+
+    args = ["--structure", structure_file]
+    if frag_choice == "2":
+        spec = get_input("Species groups, ';'-separated (e.g. 'C;B,N'): ").strip()
+        args.extend(["--fragment-species", spec])
+    elif frag_choice == "3":
+        manifest_path = get_input(
+            "Path to fragment_manifest.json [default: next to the structure file]: ").strip()
+        args.append("--fragment-manifest")
+        if manifest_path:
+            args.append(manifest_path)
+        else:
+            args.append(os.path.join(structure_dir, "fragment_manifest.json"))
+    else:
+        spec = get_input("Fragment atom counts, comma-separated (e.g. '12,12'): ").strip()
+        args.extend(["--fragment-sizes", spec])
+
+    calc_file = get_input("SIESTA input template (--calc) [default: calc.fdf]: ").strip() or "calc.fdf"
+    args.extend(["--calc", calc_file])
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if pseudo_dir:
+        args.extend(["--pseudo-dir", pseudo_dir])
+    else:
+        print(color_text(
+            f"  (no pseudopotential source selected -- reusing '{structure_dir}', which "
+            "already has every pseudopotential the combined calculation needed)", 'cyan'))
+
+    mesh_cutoff = get_input("MeshCutoff in Ry [default: 400]: ").strip()
+    if mesh_cutoff:
+        args.extend(["--mesh-cutoff", mesh_cutoff])
+
+    output_dir = get_input("Output directory [default: chargediff_run]: ").strip() or "chargediff_run"
+    args.extend(["--output-dir", output_dir, "--no-intro"])
+
+    view_fragments = get_input(
+        "\nView combined structure + fragments in ASE (needs a display)? (y/N): "
+        ).strip().lower() == 'y'
+    if view_fragments:
+        args.append("--view")
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-chargediffPrep", args)
+
+
+def run_chargediff_analysis() -> None:
+    """Interface for the Charge Density Difference Analysis (chargediff_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("CHARGE DENSITY DIFFERENCE - STAGE 2: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+
+    prep_dir = get_input(
+        "Directory stb-chargediffPrep wrote into [default: chargediff_run]: ").strip() \
+        or "chargediff_run"
+
+    args = ["--dir", prep_dir, "--no-intro"]
+
+    print(f"\n{color_text('Output mode:', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = 2D slice (default)")
+    print(f"  {color_text('2', 'cyan')} = Planar-averaged 1D profile (bilayers/interfaces)")
+    print(f"  {color_text('3', 'cyan')} = Full 3D point cloud")
+    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    if mode_choice == "2":
+        args.append("--profile")
+    elif mode_choice == "3":
+        args.append("--3d")
+
+    skip_cube = get_input(
+        "Skip writing the Gaussian .cube file (written by default)? (y/N): ").strip().lower() == 'y'
+    if skip_cube:
+        args.append("--no-cube")
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-chargediffAnalysis", args)
+
+
 def run_mlmd_generator() -> None:
     """Interface for ML Molecular Dynamics (stb-mlmd)"""
     print("\n" + "="*60)
@@ -9050,6 +9156,21 @@ WORKFLOW_TOOLS = {
             2: {'title': "Stage 2 - Analysis (stb-eosAnalysis)",
                 'description': "Aggregate the vol_* folders and fit an equation of state (bulk modulus, etc).",
                 'func': run_eos_analysis_generator},
+        }},
+    19: {'title': "Charge Density Difference",
+        'description': "Generate ghosted fragment folders for an already-relaxed combined system "
+                        "(bilayer, molecule-on-slab, or any N-fragment system), then compute "
+                        "Delta rho = rho_combined - sum(rho_fragment_i) to visualize charge "
+                        "accumulation/depletion regions.",
+        'stages': {
+            1: {'title': "Stage 1 - Prep (stb-chargediffPrep)",
+                'description': "Write one ghosted SIESTA input folder per fragment, sharing the "
+                                "combined system's cell/mesh/level of theory.",
+                'func': run_chargediff_prep},
+            2: {'title': "Stage 2 - Analysis (stb-chargediffAnalysis)",
+                'description': "Read the combined + fragment .RHO files and plot Delta rho "
+                                "(slice/3D/profile/cube).",
+                'func': run_chargediff_analysis},
         }},
        }
 

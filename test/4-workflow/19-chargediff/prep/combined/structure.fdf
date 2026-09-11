@@ -1,0 +1,30 @@
+# Synthetic 3-fragment combined structure fixture for stb-chargediffPrep's
+# smoke test: 3 pairs of atoms (C, B, N) stacked along c, standing in for a
+# 3-layer heterostructure. No physical/DFT meaning -- geometry/species only.
+NumberOfSpecies    3
+NumberofAtoms      6
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   5   B
+ 3   7   N
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 2.46000000   0.00000000   0.00000000
+ -1.23000000   2.13037000   0.00000000
+ 0.00000000   0.00000000   20.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.10000000   1
+  0.33333333   0.66666667   0.10000000   1
+  0.00000000   0.00000000   0.20000000   2
+  0.33333333   0.66666667   0.20000000   2
+  0.00000000   0.00000000   0.30000000   3
+  0.33333333   0.66666667   0.30000000   3
+%endblock AtomicCoordinatesAndAtomicSpecies

@@ -1,0 +1,11 @@
+{
+  "schema": "adsorb_fragment_manifest_v1",
+  "site_label": "manifest_fixture",
+  "slab_suffix": "_slab",
+  "adsorbate_suffix": "_ads",
+  "n_substrate": 2,
+  "n_adsorbate": 1,
+  "slab_species": {"C_slab": {"id": "1", "Z": 6, "count": 2}},
+  "adsorbate_species": {"O_ads": {"id": "2", "Z": 8, "count": 1}},
+  "adsorbate_formula": "O"
+}

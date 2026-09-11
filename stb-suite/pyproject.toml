@@ -137,6 +137,8 @@ stb-mladsorb="stb.mladsorb:main"
 stb-mleos="stb.mleos:main"
 stb-eosInputs="stb.eos_inputs:main"
 stb-eosAnalysis="stb.eos_analysis:main"
+stb-chargediffPrep="stb.chargediff_prep:main"
+stb-chargediffAnalysis="stb.chargediff_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

@@ -1,0 +1,27 @@
+# Synthetic stand-in for an stb-adsorb 'sites/site_*/structure.fdf': 2
+# slab carbon atoms + 1 adsorbate oxygen atom, species labels already
+# suffixed '_slab'/'_ads' the way core/adsorption_sites.py::label_fragments
+# writes them -- matches fragment_manifest.json in this same folder.
+NumberOfSpecies    2
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   6   C_slab
+ 2   8   O_ads
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 2.46000000   0.00000000   0.00000000
+ -1.23000000   2.13037000   0.00000000
+ 0.00000000   0.00000000   20.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.10000000   1
+  0.33333333   0.66666667   0.10000000   1
+  0.20000000   0.20000000   0.20000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

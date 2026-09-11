@@ -1,0 +1,6 @@
+%include structure.fdf
+SystemLabel   calc
+XC.functional GGA
+XC.authors    PBE
+MD.TypeOfRun  CG
+MD.Steps      0

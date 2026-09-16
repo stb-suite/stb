@@ -81,7 +81,13 @@ def print_structure_summary(typevectors, latticeparameter, vectors, getatoms, at
     space group/crystal system/point group. Shown for every successful read
     (not just --dry-run), via print_dual so it's also captured in the run's
     persisted REPORT_FILE."""
-    formula = " ".join(f"{elem[2]}{elem[3]}" for elem in getatoms)
+    # 'x' only between a label and its count when the label itself ends in a
+    # digit (e.g. getatomsandvectors_siesta's own "_specN" disambiguation
+    # suffix for a same-Z species-index collision) -- otherwise "C_spec2"
+    # count 1 would print as the ambiguous "C_spec21". Every other label
+    # (never digit-ending) prints exactly as before ("C72", unchanged).
+    formula = " ".join(
+        f"{elem[2]}{'x' if elem[2][-1].isdigit() else ''}{elem[3]}" for elem in getatoms)
     natoms_total = sum(int(elem[3]) for elem in getatoms)
     vectors_np = np.array(vectors, dtype=float) * float(latticeparameter)
     volume = abs(np.linalg.det(vectors_np))
@@ -428,6 +434,42 @@ def getatomsandvectors_cif(input_cif):
     return typevectors, latticeparameter, vectors, getatoms, atomic_position
 
 def getatomsandvectors_siesta(input_siesta):
+    """Reads a SIESTA STRUCT_OUT-style file: 3 lattice-vector lines, an
+    atom-count line, then one `species_idx Z x y z` line per atom.
+
+    **Real, verified bug fixed here**: STRUCT_OUT identifies each atom by
+    its SPECIES INDEX (`pos[0]`), not by element symbol -- a structure
+    with fragment-labeled species that share an element (e.g. stb-adsorb's
+    own `C_slab`/`C_ads`, distinct SIESTA species indices, same Z) has 2+
+    DISTINCT species indices for the same Z. Grouping is done correctly by
+    species index (`dicatoms`, keyed by `pos[0]`) for `getatoms`'s own
+    counts -- but an earlier version of this function built `atomic_
+    position` keyed by ELEMENT SYMBOL instead (`atomicnumber[position[1]]`),
+    silently MERGING every same-Z species-index group's positions into one
+    shared list. Downstream, `build_ase_atoms`/`writefilefdf` look up each
+    `getatoms` row's position list by that same symbol key -- so every
+    same-Z group ended up pulling the SAME (merged) position list, in
+    full, once per group: confirmed live on a real 84-atom, 4-species
+    (2 distinct C indices + 2 distinct O indices) STRUCT_OUT, this
+    produced a 168-atom (73+73+11+11) `.fdf`, whose OWN malformed,
+    duplicate-labeled `%block ChemicalSpeciesLabel` then compounded the
+    error AGAIN on the post-write round-trip re-read (168 -> 336) -- see
+    bugs_report/BUG_REPORT_stb-translate_duplicate-species-same-Z.md.
+
+    Fixed by keeping every species-index group distinct all the way
+    through: a group is labeled with its bare element symbol only if that
+    symbol hasn't been used by an earlier (lower-index) group, otherwise
+    `f"{symbol}_spec{species_idx}"` -- unique per group, never colliding,
+    and honestly NOT claiming a semantic fragment name (STRUCT_OUT itself
+    carries no label text, only the numeric species index, so `_slabN`/
+    `_adsN`-style naming would be a fabricated guess). This label is used
+    consistently as both `getatoms`'s own species-column AND `atomic_
+    position`'s dict key, restoring the 1:1 correspondence every other
+    getatomsandvectors_* function already relies on. A STRUCT_OUT with no
+    same-Z species-index collisions (the common case) is completely
+    unaffected: every group's symbol is already unique, so no suffix is
+    ever added.
+    """
     element, atomicnumber = periodic_table()
     datasiesta = readfile(input_siesta)
     latticeparameter = "1.00"
@@ -438,17 +480,29 @@ def getatomsandvectors_siesta(input_siesta):
         if pos[0] not in dicatoms:
             dicatoms[pos[0]] = []
         dicatoms[pos[0]].append([pos[0], pos[1], atomicnumber[pos[1]]])
+
+    # One unique label per species index, in STRUCT_OUT's own index order --
+    # bare symbol for a Z seen for the first time, suffixed for a repeat.
+    seen_symbols = set()
+    label_by_species_idx = {}
+    for species_idx in dicatoms:
+        symbol = dicatoms[species_idx][0][2]
+        label = symbol if symbol not in seen_symbols else f"{symbol}_spec{species_idx}"
+        seen_symbols.add(symbol)
+        label_by_species_idx[species_idx] = label
+
     getatoms = []
-    for atoms in dicatoms:
-        getatoms.append([dicatoms[atoms][0][0],
-                        dicatoms[atoms][0][1],
-                        dicatoms[atoms][0][2],
-                        str(len(dicatoms[atoms]))])
+    for species_idx in dicatoms:
+        getatoms.append([dicatoms[species_idx][0][0],
+                        dicatoms[species_idx][0][1],
+                        label_by_species_idx[species_idx],
+                        str(len(dicatoms[species_idx]))])
     atomic_position = {}
     for position in datasiesta[4:]:
-        if atomicnumber[position[1]] not in atomic_position:
-            atomic_position[atomicnumber[position[1]]] = []
-        atomic_position[atomicnumber[position[1]]].append(
+        label = label_by_species_idx[position[0]]
+        if label not in atomic_position:
+            atomic_position[label] = []
+        atomic_position[label].append(
             [position[2], position[3], position[4]])
     return typevectors, latticeparameter, vectors, getatoms, atomic_position
 
@@ -918,8 +972,28 @@ def convert_coordinates(typevectors_in: str,
 ##### 3D VIEWER HELPERS (--view / --view-image) #####
 def build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposition):
     """Builds an ase.Atoms from the 5-tuple every getatomsandvectors_* returns,
-    for the optional --view/--view-image 3D visualization."""
+    for the optional --view/--view-image 3D visualization (also used for
+    the pre-write structure summary/close-contact check and the post-write
+    round-trip verification -- see convert_one/reread_for_check/
+    verify_round_trip).
+
+    **Real, verified bug fixed here**: `elem[2]` (a getatoms row's own
+    species-column string) is not always a real element symbol -- any
+    reader can legitimately return a compound, suffixed label there (this
+    suite's own `_slab`/`_ads`/`_ghost` fragment-label convention for an
+    fdf input, or getatomsandvectors_siesta's own `_specN` disambiguation
+    for a STRUCT_OUT input with same-Z species groups, see that function's
+    docstring). `ase.Atoms(symbols=[...])` looks up each string in ASE's
+    own periodic table and raises `KeyError` on anything that isn't a bare
+    element symbol -- confirmed live: `Atoms(symbols=['C_slab'], ...)`
+    raises `KeyError: 'C_slab'` outright. `elem[1]` (every getatoms row's
+    OWN atomic-number column, int or str depending on the reader --
+    normalized via str() here) is unaffected by any such label and always
+    resolves to the true element, so it -- not elem[2] -- is what should
+    drive the ASE-facing chemical symbol.
+    """
     from ase import Atoms
+    _, atomicnumber = periodic_table()
 
     final_type, final_positions = convert_coordinates(
         typevectors, latticeparameter, vectors, atomsposition, 'cartesian'
@@ -929,9 +1003,9 @@ def build_ase_atoms(typevectors, latticeparameter, vectors, getatoms, atomsposit
     symbols = []
     positions = []
     for elem in getatoms:
-        species = elem[2]
-        for pos in final_positions[species]:
-            symbols.append(species)
+        label, real_symbol = elem[2], atomicnumber[str(elem[1])]
+        for pos in final_positions[label]:
+            symbols.append(real_symbol)
             positions.append([float(pos[0]), float(pos[1]), float(pos[2])])
 
     return Atoms(symbols=symbols, positions=positions, cell=cell, pbc=True)

@@ -192,7 +192,97 @@ def resolve_threads(requested):
     return multiprocessing.cpu_count()
 
 
-def read_spin_density(file_rho, geometry, cube_path):
+def build_bader_inputs(grid, geometry, physical_idx, cube_filename, output_dir):
+    """Builds PyBader's 4 required inputs -- (density, lattice, atoms,
+    file_info), exactly the tuple `pybader.io.cube.read()` would return --
+    directly from an already-read, in-memory sisl `Grid` + `Geometry`,
+    with NO round-trip through a written `.cube` file's text.
+
+    **Two real, verified bugs this sidesteps entirely** (both in the
+    write-via-sisl / read-via-pybader round-trip this function replaces,
+    not in pybader's own cube.read() in isolation):
+
+    1. **Crash for any grid whose nz isn't a multiple of 6.** sisl's cube
+       writer (`Grid.write`) streams the ENTIRE flattened grid as one
+       continuous run of values, 6 per line, wrapping across (x,y) row
+       boundaries -- a valid Gaussian-cube convention, but NOT the one
+       `pybader.io.cube.read()` assumes: it expects every (x,y) row to
+       start on its own fresh line and end with its own (possibly short)
+       trailing line before the next row begins. Confirmed via
+       `bugs_report/BUG_REPORT_stb-bader_cube-roundtrip.md`: on a
+       256-point z-grid (256 %% 6 = 4), this raises "could not broadcast
+       input array from shape (6,) into shape (4,)".
+    2. **Silent ~6.75x charge overestimate for every grid where nz IS a
+       multiple of 6** (i.e. whenever bug #1 doesn't crash) -- NOT
+       documented in the bug report above, found and verified numerically
+       while fixing it (test/3-analysis/6-bader/Sn3O4.RHO, a real
+       committed fixture: nz=90, 90%%6=0, so bug #1 never triggers here).
+       sisl's `read_grid()` scales RHO/BADER values by `sile.grid_unit`
+       (~6.748334, the Bohr^-3 -> Ang^-3 conversion -- see stb-cube.py's
+       own `[WARNING]`-free, already-correct precedent for this exact
+       factor) so `grid.grid` in memory is already e/Ang^3. sisl's cube
+       WRITER never undoes that scaling (its own docstring: "grid data is
+       assumed to be unit-less"), so the written file pairs Bohr-unit
+       coordinates with e/Ang^3-valued density -- but `pybader.io.cube.
+       read()` then multiplies by `ang_to_bohr**3` (numerically identical
+       to `sile.grid_unit`) on the assumption the file holds native
+       e/Bohr^3 values, compounding the error: verified directly on
+       Sn3O4.RHO, the OLD round-trip's total integrated charge came out
+       485.88 e against `grid.grid.sum() * voxel_volume` = 72.00 e from
+       the same in-memory grid -- a 485.88 / 72.00 = 6.748 ratio, matching
+       `sile.grid_unit` exactly. PyBader's own `charge_sum` (pybader/
+       utils.py: `charge[atom_num] += density[i]`, then `*= voxel_volume`)
+       confirms it wants plain density (e/Ang^3), not a pre-scaled
+       quantity -- despite the `Bader` class docstring's own misleading
+       "(rho * lattice volume) units" wording.
+
+    `grid.grid` (whatever sisl's default `read_grid()` scaling left it in
+    -- e/Ang^3 for a RHO/BADER file) is used AS-IS, matching what the
+    (bug-free) round-trip would have produced after pybader's own
+    `*= ang_to_bohr**3` undoes a correctly-applied write-side
+    `/= sile.grid_unit` -- i.e. this is not a new/different convention,
+    just the same one reached without ever touching disk or pybader's
+    own (buggy) reader. `lattice`/`atoms` need no Bohr round-trip either:
+    sisl's `grid.cell` is already the full cell matrix in Ang (cube.read()
+    only reconstructs this from a per-voxel Bohr vector because that's
+    literally how the file format stores it), and wrapping `geometry.fxyz`
+    into [0, 1) before converting to cartesian replicates cube.read()'s
+    own wrap-into-cell step exactly.
+    """
+    density = {'charge': np.array(grid.grid, dtype=np.float64)}
+    lattice = np.array(grid.cell, dtype=np.float64)
+    atoms = (geometry.fxyz[physical_idx] % 1.0) @ lattice
+    file_info = {
+        'filename': cube_filename,
+        'prefix': os.path.join(output_dir, ''),
+        'file_type': 'cube',
+        'write_function': cube_io.write,
+        'elements': np.array([geometry.atoms[i].Z for i in physical_idx], dtype=np.int64),
+        'voxel_offset': np.array([.5, .5, .5]),
+    }
+    return density, lattice, atoms, file_info
+
+
+def write_native_cube(grid, sile, cube_path):
+    """Writes `grid` (already read via `sile.read_grid(...)`, still
+    carrying sisl's default e/Ang^3-scaled RHO/BADER values in `.grid`) to
+    `cube_path` in genuine, standard-compliant Gaussian-cube units
+    (e/Bohr^3, correctly paired with the writer's own Bohr-unit
+    coordinates) -- the same `grid.grid / sile.grid_unit` restoration
+    stb-cube.py already applies (see its own long comment for the full
+    derivation), needed here too so a user who opens this file in VESTA/
+    VMD/Multiwfn (via --keep-cube) sees a correctly-scaled density, not
+    one ~6.75x too large. Mutates `grid.grid` in place (division creates
+    and rebinds a new array, so this must run on a copy if the caller
+    still needs the original e/Ang^3 values afterward -- see
+    build_bader_inputs, called BEFORE this in every caller here, which
+    is why that ordering matters).
+    """
+    grid.grid = grid.grid / sile.grid_unit
+    grid.write(cube_path)
+
+
+def read_spin_density(file_rho, geometry, physical_idx, cube_path):
     """Returns a PyBader-ready NET SPIN (magnetization) density array for a
     spin-polarized .RHO file, or None for a non-spin-polarized run OR if
     anything about processing the spin component fails -- this is an
@@ -214,19 +304,24 @@ def read_spin_density(file_rho, geometry, cube_path):
     answer) on a non-spin-polarized file (only 1 component, sisl needs 2
     to form the [1, -1] combination), which is how the two cases are
     told apart -- there is no separate flag/header field for it.
-    Re-uses PyBader's own cube reader (via a real round-trip through
-    sisl's cube writer) instead of hand-rolling the bohr/angstrom and
-    charge-density unit conversions PyBader's Bader object expects.
+
+    Returns the in-memory `grid.grid` array directly (see
+    build_bader_inputs' own docstring for why this -- not a round-trip
+    through pybader's cube reader -- is the correct, bug-free way to get
+    a PyBader-ready density array); still writes `cube_path` (correctly
+    unit-restored, see write_native_cube) so --keep-cube keeps an
+    inspectable spin-density .cube alongside the charge one.
     """
     try:
-        spin_grid = sisl.get_sile(file_rho).read_grid(index='z')
+        spin_sile = sisl.get_sile(file_rho)
+        spin_grid = spin_sile.read_grid(index='z')
     except Exception:
         return None
     try:
+        spin_density = np.array(spin_grid.grid, dtype=np.float64)
         spin_grid.set_geometry(geometry)
-        spin_grid.write(cube_path)
-        density, _, _, _ = cube_io.read(cube_path)
-        return density['charge']
+        write_native_cube(spin_grid, spin_sile, cube_path)
+        return spin_density
     except Exception as e:
         print(color_text(
             f"   [WARN] Spin-density grid detected but failed to process ({e}) -- "
@@ -329,11 +424,10 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
                 sys.exit(1)
 
             # Atoms with no real element assigned (Z<=0 -- e.g. a floating dummy site with
-            # no basis) are silently dropped by sisl's own cube writer, so they're excluded
-            # here too to stay consistent with what PyBader will actually see. This does NOT
-            # affect SIESTA's own ghost/BSSE atoms: sisl represents those as `AtomGhost`,
-            # whose `.Z` is the real (positive) element number -- verified empirically against
-            # this installed sisl, sisl's cube writer keeps them, and so does this check.
+            # no basis) are excluded from the Bader-ready atom list -- a dummy site has no
+            # physical charge for PyBader to partition. This does NOT affect SIESTA's own
+            # ghost/BSSE atoms: sisl represents those as `AtomGhost`, whose `.Z` is the real
+            # (positive) element number -- verified empirically against this installed sisl.
             physical_idx = [i for i, atom in enumerate(geometry.atoms) if atom.Z > 0]
             dummy_count = len(geometry.atoms) - len(physical_idx)
             if dummy_count:
@@ -359,14 +453,23 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
             # analogous one: on a real spin-polarized O2 run, the old
             # index=0 reading integrated to 7.0 e (up channel alone)
             # instead of the correct 12.0 e (2 O atoms x 6 valence e- each).
-            rho_grid = sisl.get_sile(file_rho).read_grid(index='total')
+            sile = sisl.get_sile(file_rho)
+            rho_grid = sile.read_grid(index='total')
             rho_cell = rho_grid.cell.copy()
-            rho_grid.set_geometry(geometry)
-            rho_grid.write(file_cube)
-            cube_files.append(file_cube)
-            density, lattice, cube_atoms, file_info = cube_io.read(file_cube)
 
-            spin_density = read_spin_density(file_rho, geometry, file_spin_cube)
+            # Built directly from the in-memory grid/geometry -- no round-trip through a
+            # written .cube file's text (see build_bader_inputs' own docstring for the 2
+            # real, verified bugs -- a crash and a silent ~6.75x charge overestimate --
+            # this sidesteps entirely). The on-disk .cube (below) is still written, purely
+            # for --keep-cube's user-facing "open this in VESTA/VMD" convenience.
+            density, lattice, cube_atoms, file_info = build_bader_inputs(
+                rho_grid, geometry, physical_idx, f"{label}.cube", output_dir)
+
+            rho_grid.set_geometry(geometry)
+            write_native_cube(rho_grid, sile, file_cube)
+            cube_files.append(file_cube)
+
+            spin_density = read_spin_density(file_rho, geometry, physical_idx, file_spin_cube)
             has_spin_grid = False
             if spin_density is not None and spin_density.shape == density['charge'].shape:
                 density['spin'] = spin_density
@@ -383,35 +486,20 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
             print(color_text(f"[ERROR] SISL processing failed: {e}", 'red'))
             sys.exit(1)
 
-        # --- Cross-checks: two independent signals that the .RHO really belongs with
-        # this geometry. The cell check compares the .RHO file's OWN lattice (captured
-        # above, before set_geometry() overwrote it) against the geometry's -- this catches
-        # a genuinely wrong pairing (e.g. a different relaxation step with a different
-        # cell). The atom check compares the geometry against what PyBader will actually
-        # see in the cube file, so a sisl/PyBader disagreement doesn't silently misattribute
-        # charges. Neither check (nor both together) can catch a same-cell, different-
-        # atomic-position mismatch -- a .RHO grid carries no independent atomic-position
-        # record to compare against; that class of mistake is not detectable from these
+        # --- Cross-check: the .RHO file's OWN lattice (captured above, before
+        # set_geometry() overwrote it) against the geometry's -- catches a genuinely wrong
+        # pairing (e.g. a different relaxation step with a different cell). The former atom
+        # -count/species checks here (comparing the geometry against a written-then-reread
+        # cube file) are gone along with the round-trip they guarded against -- cube_atoms/
+        # file_info['elements'] are now built directly FROM physical_idx (build_bader_inputs),
+        # so they cannot diverge from it. This cell check alone (nor any check) still can't
+        # catch a same-cell, different-atomic-position mismatch -- a .RHO grid carries no
+        # independent atomic-position record to compare against; not detectable from these
         # files alone.
         if not np.allclose(rho_cell, geometry.cell, atol=1e-3):
             print(color_text(
                 "[ERROR] Lattice mismatch between the .RHO grid and the geometry file -- "
                 "they likely don't belong to the same calculation.", 'red'))
-            sys.exit(1)
-
-        if len(cube_atoms) != len(physical_idx):
-            print(color_text(
-                f"[ERROR] Atom count mismatch: the geometry has {len(physical_idx)} real "
-                f"atom(s) (excluding dummy/no-element sites) but the written cube file has "
-                f"{len(cube_atoms)} -- refusing to continue with possibly misaligned charges.",
-                'red'))
-            sys.exit(1)
-        cube_z = [int(z) for z in file_info['elements']]
-        geo_z = [geometry.atoms[i].Z for i in physical_idx]
-        if cube_z != geo_z:
-            print(color_text(
-                "[ERROR] Atom order/species mismatch between the geometry and the written "
-                "cube file -- refusing to continue with possibly misaligned charges.", 'red'))
             sys.exit(1)
 
         # --- STEP 2: PyBader ---

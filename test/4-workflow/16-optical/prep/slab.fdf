@@ -1,0 +1,25 @@
+# Free-standing graphene monolayer: 2 C atoms, primitive hexagonal cell
+# (a = 2.46 Ang), 20 Ang vacuum along c -- exercises stb-optical's
+# [KNOWN LIMITATION, 2D/slab inputs] dimensionality note (every
+# direction, including out-of-plane, is still written and computed).
+SystemName Graphene monolayer (optical workflow test fixture)
+SystemLabel siesta
+
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+  2.4600000000   0.0000000000   0.0000000000
+ -1.2300000000   2.1304224390   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

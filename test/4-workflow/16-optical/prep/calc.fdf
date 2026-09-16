@@ -1,20 +1,18 @@
-SystemLabel      siesta
-SystemName       siesta
-
+# Shared calc.fdf template for every direction folder. Deliberately left
+# with its OWN (wrong-for-this-workflow) MD.TypeOfRun/MD.Steps -- stb
+# -optical's own config_extra.fdf (%include'd ahead of this text) must
+# override both unconditionally, proving the override actually wins over
+# whatever the template itself says (same "prove config_extra.fdf wins"
+# convention as stb-gqca/stb-oer's own calc.fdf fixtures).
+SystemLabel siesta
 %include structure.fdf
 
-PAO.BasisType       split
-PAO.BasisSize       DZP
-PAO.EnergyShift     0.02 Ry
+PAO.BasisType split
+PAO.BasisSize DZP
+Mesh.CutOff 200 Ry
+XC.functional GGA
+XC.authors PBE
+Spin non-polarized
 
-kgrid.MonkhorstPack   [1  1  1]
-Mesh.CutOff           200  Ry
-FilterCutoff          150  Ry
-
-XC.Functional       GGA
-XC.Authors          PBE
-
-Spin                non-polarized
-
-MD.TypeOfRun         CG
-MD.NumCGsteps        0
+MD.TypeOfRun CG
+MD.Steps 150

@@ -43,6 +43,45 @@ def force_single_point(calc_text):
     return new_text
 
 
+_SQRT2_INV = 2.0 ** -0.5
+
+# Shared by stb-optical (writes these folders) and stb-opticalAnalysis
+# (detects them back from each folder's own %block Optical.Vector, and
+# reconstructs the off-diagonal eps_ij from the biaxial ones) -- a single
+# source of truth for the direction-name -> Optical.Vector convention, so
+# the two stages can never silently drift apart on it. 'xx'/'yy'/'zz' are
+# the pure Cartesian unit axes (Optical.Vector = e_i, giving the diagonal
+# dielectric-tensor component eps_ii directly). 'xy'/'xz'/'yz' are the
+# BIAXIAL directions: SIESTA's Optical.Vector always computes a single
+# -direction response n^T.eps.n, never a genuine off-diagonal component
+# directly, so each biaxial direction uses the NORMALIZED BISECTOR of the
+# two axes involved (e.g. (e_x+e_y)/sqrt(2) for 'xy') -- the standard
+# trick to reach one: for a symmetric dielectric tensor, the response
+# along that bisector expands to (eps_ii + eps_jj)/2 + eps_ij, so
+# eps_ij = eps_(bisector ij) - (eps_ii + eps_jj) / 2 once eps_ii, eps_jj
+# AND the bisector's own response are all known. Same reconstruction
+# formula/convention as raman_analysis.py's own raman_tensor_full (Rij
+# from a mixed n=(i+j)/sqrt(2) direction), reimplemented here (not
+# imported) since it operates on eps(E) spectra rather than a single
+# static Raman-tensor number per mode.
+OPTICAL_DIRECTION_VECTORS = {
+    "xx": (1.0, 0.0, 0.0),
+    "yy": (0.0, 1.0, 0.0),
+    "zz": (0.0, 0.0, 1.0),
+    "xy": (_SQRT2_INV, _SQRT2_INV, 0.0),
+    "xz": (_SQRT2_INV, 0.0, _SQRT2_INV),
+    "yz": (0.0, _SQRT2_INV, _SQRT2_INV),
+}
+
+# Which 2 diagonal directions each biaxial direction needs alongside it
+# to be reconstructed into a real eps_ij.
+OPTICAL_OFFDIAG_PAIRS = {
+    "xy": ("xx", "yy"),
+    "xz": ("xx", "zz"),
+    "yz": ("yy", "zz"),
+}
+
+
 def build_optical_block(mesh, broaden_ev, axis_vec, nbands=None):
     """The %block Optical.Mesh/Optical.Vector + OpticalCalculation T fdf
     stanza for one Optical.Vector direction -- SIESTA's interband/RPA

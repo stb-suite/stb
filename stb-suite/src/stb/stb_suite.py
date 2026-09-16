@@ -6085,7 +6085,9 @@ def run_optical_prep() -> None:
     if not structure_file:
         structure_file = "structure.fdf"
 
-    calc_file = get_input("\nCalc.fdf template for the Optical calculations: ")
+    calc_file = get_input("\nCalc.fdf template for the Optical calculations [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
     while not os.path.isfile(calc_file):
         print(color_text("File not found!", 'red'))
         calc_file = get_input("Calc.fdf template for the Optical calculations: ")
@@ -6093,8 +6095,9 @@ def run_optical_prep() -> None:
     pseudo_dir = prompt_pseudo_source(optional=True)
 
     directions_str = get_input(
-        "\nDirections to compute, space-separated (x/y/z) [default: x y z]: ").strip()
-    directions = directions_str.split() if directions_str else ["x", "y", "z"]
+        "\nDirections to compute, space-separated -- xx/yy/zz (diagonal) and/or xy/xz/yz "
+        "(biaxial, off-diagonal) [default: xx yy zz]: ").strip()
+    directions = directions_str.split() if directions_str else ["xx", "yy", "zz"]
 
     output_dir = get_input("\nOutput root directory [default: optical_study]: ").strip()
     if not output_dir:

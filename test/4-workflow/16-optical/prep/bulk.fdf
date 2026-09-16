@@ -1,0 +1,27 @@
+# Simple cubic (CsCl-type) NaCl fixture: 2 atoms, Na at the corner and Cl
+# at the body center, a = 4.0 Ang -- 3D bulk (no vacuum axis), the
+# simplest possible 2-species cell to exercise stb-optical's diagonal
+# (xx/yy/zz) and biaxial (xy/xz/yz) direction folders plus
+# stb-opticalAnalysis's off-diagonal eps_ij reconstruction.
+SystemName Simple cubic NaCl (optical workflow test fixture)
+SystemLabel siesta
+
+LatticeConstant 4.0 Ang
+%block LatticeVectors
+  1.0000000000   0.0000000000   0.0000000000
+  0.0000000000   1.0000000000   0.0000000000
+  0.0000000000   0.0000000000   1.0000000000
+%endblock LatticeVectors
+
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1  11  Na
+ 2  17  Cl
+%endblock ChemicalSpeciesLabel
+
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0  0.0  0.0  1
+ 0.5  0.5  0.5  2
+%endblock AtomicCoordinatesAndAtomicSpecies

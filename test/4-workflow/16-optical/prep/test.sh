@@ -2,8 +2,10 @@
 
 # --- Setup ---
 # Smoke test for stb-optical (Optical Properties Stage 1: Direction
-# Folders, item 4.16.1). 2 fixtures: cubic.fdf (3D bulk) and mos2.fdf
-# (2D, exercises the vacuum-dilution report note).
+# Folders, item 4.16.1). 2 fixtures: bulk.fdf (3D, simple-cubic NaCl --
+# exercises the diagonal/biaxial direction folders and the config_extra.fdf
+# override mechanism) and slab.fdf (2D graphene monolayer -- exercises the
+# vacuum-padded [KNOWN LIMITATION] dimensionality note).
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -59,10 +61,10 @@ check_exit_code() {
 echo "--- Starting tester for STB-OPTICAL stage 1: direction folders (item 4.16.1) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
-cp "$FIXTURE_DIR/cubic.fdf" "$TEST_DIR/"
-cp "$FIXTURE_DIR/mos2.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/bulk.fdf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/slab.fdf" "$TEST_DIR/"
 cp "$FIXTURE_DIR/calc.fdf" "$TEST_DIR/"
-for sym in Na Mo S; do
+for sym in Na Cl C; do
     echo "# placeholder pseudopotential" > "$TEST_DIR/$sym.psf"
 done
 echo "Test directory '$TEST_DIR' prepared."
@@ -70,122 +72,178 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Default run (3D fixture, --directions x y z default) ---
-echo -e "\n--- Testing default run (cubic.fdf, all 3 directions) ---"
-rm -rf optical_study_cubic
-stb-optical -f cubic.fdf -c calc.fdf -p . -O optical_study_cubic --no-intro \
-    > log_cubic.txt 2>&1
+# --- 2. Default behavior: -c/--directions both default, config_extra.fdf mechanism ---
+echo -e "\n--- Testing default behavior (bulk.fdf, no -c, no --directions) ---"
+rm -rf study_default
+stb-optical -f bulk.fdf -O study_default --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
-check_success optical_study_cubic/dir_x/structure.fdf
-check_success optical_study_cubic/dir_y/structure.fdf
-check_success optical_study_cubic/dir_z/structure.fdf
-check_success optical_study_cubic/optical_stage1.txt
+check_success study_default/dir_xx/structure.fdf
+check_success study_default/dir_yy/structure.fdf
+check_success study_default/dir_zz/structure.fdf
+check_success study_default/dir_xx/calc.fdf
+check_success study_default/dir_xx/config_extra.fdf
 
-echo "Testing: every folder forces MD.TypeOfRun CG + MD.Steps 0 (single point)"
-check_contains "MD.TypeOfRun          CG" optical_study_cubic/dir_x/calc.fdf
-check_contains "MD.Steps              0" optical_study_cubic/dir_x/calc.fdf
+echo "Testing: -c defaults to calc.fdf in the current directory (no error despite no -c given)"
+check_not_contains "\[ERROR\]" log_default.txt
 
-echo "Testing: OpticalCalculation/Optical.Broaden/Optical.Mesh/Optical.Vector blocks are correct per axis"
-check_contains "OpticalCalculation T" optical_study_cubic/dir_x/calc.fdf
-check_contains "Optical.Broaden        0.2 eV" optical_study_cubic/dir_x/calc.fdf
-check_contains "10  10  10" optical_study_cubic/dir_x/calc.fdf
-check_contains "1.0000  0.0000  0.0000" optical_study_cubic/dir_x/calc.fdf
-check_contains "0.0000  1.0000  0.0000" optical_study_cubic/dir_y/calc.fdf
-check_contains "0.0000  0.0000  1.0000" optical_study_cubic/dir_z/calc.fdf
+echo "Testing: calc.fdf is the untouched user template, %include'ing config_extra.fdf at the top"
+check_contains "%include config_extra.fdf" study_default/dir_xx/calc.fdf
+check_contains "MD.Steps 150" study_default/dir_xx/calc.fdf
 
-echo "Testing: kgrid.MonkhorstPack left untouched, exactly as the template had it (no recompute)"
-check_contains "kgrid.MonkhorstPack   \[1  1  1\]" optical_study_cubic/dir_x/calc.fdf
+echo "Testing: config_extra.fdf carries the forced single-point + Optical.* block, not calc.fdf"
+check_contains "MD.TypeOfRun          CG" study_default/dir_xx/config_extra.fdf
+check_contains "MD.Steps              0" study_default/dir_xx/config_extra.fdf
+check_contains "OpticalCalculation T" study_default/dir_xx/config_extra.fdf
+check_contains "1.0000  0.0000  0.0000" study_default/dir_xx/config_extra.fdf
+check_contains "0.0000  1.0000  0.0000" study_default/dir_yy/config_extra.fdf
+check_contains "0.0000  0.0000  1.0000" study_default/dir_zz/config_extra.fdf
 
-echo "Testing: 3D fixture report has no [KNOWN LIMITATION] note"
-check_not_contains "KNOWN LIMITATION" optical_study_cubic/optical_stage1.txt
-
-
-# --- 3. --optical-mesh/--optical-broaden/--optical-nbands propagate ---
-echo -e "\n--- Testing --optical-mesh/--optical-broaden/--optical-nbands ---"
-rm -rf optical_study_params
-stb-optical -f cubic.fdf -c calc.fdf -p . -O optical_study_params --directions x \
-    --optical-mesh 20 20 20 --optical-broaden 0.05 --optical-nbands 40 --no-intro \
-    > log_params.txt 2>&1
+echo "Testing: calc.fdf is byte-identical across direction folders (shared template)"
+diff -q study_default/dir_xx/calc.fdf study_default/dir_yy/calc.fdf > /dev/null 2>&1
 check_exit_code $? 0
-check_contains "20  20  20" optical_study_params/dir_x/calc.fdf
-check_contains "Optical.Broaden        0.05 eV" optical_study_params/dir_x/calc.fdf
-check_contains "Optical.NumberOfBands  40" optical_study_params/dir_x/calc.fdf
+
+echo "Testing: config_extra.fdf DIFFERS across direction folders (direction-specific Optical.Vector)"
+diff -q study_default/dir_xx/config_extra.fdf study_default/dir_yy/config_extra.fdf > /dev/null 2>&1
+[ $? -ne 0 ] && echo -e "   -> ${GREEN}Verified:${NC} config_extra.fdf differs between dir_xx and dir_yy" && PASS=$((PASS+1)) \
+             || { echo -e "   -> ${RED}Failed:${NC} config_extra.fdf unexpectedly identical between dir_xx and dir_yy"; FAIL=$((FAIL+1)); }
+
+echo "Testing: report documents formula/cell volume (regression guard: LatticeConstant must be applied)"
+check_contains "Formula         : Na1 Cl1" log_default.txt
+check_contains "Cell volume     : 64.0000 Ang\^3" log_default.txt
+
+echo "Testing: 3D bulk input -- no 2D known-limitation warning, dimensionality reported correctly"
+check_contains "Detected : 3D (bulk material)" log_default.txt
+check_not_contains "\[KNOWN LIMITATION\] Vacuum-padded" log_default.txt
+
+echo "Testing: summary line counts diagonal/biaxial directions correctly"
+check_contains "3 direction folder(s) written under 'study_default' (3 diagonal, 0 biaxial)" log_default.txt
 
 
-# --- 4. --directions restricts which folders are written ---
-echo -e "\n--- Testing --directions z (only out-of-plane) ---"
-rm -rf optical_study_z
-stb-optical -f cubic.fdf -c calc.fdf -p . -O optical_study_z --directions z --no-intro \
-    > log_z_only.txt 2>&1
+# --- 3. Biaxial direction + missing-diagonal-pair warning ---
+echo -e "\n--- Testing biaxial direction xy without its yy pair (missing-pair warning) ---"
+rm -rf study_xy
+stb-optical -f bulk.fdf -c calc.fdf -O study_xy --directions xx xy --no-intro > log_xy.txt 2>&1
 check_exit_code $? 0
-check_success optical_study_z/dir_z/structure.fdf
-python3 -c "
-import os
-assert not os.path.isdir('optical_study_z/dir_x'), 'dir_x should not exist'
-assert not os.path.isdir('optical_study_z/dir_y'), 'dir_y should not exist'
-print('OK')
-" > log_z_only_check.txt 2>&1
-check_contains "OK" log_z_only_check.txt
+check_success study_xy/dir_xy/structure.fdf
+check_success study_xy/dir_xy/config_extra.fdf
+check_contains "0.7071  0.7071  0.0000" study_xy/dir_xy/config_extra.fdf
+check_contains "missing yy in this run" log_xy.txt
+check_contains "(1 diagonal, 1 biaxial)" log_xy.txt
 
 
-# --- 5. 2D fixture: KNOWN LIMITATION note ---
-echo -e "\n--- Testing 2D fixture (mos2.fdf) -- vacuum-dilution note ---"
-rm -rf optical_study_mos2
-stb-optical -f mos2.fdf -c calc.fdf -p . -O optical_study_mos2 --directions x z --no-intro \
-    > log_mos2.txt 2>&1
+# --- 4. Full 6-direction run (diagonal + biaxial complete set) ---
+echo -e "\n--- Testing full 6-direction run (xx yy zz xy xz yz) ---"
+rm -rf study_full
+stb-optical -f bulk.fdf -c calc.fdf -O study_full --directions xx yy zz xy xz yz --no-intro \
+    > log_full.txt 2>&1
 check_exit_code $? 0
-check_success optical_study_mos2/dir_x/structure.fdf
-check_success optical_study_mos2/dir_z/structure.fdf
-check_contains "KNOWN LIMITATION" optical_study_mos2/optical_stage1.txt
-check_contains "2D (e.g., a slab or surface)" optical_study_mos2/optical_stage1.txt
+check_contains "(3 diagonal, 3 biaxial)" log_full.txt
+check_success study_full/dir_xz/config_extra.fdf
+check_contains "0.7071  0.0000  0.7071" study_full/dir_xz/config_extra.fdf
+check_success study_full/dir_yz/config_extra.fdf
+check_contains "0.0000  0.7071  0.7071" study_full/dir_yz/config_extra.fdf
+
+echo "Testing: dielectric-tensor mapping table documents direct vs. needs-reconstruction"
+check_contains "eps_xx (direct)" log_full.txt
+check_contains "eps_xy (needs reconstruction)" log_full.txt
+
+echo "Testing: with all pairs present, no missing-pair warning and the automation note is shown"
+check_not_contains "missing" log_full.txt
+check_contains "stb-opticalAnalysis applies this automatically" log_full.txt
 
 
-# --- 6. Error cases ---
+# --- 5. 2D input: known-limitation dimensionality note ---
+echo -e "\n--- Testing 2D fixture (slab.fdf, vacuum-padded) ---"
+rm -rf study_slab
+stb-optical -f slab.fdf -c calc.fdf -O study_slab --no-intro > log_slab.txt 2>&1
+check_exit_code $? 0
+check_contains "Detected : 2D (e.g., a slab or surface)" log_slab.txt
+check_contains "\[KNOWN LIMITATION\] Vacuum-padded (2D/slab) input" log_slab.txt
+echo "Testing: out-of-plane (zz) direction is still written for a 2D input, not skipped"
+check_success study_slab/dir_zz/structure.fdf
+
+
+# --- 6. Pseudopotentials copied into every direction folder ---
+echo -e "\n--- Testing pseudopotential copying (-p .) ---"
+rm -rf study_pseudo
+stb-optical -f bulk.fdf -c calc.fdf -p . -O study_pseudo --no-intro > log_pseudo.txt 2>&1
+check_exit_code $? 0
+check_success study_pseudo/dir_xx/Na.psf
+check_success study_pseudo/dir_xx/Cl.psf
+
+
+# --- 7. Error cases ---
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: --version"
 stb-optical --version > log_version.txt 2>&1
 check_contains "stb-optical" log_version.txt
 
-echo "Testing: --help documents --directions/--optical-mesh/--optical-broaden/--optical-nbands"
+echo "Testing: --help documents the diagonal/biaxial naming and config_extra.fdf convention"
 stb-optical --help > log_help.txt 2>&1
-check_contains "directions" log_help.txt
-check_contains "optical-mesh" log_help.txt
-check_contains "optical-broaden" log_help.txt
-check_contains "optical-nbands" log_help.txt
+check_contains "xx yy zz" log_help.txt
+check_contains "BIAXIAL" log_help.txt
+check_contains "config_extra.fdf" log_help.txt
 
 echo "Testing: missing structure file is rejected"
-stb-optical -f nonexistent.fdf -c calc.fdf -p . -O optical_study_bad --no-intro \
-    > log_missing_structure.txt 2>&1
+stb-optical -f does_not_exist.fdf -c calc.fdf --no-intro > log_bad_structure.txt 2>&1
 check_exit_code $? 1
-check_contains "not found" log_missing_structure.txt
+check_contains "not found" log_bad_structure.txt
+
+echo "Testing: missing --calc file is rejected"
+stb-optical -f bulk.fdf -c does_not_exist.fdf --no-intro > log_bad_calc.txt 2>&1
+check_exit_code $? 1
+check_contains "not found" log_bad_calc.txt
+
+echo "Testing: default -c (calc.fdf) missing in the current directory is rejected the same way"
+mkdir -p no_calc_here
+( cd no_calc_here && cp ../bulk.fdf . && stb-optical -f bulk.fdf --no-intro > ../log_no_calc.txt 2>&1 )
+check_exit_code $? 1
+check_contains "not found" log_no_calc.txt
+
+echo "Testing: an unrecognized --directions value is rejected by argparse"
+stb-optical -f bulk.fdf -c calc.fdf --directions bogus --no-intro > log_bad_direction.txt 2>&1
+check_exit_code $? 2
+check_contains "invalid choice" log_bad_direction.txt
 
 
-# --- 7. Interactive path (stb-suite, shortcut 4.16.1) ---
+# --- 8. Interactive path (stb-suite, shortcut 4.16.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.16.1) ---"
 
-echo "Testing: navigate 4.16.1 -> cubic fixture -> defaults -> quit"
-rm -rf optical_study_menu
+echo "Testing: navigate 4.16.1 -> bulk.fdf -> defaults -> quit"
+rm -rf study_menu
 {
   echo "4.16.1"
-  echo "cubic.fdf"        # structure
-  echo "calc.fdf"           # calc template
-  echo "3"                   # pseudo_dir -> option 3 = Custom path
-  echo "."                    # custom pseudo path
-  echo ""                      # directions (default x y z)
-  echo "optical_study_menu"     # output dir
-  echo ""                        # advanced settings (default N)
-  echo ""                         # press enter to continue
-  echo "0"                         # quit stage submenu
+  echo "bulk.fdf"        # structure file
+  echo ""                 # calc.fdf (default)
+  echo ""                  # pseudo source (skip)
+  echo ""                   # directions (default xx yy zz)
+  echo "study_menu"          # output dir
+  echo "n"                    # advanced settings
+  echo ""                      # press enter to continue
+  echo "0"                      # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
-check_success optical_study_menu/dir_x/structure.fdf
-check_success optical_study_menu/dir_y/structure.fdf
-check_success optical_study_menu/dir_z/structure.fdf
+check_success study_menu/dir_xx/structure.fdf
+check_success study_menu/dir_yy/structure.fdf
+check_success study_menu/dir_zz/structure.fdf
+
+echo "Testing: interactive-menu and direct-CLI results agree (same geometry)"
+python3 -c "
+import sys
+from stb.core import structure_io
+import numpy as np
+a = structure_io.read_fdf('study_menu/dir_xx/structure.fdf')
+b = structure_io.read_fdf('study_default/dir_xx/structure.fdf')
+a_frac = sorted([tuple(np.round(pos, 6)) for _s, pos in a.atoms])
+b_frac = sorted([tuple(np.round(pos, 6)) for _s, pos in b.atoms])
+sys.exit(0 if a_frac == b_frac else 1)
+" > log_menu_check.txt 2>&1
+check_exit_code $? 0
 
 
 popd > /dev/null
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

@@ -17,6 +17,7 @@ import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.dielectric import read_epsimg
+from stb.core.calc_directives import OPTICAL_DIRECTION_VECTORS, OPTICAL_OFFDIAG_PAIRS
 from stb.core.optical_properties import (
     compute_all, correct_2d_perpendicular, correct_2d_parallel, molecular_polarizability,
     derive_from_eps,
@@ -31,7 +32,12 @@ _VECTOR_BLOCK_RE = re.compile(
     r'%block\s+Optical\.Vector\s*\n\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)',
     re.IGNORECASE)
 
-_AXIS_UNIT_VECTORS = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
+# Same direction -> Optical.Vector convention stb-optical (Stage 1) writes
+# folders with -- see core/calc_directives.py's own docstring for the
+# full diagonal ('xx'/'yy'/'zz')-vs-biaxial ('xy'/'xz'/'yz') derivation.
+_AXIS_UNIT_VECTORS = OPTICAL_DIRECTION_VECTORS
+_DIAGONAL_AXES = ("xx", "yy", "zz")
+_AXIS_ORDER = {"xx": 0, "yy": 1, "zz": 2, "xy": 3, "xz": 4, "yz": 5, "avg": 6}
 
 _QUANTITY_COLUMNS = {
     # name -> [(column_key, dat_column_index_1based, legend_label), ...]
@@ -50,50 +56,76 @@ _QUANTITY_TITLES = {
 
 _PALETTE = ["#2255cc", "#cc2222", "#22aa55", "#aa22cc", "#cc8822", "#22aacc"]
 
+CONFIG_EXTRA_FILE = "config_extra.fdf"
 
-def detect_label(fdf_path):
-    """SystemLabel from one calc.fdf -- same regex approach as
-    raman_analysis.py::detect_optical_label/core.phonon_workflow.
-    detect_system_label, reimplemented locally per-folder (not a single
-    workflow-wide detection) since Stage 2 aggregates folders that could
-    in principle carry different SystemLabels (not the normal case, but
-    cheap to handle correctly rather than assume).
+
+def _read_folder_fdf_text(folder):
+    """calc.fdf's own text, plus config_extra.fdf's (if present),
+    concatenated -- stb-optical (Stage 1) writes SystemLabel and the rest
+    of the user's template directly into calc.fdf, but the forced
+    MD.TypeOfRun/MD.Steps and Optical.Mesh/Optical.Vector/Optical.Broaden
+    block into a %include'd config_extra.fdf sidecar instead (this
+    suite's standard config_extra.fdf convention -- never edited into
+    calc.fdf itself, see CLAUDE.md). detect_label/detect_axis below search
+    this combined text so they find SystemLabel/Optical.Vector regardless
+    of which of the 2 files the directive actually lives in.
     """
-    try:
-        with open(fdf_path) as f:
-            match = _LABEL_RE.search(f.read())
-    except OSError:
-        return None
+    parts = []
+    calc_path = os.path.join(folder, "calc.fdf")
+    if os.path.isfile(calc_path):
+        with open(calc_path) as f:
+            parts.append(f.read())
+    extra_path = os.path.join(folder, CONFIG_EXTRA_FILE)
+    if os.path.isfile(extra_path):
+        with open(extra_path) as f:
+            parts.append(f.read())
+    return "\n".join(parts)
+
+
+def detect_label(folder):
+    """SystemLabel from one direction folder's calc.fdf/config_extra.fdf --
+    same regex approach as raman_analysis.py::detect_optical_label/
+    core.phonon_workflow.detect_system_label, reimplemented locally per
+    -folder (not a single workflow-wide detection) since Stage 2
+    aggregates folders that could in principle carry different
+    SystemLabels (not the normal case, but cheap to handle correctly
+    rather than assume).
+    """
+    match = _LABEL_RE.search(_read_folder_fdf_text(folder))
     return match.group(1) if match else None
 
 
-def detect_axis(fdf_path):
-    """Direction label ('x'/'y'/'z') from the %block Optical.Vector in
-    one calc.fdf -- read from the file's own content, NOT inferred from
-    the folder name (robust to the user renaming/reorganizing Stage 1's
-    dir_x/dir_y/dir_z folders). Matches both +axis and -axis unit vectors
-    (e.g. -1,0,0 is still "x") -- physically the SAME linear response
-    either way (eps_xx enters via |<i|p.e|j>|^2, quadratic in the
-    polarization unit vector e, so a sign flip cannot change the result;
-    stb-optical itself only ever writes the +axis convention, this just
-    makes detection robust to a hand-edited or externally-generated
-    folder using the opposite sign). Returns None if no block is found
-    or the vector doesn't match one of the 3 canonical axes at all (e.g.
-    a genuine off-axis direction) -- callers fall back to the folder's
-    basename as a display label in that case.
+def detect_axis(folder):
+    """Direction label ('xx'/'yy'/'zz' diagonal, 'xy'/'xz'/'yz' biaxial)
+    from the %block Optical.Vector in one direction folder's calc.fdf/
+    config_extra.fdf -- read from the files' own content, NOT inferred
+    from the folder name (robust to the user renaming/reorganizing Stage
+    1's dir_xx/dir_yy/.../dir_yz folders). Matches both the +vector and
+    -vector convention (e.g. -1,0,0 is still "xx") -- physically the SAME
+    linear response either way (eps enters via |<i|p.e|j>|^2, quadratic
+    in the polarization unit vector e, so a sign flip cannot change the
+    result; stb-optical itself only ever writes the +vector convention,
+    this just makes detection robust to a hand-edited or externally
+    -generated folder using the opposite sign). Returns None if no block
+    is found or the vector doesn't match one of the 6 canonical
+    directions at all (e.g. a genuine off-axis, non-bisector direction)
+    -- callers fall back to the folder's basename as a display label in
+    that case.
     """
-    try:
-        with open(fdf_path) as f:
-            text = f.read()
-    except OSError:
-        return None
-    match = _VECTOR_BLOCK_RE.search(text)
+    match = _VECTOR_BLOCK_RE.search(_read_folder_fdf_text(folder))
     if match is None:
         return None
-    vec = tuple(round(float(v), 4) for v in match.groups())
+    vec = tuple(float(v) for v in match.groups())
+    # Tolerance-based, not exact-tuple equality: build_optical_block writes
+    # the bisector directions ((+/-1/sqrt(2), ...)) rounded to 4 decimal
+    # places, an irrational value that would never exactly equal this
+    # module's own unrounded constant otherwise. 1e-3 comfortably covers
+    # that rounding (worst case ~5e-5) with no risk of matching a genuine
+    # off-axis direction by accident.
     for axis, unit_vec in _AXIS_UNIT_VECTORS.items():
         neg_unit_vec = tuple(-v for v in unit_vec)
-        if vec == unit_vec or vec == neg_unit_vec:
+        if (all(abs(a - b) < 1e-3 for a, b in zip(vec, unit_vec)) or
+                all(abs(a - b) < 1e-3 for a, b in zip(vec, neg_unit_vec))):
             return axis
     return None
 
@@ -101,8 +133,8 @@ def detect_axis(fdf_path):
 def find_direction_folders(directory):
     """Every immediate subdirectory of `directory` that contains a
     calc.fdf -- the general "aggregate whatever's present" scan this
-    Stage 2 uses instead of hardcoding dir_x/dir_y/dir_z (Stage 1's own
-    naming is just a convention, not a contract Stage 2 depends on).
+    Stage 2 uses instead of hardcoding dir_xx/dir_yy/.../dir_yz (Stage 1's
+    own naming is just a convention, not a contract Stage 2 depends on).
     Returns a sorted list of folder paths.
     """
     candidates = []
@@ -121,9 +153,8 @@ def read_direction_result(folder, out_file, label_override=None):
     fatal error for the whole run -- same advisory-only convention as
     cohesive_analysis.py/oer_analysis.py).
     """
-    fdf_path = os.path.join(folder, "calc.fdf")
-    label = label_override or detect_label(fdf_path) or "siesta"
-    axis = detect_axis(fdf_path) or os.path.basename(folder)
+    label = label_override or detect_label(folder) or "siesta"
+    axis = detect_axis(folder) or os.path.basename(folder)
 
     epsimg_path = os.path.join(folder, f"{label}.EPSIMG")
     if not os.path.isfile(epsimg_path):
@@ -163,9 +194,9 @@ def compute_isotropic_average(results):
     """Polycrystalline/isotropic-averaged dielectric response, for direct
     comparison against a typically-polycrystalline or powder experimental
     measurement (which doesn't correspond to any single crystallographic
-    direction). Only computed when all 3 of x/y/z are present in
+    direction). Only computed when all 3 of xx/yy/zz are present in
     `results`. Returns a result dict shaped exactly like
-    read_direction_result's own output (axis='avg'), or None if x/y/z
+    read_direction_result's own output (axis='avg'), or None if xx/yy/zz
     aren't all present.
 
     Averages eps2 (the fundamental linear-response quantity SIESTA
@@ -186,16 +217,16 @@ def compute_isotropic_average(results):
     and values within 1e-6 -- expected when all 3 came from the same
     calc.fdf template, as stb-optical always writes, but not assumed
     blindly), the non-reference grids are interpolated (np.interp) onto
-    the x direction's own grid before averaging.
+    the xx direction's own grid before averaging.
     """
     by_axis = {r["axis"]: r for r in results}
-    if not all(axis in by_axis for axis in ("x", "y", "z")):
+    if not all(axis in by_axis for axis in _DIAGONAL_AXES):
         return None
 
-    ref_omega = by_axis["x"]["omega"]
+    ref_omega = by_axis["xx"]["omega"]
     eps2_sum = np.zeros_like(ref_omega)
     interpolated = False
-    for axis in ("x", "y", "z"):
+    for axis in _DIAGONAL_AXES:
         r = by_axis[axis]
         if len(r["omega"]) == len(ref_omega) and np.allclose(r["omega"], ref_omega, atol=1e-6):
             eps2_sum = eps2_sum + r["eps2"]
@@ -206,11 +237,72 @@ def compute_isotropic_average(results):
 
     avg_result = compute_all(ref_omega, eps2_avg)
     avg_result["axis"] = "avg"
-    avg_result["label"] = by_axis["x"]["label"]
-    avg_result["scf_ok"] = all(by_axis[axis]["scf_ok"] for axis in ("x", "y", "z"))
-    avg_result["folder"] = "(isotropic average of x, y, z)"
+    avg_result["label"] = by_axis["xx"]["label"]
+    avg_result["scf_ok"] = all(by_axis[axis]["scf_ok"] for axis in _DIAGONAL_AXES)
+    avg_result["folder"] = "(isotropic average of xx, yy, zz)"
     avg_result["interpolated"] = interpolated
     return avg_result
+
+
+def reconstruct_offdiagonal(results):
+    """Off-diagonal dielectric-tensor components eps_ij(E), for every
+    biaxial direction ('xy'/'xz'/'yz') present in `results` whose 2
+    matching diagonal directions (see core.calc_directives.
+    OPTICAL_OFFDIAG_PAIRS) are ALSO present -- eps_ij = eps_(bisector ij)
+    - (eps_ii + eps_jj) / 2, applied separately to eps1(E) and eps2(E)
+    (both are components of the SAME symmetric dielectric tensor, so the
+    identical linear reconstruction applies to each independently; no
+    Kramers-Kronig re-transform needed here, unlike compute_isotropic_
+    average's own eps2-first approach, since this is a plain linear
+    combination of already-consistent eps1/eps2 pairs, not a change of
+    which underlying quantity is being averaged).
+
+    Deliberately does NOT derive n/k/alpha/R/L/sigma1 for these --
+    those textbook relations (n = sqrt(eps), etc.) assume a principal
+    -axis (diagonal) dielectric response; an off-diagonal tensor
+    component has no such standalone refractive-index/absorption
+    -coefficient interpretation, so only eps1_ij(E)/eps2_ij(E) themselves
+    are physically meaningful outputs here.
+
+    Returns a list of dicts, each {'axis', 'omega', 'eps1', 'eps2',
+    'scf_ok', 'interpolated', 'needs'} -- one entry per reconstructable
+    biaxial direction found (possibly empty). Energy grids are matched
+    onto the biaxial direction's own omega (interpolating the 2 diagonal
+    directions to it if needed), same convention as compute_isotropic_
+    average.
+    """
+    by_axis = {r["axis"]: r for r in results}
+    reconstructed = []
+    for mixed_axis, (need_a, need_b) in OPTICAL_OFFDIAG_PAIRS.items():
+        if not (mixed_axis in by_axis and need_a in by_axis and need_b in by_axis):
+            continue
+        r_mixed, r_a, r_b = by_axis[mixed_axis], by_axis[need_a], by_axis[need_b]
+        ref_omega = r_mixed["omega"]
+        interpolated = False
+
+        def _on_ref_grid(r):
+            nonlocal interpolated
+            if len(r["omega"]) == len(ref_omega) and np.allclose(r["omega"], ref_omega, atol=1e-6):
+                return r["eps1"], r["eps2"]
+            interpolated = True
+            return (np.interp(ref_omega, r["omega"], r["eps1"]),
+                    np.interp(ref_omega, r["omega"], r["eps2"]))
+
+        eps1_a, eps2_a = _on_ref_grid(r_a)
+        eps1_b, eps2_b = _on_ref_grid(r_b)
+        eps1_ij = r_mixed["eps1"] - (eps1_a + eps1_b) / 2.0
+        eps2_ij = r_mixed["eps2"] - (eps2_a + eps2_b) / 2.0
+
+        reconstructed.append({
+            "axis": mixed_axis,
+            "omega": ref_omega,
+            "eps1": eps1_ij,
+            "eps2": eps2_ij,
+            "scf_ok": r_mixed["scf_ok"] and r_a["scf_ok"] and r_b["scf_ok"],
+            "interpolated": interpolated,
+            "needs": (need_a, need_b),
+        })
+    return reconstructed
 
 
 def write_direction_dat(dat_path, result):
@@ -239,6 +331,67 @@ def write_results_csv(csv_path, results):
                         f"{result['eps2'][i]:.6f},{result['n'][i]:.6f},{result['k'][i]:.6f},"
                         f"{result['alpha'][i]:.6e},{result['R'][i]:.6f},{result['L'][i]:.6e},"
                         f"{result['sigma1'][i]:.6e}\n")
+
+
+def write_offdiagonal_dat(dat_path, result):
+    """3-column .dat for one reconstructed off-diagonal tensor component:
+    E_eV, eps1_ij, eps2_ij -- deliberately not the 9-column format
+    write_direction_dat uses (no n/k/alpha/R/L/sigma1, see reconstruct_
+    offdiagonal's own docstring for why those aren't meaningful here).
+    """
+    with open(dat_path, "w") as f:
+        f.write(f"# stb-opticalAnalysis -- reconstructed off-diagonal dielectric tensor "
+                f"component eps_{result['axis']}\n")
+        f.write(f"# eps_{result['axis']} = eps_(bisector {result['axis']}) - "
+                f"(eps_{result['needs'][0]} + eps_{result['needs'][1]}) / 2\n")
+        f.write(f"# columns: 1=E(eV) 2=eps1_{result['axis']} 3=eps2_{result['axis']}\n")
+        for i in range(len(result["omega"])):
+            f.write(f"{result['omega'][i]:12.6f} {result['eps1'][i]:14.6f} {result['eps2'][i]:14.6f}\n")
+
+
+def write_offdiagonal_csv(csv_path, results):
+    """Long-format CSV, one row per (off-diagonal direction, energy)
+    point: direction,E_eV,eps1_ij,eps2_ij.
+    """
+    with open(csv_path, "w") as f:
+        f.write("direction,E_eV,eps1_ij,eps2_ij\n")
+        for result in results:
+            for i in range(len(result["omega"])):
+                f.write(f"{result['axis']},{result['omega'][i]:.6f},"
+                        f"{result['eps1'][i]:.6f},{result['eps2'][i]:.6f}\n")
+
+
+def write_offdiagonal_gplot(gplot_path, dat_paths_by_axis):
+    """One gnuplot script overlaying eps1_ij/eps2_ij for every
+    reconstructed off-diagonal direction present -- same 2-curve-per
+    -direction convention as write_combined_gplot's own 'eps' quantity,
+    kept as a separate function since the off-diagonal .dat files have a
+    different (3-column, not 9-column) layout.
+    """
+    pdf_name = os.path.splitext(os.path.basename(gplot_path))[0] + ".pdf"
+    plot_terms = []
+    color_idx = 0
+    for axis in sorted(dat_paths_by_axis):
+        dat_path = dat_paths_by_axis[axis]
+        for col, label in ((2, "eps1"), (3, "eps2")):
+            color = _PALETTE[color_idx % len(_PALETTE)]
+            color_idx += 1
+            plot_terms.append(
+                f'"{os.path.basename(dat_path)}" using 1:{col} with lines lw 2 lc rgb "{color}" '
+                f'title "{label}_{axis}"')
+    with open(gplot_path, "w") as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-opticalAnalysis\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 8,5\n',
+            f'set output "{pdf_name}"\n\n',
+            'set title "Reconstructed off-diagonal dielectric tensor components"\n',
+            'set xlabel "Photon energy (eV)"\n',
+            'set ylabel "eps_{ij}"\n',
+            'set grid\n',
+            'set key top right\n',
+            'plot ' + ', \\\n     '.join(plot_terms) + '\n',
+        ])
 
 
 def write_polarizability_dat(dat_path, axis, omega, alpha1_si, alpha2_si, alpha1_ang3, alpha2_ang3):
@@ -341,23 +494,33 @@ def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 2 of 2: aggregates every direction folder written by "
         "stb-optical and derives the full set of linear optical properties.", 'bold')}
-Scans --directory for every subfolder containing a calc.fdf, identifies each one's Cartesian
-direction from its own %block Optical.Vector (not the folder name -- robust to renamed/reorganized
-folders), reads its SystemLabel.EPSIMG, and derives eps1(E)/eps2(E) (Kramers-Kronig transform),
-n(E)/k(E) (refractive index/extinction coefficient), the absorption coefficient, normal-incidence
-reflectivity, the electron energy-loss function, and the real optical conductivity -- all standard
-textbook relations (Wooten/Fox, "Optical Properties of Solids"), not flagged [UNVERIFIED]. Missing
-or incomplete direction folders are skipped with a warning, never block the directions that ARE
-ready (advisory only, same convention as this suite's other multi-folder analysis stages).
+Scans --directory for every subfolder containing a calc.fdf, identifies each one's direction from its
+own %block Optical.Vector (not the folder name -- robust to renamed/reorganized folders; 'xx'/'yy'/
+'zz' diagonal or 'xy'/'xz'/'yz' biaxial, the same convention stb-optical writes), reads its
+SystemLabel.EPSIMG, and derives eps1(E)/eps2(E) (Kramers-Kronig transform), n(E)/k(E) (refractive
+index/extinction coefficient), the absorption coefficient, normal-incidence reflectivity, the
+electron energy-loss function, and the real optical conductivity -- all standard textbook relations
+(Wooten/Fox, "Optical Properties of Solids"), not flagged [UNVERIFIED]. Missing or incomplete
+direction folders are skipped with a warning, never block the directions that ARE ready (advisory
+only, same convention as this suite's other multi-folder analysis stages).
+
+[OFF-DIAGONAL RECONSTRUCTION] Whenever a biaxial direction ('xy'/'xz'/'yz') AND its 2 matching
+diagonal directions are all present, also reconstructs the true off-diagonal dielectric-tensor
+component eps_ij(E) = eps_(bisector ij)(E) - (eps_ii(E) + eps_jj(E)) / 2 (same bisector-based formula
+raman_analysis.py's own raman_tensor_full uses for the Raman tensor's Rxy/Rxz/Ryz) and writes it to
+its own dedicated output -- eps1_ij/eps2_ij only, NOT n/k/alpha/R/L/sigma1 (those textbook relations
+assume a principal-axis/diagonal response and have no standalone meaning for a genuine off-diagonal
+tensor component).
 
 [ASSUMPTION] Reflectivity R(E) is normal-incidence, vacuum(n0=1)/material interface -- no angle-
 dependent Fresnel formula or thin-film interference is computed. [KNOWN LIMITATION, 2D/1D/0D inputs]
 The raw supercell values above are diluted by the vacuum region and NOT corrected by default -- pass
 --dimensionality-correction (see its own --help entry) to additionally restore the intrinsic 2D
 dielectric function or extract a 0D molecular polarizability, written ALONGSIDE the raw values, never
-replacing them (1D is not yet implemented -- see --dimensionality-correction's own help text).
+replacing them (1D is not yet implemented -- see --dimensionality-correction's own help text; this
+correction is only ever applied to the 3 diagonal directions, never to a biaxial/reconstructed one).
 
-When all 3 of x/y/z are present, also computes and reports/plots an isotropic ('avg') average --
+When all 3 of xx/yy/zz are present, also computes and reports/plots an isotropic ('avg') average --
 eps2 averaged across the 3 directions first, then every other quantity (including eps1) re-derived
 from that averaged eps2 -- the standard convention for comparing against a polycrystalline/powder
 experimental measurement, which doesn't correspond to any single crystallographic direction.""",
@@ -500,15 +663,14 @@ experimental measurement, which doesn't correspond to any single crystallographi
             f_out.close()
         sys.exit(1)
 
-    _axis_order = {"x": 0, "y": 1, "z": 2}
-    results.sort(key=lambda r: (_axis_order.get(r["axis"], 99), r["axis"]))
+    results.sort(key=lambda r: (_AXIS_ORDER.get(r["axis"], 99), r["axis"]))
 
     avg_result = compute_isotropic_average(results)
     if avg_result is not None:
         if avg_result["interpolated"]:
             print_dual(color_text(
                 "  [NOTE] Direction energy grids did not match exactly -- interpolated onto "
-                "the x direction's grid before averaging.", 'yellow'), f_out)
+                "the xx direction's grid before averaging.", 'yellow'), f_out)
         results.append(avg_result)
 
     structure = None
@@ -545,10 +707,36 @@ experimental measurement, which doesn't correspond to any single crystallographi
                 f"    [WARNING] Could not confirm SCF convergence for '{result['folder']}' -- "
                 "this direction's spectrum may be unreliable.", 'yellow'), f_out)
 
+    offdiag_results = reconstruct_offdiagonal(results)
+    if offdiag_results:
+        print_section('[2b] OFF-DIAGONAL DIELECTRIC TENSOR (eps_ij RECONSTRUCTION)', f_out)
+        print_dual("eps_ij = eps_(bisector ij) - (eps_ii + eps_jj) / 2, applied to eps1(E) and "
+                    "eps2(E) independently -- see stb-optical --help for the full derivation.", f_out)
+        for r in offdiag_results:
+            i0 = int(np.argmin(r["omega"]))
+            need_a, need_b = r["needs"]
+            print_dual(f"  eps_{r['axis']} (from dir_{r['axis']}, dir_{need_a}, dir_{need_b}):", f_out)
+            print_dual(f"    eps1_{r['axis']}(E->0)  : {r['eps1'][i0]:.4f}", f_out)
+            print_dual(f"    eps2_{r['axis']}(E->0)  : {r['eps2'][i0]:.4f}", f_out)
+            if r["interpolated"]:
+                print_dual(color_text(
+                    f"    [NOTE] Direction energy grids did not match exactly -- interpolated "
+                    f"onto {r['axis']}'s own grid before reconstructing.", 'yellow'), f_out)
+            if not r["scf_ok"]:
+                print_dual(color_text(
+                    f"    [WARNING] Could not confirm SCF convergence for one of the 3 folders "
+                    f"feeding eps_{r['axis']} -- this component may be unreliable.", 'yellow'), f_out)
+        n_offdiag_possible = len(OPTICAL_OFFDIAG_PAIRS)
+        if len(offdiag_results) < n_offdiag_possible:
+            missing_pairs = [axis for axis in OPTICAL_OFFDIAG_PAIRS if axis not in
+                              {r["axis"] for r in offdiag_results}]
+            print_dual(f"  ({', '.join(missing_pairs)} not reconstructed -- missing the biaxial "
+                        "folder and/or one of its 2 matching diagonal folders.)", f_out)
+
     corrected_dat_paths = []
     polarizability_rows = []
     if args.dimensionality_correction:
-        print_section('[2b] DIMENSIONALITY CORRECTION', f_out)
+        print_section('[2c] DIMENSIONALITY CORRECTION', f_out)
         if structure is None or vacuum_axes is None:
             print_dual(color_text(
                 "  [WARNING] Could not read structure.fdf -- --dimensionality-correction "
@@ -591,9 +779,9 @@ experimental measurement, which doesn't correspond to any single crystallographi
                 print_dual(f"  Thickness (user-supplied) : {args.thickness} Ang", f_out)
                 corrected_results = []
                 for result in results:
-                    if result["axis"] not in ("x", "y", "z"):
+                    if result["axis"] not in _DIAGONAL_AXES:
                         continue
-                    axis_idx = {"x": 0, "y": 1, "z": 2}[result["axis"]]
+                    axis_idx = {"xx": 0, "yy": 1, "zz": 2}[result["axis"]]
                     if axis_idx == vacuum_idx:
                         e1c, e2c = correct_2d_perpendicular(
                             result["eps1"], result["eps2"], cell_length_ang, args.thickness)
@@ -623,7 +811,7 @@ experimental measurement, which doesn't correspond to any single crystallographi
                 print_dual("  Extracting molecular polarizability (dilute Clausius-Mossotti "
                             "relation).", f_out)
                 for result in results:
-                    if result["axis"] not in ("x", "y", "z"):
+                    if result["axis"] not in _DIAGONAL_AXES:
                         continue
                     a1si, a2si, a1a3, a2a3 = molecular_polarizability(
                         result["eps1"], result["eps2"], cell_volume_ang3)
@@ -654,6 +842,21 @@ experimental measurement, which doesn't correspond to any single crystallographi
         write_direction_dat(dat_path, result)
         dat_paths_by_axis[result["axis"]] = dat_path
         print_dual(f"Direction {result['axis']} .dat     : {dat_path}", f_out)
+
+    if offdiag_results:
+        offdiag_csv_path = os.path.join(args.directory, f"{args.output}_offdiagonal.csv")
+        write_offdiagonal_csv(offdiag_csv_path, offdiag_results)
+        print_dual(f"CSV (off-diagonal)   : {offdiag_csv_path}", f_out)
+        offdiag_dat_paths = {}
+        for r in offdiag_results:
+            dat_path = os.path.join(args.directory, f"{args.output}_{r['axis']}_offdiag.dat")
+            write_offdiagonal_dat(dat_path, r)
+            offdiag_dat_paths[r["axis"]] = dat_path
+            print_dual(f"eps_{r['axis']} .dat            : {dat_path}", f_out)
+        offdiag_gplot_path = os.path.join(args.directory, f"{args.output}_offdiagonal.gplot")
+        write_offdiagonal_gplot(offdiag_gplot_path, offdiag_dat_paths)
+        print_dual(f"Combined plot (off-diagonal) : {offdiag_gplot_path} "
+                    f"(cd {args.directory} && gnuplot {os.path.basename(offdiag_gplot_path)})", f_out)
 
     for path in corrected_dat_paths:
         print_dual(f"Dimensionality correction : {path}", f_out)

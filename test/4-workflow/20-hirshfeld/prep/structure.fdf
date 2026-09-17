@@ -1,0 +1,25 @@
+# Synthetic 2-species combined structure fixture for stb-hirshfeldPrep's
+# smoke test: a CO-like molecule in a vacuum box. No physical/DFT meaning --
+# geometry/species only.
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 15.00000000   0.00000000   0.00000000
+  0.00000000  15.00000000   0.00000000
+  0.00000000   0.00000000  15.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.50000000   0.45000000   1
+  0.50000000   0.50000000   0.55000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

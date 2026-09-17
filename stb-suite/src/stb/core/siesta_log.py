@@ -536,6 +536,88 @@ def get_spin_moment(path: str) -> float | None:
     return moment
 
 
+def _parse_atomic_population_block(lines: list[str], header_text: str) -> list[dict] | None:
+    """Shared parser for SIESTA's 'Hirshfeld Atomic Populations:'/'Voronoi
+    Atomic Populations:' blocks (written when Charge.Hirshfeld end /
+    Charge.Voronoi end is set), e.g.:
+
+        Hirshfeld Atomic Populations:
+        Atom #   charge [q] valence [e]      Sz [e]  Species
+             1    -0.049444    4.049444   -0.005202  C
+             ...
+        -------------------------------------------
+         Total    -0.000086                0.987951
+
+    Verified against a real spin-polarized .out (new_functions/calc.out).
+    Finds the LAST line equal to `header_text`, skips the column-header
+    line right after it, then reads data rows until a line of only '-'
+    characters (the block's own terminator, right before its 'Total'
+    line). Each data row: 1-based atom index, then 2 or 3 numeric columns
+    (charge, valence population, and an optional net-spin Sz column --
+    present for a spin-polarized run; a non-polarized run's exact column
+    count hasn't been verified against a real fixture, hence the
+    tolerance), then a trailing species symbol. Returns
+    [{'id', 'charge', 'population', 'sz': float | None, 'sym'}, ...], or
+    None if `header_text` never appears or no data row parses.
+    """
+    start = None
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == header_text:
+            start = i
+            break
+    if start is None:
+        return None
+
+    rows = []
+    for line in lines[start + 2:]:
+        stripped = line.strip()
+        if not stripped or re.fullmatch(r"-+", stripped):
+            break
+        tokens = stripped.split()
+        if len(tokens) < 4:
+            break
+        try:
+            idx = int(tokens[0])
+            nums = [float(t) for t in tokens[1:-1]]
+        except ValueError:
+            break
+        if len(nums) not in (2, 3):
+            break
+        rows.append({
+            'id': idx, 'charge': nums[0], 'population': nums[1],
+            'sz': nums[2] if len(nums) == 3 else None, 'sym': tokens[-1],
+        })
+    return rows if rows else None
+
+
+def get_hirshfeld_charges(path: str) -> list[dict] | None:
+    """Per-atom Hirshfeld charges from the LAST 'Hirshfeld Atomic
+    Populations:' block in a SIESTA .out file (written when
+    'Charge.Hirshfeld end' is set) -- SIESTA's own native Hirshfeld
+    analysis; stb-nativecharges reads and tabulates this rather than
+    reimplementing Hirshfeld from a .RHO (see that tool's module docstring
+    for why). Returns [{'id', 'charge', 'population', 'sz': float | None,
+    'sym'}, ...], or None if the block isn't present / fails to parse.
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+    except Exception:
+        return None
+    return _parse_atomic_population_block(lines, "Hirshfeld Atomic Populations:")
+
+
+def get_voronoi_charges(path: str) -> list[dict] | None:
+    """Same shape as get_hirshfeld_charges, for the LAST 'Voronoi Atomic
+    Populations:' block (Charge.Voronoi end)."""
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            lines = f.readlines()
+    except Exception:
+        return None
+    return _parse_atomic_population_block(lines, "Voronoi Atomic Populations:")
+
+
 def get_scf_convergence(path: str) -> tuple[bool, int | None]:
     """Returns (converged, iterations) from the LAST "SCF cycle converged
     after N iterations" line in a SIESTA .out file. `converged` is False
@@ -645,6 +727,137 @@ def report_quality_diagnostics(label: str, out_path: str, force_tolerance: float
             f"  [WARNING] Residual force on {label} ({max_force:.4f} eV/Ang) exceeds "
             f"--force-tolerance ({force_tolerance} eV/Ang) -- this geometry may not be "
             "relaxed.", 'yellow'), f_out)
+
+
+# Standard chemical valence (s+p for main group, s+d for transition) --
+# used ONLY as a per-species fallback when the .out file can't be parsed,
+# or doesn't mention a species the structure actually has. DFT
+# pseudopotentials (especially with semi-core states) may report a
+# different Z_val than this table -- get_zval_from_output's own
+# .out-detected value always takes priority when available.
+FALLBACK_VALENCE = {
+    # Period 1
+    "H": 1.0,  "He": 2.0,
+    # Period 2
+    "Li": 1.0, "Be": 2.0, "B": 3.0,  "C": 4.0,  "N": 5.0,  "O": 6.0,  "F": 7.0,  "Ne": 8.0,
+    # Period 3
+    "Na": 1.0, "Mg": 2.0, "Al": 3.0, "Si": 4.0, "P": 5.0,  "S": 6.0,  "Cl": 7.0, "Ar": 8.0,
+    # Period 4
+    "K": 1.0,  "Ca": 2.0, "Sc": 3.0, "Ti": 4.0, "V": 5.0,  "Cr": 6.0, "Mn": 7.0, "Fe": 8.0,
+    "Co": 9.0, "Ni": 10.0,"Cu": 11.0,"Zn": 12.0,"Ga": 3.0, "Ge": 4.0, "As": 5.0, "Se": 6.0,
+    "Br": 7.0, "Kr": 8.0,
+    # Period 5
+    "Rb": 1.0, "Sr": 2.0, "Y": 3.0,  "Zr": 4.0, "Nb": 5.0, "Mo": 6.0, "Tc": 7.0, "Ru": 8.0,
+    "Rh": 9.0, "Pd": 10.0,"Ag": 11.0,"Cd": 12.0,"In": 3.0, "Sn": 4.0, "Sb": 5.0, "Te": 6.0,
+    "I": 7.0,  "Xe": 8.0,
+    # Period 6 (Lanthanides usually 3, but can vary in DFT)
+    "Cs": 1.0, "Ba": 2.0,
+    "La": 3.0, "Ce": 4.0, "Pr": 3.0, "Nd": 3.0, "Pm": 3.0, "Sm": 3.0, "Eu": 2.0, "Gd": 3.0,
+    "Tb": 3.0, "Dy": 3.0, "Ho": 3.0, "Er": 3.0, "Tm": 3.0, "Yb": 2.0, "Lu": 3.0,
+    "Hf": 4.0, "Ta": 5.0, "W": 6.0,  "Re": 7.0, "Os": 8.0, "Ir": 9.0, "Pt": 10.0,"Au": 11.0,
+    "Hg": 12.0,"Tl": 3.0, "Pb": 4.0, "Bi": 5.0, "Po": 6.0, "At": 7.0, "Rn": 8.0,
+    # Period 7 (Actinides)
+    "Fr": 1.0, "Ra": 2.0,
+    "Ac": 3.0, "Th": 4.0, "Pa": 5.0, "U": 6.0,  "Np": 5.0, "Pu": 4.0, "Am": 3.0, "Cm": 3.0,
+    "Bk": 3.0, "Cf": 3.0, "Es": 3.0, "Fm": 3.0, "Md": 3.0, "No": 2.0, "Lr": 3.0,
+    "Rf": 4.0, "Db": 5.0, "Sg": 6.0, "Bh": 7.0, "Hs": 8.0, "Mt": 9.0, "Ds": 10.0,"Rg": 11.0,
+    "Cn": 12.0,"Nh": 3.0, "Fl": 4.0, "Mc": 5.0, "Lv": 6.0, "Ts": 7.0, "Og": 8.0
+}
+
+
+def get_zval_from_output(label, override_path=None):
+    """Reads the per-species VALENCE charge (Z_val -- NOT the atomic number
+    Z used to select a pseudopotential in %block ChemicalSpeciesLabel) from
+    a SIESTA .out log. Supports SIESTA 4.x and 5.x wordings. Critical
+    distinction: a pseudopotential DFT calculation's own charge density
+    only ever integrates to the VALENCE electron count -- using the full
+    atomic number Z instead of this Z_val in any `charge = Z - population`
+    formula silently produces a wildly wrong charge (e.g. Te: using Z=52
+    instead of Z_val~6 gives a nonsensical +46 e "charge" for an atom that
+    should read close to neutral).
+
+    Moved here from bader.py once hirshfeld_ions.py/hirshfeld_analysis.py
+    became further consumers of the exact same "get this system's real,
+    pseudopotential-consistent per-species Z_val, not just its Z" need
+    (extract-on-second-use, same policy as the rest of core/).
+
+    `override_path` reads a specific file (e.g. bader's --ref, or a
+    Hirshfeld-I workflow's own combined/*.out) instead of the default
+    `<label>.out`. Returns {species_label: Z_val} for every species whose
+    Z_val this .out actually reports, or None if the file doesn't exist/
+    has none -- callers should merge this over FALLBACK_VALENCE (detected
+    values take priority) rather than treat a None/partial result as fatal.
+    """
+    if override_path:
+        target_file = override_path
+        if not os.path.exists(target_file):
+            print(color_text(f"   [ERROR] Reference file '{target_file}' (via --ref) not found.", 'red'))
+            return None
+        print(f"   [INFO] Using external reference file: {color_text(target_file, 'bold')}")
+    else:
+        target_file = f"{label}.out"
+        if not os.path.exists(target_file):
+            return None
+
+    dynamic_valence = {}
+    current_label = None
+
+    try:
+        with open(target_file, 'r') as f:
+            for line in f:
+                # ---------------- LABEL DETECTION ----------------
+
+                # PRIORITY 1: Siesta 5 Standard ("atom: Called for C")
+                # This is the safest method as it appears right before the processing block
+                if "atom: Called for" in line:
+                    parts = line.split()
+                    try:
+                        # Find "for" and get the next element
+                        idx = parts.index("for")
+                        current_label = parts[idx+1]
+                        # Clean cleanup (e.g. "C(Z=6)" -> "C")
+                        current_label = current_label.split('(')[0]
+                    except ValueError:
+                        pass
+
+                # PRIORITY 2: Old Standard ("Species number: ... Label: C")
+                elif "Species number:" in line and "Label:" in line:
+                    parts = line.split()
+                    try:
+                        lbl_candidate = parts[-1]
+                        current_label = lbl_candidate
+                    except IndexError:
+                        continue
+
+                # ---------------- ZVAL DETECTION ----------------
+
+                # Check if we have an active Label
+                if current_label:
+                    zval = None
+
+                    # CASE 1: Standard Vna ("Vna: chval, zval: ...")
+                    if "Vna: chval, zval:" in line:
+                        parts = line.split()
+                        try:
+                            zval = float(parts[-1])
+                        except ValueError: pass
+
+                    # CASE 2: PSML/Pseudopotential Generation
+                    # "Valence charge in pseudo generation:    4.00000"
+                    elif "Valence charge in pseudo generation:" in line:
+                        parts = line.split()
+                        try:
+                            zval = float(parts[-1])
+                        except ValueError: pass
+
+                    if zval is not None:
+                        dynamic_valence[current_label] = zval
+
+    except Exception as e:
+        print(color_text(f"[WARN] Error reading {target_file}: {e}", 'yellow'))
+        return None
+
+    return dynamic_valence if dynamic_valence else None
 
 
 def _parse_float_line(line: str) -> list[float] | None:

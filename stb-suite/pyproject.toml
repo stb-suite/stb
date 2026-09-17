@@ -72,6 +72,7 @@ stb-cube="stb.cube:main"
 stb-ani2traj="stb.ani2traj:main"
 stb-status="stb.status:main"
 stb-archive="stb.archive:main"
+stb-nativecharges="stb.nativecharges:main"
 stb-density="stb.density:main"
 stb-stm="stb.stm:main"
 stb-wfdensity="stb.wfdensity:main"
@@ -139,6 +140,9 @@ stb-eosInputs="stb.eos_inputs:main"
 stb-eosAnalysis="stb.eos_analysis:main"
 stb-chargediffPrep="stb.chargediff_prep:main"
 stb-chargediffAnalysis="stb.chargediff_analysis:main"
+stb-hirshfeldPrep="stb.hirshfeld_prep:main"
+stb-hirshfeldIons="stb.hirshfeld_ions:main"
+stb-hirshfeldAnalysis="stb.hirshfeld_analysis:main"
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

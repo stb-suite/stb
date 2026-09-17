@@ -9,6 +9,7 @@ generic over an arbitrary grid_data array moved here.
 
 import os
 import sys
+import glob
 
 import numpy as np
 
@@ -18,6 +19,32 @@ from stb.core.grid_export import (
     integrated_charge, write_profile_data_file, write_data_file,
     plot_matplotlib_slice, plot_matplotlib_profile,
 )
+
+
+def find_one_rho(folder):
+    """Returns the single '*.RHO' file inside `folder`, or raises
+    ValueError with a clear reason if there isn't exactly one -- SIESTA
+    names it after whatever SystemLabel the calc.fdf in that folder
+    declares, so this looks for it by glob instead of asking the user to
+    type it, or assuming a specific name.
+
+    Moved here from chargediff_analysis.py once
+    hirshfeld_ions.py/hirshfeld_analysis.py became further consumers of
+    the identical "find the one .RHO SIESTA wrote in this folder" need
+    (extract-on-second-use, same policy as the rest of core/).
+    """
+    matches = sorted(glob.glob(os.path.join(folder, "*.RHO")))
+    if not matches:
+        raise ValueError(
+            f"no '*.RHO' file found in '{folder}' -- has SIESTA been run there yet "
+            "(with SaveRho true)?"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"more than one '*.RHO' file found in '{folder}' ({', '.join(matches)}) -- "
+            "expected exactly one; clean up the folder before re-running."
+        )
+    return matches[0]
 
 
 def read_total(sile):

@@ -1,0 +1,28 @@
+# Synthetic 3-atom (2x C, 1x O) fixture for stb-hirshfeldIons' own
+# mixed-sign-species fallback test: the two C atoms get deliberately very
+# different LOCAL densities in the synthetic combined .RHO (see test.sh),
+# so the species 'C' reads mixed-sign at pass-0 and must fall back to the
+# largest-|charge| atom's own sign.
+NumberOfSpecies    2
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 20.00000000   0.00000000   0.00000000
+  0.00000000  20.00000000   0.00000000
+  0.00000000   0.00000000  20.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.50000000   0.20000000   1
+  0.50000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.80000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

@@ -22,32 +22,11 @@ sisl = require_sisl()
 
 from stb.core import citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.rho_io import read_total, try_read_net_spin, report_quantity
+from stb.core.rho_io import read_total, try_read_net_spin, report_quantity, find_one_rho
 
 REPORT_FILE = "chargediff_analysis_report.txt"
 BIB_FILE = "references.bib"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
-
-
-def find_one_rho(folder):
-    """Returns the single '*.RHO' file inside `folder`, or raises ValueError
-    with a clear reason if there isn't exactly one -- SIESTA names it after
-    whatever SystemLabel the shared --calc template declares (identical
-    across every folder stb-chargediffPrep wrote, since they all reuse the
-    same template), so this looks for it by glob instead of asking the
-    user to type it, or assuming a specific name."""
-    matches = sorted(glob.glob(os.path.join(folder, "*.RHO")))
-    if not matches:
-        raise ValueError(
-            f"no '*.RHO' file found in '{folder}' -- has SIESTA been run there yet "
-            "(with SaveRho true, already forced by stb-chargediffPrep's own config_extra.fdf)?"
-        )
-    if len(matches) > 1:
-        raise ValueError(
-            f"more than one '*.RHO' file found in '{folder}' ({', '.join(matches)}) -- "
-            "expected exactly one; clean up the folder before re-running."
-        )
-    return matches[0]
 
 
 def find_geometry_file(folder):

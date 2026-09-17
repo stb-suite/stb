@@ -32,121 +32,14 @@ from pybader.io import cube as cube_io
 # ================= ANSI COLORS =================
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
+# FALLBACK_VALENCE/get_zval_from_output moved to core/siesta_log.py once
+# hirshfeld_ions.py/hirshfeld_analysis.py became further consumers of the
+# exact same "real, pseudopotential-consistent per-species Z_val" need
+# (extract-on-second-use, same policy as the rest of core/).
+from stb.core.siesta_log import FALLBACK_VALENCE, get_zval_from_output
 
 REPORT_FILE = "stb_bader_report.txt"
 BIB_FILE = "references.bib"
-
-# ================= SCIENTIFIC DATA =================
-
-# FALLBACK DICTIONARY
-# Contains standard chemical valence (s+p for main group, s+d for transition).
-# NOTE: DFT pseudopotentials (especially with semi-core states) may differ.
-#       This is used ONLY as a per-species fallback when the .out file can't
-#       be parsed, or doesn't mention a species the structure actually has.
-FALLBACK_VALENCE = {
-    # Period 1
-    "H": 1.0,  "He": 2.0,
-    # Period 2
-    "Li": 1.0, "Be": 2.0, "B": 3.0,  "C": 4.0,  "N": 5.0,  "O": 6.0,  "F": 7.0,  "Ne": 8.0,
-    # Period 3
-    "Na": 1.0, "Mg": 2.0, "Al": 3.0, "Si": 4.0, "P": 5.0,  "S": 6.0,  "Cl": 7.0, "Ar": 8.0,
-    # Period 4
-    "K": 1.0,  "Ca": 2.0, "Sc": 3.0, "Ti": 4.0, "V": 5.0,  "Cr": 6.0, "Mn": 7.0, "Fe": 8.0,
-    "Co": 9.0, "Ni": 10.0,"Cu": 11.0,"Zn": 12.0,"Ga": 3.0, "Ge": 4.0, "As": 5.0, "Se": 6.0,
-    "Br": 7.0, "Kr": 8.0,
-    # Period 5
-    "Rb": 1.0, "Sr": 2.0, "Y": 3.0,  "Zr": 4.0, "Nb": 5.0, "Mo": 6.0, "Tc": 7.0, "Ru": 8.0,
-    "Rh": 9.0, "Pd": 10.0,"Ag": 11.0,"Cd": 12.0,"In": 3.0, "Sn": 4.0, "Sb": 5.0, "Te": 6.0,
-    "I": 7.0,  "Xe": 8.0,
-    # Period 6 (Lanthanides usually 3, but can vary in DFT)
-    "Cs": 1.0, "Ba": 2.0,
-    "La": 3.0, "Ce": 4.0, "Pr": 3.0, "Nd": 3.0, "Pm": 3.0, "Sm": 3.0, "Eu": 2.0, "Gd": 3.0,
-    "Tb": 3.0, "Dy": 3.0, "Ho": 3.0, "Er": 3.0, "Tm": 3.0, "Yb": 2.0, "Lu": 3.0,
-    "Hf": 4.0, "Ta": 5.0, "W": 6.0,  "Re": 7.0, "Os": 8.0, "Ir": 9.0, "Pt": 10.0,"Au": 11.0,
-    "Hg": 12.0,"Tl": 3.0, "Pb": 4.0, "Bi": 5.0, "Po": 6.0, "At": 7.0, "Rn": 8.0,
-    # Period 7 (Actinides)
-    "Fr": 1.0, "Ra": 2.0,
-    "Ac": 3.0, "Th": 4.0, "Pa": 5.0, "U": 6.0,  "Np": 5.0, "Pu": 4.0, "Am": 3.0, "Cm": 3.0,
-    "Bk": 3.0, "Cf": 3.0, "Es": 3.0, "Fm": 3.0, "Md": 3.0, "No": 2.0, "Lr": 3.0,
-    "Rf": 4.0, "Db": 5.0, "Sg": 6.0, "Bh": 7.0, "Hs": 8.0, "Mt": 9.0, "Ds": 10.0,"Rg": 11.0,
-    "Cn": 12.0,"Nh": 3.0, "Fl": 4.0, "Mc": 5.0, "Lv": 6.0, "Ts": 7.0, "Og": 8.0
-}
-
-def get_zval_from_output(label, override_path=None):
-    """
-    Reads Z_val from the .out file. Supports Siesta 4.x and 5.x formats.
-    """
-
-    if override_path:
-        target_file = override_path
-        if not os.path.exists(target_file):
-            print(color_text(f"   [ERROR] Reference file '{target_file}' (via --ref) not found.", 'red'))
-            return None
-        print(f"   [INFO] Using external reference file: {color_text(target_file, 'bold')}")
-    else:
-        target_file = f"{label}.out"
-        if not os.path.exists(target_file):
-            return None
-
-    dynamic_valence = {}
-    current_label = None
-
-    try:
-        with open(target_file, 'r') as f:
-            for line in f:
-                # ---------------- LABEL DETECTION ----------------
-
-                # PRIORITY 1: Siesta 5 Standard ("atom: Called for C")
-                # This is the safest method as it appears right before the processing block
-                if "atom: Called for" in line:
-                    parts = line.split()
-                    try:
-                        # Find "for" and get the next element
-                        idx = parts.index("for")
-                        current_label = parts[idx+1]
-                        # Clean cleanup (e.g. "C(Z=6)" -> "C")
-                        current_label = current_label.split('(')[0]
-                    except ValueError:
-                        pass
-
-                # PRIORITY 2: Old Standard ("Species number: ... Label: C")
-                elif "Species number:" in line and "Label:" in line:
-                    parts = line.split()
-                    try:
-                        lbl_candidate = parts[-1]
-                        current_label = lbl_candidate
-                    except IndexError:
-                        continue
-
-                # ---------------- ZVAL DETECTION ----------------
-
-                # Check if we have an active Label
-                if current_label:
-                    zval = None
-
-                    # CASE 1: Standard Vna ("Vna: chval, zval: ...")
-                    if "Vna: chval, zval:" in line:
-                        parts = line.split()
-                        try:
-                            zval = float(parts[-1])
-                        except ValueError: pass
-
-                    # CASE 2: PSML/Pseudopotential Generation
-                    # "Valence charge in pseudo generation:    4.00000"
-                    elif "Valence charge in pseudo generation:" in line:
-                        parts = line.split()
-                        try:
-                            zval = float(parts[-1])
-                        except ValueError: pass
-
-                    if zval is not None:
-                        dynamic_valence[current_label] = zval
-
-    except Exception as e:
-        print(color_text(f"[WARN] Error reading {target_file}: {e}", 'yellow'))
-        return None
-
-    return dynamic_valence if dynamic_valence else None
 
 # Below this raw Bader population (electrons), an atom is flagged as suspicious rather
 # than reported at face value. A real atom essentially never integrates to exactly/near
@@ -162,6 +55,21 @@ ZERO_POPULATION_TOL = 0.01
 # resolution problem localized to part of the cell, or a mis-set-up structure, rather
 # than a real electronic-structure effect.
 SYMMETRY_CHARGE_TOL = 0.1
+
+# A whole species reporting a LARGE, nearly-uniform net charge across every
+# atom of that species (not just one outlier) is a distinct failure
+# signature from either check above: a pseudopotential with no resolvable
+# valence density maximum at that nucleus (no NLCC, deep frozen semicore
+# states) makes Bader donate that species' basin volume to its neighbors
+# wholesale, so every atom of the species fails identically rather than
+# randomly. Real, physically large and uniform charges do happen (e.g. an
+# alkali halide) -- these thresholds are a coarse heuristic, not proof of a
+# bug, and may need tuning against more cases than the one that motivated
+# them (a Te pseudopotential without NLCC reading a uniform +2.22 e across
+# every Te atom in a slab; see
+# new_functions/PROPOSAL_hirshfeld-I_implementation.md).
+SPECIES_CHARGE_MAGNITUDE_TOL = 1.0    # e-: mean |net charge| above this is "large"
+SPECIES_CHARGE_UNIFORMITY_TOL = 0.15  # e-: pstdev below this is "suspiciously uniform"
 
 # ================= HELPERS =================
 
@@ -655,6 +563,33 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
                 net = data['z_val'] - data['pop_raw'] * correction_factor
                 by_species.setdefault(data['sym'], []).append(net)
 
+            # Species-wide large-and-uniform-charge check -- see
+            # SPECIES_CHARGE_MAGNITUDE_TOL/SPECIES_CHARGE_UNIFORMITY_TOL's own
+            # comment above for why this is a distinct signature from both
+            # suspicious_zero_ids (one atom, ~zero) and inconsistent_groups
+            # (symmetry-equivalent atoms that disagree). Needs >=2 atoms of
+            # the species to even demonstrate "uniform" -- a single-atom
+            # species can't, that's the other two checks' job.
+            suspicious_species = []
+            for sym, charges in by_species.items():
+                if len(charges) < 2:
+                    continue
+                mean_abs = statistics.mean(abs(c) for c in charges)
+                std = statistics.pstdev(charges)
+                if mean_abs > SPECIES_CHARGE_MAGNITUDE_TOL and std < SPECIES_CHARGE_UNIFORMITY_TOL:
+                    suspicious_species.append((sym, mean_abs, std, len(charges)))
+
+            if suspicious_species:
+                for sym, mean_abs, std, n in suspicious_species:
+                    print(color_text(
+                        f"   [WARN] Species '{sym}' shows a large ({mean_abs:.2f} e-) and nearly "
+                        f"uniform (std {std:.3f} e-) net charge across all {n} atoms -- a common "
+                        "signature of a pseudopotential with no resolvable valence density "
+                        "maximum at that nucleus (e.g. no NLCC, deep frozen semicore states), "
+                        "which makes Bader donate that whole species' basin volume to its "
+                        "neighbors. Cross-check with a non-topological charge-partitioning "
+                        "method before trusting this species' charge.", 'red'))
+
         except Exception as e:
             print(color_text(f"[ERROR] Analysis failed: {e}", 'red'))
             sys.exit(1)
@@ -674,6 +609,7 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
         'has_spin': raw_spins is not None, 'has_volume': raw_volumes is not None,
         'atoms_data': atoms_data, 'unknown_syms': unknown_syms,
         'suspicious_zero_ids': suspicious_zero_ids, 'inconsistent_groups': inconsistent_groups,
+        'suspicious_species': suspicious_species,
         'total_theory': total_theory, 'total_final': total_final,
         'correction_factor': correction_factor, 'by_species': by_species,
         'cube_files': cube_files if keep_cube else [],
@@ -748,6 +684,7 @@ def print_bader_report(results, args, report_path, f_out):
     if results['has_spin']:
         headers += ["Spin(µB)"]
     inconsistent_ids = {i for ids, _ in results['inconsistent_groups'] for i in ids}
+    suspicious_syms = {sym for sym, _, _, _ in results['suspicious_species']}
     rows = []
     for data in results['atoms_data']:
         pop = data['pop_raw'] * results['correction_factor']
@@ -762,8 +699,11 @@ def print_bader_report(results, args, report_path, f_out):
             cells += [_fmt(data['volume']), _fmt(data['surf_dist'])]
         if results['has_spin']:
             cells.append(f"{data['spin']:+.4f}" if data['spin'] is not None else "N/A")
+        # red = this atom itself is individually anomalous (near-zero population);
+        # yellow = this atom's symmetry group disagrees, OR its whole species reads
+        # large-and-uniform -- the atom itself isn't the anomaly, its species is.
         color = 'red' if data['id'] in results['suspicious_zero_ids'] else \
-                'yellow' if data['id'] in inconsistent_ids else None
+                'yellow' if data['id'] in inconsistent_ids or data['sym'] in suspicious_syms else None
         rows.append((cells, color))
     print_table(headers, rows, f_out)
     theory_note = "" if not results['unknown_syms'] else \
@@ -779,7 +719,8 @@ def print_bader_report(results, args, report_path, f_out):
             values = results['by_species'][sym]
             mean = statistics.mean(values)
             std = statistics.pstdev(values) if len(values) > 1 else 0.0
-            rows.append(([sym, str(len(values)), f"{mean:+.4f}", f"{std:.4f}"], None))
+            rows.append(([sym, str(len(values)), f"{mean:+.4f}", f"{std:.4f}"],
+                         'yellow' if sym in suspicious_syms else None))
         print_table(["Elem", "N", "Mean(e-)", "Std(e-)"], rows, f_out)
     else:
         print_dual("No species with a known Z_val -- nothing to summarize.", f_out)
@@ -804,6 +745,16 @@ def print_bader_report(results, args, report_path, f_out):
                 f"[WARNING] Symmetry-equivalent atoms disagree on net charge: {pairs} "
                 f"(spread > {SYMMETRY_CHARGE_TOL} e-) -- these sites should be identical by "
                 "symmetry; investigate before trusting either value.", 'red'), f_out)
+    if results['suspicious_species']:
+        for sym, mean_abs, std, n in results['suspicious_species']:
+            print_dual(color_text(
+                f"[WARNING] Species '{sym}' shows a large ({mean_abs:.2f} e-) and nearly "
+                f"uniform (std {std:.3f} e-) net charge across all {n} atoms -- a common "
+                "signature of a pseudopotential with no resolvable valence density maximum "
+                "at that nucleus (e.g. no NLCC, deep frozen semicore states), which makes "
+                "Bader donate that whole species' basin volume to its neighbors. Cross-check "
+                "with a non-topological charge-partitioning method before trusting this "
+                "species' charge.", 'red'), f_out)
     print_dual(
         "Bader analysis has known limitations this tool cannot detect or correct for: "
         "non-nuclear attractors (basins not centered on any atom, common in ionic/metallic "

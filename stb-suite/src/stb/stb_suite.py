@@ -1937,6 +1937,34 @@ def run_status_checker() -> None:
     run_tool("stb-status", args)
 
 
+def run_native_charges_checker() -> None:
+    """Interface for the Native Charges reader (nativecharges.py)"""
+    print("\n" + "="*60)
+    print(color_text("SIESTA NATIVE CHARGES", 'bold').center(60))
+    print("="*60 + "\n")
+    print("Reads and tabulates SIESTA's own native Hirshfeld/Voronoi atomic-charge")
+    print("sections from a finished .out log (Charge.Hirshfeld end / Charge.Voronoi")
+    print("end) -- no new charge-partitioning method, just formats what SIESTA")
+    print("already wrote.\n")
+
+    path = get_input("Directory (or glob pattern, e.g. strain_*) to inspect (default: current): ").strip()
+    if path == "":
+        path = "."
+    is_glob = any(c in path for c in '*?[')
+    while not is_glob and not os.path.isdir(path):
+        print(color_text("Directory not found!", 'red'))
+        path = get_input("Enter a valid directory (or glob pattern): ").strip()
+        is_glob = any(c in path for c in '*?[')
+
+    label = get_input("SystemLabel override (leave blank to auto-detect): ").strip()
+
+    args = ["--path", path, "--no-intro"]
+    if label:
+        args.extend(["--label", label])
+
+    run_tool("stb-nativecharges", args)
+
+
 def run_archive_packager() -> None:
     """Interface for the Archive Packager (archive.py)"""
     print("\n" + "="*60)
@@ -6522,6 +6550,113 @@ def run_chargediff_analysis() -> None:
     run_tool("stb-chargediffAnalysis", args)
 
 
+def run_hirshfeld_prep() -> None:
+    """Interface for the Hirshfeld-I Prep (hirshfeld_prep.py)"""
+    print("\n" + "="*60)
+    print(color_text("HIRSHFELD-I - STAGE 1: NEUTRAL PREP", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Writes one isolated NEUTRAL atom-in-vacuum-box SIESTA folder per chemical species "
+        "present in an already-computed combined/production system (needs its own '*.RHO', "
+        "SaveRho true) -- the reference Stage 2 needs to decide each species' ion sign.",
+        'cyan'))
+    print()
+
+    structure_file = get_input(
+        "Path to the combined system's own .fdf structure file [default: structure.fdf]: "
+        ).strip() or "structure.fdf"
+    structure_dir = os.path.dirname(os.path.abspath(structure_file)) or "."
+
+    calc_file = get_input("SIESTA input template (--calc) [default: calc.fdf]: ").strip() or "calc.fdf"
+
+    args = ["--structure", structure_file, "--calc", calc_file]
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if pseudo_dir:
+        args.extend(["--pseudo-dir", pseudo_dir])
+    else:
+        print(color_text(
+            f"  (no pseudopotential source selected -- reusing '{structure_dir}', which "
+            "already has every pseudopotential the combined calculation needed)", 'cyan'))
+
+    mesh_cutoff = get_input("MeshCutoff in Ry [default: 400]: ").strip()
+    if mesh_cutoff:
+        args.extend(["--mesh-cutoff", mesh_cutoff])
+
+    vacuum = get_input("Vacuum box side in Ang [default: 20]: ").strip()
+    if vacuum:
+        args.extend(["--vacuum", vacuum])
+
+    output_dir = get_input("Output directory [default: hirshfeld_study]: ").strip() or "hirshfeld_study"
+    args.extend(["--output-dir", output_dir, "--no-intro"])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-hirshfeldPrep", args)
+
+
+def run_hirshfeld_ions() -> None:
+    """Interface for the Hirshfeld-I Ions (hirshfeld_ions.py)"""
+    print("\n" + "="*60)
+    print(color_text("HIRSHFELD-I - STAGE 2: ION PREP", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Reads back every neutral/<species>/ folder (now run through SIESTA), decides each "
+        "species' ion sign from a pass-0 simple-Hirshfeld charge, and writes the ion/<species>/ "
+        "folders Stage 3 needs.",
+        'cyan'))
+    print()
+
+    study_dir = get_input(
+        "Directory stb-hirshfeldPrep wrote into [default: hirshfeld_study]: ").strip() \
+        or "hirshfeld_study"
+    args = ["--output-dir", study_dir, "--no-intro"]
+
+    pseudo_dir = prompt_pseudo_source(optional=True)
+    if pseudo_dir:
+        args.extend(["--pseudo-dir", pseudo_dir])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-hirshfeldIons", args)
+
+
+def run_hirshfeld_analysis() -> None:
+    """Interface for the Hirshfeld-I Analysis (hirshfeld_analysis.py)"""
+    print("\n" + "="*60)
+    print(color_text("HIRSHFELD-I - STAGE 3: ANALYSIS", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Reads back every ion/<species>/ folder (now run through SIESTA) and iterates the "
+        "Hirshfeld-I reference-density refinement against the combined system's real density "
+        "until convergence.",
+        'cyan'))
+    print()
+
+    study_dir = get_input(
+        "Directory stb-hirshfeldPrep/Ions wrote into [default: hirshfeld_study]: ").strip() \
+        or "hirshfeld_study"
+    args = ["--output-dir", study_dir, "--no-intro"]
+
+    tol = get_input("Convergence tolerance on max|Delta q|, in e- [default: 0.005]: ").strip()
+    if tol:
+        args.extend(["--tol", tol])
+
+    max_iter = get_input("Maximum number of refinement rounds [default: 20]: ").strip()
+    if max_iter:
+        args.extend(["--max-iter", max_iter])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
+    if save_report:
+        args.append("--save-report")
+
+    run_tool("stb-hirshfeldAnalysis", args)
+
+
 def run_mlmd_generator() -> None:
     """Interface for ML Molecular Dynamics (stb-mlmd)"""
     print("\n" + "="*60)
@@ -9175,6 +9310,27 @@ WORKFLOW_TOOLS = {
                                 "(slice/3D/profile/cube).",
                 'func': run_chargediff_analysis},
         }},
+    20: {'title': "Hirshfeld-I Charge Partitioning",
+        'description': "Iteratively refined Hirshfeld atomic charges for an already-computed "
+                        "combined/production system, via isolated neutral/ion atomic "
+                        "references -- corrects simple Hirshfeld's known conservative bias "
+                        "without needing a Bader-style density maximum at every nucleus (see "
+                        "Utils > Native Charges for plain SIESTA-native Hirshfeld/Voronoi "
+                        "output instead).",
+        'stages': {
+            1: {'title': "Stage 1 - Neutral Prep (stb-hirshfeldPrep)",
+                'description': "Write one isolated NEUTRAL atom-in-vacuum-box SIESTA folder "
+                                "per chemical species.",
+                'func': run_hirshfeld_prep},
+            2: {'title': "Stage 2 - Ion Prep (stb-hirshfeldIons)",
+                'description': "Decide each species' ion sign from a pass-0 simple-Hirshfeld "
+                                "charge, then write the cation/anion reference folders.",
+                'func': run_hirshfeld_ions},
+            3: {'title': "Stage 3 - Analysis (stb-hirshfeldAnalysis)",
+                'description': "Iterate the Hirshfeld-I reference-density refinement to "
+                                "convergence and report the final per-atom charges.",
+                'func': run_hirshfeld_analysis},
+        }},
        }
 
 
@@ -9256,6 +9412,12 @@ UTILITY_TOOLS = {
         'description': "Package a finished calc (inputs + essential outputs) into a "
                         ".tar.gz for sharing/reproducibility -- the complement of stb-clean.",
         'func': run_archive_packager},
+    8: {'title': "Native Charges (stb-nativecharges)",
+        'description': "Read and tabulate SIESTA's own native Hirshfeld/Voronoi atomic-charge "
+                        "sections from a finished .out log (Charge.Hirshfeld end / "
+                        "Charge.Voronoi end) -- no new charge-partitioning method, just "
+                        "formats what SIESTA already wrote.",
+        'func': run_native_charges_checker},
 }
 
 

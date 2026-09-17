@@ -628,6 +628,44 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
         f.writelines(lines)
 
 
+def write_isolated_atom_fdf(symbol: str, z_num: int, out_path: str, vacuum: float) -> None:
+    """Writes a structure.fdf for a single isolated atom in a large cubic
+    vacuum box, at the fractional center (0.5, 0.5, 0.5) -- stays centered
+    regardless of `vacuum` (the box side, in Ang). Hand-written minimal
+    text (not built via an FdfStructure + write_fdf) since this is only
+    ever a species-count-1 special case with no other blocks to preserve.
+
+    Moved here from cohesive_energy.py::generate_isolated_atom_fdf once
+    hirshfeld_prep.py/hirshfeld_ions.py became 2nd/3rd consumers of the
+    identical isolated-atom-in-vacuum-box need (same extract-on-second-use
+    policy as the rest of core/) -- cohesive_energy.py now just calls this.
+    """
+    content = f"""# Isolated {symbol} atom
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   {z_num}   {symbol}
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.00 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ {vacuum:.6f}   0.000000   0.000000
+  0.000000  {vacuum:.6f}   0.000000
+  0.000000   0.000000  {vacuum:.6f}
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.500000000   0.500000000   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+"""
+    with open(out_path, 'w') as f:
+        f.write(content)
+
+
 def rewrite_fdf_lattice(source_path: str, new_lattice: np.ndarray, out_path: str) -> None:
     """Writes out_path as a copy of source_path with only %block LatticeVectors replaced.
 

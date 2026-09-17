@@ -1,0 +1,11 @@
+%include structure.fdf
+SystemLabel   siesta
+PAO.BasisSize DZP
+XC.functional GGA
+XC.authors    PBE
+MeshCutoff    300.0 Ry
+kgrid.MonkhorstPack   [1  1  1]
+Spin          non-polarized
+MD.TypeOfRun  CG
+MD.Steps      0
+SaveRho       true

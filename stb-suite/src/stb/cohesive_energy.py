@@ -100,39 +100,6 @@ def parse_structure_fdf(filename, vacuum_gap):
         print(color_text(f"[ERROR] {e}", 'red'))
         sys.exit(1)
 
-def generate_isolated_atom_fdf(symbol, z_num, out_path, vacuum):
-    """Creates a structure.fdf for a single isolated atom in a large box.
-
-    `vacuum` is the cubic box side, in Ang -- the atom sits at the
-    fractional center (0.5, 0.5, 0.5), so it stays centered regardless of
-    the box size substituted here.
-    """
-    content = f"""# Isolated {symbol} atom for cohesive energy
-NumberOfSpecies    1
-NumberofAtoms      1
-
-%block ChemicalSpeciesLabel
- 1   {z_num}   {symbol}
-%endblock ChemicalSpeciesLabel
-
-LatticeConstant 1.00 Ang
-
-AtomicCoordinatesFormat  Fractional
-
-%block LatticeVectors
- {vacuum:.6f}   0.000000   0.000000
-  0.000000  {vacuum:.6f}   0.000000
-  0.000000   0.000000  {vacuum:.6f}
-%endblock LatticeVectors
-
-%block AtomicCoordinatesAndAtomicSpecies
-  0.500000000   0.500000000   0.500000000   1
-%endblock AtomicCoordinatesAndAtomicSpecies
-"""
-    with open(out_path, 'w') as f:
-        f.write(content)
-    return
-
 def find_ghost_neighbors(pmg_structure, anchor_index, cutoff):
     """Returns a list of (element_symbol, atomic_number, relative_cartesian_vector)
     for every periodic neighbor of `pmg_structure[anchor_index]` within
@@ -154,7 +121,7 @@ def build_ghost_cluster(anchor_symbol, anchor_Z, neighbors, vacuum_box):
     same basis as the real element -- see copy_pseudo's dest_label), placed
     at the anchor's REAL local coordination geometry (from find_ghost_neighbors).
     `vacuum_box` is the cubic box side in Ang (anchor at the fractional
-    center, same convention as generate_isolated_atom_fdf).
+    center, same convention as structure_io.write_isolated_atom_fdf).
     """
     species = [anchor_symbol]
     species_meta = {anchor_symbol: {'id': '1', 'Z': anchor_Z}}
@@ -571,7 +538,7 @@ def main():
     for sym, data in species.items():
         atom_dir = os.path.join(atoms_root, sym)
         os.makedirs(atom_dir, exist_ok=True)
-        generate_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"), args.vacuum)
+        structure_io.write_isolated_atom_fdf(sym, data['Z'], os.path.join(atom_dir, "structure.fdf"), args.vacuum)
         with open(os.path.join(atom_dir, "calc.fdf"), 'w') as f:
             f.write(_isolated_atom_calc(args.dispersion))
         copy_pseudo(args.pp_path, sym, atom_dir)

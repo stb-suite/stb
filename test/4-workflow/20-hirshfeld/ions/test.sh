@@ -188,17 +188,32 @@ check_contains "fell back to atom #2's own charge" log_mixed.txt
 check_contains "NetCharge            -1.0" hirshfeld_study_mixed/ions/C/config_extra.fdf
 
 
-# --- 7. Interactive path (stb-suite, shortcut 4.20.2) ---
+# --- 7. --ref (explicit reference file, e.g. not named with a .out extension) ---
+echo -e "\n--- Testing --ref (Z_val detection from an explicitly-named, non-.out reference file) ---"
+make_prep_and_neutral_rho
+cat > hirshfeld_study/combined/run_log.txt << 'ZVALEOF'
+atom: Called for C(Z=6)
+Vna: chval, zval:    4.00000   4.00000
+atom: Called for O(Z=8)
+Vna: chval, zval:    6.00000   6.00000
+ZVALEOF
+stb-hirshfeldIons -O hirshfeld_study -p . --ref hirshfeld_study/combined/run_log.txt \
+    --no-intro > log_ref.txt 2>&1
+check_exit_code $? 0
+check_contains "detected (SIESTA log)" log_ref.txt
+
+
+# --- 8. Interactive path (stb-suite, shortcut 4.20.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.20.2) ---"
 make_prep_and_neutral_rho
-printf '4.20.2\nhirshfeld_study\n3\n.\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '4.20.2\nhirshfeld_study\n3\n.\n\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "Hirshfeld-I Ions (Stage 2) complete" log_interactive.txt
 check_success hirshfeld_study/hirshfeld_ions_manifest.json
 
 
 popd > /dev/null
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

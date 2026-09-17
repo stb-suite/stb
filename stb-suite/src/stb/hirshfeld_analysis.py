@@ -86,6 +86,12 @@ def main():
                          help=f"Maximum number of refinement rounds (default: "
                               f"{DEFAULT_MAX_ITER}; the method's own prototype converged in "
                               "8).")
+    parser.add_argument("--ref", required=False, default=None,
+                         help="Path to a specific SIESTA output file to read each species' "
+                              "Z_val (valence charge) from -- same convention as stb-bader's "
+                              "own --ref. Overrides auto-detection of combined/'s own '*.out' "
+                              "(which assumes that log was left with a .out extension; use "
+                              "--ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
                          help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -155,8 +161,10 @@ def main():
     # pseudopotential -- same detected-from-.out-with-tabulated-fallback
     # resolution as stb-bader's own valence_source (see
     # hirshfeld_ions.py's identical block for why this distinction matters:
-    # using Z instead of Z_val silently produces nonsense charges).
-    combined_out = siesta_log.find_out_file(manifest["combined_dir"], None)
+    # using Z instead of Z_val silently produces nonsense charges). --ref
+    # (same flag/behavior as stb-bader's own) takes priority over auto-
+    # detecting combined/'s own '*.out'.
+    combined_out = args.ref or siesta_log.find_out_file(manifest["combined_dir"], None)
     detected_valence = siesta_log.get_zval_from_output(None, override_path=combined_out) \
         if combined_out else None
     valence_source = {**siesta_log.FALLBACK_VALENCE, **(detected_valence or {})}

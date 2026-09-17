@@ -178,6 +178,12 @@ def main():
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
                          help="Pseudopotentials source for the ion folders. Default: reuse "
                               "the combined system's own directory (recorded in the manifest).")
+    parser.add_argument("--ref", required=False, default=None,
+                         help="Path to a specific SIESTA output file to read each species' "
+                              "Z_val (valence charge) and native Hirshfeld/Voronoi cross-check "
+                              "from -- same convention as stb-bader's own --ref. Overrides "
+                              "auto-detection of combined/'s own '*.out' (which assumes that "
+                              "log was left with a .out extension; use --ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
                          help=f"Also persist the report to {REPORT_FILE}. Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -230,8 +236,12 @@ def main():
     # in charge = Z_val - population silently produces nonsense (e.g. Te
     # would read a "charge" of +46 e instead of a plausible +0.2 e). Same
     # detected-from-.out-with-tabulated-fallback resolution as stb-bader's
-    # own valence_source.
-    combined_out = siesta_log.find_out_file(manifest["combined_dir"], None)
+    # own valence_source; --ref (same flag/behavior as stb-bader's own)
+    # takes priority over auto-detecting combined/'s own '*.out' -- a
+    # caller whose SIESTA log wasn't left with a .out extension needs this
+    # to get a real detected Z_val instead of silently falling all the way
+    # back to the hardcoded table.
+    combined_out = args.ref or siesta_log.find_out_file(manifest["combined_dir"], None)
     detected_valence = siesta_log.get_zval_from_output(None, override_path=combined_out) \
         if combined_out else None
     valence_source = {**siesta_log.FALLBACK_VALENCE, **(detected_valence or {})}
@@ -267,7 +277,7 @@ def main():
         sym = entry["symbol"]
         neutral_folder = os.path.join(args.output_dir, entry["neutral_folder"])
         rho_status = "found" if _glob_rho(neutral_folder) else "MISSING"
-        z_val_source = "detected (.out)" if sym in (detected_valence or {}) else "hardcoded fallback"
+        z_val_source = "detected (SIESTA log)" if sym in (detected_valence or {}) else "hardcoded fallback"
         species_rows.append(([sym, str(entry["z_num"]), f"{valence_source[sym]:g}", z_val_source,
                               str(counts.get(sym, 0)), entry["neutral_folder"], rho_status],
                              None if rho_status == "found" else 'yellow'))

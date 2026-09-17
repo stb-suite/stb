@@ -6618,6 +6618,13 @@ def run_hirshfeld_ions() -> None:
     if pseudo_dir:
         args.extend(["--pseudo-dir", pseudo_dir])
 
+    print(f"\n{color_text('Reference Output File (for Z_val detection):', 'cyan')}")
+    print("If the combined system's .out has a different name/path (or wasn't left with a")
+    print(".out extension at all), specify it below. Otherwise, leave blank to auto-detect.")
+    ref_file = get_input("Path to reference output file (default: auto-detect): ").strip()
+    if ref_file:
+        args.extend(["--ref", ref_file])
+
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     if save_report:
         args.append("--save-report")
@@ -6649,6 +6656,13 @@ def run_hirshfeld_analysis() -> None:
     max_iter = get_input("Maximum number of refinement rounds [default: 20]: ").strip()
     if max_iter:
         args.extend(["--max-iter", max_iter])
+
+    print(f"\n{color_text('Reference Output File (for Z_val detection):', 'cyan')}")
+    print("If the combined system's .out has a different name/path (or wasn't left with a")
+    print(".out extension at all), specify it below. Otherwise, leave blank to auto-detect.")
+    ref_file = get_input("Path to reference output file (default: auto-detect): ").strip()
+    if ref_file:
+        args.extend(["--ref", ref_file])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     if save_report:

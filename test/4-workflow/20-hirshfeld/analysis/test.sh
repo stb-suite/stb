@@ -119,6 +119,20 @@ check_contains "Tolerance      : 0.05 e-" log_tol.txt
 check_contains "Max iterations : 3" log_tol.txt
 
 
+# --- 4b. --ref (explicit reference file, e.g. not named with a .out extension) ---
+echo -e "\n--- Testing --ref (Z_val detection from an explicitly-named, non-.out reference file) ---"
+cat > hirshfeld_study/combined/run_log.txt << 'ZVALEOF'
+atom: Called for C(Z=6)
+Vna: chval, zval:    4.00000   4.00000
+atom: Called for O(Z=8)
+Vna: chval, zval:    6.00000   6.00000
+ZVALEOF
+stb-hirshfeldAnalysis -O hirshfeld_study --ref hirshfeld_study/combined/run_log.txt \
+    --no-intro > log_ref.txt 2>&1
+check_exit_code $? 0
+check_contains "Total charge" log_ref.txt
+
+
 # --- 5. --save-report ---
 echo -e "\n--- Testing --save-report ---"
 rm -f hirshfeld_analysis_report.txt
@@ -130,7 +144,7 @@ rm -f hirshfeld_analysis_report.txt
 
 # --- 6. Interactive path (stb-suite, shortcut 4.20.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.20.3) ---"
-printf '4.20.3\nhirshfeld_study\n\n\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '4.20.3\nhirshfeld_study\n\n\n\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "Hirshfeld-I Analysis (Stage 3) complete" log_interactive.txt
 
 

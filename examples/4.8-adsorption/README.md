@@ -520,7 +520,7 @@ relaxed)` / `SKIP (missing calc.out)`).
 | `output/stage1_lateral_warning/` | same command | Section 3.2's lateral self-interaction `[WARNING]`, live |
 | `output/stage1_fixed/` | `stb-supercell -d 4 4 1` then `stb-adsorb --site-type all --all-sites` | the warning fixed by tiling; the `[2]` candidate-count table |
 | `output/stage1_bothsides/` | `stb-adsorb --adsorbate H --both-sides` | 2D free-standing material, both faces |
-| `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 → Stage 3b (`--compute-gibbs`) → (fabricated Hessian `.FA`) → Stage 4 | **the worked examples (Section 8: BSSE flips the ranking; Section 13.4: entropy flips DG unfavorable above ~331 K)** |
+| `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 → Stage 3b (`--compute-gibbs`) → (fabricated Hessian `.FA`) → Stage 4 | **the worked examples (Section 8: BSSE flips the ranking; Section 13.4: entropy flips DG unfavorable above ~331 K; Section 13.6: the same crossing, in a rough desorption timescale)** |
 | *(no folder — a diff only)* | Stage 1 via `printf … \| stb-suite` | proof the interactive menu (`4.8.1`) agrees with the CLI |
 
 ## 13. Stage 3 diagnostics/suggestions, and Stage 4 — Gibbs free energy (`stb-adsorbGibbs`, code `4.8.4`)
@@ -639,6 +639,12 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
   rough estimate from a harmonic model, not a kinetic prediction (real desorption also
   depends on a barrier/attempt-frequency, not just the sign of `DG`) — but a useful
   single number for "is this still bound at the temperature I actually care about."
+- **Desorption kinetics (`[3c]`)** — a rough Eyring-TST estimate of the desorption
+  rate `k_desorb(T)` and timescale `tau_desorb(T)` at every temperature already
+  swept in `[3]`. Always printed (console **and** `--save-report` file) directly
+  under an explicit `[APPROXIMATION]` warning — see Section 13.6 for the full
+  derivation, the barrierless assumption behind it, and why `tau_desorb` is a
+  **lower bound**, not a prediction.
 - **`adsorption_gibbs.png`** — a 2-panel plot: top, `DG(T)` against two
   temperature-independent reference lines (`E_ads` and `D0`); bottom, `DS(T)`.
 - **`adsorption_mode_spectrum.png`** — a stick-spectrum comparison of the site's and
@@ -649,6 +655,13 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
   the kind of plot that would have visually surfaced this session's mode-counting bug
   (Section 13.1) on sight, rather than requiring a manual literature cross-check to
   notice.
+- **`adsorption_desorption_kinetics.png`** / **`plot/desorption_kinetics.{dat,gplot}`**
+  — `tau_desorb(T)`, log-scale, from the same `[3c]` sweep. Both are written every
+  run, not either/or: the PNG (matplotlib) is for immediately looking at the result;
+  the `.dat`/`.gplot` pair (gnuplot, `WORKFLOW_TOOLS` convention — see `CLAUDE.md`)
+  lives in its own `plot/` subfolder rather than next to the two PNGs above, since
+  it's the only gnuplot-convention output this stage produces (`cd plot && gnuplot
+  desorption_kinetics.gplot` renders `desorption_kinetics.pdf` there).
 
 ### 13.4 Worked example: watching entropy turn a favorable adsorption unfavorable
 
@@ -754,6 +767,109 @@ clear `[ERROR]`, not a silent fallback to the pre-relaxation guess, if either is
 `stb-adsorbGibbs` auto-detects which single site's folder set exists under `gibbs/` —
 you never need to pass a site label explicitly, since `--compute-gibbs` only ever
 preps one site's worth of folders per run.
+
+### 13.6 Rough desorption kinetics (`[3c]`) — how fast, not just whether
+
+Section 13.4 stopped at *whether* `site_1_ontop` desorbs — `DG(T)` crosses zero
+around 331 K, so it's bound below that and unbound above it. That's a
+thermodynamic answer, not a kinetic one: it says nothing about **how fast**
+desorption actually happens at a given temperature, which is what you'd need to
+compare against, say, an experiment's dwell time or a device's operating
+lifetime. `[3c]` gives a genuinely rough answer to that question, computed
+directly from the same `DG(T)` sweep `[3]` already produced — no new SIESTA
+calculation, no transition-state search:
+
+```
+k_desorb(T)   = (kB*T/h) * exp(DG_ads(T) / (kB*T))
+tau_desorb(T) = 1 / k_desorb(T)
+```
+
+This is the Eyring/transition-state-theory rate law under the **barrierless
+-desorption approximation**: it assumes the desorption activation free energy
+`DG_double_dagger` equals `-DG_ads(T)` exactly — i.e. that there is *no* extra
+kinetic barrier beyond the thermodynamic well depth this workflow already
+computes. A real desorption pathway almost always has *some* additional
+barrier (the adsorbate has to pass through an actual transition state on its
+way out, not just teleport from the bound minimum to a free particle) — this
+tool has no way to compute that barrier, since it would require a genuine
+transition-state search (e.g. `stb-neb`, Section 9), not just the endpoint
+energies this workflow already has. The prefactor `kB*T/h` is also the bare TST
+value, not corrected by a Vineyard prefactor (the ratio of the bound state's
+and the transition state's own vibrational frequencies) — that correction
+needs the transition state's vibrational spectrum too, equally unavailable
+here. Both approximations point the same direction: **`tau_desorb` printed
+here is a lower bound on the true desorption time, not a prediction of it** —
+a real barrier can only make desorption slower/`tau` longer than shown.
+
+This caveat is not a footnote — it is printed as an explicit
+`[APPROXIMATION]` warning immediately above the `[3c]` table on **every**
+run, in the live console output and in `--save-report`'s persisted file
+alike (same `print_dual` mechanism that keeps every other section of this
+report identical between the two), precisely so the rough numbers below are
+never read in isolation from what they assume.
+
+Continuing the exact same `site_1_ontop` scenario as Section 13.4 (same
+`E_ads_BSSE = -0.530000 eV`, same isotropic ~400 cm⁻¹ site Hessian, same
+free monatomic-O isolated reference) — `stb-adsorbGibbs --dir . --tmin 200
+--tmax 400 --tstep 100`, output continuing directly after `[3b]`, verbatim:
+
+```
+[3c] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)
+------------------------------------------------------------
+  [APPROXIMATION] Assumes desorption has NO kinetic barrier beyond the thermodynamic
+  well depth already computed above (DG_double_dagger = -DG_ads(T)) and a bare TST
+  prefactor kB*T/h (no Vineyard correction from a transition-state vibrational
+  spectrum -- this workflow does not run a NEB/transition-state search). tau_desorb
+  below is therefore a LOWER BOUND on the real desorption time, not a kinetic
+  prediction -- a real barrier can only make desorption SLOWER. See Section 13.6 of
+  examples/4.8-adsorption/README.md for the full derivation and caveats.
+  T =  200.00 K   DG = -0.1843 eV   k_desorb =  9.467e+07 1/s   tau_desorb = 10.6 ns
+  T =  300.00 K   DG = -0.0432 eV   k_desorb =  1.178e+12 1/s   tau_desorb = 849 fs
+  T =  400.00 K   DG = +0.0950 eV   k_desorb =  1.311e+14 1/s   tau_desorb = 7.63 fs
+
+  At T = 200.0 K (rough estimate, lower bound): tau_desorb ~= 10.6 ns
+[Saved] ./adsorption_gibbs.png
+[Saved] ./adsorption_mode_spectrum.png
+[Saved] ./adsorption_desorption_kinetics.png (APPROXIMATION -- see [3c] above)
+[Saved] ./plot/desorption_kinetics.dat / ./plot/desorption_kinetics.gplot (run
+'gnuplot desorption_kinetics.gplot' inside './plot' -- APPROXIMATION, see [3c] above)
+```
+
+`tau_desorb` collapses from `10.6 ns` at 200 K (where `DG` is still negative — the
+adsorbate is thermodynamically bound, and this rough model already predicts it
+sits there for a while) down to `7.63 fs` at 400 K (where `DG` has gone
+positive — essentially instantaneous on this model, once desorption is even
+thermodynamically favorable). That eight-order-of-magnitude collapse across a
+200 K window, driven entirely by the `exp(DG/(kB*T))` factor, is the actual
+qualitative payoff of `[3c]`: `[3b]`'s single crossing temperature tells you
+*where* the sign flips; `[3c]` tells you the timescale falls off a cliff right
+around it, not gradually — useful context even though every number in it is a
+lower bound. **Read literally, `9.467e+07`/`1.178e+12`/`1.311e+14 1/s` and their
+corresponding `tau` values are not measured rates** — they are what the
+barrierless-TST approximation gives from `DG(T)` alone; a real experimental
+`k_desorb` at any of these temperatures could be many orders of magnitude
+smaller once an actual barrier is included.
+
+`desorption_kinetics.dat` (the gnuplot pair's data file, `plot/` subfolder):
+
+```
+# Desorption kinetics for site_1_ontop -- ROUGH Eyring-TST estimate
+# (barrierless-desorption assumption: DG_double_dagger = -DG_ads(T),
+# bare kB*T/h prefactor, no Vineyard correction) -- see 'examples/
+# 4.8-adsorption/README.md' Section 13.6 or the report's [3c] section
+# for the full caveat. tau_desorb is a LOWER BOUND, not a prediction.
+# 1:T(K) 2:DG_ads(eV) 3:k_desorb(1/s) 4:tau_desorb(s)
+200.0000  -0.184300  9.467271e+07  1.056304e-08
+300.0000  -0.043200  1.177914e+12  8.489499e-13
+400.0000  0.095000  1.311132e+14  7.627628e-15
+```
+
+`cd plot && gnuplot desorption_kinetics.gplot` renders `desorption_kinetics.pdf`
+in the same folder — a log-scale `tau_desorb(T)` line plot, same
+`pdfcairo`/`linespoints` styling as every other gnuplot-convention plot in this
+suite (e.g. `stb-nebAnalysis`'s energy profile). `adsorption_desorption_kinetics.png`
+is the same data as a matplotlib figure, for viewing directly without needing
+gnuplot installed at all.
 
 ## 14. Van der Waals correction (always on), and systematic orientation sampling
 

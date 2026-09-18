@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 import os
 import sys
@@ -29,11 +29,17 @@ from stb.adsorb_analysis import read_site_table, read_bsse_energy, GIBBS_LOCAL_M
 REPORT_FILE = "adsorption_gibbs_report.txt"
 PLOT_FILE = "adsorption_gibbs.png"
 MODE_SPECTRUM_PLOT_FILE = "adsorption_mode_spectrum.png"
+DESORPTION_PLOT_FILE = "adsorption_desorption_kinetics.png"
+DESORPTION_PLOT_DIR = "plot"  # gnuplot .dat/.gplot pair convention (WORKFLOW_TOOLS
+                               # category, see CLAUDE.md) -- kept in its own subfolder
+                               # since this file's other 2 plots are matplotlib PNGs
+                               # saved directly under --dir.
 
 _FREQ_CONVERSION_THZ = 15.633302  # sqrt(eV / (amu * Ang^2)) -> THz, same constant ASE's own
                                   # vibrational-analysis code (and her_analysis.py/oer_analysis.py) use
 _BOLTZMANN_EV_K = 8.617333262e-5  # eV/K
 _EV_PER_THZ = 0.00413566733  # E = h*f, h in eV.s, f in THz*1e12 -> eV
+_PLANCK_EV_S = 4.135667696e-15  # eV.s (CODATA) -- Eyring-TST prefactor kB*T/h
 _KJ_MOL_TO_EV = 0.01036427
 _J_MOL_TO_EV = _KJ_MOL_TO_EV / 1000.0
 _STANDARD_PRESSURE_PA = 1.0e5  # 1 bar, in real Pascals -- see compute_ideal_gas_thermo's
@@ -396,6 +402,109 @@ def compute_full_phonon_thermo(phonon_dir, system_label, temperature_k, f_out, l
     return zpe_ev, ts_ev
 
 
+def compute_desorption_kinetics(temperatures, dg_values):
+    """ROUGH Eyring-TST (barrierless-desorption) estimate of the desorption
+    rate/timescale at each temperature of the already-computed DG(T) sweep,
+    reusing it as-is rather than any new DFT/NEB calculation.
+
+    ASSUMPTION (the actual approximation, always surfaced alongside every
+    number this returns -- see the '[3c]' report section in main()): the
+    desorption activation free energy DG_double_dagger is taken to be
+    exactly -DG_ads(T), i.e. desorption has NO kinetic barrier beyond the
+    thermodynamic well depth already computed in section [3]. This is
+    optimistic -- a real barrier (only obtainable from a genuine transition-
+    state search, e.g. stb-neb, which this workflow does not run) can only
+    make true desorption SLOWER than this estimate. The prefactor is also
+    the bare TST value kB*T/h, not Vineyard-corrected (that would need the
+    transition state's own vibrational spectrum, likewise unavailable here).
+    tau_desorb below is therefore a LOWER BOUND on the real desorption
+    time, not a kinetic prediction.
+
+        k_desorb(T)   = (kB*T/h) * exp(DG_ads(T) / (kB*T))
+        tau_desorb(T) = 1 / k_desorb(T)
+
+    Returns (k_values, tau_values), numpy arrays matching `temperatures`.
+    """
+    temps = np.asarray(temperatures, dtype=float)
+    dgs = np.asarray(dg_values, dtype=float)
+    with np.errstate(over='ignore', under='ignore', invalid='ignore'):
+        k_values = (_BOLTZMANN_EV_K * temps / _PLANCK_EV_S) * \
+            np.exp(dgs / (_BOLTZMANN_EV_K * temps))
+        tau_values = 1.0 / k_values
+    return k_values, tau_values
+
+
+def _format_duration(seconds):
+    """Human-readable duration from a raw second count, picking the largest
+    unit (fs/ps/ns/us/ms/s/min/hr/day/yr) that still keeps the value >= 1 --
+    tau_desorb can span dozens of orders of magnitude (sub-femtosecond for a
+    barely-bound system, to far longer than the age of the universe for a
+    strongly-bound one), so a bare "X s" column is unreadable at either
+    extreme. Falls back to raw scientific-notation seconds once even years
+    would still be an absurdly large/small number.
+    """
+    if not np.isfinite(seconds):
+        return "N/A (overflow)"
+    if seconds <= 1e-15:
+        return "~0 (instant)"
+    units = [(1e-15, "fs"), (1e-12, "ps"), (1e-9, "ns"), (1e-6, "µs"),
+             (1e-3, "ms"), (1.0, "s"), (60.0, "min"), (3600.0, "hr"),
+             (86400.0, "day"), (365.25 * 86400.0, "yr")]
+    factor, name = units[0]
+    for f, n in units:
+        if seconds >= f:
+            factor, name = f, n
+    value = seconds / factor
+    if value >= 1e4:
+        return f"{seconds:.3e} s"
+    return f"{value:.3g} {name}"
+
+
+def write_desorption_kinetics_gplot(plot_dir, temperatures, dg_values, k_values,
+                                     tau_values, site_label):
+    """Writes the desorption-kinetics .dat + .gplot pair into `plot_dir` --
+    the gnuplot convention this file's other 2 plots (matplotlib PNGs,
+    saved directly under --dir) don't otherwise follow, requested
+    specifically for this new plot. First (only) consumer of this exact
+    'quantity vs. T, log-scale y' shape in this file, so kept local here
+    rather than promoted to core/ (extract-on-second-use policy, see
+    CLAUDE.md) -- styled after neb_analysis.py's write_curve_plot
+    (pdfcairo/linespoints), the closest existing precedent.
+    """
+    os.makedirs(plot_dir, exist_ok=True)
+    dat_path = os.path.join(plot_dir, "desorption_kinetics.dat")
+    gplot_path = os.path.join(plot_dir, "desorption_kinetics.gplot")
+    with open(dat_path, 'w') as f:
+        f.write(f"# Desorption kinetics for {site_label} -- ROUGH Eyring-TST estimate\n")
+        f.write("# (barrierless-desorption assumption: DG_double_dagger = -DG_ads(T),\n")
+        f.write("# bare kB*T/h prefactor, no Vineyard correction) -- see 'examples/\n")
+        f.write("# 4.8-adsorption/README.md' Section 13.6 or the report's [3c] section\n")
+        f.write("# for the full caveat. tau_desorb is a LOWER BOUND, not a prediction.\n")
+        f.write("# 1:T(K) 2:DG_ads(eV) 3:k_desorb(1/s) 4:tau_desorb(s)\n")
+        for T, dg, k, tau in zip(temperatures, dg_values, k_values, tau_values):
+            f.write(f"{T:.4f}  {dg:.6f}  {k:.6e}  {tau:.6e}\n")
+
+    base_name = "desorption_kinetics"
+    dat_name = os.path.basename(dat_path)
+    with open(gplot_path, 'w') as f:
+        f.writelines([
+            '# --- STB Plot Configuration ---\n',
+            '# Generated by stb-adsorbGibbs -- ROUGH Eyring-TST desorption-kinetics\n',
+            '# estimate (barrierless assumption, no real kinetic barrier computed).\n',
+            'set terminal pdfcairo enhanced color font "Arial,14" size 7,5\n',
+            f'set output "{base_name}.pdf"\n\n',
+            f'set title "Desorption timescale (rough estimate) -- {site_label}"\n',
+            'set xlabel "Temperature (K)"\n',
+            'set ylabel "{/Symbol t}_{desorb} (s)"\n',
+            'set logscale y\n',
+            'set grid\n',
+            'set key top right\n',
+            f'plot "{dat_name}" using 1:4 with linespoints lw 2 pt 7 lc rgb "#cc5522" '
+            'title "{/Symbol t}_{desorb} (rough estimate, lower bound)"\n',
+        ])
+    return dat_path, gplot_path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 4 of the Adsorption workflow: combines the vibrational "
@@ -615,6 +724,24 @@ literature table for an arbitrary adsorbate.""",
                 "  [WARNING] DG is flat over the scanned range -- cannot estimate a desorption "
                 "temperature.", 'yellow'), f_out)
 
+    print_section('[3c] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)', f_out)
+    print_dual(color_text(
+        "  [APPROXIMATION] Assumes desorption has NO kinetic barrier beyond the "
+        "thermodynamic well depth already computed above (DG_double_dagger = -DG_ads(T)) "
+        "and a bare TST prefactor kB*T/h (no Vineyard correction from a transition-state "
+        "vibrational spectrum -- this workflow does not run a NEB/transition-state search). "
+        "tau_desorb below is therefore a LOWER BOUND on the real desorption time, not a "
+        "kinetic prediction -- a real barrier can only make desorption SLOWER. See Section "
+        "13.6 of examples/4.8-adsorption/README.md for the full derivation and caveats.",
+        'yellow'), f_out)
+    k_values, tau_values = compute_desorption_kinetics(temperatures, dg_values)
+    for T, dg, k, tau in zip(temperatures, dg_values, k_values, tau_values):
+        print_dual(f"  T = {T:>7.2f} K   DG = {dg:+.4f} eV   k_desorb = {k:>10.3e} 1/s   "
+                    f"tau_desorb = {_format_duration(tau)}", f_out)
+    tau_at_tmin = tau_values[0]
+    print_dual(f"\n  At T = {args.tmin} K (rough estimate, lower bound): "
+               f"tau_desorb ~= {_format_duration(tau_at_tmin)}", f_out)
+
     # [Panel 1] DG(T) plus the two T-independent electronic-level reference
     # lines (E_ads, D0) -- the original single-axes plot, unchanged, with
     # D0 added alongside E_ads for a direct visual read of how much the ZPE
@@ -680,6 +807,35 @@ literature table for an arbitrary adsorbate.""",
             plt.show()
         plt.close(fig2)
         print_dual(f"{color_text('[Saved]', 'cyan')} {mode_plot_path}", f_out)
+
+    # Desorption-kinetics plot: tau_desorb(T), log-scale (spans many orders
+    # of magnitude -- see _format_duration's own docstring). matplotlib PNG
+    # for direct viewing (this file's existing PLOT_FILE/MODE_SPECTRUM_PLOT_FILE
+    # convention) PLUS a gnuplot .dat/.gplot pair under DESORPTION_PLOT_DIR
+    # (the WORKFLOW_TOOLS gnuplot convention, see CLAUDE.md) -- both from the
+    # same underlying data, not either/or.
+    fig3, ax3 = plt.subplots(figsize=(7, 4.5))
+    ax3.plot(temperatures, tau_values, marker='o', color='tab:red')
+    ax3.set_yscale('log')
+    ax3.set_xlabel("Temperature (K)")
+    ax3.set_ylabel(r"$\tau_{desorb}$ (s)")
+    ax3.set_title(f"Desorption timescale (rough estimate) -- {site_label}")
+    ax3.grid(True, which='both', alpha=0.3)
+    fig3.tight_layout()
+    desorption_plot_path = os.path.join(args.dir, DESORPTION_PLOT_FILE)
+    fig3.savefig(desorption_plot_path, dpi=150)
+    if args.view_plots:
+        plt.show()
+    plt.close(fig3)
+    print_dual(f"{color_text('[Saved]', 'cyan')} {desorption_plot_path} "
+                "(APPROXIMATION -- see [3c] above)", f_out)
+
+    plot_dir = os.path.join(args.dir, DESORPTION_PLOT_DIR)
+    dat_path, gplot_path = write_desorption_kinetics_gplot(
+        plot_dir, temperatures, dg_values, k_values, tau_values, site_label)
+    print_dual(f"{color_text('[Saved]', 'cyan')} {dat_path} / {gplot_path} "
+                "(run 'gnuplot desorption_kinetics.gplot' inside "
+                f"'{plot_dir}' -- APPROXIMATION, see [3c] above)", f_out)
 
     if report_path:
         print_dual(f"{color_text('[Saved]', 'cyan')} Report -> {report_path}", f_out)

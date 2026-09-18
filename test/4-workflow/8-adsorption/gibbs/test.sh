@@ -165,6 +165,19 @@ check_contains "DG(adsorption) = +0.4358 eV" log_gibbs.txt
 check_success adsorption_gibbs.png
 check_success adsorption_gibbs_report.txt
 
+echo -e "\n--- Testing [3c] rough desorption-kinetics section + its 2 plot outputs ---"
+check_contains "\[3c\] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)" log_gibbs.txt
+check_contains "\[APPROXIMATION\]" log_gibbs.txt
+check_contains "LOWER BOUND" log_gibbs.txt
+check_contains "k_desorb = " log_gibbs.txt
+check_contains "tau_desorb = " log_gibbs.txt
+check_contains "\[APPROXIMATION\]" adsorption_gibbs_report.txt
+check_success adsorption_desorption_kinetics.png
+check_success plot/desorption_kinetics.dat
+check_success plot/desorption_kinetics.gplot
+check_contains "1:T(K) 2:DG_ads(eV) 3:k_desorb(1/s) 4:tau_desorb(s)" plot/desorption_kinetics.dat
+check_contains "set logscale y" plot/desorption_kinetics.gplot
+
 
 # --- 3. Physical correctness: a truly isolated single atom (zero force at
 #     every displacement -- nothing to restore it) must give EXACTLY

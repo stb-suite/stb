@@ -1,0 +1,38 @@
+# GaAs, zincblende, conventional (non-primitive) cubic cell: 4 Ga + 4 As,
+# a = 5.6533 Ang (the real, textbook experimental GaAs lattice constant).
+# The Ga sublattice is FCC -- geometrically frustrated for the pair-cluster
+# enumeration stb-gqca does (see the README's Section 2: no 2-coloring of
+# an FCC lattice makes every nearest-neighbor pair unlike, the same reason
+# rocksalt's own cation sublattice can't reach it either). This is real,
+# unavoidable physics of the zincblende structure, not a fixture quirk --
+# the walkthrough shows exactly how stb-gqca reports and works around it.
+# --sublattice Ga --species-b Al models Al(x)Ga(1-x)As; --species-b <X>
+# models any other III-V pseudobinary built on the same GaAs host lattice.
+SystemName GaAs zincblende (conventional cubic cell)
+SystemLabel siesta
+
+LatticeConstant 5.6533 Ang
+%block LatticeVectors
+  1.0000000000   0.0000000000   0.0000000000
+  0.0000000000   1.0000000000   0.0000000000
+  0.0000000000   0.0000000000   1.0000000000
+%endblock LatticeVectors
+
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1  31  Ga
+ 2  33  As
+%endblock ChemicalSpeciesLabel
+
+NumberOfAtoms 8
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00 0.00 0.00  1
+ 0.00 0.50 0.50  1
+ 0.50 0.00 0.50  1
+ 0.50 0.50 0.00  1
+ 0.25 0.25 0.25  2
+ 0.25 0.75 0.75  2
+ 0.75 0.25 0.75  2
+ 0.75 0.75 0.25  2
+%endblock AtomicCoordinatesAndAtomicSpecies

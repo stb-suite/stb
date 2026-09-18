@@ -1,0 +1,17 @@
+# Shared calc.fdf template for all 3 cluster_n{0,1,2} relaxations.
+# stb-gqca's own force_full_relaxation() rewrites MD.TypeOfRun to CG and
+# adds MD.VariableCell T unconditionally for a 3D input (see the README's
+# Section 2) -- this template's own MD block is a plausible starting
+# point only, not what actually ends up in the written calc.fdf files.
+SystemLabel siesta
+%include structure.fdf
+
+PAO.BasisType split
+PAO.BasisSize DZP
+Mesh.CutOff 200 Ry
+XC.functional GGA
+XC.authors PBE
+Spin non-polarized
+
+MD.MaxForceTol 0.02 eV/Ang
+MD.Steps 150

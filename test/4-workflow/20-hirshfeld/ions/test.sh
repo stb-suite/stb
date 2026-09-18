@@ -5,7 +5,11 @@
 # 4.20.2). Chains a real stb-hirshfeldPrep (Stage 1, tested separately) run
 # on the ../prep fixture, then fabricates each neutral/<species>/'s own
 # .RHO via ../make_synthetic_rho.py (standing in for "SIESTA has already
-# been run there") before running stb-hirshfeldIons for real.
+# been run there") before running stb-hirshfeldIons for real. Writes BOTH
+# a cation and an anion reference folder per species, unconditionally --
+# no more per-species sign decision (see hirshfeld_ions.py's own module
+# docstring for why: individual atoms of the same species can converge
+# toward opposite ion states, per the literal Bultinck et al. formulation).
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREP_DIR="$(cd "$FIXTURE_DIR/../prep" && pwd)"
 GEN_SCRIPT="$FIXTURE_DIR/../make_synthetic_rho.py"
@@ -52,11 +56,8 @@ check_exit_code() {
 # Runs stb-hirshfeldPrep on the shared fixture (which itself writes
 # combined/ + neutral/<species>/, nothing pre-computed needed), then
 # fabricates a synthetic .RHO in combined/ and every neutral/<species>/ it
-# wrote -- purely for PLUMBING coverage (sign decision, folder writing,
-# manifest chaining), not a physically meaningful charge (these Gaussian
-# amplitudes aren't calibrated against the real Z=6/Z=8 used here, so both
-# species land net-negative/ANION at pass-0; the mixed-sign fallback
-# branch itself gets its own dedicated case below, via structure_mixed.fdf).
+# wrote -- purely for PLUMBING coverage (folder writing, manifest
+# chaining), not a physically meaningful charge.
 make_prep_and_neutral_rho() {
     rm -rf hirshfeld_study
     stb-hirshfeldPrep -s structure.fdf --calc calc.fdf -p . -O hirshfeld_study --no-intro \
@@ -88,45 +89,51 @@ check_exit_code $? 1
 check_contains "run stb-hirshfeldPrep first" log_no_stage1.txt
 
 
-# --- 3. Default run: ion sign decision + folder contents ---
-echo -e "\n--- Testing default run (ion sign decision + folder contents) ---"
+# --- 3. Default run: BOTH cation and anion written for every species ---
+echo -e "\n--- Testing default run (cation + anion folders, every species) ---"
 make_prep_and_neutral_rho
 stb-hirshfeldIons -O hirshfeld_study -p . --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success hirshfeld_study/hirshfeld_ions_manifest.json
-check_success hirshfeld_study/ions/C/structure.fdf
-check_success hirshfeld_study/ions/C/calc.fdf
-check_success hirshfeld_study/ions/C/config_extra.fdf
-check_success hirshfeld_study/ions/O/config_extra.fdf
+check_success hirshfeld_study/ions/C/cation/structure.fdf
+check_success hirshfeld_study/ions/C/cation/calc.fdf
+check_success hirshfeld_study/ions/C/cation/config_extra.fdf
+check_success hirshfeld_study/ions/C/anion/config_extra.fdf
+check_success hirshfeld_study/ions/O/cation/config_extra.fdf
+check_success hirshfeld_study/ions/O/anion/config_extra.fdf
 
-echo "Testing: Stage 1 recap, native-charges cross-check, pass-0 charges and ion sign"
+echo "Testing: Stage 1 recap, native-charges cross-check, and pass-0 preview"
 echo "         all land in the console report -- Stage 2's report is self-contained"
 check_contains "STAGE 1 RECAP" log_default.txt
 check_contains "Combined structure :" log_default.txt
 check_contains "Species written by Stage 1:" log_default.txt
 check_contains "NATIVE CHARGES CROSS-CHECK" log_default.txt
-check_contains "PASS-0 (SIMPLE HIRSHFELD) CHARGES" log_default.txt
-check_contains "Per-species summary:" log_default.txt
-check_contains "ION SIGN DECISION" log_default.txt
+check_contains "PASS-0 (SIMPLE HIRSHFELD) CHARGES -- PREVIEW ONLY" log_default.txt
+check_contains "N+ / N- = how many atoms" log_default.txt
+check_contains "WRITING ION REFERENCES (cation + anion, every species)" log_default.txt
 
 echo "Testing: the species table distinguishes Z (atomic number, for the pseudopotential)"
 echo "         from Z_val (valence charge, for the charge formula) -- C: Z=6, Z_val=4"
 check_contains "C       | 6 | 4     | hardcoded fallback" log_default.txt
 check_contains "Z_val | Population(e-) | Charge(e-)" log_default.txt
 
-echo "Testing: each ion folder carries a NetCharge directive (+-1.0) and is"
-echo "         otherwise single-point/Gamma-only/spin-polarized like Stage 1 --"
+echo "Testing: each ion folder carries a NetCharge directive (+1.0/-1.0 respectively) and"
+echo "         is otherwise single-point/Gamma-only/spin-polarized like Stage 1 --"
 echo "         Spin polarized forced BOTH via config_extra.fdf AND directly in calc.fdf"
-check_contains "NetCharge            " hirshfeld_study/ions/C/config_extra.fdf
-check_contains "NetCharge            " hirshfeld_study/ions/O/config_extra.fdf
-check_contains "MD.Steps              0" hirshfeld_study/ions/C/config_extra.fdf
-check_contains "kgrid.MonkhorstPack   \[1  1  1\]" hirshfeld_study/ions/O/config_extra.fdf
-check_contains "%include config_extra.fdf" hirshfeld_study/ions/C/calc.fdf
-check_contains "Spin                polarized" hirshfeld_study/ions/C/calc.fdf
+check_contains "NetCharge            +1.0" hirshfeld_study/ions/C/cation/config_extra.fdf
+check_contains "NetCharge            -1.0" hirshfeld_study/ions/C/anion/config_extra.fdf
+check_contains "NetCharge            +1.0" hirshfeld_study/ions/O/cation/config_extra.fdf
+check_contains "NetCharge            -1.0" hirshfeld_study/ions/O/anion/config_extra.fdf
+check_contains "MD.Steps              0" hirshfeld_study/ions/C/cation/config_extra.fdf
+check_contains "kgrid.MonkhorstPack   \[1  1  1\]" hirshfeld_study/ions/O/anion/config_extra.fdf
+check_contains "%include config_extra.fdf" hirshfeld_study/ions/C/cation/calc.fdf
+check_contains "Spin                polarized" hirshfeld_study/ions/C/cation/calc.fdf
 
-echo "Testing: the ions manifest records both species with a net_charge and pass0_charges"
+echo "Testing: the ions manifest records both folders + pass0_charges per species (no more"
+echo "         single net_charge/sign_source -- there's no single sign to decide anymore)"
 check_contains '"symbol": "C"' hirshfeld_study/hirshfeld_ions_manifest.json
-check_contains '"net_charge"' hirshfeld_study/hirshfeld_ions_manifest.json
+check_contains '"cation_folder": "ions/C/cation"' hirshfeld_study/hirshfeld_ions_manifest.json
+check_contains '"anion_folder": "ions/C/anion"' hirshfeld_study/hirshfeld_ions_manifest.json
 check_contains '"pass0_charges"' hirshfeld_study/hirshfeld_ions_manifest.json
 
 
@@ -167,8 +174,8 @@ check_exit_code $? 1
 check_contains "has SIESTA been run there yet" log_norho.txt
 
 
-# --- 6. Mixed-sign species -- fallback to the largest-|charge| atom ---
-echo -e "\n--- Testing the mixed-sign-species fallback (structure_mixed.fdf) ---"
+# --- 6. Genuinely mixed-sign species -- BOTH ion folders written regardless ---
+echo -e "\n--- Testing a genuinely mixed-sign species (structure_mixed.fdf) ---"
 rm -rf hirshfeld_study_mixed mixed_combined
 mkdir -p mixed_combined
 cp "$FIXTURE_DIR/structure_mixed.fdf" mixed_combined/structure.fdf
@@ -183,9 +190,14 @@ python3 "$GEN_SCRIPT" hirshfeld_study_mixed/neutral/O/structure.fdf \
     hirshfeld_study_mixed/neutral/O/siesta.RHO 24 "1.0" "0.8" > /dev/null 2>&1
 stb-hirshfeldIons -O hirshfeld_study_mixed -p . --no-intro > log_mixed.txt 2>&1
 check_exit_code $? 0
-check_contains "MIXED SIGN across 2 atom(s)" log_mixed.txt
-check_contains "fell back to atom #2's own charge" log_mixed.txt
-check_contains "NetCharge            -1.0" hirshfeld_study_mixed/ions/C/config_extra.fdf
+echo "Testing: C reads genuinely mixed sign at pass-0 (1 cation-like, 1 anion-like) and the"
+echo "         table is highlighted -- but BOTH ions/C/cation and ions/C/anion still get"
+echo "         written (no fallback/vote needed anymore)"
+check_contains "C    | 2 | 1  | 1  " log_mixed.txt
+check_success hirshfeld_study_mixed/ions/C/cation/config_extra.fdf
+check_success hirshfeld_study_mixed/ions/C/anion/config_extra.fdf
+check_contains "NetCharge            +1.0" hirshfeld_study_mixed/ions/C/cation/config_extra.fdf
+check_contains "NetCharge            -1.0" hirshfeld_study_mixed/ions/C/anion/config_extra.fdf
 
 
 # --- 7. --ref (explicit reference file, e.g. not named with a .out extension) ---

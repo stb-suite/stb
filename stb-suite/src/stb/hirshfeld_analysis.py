@@ -7,13 +7,18 @@
 #################################################
 
 """Stage 3 (final) of the Hirshfeld-I (iterative) charge-partitioning
-workflow. Reads back every ion/<species>/ folder stb-hirshfeldIons wrote
-(now assumed already run through SIESTA), spherically-averages each into a
-radial ion density profile, then runs the actual Hirshfeld-I convergence
-loop (core.hirshfeld.iterate_hirshfeld_i) against the combined/production
-system's fixed real density: each round blends every atom's reference
-between its species' neutral and ion profile, weighted by that ATOM's own
-charge from the previous round, until max|Delta q| converges.
+workflow. Reads back every ion/<species>/cation//anion/ folder
+stb-hirshfeldIons wrote (now assumed already run through SIESTA),
+spherically-averages each into a radial density profile, then runs the
+actual Hirshfeld-I convergence loop (core.hirshfeld.iterate_hirshfeld_i)
+against the combined/production system's fixed real density: following
+the original iterative-Hirshfeld formulation (Bultinck et al., J. Chem.
+Phys. 126, 144111 (2007)) literally, EACH ATOM independently interpolates
+its own reference between its species' neutral profile and whichever of
+that species' cation/anion profile matches THAT ATOM's own charge sign
+from the previous round -- two atoms of the same species can genuinely
+lean toward opposite ion states in the same round. Iterates until
+max|Delta q| converges.
 
 This is the only stage that iterates -- no new folders/geometry are
 written here, matching the suite's general "an Analysis stage never
@@ -24,7 +29,9 @@ side by side, plus the convergence history, so the shift between the two
 methods is visible rather than only the final number.
 """
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"  # reads BOTH cation and anion per species and lets each atom
+                    # pick its own, per the literal literature formulation
+                    # (previously blended toward a single per-species ion sign)
 
 import os
 import sys
@@ -182,8 +189,8 @@ def main():
             "table (not detected in combined/'s own .out) -- verify these match your "
             "pseudopotential's real valence charge if unsure.", 'cyan'), f_out)
 
-    print_section("[1] NEUTRAL + ION PROFILES", f_out)
-    neutral_profiles, ion_profiles = {}, {}
+    print_section("[1] NEUTRAL + CATION + ANION PROFILES", f_out)
+    neutral_profiles, cation_profiles, anion_profiles = {}, {}, {}
     for entry in manifest["species"]:
         sym = entry["symbol"]
         neutral_folder = os.path.join(args.output_dir, entry["neutral_folder"])
@@ -195,16 +202,25 @@ def main():
                 f"[ERROR] Could not build a neutral profile for species '{sym}' from "
                 f"'{neutral_folder}': {e}", 'red'), f_out)
             sys.exit(1)
-    for entry in ions_manifest["ions"]:
+    for entry in ions_manifest["species"]:
         sym = entry["symbol"]
-        ion_folder = os.path.join(args.output_dir, entry["ion_folder"])
+        cation_folder = os.path.join(args.output_dir, entry["cation_folder"])
+        anion_folder = os.path.join(args.output_dir, entry["anion_folder"])
         try:
-            ion_profiles[sym] = load_species_profile(ion_folder)
-            print_dual(f"  {sym} (ion)    : read from '{ion_folder}'", f_out)
+            cation_profiles[sym] = load_species_profile(cation_folder)
+            print_dual(f"  {sym} (cation) : read from '{cation_folder}'", f_out)
         except Exception as e:
             print_dual(color_text(
-                f"[ERROR] Could not build an ion profile for species '{sym}' from "
-                f"'{ion_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
+                f"[ERROR] Could not build a cation profile for species '{sym}' from "
+                f"'{cation_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
+            sys.exit(1)
+        try:
+            anion_profiles[sym] = load_species_profile(anion_folder)
+            print_dual(f"  {sym} (anion)  : read from '{anion_folder}'", f_out)
+        except Exception as e:
+            print_dual(color_text(
+                f"[ERROR] Could not build an anion profile for species '{sym}' from "
+                f"'{anion_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
             sys.exit(1)
 
     species_profiles_0 = {i: neutral_profiles[symbols[i]] for i in range(len(symbols))}
@@ -218,16 +234,18 @@ def main():
     def report_iteration(iteration, max_delta, worst_atom_idx, charges, populations):
         elapsed = time.monotonic() - iter_start
         sym = symbols[worst_atom_idx]
+        leaning = "cation-like" if charges[worst_atom_idx] >= 0 else "anion-like"
         status = color_text("CONVERGED", 'green') if max_delta < args.tol else "not yet converged"
         print_dual(
             f"  Iteration {iteration:>2}/{args.max_iter}: max|Delta q| = {max_delta:.6f} e- "
             f"-- atom #{worst_atom_idx + 1} ({sym}), now {charges[worst_atom_idx]:+.4f} e- "
-            f"(pop. {populations[worst_atom_idx]:.4f} e-), {elapsed:6.1f}s elapsed -- {status}",
+            f"({leaning}, pop. {populations[worst_atom_idx]:.4f} e-), {elapsed:6.1f}s elapsed "
+            f"-- {status}",
             f_out)
 
     charges_final, populations_final, history = hf.iterate_hirshfeld_i(
         rho_real, structure.lattice, frac_positions, symbols, z_vals,
-        neutral_profiles, ion_profiles, tol=args.tol, max_iter=args.max_iter,
+        neutral_profiles, cation_profiles, anion_profiles, tol=args.tol, max_iter=args.max_iter,
         show_progress=True, initial_charges=charges_0, initial_populations=populations_0,
         on_iteration=report_iteration)
 
@@ -263,12 +281,24 @@ def main():
     for i, sym in enumerate(symbols):
         by_species[sym].append(charges_final[i])
     species_rows = []
+    any_genuinely_mixed = False
     for sym in sorted(by_species):
         values = by_species[sym]
+        n_cation = sum(1 for c in values if c >= 0)
+        n_anion = sum(1 for c in values if c < 0)
+        is_mixed = n_cation > 0 and n_anion > 0
+        any_genuinely_mixed = any_genuinely_mixed or is_mixed
         mean = statistics.mean(values)
         std = statistics.pstdev(values) if len(values) > 1 else 0.0
-        species_rows.append(([sym, str(len(values)), f"{mean:+.4f}", f"{std:.4f}"], None))
-    print_table(["Elem", "N", "Mean(e-)", "Std(e-)"], species_rows, f_out)
+        species_rows.append(([sym, str(len(values)), str(n_cation), str(n_anion),
+                              f"{mean:+.4f}", f"{std:.4f}"], 'cyan' if is_mixed else None))
+    print_table(["Elem", "N", "Cation-like", "Anion-like", "Mean(e-)", "Std(e-)"],
+                species_rows, f_out)
+    if any_genuinely_mixed:
+        print_dual(color_text(
+            "Species highlighted above converged with atoms genuinely leaning toward BOTH "
+            "ion states -- exactly the case a single-sign-per-species approach cannot "
+            "represent correctly.", 'cyan'), f_out)
 
     print_section("[6] SUMMARY", f_out)
     total_elapsed = time.monotonic() - iter_start

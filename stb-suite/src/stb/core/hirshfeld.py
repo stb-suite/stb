@@ -5,9 +5,9 @@ imported by anything reading SIESTA's own NATIVE Hirshfeld output
 reader, this module is the actual density-partitioning method SIESTA
 itself doesn't implement iteratively.
 
-Shared by 2 consumers from the start (hirshfeld_ions.py's pass-0 sign
-decision, hirshfeld_analysis.py's full iteration), so it lives directly in
-core/ rather than waiting for an extract-on-second-use move.
+Shared by 2 consumers from the start (hirshfeld_ions.py's informational
+pass-0 report, hirshfeld_analysis.py's full iteration), so it lives
+directly in core/ rather than waiting for an extract-on-second-use move.
 
 All grid arrays here follow the same convention as core/rho_io.py /
 core/grid_export.py: a plain numpy array from sisl's Grid.grid (already
@@ -184,23 +184,34 @@ def compute_hirshfeld_charges(rho_real: np.ndarray, lattice: np.ndarray, frac_po
 
 
 def iterate_hirshfeld_i(rho_real: np.ndarray, lattice: np.ndarray, frac_positions, symbols,
-                         z_vals, neutral_profiles: dict, ion_profiles: dict,
-                         tol: float = 0.005, max_iter: int = 20, show_progress: bool = False,
-                         initial_charges=None, initial_populations=None, on_iteration=None):
-    """The Hirshfeld-I convergence loop. `neutral_profiles`/`ion_profiles`
-    map species symbol -> (r_array, rho_of_r_array) (from
-    radial_density_profile on that species' isolated neutral/ion .RHO).
+                         z_vals, neutral_profiles: dict, cation_profiles: dict,
+                         anion_profiles: dict, tol: float = 0.005, max_iter: int = 20,
+                         show_progress: bool = False, initial_charges=None,
+                         initial_populations=None, on_iteration=None):
+    """The Hirshfeld-I convergence loop, following the original iterative-
+    Hirshfeld formulation (Bultinck et al., J. Chem. Phys. 126, 144111
+    (2007)) literally: EVERY ATOM independently interpolates its own
+    reference density between its species' NEUTRAL profile and whichever
+    of that species' CATION or ANION profile matches that atom's OWN
+    charge sign from the previous round -- so two atoms of the same
+    species can legitimately end up leaning toward opposite ion states in
+    the same round (e.g. one edge carbon reading slightly positive, the
+    bulk of the carbons reading negative). This is why both
+    `cation_profiles` and `anion_profiles` (species symbol -> (r_array,
+    rho_of_r_array), from radial_density_profile on that species'
+    isolated +1/-1 '*.RHO') must always be supplied, never just "the"
+    ion for a species -- a coarser variant that picks one sign per
+    species from a single vote (this codebase's own earlier
+    implementation) cannot represent this and silently mis-references
+    every atom on the "wrong" side of that vote.
 
     Iteration 0 is plain simple Hirshfeld (every atom's reference = its
     own species' neutral profile, frac=0 -- directly comparable to
     stb-nativecharges'/SIESTA's own native Hirshfeld output for the same
-    system). Each subsequent round blends every atom's reference between
-    its species' neutral and ion profile, weighted by that ATOM's own
-    charge from the previous round (interpolate_reference_density,
-    frac = min(|q|, 1) -- not a per-species average, so two atoms of the
-    same species with different local environments can end up with
-    different references), and recomputes charges against the fixed real
-    density, until max|Delta q| < tol or max_iter rounds are used.
+    system). Each subsequent round recomputes charges against the fixed
+    real density using this per-atom cation-or-anion blend
+    (interpolate_reference_density, frac = min(|q|, 1)), until
+    max|Delta q| < tol or max_iter rounds are used.
 
     `show_progress`, if True, forwards a per-round progress_label
     ("Pass 0"/"Iteration N/max_iter") to each compute_hirshfeld_charges
@@ -246,8 +257,13 @@ def iterate_hirshfeld_i(rho_real: np.ndarray, lattice: np.ndarray, frac_position
     for iteration in range(1, max_iter + 1):
         species_profiles = {}
         for i in range(n_atoms):
-            r_n, rho_n = neutral_profiles[symbols[i]]
-            r_i, rho_i = ion_profiles[symbols[i]]
+            sym = symbols[i]
+            r_n, rho_n = neutral_profiles[sym]
+            # Each atom picks its OWN ion state from its OWN charge sign
+            # this round -- not a per-species decision. A charge of
+            # exactly 0.0 (vanishingly rare in practice) leans cation
+            # (frac=0 either way makes the choice moot: rho_ref = rho_n).
+            r_i, rho_i = cation_profiles[sym] if charges[i] >= 0 else anion_profiles[sym]
             blended = interpolate_reference_density(r_n, r_n, rho_n, r_i, rho_i, charges[i])
             species_profiles[i] = (r_n, blended)
 

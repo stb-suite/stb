@@ -6603,9 +6603,9 @@ def run_hirshfeld_ions() -> None:
     print(color_text("HIRSHFELD-I - STAGE 2: ION PREP", 'bold').center(60))
     print("="*60 + "\n")
     print(color_text(
-        "Reads back every neutral/<species>/ folder (now run through SIESTA), decides each "
-        "species' ion sign from a pass-0 simple-Hirshfeld charge, and writes the ion/<species>/ "
-        "folders Stage 3 needs.",
+        "Reads back every neutral/<species>/ folder (now run through SIESTA) and writes BOTH "
+        "a cation and an anion reference folder for every species -- Stage 3 lets each atom "
+        "pick whichever one matches its own charge sign, per the literature.",
         'cyan'))
     print()
 
@@ -9337,8 +9337,8 @@ WORKFLOW_TOOLS = {
                                 "per chemical species.",
                 'func': run_hirshfeld_prep},
             2: {'title': "Stage 2 - Ion Prep (stb-hirshfeldIons)",
-                'description': "Decide each species' ion sign from a pass-0 simple-Hirshfeld "
-                                "charge, then write the cation/anion reference folders.",
+                'description': "Write BOTH a cation and an anion reference folder for every "
+                                "species -- Stage 3 lets each atom pick its own, per atom.",
                 'func': run_hirshfeld_ions},
             3: {'title': "Stage 3 - Analysis (stb-hirshfeldAnalysis)",
                 'description': "Iterate the Hirshfeld-I reference-density refinement to "

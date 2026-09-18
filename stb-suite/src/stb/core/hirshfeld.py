@@ -132,21 +132,39 @@ def compute_hirshfeld_charges(rho_real: np.ndarray, lattice: np.ndarray, frac_po
     silent, for callers that don't want stray stderr output (e.g. a unit
     test).
 
+    The per-atom minimum-image GEOMETRY arrays (grid_frac/disp/cart/r --
+    the ones whose size is O(grid size), not O(grid size) x 8 bytes worth
+    of double precision anyone actually needs for an Angstrom-scale
+    distance) are float32, not float64 -- half the memory of the original
+    implementation for a real production grid (SIESTA's own .RHO is
+    already float32; the density/population arithmetic itself stays
+    float64 throughout, only the distance computation is narrowed).
+    `del`eted explicitly as soon as each is no longer needed rather than
+    relying on CPython's refcounting alone to free it -- this function's
+    own peak was observed to OOM-kill a real 216x216x180 (~8.4M point)
+    production run otherwise.
+
     Returns (charges, populations), each a (n_atoms,) array.
     """
     n_atoms = len(frac_positions)
     nx, ny, nz = rho_real.shape
-    fx, fy, fz = np.meshgrid(np.arange(nx) / nx, np.arange(ny) / ny, np.arange(nz) / nz,
+    fx, fy, fz = np.meshgrid(np.arange(nx, dtype=np.float32) / nx,
+                              np.arange(ny, dtype=np.float32) / ny,
+                              np.arange(nz, dtype=np.float32) / nz,
                               indexing='ij')
     grid_frac = np.stack([fx, fy, fz], axis=-1)
+    del fx, fy, fz
+    lattice32 = np.asarray(lattice, dtype=np.float32)
     cell_volume = abs(np.linalg.det(lattice))
     voxel_volume = cell_volume / rho_real.size
 
     def atom_density(i):
-        disp = grid_frac - np.asarray(frac_positions[i], dtype=float)
+        disp = grid_frac - np.asarray(frac_positions[i], dtype=np.float32)
         disp -= np.round(disp)
-        cart = disp @ lattice
+        cart = disp @ lattice32
+        del disp
         r = np.linalg.norm(cart, axis=-1)
+        del cart
         r_arr, rho_arr = species_profiles[i]
         return np.interp(r, r_arr, rho_arr, left=0.0, right=0.0)
 

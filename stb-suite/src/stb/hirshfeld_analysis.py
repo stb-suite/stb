@@ -267,13 +267,32 @@ def main():
             "Re-run with a larger --max-iter, or treat the result below as unconverged.",
             'yellow'), f_out)
 
-    print_section("[4] PER-ATOM CHARGES: SIMPLE HIRSHFELD vs. HIRSHFELD-I", f_out)
-    headers = ["Idx", "Elem", "Simple Hirshfeld(e-)", "Hirshfeld-I(e-)", "Shift(e-)"]
+    # Native Voronoi charges (SIESTA's own 'Voronoi Atomic Populations:' block,
+    # written when 'Charge.Voronoi end' is set -- stb-hirshfeldPrep forces this
+    # unconditionally into combined/'s config_extra.fdf specifically so it's
+    # available here as a 3rd, independent cross-check alongside simple
+    # Hirshfeld and Hirshfeld-I, same combined_out already resolved above for
+    # Z_val). Keyed by SIESTA's own 1-based atom index.
+    native_voronoi = siesta_log.get_voronoi_charges(combined_out) if combined_out else None
+    voronoi_by_id = {d["id"]: d["charge"] for d in native_voronoi} if native_voronoi else {}
+
+    print_section("[4] PER-ATOM CHARGES: VORONOI vs. SIMPLE HIRSHFELD vs. HIRSHFELD-I", f_out)
+    if not voronoi_by_id:
+        print_dual(color_text(
+            "[INFO] Native Voronoi charges not found in combined/'s own .out ('Voronoi "
+            "Atomic Populations:' block, from 'Charge.Voronoi end') -- Voronoi column "
+            "below reads N/A. Pass --ref to point at the right .out if 'combined/' has "
+            "more than one, or if it was renamed.", 'yellow'), f_out)
+    cart_positions = frac_positions @ np.asarray(structure.lattice)
+    headers = ["Idx", "X(Ang)", "Y(Ang)", "Z(Ang)", "Elem", "Voronoi(e-)",
+               "Simple Hirshfeld(e-)", "Hirshfeld-I(e-)"]
     rows = []
     for i in range(len(symbols)):
-        shift = charges_final[i] - charges_0[i]
-        rows.append(([str(i + 1), symbols[i], f"{charges_0[i]:+.4f}",
-                       f"{charges_final[i]:+.4f}", f"{shift:+.4f}"], None))
+        voro = voronoi_by_id.get(i + 1)
+        voro_str = f"{voro:+.4f}" if voro is not None else "N/A"
+        rows.append(([str(i + 1), f"{cart_positions[i, 0]:.4f}", f"{cart_positions[i, 1]:.4f}",
+                       f"{cart_positions[i, 2]:.4f}", symbols[i], voro_str,
+                       f"{charges_0[i]:+.4f}", f"{charges_final[i]:+.4f}"], None))
     print_table(headers, rows, f_out)
 
     print_section("[5] PER-SPECIES SUMMARY (HIRSHFELD-I)", f_out)

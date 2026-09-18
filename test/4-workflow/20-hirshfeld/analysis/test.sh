@@ -117,6 +117,15 @@ check_contains "SIMPLE HIRSHFELD vs. HIRSHFELD-I" log_default.txt
 check_contains "PER-SPECIES SUMMARY (HIRSHFELD-I)" log_default.txt
 check_contains "Cation-like | Anion-like" log_default.txt
 check_contains "Iterations run  :" log_default.txt
+
+echo "Testing: table [4] has Idx/position(x,y,z)/Elem/Voronoi/Simple Hirshfeld/Hirshfeld-I columns"
+check_contains "VORONOI vs. SIMPLE HIRSHFELD vs. HIRSHFELD-I" log_default.txt
+check_contains "X(Ang)" log_default.txt
+check_contains "Voronoi(e-)" log_default.txt
+check_contains "Idx | X(Ang)" log_default.txt
+echo "Testing: this synthetic fixture's combined/ has no real .out with a native Voronoi"
+echo "         block, so the Voronoi column gracefully degrades to N/A with an [INFO] note"
+check_contains "Native Voronoi charges not found" log_default.txt
 check_contains "Iterating time  :" log_default.txt
 
 
@@ -129,17 +138,32 @@ check_contains "Max iterations : 3" log_tol.txt
 
 
 # --- 4b. --ref (explicit reference file, e.g. not named with a .out extension) ---
+# Also carries a real 'Voronoi Atomic Populations:' block (same file --ref
+# points at doubles as the Z_val AND native-Voronoi source, exactly like a
+# real combined/*.out would) -- proves table [4]'s Voronoi column's happy
+# path, not just its N/A fallback (already exercised by the default run
+# above, whose synthetic combined/ has no real .out at all).
 echo -e "\n--- Testing --ref (Z_val detection from an explicitly-named, non-.out reference file) ---"
 cat > hirshfeld_study/combined/run_log.txt << 'ZVALEOF'
 atom: Called for C(Z=6)
 Vna: chval, zval:    4.00000   4.00000
 atom: Called for O(Z=8)
 Vna: chval, zval:    6.00000   6.00000
+Voronoi Atomic Populations:
+Atom #   charge [q] valence [e]      Sz [e]  Species
+     1    -0.050000    4.050000    0.000000  C
+     2     0.050000    5.950000    0.000000  O
+-------------------------------------------
+ Total     0.000000                0.000000
 ZVALEOF
 stb-hirshfeldAnalysis -O hirshfeld_study --ref hirshfeld_study/combined/run_log.txt \
     --no-intro > log_ref.txt 2>&1
 check_exit_code $? 0
 check_contains "Total charge" log_ref.txt
+
+echo "Testing: table [4]'s Voronoi column happy path -- real values, not N/A, read"
+echo "         straight from the same --ref file's native 'Voronoi Atomic Populations:' block"
+check_contains "-0.0500" log_ref.txt
 
 
 # --- 5. --save-report ---

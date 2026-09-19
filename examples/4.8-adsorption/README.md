@@ -35,13 +35,18 @@ calculations is corrected for. This item has **four** stages:
 
 `example_4.8.sh` is a guided, runnable walkthrough of all four stages —
 **including a worked numeric example (Section 8) where the BSSE
-correction changes which site you'd conclude is the most stable one, and a
+correction changes which site you'd conclude is the most stable one, a
 second one (Section 13.4) where accounting for entropy turns a favorable
-adsorption unfavorable above room temperature.** Those are the two most
-important things to take from this page: an uncorrected adsorption-energy
-ranking is not just "a little too negative," it can point at the wrong site
-outright — and even a BSSE-corrected `E_ads` is only the electronic part of
-the story, not the full thermodynamic answer.
+adsorption unfavorable above room temperature, and a third one (Section
+13.6/13.7) that turns that same `DG(T)` sweep into a rough desorption
+*timescale* — and shows the degenerate case where that timescale estimate
+stops being informative at all.** Those are the three most important things
+to take from this page: an uncorrected adsorption-energy ranking is not just
+"a little too negative," it can point at the wrong site outright; even a
+BSSE-corrected `E_ads` is only the electronic part of the story, not the
+full thermodynamic answer; and even `DG(T)` itself only tells you *whether*
+something desorbs, not *how fast* — a question Stage 4's `[3c]` section
+answers only very roughly, and sometimes (Section 13.7) not usefully at all.
 
 ## 1. Why the cell stays fixed
 
@@ -469,6 +474,21 @@ relaxed)` / `SKIP (missing calc.out)`).
   convention. Not expected to matter in practice (every orientation for one
   candidate starts at the same site coordinate and relaxes independently),
   but a documented simplification, not a rigorous guarantee.
+- **`[3c]`'s desorption kinetics (`tau_desorb`) is a *lower bound*, not a
+  kinetic prediction** (Section 13.6) — it assumes desorption has literally
+  no barrier beyond `-DG_ads(T)` and a bare, uncorrected TST prefactor. A
+  real barrier only makes the true residence time longer than the number
+  printed here, sometimes by many orders of magnitude. **Never quote
+  `tau_desorb` on its own as "the desorption time"** — it is only ever a
+  floor on that time.
+- **When `DG_ads(T)` is already positive at `--tmin` itself, `[3c]`
+  degenerates into "instant" at every scanned temperature** (Section 13.7)
+  — a real, observed failure mode (not a hypothetical one), not a bug. It
+  means the barrierless-TST assumption has nothing left to bound: there is
+  no thermodynamic well anywhere in the scanned range for it to measure a
+  lifetime against. Treat this pattern as a screening signal ("this site
+  does not bind at any temperature you scanned"), not as literal
+  femtosecond/nanosecond kinetics.
 
 ## 10. Step-by-step: running this workflow on your own structure
 
@@ -644,7 +664,9 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
   swept in `[3]`. Always printed (console **and** `--save-report` file) directly
   under an explicit `[APPROXIMATION]` warning — see Section 13.6 for the full
   derivation, the barrierless assumption behind it, and why `tau_desorb` is a
-  **lower bound**, not a prediction.
+  **lower bound**, not a prediction. If every row reads `~0 (instant)`, see
+  Section 13.7 — that's the degenerate case where `DG_ads(T)` is already
+  positive at `--tmin`, and `[3c]` stops being informative at all.
 - **`adsorption_gibbs.png`** — a 2-panel plot: top, `DG(T)` against two
   temperature-independent reference lines (`E_ads` and `D0`); bottom, `DS(T)`.
 - **`adsorption_mode_spectrum.png`** — a stick-spectrum comparison of the site's and
@@ -870,6 +892,106 @@ in the same folder — a log-scale `tau_desorb(T)` line plot, same
 suite (e.g. `stb-nebAnalysis`'s energy profile). `adsorption_desorption_kinetics.png`
 is the same data as a matplotlib figure, for viewing directly without needing
 gnuplot installed at all.
+
+### 13.7 The degenerate case: `DG_ads(T)` already positive at `--tmin` — a real example
+
+Section 13.6's worked example is the "nice" case: `DG(T)` starts negative
+(bound) and crosses to positive (unbound) *inside* the scanned window, so
+`tau_desorb` has something to measure — it falls from a genuinely long time
+to a genuinely short one as `T` sweeps across that crossing. That is not the
+only shape this can take. **When `DG_ads(T)` is already positive at
+`--tmin` itself — i.e. the system is thermodynamically unbound at *every*
+temperature you scanned — `[3c]` degenerates into `tau_desorb ~= ~0
+(instant)` at every single row, not just near the crossing.** This is not a
+hypothetical corner case; it is what an actual finished SIESTA calculation
+in this suite produced (weakly-bound CO2 physisorption, run outside this
+example folder — the numbers below are a real, code-verified
+`stb-adsorbGibbs` run, not a hand-fabricated illustration like Sections 8/13.4):
+
+```
+[1] ELECTRONIC ENERGIES
+------------------------------------------------------------
+  E_ads (raw)  =    -0.532653 eV
+  E_ads (BSSE) =    -0.096923 eV
+  E_ads used for DG below: BSSE-corrected = -0.096923 eV
+
+[2] VIBRATIONAL/THERMAL TERMS
+------------------------------------------------------------
+  ZPE(site)  = 0.3218 eV   ZPE(isolated ref) = 0.3043 eV   DZPE = +0.0175 eV
+  D0 (ZPE-corrected binding energy) = E_ads + DZPE = -0.0794 eV
+
+[3] GIBBS FREE ENERGY vs. TEMPERATURE
+------------------------------------------------------------
+  T =  200.00 K   DZPE = +0.0175 eV   DTS = -0.2907 eV   DS = -1.4534 meV/K (-140.24 J/(mol*K))   DG = +0.2113 eV
+  T =  300.00 K   ...                                                                             DG = +0.3520 eV
+  T =  400.00 K   ...                                                                             DG = +0.4911 eV
+
+[FINAL RESULT] DG(adsorption) = +0.2113 eV at T = 200.0 K (E_ads BSSE-corrected, D0 = -0.0794 eV)
+
+[3b] ESTIMATED DESORPTION TEMPERATURE
+------------------------------------------------------------
+  [EXTRAPOLATED] T_desorption ~= 49.0 K -- DG stays positive throughout the scanned
+  [200.0, 400.0] K range; this is a linear extrapolation beyond it, not an
+  interpolation -- widen --tmin/--tmax for a direct estimate.
+
+[3c] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)
+------------------------------------------------------------
+  T =  200.00 K   DG = +0.2113 eV   k_desorb =  8.790e+17 1/s   tau_desorb = ~0 (instant)
+  T =  300.00 K   DG = +0.3520 eV   k_desorb =  5.129e+18 1/s   tau_desorb = ~0 (instant)
+  T =  400.00 K   DG = +0.4911 eV   k_desorb =  1.285e+19 1/s   tau_desorb = ~0 (instant)
+```
+
+**Why this happens (theory):** `D0` — the electronic+ZPE binding energy,
+`E_ads + DZPE`, the `T = 0` limit of the whole calculation — is still
+favorable here (`-0.0794 eV`, a genuine although weak minimum). What flips
+`DG` positive already at 200 K is `DTS`: `DS = -140.24 J/(mol*K)`, i.e. this
+adsorbate loses almost its *entire* gas-phase translational+rotational
+entropy on binding (squarely in, in fact toward the high end of, the
+100-150 J/(mol·K) literature range quoted in Section 13.3), while the
+electronic well is only `~0.08 eV` deep — nowhere near enough to outweigh a
+`-T*DS` penalty of that size even at 200 K, let alone 300-400 K. Physically:
+**a shallow physisorption well can lose the fight to gas-phase entropy
+before you ever reach a temperature worth running SIESTA at.**
+
+> **⚠ READ THIS BEFORE TRUSTING `tau_desorb` IN THIS REGIME.** Once
+> `DG_ads(T) > 0` at every scanned `T`, `k_desorb(T) = (kB*T/h) *
+> exp(DG_ads(T)/(kB*T))` (Section 13.6) has a positive exponent at every
+> row — it is mathematically *guaranteed* to sit above the bare attempt
+> frequency `kB*T/h` (~1e13 1/s), which is exactly why `tau_desorb` floors
+> out at "instant" (femtoseconds or less) everywhere. **This does not mean
+> the real adsorbate desorbs in femtoseconds.** It means the barrierless
+> -TST model (Section 13.6: `DG_double_dagger = -DG_ads(T)`, no real
+> transition-state search) has run out of anything to measure — there is no
+> thermodynamic well left in this window for "how long does it sit in the
+> well" to even be a meaningful question. Section 13.6's own "lower bound"
+> framing is technically still true here (a real barrier can only make
+> desorption slower), but it is **not useful** in this regime: "at least
+> instant" carries no information. **Do not report a `tau_desorb` value
+> from this regime as a kinetic result.**
+>
+> What to do instead:
+> - **Trust `[3b]`'s extrapolated crossing (`T_desorption ~= 49.0 K` above),
+>   not `[3c]`, as the actionable number** — and note it is flagged
+>   `[EXTRAPOLATED]`, a linear extrapolation *below* `--tmin`, not an
+>   interpolation. Re-run with a lower `--tmin` (e.g. `--tmin 50`) to turn
+>   that extrapolation into a direct interpolation instead — cheap to do,
+>   since it reuses the same finished Hessian folders, no new SIESTA runs.
+> - **Treat "`DG` positive throughout the whole scan" as a screening
+>   result, not a kinetics result**: this site/adsorbate pair is not going
+>   to stay bound at any temperature you actually scanned, full stop — the
+>   femtosecond `tau_desorb` numbers add nothing beyond confirming that.
+> - **If you actually need a real kinetic answer** (a genuine desorption
+>   rate, not a thermodynamic screening result), this workflow cannot give
+>   you one in *any* regime, degenerate or not — that requires an actual
+>   transition-state search (`stb-neb`, Section 9) with the adsorbate's real
+>   escape pathway and its own vibrational spectrum for a proper Vineyard
+>   prefactor, neither of which Stage 4 computes.
+> - Before concluding the *site* is simply weakly bound, double check the
+>   basics this session's own diagnostics depend on: was `DFTD3` actually
+>   applied (`config_extra.fdf`, Section 14.1) — van der Waals is often the
+>   dominant term for a weak physisorption well, and a missing/misconfigured
+>   dispersion correction can produce exactly this "too-shallow-to-matter"
+>   `D0`.
 
 ## 14. Van der Waals correction (always on), and systematic orientation sampling
 

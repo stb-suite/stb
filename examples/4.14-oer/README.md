@@ -290,8 +290,8 @@ publication-ready charts (Section 6.4) automatically.
 
 ## 2. Libraries and external dependencies used
 
-- **`pymatgen` / `spglib`** — `AdsorbateSiteFinder` (site search, Stage
-  1) and `SpacegroupAnalyzer` (the `[1] SLAB SYMMETRY` section).
+- **`pymatgen` / `spglib`** — `AdsorbateSiteFinder` (site search,
+  Stage 1) and `SpacegroupAnalyzer` (the `[1] SLAB SYMMETRY` section).
 - **`numpy`** — every local-mode Hessian diagonalization and
   Bose-Einstein entropy formula (Section 6.3).
 - **`matplotlib`** — `stb-oerAnalysis --show`, an optional on-screen

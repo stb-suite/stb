@@ -1,0 +1,70 @@
+site_name: STB-SUITE
+site_description: Siesta Toolbox Suite - command-line tools for SIESTA DFT workflows
+site_url: https://stb-suite.github.io/stb/
+site_author: Carlos M. O. Bastos
+repo_url: https://github.com/stb-suite/stb
+repo_name: stb-suite/stb
+edit_uri: edit/main/docs/
+copyright: MIT License - &copy; 2025 Dr. Carlos M. O. Bastos, University of Brasília (UnB)
+
+docs_dir: docs
+
+# Build tooling that lives next to the docs, not content to publish.
+exclude_docs: |
+  gen_pages.py
+  hooks.py
+  requirements.txt
+  __pycache__/
+
+hooks:
+  - docs/hooks.py
+
+theme:
+  name: material
+  logo: assets/stb-icon.png
+  favicon: assets/stb-icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+
+markdown_extensions:
+  - tables
+  - sane_lists
+  - toc:
+      permalink: true
+      # GitHub-compatible heading anchors, so the in-page links written for
+      # GitHub's rendering (e.g. "#--mode-mean-vs---mode-list") still resolve.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Guides: guides/

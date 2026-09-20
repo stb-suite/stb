@@ -225,8 +225,8 @@ cell is what the rest of the walkthrough (Section 4) actually uses.
   limitation `stb-adsorb` itself imposes.
 - **`sisl`** — reads each site's relaxed `siesta.XV` in Stage 2
   (`stb-adsorbBsse`).
-- **`matplotlib`** — the site-layout plot (`adsorption_sites.png`, Stage
-  1) and the adsorption-energy ranking plot (`adsorption_ranking.png`,
+- **`matplotlib`** — the site-layout plot (`adsorption_sites.png`,
+  Stage 1) and the adsorption-energy ranking plot (`adsorption_ranking.png`,
   Stage 3, `--view-plots` to preview live).
 - **`gnuplot`** (optional, always written by Stage 3) — `adsorption_curve.dat`/
   `.gplot`, a portable per-site `E_ads`/`E_ads_BSSE` scatter.

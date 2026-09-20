@@ -21,3 +21,6 @@ env/
 .idea/
 *.swp
 .DS_Store
+
+# Documentation site build output (mkdocs build)
+site/

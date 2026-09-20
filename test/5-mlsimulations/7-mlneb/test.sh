@@ -56,6 +56,16 @@ check_exit_code() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 
 echo "--- Starting tester for stb-mlneb (item 5.7) ---"
 
@@ -141,6 +151,25 @@ echo -e "\n--- Testing composition mismatch rejection ---"
 stb-mlneb --initial vac_initial.fdf --final ../../3-mlelastic/si8.fdf --no-intro > log_mismatch.txt 2>&1
 check_exit_code $? 1
 check_contains "different composition" log_mismatch.txt
+
+
+# --- 3b. Lattice mismatch: warn, adopt the INITIAL lattice, keep going ---
+# Unlike stb-neb (the DFT workflow, which hard-fails on a lattice mismatch),
+# this screening tool keeps a lenient resolve_lattice_mismatch: ASE's NEB and
+# pymatgen's interpolation both need one shared cell, so the initial structure's
+# lattice is used for the whole band and the user is warned.
+echo -e "\n--- Testing lattice mismatch (warn + adopt the initial lattice) ---"
+sed 's/5\.43000000/5.45000000/g' vac_final.fdf > vac_final_stretched.fdf
+stb-mlneb --initial vac_initial.fdf --final vac_final_stretched.fdf --n-images 5 \
+    --save-report --no-intro -o vac_stretched > log_lattice.txt 2>&1
+check_exit_code $? 0
+check_contains "different lattices" log_lattice.txt
+check_contains "Adopting the INITIAL structure's lattice" log_lattice.txt
+check_contains "different lattices" vac_stretched/stb_mlneb_report.txt
+check_contains "Barrier (forward)" log_lattice.txt
+echo "Testing: matching lattices (the basic run above) must NOT emit the warning"
+check_not_contains "different lattices" log_neb.txt
+rm -rf vac_stretched vac_final_stretched.fdf
 
 
 # --- 4. Error and robustness cases ---

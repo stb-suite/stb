@@ -19,14 +19,21 @@ barrier estimate -- e.g. defect/vacancy migration, an adsorbate hopping
 between sites -- with no DFT step involved at all.
 
 Deliberately reuses (not duplicates) neb.py's own pure-geometry helpers --
-check_composition_match, wrap_into_cell, resolve_lattice_mismatch,
-linear_interpolate_images, idpp_refine_images, compute_frozen_indices,
-cumulative_reaction_coordinates, check_path_quality, write_path_trajectory,
-write_ml_preview_plot -- since interpolating/quality-checking a reaction
-path is exactly the same problem whether the images end up going to SIESTA
-or straight into a MACE NEB; only write_image_folder (SIESTA input/
-pseudopotential specific) is not reused, since this tool doesn't generate
-any DFT input. The actual NEB relaxation reuses core/mace_relax.py's
+check_composition_match, wrap_into_cell, linear_interpolate_images,
+idpp_refine_images, compute_frozen_indices, cumulative_reaction_coordinates,
+check_path_quality, write_path_trajectory, write_ml_preview_plot -- since
+interpolating/quality-checking a reaction path is exactly the same problem
+whether the images end up going to SIESTA or straight into a MACE NEB; only
+write_image_folder (SIESTA input/pseudopotential specific) is not reused,
+since this tool doesn't generate any DFT input.
+
+The one deliberate exception is the endpoint-lattice check: stb-neb (the
+DFT workflow) hard-fails on a lattice mismatch between --initial/--final
+(neb.py::require_lattice_match), since re-relaxing an endpoint on the
+other's cell is the user's job before committing to real SIESTA runs. This
+screening tool keeps its own lenient resolve_lattice_mismatch below
+instead -- a warning, then the INITIAL lattice adopted for the whole band --
+so a quick ML preview still runs on two roughly-matching endpoints. The actual NEB relaxation reuses core/mace_relax.py's
 relax_neb (already the same function stb-neb's --ml-neb mode calls) --
 climbing-image NEB, two-stage convergence (climb=False first to let the
 band find its shape, then climb=True to refine the true saddle point).
@@ -40,13 +47,14 @@ import argparse
 from datetime import datetime
 
 import numpy as np
+from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mace_relax
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.neb import (
-    check_composition_match, wrap_into_cell, resolve_lattice_mismatch,
+    check_composition_match, wrap_into_cell,
     linear_interpolate_images, idpp_refine_images, compute_frozen_indices,
     cumulative_reaction_coordinates, check_path_quality, write_path_trajectory,
     write_ml_preview_plot,
@@ -55,6 +63,36 @@ from stb.neb import (
 require_mace()
 
 REPORT_FILE = "stb_mlneb_report.txt"
+
+
+def resolve_lattice_mismatch(initial_pmg, final_pmg, f_out, tol=1e-3):
+    """Returns a copy of `final_pmg` rebuilt on the INITIAL structure's
+    lattice (species/frac_coords kept from final_pmg), with a [WARNING] if
+    the two lattices differ by more than `tol` Ang in any component.
+
+    Not just stylistic: ase.mep.neb.NEB/idpp_interpolate both raise
+    NotImplementedError on any per-image cell mismatch (no variable-cell NEB
+    support in ASE), and pymatgen's Structure.interpolate raises ValueError
+    on unequal lattices unless interpolate_lattices=True -- so a single
+    fixed lattice for the whole band is the only thing either downstream
+    library can actually run. Below `tol` (ordinary floating-point noise
+    between two independently-relaxed endpoints) no message is printed, but
+    the rebuild is still needed: pymatgen/ASE's own lattice-equality checks
+    are tighter than `tol`.
+    """
+    initial_matrix = np.array(initial_pmg.lattice.matrix)
+    final_matrix = np.array(final_pmg.lattice.matrix)
+    max_diff = float(np.abs(initial_matrix - final_matrix).max())
+    if max_diff > tol:
+        print_dual(color_text(
+            f"[WARNING] Initial and final structures have different lattices (largest "
+            f"component difference: {max_diff:.4f} Ang) -- ase.mep.neb.NEB and pymatgen's "
+            "interpolation both require every image to share one exact cell (no variable-cell "
+            "NEB support in ASE). Adopting the INITIAL structure's lattice for the whole band; "
+            "the final structure's atomic (fractional) positions are kept, its own lattice is "
+            "discarded.", 'yellow'), f_out)
+    return Structure(initial_pmg.lattice, final_pmg.species, final_pmg.frac_coords,
+                      coords_are_cartesian=False)
 
 
 def run_single_neb(initial_pmg, final_pmg_matched, calc, args, f_out, tag=""):
@@ -251,7 +289,7 @@ def main():
 
     initial_pmg = wrap_into_cell(structure_io.to_pymatgen(initial_structure))
     final_pmg = wrap_into_cell(structure_io.to_pymatgen(final_structure))
-    final_pmg_matched = resolve_lattice_mismatch(initial_pmg, final_pmg)
+    final_pmg_matched = resolve_lattice_mismatch(initial_pmg, final_pmg, f_out)
 
     model_arg = args.custom_model if args.custom_model else args.model
     calc = mace_relax.get_calculator(model=model_arg, device=args.device)

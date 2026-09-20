@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / "docs"))
 from stbdocs.mdcompat import github_markdown_to_python_markdown  # noqa: E402
 
 # Same extensions as mkdocs.yml (plus the ones MkDocs always enables).
-EXTENSIONS = ["tables", "sane_lists", "toc", "pymdownx.highlight",
+EXTENSIONS = ["admonition", "tables", "sane_lists", "toc", "pymdownx.highlight",
               "pymdownx.inlinehilite", "pymdownx.superfences"]
 
 

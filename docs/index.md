@@ -2,6 +2,13 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows.**
 
+!!! warning dev-notice "This version is still under development"
+
+    **Several functions may not behave as expected.**
+
+    **Verify every result** before relying on it: check it independently, for
+    example against a reference calculation or the literature.
+
 STB-SUITE is a collection of independent command-line tools that assist users of
 the [SIESTA](https://siesta-project.org/siesta/) DFT code through every step of a
 project: generating inputs, building and converting structures, post-processing

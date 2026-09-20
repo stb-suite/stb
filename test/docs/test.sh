@@ -109,6 +109,13 @@ check_success "$SITE_DIR/index.html"
 check_success "$SITE_DIR/guides/index.html"
 check_success "$SITE_DIR/assets/stb-icon.png"
 
+echo "Testing: the home page carries the large 'still under development' notice (and only the home page)"
+check_contains "This version is still under development" "$SITE_DIR/index.html"
+check_contains "Verify every result" "$SITE_DIR/index.html"
+check_contains "dev-notice" "$SITE_DIR/index.html"
+check_success "$SITE_DIR/assets/notice.css"
+check_not_contains "still under development" "$SITE_DIR/guides/index.html"
+
 
 # --- 2. Every menu item has a guide page (real or stub) ---
 echo -e "\n--- Testing that every menu item has a guide page ---"

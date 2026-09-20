@@ -24,7 +24,7 @@ whether the MACE-MP-0 answer itself has converged with model size, not
 whether MACE-MP-0 (at any size) agrees with the real material.
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -1,12 +1,20 @@
+# The version is 1.9.<number of commits>, computed from git by src/stb/_version.py.
+# This recipe builds from a copy of stb-suite/ that has no git history, so export
+# STB_VERSION (for example STB_VERSION=1.9.$(git rev-list --count HEAD)) before
+# building; without it the package is version 1.9.0.
+{% set version = environ.get("STB_VERSION", "1.9.0") %}
+
 package:
   name: stb_suite
-  version: "1.9.1"
+  version: "{{ version }}"
 
 source:
   path: .
 
 build:
   noarch: python
+  script_env:
+    - STB_VERSION
   script:
     - python -m pip install .   # Instala o pacote
 

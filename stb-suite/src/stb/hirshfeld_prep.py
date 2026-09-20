@@ -66,8 +66,7 @@ ChemicalSpeciesLabel may not be accepted by SIESTA and is the caller's own
 responsibility to avoid.
 """
 
-VERSION = "2.0.0"  # combined/ folder now written by this stage itself (previously
-                    # required an already-computed combined .RHO to exist beforehand)
+from stb import __version__ as VERSION
 
 import os
 import re

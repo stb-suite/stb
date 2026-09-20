@@ -6,15 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.13.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through
-                    # to Phonopy itself -- a real bug: Phonopy's own raw default (1e-5) is far
-                    # tighter than any DFT relaxation's real numerical noise floor and was
-                    # silently misdetecting the true space group (verified live on a real
-                    # relaxed AlP structure: 1e-5 -> wrong R3m, 0.01 -> correct F-43m). Also:
-                    # library prints/warnings (MACE/torch/phonopy) captured and moved to a new
-                    # final [LIBRARY WARNINGS] section instead of interleaving with the report;
-                    # [0b] ML PRE-FLIGHT CHECK gets an explicit Verdict line; symmetry section
-                    # rewritten as a print_table with symprec shown and the result highlighted
+from stb import __version__ as VERSION
 
 import os
 import sys

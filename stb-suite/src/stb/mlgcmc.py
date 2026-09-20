@@ -61,7 +61,7 @@ molecular species arises, same "expose on first genuine use" policy as
 the rest of this suite.
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

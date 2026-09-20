@@ -6,11 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"  # stb-standard numbered report ([0]-[7], --save-report) and a
-                    # single wrapping --output-dir (default cohesive_runs, matching
-                    # stb-strain/stb-elasticInputs' own <property>_runs convention)
-                    # instead of writing structure/atoms/atoms_bsse[_check] loose
-                    # into the current directory by default.
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -409,7 +405,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "Cohesive Energy Workflow setup",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

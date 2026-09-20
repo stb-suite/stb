@@ -29,12 +29,7 @@ side by side, plus the convergence history, so the shift between the two
 methods is visible rather than only the final number.
 """
 
-VERSION = "2.1.0"  # reads BOTH cation and anion per species and lets each atom
-                    # pick its own, per the literal literature formulation
-                    # (previously blended toward a single per-species ion sign);
-                    # honors stb-hirshfeldIons' "cation_zero_density" flag
-                    # (hydrogen's cation is a bare proton -- exactly zero
-                    # electron density, not read from a SIESTA folder)
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -6,28 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.2.1"  # New [LIMITATION] note in [1] INPUT STRUCTURE's bulk-path advisory: a
-                    # polar bulk crystal's Stage 1 phonon frequencies get no non-analytic
-                    # (LO-TO) correction, so they can land between the true TO and LO values
-                    # (root-caused, not fixed, on NaCl -- see stb-irModes' VERSION 1.4.1 comment
-                    # for the full explanation and literature references). Documented as a known
-                    # limitation only; a real fix is planned for a future version.
-                    # (previously 1.2.0: --symprec (default 0.01, pymatgen's own default) threaded through to
-                    # Phonopy itself, and --kgrid/--kgrid-density auto-suggest + force the
-                    # supercell's own k-grid via a new [1] SINGLE-POINT SCF ENFORCEMENT section --
-                    # both ported from stb-raman's own fix (VERSION 1.1.1): Phonopy's raw symprec
-                    # default (1e-5) is far tighter than any DFT relaxation's real numerical noise
-                    # floor and can silently misdetect the true point group (downstream, in
-                    # stb-irModes, this drives IR-active/forbidden classification and degenerate-
-                    # mode grouping); and the previous "review the k-grid yourself" NOTE left the
-                    # supercell's electronic sampling entirely up to the user copying --calc
-                    # verbatim, with no enforcement that it was even single-point (a real risk if
-                    # --calc is a reused relaxation template) -- see stb-raman's own graphene G-band
-                    # case, where k-density (not supercell size) was the dominant convergence lever.
-                    # Also: the Stage 1 -> Stage 2 advisory NOTE now distinguishes a 2D slab (one
-                    # vacuum axis) from a genuine 0D/1D non-bulk structure, since Stage 2 now
-                    # routes a 2D slab through its own new HYBRID path (see ir_modes.py's VERSION
-                    # comment) rather than the plain non-bulk dipole-difference path.
+from stb import __version__ as VERSION
 
 import os
 import sys

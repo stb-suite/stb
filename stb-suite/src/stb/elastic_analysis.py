@@ -6,7 +6,7 @@
 #     Integrated Style Refactoring              #
 #################################################
 
-VERSION = "1.13.2" # fix: eggbox cross-check double-applied the Lz/cross_section dilution factor for 2D/1D, inflating energy_value
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -1389,7 +1389,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Elastic Analyzer",
             "Elastic Constants & Stability Calculator",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Integrated Style Refactoring"
         ])
 

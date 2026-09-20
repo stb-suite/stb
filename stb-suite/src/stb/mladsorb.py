@@ -50,7 +50,7 @@ Four features on top of the original single-model site ranking:
   bulk), this is migration of an ADSORBATE across a surface.
 """
 
-VERSION = "1.1.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

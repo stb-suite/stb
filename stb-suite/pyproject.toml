@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stb_suite"
-version = "1.9.1"
+# One version for the whole suite, 1.9.<number of commits>, computed by
+# src/stb/_version.py (see its docstring); STB_VERSION overrides it.
+dynamic = ["version"]
 description = "Siesta ToolBox (STB) suite with softwares pre and pos processing for Siesta code."
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -143,6 +145,9 @@ stb-chargediffAnalysis="stb.chargediff_analysis:main"
 stb-hirshfeldPrep="stb.hirshfeld_prep:main"
 stb-hirshfeldIons="stb.hirshfeld_ions:main"
 stb-hirshfeldAnalysis="stb.hirshfeld_analysis:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "stb._version.__version__"}
 
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship

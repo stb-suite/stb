@@ -74,7 +74,7 @@ never flags anything; the fix checks the REQUESTED PRESSURE against the range of
 pressures the fitted curve actually spans instead.
 """
 
-VERSION = "1.1.0"  # --eos all, --target-pressure, v0-outside-range warning (core/eos_fit.py)
+from stb import __version__ as VERSION
 
 import os
 import re

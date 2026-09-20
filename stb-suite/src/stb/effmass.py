@@ -91,7 +91,7 @@ Known limitations:
    a differently-behaving sisl version raises this for some other reason.
 """
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import argparse
 import os
@@ -275,7 +275,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

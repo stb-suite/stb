@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.1"
+from stb import __version__ as VERSION
 
 import os
 import sys

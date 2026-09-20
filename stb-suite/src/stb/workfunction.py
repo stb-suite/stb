@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -581,7 +581,7 @@ missing dipole correction) rather than being genuinely flat.""",
         show_intro([
             "Siesta ToolBox Suite - Work Function",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

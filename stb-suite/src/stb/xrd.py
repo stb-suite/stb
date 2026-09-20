@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.1.0"
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -148,7 +148,7 @@ already needed by stb-crystalcast covers this too.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

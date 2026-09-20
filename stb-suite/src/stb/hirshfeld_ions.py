@@ -47,12 +47,7 @@ positive vs negative per species), since deciding WHICH folders to write
 no longer depends on it.
 """
 
-VERSION = "2.1.0"  # writes BOTH cation and anion per species unconditionally
-                    # (previously picked one sign per species from a pass-0 vote);
-                    # skips the cation SIESTA folder (uses an analytical
-                    # zero-density reference instead) for any species with
-                    # Z_val <= 1 (hydrogen) -- NetCharge +1.0 would otherwise
-                    # leave 0 electrons, a bare-nucleus SCF SIESTA cannot converge
+from stb import __version__ as VERSION
 
 import os
 import re

@@ -2,7 +2,7 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows**
 
-![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)
+![Status](https://img.shields.io/badge/status-under%20development-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.9%20to%203.12-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)

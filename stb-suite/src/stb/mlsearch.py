@@ -53,7 +53,7 @@ structure prediction (cell shape is only touched by the optional final
 polish, never during the search itself).
 """
 
-VERSION = "1.1.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

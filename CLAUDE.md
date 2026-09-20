@@ -48,6 +48,20 @@ against the fixtures under `test/` (or the generator scripts, e.g.
 following the same "generate sample input → run the CLI → check the output file"
 pattern used in `test.sh`.
 
+## Versioning
+
+The suite has ONE version, `1.9.<number of commits>` (`1.9` marks the development
+series), computed by `stb-suite/src/stb/_version.py` and exposed as `stb.__version__`.
+Every tool takes its `VERSION` from it (`from stb import __version__ as VERSION`), for its
+`--version` and its banner -- **never give a tool a version literal of its own**. In a git
+checkout it is recomputed at each import (`git rev-list --count HEAD`), so an editable
+install is always current; an installed copy reports the number baked into its package
+metadata when it was built (`pyproject.toml` reads `__version__`); `STB_VERSION`
+overrides it, for builds without git history (the conda recipe uses this). Nothing is
+edited on a push. The per-tool numbers used before (1.0.0-3.0.0) are retired; the notes
+that sat next to them are kept in `stb-suite/CHANGELOG.md`. `bash test/version/test.sh`
+checks all of this (needs the package and its `ml` extra).
+
 ## Architecture
 
 **Each module in `stb-suite/src/stb/` is a thin CLI script** (argparse `main()`,

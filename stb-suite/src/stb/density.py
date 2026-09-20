@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -127,7 +127,7 @@ compare several slices on the same scale.""",
         show_intro([
             "Siesta ToolBox Suite - Density Plotter",
             "Exports RHO to 2D Maps, 3D Clouds, and matplotlib previews",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

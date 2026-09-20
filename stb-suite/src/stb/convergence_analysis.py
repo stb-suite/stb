@@ -57,7 +57,7 @@ matplotlib preview of every discovered parameter, never saved to disk),
 and -o/--output-dir.
 """
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import re

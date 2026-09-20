@@ -84,7 +84,7 @@ numbered [0]...[7] report and an opt-in --save-report (off by default),
 same shape as her.py/gqca.py's own Stage 1 reports.
 """
 
-VERSION = "3.0.0"
+from stb import __version__ as VERSION
 
 import os
 import re

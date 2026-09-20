@@ -6,70 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.4.1"  # [1b] SYMMETRY ANALYSIS's degenerate-groups listing no longer prints an empty
-                    # "modes  (T1u)" line for a group made entirely of ACOUSTIC bands (not in
-                    # band_to_k, e.g. NaCl's own T1u translational mode shares its irrep label with
-                    # the real IR-active T1u optical mode) -- now built as (ms, mode_ids) pairs and
-                    # filtered to drop any group with no displayed (non-acoustic) member.
-                    # Also: new [LIMITATION] note after [1]'s per-mode frequency listing, for the
-                    # BULK (3D) path only -- these Gamma frequencies have no non-analytic (LO-TO)
-                    # correction applied, so for a genuinely POLAR bulk crystal they can land
-                    # between the true TO and LO values rather than matching either. Root-caused
-                    # (not fixed) on NaCl: T1u computed at 185.6 cm^-1 vs. ~164/~264 cm^-1
-                    # (TO/LO, Raunio et al. 1969), landing almost exactly midway -- the textbook
-                    # symptom of a finite-supercell frozen-phonon calculation missing the Gonze &
-                    # Lee (1997) dipole-dipole subtraction, which needs eps_inf (not currently
-                    # computed by any stb tool) alongside the Z* this stage already computes.
-                    # Documented as a known limitation, not fixed -- a real fix needs a new
-                    # eps_inf-producing SIESTA Optical-module run plus a dynamical-matrix-level
-                    # change in core/phonon_workflow.py, planned for a future version.
-                    # (previously 1.4.0: --symprec (default 0.01, pymatgen's own default) threaded through to
-                    # Phonopy itself, same fix as stb-ramanModes (VERSION 1.2.0): Phonopy's own
-                    # raw default (1e-5) is far tighter than any DFT relaxation's real numerical
-                    # noise floor and can silently misdetect the true point group -- this is the
-                    # actual tolerance driving [1b] SYMMETRY ANALYSIS/--use-symmetry, so a
-                    # too-tight symprec here can artificially split a truly degenerate IR-active
-                    # mode into separate near-identical frequencies and mislabel a symmetry-silent
-                    # mode as IR-active. [1b] SYMMETRY ANALYSIS (space group, point group,
-                    # symmetry op count, per-mode Mulliken label/activity) is now always printed,
-                    # not just with --use-symmetry, along with an explicit [CHECK] warning to
-                    # verify the reported group against the crystal's known symmetry and loosen
-                    # --symprec if it looks wrong -- misdetection here is silent, never an error.
-                    # Also: every candidate mode being symmetry-forbidden (e.g. a centrosymmetric
-                    # crystal with no IR-active Gamma modes at all) now finishes as a [WARNING]
-                    # with exit code 0, not a fatal [ERROR]/exit(1) -- it's a valid physical
-                    # result, not a misconfiguration. Still a hard [ERROR]/exit(1) when
-                    # --modes/--freq-min/--freq-max (not symmetry) are what emptied the selection.
-                    # New HYBRID path for exactly-one-vacuum-axis (2D slab) structures. A naive
-                    # real-space dipole moment (the old "non-bulk" path, still used as-is for
-                    # 0D/1D) is only physically valid along a genuinely NON-periodic direction --
-                    # confirmed live on monolayer h-BN: SIESTA itself printed an EXACT ZERO
-                    # dipole change for the in-plane E' mode's +/-delta displacement (not a
-                    # parsing bug), silently reporting zero IR intensity for a mode the
-                    # literature puts as the DOMINANT IR peak (~1420 cm^-1). The two in-plane
-                    # (periodic) axes of a slab need the same Born-effective-charge/Berry-phase
-                    # machinery the "bulk" path already uses; the vacuum axis is still fine via
-                    # the old dipole-difference method (verified: the out-of-plane A2'' mode's
-                    # dmu_z/dQ came out correct, matching the literature TO/LO range). HYBRID
-                    # writes BOTH a shared born_charge_disp/equilibrium/ folder (PolarizationGrids
-                    # built vacuum-aware via build_slab_polarization_grid -- the vacuum axis's own
-                    # row zeroed, since SIESTA skips the polarization calculation entirely for any
-                    # zero grid-count direction) AND per-mode dipole_disp/mode_XX_plus|minus/
-                    # folders; stb-irAnalysis combines one component from each. Empirically
-                    # validated before writing this code: a manual BornCharge T run on the relaxed
-                    # h-BN structure with this exact grid shape gave a sane, sign-correct,
-                    # sum-rule-satisfying in-plane Z* (B ~+2.76/+2.78, N ~-2.76/-2.74 |e|, in-plane
-                    # sum ~0.01-0.04 |e|, out-of-plane row correctly ~0). Deliberately scoped to 2D
-                    # only (exactly 1 vacuum axis) -- 1D (2 vacuum axes) stays on the old non-bulk
-                    # path for now, same limitation, no test case yet.
-                    # Also: [1] now tags each mode with a Cartesian-polarization character label
-                    # (mode_character_label, e.g. "98% z" or "51% x, 47% y", from its
-                    # eigendisplacement -- purely descriptive, compare against the Vacuum
-                    # axes/Lattice vectors already printed to interpret in-plane vs. out-of-plane
-                    # for a given structure), and [1b] always lists degenerate mode groups by
-                    # symmetry (band indices sharing one irrep -- Phonopy's own eigenvector basis
-                    # choice within such a group is arbitrary, informational regardless of
-                    # --use-symmetry/--skip-degenerate).)
+from stb import __version__ as VERSION
 
 import os
 import sys

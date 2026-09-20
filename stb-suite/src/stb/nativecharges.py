@@ -19,7 +19,7 @@ SCF/force/energy. For a genuinely new (iterative Hirshfeld-I) partitioning
 method, see stb-hirshfeldPrep/Ions/Analysis instead.
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

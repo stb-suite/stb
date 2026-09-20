@@ -12,7 +12,7 @@ Reads two Siesta .fdf files, finds a commensurate supercell using the ZSL algori
 and stacks them into a van der Waals heterostructure.
 """
 
-VERSION = "2.2.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

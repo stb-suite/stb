@@ -14,7 +14,7 @@
 # written under its own 'plot/' subfolder; matplotlib preview (same two plots,
 # one figure) via --view; space group added to the ranking table; final
 # dedicated LIBRARY WARNINGS section.
-VERSION = "2.0.1"
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -271,7 +271,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

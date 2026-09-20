@@ -6,11 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "2.1.0"  # multi-cutoff BSSE convergence scan: detects and reports/plots
-                    # 'atoms_bsse_check_<cutoff>/' (2+ points, from stb-cohesive's
-                    # --bsse-convergence-increment given multiple values), a new
-                    # [3b] section, alongside the existing single-point
-                    # 'atoms_bsse_check/' comparison (unchanged behavior)
+from stb import __version__ as VERSION
 
 import os
 import re
@@ -273,7 +269,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "Cohesive Energy Post-Processing",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

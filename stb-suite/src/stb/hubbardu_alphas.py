@@ -12,7 +12,7 @@
 # the common case (stage 2 right after stage 1, same folder) needed no
 # extra flag before this change either -- unchanged, just confirmed/reported
 # explicitly now in [0] RUN METADATA.
-VERSION = "1.3.0"
+from stb import __version__ as VERSION
 
 import os
 import sys
@@ -117,7 +117,7 @@ stb-hubbarduAnalysis.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

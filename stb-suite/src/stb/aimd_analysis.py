@@ -123,7 +123,7 @@ vs. E_KS's std (0.4158 eV) -- ~140x smaller -- confirming E_tot, not
 E_KS, is the physically appropriate "conserved-ish" quantity to watch.
 """
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -46,7 +46,7 @@ who has already picked a --strain-range for one tool can reuse the same
 number in the other with the same meaning.
 """
 
-VERSION = "1.0.2"  # v0-outside-scanned-range warning surfaced (core/eos_fit.py's fit_eos fix)
+from stb import __version__ as VERSION
 
 import os
 import sys

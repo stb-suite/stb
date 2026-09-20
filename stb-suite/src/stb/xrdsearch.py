@@ -11,7 +11,7 @@
 # collects every third-party warning (MACE/torch/pymatgen/spglib/stb-crystalcast)
 # emitted during the run instead of letting it leak into the terminal interleaved
 # with the report.
-VERSION = "1.14.0"
+from stb import __version__ as VERSION
 
 import os
 import re
@@ -278,7 +278,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

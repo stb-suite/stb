@@ -49,7 +49,7 @@ calculation:
     magnitudes to check the linear-regime assumption actually holds.
 """
 
-VERSION = "1.1.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -30,7 +30,7 @@ bounded cell volume; a vacuum-padded axis (slab/wire/molecule) has nothing
 of the kind (same reasoning as stb-mleos/stb-mlmelting/stb-amorphize).
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -64,7 +64,7 @@ session's phonons 4.4.1-then-4.4.2 work) -- flagged explicitly in [6] below
 rather than left silently broken.
 """
 
-VERSION = "2.2.0"
+from stb import __version__ as VERSION
 
 import os
 import re

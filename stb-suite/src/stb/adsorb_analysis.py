@@ -6,10 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.5.0"  # New: [2b] PHYSICAL DIAGNOSTICS (dipole/spin moment/bond-length change),
-                    # [5] SUGGESTED NEXT ANALYSES, and an opt-in [6] GIBBS FREE ENERGY (DG) PREP
-                    # step (--compute-gibbs) that writes the displacement folders stb-adsorbGibbs
-                    # (the new Stage 4) needs -- see their own docstrings/CLAUDE.md for the design.
+from stb import __version__ as VERSION
 
 import os
 import re

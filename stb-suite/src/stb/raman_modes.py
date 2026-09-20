@@ -6,23 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.3.0"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
-                    # Phonopy itself, same fix as stb-phononsCreate: Phonopy's own raw default
-                    # (1e-5) is far tighter than any DFT relaxation's real numerical noise floor
-                    # and can silently misdetect the true point group -- this is the actual
-                    # tolerance driving [1b] SYMMETRY ANALYSIS/--use-symmetry, so a too-tight
-                    # symprec here can artificially split a truly degenerate Raman-active mode
-                    # into separate near-identical frequencies and mislabel a symmetry-silent
-                    # mode as Raman-active. [1b] SYMMETRY ANALYSIS (space group, point group,
-                    # symmetry op count, per-mode Mulliken label/activity) is now always printed,
-                    # not just with --use-symmetry, along with an explicit [CHECK] warning to
-                    # verify the reported group against the crystal's known symmetry and loosen
-                    # --symprec if it looks wrong -- misdetection here is silent, never an error.
-                    # Also: every candidate mode being symmetry-forbidden (e.g. a centrosymmetric
-                    # crystal with no Raman-active Gamma modes at all) now finishes as a
-                    # [WARNING] with exit code 0, not a fatal [ERROR]/exit(1) -- it's a valid
-                    # physical result, not a misconfiguration. Still a hard [ERROR]/exit(1) when
-                    # --modes/--freq-min/--freq-max (not symmetry) are what emptied the selection.
+from stb import __version__ as VERSION
 
 import os
 import sys

@@ -68,7 +68,7 @@ informative combined category is now what a plain run shows without
 having to know to ask for it.
 """
 
-VERSION = "2.1.0"
+from stb import __version__ as VERSION
 
 import argparse
 import os
@@ -295,7 +295,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

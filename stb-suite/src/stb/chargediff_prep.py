@@ -39,7 +39,7 @@ FIXED_CELL_BLOCK/SINGLE_POINT_BLOCK/SPIN_POLARIZED_BLOCK/
 DIPOLE_CORRECTION_BLOCK/VDW_CORRECTION_BLOCK for the reused blocks.
 """
 
-VERSION = "1.1.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

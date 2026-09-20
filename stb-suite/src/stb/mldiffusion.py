@@ -30,7 +30,7 @@ only the SAME vacancy moves), but is not a meaningful migration path for
 most real materials and should be interpreted with that in mind.
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

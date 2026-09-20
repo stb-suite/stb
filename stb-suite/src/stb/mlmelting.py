@@ -46,7 +46,7 @@ runs used, not a sign of a bug (a genuinely converged answer would need a
 much larger supercell and/or a two-phase coexistence method).
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

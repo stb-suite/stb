@@ -33,13 +33,15 @@ DFT workflow) hard-fails on a lattice mismatch between --initial/--final
 other's cell is the user's job before committing to real SIESTA runs. This
 screening tool keeps its own lenient resolve_lattice_mismatch below
 instead -- a warning, then the INITIAL lattice adopted for the whole band --
-so a quick ML preview still runs on two roughly-matching endpoints. The actual NEB relaxation reuses core/mace_relax.py's
+so a quick ML preview still runs on two roughly-matching endpoints.
+
+The actual NEB relaxation reuses core/mace_relax.py's
 relax_neb (already the same function stb-neb's --ml-neb mode calls) --
 climbing-image NEB, two-stage convergence (climb=False first to let the
 band find its shape, then climb=True to refine the true saddle point).
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

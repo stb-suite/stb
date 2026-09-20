@@ -47,7 +47,7 @@ silently ignored whenever --calc already sets any of these -- the common
 case for a real relaxation template.
 """
 
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import sys

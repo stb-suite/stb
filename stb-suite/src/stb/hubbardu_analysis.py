@@ -13,7 +13,7 @@
 # table instead of one print() line per run; a final LIBRARY WARNINGS section
 # (numpy's own RankWarning on a poorly-conditioned polyfit is a real, relevant
 # signal for this tool's own core fit -- now captured there instead of leaking).
-VERSION = "2.0.0"
+from stb import __version__ as VERSION
 
 import os
 import re
@@ -270,7 +270,7 @@ visually instead of trusting R^2 alone.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

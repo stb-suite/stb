@@ -6,37 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.2.1"  # New [LIMITATION] note at the top of [2] IR-ACTIVE MODES SUMMARY, shown
-                    # whenever any mode used the BULK path: those frequencies have no
-                    # non-analytic (LO-TO) correction, so for a polar bulk crystal they can land
-                    # between the true TO and LO values -- see stb-irModes' VERSION 1.4.1 comment
-                    # for the full root-cause story and literature references. Documented as a
-                    # known limitation only; a real fix is planned for a future version.
-                    # (previously 1.2.0: New HYBRID path (2D slab, exactly one vacuum axis): combines the BULK
-                    # path's Born-charge x eigendisplacement formula (in-plane/periodic axes)
-                    # with the NONBULK path's dipole-difference formula (vacuum axis) into one
-                    # physically valid dmu/dQ per mode -- see stb-irModes' own VERSION comment
-                    # for the full root-cause story (a naive dipole moment silently came back
-                    # exactly zero for h-BN's in-plane E' mode, a mode the literature puts as
-                    # the dominant IR peak). The two contributions are additive by construction
-                    # (each is ~0 exactly where the other is valid); axis_mask selects/verifies
-                    # this when the vacuum axis's Cartesian alignment can be confirmed, and
-                    # falls back to plain addition with a warning when it can't.
-                    # Also: [3] SPECTRUM now always lists detected peaks (not just with
-                    # --experimental), [2] reports combined intensity for near-degenerate mode
-                    # groups (the basis-independent quantity, since individual dmu/dQ directions
-                    # within a degenerate subspace are an arbitrary Phonopy eigenvector choice),
-                    # the gnuplot .dat/.gplot pair is now opt-in via --save-gnuplot (written
-                    # under <directory>/plot/, same convention stb-ramanAnalysis already uses)
-                    # instead of always-on, --view opens an interactive matplotlib preview, and
-                    # a new [3c] MODE VIBRATIONS section always reloads Stage 1's force constants
-                    # to write an extended-XYZ animation per analyzed mode under
-                    # <directory>/mode_animations/ (skipped gracefully, never a hard error, if
-                    # phonon_disp/ is no longer present) -- --view-modes additionally opens each
-                    # one interactively in ASE's viewer. build_mode_animation_frames/
-                    # write_mode_animation/phonopy_atoms_to_ase moved to core/phonon_workflow.py
-                    # (were duplicated in raman_modes.py/ir_modes.py) now that this module is a
-                    # third consumer -- extract-on-second-use, per this suite's own policy.
+from stb import __version__ as VERSION
 
 import os
 import re

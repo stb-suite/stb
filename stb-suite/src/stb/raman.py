@@ -6,17 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.1.1"  # --symprec (default 0.01, pymatgen's own default) now threaded through to
-                    # Phonopy itself, same fix as stb-phononsCreate: Phonopy's own raw default
-                    # (1e-5) is far tighter than any DFT relaxation's real numerical noise floor
-                    # and can silently misdetect the true point group -- which, downstream in
-                    # stb-ramanModes, artificially splits a truly degenerate Raman-active mode
-                    # into separate near-identical frequencies and can mislabel a
-                    # symmetry-silent mode as Raman-active. Epilog expanded with a didactic
-                    # Notes section spelling out --symprec's real (downstream, stb-ramanModes)
-                    # effect and --kgrid-density's role/independence from symmetry -- verified
-                    # live on graphene's G-band (Kohn anomaly): >100 cm^-1 shift from doubling
-                    # k-density alone, after supercell size (--dim) had stopped mattering.
+from stb import __version__ as VERSION
 
 import os
 import sys

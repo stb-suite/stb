@@ -6,10 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-VERSION = "1.14.1"  # retry transient connection resets against COD (observed live:
-                     # crystallography.net intermittently resets the connection on
-                     # both /result and /<id>.cif -- not a stb-fetch bug, but worth
-                     # a few automatic retries before giving up)
+from stb import __version__ as VERSION
 
 import sys
 import argparse
@@ -362,7 +359,7 @@ Look it up by exact id, or search by formula and pick a candidate.""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

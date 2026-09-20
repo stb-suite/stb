@@ -17,7 +17,7 @@ from stb.core.cli import COLORS, color_text, show_intro
 from stb.core.deps import require_sisl
 sisl = require_sisl()
 
-VERSION = "1.9.1"
+from stb import __version__ as VERSION
 
 def parse_arguments() -> argparse.Namespace:
     """Handle command-line arguments with argparse"""
@@ -278,7 +278,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "SIESTA-to-Wantibexos Hamiltonian Interface",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             ""
         ])
         print("\n" + color_text("SIESTA-WANTIBEXOS Interface:", 'bold'))

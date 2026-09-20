@@ -15,7 +15,7 @@
 # config_extra.fdf sidecar + '%include', the same pattern strain.py/
 # elastic_inputs.py/phonons_create.py already use, instead of being embedded
 # directly inline in calc.fdf.
-VERSION = "2.2.0"
+from stb import __version__ as VERSION
 
 import os
 import re
@@ -349,7 +349,7 @@ REFERENCE_U sanity check, ...).""",
         show_intro([
             "Siesta ToolBox Suite",
             "A comprehensive toolkit for SIESTA DFT simulations",
-            f"Version {VERSION} | University of Brasilia - 2025",
+            f"Version {VERSION} | University of Brasilia - 2026",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 

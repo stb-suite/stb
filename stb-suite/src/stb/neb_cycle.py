@@ -37,7 +37,7 @@ interior images, same guarantee core/mace_relax.py::relax_neb already
 documents and relies on.
 """
 
-VERSION = "1.0.0"
+from stb import __version__ as VERSION
 
 import os
 import re

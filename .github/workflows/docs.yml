@@ -3,6 +3,8 @@ name: Documentation
 # Builds the MkDocs site (docs/ + the guides generated from examples/) on every
 # change that can affect it, and publishes it to GitHub Pages from main.
 # One-time setup: repository Settings > Pages > Source: "GitHub Actions".
+# To rebuild and redeploy without changing any file (for example right after
+# enabling Pages): Actions > Documentation > "Run workflow" (workflow_dispatch).
 
 on:
   push:

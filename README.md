@@ -4,113 +4,98 @@
 
 ![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Python](https://img.shields.io/badge/python-%E2%89%A53.9-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9%20to%203.12-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
+[![Documentation](https://img.shields.io/badge/docs-stb--suite.github.io%2Fstb-informational.svg)](https://stb-suite.github.io/stb/)
 
 **Author:** Dr. Carlos M. O. Bastos — University of Brasília (UnB), 2025
 🔗 [bastoscmo.github.io](https://bastoscmo.github.io)
+
+📚 **Documentation: <https://stb-suite.github.io/stb/>** — a guide for every tool and a reference page for every command.
 
 ---
 
 ## 📖 Overview
 
-**STB-SUITE (Siesta Toolbox Suite)** is a comprehensive collection of command-line tools designed to assist users of the **SIESTA** DFT code through every step of their workflow — from input generation to post-processing and structural analysis.
+**STB-SUITE (Siesta Toolbox Suite)** is a collection of command-line tools that assist users of the **SIESTA** DFT code through every step of a project: generating inputs, building and converting structures, post-processing results, and running complete prepare-and-analyze workflows for a specific property.
 
-It provides a unified, intuitive interface that simplifies and accelerates computational materials research.
+Every tool is a standalone `stb-*` command, and `stb-suite` is an interactive menu that wraps all of them.
+
+SIESTA itself is not bundled: the Inputs and Workflow tools write ready-to-run calculation folders, and the Analysis tools read what SIESTA produced.
 
 ---
 
-## 🚀 Features
+## 🚀 What's inside
 
-### 🧩 Inputs
+The menu groups the tools into six categories. Each tool has a guide with a runnable example in [`examples/`](examples/) (published on the [documentation site](https://stb-suite.github.io/stb/)).
 
-* **`stb-inputfile`** – Generate FDF input files from structure files with suggested settings.
-* **`stb-kgrid`** – Automatically suggest Monkhorst-Pack k-point grids based on a target density.
-* **`stb-kpath`** – Generate high-symmetry paths for band-structure calculations.
-* **`stb-2Dstacking`** – Stack two monolayers into a heterostructure using the ZSL algorithm, with twist/shift control.
+| # | Category | What it's for | Tools |
+|---|----------|---------------|-------|
+| 1 | **Inputs** | Set up a SIESTA run | `stb-inputfile` `stb-pseudo` `stb-kgrid` `stb-kpath` `stb-dftu` `stb-fetch` `stb-mlrelax` |
+| 2 | **Structures** | Build, generate or transform structure files | `stb-2Dstacking` `stb-supercell` `stb-slab` `stb-nanotube` `stb-defect` `stb-sqs` `stb-unitcell` `stb-crystalbuilder` `stb-passivate` `stb-molecule` `stb-amorphize` `stb-crystalcast` |
+| 3 | **Analysis** | Analyze simulation results | `stb-bands` `stb-dos` `stb-convdos` `stb-structural` `stb-symmetry` `stb-bader` `stb-workfunction` `stb-density` `stb-xrd` `stb-fatbands` `stb-stm` `stb-wfdensity` `stb-sts` `stb-coop` `stb-ipr` `stb-effmass` `stb-spintexture` `stb-aimdAnalysis` |
+| 4 | **Workflow** | Paired preparation + analysis pipelines for one property | Stress-strain, elastic constants, cohesive energy, phonons, convergence tests, structure solution (XRD), Hubbard U, adsorption, NEB, stacking fault, Raman, IR, HER, OER, GQCA, optical properties, custom ML force field, equation of state, charge density difference, Hirshfeld-I |
+| 5 | **ML Simulations** | Run simulations with a MACE machine-learning potential instead of SIESTA | `stb-mlmd` `stb-mlphonons` `stb-mlelastic` `stb-mlsearch` `stb-mlmelting` `stb-mlconvergence` `stb-mlneb` `stb-mldiffusion` `stb-mlgcmc` `stb-mladsorb` `stb-mleos` |
+| 6 | **Utils** | File management and format conversion | `stb-translate` `stb-clean` `stb-cube` `stb-siesta2wtb` `stb-ani2traj` `stb-status` `stb-archive` `stb-nativecharges` |
 
-### 📊 Analysis
-
-* **`stb-bands`** – Analyze SIESTA band structures and calculate band gaps.
-* **`stb-dos`** – Parse `PDOS.xml` files for total and projected density of states.
-* **`stb-convdos`** – Apply Gaussian convolution to DOS data for smoothing.
-* **`stb-structural`** – Compute lattice parameters, coordination numbers, and ECN values.
-* **`stb-symmetry`** – Identify space group, point group, crystal system, and Wyckoff positions.
-* **`stb-bader`** – Perform Bader charge (AIM) analysis on SIESTA charge density grids.
-* **`stb-workfunction`** – Calculate work function from the planar-averaged electrostatic potential.
-* **`stb-density`** – Export charge density as 2D slice maps or 3D point clouds for plotting.
-
-### 🔄 Workflow
-
-Paired preparation + analysis tools for a specific property calculation, from generating the deformed/perturbed structures to extracting the final result:
-
-* **`stb-strain`** + **`stb-strainAnalysis`** – Create uniaxial/biaxial strained supercells, then extract stress-strain curves and mechanical properties (Young's modulus, UTS).
-* **`stb-elasticInputs`** + **`stb-elasticAnalysis`** – Generate deformed structures for elastic constants, then compute the stiffness matrix, elastic moduli, and Born stability criteria.
-* **`stb-cohesive`** + **`stb-cohesiveAnalysis`** – Set up bulk + isolated-atom calculations, then calculate cohesive energy per atom.
-* **`stb-phononsCreate`** + **`stb-phononsPos`** – Generate displaced supercells via Phonopy, then post-process the forces into thermal properties.
-
-### ⚙️ Utils
-
-* **`stb-translate`** – Convert between structure formats (CIF, POSCAR, FDF, XYZ, XSF, FHI, DFTB).
-* **`stb-clean`** – Remove unnecessary calculation files and clean directories.
-* **`stb-cube`** – Convert SIESTA grid files (VT, VH, RHO) to Gaussian Cube format.
-* **`stb-siesta2wtb`** – Export SIESTA Hamiltonians to the **Wantibexos** tight-binding format.
-* **`stb-suite`** – Unified terminal interface providing interactive access to all tools; browse by category or jump straight to a tool with a code like `3.1.2`.
+A workflow is several commands used in order (for example `stb-strain` then `stb-strainAnalysis`); the [documentation](https://stb-suite.github.io/stb/) lists every command of each one.
 
 ---
 
 ## 🧠 Requirements
 
-* **Python ≥ 3.9**
-* **Conda** (recommended)
-
-### Python dependencies
-
-```
-numpy
-matplotlib
-ase
-pymatgen
-spglib
-sisl
-argparse (builtin)
-```
+* **Python 3.9 to 3.12**
+* Installed automatically: `numpy`, `ase`, `matplotlib`, `pymatgen`, `spglib`, `sisl`, `pybader`, `scipy`, `phonopy`, `pandas`, `icet`, `pyxtal`
+* Optional **`ml` extra** (`torch`, `mace-torch`, `torch-dftd`) for the ML tools — see below
 
 ---
 
 ## 📦 Installation
 
-### 🔹 Conda (recommended)
-
 ```bash
-conda install bastoscmo::stb_suite
-```
-
-### 🔹 Manual installation
-
-```bash
-git clone https://github.com/bastoscmo/stb-suite.git
-cd stb-suite
+git clone https://github.com/stb-suite/stb.git
+cd stb/stb-suite
 pip install .
 ```
+
+With the optional ML tools:
+
+```bash
+pip install ".[ml]"
+```
+
+If the suite is already installed, `pip install "stb_suite[ml]"` adds the ML extra to it.
+
+There is no PyPI package: install from source as above.
 
 ---
 
 ## ▶️ Usage
 
-Launch the interactive interface:
+Launch the interactive menu, then browse the categories or type a tool's code (for example `1.3`, or `4.1.2` for a workflow stage):
 
 ```bash
-stb_suite
+stb-suite
 ```
 
-Run individual tools directly:
+Or run any tool directly:
 
 ```bash
 stb-inputfile structure.fdf --type relax
-stb-kgrid --file POSCAR --density 0.2
-stb-symmetry --input struct.cif --filetype cif
+stb-kgrid -f structure.fdf -d 0.2
+stb-symmetry --file structure.fdf --format fdf
 ```
+
+Every tool prints its options with `--help` (for example `stb-kgrid --help`).
+
+---
+
+## 🗂️ Repository layout
+
+* `stb-suite/` — the Python package (`src/stb/`) and its packaging metadata
+* `examples/` — one tutorial per tool, with a runnable script and small input files
+* `test/` — the developers' smoke tests
+* `docs/`, `mkdocs.yml` — the documentation site, built from `examples/`
 
 ---
 
@@ -118,7 +103,3 @@ stb-symmetry --input struct.cif --filetype cif
 
 Distributed under the **MIT License**.
 © 2025 Dr. Carlos M. O. Bastos – University of Brasília (UnB)
-
----
-
-

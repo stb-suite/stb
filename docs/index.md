@@ -14,12 +14,6 @@ all of them.
 
 ## Install
 
-From conda:
-
-```bash
-conda install bastoscmo::stb_suite
-```
-
 From source:
 
 ```bash
@@ -28,11 +22,15 @@ cd stb/stb-suite
 pip install .
 ```
 
-The ML Simulations tools additionally need PyTorch and `mace-torch`:
+Python 3.9 to 3.12. The ML Simulations tools additionally need PyTorch and `mace-torch`,
+which the optional `ml` extra installs:
 
 ```bash
-pip install "stb_suite[ml]"
+pip install ".[ml]"                 # from stb/stb-suite, instead of the plain install
+pip install "stb_suite[ml]"         # or, to add it to an existing install
 ```
+
+There is no PyPI package: install from source as above.
 
 ## Two ways to run any tool
 

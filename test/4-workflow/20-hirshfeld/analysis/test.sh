@@ -82,7 +82,7 @@ echo "--- Starting tester for STB-HIRSHFELDANALYSIS (item 4.20.3) ---"
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$PREP_DIR/structure.fdf" "$PREP_DIR/calc.fdf" "$PREP_DIR/C.psf" "$PREP_DIR/O.psf" "$TEST_DIR/"
-cp "$IONS_DIR/structure_mixed.fdf" "$TEST_DIR/"
+cp "$IONS_DIR/structure_mixed.fdf" "$IONS_DIR/structure_hydrogen.fdf" "$IONS_DIR/H.psf" "$TEST_DIR/"
 echo "Test directory '$TEST_DIR' prepared."
 
 pushd "$TEST_DIR" > /dev/null
@@ -206,6 +206,43 @@ echo "         and an anion-like atom, highlighted -- exactly what a single-sign
 echo "         approach could never represent correctly"
 check_contains "C    | 2 | 1           | 1          " log_mixed_analysis.txt
 check_contains "atoms genuinely leaning toward BOTH ion states" log_mixed_analysis.txt
+
+
+# --- 6b. End-to-end proof: hydrogen (Z_val=1) -- its cation is a bare proton, so
+# Stage 2 writes NO ions/H/cation/ folder (NetCharge +1.0 leaves 0 electrons, an
+# SCF SIESTA cannot converge) and Stage 3 substitutes the analytically exact
+# zero-density profile instead of aborting on a missing .RHO ---
+echo -e "\n--- Testing the full pipeline with hydrogen (bare-proton cation, zero density) ---"
+rm -rf hirshfeld_study_h h_combined
+mkdir -p h_combined
+cp structure_hydrogen.fdf h_combined/structure.fdf
+cp calc.fdf h_combined/
+stb-hirshfeldPrep -s h_combined/structure.fdf --calc h_combined/calc.fdf -p . \
+    -O hirshfeld_study_h --no-intro > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/combined/structure.fdf \
+    hirshfeld_study_h/combined/siesta.RHO 24 "0.8,0.5" "1.4,0.9" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/neutral/C/structure.fdf \
+    hirshfeld_study_h/neutral/C/siesta.RHO 18 "0.8" "1.4" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/neutral/H/structure.fdf \
+    hirshfeld_study_h/neutral/H/siesta.RHO 18 "0.5" "0.9" > /dev/null 2>&1
+stb-hirshfeldIons -O hirshfeld_study_h -p . --no-intro > /dev/null 2>&1
+# Deliberately NO cation .RHO for H -- there is no ions/H/cation/ folder to put one in.
+python3 "$GEN_SCRIPT" hirshfeld_study_h/ions/C/cation/structure.fdf \
+    hirshfeld_study_h/ions/C/cation/siesta.RHO 18 "0.6" "1.3" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/ions/C/anion/structure.fdf \
+    hirshfeld_study_h/ions/C/anion/siesta.RHO 18 "1.0" "1.5" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/ions/H/anion/structure.fdf \
+    hirshfeld_study_h/ions/H/anion/siesta.RHO 18 "0.8" "1.2" > /dev/null 2>&1
+stb-hirshfeldAnalysis -O hirshfeld_study_h --no-intro > log_hydrogen_analysis.txt 2>&1
+check_exit_code $? 0
+echo "Testing: H's cation is announced as the analytical zero-density reference (not read"
+echo "         from a folder, not a silent omission), C's is still read from its folder,"
+echo "         and the iteration converges to a full report"
+check_contains "H (cation) : analytical zero density" log_hydrogen_analysis.txt
+check_contains "C (cation) : read from" log_hydrogen_analysis.txt
+check_contains "H (anion)  : read from" log_hydrogen_analysis.txt
+check_contains "Converged after" log_hydrogen_analysis.txt
+check_contains "Total charge" log_hydrogen_analysis.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.20.3) ---

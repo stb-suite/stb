@@ -53,6 +53,16 @@ check_exit_code() {
     fi
 }
 
+check_absent() {
+    if [ ! -e "$1" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' does not exist (as expected)"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' exists but should not"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 # Runs stb-hirshfeldPrep on the shared fixture (which itself writes
 # combined/ + neutral/<species>/, nothing pre-computed needed), then
 # fabricates a synthetic .RHO in combined/ and every neutral/<species>/ it
@@ -110,7 +120,7 @@ check_contains "Species written by Stage 1:" log_default.txt
 check_contains "NATIVE CHARGES CROSS-CHECK" log_default.txt
 check_contains "PASS-0 (SIMPLE HIRSHFELD) CHARGES -- PREVIEW ONLY" log_default.txt
 check_contains "N+ / N- = how many atoms" log_default.txt
-check_contains "WRITING ION REFERENCES (cation + anion, every species)" log_default.txt
+check_contains "WRITING ION REFERENCES (cation + anion per species)" log_default.txt
 
 echo "Testing: the species table distinguishes Z (atomic number, for the pseudopotential)"
 echo "         from Z_val (valence charge, for the charge formula) -- C: Z=6, Z_val=4"
@@ -198,6 +208,50 @@ check_success hirshfeld_study_mixed/ions/C/cation/config_extra.fdf
 check_success hirshfeld_study_mixed/ions/C/anion/config_extra.fdf
 check_contains "NetCharge            +1.0" hirshfeld_study_mixed/ions/C/cation/config_extra.fdf
 check_contains "NetCharge            -1.0" hirshfeld_study_mixed/ions/C/anion/config_extra.fdf
+
+
+# --- 6b. Hydrogen (Z_val=1): its cation is a bare proton -- SKIPPED, not written ---
+# NetCharge +1.0 on a Z_val=1 species leaves 0 electrons, an SCF SIESTA's
+# Fermi-Dirac occupation solver cannot converge ("Fermid: Iteration has not
+# converged"). The exact cation reference is zero density everywhere, so
+# Stage 2 writes no ions/H/cation/ folder at all and flags it in the manifest
+# for Stage 3 (see hirshfeld_ions.py / hirshfeld_analysis.py).
+echo -e "\n--- Testing hydrogen (Z_val=1): cation folder skipped, anion still written ---"
+rm -rf hirshfeld_study_h h_combined
+mkdir -p h_combined
+cp "$FIXTURE_DIR/structure_hydrogen.fdf" h_combined/structure.fdf
+cp "$FIXTURE_DIR/H.psf" .
+cp calc.fdf h_combined/
+stb-hirshfeldPrep -s h_combined/structure.fdf --calc h_combined/calc.fdf -p . \
+    -O hirshfeld_study_h --no-intro > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/combined/structure.fdf \
+    hirshfeld_study_h/combined/siesta.RHO 24 "0.8,0.5" "1.4,0.9" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/neutral/C/structure.fdf \
+    hirshfeld_study_h/neutral/C/siesta.RHO 18 "0.8" "1.4" > /dev/null 2>&1
+python3 "$GEN_SCRIPT" hirshfeld_study_h/neutral/H/structure.fdf \
+    hirshfeld_study_h/neutral/H/siesta.RHO 18 "0.5" "0.9" > /dev/null 2>&1
+stb-hirshfeldIons -O hirshfeld_study_h -p . --no-intro > log_hydrogen.txt 2>&1
+check_exit_code $? 0
+
+echo "Testing: H gets an anion folder (H-, 2 electrons -- a perfectly calculable SCF) but NO"
+echo "         cation folder; the non-hydrogen species (C) is unaffected and still gets both"
+check_success hirshfeld_study_h/ions/H/anion/config_extra.fdf
+check_contains "NetCharge            -1.0" hirshfeld_study_h/ions/H/anion/config_extra.fdf
+check_absent hirshfeld_study_h/ions/H/cation
+check_success hirshfeld_study_h/ions/C/cation/config_extra.fdf
+check_success hirshfeld_study_h/ions/C/anion/config_extra.fdf
+
+echo "Testing: the skip is announced (not silent) and the summary counts folders correctly"
+check_contains "cation SKIPPED" log_hydrogen.txt
+check_contains "Ion folders written        : 3 (1 cation + 2 anion)" log_hydrogen.txt
+check_contains "1 species used the analytical zero-density cation" log_hydrogen.txt
+
+echo "Testing: the manifest flags H's cation as zero-density (folder null) for Stage 3, and"
+echo "         leaves C's cation as an ordinary folder"
+check_contains '"cation_folder": null' hirshfeld_study_h/hirshfeld_ions_manifest.json
+check_contains '"cation_zero_density": true' hirshfeld_study_h/hirshfeld_ions_manifest.json
+check_contains '"cation_folder": "ions/C/cation"' hirshfeld_study_h/hirshfeld_ions_manifest.json
+check_contains '"cation_zero_density": false' hirshfeld_study_h/hirshfeld_ions_manifest.json
 
 
 # --- 7. --ref (explicit reference file, e.g. not named with a .out extension) ---

@@ -29,9 +29,12 @@ side by side, plus the convergence history, so the shift between the two
 methods is visible rather than only the final number.
 """
 
-VERSION = "2.0.0"  # reads BOTH cation and anion per species and lets each atom
+VERSION = "2.1.0"  # reads BOTH cation and anion per species and lets each atom
                     # pick its own, per the literal literature formulation
-                    # (previously blended toward a single per-species ion sign)
+                    # (previously blended toward a single per-species ion sign);
+                    # honors stb-hirshfeldIons' "cation_zero_density" flag
+                    # (hydrogen's cation is a bare proton -- exactly zero
+                    # electron density, not read from a SIESTA folder)
 
 import os
 import sys
@@ -204,16 +207,29 @@ def main():
             sys.exit(1)
     for entry in ions_manifest["species"]:
         sym = entry["symbol"]
-        cation_folder = os.path.join(args.output_dir, entry["cation_folder"])
         anion_folder = os.path.join(args.output_dir, entry["anion_folder"])
-        try:
-            cation_profiles[sym] = load_species_profile(cation_folder)
-            print_dual(f"  {sym} (cation) : read from '{cation_folder}'", f_out)
-        except Exception as e:
-            print_dual(color_text(
-                f"[ERROR] Could not build a cation profile for species '{sym}' from "
-                f"'{cation_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
-            sys.exit(1)
+        if entry.get("cation_zero_density", False):
+            # Hydrogen's (Z_val=1) cation is a bare proton: exactly zero
+            # electron density everywhere, not an approximation -- there is
+            # no SIESTA folder to read (stb-hirshfeldIons never wrote one),
+            # so reuse the neutral profile's own radial grid with rho=0.
+            # This is the analytically exact asymptote a real SCF at
+            # NetCharge +1.0 could never actually converge to (0 electrons
+            # is not a valid Fermi-Dirac occupation problem).
+            r_neutral, _ = neutral_profiles[sym]
+            cation_profiles[sym] = (r_neutral, np.zeros_like(r_neutral))
+            print_dual(f"  {sym} (cation) : analytical zero density (Z_val <= 1 -- bare "
+                       "nucleus, no SIESTA folder)", f_out)
+        else:
+            cation_folder = os.path.join(args.output_dir, entry["cation_folder"])
+            try:
+                cation_profiles[sym] = load_species_profile(cation_folder)
+                print_dual(f"  {sym} (cation) : read from '{cation_folder}'", f_out)
+            except Exception as e:
+                print_dual(color_text(
+                    f"[ERROR] Could not build a cation profile for species '{sym}' from "
+                    f"'{cation_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
+                sys.exit(1)
         try:
             anion_profiles[sym] = load_species_profile(anion_folder)
             print_dual(f"  {sym} (anion)  : read from '{anion_folder}'", f_out)

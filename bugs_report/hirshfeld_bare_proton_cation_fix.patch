@@ -1,0 +1,153 @@
+diff --git a/stb-suite/src/stb/hirshfeld_analysis.py b/stb-suite/src/stb/hirshfeld_analysis.py
+index a730b2b..22ae8e2 100644
+--- a/stb-suite/src/stb/hirshfeld_analysis.py
++++ b/stb-suite/src/stb/hirshfeld_analysis.py
+@@ -29,9 +29,12 @@ side by side, plus the convergence history, so the shift between the two
+ methods is visible rather than only the final number.
+ """
+ 
+-VERSION = "2.0.0"  # reads BOTH cation and anion per species and lets each atom
++VERSION = "2.1.0"  # reads BOTH cation and anion per species and lets each atom
+                     # pick its own, per the literal literature formulation
+-                    # (previously blended toward a single per-species ion sign)
++                    # (previously blended toward a single per-species ion sign);
++                    # honors stb-hirshfeldIons' "cation_zero_density" flag
++                    # (hydrogen's cation is a bare proton -- exactly zero
++                    # electron density, not read from a SIESTA folder)
+ 
+ import os
+ import sys
+@@ -204,16 +207,29 @@ def main():
+             sys.exit(1)
+     for entry in ions_manifest["species"]:
+         sym = entry["symbol"]
+-        cation_folder = os.path.join(args.output_dir, entry["cation_folder"])
+         anion_folder = os.path.join(args.output_dir, entry["anion_folder"])
+-        try:
+-            cation_profiles[sym] = load_species_profile(cation_folder)
+-            print_dual(f"  {sym} (cation) : read from '{cation_folder}'", f_out)
+-        except Exception as e:
+-            print_dual(color_text(
+-                f"[ERROR] Could not build a cation profile for species '{sym}' from "
+-                f"'{cation_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
+-            sys.exit(1)
++        if entry.get("cation_zero_density", False):
++            # Hydrogen's (Z_val=1) cation is a bare proton: exactly zero
++            # electron density everywhere, not an approximation -- there is
++            # no SIESTA folder to read (stb-hirshfeldIons never wrote one),
++            # so reuse the neutral profile's own radial grid with rho=0.
++            # This is the analytically exact asymptote a real SCF at
++            # NetCharge +1.0 could never actually converge to (0 electrons
++            # is not a valid Fermi-Dirac occupation problem).
++            r_neutral, _ = neutral_profiles[sym]
++            cation_profiles[sym] = (r_neutral, np.zeros_like(r_neutral))
++            print_dual(f"  {sym} (cation) : analytical zero density (Z_val <= 1 -- bare "
++                       "nucleus, no SIESTA folder)", f_out)
++        else:
++            cation_folder = os.path.join(args.output_dir, entry["cation_folder"])
++            try:
++                cation_profiles[sym] = load_species_profile(cation_folder)
++                print_dual(f"  {sym} (cation) : read from '{cation_folder}'", f_out)
++            except Exception as e:
++                print_dual(color_text(
++                    f"[ERROR] Could not build a cation profile for species '{sym}' from "
++                    f"'{cation_folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
++                sys.exit(1)
+         try:
+             anion_profiles[sym] = load_species_profile(anion_folder)
+             print_dual(f"  {sym} (anion)  : read from '{anion_folder}'", f_out)
+diff --git a/stb-suite/src/stb/hirshfeld_ions.py b/stb-suite/src/stb/hirshfeld_ions.py
+index 1aa1026..a797fe2 100644
+--- a/stb-suite/src/stb/hirshfeld_ions.py
++++ b/stb-suite/src/stb/hirshfeld_ions.py
+@@ -38,8 +38,12 @@ positive vs negative per species), since deciding WHICH folders to write
+ no longer depends on it.
+ """
+ 
+-VERSION = "2.0.0"  # writes BOTH cation and anion per species unconditionally
+-                    # (previously picked one sign per species from a pass-0 vote)
++VERSION = "2.1.0"  # writes BOTH cation and anion per species unconditionally
++                    # (previously picked one sign per species from a pass-0 vote);
++                    # skips the cation SIESTA folder (uses an analytical
++                    # zero-density reference instead) for any species with
++                    # Z_val <= 1 (hydrogen) -- NetCharge +1.0 would otherwise
++                    # leave 0 electrons, a bare-nucleus SCF SIESTA cannot converge
+ 
+ import os
+ import re
+@@ -423,20 +427,43 @@ def main():
+     species_entries = []
+     for entry in manifest["species"]:
+         sym = entry["symbol"]
+-        cation_folder = os.path.join("ions", sym, "cation")
+         anion_folder = os.path.join("ions", sym, "anion")
+-        write_ion_folder(os.path.join(args.output_dir, cation_folder), sym, entry["z_num"],
+-                          +1.0, calc_source, pseudo_dir, manifest["mesh_cutoff"],
+-                          manifest["vacuum_box"])
+         write_ion_folder(os.path.join(args.output_dir, anion_folder), sym, entry["z_num"],
+                           -1.0, calc_source, pseudo_dir, manifest["mesh_cutoff"],
+                           manifest["vacuum_box"])
++
++        # A +1.0 NetCharge on a species whose Z_val is already <= 1 leaves
++        # 0 (or negative) electrons -- a bare nucleus in vacuum, which is
++        # not a degenerate numerical corner case but a genuinely
++        # ill-posed SCF (SIESTA's Fermi-Dirac occupation solver has no
++        # electrons to place: "Fermid: Iteration has not converged").
++        # Hydrogen (Z_val=1) is the only element this can happen for. The
++        # analytically EXACT cation reference for a bare proton is zero
++        # electron density everywhere -- not an approximation, since a
++        # bare nucleus has no electrons to have a density in the first
++        # place -- so this skips SIESTA for that one folder entirely and
++        # has stb-hirshfeldAnalysis substitute an all-zero radial profile
++        # (see hirshfeld_analysis.py's load of "cation_zero_density").
++        if valence_source[sym] <= 1.0:
++            cation_folder = None
++            print_dual(f"  {color_text('[OK]', 'green')} {sym}: "
++                       f"{anion_folder}/ (NetCharge -1.0); cation SKIPPED (Z_val="
++                       f"{valence_source[sym]:g} -- NetCharge +1.0 would leave 0 electrons, "
++                       "a bare-nucleus SCF SIESTA cannot converge; using the analytically "
++                       "exact zero-density reference instead, see [6] SUMMARY note)", f_out)
++        else:
++            cation_folder = os.path.join("ions", sym, "cation")
++            write_ion_folder(os.path.join(args.output_dir, cation_folder), sym, entry["z_num"],
++                              +1.0, calc_source, pseudo_dir, manifest["mesh_cutoff"],
++                              manifest["vacuum_box"])
++            print_dual(f"  {color_text('[OK]', 'green')} {sym}: "
++                       f"{cation_folder}/ (NetCharge +1.0), {anion_folder}/ (NetCharge -1.0)", f_out)
++
+         species_entries.append({
+             "symbol": sym, "cation_folder": cation_folder, "anion_folder": anion_folder,
++            "cation_zero_density": cation_folder is None,
+             "pass0_charges": [float(charges[i]) for i in by_species_idx[sym]],
+         })
+-        print_dual(f"  {color_text('[OK]', 'green')} {sym}: "
+-                   f"{cation_folder}/ (NetCharge +1.0), {anion_folder}/ (NetCharge -1.0)", f_out)
+ 
+     ions_manifest = {
+         "schema": "hirshfeld_ions_manifest_v2",
+@@ -446,16 +473,21 @@ def main():
+     with open(os.path.join(args.output_dir, HIRSHFELD_IONS_MANIFEST_FILE), "w") as f:
+         json.dump(ions_manifest, f, indent=2)
+ 
++    n_cation_written = sum(1 for e in species_entries if e["cation_folder"] is not None)
++    n_cation_zero = len(species_entries) - n_cation_written
+     print_section("[6] SUMMARY", f_out)
+     print_dual(f"Atoms analyzed (pass-0)    : {len(symbols)}", f_out)
+     print_dual(f"Species                    : {len(species_entries)}", f_out)
+-    print_dual(f"Ion folders written        : {2 * len(species_entries)} "
+-               f"({len(species_entries)} cation + {len(species_entries)} anion)", f_out)
++    print_dual(f"Ion folders written        : {n_cation_written + len(species_entries)} "
++               f"({n_cation_written} cation + {len(species_entries)} anion)"
++               + (f" -- {n_cation_zero} species used the analytical zero-density cation "
++                  "instead (Z_val <= 1, see [5])" if n_cation_zero else ""), f_out)
+     print_dual(f"Manifest                   : "
+                f"{os.path.join(args.output_dir, HIRSHFELD_IONS_MANIFEST_FILE)}", f_out)
+     print_dual(color_text(
+-        "Next: run SIESTA in every ions/<species>/cation/ AND ions/<species>/anion/ folder, "
+-        "then run stb-hirshfeldAnalysis for the converged Hirshfeld-I charges.", 'cyan'), f_out)
++        "Next: run SIESTA in every ions/<species>/cation/ (where written) AND every "
++        "ions/<species>/anion/ folder, then run stb-hirshfeldAnalysis for the converged "
++        "Hirshfeld-I charges.", 'cyan'), f_out)
+     if report_path:
+         print_dual(f"Report                     : {report_path}", f_out)
+ 

@@ -1,7 +1,11 @@
 name: Documentation
 
-# Builds the MkDocs site (docs/ + the guides generated from examples/) on every
-# change that can affect it, and publishes it to GitHub Pages from main.
+# Builds the MkDocs site (docs/, the guides generated from examples/, and the
+# reference generated from the menu in stb_suite.py and the commands in
+# pyproject.toml) on every change that can affect it, and publishes it to
+# GitHub Pages from main. A command's --help text comes from the committed
+# docs/reference_help.json (regenerate it with docs/dump_help.py), so this job
+# installs only the documentation dependencies.
 # One-time setup: repository Settings > Pages > Source: "GitHub Actions".
 # To rebuild and redeploy without changing any file (for example right after
 # enabling Pages): Actions > Documentation > "Run workflow" (workflow_dispatch).
@@ -13,12 +17,16 @@ on:
       - "examples/**"
       - "docs/**"
       - "mkdocs.yml"
+      - "stb-suite/pyproject.toml"
+      - "stb-suite/src/stb/stb_suite.py"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "examples/**"
       - "docs/**"
       - "mkdocs.yml"
+      - "stb-suite/pyproject.toml"
+      - "stb-suite/src/stb/stb_suite.py"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 

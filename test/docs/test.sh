@@ -3,10 +3,13 @@
 # --- Setup ---
 # Smoke test for the documentation site (mkdocs.yml + docs/gen_pages.py).
 # Builds the whole site with `mkdocs build --strict` into test_files/site and
-# checks what came out: every example became a guide page, the sidebar is
-# generated in menu order, links between guides were rewritten, build tooling
-# was not published, and each README keeps the list/code structure GitHub gives
-# it (check_markdown_structure.py).
+# checks what came out: every menu item has a guide page (a real one from
+# examples/, or a generated stub), every console command has a reference page,
+# the sidebars follow menu order, links between guides and to the reference
+# were written, build tooling was not published, each README keeps the
+# list/table/code structure GitHub gives it (check_markdown_structure.py), and
+# the committed --help snapshot is up to date (only where the stb-suite package
+# and its ml extra are installed).
 #
 # Needs the documentation dependencies (not part of the stb-suite package):
 #   pip install -r docs/requirements.txt markdown-it-py
@@ -41,6 +44,16 @@ check_contains() {
     else
         echo -e "   -> ${RED}Failed:${NC} '$1' NOT found in '$2'"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -97,14 +110,25 @@ check_success "$SITE_DIR/guides/index.html"
 check_success "$SITE_DIR/assets/stb-icon.png"
 
 
-# --- 2. Every example became a guide page ---
-echo -e "\n--- Testing that every example folder became a guide page ---"
-expected=$(ls -d "$REPO_DIR"/examples/[0-9]*/ | wc -l)
+# --- 2. Every menu item has a guide page (real or stub) ---
+echo -e "\n--- Testing that every menu item has a guide page ---"
+menu_items=$(python3 -c "import sys; sys.path.insert(0, '$REPO_DIR/docs'); from stbdocs import catalog; print(len(catalog.load_menu()))")
 built=$(find "$SITE_DIR/guides" -mindepth 3 -name index.html | wc -l)
-check_equal "$built" "$expected" "guide pages built vs. example folders"
+check_equal "$built" "$menu_items" "guide pages built vs. top-level menu items"
 check_success "$SITE_DIR/guides/1-inputs/1.3-stb-kgrid/index.html"
 check_success "$SITE_DIR/guides/3-analysis/3.11-stm/index.html"
 check_success "$SITE_DIR/guides/4-workflows/4.8-adsorption/index.html"
+
+echo "Testing: an item with no example gets a generated stub that says so and lists its commands"
+stub="$SITE_DIR/guides/5-ml-simulations/5.1-ml-molecular-dynamics/index.html"
+check_success "$stub"
+check_contains "no hands-on guide for this tool yet" "$stub"
+check_contains 'href="../../../reference/stb-mlmd/"' "$stub"
+wstub="$SITE_DIR/guides/4-workflows/4.5-convergence-tests/index.html"
+check_success "$wstub"
+check_contains "4.5.1" "$wstub"
+check_contains 'href="../../../reference/stb-convergenceAnalysis/"' "$wstub"
+check_contains "Tools without a hands-on guide yet" "$SITE_DIR/guides/index.html"
 
 
 # --- 3. Sidebar: menu categories, numeric (not alphabetical) order, short labels ---
@@ -132,15 +156,52 @@ check_contains 'href="../4.3-cohesive/"' "$SITE_DIR/guides/4-workflows/4.1-strai
 check_contains 'href="4-workflows/4.9-neb/"' "$SITE_DIR/guides/index.html"
 check_contains "github.com/stb-suite/stb/tree/main/examples/1.3-stb-kgrid" "$page"
 check_contains "example_1.3.sh" "$page"
+check_contains 'href="../../../reference/stb-kgrid/"' "$page"
+echo "Testing: a workflow guide links to the reference page of every stage's command"
+check_contains 'href="../../../reference/stb-strain/"' "$SITE_DIR/guides/4-workflows/4.1-strain/index.html"
+check_contains 'href="../../../reference/stb-strainAnalysis/"' "$SITE_DIR/guides/4-workflows/4.1-strain/index.html"
+
+
+# --- 4b. Reference: one page per console command ---
+echo -e "\n--- Testing the command reference ---"
+commands=$(python3 -c "import sys; sys.path.insert(0, '$REPO_DIR/docs'); from stbdocs import catalog; print(len(catalog.load_scripts()))")
+built=$(find "$SITE_DIR/reference" -mindepth 2 -name index.html | wc -l)
+check_equal "$built" "$commands" "reference pages built vs. commands in [project.scripts]"
+check_success "$SITE_DIR/reference/index.html"
+ref="$SITE_DIR/reference/stb-kgrid/index.html"
+check_success "$ref"
+check_contains "usage: stb-kgrid" "$ref"
+check_contains "menu code" "$ref"
+check_contains 'href="../../guides/1-inputs/1.3-stb-kgrid/"' "$ref"
+check_contains "1 · Inputs" "$ref"
+check_contains "Not in the menu" "$ref"
+echo "Testing: command pages wrap long --help lines with their own stylesheet; guides do not load it"
+check_success "$SITE_DIR/assets/reference.css"
+check_contains "reference.css" "$ref"
+check_not_contains "reference.css" "$page"
+check_not_contains "reference.css" "$SITE_DIR/reference/index.html"
+echo "Testing: a workflow stage's page names its stage and links to the workflow's guide"
+check_contains "Stage 1 - Prep" "$SITE_DIR/reference/stb-strain/index.html"
+check_contains 'href="../../guides/4-workflows/4.1-strain/"' "$SITE_DIR/reference/stb-strain/index.html"
+echo "Testing: a command outside the menu says so; the menu map lists every code"
+check_contains "Not in the" "$SITE_DIR/reference/stb-nebCycle/index.html"
+check_contains "4.1.2" "$SITE_DIR/reference/stb-suite/index.html"
+check_contains "5.11" "$SITE_DIR/reference/stb-suite/index.html"
+check_contains "<code>4.5.2</code>" "$SITE_DIR/reference/stb-suite/index.html"
 
 
 # --- 5. Build tooling is not published ---
 echo -e "\n--- Testing that build tooling and the nav file are not published ---"
 check_absent "$SITE_DIR/gen_pages.py"
 check_absent "$SITE_DIR/hooks.py"
+check_absent "$SITE_DIR/dump_help.py"
+check_absent "$SITE_DIR/reference_help.json"
+check_absent "$SITE_DIR/stbdocs"
+check_absent "$SITE_DIR/overrides"
 check_absent "$SITE_DIR/requirements.txt"
 check_absent "$SITE_DIR/__pycache__"
 check_absent "$SITE_DIR/guides/SUMMARY"
+check_absent "$SITE_DIR/reference/SUMMARY"
 if grep -q "SUMMARY" "$SITE_DIR/sitemap.xml"; then
     echo -e "   -> ${RED}Failed:${NC} SUMMARY listed in sitemap.xml"
     FAIL=$((FAIL+1))
@@ -150,14 +211,26 @@ else
 fi
 
 
-# --- 6. GitHub-flavoured lists survive Python-Markdown ---
-echo -e "\n--- Testing list/code structure against GitHub's (CommonMark) rendering ---"
+# --- 6. GitHub-flavoured Markdown survives Python-Markdown ---
+echo -e "\n--- Testing list/table/code structure against GitHub's (CommonMark) rendering ---"
 python3 "$FIXTURE_DIR/check_markdown_structure.py" > "$TEST_DIR/log_structure.txt" 2>&1
 check_exit_code $? 0
-check_contains "documents keep GitHub's list/code structure" "$TEST_DIR/log_structure.txt"
+check_contains "0 difference(s) from GitHub's rendering" "$TEST_DIR/log_structure.txt"
 
 
-# --- 7. Summary ---
+# --- 7. The committed --help snapshot matches the tools ---
+echo -e "\n--- Testing that docs/reference_help.json is up to date ---"
+if python3 -c "import stb, mace" 2>/dev/null; then
+    python3 "$REPO_DIR/docs/dump_help.py" --check > "$TEST_DIR/log_help_snapshot.txt" 2>&1
+    check_exit_code $? 0
+    check_contains "is up to date" "$TEST_DIR/log_help_snapshot.txt"
+else
+    echo -e "   -> ${YELLOW}Skipped:${NC} needs the stb-suite package and its 'ml' extra installed"
+    echo "      (pip install -e \"stb-suite[ml]\"); then: python docs/dump_help.py --check"
+fi
+
+
+# --- 8. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
 

@@ -13,7 +13,11 @@ docs_dir: docs
 exclude_docs: |
   gen_pages.py
   hooks.py
+  dump_help.py
+  reference_help.json
   requirements.txt
+  stbdocs/
+  overrides/
   __pycache__/
 
 hooks:
@@ -21,6 +25,7 @@ hooks:
 
 theme:
   name: material
+  custom_dir: docs/overrides
   logo: assets/stb-icon.png
   favicon: assets/stb-icon.png
   palette:
@@ -68,3 +73,4 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Guides: guides/
+  - Reference: reference/

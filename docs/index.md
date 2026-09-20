@@ -71,9 +71,12 @@ The menu groups every tool into six categories:
 The [**Guides**](guides/index.md) are hands-on tutorials, one per tool (or one per
 workflow, for the multi-stage ones). Each explains what the tool does, the theory
 behind it, and walks through a runnable example with both the direct command and the
-menu path.
+menu path. Tools that do not have a written guide yet still get a short page listing
+their commands.
 
-Not every tool has a guide yet — they are being added a few at a time.
+The [**Reference**](reference/index.md) has one page per `stb-*` command, with its
+full `--help` text, and a [map of every menu code](reference/stb-suite.md) for the
+interactive menu.
 
 ## Source and license
 

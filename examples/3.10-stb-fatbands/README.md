@@ -256,7 +256,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `species-l-default/`       | The default `species_l` projection on a real, dispersive, multi-species structure; accurate (`.HSX`-based) overlap weights |
 | `projection-modes/`        | The same structure/bands, contrasting `l` vs. `species` vs. `species_l` categories |
 | `category-filter/`         | `--category` restricting the output to specific species/orbital combinations |
-| `accuracy-fallback/`       | No `.HSX` available: the approximate (`|c|^2`) fallback, via `--geometry-file` |
+| `accuracy-fallback/`       | No `.HSX` available: the approximate (`\|c\|^2`) fallback, via `--geometry-file` |
 | `spin-polarized/`          | The real spin-polarized fixture: spin-resolved gap analysis AND `<category>_up`/`<category>_down` splitting |
 | `full-report/`             | Default (no report/data files) vs. `--save-report --save-gnuplot`, `references.bib` |
 

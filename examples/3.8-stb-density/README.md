@@ -205,7 +205,7 @@ stb-density --label my_calc --cube
 | `-p/--pos`          | Slice position in Å (default: cell center).                            |
 | `--spin`            | Process ONLY the net spin density, skipping charge.                    |
 | `--rho2`            | A second `.RHO` to subtract (charge/spin transfer).                    |
-| `--iso-min`         | For `--3d`: filter out points below this `|density|`.                  |
+| `--iso-min`         | For `--3d`: filter out points below this `\|density\|`.                  |
 | `--cube`            | Also write a Gaussian `.cube` file.                                     |
 | `--vmin/--vmax`     | Fix the colorbar range manually (primary quantity only).               |
 | `--contour`         | Overlay contour lines (2D slice only).                                 |

@@ -268,7 +268,7 @@ Reduction                    | 97.9% fewer SIESTA runs
 ```
 
 `--symprec` (default `0.01` Ang) matters far more than it might look —
-this session's own suite-wide fix (several tools used to default to
+the suite-wide fix (several tools used to default to
 `1e-3`, tighter than pymatgen's real own default of `0.01` and far tighter
 than typical DFT-relaxation noise) directly targeted this exact structure.
 Reproduced live, with `--symprec 1e-5` (Phonopy's own raw, unexposed
@@ -319,8 +319,8 @@ Supercell k-grid  : 7 7 7 (explicit --kgrid)
 
 The interactive `stb-suite` menu (`4.4.1`) previews the auto-suggested
 grid directly as the bracketed default at its own k-grid prompt
-(`Supercell k-grid [5 5 5]: `), so blank == accept, matching this
-session's own UX convention rather than a silent "blank means auto"
+(`Supercell k-grid [5 5 5]: `), so blank == accept, matching the
+suite's UX convention rather than a silent "blank means auto"
 prompt.
 
 ### 3.5 Running it both ways
@@ -401,9 +401,9 @@ This is Phonopy's own **built-in reference guide**, drawn on every band
 -structure plot it produces regardless of what tool calls it — stb-suite
 adds nothing here. It exists purely so a reader can visually confirm the
 acoustic branches actually touch zero at Γ; it is not a plotted mode, not
-a warning, not a sign of instability. (This is exactly the finding from
-this session's real investigation into the user's own production AlP
-results before this tutorial was written.)
+a warning, not a sign of instability. (This is exactly the finding from a
+real investigation into production AlP results, made before this
+tutorial was written.)
 
 ### 4.4 DOS/PDOS — the Debye-fit blue curve, and species projection
 
@@ -422,7 +422,7 @@ With `--dos --view`, Phonopy's own `phonon.plot_total_dos()` overlays a
 default argument. This is the Debye quadratic fit
 (`g(omega) = Debye_fit_coef * omega^2`) Section 1.5 introduces, drawn from
 `omega=0` up to the fitted Debye frequency, then dropping to zero — the
-**other** "strange blue line" investigated this session, and unlike the
+**other** "strange blue line", and unlike the
 band-structure one, this one carries real information: it shows how well
 the actual DOS matches ideal Debye (free-particle, low-frequency) behavior.
 The correct reading for a real 2-atom-basis crystal: the fit and the real
@@ -479,7 +479,7 @@ Bravais lattice   : face-centred cubic (FCC)
 **A real, found-and-verified interaction**: a Stage-2 `--symprec`
 substantially **tighter** than what Stage 1 used to reduce the original
 displacement set can fail to reconstruct the force constants at all —
-verified live this session against this suite's own `test/4-workflow/
+verified live against this suite's own `test/4-workflow/
 4-phonons/analysis/test.sh` fixture (a real SIESTA `.FA`-based dataset,
 Stage 1 run at the default `symprec=0.01`, Stage 2 re-run with
 `--symprec 1e-5`):
@@ -504,19 +504,18 @@ actually on disk. **Rule of thumb: loosen, never tighten blindly, if in
 doubt** — the CLI help text and the interactive prompt both say this
 explicitly now.
 
-### 4.7 `--save-gnuplot` / `--view` — both opt-in this session
+### 4.7 `--save-gnuplot` / `--view` — both opt-in
 
 ```
 $ stb-phononsPos -dir phonon_runs -m 20 20 20 --bands --dos --save-gnuplot --no-intro
 Files               : phonon_runs/thermal_properties.png, phonon_runs/thermal_properties.dat, phonon_runs/phonon_bands.png, phonon_runs/band.yaml, phonon_runs/phonon_plots/ (7 .dat/.gplot pairs)
 ```
 
-Gnuplot `.dat`/`.gplot` output used to be written unconditionally on every
-run; this session made it opt-in via `--save-gnuplot` (default off),
+Gnuplot `.dat`/`.gplot` output is opt-in via `--save-gnuplot` (default off),
 matching the exact convention `aimd_analysis.py`/`effmass.py`/`coop.py`
 already established — matplotlib PNGs (`phonon_bands.png`,
 `thermal_properties.png`) are **unaffected**, still always saved either
-way. `--view` (also new this session) additionally pops up the computed
+way. `--view` additionally pops up the computed
 figures live via matplotlib (bands, thermal properties, DOS, PDOS) — a
 safe no-op under a non-interactive backend like `MPLBACKEND=Agg` (this
 tutorial's own script uses it for exactly that reason). Note:
@@ -526,8 +525,8 @@ tutorial's own script uses it for exactly that reason). Note:
 tool actually runs (`run_thermal_displacement_matrices`), and there is no
 matrices-plotting equivalent in Phonopy's own API (Section 6).
 
-The interactive `stb-suite` menu (`4.4.2`) also gained an **`"all"`**
-shortcut for its additional-analyses list this session — expands to
+The interactive `stb-suite` menu (`4.4.2`) also offers an **`"all"`**
+shortcut for its additional-analyses list — expands to
 `bands+dos+pdos+thermal`, deliberately **excluding** mode-freeze (a
 different kind of action, writing a structure file, not just a
 plot/report):
@@ -549,7 +548,7 @@ session, on real production folders the user actually ran (`stb
 -phononsCreate` + `stb-phononsPos`, real SIESTA, DZP/GGA-PBE, `dojo`
 pseudopotentials).
 
-### 5.1 AlP: clean, stable, and a direct confirmation of this session's own fix
+### 5.1 AlP: clean, stable, and a direct confirmation of the `--symprec` fix
 
 Stage 1's real, saved report on this exact structure (`structure.fdf`/
 `calc.fdf` in this folder) already shows the correct result at the fixed
@@ -574,7 +573,7 @@ constants (not this tutorial's own MACE shortcut):
   lattice-constant bias, not a red flag.
 
 Every one of these is an independent physical cross-check, and every one
-passes — strong, real evidence that both the physics *and* this session's
+passes — strong, real evidence that both the physics *and* the
 `--symprec` fix (Section 3.3) are working correctly end-to-end, not just
 in a synthetic test fixture.
 

@@ -382,8 +382,8 @@ The exact same data analyzed with `--symmetry-method full` instead omits the
 `Tensor symmetry` line entirely — not a `0.000` value, no line at all — the
 concrete proof this workflow's own `example_4.2.sh` (Case 5) runs live.
 
-**A real bug, found and fixed on this exact material's data during this
-session's development**: `eggbox_cross_check`'s energy-side conversion used
+**A real bug, found and fixed on this exact material's data during
+development**: `eggbox_cross_check`'s energy-side conversion used
 to also multiply by the *stress*-side geometric dilution factor (the cell
 height `Lz` for 2D, a cross-section for 1D) — a factor the energy side
 should never need (total energy isn't diluted by vacuum the way SIESTA's raw

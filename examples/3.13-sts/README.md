@@ -9,7 +9,7 @@ would the tunneling spectrum look like?" — the energy-resolved twin of
 
 This example walks through the theory, the real-world file conventions
 you need to get right (a full-BZ `.WFSX`, not a band-path one), and two
-real bugs found and fixed while reviewing this tool this session — using
+real bugs found and fixed while reviewing this tool — using
 a real SIESTA calculation of monolayer graphene.
 
 ## 1. Theory: the Tersoff-Hamann proxy, extended to an energy axis
@@ -148,64 +148,43 @@ specifically so this doesn't bite a normal STM/STS height (a few Ang), but
 it's worth keeping in mind if you ever go looking for the true vacuum
 plateau by cranking `--height` up.
 
-## 2. What changed this session — the same fixes as `stb-wfdensity`
-
-`stb-sts` had accumulated the same class of gaps `stb-wfdensity` did, and
-was rewritten (v1.0.0 -> v2.0.0) with the identical fixes applied:
+## 2. Output and options
 
 - **Numbered `[0]`...`[6]` report** (`RUN METADATA`, `INPUT DATA`,
   `TIP POSITION`, `STS CURVE`, `OUTPUT DATA & PLOTS`, `REFERENCES`,
   `SUMMARY & FILES`), matching `stb-bands`/`stb-dos`/`stb-wfdensity`.
 - **`--save-report`** persists the full report to `stb_sts_report.txt`
   (off by default).
-- **`--save-gnuplot`** — a real bug fix: this tool used to write `sts.dat`
-  unconditionally with no way to opt out, and never wrote a `.gplot`
-  script at all, despite being "gnuplot output" in spirit. Now both the
-  `.dat` write and a real, working `.gplot` script are together behind
-  one off-by-default flag.
-- **`--view`** replaces the old `--no-plot`: the matplotlib preview is now
-  off by default and opted INTO, instead of on by default and opted out
-  of (the same convention flip every rewritten Analysis tool this session
-  has gotten).
-- **Fermi-energy source decoupled from `--label`**: `--shift fermi` used
-  to accept only an explicit `--fermi` value. It now has the same
-  priority-ordered hierarchy as `stb-wfdensity`'s `--band vbm/cbm`:
+- **`--save-gnuplot`** writes `sts.dat` and a working `.gplot` script
+  together, both behind this one off-by-default flag.
+- **`--view`** shows the matplotlib preview (off by default).
+- **`--shift fermi`'s Fermi-energy source** follows a priority-ordered
+  hierarchy, the same one as `stb-wfdensity`'s `--band vbm/cbm`:
   `--fermi` (explicit) > `--bands-file` > `--fermi-file` > an
-  auto-detected `.out` log in the current directory (via
-  `core.siesta_log.find_out_file`, NOT assumed to be named `<label>.out`
-  -- many real SIESTA jobs redirect stdout to a generic name instead).
-  This priority-ordered resolution was extracted into
-  `core.siesta_bands.resolve_fermi_energy_hierarchy` once `stb-sts`
-  became a second consumer of the exact logic `stb-wfdensity` already had
-  — both tools now share one implementation instead of two.
-- **`--label` + `--geometry-file` together used to be rejected outright**
-  — the identical overly-strict validation bug found and fixed in
-  `stb-wfdensity`. This example's own fixture demonstrates exactly why it
-  matters: `SystemLabel` is `Graphene`, but the real input file is
-  `calc.fdf` — there is no `Graphene.fdf` anywhere.
-- **A silently-dropped warning, fixed**: the surface-normal axis-alignment
-  check (shared with `stb-stm`, for a sheared cell where "height above the
-  surface" along one axis isn't simply Cartesian) was being computed but
-  its result was never printed. Now it prints, exactly like `stb-stm`
-  already does.
-- **The same "naive topmost atom" bug `stb-stm` already had fixed,
-  inherited here too**: the `--xy`/`--height` tip-height calculation used
-  a plain `xyz[:, axis].max()`, which silently picks the wrong bounding
-  atom for a structure whose atoms straddle the periodic cell boundary
-  (verified previously on a real CrS monolayer with atoms at fractional
-  Z = 0, 0, 0.066, 0.934 — see the `3.11-stm` example for that live
-  verification). `stb-sts` now reuses the same
-  `core.kspace.find_surface_reference` fix `stb-stm` uses. This example's
-  own graphene fixture happens to have its atoms exactly centered
-  (fractional Z = 0.5 for both), so the naive and gap-aware methods agree
-  here — the fix is inherited defense against structures that aren't this
-  well-behaved, not something this particular fixture can show diverging.
-- The interactive `stb-suite` menu (item `3.13`) now asks for the label
-  and the `.fdf` path SEPARATELY, and gained an energy-shift submenu
-  offering the same Fermi-source options — see the "Two ways to run it"
-  section below.
+  auto-detected `.out` log in the current directory (not assumed to be
+  named `<label>.out` -- many real SIESTA jobs redirect stdout to a
+  generic name instead).
+- **`--label` can be combined with `--geometry-file`.** This example's own
+  fixture shows why that matters: `SystemLabel` is `Graphene`, but the
+  real input file is `calc.fdf` — there is no `Graphene.fdf` anywhere.
+- **The surface-normal axis-alignment check** (shared with `stb-stm`, for a
+  sheared cell where "height above the surface" along one axis isn't
+  simply Cartesian) prints its result, exactly like `stb-stm` does.
+- **The `--xy`/`--height` tip height is measured from the true topmost
+  atom.** A plain `xyz[:, axis].max()` picks the wrong bounding atom for a
+  structure whose atoms straddle the periodic cell boundary (verified on a
+  real CrS monolayer with atoms at fractional Z = 0, 0, 0.066, 0.934 — see
+  the `3.11-stm` example for that live verification), so `stb-sts` uses
+  the same gap-aware surface reference `stb-stm` does. This example's own
+  graphene fixture has its atoms exactly centered (fractional Z = 0.5 for
+  both), so the naive and gap-aware methods agree here — the gap-aware
+  method is defense against structures that aren't this well-behaved, not
+  something this particular fixture can show diverging.
+- The interactive `stb-suite` menu (item `3.13`) asks for the label and
+  the `.fdf` path separately, and has an energy-shift submenu offering the
+  same Fermi-source options — see the "Two ways to run it" section below.
 
-## 3. Known, deliberate limitations (unchanged this session)
+## 3. Known limitations
 
 - **Not a full STS simulation** — the tip is a structureless point probe
   (same philosophy as `stb-stm`'s constant-height/current modes), not a

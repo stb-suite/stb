@@ -101,40 +101,28 @@ same states:
 A genuine, ~12% difference — not a rounding-level discrepancy — confirming
 the accuracy warning is worth heeding whenever a real `.HSX` is available.
 
-## 2. What changed this session
-
-`stb-ipr` was still on the pre-rewrite style (plain banner, no numbered
-report, `ipr.dat`/`ipr.gplot` written unconditionally, matplotlib preview
-always shown with no way to skip it). Rewritten (v1.0.0 -> v2.0.0) to
-match `stb-fatbands`' own v2.0.0 rewrite:
+## 2. Output and options
 
 - **Numbered `[0]`...`[6]` report** (`RUN METADATA`, `INPUT DATA`,
   `BAND GAP ANALYSIS`, `IPR ANALYSIS`, `WRITING OUTPUT FILES`,
-  `REFERENCES`, `SUMMARY & FILES`) — the `IPR ANALYSIS` section is new
-  content this tool never reported before: per-series mean/min/max IPR
-  AND which exact (k, energy) state is the most localized/most extended.
-- **`--save-report`**, **`--save-gnuplot`** (off by default — this tool
-  used to write `ipr.dat`/`ipr.gplot` on every single run with no way to
-  opt out), and **`--view`** (off by default — this tool used to always
-  pop a blocking matplotlib window, with no flag to skip it at all).
-- **A real bug fixed**: `--label` + `--hsx-file`/`--geometry-file`
-  together used to be rejected outright — the same overly strict
-  validation bug already found and fixed in `stb-wfdensity`/`stb-sts`/
-  `stb-coop` this session. `load_parent()` already preferred an explicit
-  `--hsx-file` over `<label>.HSX` on its own; only `--label` +
-  `--file`/`--wfsx` still needs to be rejected (ambiguous).
-- **A real bug fixed**: `--q` had no lower-bound check. sisl's own
-  `ipr()` asserts `q >= 2` internally — `--q 1`/`0`/negative used to crash
-  with a raw, unfriendly `AssertionError` traceback. Now a clean
-  `parser.error` up front.
-- **A real bug fixed**: the exact same nspin=2 spin-channel-merging bug
-  `stb-fatbands` already found and fixed this session, inherited here
-  too. See section 3 below for the live verification.
+  `REFERENCES`, `SUMMARY & FILES`) — the `IPR ANALYSIS` section reports
+  per-series mean/min/max IPR AND which exact (k, energy) state is the
+  most localized/most extended.
+- **`--save-report`**, **`--save-gnuplot`** (writes `ipr.dat`/`ipr.gplot`)
+  and **`--view`** (matplotlib preview) are all off by default.
+- **`--label` can be combined with `--hsx-file`/`--geometry-file`**: an
+  explicit `--hsx-file` is preferred over `<label>.HSX`. Only `--label` +
+  `--file`/`--wfsx` is rejected (ambiguous).
+- **`--q` must be at least 2**: sisl's own `ipr()` asserts `q >= 2`, so
+  `--q 1`/`0`/negative is rejected up front with a clear error instead of a
+  raw `AssertionError`.
+- **nspin=2 keeps the two spin channels separate** — see section 3 below
+  for the live verification.
 
-Unlike `stb-wfdensity`/`stb-sts`/`stb-coop`, no Fermi-source hierarchy was
-added: `stb-ipr` (like `stb-fatbands`) already requires a `.bands` file as
-its primary input, which carries its own embedded Fermi energy — there
-was nothing to decouple.
+`stb-ipr` has no Fermi-energy source hierarchy (unlike `stb-wfdensity`/
+`stb-sts`/`stb-coop`): like `stb-fatbands`, it already requires a `.bands`
+file as its primary input, which carries its own embedded Fermi energy —
+there is nothing to decouple.
 
 ## 3. A real bug found and fixed: spin channels silently merged
 
@@ -142,7 +130,7 @@ This tool's row-building loop used to dump BOTH spin channels into one
 flat, spin-blind list — for a genuinely magnetic system this silently
 combines two physically different IPR series into one indistinguishable
 scatter/data file (the exact same bug `stb-fatbands` already found and
-fixed for its own orbital weights this session). Fixed the same way:
+fixed for its own orbital weights). Fixed the same way:
 `nspin=2` now splits into `ipr_up`/`ipr_down`, written as separate
 `.dat` files and reported as separate table rows; `nspin=1` is completely
 unaffected (still plain `ipr`).
@@ -170,7 +158,7 @@ to fully localized on one or two orbitals; values fractionally above the
 theoretical q=2 maximum of exactly 1.0 reflect small numerical noise in
 the overlap-weighted normalization, not a code defect.)
 
-## 4. Known, deliberate limitations (unchanged this session)
+## 4. Known limitations
 
 - No file metadata ties a given `.WFSX` to a given `.bands` file — same
   k-count/orbital-count guard and `--k-tol` eigenvalue cross-check as

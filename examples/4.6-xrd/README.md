@@ -86,8 +86,8 @@ rigid shift between the two patterns, e.g. from a slightly-off lattice
 constant, rather than demanding a perfect point-by-point match.) Read
 literally: **this is a normalized dot product** — `1.0` means the two
 profiles are identical up to scale, `~0` means uncorrelated. Section 4.5
-traces the exact place this formula breaks (a real bug this session found
-and fixed) when one of the two profiles is degenerate (all zero).
+traces the exact place this formula breaks (a real bug, now
+fixed) when one of the two profiles is degenerate (all zero).
 
 ### 1.5 The experimental data file: the model this workflow expects
 
@@ -116,7 +116,7 @@ source actually produced this data (default `CuKa`).
 among the columns after 2-theta. For a plain 2-column file that's the only
 candidate anyway. This matters for real instrument export formats with a
 3rd (or more) column — Section 4.5 works through a real one, live, and
-shows exactly what used to go wrong before this session fixed it.
+shows exactly what used to go wrong before it was fixed.
 
 ### 1.6 Why this needs a *search* at all
 
@@ -390,8 +390,8 @@ cosmetic default; without it, this workflow gives the wrong answer.
 ### 4.5 The 3-column bug — reproduced and shown fixed, live
 
 Real diffractometer export formats aren't always 2 columns. A `.int`-style
-export this session encountered in real production use
-(`/home/carlos/test/Si/xrd.int`, Section 5) has **3** columns: `2theta`,
+export encountered in real production use
+(`xrd.int`, Section 5) has **3** columns: `2theta`,
 intensity, and a 3rd field (an unpopulated uncertainty/esd column) that was
 **exactly zero on all 11900 lines**. `read_experimental_pattern` used to
 always take the *last* column as intensity (a rule that happened to be
@@ -404,7 +404,7 @@ Traced to the exact line: `pyxtal.XRD.similarity_calculate()` computes
 `gy` (the misread "experimental" intensity), `aCorrgg_w = 0` and
 `xCorrfg_w = 0` too, so the division is a literal `0/0` -> **`nan`**, with
 no exception and no visible cause beyond a bare `RuntimeWarning: invalid
-value encountered in scalar divide` — which, before this session's own
+value encountered in scalar divide` — which, before the
 `[6] LIBRARY WARNINGS` section existed, had nowhere organized to surface at
 all (Section 4.7).
 
@@ -475,8 +475,8 @@ one collector list, instead of leaking straight to the terminal interleaved
 with the report. This tool's *own* `print_dual` report lines are never
 inside a wrapped block, so the report itself is never delayed or hidden.
 
-A real, subtle gap this session found and fixed (verified against
-`/home/carlos/test/Si`'s own real data, Section 5): the space-group lookup
+A real, subtle gap, since fixed (verified against
+this Si example's own real data, Section 5): the space-group lookup
 (`core/symmetry.py::space_group_label`, called once per candidate to fill
 the ranking table's own column) used to sit in its *own* `try/except`,
 **outside** the wrapped block that computes the pattern/similarity for that
@@ -512,8 +512,8 @@ the CLI flags above.
 
 ## 5. Worked example: real production data, end-to-end
 
-This is not illustrative data — this is a real calculation the user ran
-this session, at `/home/carlos/test/Si`: `stb-xrdsearch` cast 3 candidates
+This is not illustrative data — this is a real calculation run
+with this workflow: `stb-xrdsearch` cast 3 candidates
 for `Si8`, space group `227` (`Fd-3m`), each pre-relaxed with MACE, then
 **actually relaxed with real SIESTA** (GGA-PBE, DZP, `320 Ry` mesh cutoff,
 `6x6x6` Monkhorst-Pack — `132` irreducible k-points, force tolerance
@@ -523,9 +523,9 @@ correct structure; the question is which SIESTA run relaxed it best.
 
 ### 5.1 First run: `nan` for every candidate
 
-The user's real experimental file, `xrd.int`, is the exact 3-column format
+The real experimental file, `xrd.int`, is the exact 3-column format
 Section 4.5 works through (2theta, intensity, an always-zero 3rd column).
-Before this session's fix, every candidate scored `similarity nan`:
+Before the fix, every candidate scored `similarity nan`:
 
 ```
 [3] RANKING
@@ -666,7 +666,7 @@ recommended next step: re-relax `group_227_2` with an explicit, tighter
 
 | File | What it is |
 |---|---|
-| `experimental.dat` | Real Si (diamond cubic) powder pattern, Cu-K-alpha, the canonical 2-column model (Section 1.5) -- derived from the real `/home/carlos/test/Si/xrd.int` production data with its bogus 3rd column removed |
+| `experimental.dat` | Real Si (diamond cubic) powder pattern, Cu-K-alpha, the canonical 2-column model (Section 1.5) -- derived from real `xrd.int` production data with its bogus 3rd column removed |
 | `experimental_peaks.dat` | The same real pattern, as a sparse 9-point peak list (Section 4.4) |
 | `example_4.6.sh` | This walkthrough's runnable script (both stages) |
 

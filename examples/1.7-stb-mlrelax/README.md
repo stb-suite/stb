@@ -220,7 +220,7 @@ that "bigger" model checkpoints aren't a strict superset of the smaller
 ones in every dimension, just an independently-tuned, overall more
 expressive network.
 
-Numbers below were measured live in this session on the same 8-atom
+Numbers below were measured live on the same 8-atom
 `si_defect.fdf` (see `example_1.7.sh`'s `output/model-comparison/`, which
 reproduces this exact table from the tool's own `[3]`/`[4]` report
 sections, not a separate claim):

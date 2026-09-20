@@ -9,7 +9,7 @@ antibonding* between two specific atoms — the quantum-chemical bridge
 between a band structure and a picture of chemical bonds.
 
 This example walks through the theory, and a real, serious bug found and
-fixed while reviewing this tool this session — using a real SIESTA
+fixed while reviewing this tool — using a real SIESTA
 calculation of the tin oxide Sn3O4.
 
 ## 1. Theory
@@ -139,38 +139,31 @@ bond order for both pairs (+0.133 vs +0.527 for the bond, -0.0008 vs
 evidence, not just an assertion, that this suite's COOP sign convention
 (positive = bonding) is correct.
 
-## 2. What changed this session
+## 2. Output and options
 
 - **Numbered `[0]`...`[7]` report** (`RUN METADATA`, `INPUT DATA`,
   `PAIR SELECTION`, `COOP/COHP CURVE`, `BOND ORDER`, `OUTPUT DATA & PLOTS`,
   `REFERENCES`, `SUMMARY & FILES`), matching `stb-wfdensity`/`stb-sts`.
 - **`--save-report`** persists the report to `stb_coop_report.txt` (off by
   default).
-- **`--save-gnuplot`** -- a real gap closed: this tool used to write
-  `coop.dat`/`cohp.dat` unconditionally with no way to opt out, and never
-  wrote a `.gplot` script at all. Now both are together behind one
-  off-by-default flag, with a real multi-pair gnuplot script (one curve
-  per selected pair, via `columnheader()`).
-- **`--view`** replaces the old `--no-plot`: off by default, opted INTO
-  (same convention flip every rewritten Analysis tool has gotten).
-- **`--shift fermi`'s Fermi-energy source decoupled from `--label`**: now
-  the same priority-ordered hierarchy as `stb-wfdensity`/`stb-sts`
-  (`--fermi` > `--bands-file` > `--fermi-file` > an auto-detected `.out`
-  log), via the shared `core.siesta_bands.resolve_fermi_energy_hierarchy`.
-- **`--label` + `--hsx-file` together used to be rejected outright** --
-  the same overly strict validation bug already fixed in
-  `stb-wfdensity`/`stb-sts`. `load_parent()` already preferred an
-  explicit `--hsx-file` over `<label>.HSX` -- the CLI validation was
-  simply stricter than it needed to be.
-- **`--bond-order` fixed** to use a real density matrix (`--dm-file`/
-  auto-detected `<label>.DM`) instead of the Hamiltonian -- see section
-  1.4 above. Errors clearly if no usable `.DM` is found, instead of
-  silently returning a wrong number.
-- The interactive `stb-suite` menu (item `3.14`) now asks for the label
-  and `.HSX` path separately, gained a Fermi-source submenu, and a
+- **`--save-gnuplot`** writes `coop.dat`/`cohp.dat` and a real multi-pair
+  gnuplot script (one curve per selected pair, via `columnheader()`),
+  together behind one off-by-default flag.
+- **`--view`** shows the matplotlib preview (off by default).
+- **`--shift fermi`'s Fermi-energy source** follows the same
+  priority-ordered hierarchy as `stb-wfdensity`/`stb-sts` (`--fermi` >
+  `--bands-file` > `--fermi-file` > an auto-detected `.out` log).
+- **`--label` can be combined with `--hsx-file`**, which takes precedence
+  over `<label>.HSX`.
+- **`--bond-order`** uses a real density matrix (`--dm-file`/auto-detected
+  `<label>.DM`), not the Hamiltonian -- see section 1.4 above. It errors
+  clearly if no usable `.DM` is found, instead of silently returning a
+  wrong number.
+- The interactive `stb-suite` menu (item `3.14`) asks for the label and
+  `.HSX` path separately, has a Fermi-source submenu, and a
   bond-order/`.DM` prompt.
 
-## 3. Known, deliberate limitations (unchanged this session)
+## 3. Known limitations
 
 - sisl's COOP/COHP API is explicitly "experimental" and memory-heavy for
   many energy points/large systems -- start modest with `--npoints`.
@@ -209,8 +202,7 @@ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
 ## 6. What's next
 
 - `stb-sts` (`3.13-sts/`) -- the other Brillouin-zone-integrated,
-  energy-resolved tool this session gave the same Fermi-source hierarchy
-  to.
+  energy-resolved tool, with the same Fermi-source hierarchy.
 - `stb-dos`/`stb-ipr` -- related energy-resolved electronic-structure
   quantities, without the atom-pair bonding character COOP/COHP add.
 - `stb-fatbands` (`3.10-stb-fatbands/`) -- orbital-projected band

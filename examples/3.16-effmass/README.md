@@ -9,7 +9,7 @@ band minimum (CBM), where these quantities govern carrier transport.
 
 This example walks through the theory, a real crash a user hit on their
 own spin-polarized calculation (now fixed), and a second, deeper physics
-subtlety this session's review uncovered along the way.
+subtlety uncovered along the way.
 
 ## 1. Theory
 
@@ -167,29 +167,25 @@ exact same graceful degradation — this was already handled before the
 fix; the new fix simply extends the SAME treatment to nspin=2, which
 used to be (incorrectly) assumed safe.
 
-## 4. What changed this session
+## 4. Output and options
 
 - **Numbered `[0]`...`[8]` report** (`RUN METADATA`, `INPUT DATA`,
   `STATE SELECTION`, `EFFECTIVE MASS (per-axis Voigt)`,
   `EFFECTIVE MASS (principal, full tensor)`, `BAND VELOCITY`,
   `OUTPUT DATA & PLOTS`, `REFERENCES`, `SUMMARY & FILES`).
 - **`--save-report`**, **`--save-gnuplot`** (writes `effmass.dat`/
-  `velocity.dat` + a real 2-panel bar-chart `.gplot` script, off by
-  default), and **`--view`** (matplotlib bar charts, off by default) —
-  this tool previously only ever wrote a single `effmass.txt`, with no
-  plot at all.
-- **The real nspin=2 crash, fixed** (section 1.2/3 above).
-- **The principal-effective-mass addition** (section 1.3 above) — new
-  information this tool never reported before.
-- **A real bug fixed**: `--label` + `--hsx-file` together used to be
-  rejected outright — the same overly strict validation bug already
-  fixed in `stb-wfdensity`/`stb-sts`/`stb-coop`.
-- **`--band vbm/cbm`'s Fermi-energy source decoupled from `--label`**:
-  now the same priority-ordered hierarchy (`--fermi` > `--bands-file` >
-  `--fermi-file` > an auto-detected `.out` log) those three tools have,
-  via the shared `core.siesta_bands.resolve_fermi_energy_hierarchy`.
+  `velocity.dat` + a real 2-panel bar-chart `.gplot` script) and
+  **`--view`** (matplotlib bar charts) are all off by default.
+- **nspin=2 is handled gracefully** (section 1.2/3 above).
+- **The principal effective mass** (section 1.3 above) is reported
+  alongside the per-axis values.
+- **`--label` can be combined with `--hsx-file`.**
+- **`--band vbm/cbm`'s Fermi-energy source** is independent of `--label`:
+  the same priority-ordered hierarchy (`--fermi` > `--bands-file` >
+  `--fermi-file` > an auto-detected `.out` log) as `stb-wfdensity`/
+  `stb-sts`/`stb-coop`.
 
-## 5. Known, deliberate limitations (unchanged this session)
+## 5. Known limitations
 
 - Only a single (k, band) point, not swept along a path — most
   meaningful at a true band extremum (VBM/CBM); a coarse k-mesh's

@@ -458,7 +458,7 @@ relaxed)` / `SKIP (missing calc.out)`).
 - **Stage 4's Gibbs free energy is a harmonic-approximation treatment, not
   an anharmonic one** (Section 13) — `ZPE`/entropy come from a harmonic
   Hessian (site) and `ase.thermochemistry.IdealGasThermo` (isolated
-  reference, full translational+rotational+vibrational as of this session
+  reference, full translational+rotational+vibrational
   — no longer vibrational-only), both standard, but neither captures real
   anharmonic effects (thermal expansion of the well, mode coupling). The
   isolated reference's standard-state pressure is also fixed at 1 bar, not
@@ -674,7 +674,7 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
   reference below), genuine vibrational modes as full-height solid stems, excluded
   rigid-body/imaginary modes as short red stems — the isolated reference's excluded
   modes cluster near 0 THz, well separated from any genuine vibration. This is exactly
-  the kind of plot that would have visually surfaced this session's mode-counting bug
+  the kind of plot that would have visually surfaced the mode-counting bug
   (Section 13.1) on sight, rather than requiring a manual literature cross-check to
   notice.
 - **`adsorption_desorption_kinetics.png`** / **`plot/desorption_kinetics.{dat,gplot}`**
@@ -694,7 +694,7 @@ a monatomic species has **zero** possible vibrational modes by definition (there
 nothing to vibrate against), so its isolated reference's `ZPE` must come out **exactly
 zero** regardless of any Hessian data fed to it, while its entropy is **purely
 translational** (no rotation for a point particle either) — the simplest possible
-demonstration of this session's fix.
+demonstration of that fix.
 
 Two fabricated `.FA` (force) datasets, hand-chosen the same "no real SIESTA available"
 way Section 8's `calc.out` values are:
@@ -736,7 +736,7 @@ comfortably favorable at any reasonable temperature; **`DG` tells a different st
 the whole reason Stage 4 exists: a purely electronic `E_ads` (even BSSE-corrected)
 cannot tell you this on its own.
 
-The Gibbs-prep folders also demonstrate this session's `config_extra.fdf` refactor —
+The Gibbs-prep folders also demonstrate the `config_extra.fdf` mechanism —
 `gibbs/site_1_ontop/disp_001/calc.fdf` is now just `%include config_extra.fdf` plus
 your original `--calc` template, unmodified:
 
@@ -987,7 +987,7 @@ before you ever reach a temperature worth running SIESTA at.**
 >   escape pathway and its own vibrational spectrum for a proper Vineyard
 >   prefactor, neither of which Stage 4 computes.
 > - Before concluding the *site* is simply weakly bound, double check the
->   basics this session's own diagnostics depend on: was `DFTD3` actually
+>   basics the diagnostics above depend on: was `DFTD3` actually
 >   applied (`config_extra.fdf`, Section 14.1) — van der Waals is often the
 >   dominant term for a weak physisorption well, and a missing/misconfigured
 >   dispersion correction can produce exactly this "too-shallow-to-matter"

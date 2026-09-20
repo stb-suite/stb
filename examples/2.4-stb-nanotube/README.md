@@ -41,8 +41,8 @@ allows, not merely non-parallel to it.
 
 ### A real, serious bug, found and fixed: `T` needs to be perpendicular, not just non-parallel
 
-This is not a hypothetical concern — it was a genuine, verified bug in this
-tool before this session, silently producing physically wrong tubes for
+This is not a hypothetical concern — it was a genuine, verified bug in an
+earlier version of this tool, silently producing physically wrong tubes for
 almost every chirality except plain zigzag. Verified live against
 `ase.build.nanotube` (an independent, trusted reference implementation):
 the old "just pick the shortest non-parallel `T`" logic gave graphene

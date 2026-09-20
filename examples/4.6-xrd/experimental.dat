@@ -13,7 +13,7 @@
 #
 # Real data, not fabricated: this is bulk silicon (diamond cubic, Fd-3m),
 # Cu-K-alpha (1.54184 Ang), 2theta = 1-120 deg, 0.01 deg step -- the exact
-# same file used in this session's own real /home/carlos/test/Si analysis
+# same file used in the real production analysis
 # (README section 5), with its original (always-zero, unused) 3rd column
 # removed so this file is the clean, minimal, correct model to copy.
 # ============================================================

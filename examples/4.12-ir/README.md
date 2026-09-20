@@ -121,7 +121,7 @@ single experimental peak, not any one partner's own row.
 
 - **No non-analytic (LO-TO) correction for polar bulk crystals** — the
   single most consequential limitation of this workflow, root-caused (not
-  fixed) this session. Full explanation: Section 6.4. `4.4-phonons`
+  fixed). Full explanation: Section 6.4. `4.4-phonons`
   documents the identical limitation for its own (intensity-free) phonon
   band structures/DOS — this is a shared, suite-wide gap, not specific to
   IR.
@@ -273,7 +273,7 @@ If you have SIESTA installed and run the `BornCharge`/`Optical`-module
 equilibrium calculation yourself with `mpirun -np N` for `N>1`, it fails
 with `cdiag: Error in Cholesky factorisation` — a real, reproducible bug
 in SIESTA's own parallel diagonalization specific to the polarization/
-Optical module (confirmed directly this session: `-np 1` works, `-np 2`
+Optical module (confirmed directly: `-np 1` works, `-np 2`
 reproduces the failure, `-np 6` also fails; supercell force runs and
 dipole-difference runs elsewhere in the SAME workflow are unaffected and
 can use any rank count). The fix is simply `-np 1` for that one folder —

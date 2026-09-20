@@ -16,7 +16,7 @@
 #
 # experimental.dat / experimental_peaks.dat are REAL Si powder-XRD data
 # (README section 8), not fabricated -- derived from the same real
-# production file (/home/carlos/test/Si/xrd.int) README section 5 documents.
+# production file README section 5 documents.
 #
 # Both stages run for real below. Stage 1's --mace-relax case takes
 # roughly a minute (3 small candidates, MACE-MP-0 'small'); each Stage 2
@@ -194,8 +194,8 @@ Real diffractometer '.int' exports often have a 3rd column (e.g. an
 unpopulated uncertainty/esd field, exactly zero on every line) -- this
 USED TO silently get read as "intensity" (the old "always take the last
 column" rule), giving similarity = nan with no visible cause beyond a bare
-RuntimeWarning (README section 4.5/5.1, the exact real bug this session
-found and fixed against /home/carlos/test/Si's own production data).
+RuntimeWarning (README section 4.5/5.1, the exact real bug found and
+fixed against real production data).
 Reproduced here with the same real pattern plus a synthetic bogus 3rd
 column mimicking that exact real-world mistake:
 EOF
@@ -277,8 +277,8 @@ is 2 columns (2theta, intensity); a real 3-column-format bug that used to
 silently give nan is now fixed and demonstrated live above (Cases 6-7);
 [6] LIBRARY WARNINGS collects every third-party message in one place.
 
-See the README's section 5 for the real /home/carlos/test/Si production
-data this session actually debugged (the same nan -> real-numbers story,
+See the README's section 5 for the real production
+data that was actually debugged (the same nan -> real-numbers story,
 on real SIESTA-relaxed candidates, plus a genuine relaxation-quality
 finding the ranking alone can't resolve), and section 7 for a step-by-step
 guide to running this on your own composition.

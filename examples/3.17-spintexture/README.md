@@ -104,29 +104,22 @@ this suite doesn't bundle a fixture for. The `[3]` report section's
 you'd use to find where in a real k-path the most interesting spin
 texture occurs.
 
-## 3. What changed this session
+## 3. Output and options
 
 - **Numbered `[0]`...`[6]` report** (`RUN METADATA`, `INPUT DATA`,
   `ENERGY REFERENCE`, `SPIN TEXTURE ANALYSIS`, `OUTPUT DATA & PLOTS`,
-  `REFERENCES`, `SUMMARY & FILES`) — `SPIN TEXTURE ANALYSIS` is new
-  content this tool never reported before: per-component mean/min/max,
-  the `|S| <= 1` normalization check (section 1.2), and the single most
-  spin-polarized state found.
-- **`--save-report`**, **`--save-gnuplot`** (previously wrote
-  `spintexture_S{x,y,z}.dat`/`.gplot` unconditionally on every run), and
-  **`--view`** (previously the matplotlib preview was always shown,
-  blocking, with no way to skip it) — all off by default now.
-- **A real bug fixed**: `--label` + `--hsx-file`/`--geometry-file`
-  together used to be rejected outright — the same overly strict
-  validation bug already fixed in `stb-wfdensity`/`stb-sts`/`stb-coop`/
-  `stb-effmass`.
-- **`--shift fermi/vbm/cbm`'s Fermi-energy source decoupled from
-  `--label`**: the same priority-ordered hierarchy `stb-effmass` has
-  (`--fermi` > `--bands-file` > `--fermi-file` > an auto-detected `.out`
-  log) — this tool previously only ever accepted an explicit `--fermi`
-  value.
+  `REFERENCES`, `SUMMARY & FILES`) — `SPIN TEXTURE ANALYSIS` reports
+  per-component mean/min/max, the `|S| <= 1` normalization check
+  (section 1.2), and the single most spin-polarized state found.
+- **`--save-report`**, **`--save-gnuplot`** (writes
+  `spintexture_S{x,y,z}.dat`/`.gplot`) and **`--view`** (matplotlib
+  preview) are all off by default.
+- **`--label` can be combined with `--hsx-file`/`--geometry-file`.**
+- **`--shift fermi/vbm/cbm`'s Fermi-energy source** follows the same
+  priority-ordered hierarchy as `stb-effmass` (`--fermi` > `--bands-file`
+  > `--fermi-file` > an auto-detected `.out` log).
 
-## 4. Known, deliberate limitations (unchanged this session)
+## 4. Known limitations
 
 - Needs `nspin=4` (non-collinear) or `nspin=8` (spin-orbit); a clean
   error for any other `nspin`.

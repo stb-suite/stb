@@ -211,7 +211,7 @@ An **extended-XYZ animation** (`stackingfault_animation.xyz`, one frame
 per analyzed point, `Lattice=`/per-frame `.info` with `label`,
 `shift_x`/`shift_y`, `energy_eV`, `dE_meV_per_A2`) is **always** written,
 unconditionally — viewable directly in VESTA/OVITO/ASE-GUI, or
-interactively in this session via `--view-animation` (ASE's own 3D
+interactively via `--view-animation` (ASE's own 3D
 viewer, needs a display).
 
 ### 3.4 `--apply`

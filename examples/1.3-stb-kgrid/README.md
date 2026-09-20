@@ -75,7 +75,7 @@ stb-suite
 # at the main prompt, type: 1.3
 ```
 
-`1.3` asks for the structure file, then — as of this session — shows the
+`1.3` asks for the structure file, then shows the
 density recommendation guide **before** asking for a density, so the choice
 is informed instead of guessed, then runs the exact same `stb-kgrid`
 command underneath. `example_1.3.sh` proves both paths agree.

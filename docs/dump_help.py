@@ -13,6 +13,11 @@ Run it whenever a command's options or help text change:
     python docs/dump_help.py              # rewrites docs/reference_help.json
     python docs/dump_help.py --check      # only compares; exit 1 if out of date
 
+For an extension package (see docs/stbdocs/catalog.py), point it at that package's
+own `pyproject.toml` and snapshot:
+
+    python docs/dump_help.py --pyproject ../ext/pyproject.toml --out ../ext/docs/reference_help.json
+
 The output is made deterministic (fixed terminal width and hash seed, no colour,
 no warnings), and the banner some ML libraries print to stdout before argparse's
 own "usage:" line is dropped. The text is otherwise exactly what the tool prints:
@@ -62,8 +67,8 @@ def capture(name, target):
     return "\n".join(line.rstrip() for line in lines[start:]).rstrip() + "\n", None
 
 
-def collect():
-    scripts = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["scripts"]
+def collect(pyproject=PYPROJECT):
+    scripts = tomllib.loads(Path(pyproject).read_text(encoding="utf-8"))["project"]["scripts"]
     targets = {name: target for name, target in scripts.items() if name not in SKIP}
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = dict(zip(targets, pool.map(lambda kv: capture(*kv), targets.items())))
@@ -76,25 +81,34 @@ def collect():
     return data, failures
 
 
+def option(name, default):
+    """Value of `--name VALUE` on the command line, or `default`."""
+    args = sys.argv[1:]
+    return Path(args[args.index(name) + 1]) if name in args else default
+
+
 def main():
     check = "--check" in sys.argv[1:]
-    data, failures = collect()
+    pyproject, snapshot = option("--pyproject", PYPROJECT), option("--out", SNAPSHOT)
+    data, failures = collect(pyproject)
     if failures:
         print("Could not capture --help for:\n" + "\n".join(failures), file=sys.stderr)
         return 1
     rendered = json.dumps(data, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
     if check:
-        current = SNAPSHOT.read_text(encoding="utf-8") if SNAPSHOT.is_file() else ""
+        current = snapshot.read_text(encoding="utf-8") if snapshot.is_file() else ""
         if current == rendered:
-            print(f"{SNAPSHOT.name} is up to date ({len(data)} commands)")
+            print(f"{snapshot.name} is up to date ({len(data)} commands)")
             return 0
         old = json.loads(current) if current else {}
         changed = sorted(n for n in set(old) | set(data) if old.get(n) != data.get(n))
-        print(f"{SNAPSHOT.name} is out of date; differing commands: {', '.join(changed)}\n"
-              "Run: python docs/dump_help.py", file=sys.stderr)
+        print(f"{snapshot.name} is out of date; differing commands: {', '.join(changed)}\n"
+              "Run: python docs/dump_help.py" + ("" if snapshot == SNAPSHOT else f" --pyproject {pyproject} --out {snapshot}"),
+              file=sys.stderr)
         return 1
-    SNAPSHOT.write_text(rendered, encoding="utf-8")
-    print(f"Wrote {SNAPSHOT.relative_to(ROOT)}: {len(data)} commands, {len(rendered) // 1024} KiB")
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_text(rendered, encoding="utf-8")
+    print(f"Wrote {snapshot}: {len(data)} commands, {len(rendered) // 1024} KiB")
     return 0
 
 

@@ -62,6 +62,27 @@ edited on a push. The per-tool numbers used before (1.0.0-3.0.0) are retired; th
 that sat next to them are kept in `stb-suite/CHANGELOG.md`. `bash test/version/test.sh`
 checks all of this (needs the package and its `ml` extra).
 
+## Extensions (plugins)
+
+Tools that must not live in this public repository (restricted to a team, for example) ship
+as a separate package that plugs into the menu, with no code copied here. `stb_suite.py`
+calls `_load_plugins()` before it builds `TOOL_CODES`: every module registered under the
+`stb.plugins` entry-point group may define any of `INPUT_TOOLS`, `STRUCTURE_TOOLS`,
+`ANALYSIS_TOOLS`, `WORKFLOW_TOOLS`, `MLSIM_TOOLS`, `UTILITY_TOOLS` (same shape as here);
+its entries are merged in by menu number and the tables are re-sorted, since the menu lists
+in insertion order. A taken number or a plugin that fails to load only warns -- the menu
+never fails because of an extension. An extension's entries run their tools like any other,
+through `run_tool` and the console commands its own package installs; `stb.core.menu`
+(`run_tool`, `prompt_pseudo_source`) is the API it imports.
+
+The documentation tooling reads extension repositories too: `STB_DOCS_EXTRA_ROOTS` (paths
+separated by `os.pathsep`), each with a `docs_plugin.toml` naming its menu module,
+`pyproject.toml`, help snapshot and examples folder (see `docs/stbdocs/catalog.py`);
+`docs/dump_help.py --pyproject ... --out ...` writes such a snapshot. Extension pages get no
+"edit this page" link. The public site is built without the variable, so it never shows them.
+`bash test/menu/test.sh` and `test/docs/test.sh` (with `test/docs/fixture_plugin/`) cover both.
+**Do not name or describe an extension's implementation in this repository.**
+
 ## Architecture
 
 **Each module in `stb-suite/src/stb/` is a thin CLI script** (argparse `main()`,

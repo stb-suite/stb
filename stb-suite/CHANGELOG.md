@@ -46,9 +46,6 @@ written. Anything older is in the git history.
 | `stb-fetch` | 1.14.1 |
 | `stb-gqca` | 1.0.0 |
 | `stb-gqcaAnalysis` | 1.0.0 |
-| `stb-her` | 1.0.0 |
-| `stb-herAnalysis` | 1.0.0 |
-| `stb-herRefs` | 1.0.0 |
 | `stb-hirshfeldAnalysis` | 2.1.0 |
 | `stb-hirshfeldIons` | 2.1.0 |
 | `stb-hirshfeldPrep` | 2.0.0 |
@@ -83,10 +80,6 @@ written. Anything older is in the git history.
 | `stb-neb` | 1.0.0 |
 | `stb-nebAnalysis` | 1.0.0 |
 | `stb-nebCycle` | 1.0.0 |
-| `stb-oer` | 1.0.0 |
-| `stb-oerAnalysis` | 1.0.0 |
-| `stb-oerIntermediates` | 1.0.0 |
-| `stb-oerRefs` | 1.0.0 |
 | `stb-optical` | 1.0.0 |
 | `stb-opticalAnalysis` | 1.0.0 |
 | `stb-passivate` | 2.0.0 |

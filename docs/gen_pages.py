@@ -16,6 +16,10 @@ Reference (`reference/`), one page per console command:
   see `dump_help.py`), its menu code, and a link to its guide.
 - `reference/stb-suite.md` is the map of every menu code.
 
+If STB_DOCS_EXTRA_ROOTS names extension repositories (see stbdocs/catalog.py), their
+menu entries, examples and commands are added to all of the above, and those pages
+have no "edit this page" link (the source is not in this repository).
+
 Sidebars come from generated `SUMMARY.md` files (mkdocs-literate-nav), ordered
 numerically by menu code. What the suite contains -- menu items, which command
 each runs, console commands -- is read from `stb_suite.py` and `pyproject.toml`
@@ -70,9 +74,10 @@ _FOLDER_LINK = re.compile(r"\]\((?:\.\./)?(\d+\.\d+-[^/)#\s]+)/?(#[^)\s]*)?\)")
 class Page:
     """One guide page in the sidebar: a real guide (from an example README) or a stub."""
 
-    def __init__(self, entry, dest, label, text=None, edit_source=None, folder=None):
+    def __init__(self, entry, dest, label, text=None, edit_source=None, folder=None, directory=None):
         self.entry, self.dest, self.label = entry, dest, label
         self.text, self.edit_source, self.folder = text, edit_source, folder
+        self.directory = directory      # the example folder on disk, for a real guide
 
     @property
     def is_stub(self):
@@ -100,27 +105,36 @@ def guide_title(folder, text):
 
 
 def collect_pages(menu):
-    """Every guide page, real or stub, in menu order."""
+    """Every guide page, real or stub, in menu order. Guides come from the
+    examples folder of each source (this repository, then any extension)."""
     entries = {e.code: e for e in menu}
     pages, seen = [], set()
-    for path in sorted(EXAMPLES.iterdir()):
-        m = FOLDER_RE.match(path.name)
-        if not (path.is_dir() and m):
+    for source in catalog.sources():
+        if not source.examples.is_dir():
             continue
-        if not (path / "README.md").is_file():
-            log.warning("examples/%s has no README.md; skipped", path.name)
-            continue
-        code = f"{m.group(1)}.{m.group(2)}"
-        entry = entries.get(code)
-        if entry is None:
-            log.warning("examples/%s: no menu item has code %s (see stb_suite.py)", path.name, code)
-            continue
-        text = (path / "README.md").read_text(encoding="utf-8")
-        slug = catalog.CATEGORIES[entry.cat][0]
-        pages.append(Page(entry, f"guides/{entry.cat}-{slug}/{path.name}.md",
-                          f"{code} {guide_title(path.name, text)}", text,
-                          f"examples/{path.name}/README.md", path.name))
-        seen.add(code)
+        for path in sorted(source.examples.iterdir()):
+            m = FOLDER_RE.match(path.name)
+            if not (path.is_dir() and m):
+                continue
+            if not (path / "README.md").is_file():
+                log.warning("%s: examples/%s has no README.md; skipped", source.name, path.name)
+                continue
+            code = f"{m.group(1)}.{m.group(2)}"
+            entry = entries.get(code)
+            if entry is None:
+                log.warning("%s: examples/%s: no menu item has code %s", source.name, path.name, code)
+                continue
+            if code in seen:
+                log.warning("%s: examples/%s: another example already has code %s; skipped",
+                            source.name, path.name, code)
+                continue
+            text = (path / "README.md").read_text(encoding="utf-8")
+            slug = catalog.CATEGORIES[entry.cat][0]
+            # The edit link points into this repository; a page from an extension has none.
+            edit = f"examples/{path.name}/README.md" if source is catalog.PUBLIC else None
+            pages.append(Page(entry, f"guides/{entry.cat}-{slug}/{path.name}.md",
+                              f"{code} {guide_title(path.name, text)}", text, edit, path.name, path))
+            seen.add(code)
     for entry in menu:
         if entry.code not in seen:
             slug = catalog.CATEGORIES[entry.cat][0]
@@ -151,8 +165,8 @@ def md_escape(text):
 def write_page(dest, content, edit_source):
     with mkdocs_gen_files.open(dest, "w") as f:
         f.write(content)
-    # edit_uri is rooted at docs/, so reach the repo root with "../"
-    mkdocs_gen_files.set_edit_path(dest, f"../{edit_source}")
+    # edit_uri is rooted at docs/, so reach the repo root with "../"; None: no edit link
+    mkdocs_gen_files.set_edit_path(dest, None if edit_source is None else f"../{edit_source}")
 
 
 def write_nav(dest, lines):
@@ -183,11 +197,12 @@ def rewrite_folder_links(text, source_page, dest_by_folder):
 # --- Guides ---------------------------------------------------------------------
 
 def guide_footer(page):
-    tree = f"{REPO_URL}/tree/{BRANCH}/examples/{page.folder}"
+    repo = page.entry.source.repo_url or REPO_URL
+    tree = f"{repo}/tree/{BRANCH}/examples/{page.folder}"
     parts = [f"Example folder (input fixtures and guided script) on GitHub: [`examples/{page.folder}/`]({tree})"]
-    scripts = sorted((EXAMPLES / page.folder).glob("example_*.sh"))
+    scripts = sorted(page.directory.glob("example_*.sh"))
     if scripts:
-        blob = f"{REPO_URL}/blob/{BRANCH}/examples/{page.folder}/{scripts[0].name}"
+        blob = f"{repo}/blob/{BRANCH}/examples/{page.folder}/{scripts[0].name}"
         parts.append(f"guided script [`{scripts[0].name}`]({blob})")
     footer = "\n\n---\n\n*" + " · ".join(parts) + "*\n"
     commands = page.entry.commands
@@ -372,7 +387,8 @@ def main():
 
     for page in pages:
         if page.is_stub:
-            write_page(page.dest, stub_page(page, helps), "docs/gen_pages.py")
+            write_page(page.dest, stub_page(page, helps),
+                       "docs/gen_pages.py" if page.entry.source is catalog.PUBLIC else None)
         else:
             content = github_markdown_to_python_markdown(page.text)
             write_page(page.dest, rewrite_folder_links(content, page.dest, dest_by_folder) + guide_footer(page),
@@ -391,9 +407,12 @@ def main():
     # Reference
     write_page("reference/index.md", reference_index(menu, scripts, helps, in_menu), "docs/gen_pages.py")
     write_page(ref_dest(catalog.INTERACTIVE_MENU), suite_page(menu, guide_dest_by_code), "stb-suite/src/stb/stb_suite.py")
+    command_source = catalog.load_command_sources()
     for command in scripts:
         if command in helps:
-            module_file = "stb-suite/src/" + helps[command]["module"].replace(".", "/") + ".py"
+            module_file = None
+            if command_source[command] is catalog.PUBLIC:
+                module_file = "stb-suite/src/" + helps[command]["module"].replace(".", "/") + ".py"
             write_page(ref_dest(command), reference_page(command, helps, in_menu, guide_dest_by_code), module_file)
     write_nav("reference/SUMMARY.md", reference_nav(menu, scripts, helps, in_menu))
 

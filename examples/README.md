@@ -186,8 +186,6 @@ through.
 | 4.8  | `stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` | [`4.8-adsorption/`](4.8-adsorption/) |
 | 4.9  | `stb-neb` / `stb-nebCycle` / `stb-nebAnalysis` | [`4.9-neb/`](4.9-neb/) |
 | 4.12 | `stb-ir` / `stb-irModes` / `stb-irAnalysis` | [`4.12-ir/`](4.12-ir/) |
-| 4.13 | `stb-her` / `stb-herRefs` / `stb-herAnalysis` | [`4.13-her/`](4.13-her/) |
-| 4.14 | `stb-oer` / `stb-oerIntermediates` / `stb-oerRefs` / `stb-oerAnalysis` | [`4.14-oer/`](4.14-oer/) |
 | 4.15 | `stb-gqca` / `stb-gqcaAnalysis` | [`4.15-gqca/`](4.15-gqca/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
@@ -217,14 +215,7 @@ phonon displacement prep), `stb-irModes` (`4.12.2`, Γ-point mode/symmetry
 analysis plus whichever dipole/Born-charge displacement folder(s) the
 structure's dimensionality needs), and `stb-irAnalysis` (`4.12.3`,
 per-mode intensities, degenerate-group combining, and the spectrum).
-`4.13-her/` covers the 3-stage Hydrogen Evolution Reaction workflow:
-`stb-her` (`4.13.1`, site search), `stb-herRefs` (`4.13.2`, references +
-ZPE prep), and `stb-herAnalysis` (`4.13.3`, the final ΔG_H* result).
-`4.14-oer/` extends the same shape to the 4-stage Oxygen Evolution
-Reaction workflow: `stb-oer` (`4.14.1`, site search), `stb-oerIntermediates`
-(`4.14.2`, O*/OOH* derived from that same site), `stb-oerRefs` (`4.14.3`,
-references/BSSE/ZPE prep), and `stb-oerAnalysis` (`4.14.4`, η and the
-potential-determining step). `4.15-gqca/` covers the 2-stage Generalized
+`4.15-gqca/` covers the 2-stage Generalized
 Quasi-Chemical Approximation alloy-thermodynamics workflow: `stb-gqca`
 (`4.15.1`, the 3 pair-cluster structures) and `stb-gqcaAnalysis`
 (`4.15.2`, the mass-action solve over composition/temperature).

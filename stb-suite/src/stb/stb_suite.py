@@ -25,36 +25,10 @@ except ImportError:
 
 from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
 from stb.core.pseudopotentials import BANKS
+from stb.core.menu import run_tool, prompt_pseudo_source
 from stb.core import structure_io, kspace, symmetry
 from stb import strain
 
-def prompt_pseudo_source(optional: bool = True) -> str:
-    """Shared pseudopotential-source prompt for every wrapper below that
-    needs one (phonons, cohesive energy, input file, Hubbard U prep):
-    a bundled bank (see core/pseudopotentials.py) or a custom path. Returns
-    the raw string to pass straight through as the tool's -p/--pp-path/
-    --pseudo-dir value (each tool resolves it itself); empty string only if
-    `optional` and the user skips."""
-    bank_list = list(BANKS.items())
-    print(f"\n{color_text('Pseudopotential source:', 'yellow')}")
-    for i, (name, info) in enumerate(bank_list, 1):
-        print(f"  {color_text(str(i), 'cyan')} = Bundled: {info['description']} ({name})")
-    print(f"  {color_text(str(len(bank_list) + 1), 'cyan')} = Custom path")
-    prompt = f"Select option (1-{len(bank_list) + 1}"
-    prompt += ", or Enter to skip): " if optional else "): "
-    while True:
-        choice = get_input(prompt).strip()
-        if not choice and optional:
-            return ""
-        if choice.isdigit() and 1 <= int(choice) <= len(bank_list):
-            return bank_list[int(choice) - 1][0]
-        if choice == str(len(bank_list) + 1):
-            path = os.path.expanduser(get_input("Custom pseudopotentials folder path: ").strip())
-            if os.path.isdir(path):
-                return path
-            print(color_text(f"Path not found: '{path}'", 'red'))
-            continue
-        print(color_text("Invalid choice.", 'red'))
 
 
 def show_main_menu() -> None:
@@ -85,25 +59,6 @@ def show_sub_menu(title: str, tools_dict: Dict) -> None:
     print(f"{color_text('0.', 'yellow')} {color_text('Back to Main Menu', 'red')}")
     print("-"*60)
 
-def run_tool(tool_name: str, args: List[str], pause: bool = True) -> None:
-    """Executes a suite tool as a subprocess.
-
-    `pause=False` skips the "Press Enter to continue..." block -- for callers
-    that invoke run_tool() several times in a row (e.g. run_strain_generator
-    looping over multiple symmetry-equivalent directions in one go), so the
-    user isn't interrupted after every individual subprocess call, only once
-    at the very end.
-    """
-    try:
-        cmd = [f"{tool_name}"] + args
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(color_text(f"\nError running {tool_name}: {e}", 'red'))
-    except FileNotFoundError:
-        print(color_text(f"\nTool {tool_name} not found!", 'red'))
-        print(color_text(f"Make sure {tool_name} is in your system's PATH.", 'yellow'))
-    if pause:
-        input("\nPress Enter to continue...")
 
 # ==========================================================
 # TOOL FUNCTIONS
@@ -5581,423 +5536,6 @@ def run_ir_analysis() -> None:
     run_tool("stb-irAnalysis", args)
 
 
-def run_her_prep() -> None:
-    """Interface for the HER Stage 1 (stb-her)"""
-    print("\n" + "="*60)
-    print(color_text("HER WORKFLOW - STAGE 1: ADSORPTION SITES", 'bold').center(60))
-    print("="*60 + "\n")
-
-    structure_file = get_input("Relaxed slab/2D structure file [default: structure.fdf]: ").strip()
-    if not structure_file:
-        structure_file = "structure.fdf"
-
-    calc_file = get_input("Calc.fdf template for the site relaxations: ")
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template for the site relaxations: ")
-
-    pseudo_dir = prompt_pseudo_source(optional=True)
-
-    site_type = get_input(
-        "\nSite type to search: ontop/bridge/hollow/all [default: all]: ").strip().lower()
-    if site_type not in ("ontop", "bridge", "hollow", "all"):
-        site_type = "all"
-
-    height = get_float_input("\nH adsorption height in Ang [default: 1.5]: ", 1.5)
-
-    both_sides_choice = get_input(
-        "\nAdsorb on both faces (free-standing 2D material with vacuum on both sides) "
-        "(y/N): ").strip().lower()
-
-    output_dir = get_input("\nOutput root directory [default: her_study]: ").strip()
-    if not output_dir:
-        output_dir = "her_study"
-
-    args = [
-        "-s", structure_file, "-c", calc_file,
-        "--site-type", site_type, "--height", str(height),
-        "-O", output_dir, "--no-intro"
-    ]
-    if pseudo_dir:
-        args.extend(["-p", pseudo_dir])
-    if both_sides_choice in ('y', 'yes'):
-        args.append("--both-sides")
-
-    show_advanced = get_input(
-        "\nConfigure advanced settings (symprec/vacuum-gap)? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        symprec = get_float_input(
-            "Symmetry-reduction tolerance for site-finding [default: 0.01]: ", 0.01)
-        args.extend(["--symprec", str(symprec)])
-        vacuum_gap = get_float_input(
-            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
-        args.extend(["--vacuum-gap", str(vacuum_gap)])
-
-    print(color_text("\nSearching H-adsorption sites...", 'green'))
-    run_tool("stb-her", args)
-
-
-def run_her_refs() -> None:
-    """Interface for the HER Stage 2 (stb-herRefs)"""
-    print("\n" + "="*60)
-    print(color_text("HER WORKFLOW - STAGE 2: REFERENCES & ZPE PREP", 'bold').center(60))
-    print("="*60 + "\n")
-
-    run_dir = get_input("Directory written by Stage 1 [default: her_study]: ").strip()
-    if not run_dir:
-        run_dir = "her_study"
-
-    output_filename = get_input("SIESTA output filename inside each site folder "
-                                 "[default: calc.out]: ").strip()
-    if not output_filename:
-        output_filename = "calc.out"
-
-    pseudo_dir = prompt_pseudo_source(optional=True)
-
-    zpe_mode = get_input(
-        "\nZPE/entropy mode: standard/local/full [default: local]: ").strip().lower()
-    if zpe_mode not in ("standard", "local", "full"):
-        zpe_mode = "local"
-
-    args = ["--directory", run_dir, "--file", output_filename, "--zpe-mode", zpe_mode, "--no-intro"]
-    if pseudo_dir:
-        args.extend(["-p", pseudo_dir])
-
-    show_advanced = get_input(
-        "\nConfigure advanced settings (displacement/supercell/vacuum-box)? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        displacement = get_float_input("Finite-difference displacement in Ang [default: 0.015]: ", 0.015)
-        args.extend(["--displacement", str(displacement)])
-        vacuum_box = get_float_input("H2 reference vacuum box side in Ang [default: 15.0]: ", 15.0)
-        args.extend(["--vacuum-box", str(vacuum_box)])
-        if zpe_mode == "full":
-            supercell_input = get_input(
-                "Supercell dimensions for the full phonon calc (e.g. '1 1 1') "
-                "[default: 1 1 1]: ").strip()
-            if supercell_input:
-                try:
-                    dims = [int(x) for x in supercell_input.split()]
-                    if len(dims) == 3:
-                        args.extend(["--supercell", str(dims[0]), str(dims[1]), str(dims[2])])
-                except ValueError:
-                    pass
-
-    print(color_text("\nBuilding winning-site references and ZPE folders...", 'green'))
-    run_tool("stb-herRefs", args)
-
-
-def run_her_analysis() -> None:
-    """Interface for the HER Stage 3 (stb-herAnalysis)"""
-    print("\n" + "="*60)
-    print(color_text("HER WORKFLOW - STAGE 3: ANALYSIS", 'bold').center(60))
-    print("="*60 + "\n")
-
-    run_dir = get_input("Directory with the stb-her/stb-herRefs run [default: her_study]: ").strip()
-    if not run_dir:
-        run_dir = "her_study"
-
-    output_filename = get_input("SIESTA output filename inside each folder "
-                                 "[default: calc.out]: ").strip()
-    if not output_filename:
-        output_filename = "calc.out"
-
-    temperature = get_float_input("\nTemperature in K [default: 298.15]: ", 298.15)
-
-    force_tolerance = get_float_input(
-        "Force tolerance for the 'is this folder relaxed/converged' check, in eV/Ang "
-        "(default: 0.05): ", 0.05)
-
-    args = ["--directory", run_dir, "--file", output_filename, "--temp", str(temperature),
-            "--force-tolerance", str(force_tolerance), "--no-intro"]
-
-    run_tool("stb-herAnalysis", args)
-
-
-def run_oer_prep() -> None:
-    """Interface for the OER Stage 1 (stb-oer)"""
-    print("\n" + "="*60)
-    print(color_text("OER WORKFLOW - STAGE 1: ADSORPTION SITES (OH*)", 'bold').center(60))
-    print("="*60 + "\n")
-
-    structure_file = get_input("Relaxed slab/2D structure file [default: structure.fdf]: ").strip()
-    if not structure_file:
-        structure_file = "structure.fdf"
-
-    calc_file = get_input("Calc.fdf template for the site relaxations: ")
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template for the site relaxations: ")
-
-    pseudo_dir = prompt_pseudo_source(optional=True)
-
-    site_type = get_input(
-        "\nSite type to search: ontop/bridge/hollow/all [default: all]: ").strip().lower()
-    if site_type not in ("ontop", "bridge", "hollow", "all"):
-        site_type = "all"
-
-    height = get_float_input("\nOH adsorption height in Ang [default: 1.8]: ", 1.8)
-
-    both_sides_choice = get_input(
-        "\nAdsorb on both faces (free-standing 2D material with vacuum on both sides) "
-        "(y/N): ").strip().lower()
-    both_sides = both_sides_choice in ('y', 'yes')
-
-    n_orient_polar, n_orient_azimuthal, ml_rank, orient_top_k = 1, 1, False, None
-    if not both_sides:
-        orient_grid = get_input(
-            "\nSample multiple OH orientations per site, polar x azimuthal grid (e.g. 4x2), "
-            "blank to skip: ").strip()
-        if orient_grid:
-            try:
-                p_str, a_str = orient_grid.lower().split('x')
-                n_orient_polar, n_orient_azimuthal = int(p_str), int(a_str)
-            except ValueError:
-                print(color_text(
-                    "Invalid grid (expected e.g. '4x2') -- orientation sampling skipped.", 'red'))
-                n_orient_polar, n_orient_azimuthal = 1, 1
-            else:
-                ml_rank = get_input(
-                    "  Pre-screen each orientation with MACE-MP-0 before writing SIESTA folders? "
-                    "Without this, EVERY sampled orientation is written directly, unscreened "
-                    "(y/N): ").strip().lower() in ('y', 'yes')
-                if ml_rank:
-                    top_k_str = get_input(
-                        "  Keep only the N best unique orientations per site (blank = keep "
-                        "all): ").strip()
-                    orient_top_k = int(top_k_str) if top_k_str.isdigit() else None
-
-    output_dir = get_input("\nOutput root directory [default: oer_study]: ").strip()
-    if not output_dir:
-        output_dir = "oer_study"
-
-    args = [
-        "-s", structure_file, "-c", calc_file,
-        "--site-type", site_type, "--height", str(height),
-        "-O", output_dir, "--no-intro"
-    ]
-    if pseudo_dir:
-        args.extend(["-p", pseudo_dir])
-    if both_sides:
-        args.append("--both-sides")
-    if n_orient_polar > 1 or n_orient_azimuthal > 1:
-        args.extend(["--n-orientations-polar", str(n_orient_polar),
-                      "--n-orientations-azimuthal", str(n_orient_azimuthal)])
-        if ml_rank:
-            args.append("--ml-rank")
-            if orient_top_k is not None:
-                args.extend(["--orientation-top-k", str(orient_top_k)])
-
-    advanced_items = "O-H bond length/symprec/vacuum-gap"
-    if ml_rank:
-        advanced_items += ", ML model/device, orientation RMSD tolerance"
-    show_advanced = get_input(
-        f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        oh_bond_length = get_float_input(
-            "O-H bond length of the adsorbing OH group, in Ang [default: 0.970]: ", 0.970)
-        args.extend(["--oh-bond-length", str(oh_bond_length)])
-        symprec = get_float_input(
-            "Symmetry-reduction tolerance for site-finding [default: 0.01]: ", 0.01)
-        args.extend(["--symprec", str(symprec)])
-        vacuum_gap = get_float_input(
-            "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
-        args.extend(["--vacuum-gap", str(vacuum_gap)])
-        if ml_rank:
-            model_choice = get_input("ML model size [small/medium/large, default: medium]: ").strip().lower()
-            if model_choice in ("small", "medium", "large"):
-                args.extend(["--ml-model", model_choice])
-            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
-            if device_choice == "cuda":
-                from stb.core.mace_relax import gpu_available
-                available, detail = gpu_available()
-                if available:
-                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
-                else:
-                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
-                                      "the tool will report a clear error when it runs unless you "
-                                      "switch back to cpu.", 'yellow'))
-                args.extend(["--ml-device", "cuda"])
-            orient_rmsd_tol = get_float_input(
-                "Orientation RMSD duplicate tolerance in Ang [default: 0.3]: ", 0.3)
-            args.extend(["--orientation-rmsd-tol", str(orient_rmsd_tol)])
-
-    print(color_text("\nSearching OH-adsorption sites...", 'green'))
-    run_tool("stb-oer", args)
-
-
-def run_oer_intermediates() -> None:
-    """Interface for the OER Stage 2 (stb-oerIntermediates)"""
-    print("\n" + "="*60)
-    print(color_text("OER WORKFLOW - STAGE 2: O*/OOH* INTERMEDIATES", 'bold').center(60))
-    print("="*60 + "\n")
-
-    run_dir = get_input("Directory written by Stage 1 [default: oer_study]: ").strip()
-    if not run_dir:
-        run_dir = "oer_study"
-
-    output_filename = get_input("SIESTA output filename inside each site folder "
-                                 "[default: calc.out]: ").strip()
-    if not output_filename:
-        output_filename = "calc.out"
-
-    pseudo_dir = prompt_pseudo_source(optional=True)
-
-    print(color_text(
-        "\nO* and OOH* are always derived from the same winning OH* site (the physically "
-        "consistent single-active-site pathway the CHE overpotential descriptor assumes).",
-        'cyan'))
-
-    ml_prerelax_choice = get_input(
-        "\nPre-relax O*/OOH*'s adsorbate atoms with MACE-MP-0 before writing the CG-relaxation "
-        "folder(s) (substrate fixed)? Needs the optional 'ml' extra (y/N): ").strip().lower()
-    ml_prerelax = ml_prerelax_choice in ('y', 'yes')
-
-    args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
-    if pseudo_dir:
-        args.extend(["-p", pseudo_dir])
-    if ml_prerelax:
-        args.append("--ml-prerelax")
-
-    ooh_orient_grid = get_input(
-        "\nSample multiple OOH* orientations AT THE WINNING OH* SITE (O1 never moves), polar x "
-        "azimuthal grid (e.g. 4x4), blank to skip -- no equivalent exists for O* (a bare atom has "
-        "no orientation to sample): ").strip()
-    ooh_orient_top_k = None
-    if ooh_orient_grid:
-        try:
-            p_str, a_str = ooh_orient_grid.lower().split('x')
-            n_p, n_a = int(p_str), int(a_str)
-        except ValueError:
-            print(color_text("Invalid grid (expected e.g. '4x4') -- orientation sampling skipped.", 'red'))
-        else:
-            args.extend(["--ooh-n-orientations-polar", str(n_p),
-                          "--ooh-n-orientations-azimuthal", str(n_a)])
-            if not ml_prerelax:
-                print(color_text("  [NOTE] Without --ml-prerelax, all sampled orientations are "
-                                  "written unscreened as separate folders.", 'yellow'))
-            else:
-                top_k_str = get_input(
-                    "  Keep only the N best unique orientations (blank = keep all): ").strip()
-                if top_k_str.isdigit():
-                    ooh_orient_top_k = int(top_k_str)
-                    args.extend(["--orientation-top-k", str(ooh_orient_top_k)])
-
-    advanced_items = "OOH* starting bond lengths/bend angle"
-    if ml_prerelax:
-        advanced_items += ", ML device"
-    if ooh_orient_top_k is not None:
-        advanced_items += ", orientation RMSD tolerance"
-    show_advanced = get_input(f"\nConfigure advanced settings ({advanced_items})? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        oo_bond_length = get_float_input(
-            "Illustrative starting O-O bond length for OOH*, in Ang [default: 1.45]: ", 1.45)
-        args.extend(["--oo-bond-length", str(oo_bond_length)])
-        ooh_oh_bond_length = get_float_input(
-            "Illustrative starting O-H bond length for OOH*'s new H, in Ang [default: 0.970]: ", 0.970)
-        args.extend(["--ooh-oh-bond-length", str(ooh_oh_bond_length)])
-        ooh_bend_deg = get_float_input(
-            "Illustrative starting O-O-H bend angle for OOH*, in degrees [default: 100.0]: ", 100.0)
-        args.extend(["--ooh-bend-deg", str(ooh_bend_deg)])
-        if ml_prerelax:
-            device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
-            ml_device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
-            if ml_device == "cuda":
-                from stb.core.mace_relax import gpu_available
-                available, detail = gpu_available()
-                if available:
-                    print(color_text(f"  [OK] GPU detected: {detail}", 'green'))
-                else:
-                    print(color_text(f"  [WARNING] cuda requested but not available ({detail}) -- "
-                                      "the tool will report a clear error when it runs unless you "
-                                      "switch back to cpu.", 'yellow'))
-            args.extend(["--ml-device", ml_device])
-        if ooh_orient_top_k is not None:
-            rmsd_tol = get_float_input(
-                "Orientation RMSD duplicate tolerance, in Ang [default: 0.3]: ", 0.3)
-            args.extend(["--orientation-rmsd-tol", str(rmsd_tol)])
-
-    print(color_text("\nBuilding O*/OOH* intermediate geometries...", 'green'))
-    run_tool("stb-oerIntermediates", args)
-
-
-def run_oer_refs() -> None:
-    """Interface for the OER Stage 3 (stb-oerRefs)"""
-    print("\n" + "="*60)
-    print(color_text("OER WORKFLOW - STAGE 3: REFERENCES, BSSE & ZPE PREP", 'bold').center(60))
-    print("="*60 + "\n")
-
-    run_dir = get_input("Directory written by Stage 1/2 [default: oer_study]: ").strip()
-    if not run_dir:
-        run_dir = "oer_study"
-
-    output_filename = get_input("SIESTA output filename inside each folder "
-                                 "[default: calc.out]: ").strip()
-    if not output_filename:
-        output_filename = "calc.out"
-
-    pseudo_dir = prompt_pseudo_source(optional=True)
-
-    zpe_mode = get_input(
-        "\nZPE/entropy mode: local/full [default: local]: ").strip().lower()
-    if zpe_mode not in ("local", "full"):
-        zpe_mode = "local"
-
-    args = ["--directory", run_dir, "--file", output_filename,
-            "--zpe-mode", zpe_mode, "--no-intro"]
-    if pseudo_dir:
-        args.extend(["-p", pseudo_dir])
-
-    show_advanced = get_input(
-        "\nConfigure advanced settings (displacement/supercell/vacuum-box)? [y/N]: ").strip().lower()
-    if show_advanced == 'y':
-        displacement = get_float_input("Finite-difference displacement in Ang [default: 0.015]: ", 0.015)
-        args.extend(["--displacement", str(displacement)])
-        vacuum_box = get_float_input("H2/H2O reference vacuum box side in Ang [default: 15.0]: ", 15.0)
-        args.extend(["--vacuum-box", str(vacuum_box)])
-        if zpe_mode == "full":
-            supercell_input = get_input(
-                "Supercell dimensions for the full phonon calc (e.g. '1 1 1') "
-                "[default: 1 1 1]: ").strip()
-            if supercell_input:
-                try:
-                    dims = [int(x) for x in supercell_input.split()]
-                    if len(dims) == 3:
-                        args.extend(["--supercell", str(dims[0]), str(dims[1]), str(dims[2])])
-                except ValueError:
-                    pass
-
-    print(color_text("\nBuilding references, BSSE and ZPE folders...", 'green'))
-    run_tool("stb-oerRefs", args)
-
-
-def run_oer_analysis() -> None:
-    """Interface for the OER Stage 4 (stb-oerAnalysis)"""
-    print("\n" + "="*60)
-    print(color_text("OER WORKFLOW - STAGE 4: ANALYSIS", 'bold').center(60))
-    print("="*60 + "\n")
-
-    run_dir = get_input("Directory with the stb-oer/stb-oerIntermediates/stb-oerRefs run "
-                         "[default: oer_study]: ").strip()
-    if not run_dir:
-        run_dir = "oer_study"
-
-    output_filename = get_input("SIESTA output filename inside each folder "
-                                 "[default: calc.out]: ").strip()
-    if not output_filename:
-        output_filename = "calc.out"
-
-    temperature = get_float_input("\nTemperature in K [default: 298.15]: ", 298.15)
-
-    force_tolerance = get_float_input(
-        "Force tolerance for the 'is this folder relaxed/converged' check, in eV/Ang "
-        "(default: 0.05): ", 0.05)
-
-    args = ["--directory", run_dir, "--file", output_filename, "--temp", str(temperature),
-            "--force-tolerance", str(force_tolerance), "--no-intro"]
-
-    run_tool("stb-oerAnalysis", args)
-
-
 def run_gqca_prep() -> None:
     """Interface for the GQCA Stage 1 (stb-gqca)"""
     print("\n" + "="*60)
@@ -9204,46 +8742,6 @@ WORKFLOW_TOOLS = {
                                 "spectrum.",
                 'func': run_ir_analysis},
         }},
-    13: {'title': "Hydrogen Evolution Reaction (HER)",
-        'description': "Self-contained: finds the most stable H-adsorption site on a slab, "
-                        "then the H2/BSSE/ZPE references needed for the computational hydrogen "
-                        "electrode descriptor Delta-G_H* (Norskov et al.).",
-        'stages': {
-            1: {'title': "Stage 1 - Adsorption Sites (stb-her)",
-                'description': "Find every symmetrically distinct H-adsorption site and write "
-                                "one relaxation folder per site.",
-                'func': run_her_prep},
-            2: {'title': "Stage 2 - References & ZPE Prep (stb-herRefs)",
-                'description': "Pick the winning site, build the H2/deformed-slab/BSSE-ghost "
-                                "references, and the ZPE calculation folder(s).",
-                'func': run_her_refs},
-            3: {'title': "Stage 3 - Analysis (stb-herAnalysis)",
-                'description': "Combine every reference energy into the final Delta-G_H*.",
-                'func': run_her_analysis},
-        }},
-    14: {'title': "Oxygen Evolution Reaction (OER)",
-        'description': "Self-contained: finds the most stable OH-adsorption site on a slab, derives "
-                        "the O*/OOH* intermediates from that SAME site, then the H2/H2O/BSSE/ZPE "
-                        "references needed for the 4-electron CHE descriptor (Delta-G1..4, "
-                        "overpotential eta, potential-determining step; Rossmeisl et al. 2007, "
-                        "Man et al. 2011).",
-        'stages': {
-            1: {'title': "Stage 1 - Adsorption Sites (stb-oer)",
-                'description': "Find every symmetrically distinct OH-adsorption site and write "
-                                "one relaxation folder per site.",
-                'func': run_oer_prep},
-            2: {'title': "Stage 2 - O*/OOH* Intermediates (stb-oerIntermediates)",
-                'description': "Derive O*/OOH* from the winning OH* site and write their own "
-                                "CG-relaxation folder(s).",
-                'func': run_oer_intermediates},
-            3: {'title': "Stage 3 - References, BSSE & ZPE Prep (stb-oerRefs)",
-                'description': "Build the H2/H2O/BSSE/ZPE reference folders from the final relaxed "
-                                "OH*/O*/OOH* geometries.",
-                'func': run_oer_refs},
-            4: {'title': "Stage 4 - Analysis (stb-oerAnalysis)",
-                'description': "Combine every reference energy into Delta-G1..4, eta, and the PDS.",
-                'func': run_oer_analysis},
-        }},
     15: {'title': "Generalized Quasi-Chemical Approximation (GQCA)",
         'description': "Self-contained: builds the 3 ordered pair-cluster-representative "
                         "structures (AA/AB/BB) for a substitutional alloy A(1-x)Bx, then solves "
@@ -9436,6 +8934,51 @@ UTILITY_TOOLS = {
                         "formats what SIESTA already wrote.",
         'func': run_native_charges_checker},
 }
+
+
+def _load_plugins() -> None:
+    """Merges into the menu the entries of every installed extension package.
+
+    An extension (for example a private package that ships extra workflows)
+    registers a module under the "stb.plugins" entry-point group. That module
+    defines any of INPUT_TOOLS, STRUCTURE_TOOLS, ANALYSIS_TOOLS, WORKFLOW_TOOLS,
+    MLSIM_TOOLS and UTILITY_TOOLS, in the same shape as the dictionaries above;
+    its entries are added to them, keyed by menu number. Its tools are run like
+    any other, through `run_tool` and the console commands its package installs
+    (`stb.core.menu` has the helpers it can import). A plugin that fails to load,
+    or whose number is already taken, is skipped with a warning: the menu itself
+    never fails because of an extension.
+    """
+    from importlib.metadata import entry_points
+
+    tables = {"INPUT_TOOLS": INPUT_TOOLS, "STRUCTURE_TOOLS": STRUCTURE_TOOLS,
+              "ANALYSIS_TOOLS": ANALYSIS_TOOLS, "WORKFLOW_TOOLS": WORKFLOW_TOOLS,
+              "MLSIM_TOOLS": MLSIM_TOOLS, "UTILITY_TOOLS": UTILITY_TOOLS}
+    try:
+        found = entry_points()
+        plugins = found.select(group="stb.plugins") if hasattr(found, "select") else found.get("stb.plugins", [])
+    except Exception:
+        return
+    for plugin in plugins:
+        try:
+            module = plugin.load()
+        except Exception as error:
+            print(color_text(f"[WARNING] stb-suite plugin '{plugin.name}' could not be loaded: {error}", 'yellow'))
+            continue
+        for name, table in tables.items():
+            for key, entry in getattr(module, name, {}).items():
+                if key in table:
+                    print(color_text(f"[WARNING] stb-suite plugin '{plugin.name}': {name} number {key} is "
+                                     "already taken; its entry was skipped.", 'yellow'))
+                else:
+                    table[key] = entry
+    for table in tables.values():           # menus list entries in insertion order: keep them numeric
+        ordered = sorted(table.items())
+        table.clear()
+        table.update(ordered)
+
+
+_load_plugins()
 
 
 def _flatten_tool_codes() -> Dict[str, Callable]:

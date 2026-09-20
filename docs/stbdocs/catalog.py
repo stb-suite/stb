@@ -10,10 +10,17 @@ refuse to import without PyTorch/MACE):
 - the console commands (`[project.scripts]` in `pyproject.toml`);
 - every command's `--help` text, from the snapshot `docs/reference_help.json`
   that `docs/dump_help.py` writes (that one does need the package installed).
+
+These come from this repository and, optionally, from extension repositories
+(plugins for the menu, see `stb_suite._load_plugins`) named in `STB_DOCS_EXTRA_ROOTS`
+(paths separated by `os.pathsep`). Each has a `docs_plugin.toml` saying where its
+menu module, `pyproject.toml`, help snapshot and examples are; the site then covers
+the extension's tools too, as if they were part of this repository.
 """
 
 import ast
 import json
+import os
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -23,6 +30,47 @@ ROOT = Path(__file__).resolve().parents[2]
 MENU_SOURCE = ROOT / "stb-suite" / "src" / "stb" / "stb_suite.py"
 PYPROJECT = ROOT / "stb-suite" / "pyproject.toml"
 HELP_SNAPSHOT = ROOT / "docs" / "reference_help.json"
+
+EXTRA_ROOTS_ENV = "STB_DOCS_EXTRA_ROOTS"
+
+
+@dataclass(frozen=True)
+class Source:
+    """Where a set of menu entries, commands, `--help` texts and guides comes
+    from: this repository, or an extension repository."""
+    name: str
+    menu: Path
+    pyproject: Path
+    help_snapshot: Path
+    examples: Path
+    repo_url: str = ""          # "" = this repository (gen_pages.REPO_URL)
+
+
+PUBLIC = Source("stb", MENU_SOURCE, PYPROJECT, HELP_SNAPSHOT, ROOT / "examples")
+
+
+def extra_sources():
+    """The extension repositories named in STB_DOCS_EXTRA_ROOTS, if any."""
+    found = []
+    for entry in os.environ.get(EXTRA_ROOTS_ENV, "").split(os.pathsep):
+        if not entry.strip():
+            continue
+        root = Path(entry).expanduser().resolve()
+        manifest = root / "docs_plugin.toml"
+        if not manifest.is_file():
+            raise ValueError(f"{EXTRA_ROOTS_ENV}: {root} has no docs_plugin.toml")
+        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        found.append(Source(name=data.get("name", root.name), menu=root / data["menu"],
+                            pyproject=root / data["pyproject"],
+                            help_snapshot=root / data["help_snapshot"],
+                            examples=root / data.get("examples", "examples"),
+                            repo_url=data.get("repo_url", "").rstrip("/")))
+    return found
+
+
+def sources():
+    return [PUBLIC] + extra_sources()
+
 
 # The six menu categories, in menu order: number -> (url slug, display name).
 CATEGORIES = {
@@ -62,6 +110,7 @@ class Entry:
     title: str
     description: str
     leaves: list = field(default_factory=list)
+    source: Source = PUBLIC
 
     @property
     def commands(self):
@@ -89,8 +138,23 @@ def slugify(text):
 # --- The interactive menu ------------------------------------------------------
 
 def load_menu():
-    """The menu as a list of `Entry`, in menu order."""
-    tree = ast.parse(MENU_SOURCE.read_text(encoding="utf-8"))
+    """The menu as a list of `Entry`, in menu order: this repository's plus
+    every extension's (a menu number used twice is an error)."""
+    menu = []
+    for source in sources():
+        menu += _read_menu(source)
+    seen = {}
+    for entry in menu:
+        if entry.code in seen:
+            raise ValueError(f"menu code {entry.code} is defined by both '{seen[entry.code].source.name}' "
+                             f"and '{entry.source.name}'")
+        seen[entry.code] = entry
+    return sorted(menu, key=lambda e: (e.cat, e.item))
+
+
+def _read_menu(source):
+    """The `Entry` list defined by one source's menu module."""
+    tree = ast.parse(source.menu.read_text(encoding="utf-8"))
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
 
     def commands_of(name, seen=()):
@@ -135,7 +199,7 @@ def load_menu():
         for key, value in zip(node.value.keys, node.value.values):
             item, raw = literal(key), read_entry(value)
             entry = Entry(code=f"{cat}.{item}", cat=cat, item=item,
-                          title=raw["title"], description=raw.get("description", ""))
+                          title=raw["title"], description=raw.get("description", ""), source=source)
             if "stages" in raw:
                 for stage, stage_raw in raw["stages"].items():
                     entry.leaves.append(Leaf(f"{entry.code}.{stage}", stage_raw["title"],
@@ -143,22 +207,41 @@ def load_menu():
             else:
                 entry.leaves.append(Leaf(entry.code, raw["title"], commands_of(raw.get("func"))))
             menu.append(entry)
-    return sorted(menu, key=lambda e: (e.cat, e.item))
+    return menu
 
 
 # --- Commands and their --help --------------------------------------------------
 
+def load_command_sources():
+    """Console commands with the source that defines each: name -> Source, in
+    pyproject order, this repository first (a command defined twice is an error)."""
+    owners = {}
+    for source in sources():
+        data = tomllib.loads(source.pyproject.read_text(encoding="utf-8"))
+        for name in data["project"]["scripts"]:
+            if name in owners:
+                raise ValueError(f"command {name} is defined by both '{owners[name].name}' and '{source.name}'")
+            owners[name] = source
+    return owners
+
+
 def load_scripts():
-    """Console commands: name -> "module:function", in pyproject order."""
-    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    return dict(data["project"]["scripts"])
+    """Console commands: name -> "module:function", in pyproject order (this
+    repository's first, then each extension's)."""
+    scripts = {}
+    for source in sources():
+        data = tomllib.loads(source.pyproject.read_text(encoding="utf-8"))
+        scripts.update(data["project"]["scripts"])
+    return scripts
 
 
 def load_help():
-    """The `--help` snapshot: command -> {"module": ..., "help": ...}."""
-    if not HELP_SNAPSHOT.is_file():
-        return {}
-    return json.loads(HELP_SNAPSHOT.read_text(encoding="utf-8"))
+    """The `--help` snapshots: command -> {"module": ..., "help": ...}."""
+    helps = {}
+    for source in sources():
+        if source.help_snapshot.is_file():
+            helps.update(json.loads(source.help_snapshot.read_text(encoding="utf-8")))
+    return helps
 
 
 _SECTION_HEADER = re.compile(r"^[A-Za-z][^:]*:$")

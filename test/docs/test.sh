@@ -218,6 +218,36 @@ else
 fi
 
 
+# --- 5b. Extension repositories as extra documentation sources (STB_DOCS_EXTRA_ROOTS) ---
+# fixture_plugin/ is a fictional extension (workflow 4.99, command stb-demoext): it proves that
+# guides, menu entries and command references from another repository join the site, without
+# the site tooling knowing anything about what that repository contains.
+echo -e "\n--- Testing extra documentation sources (STB_DOCS_EXTRA_ROOTS) ---"
+EXT_SITE="$TEST_DIR/site_ext"
+(cd "$REPO_DIR" && STB_DOCS_EXTRA_ROOTS="$FIXTURE_DIR/fixture_plugin" python3 -m mkdocs build --strict -f mkdocs.yml -d "$EXT_SITE") > "$TEST_DIR/log_build_ext.txt" 2>&1
+check_exit_code $? 0
+demo="$EXT_SITE/guides/4-workflows/4.99-demo/index.html"
+check_success "$demo"
+check_contains "Demo Extension" "$demo"
+check_contains "4.99 Demo Extension" "$demo"
+check_contains 'href="../../../reference/stb-demoext/"' "$demo"
+check_contains "example.invalid/demo-extension/tree/main/examples/4.99-demo" "$demo"
+check_contains "example.invalid/demo-extension/blob/main/examples/4.99-demo/example_4.99.sh" "$demo"
+echo "Testing: an extension page has no 'edit this page' link (its source is not in this repository)"
+check_not_contains "/edit/main/" "$demo"
+check_contains "usage: stb-demoext" "$EXT_SITE/reference/stb-demoext/index.html"
+check_contains 'href="../../guides/4-workflows/4.99-demo/"' "$EXT_SITE/reference/stb-demoext/index.html"
+check_contains "4.99.1" "$EXT_SITE/reference/stb-suite/index.html"
+echo "Testing: the regular pages are still there, and the main site (built without the variable) has none of the extension's"
+check_success "$EXT_SITE/guides/1-inputs/1.3-stb-kgrid/index.html"
+check_absent "$SITE_DIR/guides/4-workflows/4.99-demo"
+check_absent "$SITE_DIR/reference/stb-demoext"
+echo "Testing: a root without docs_plugin.toml is rejected with a clear message"
+(cd "$REPO_DIR" && STB_DOCS_EXTRA_ROOTS="$FIXTURE_DIR" python3 -m mkdocs build --strict -f mkdocs.yml -d "$TEST_DIR/site_bad") > "$TEST_DIR/log_build_bad.txt" 2>&1
+check_exit_code $? 1
+check_contains "docs_plugin.toml" "$TEST_DIR/log_build_bad.txt"
+
+
 # --- 6. GitHub-flavoured Markdown survives Python-Markdown ---
 echo -e "\n--- Testing list/table/code structure against GitHub's (CommonMark) rendering ---"
 python3 "$FIXTURE_DIR/check_markdown_structure.py" > "$TEST_DIR/log_structure.txt" 2>&1

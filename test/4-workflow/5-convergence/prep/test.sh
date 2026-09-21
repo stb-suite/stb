@@ -76,13 +76,11 @@ check_contains "Mesh.CutOff           250.0000  Ry" convergence_runs/meshcutoff/
 check_contains "MD.TypeOfRun       CG" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.Steps.*200" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.VariableCell    true" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
-if [ -L convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/Si.psml ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} Si.psml linked into the generated folder"
-    PASS=$((PASS+1))
-else
-    echo -e "   -> ${RED}Failed:${NC} Si.psml was not linked into the generated folder"
-    FAIL=$((FAIL+1))
-fi
+# Pseudopotentials are always COPIED (shutil.copy2), never symlinked -- see
+# core/pseudopotentials.py's own module docstring (a symlink into a bundled
+# bank breaks the moment the folder is archived/rsynced elsewhere, e.g. to
+# an HPC cluster, without also bringing the link target along).
+check_success convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/Si.psml
 
 
 # --- 3. All 3 parameters in ONE invocation, only meshcutoff customized -- the others

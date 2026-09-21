@@ -181,6 +181,7 @@ through.
 | 4.2  | `stb-elasticInputs` / `stb-elasticAnalysis` | [`4.2-elastic/`](4.2-elastic/) |
 | 4.3  | `stb-cohesive` / `stb-cohesiveAnalysis` | [`4.3-cohesive/`](4.3-cohesive/) |
 | 4.4  | `stb-phononsCreate` / `stb-phononsPos` | [`4.4-phonons/`](4.4-phonons/) |
+| 4.5  | `stb-convergence` / `stb-convergenceAnalysis` | [`4.5-convergence/`](4.5-convergence/) |
 | 4.6  | `stb-xrdsearch` / `stb-xrdrank` | [`4.6-xrd/`](4.6-xrd/) |
 | 4.7  | `stb-hubbardu` / `stb-hubbarduAlphas` / `stb-hubbarduAnalysis` | [`4.7-hubbardu/`](4.7-hubbardu/) |
 | 4.8  | `stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` | [`4.8-adsorption/`](4.8-adsorption/) |
@@ -196,7 +197,11 @@ and `stb-strainAnalysis`, code `4.1.2`) as a single, theory-first tutorial,
 `stb-elasticAnalysis` (`4.2.2`), `4.3-cohesive/` does the same for
 `stb-cohesive` (`4.3.1`) and `stb-cohesiveAnalysis` (`4.3.2`),
 `4.4-phonons/` does the same for `stb-phononsCreate` (`4.4.1`) and
-`stb-phononsPos` (`4.4.2`), `4.6-xrd/` does the same for `stb-xrdsearch`
+`stb-phononsPos` (`4.4.2`), `4.5-convergence/` does the same for
+`stb-convergence` (`4.5.1`, one fully-relaxed folder per swept
+Mesh.CutOff/PAO.EnergyShift/k-grid-density value) and
+`stb-convergenceAnalysis` (`4.5.2`, the energy- and relaxed-structure
+-convergence report), `4.6-xrd/` does the same for `stb-xrdsearch`
 (`4.6.1`) and `stb-xrdrank` (`4.6.2`), `4.7-hubbardu/` extends the
 pattern across **three** stages instead of two: `stb-hubbardu` (`4.7.1`,
 reference prep), `stb-hubbarduAlphas` (`4.7.2`, perturbation prep), and

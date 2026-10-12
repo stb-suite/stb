@@ -358,7 +358,12 @@ def find_vacuum_plateaus(v_planar, cell_length, merge_tol=MERGE_LEVEL_TOL):
     n_points = len(grad)
     n_flat = max(1, int(n_points * VACUUM_PLATEAU_FRACTION))
     threshold = np.partition(grad, n_flat - 1)[n_flat - 1]
-    is_flat = grad <= threshold
+    # A genuine vacuum plateau can hold more near-zero-gradient points than the fixed
+    # VACUUM_PLATEAU_FRACTION quota counts, so the top-N cut would land inside the plateau
+    # and split points that differ only by float32 noise of the .VT grid (leaving each
+    # fragment below MIN_PLATEAU_WIDTH_ANG). Absorb anything within that noise margin.
+    tie_tol = max(1e-6, np.finfo(np.float32).eps * float(np.max(grad)) * 10)
+    is_flat = grad <= threshold + tie_tol
 
     point_width = cell_length / n_points
     max_gap_points = max(0, int(np.floor(MAX_GAP_ANG / point_width)))

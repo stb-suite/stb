@@ -118,6 +118,7 @@ check_success raman_study/optical_disp/mode_01_minus_z/structure.fdf
 check_success raman_study/optical_disp/mode_01_plus_x/O.psf
 check_success raman_study/optical_disp/mode_01_plus_x/Sn.psf
 check_contains "OpticalCalculation T" raman_study/optical_disp/mode_01_plus_x/calc.fdf
+check_contains "Optical.PolarizationType    polarized" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
 check_contains "Optical.Vector" raman_study/optical_disp/mode_01_plus_x/calc.fdf
 check_contains "MD.TypeOfRun.*CG" raman_study/optical_disp/mode_01_plus_x/calc.fdf
 check_contains "MD.Steps.*0" raman_study/optical_disp/mode_01_plus_x/calc.fdf

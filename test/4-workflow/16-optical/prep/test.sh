@@ -94,6 +94,7 @@ echo "Testing: config_extra.fdf carries the forced single-point + Optical.* bloc
 check_contains "MD.TypeOfRun          CG" study_default/dir_xx/config_extra.fdf
 check_contains "MD.Steps              0" study_default/dir_xx/config_extra.fdf
 check_contains "OpticalCalculation T" study_default/dir_xx/config_extra.fdf
+check_contains "Optical.PolarizationType    polarized" study_default/dir_xx/config_extra.fdf
 check_contains "1.0000  0.0000  0.0000" study_default/dir_xx/config_extra.fdf
 check_contains "0.0000  1.0000  0.0000" study_default/dir_yy/config_extra.fdf
 check_contains "0.0000  0.0000  1.0000" study_default/dir_zz/config_extra.fdf

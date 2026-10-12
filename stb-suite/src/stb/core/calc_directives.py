@@ -96,7 +96,13 @@ def build_optical_block(mesh, broaden_ev, axis_vec, nbands=None):
     """
     lines = [
         "OpticalCalculation T",
-        f"Optical.Broaden        {broaden_ev} eV",
+        # Without this, SIESTA defaults to Optical.PolarizationType
+        # "polycrystal" (isotropic average) and SILENTLY IGNORES
+        # %block Optical.Vector below -- every direction would return the
+        # identical isotropic result. "polarized" makes SIESTA use it
+        # (its log prints "Optical: Polarization type = polarized").
+        "Optical.PolarizationType    polarized",
+        f"Optical.Broaden       {broaden_ev} eV",
         "%block Optical.Mesh",
         f"  {mesh[0]}  {mesh[1]}  {mesh[2]}",
         "%endblock Optical.Mesh",

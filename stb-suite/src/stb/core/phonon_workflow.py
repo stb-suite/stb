@@ -307,9 +307,14 @@ def _unit_mode_probe(phonon, band_index, internal_to_angstrom):
     q_point = [0, 0, 0]
     phonon.run_modulations([1, 1, 1], [[q_point, band_index, 1.0, 0.0]])
     mod = phonon.modulation
-    delta_positions_ang = (
-        mod.modulated_supercells[0].positions - mod.supercell.positions
-    ) * internal_to_angstrom
+    # Minimum-image difference in FRACTIONAL coordinates: Phonopy wraps the modulated
+    # positions into [0, 1), so an atom sitting on the cell boundary (fractional 0.0 or 1.0)
+    # that moves in the negative direction would otherwise show a spurious shift of one
+    # whole lattice vector and ruin the calibration below.
+    delta_frac = (np.array(mod.modulated_supercells[0].scaled_positions)
+                  - np.array(mod.supercell.scaled_positions))
+    delta_frac -= np.round(delta_frac)
+    delta_positions_ang = (delta_frac @ np.array(mod.supercell.cell)) * internal_to_angstrom
     probe_shift = np.linalg.norm(delta_positions_ang, axis=1).max()
     if probe_shift == 0:
         raise ValueError(f"Mode {band_index} has zero displacement amplitude at a unit "

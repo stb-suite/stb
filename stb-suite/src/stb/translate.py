@@ -296,7 +296,10 @@ def getatomsandvectors_vasp(poscar):
     # Optional "Selective dynamics" line (VASP only requires the first letter to
     # match) shifts the coordinate-type line and the start of positions by one.
     coord_line_idx = 8 if datavasp[7][0].lower().startswith('s') else 7
-    typevectors = datavasp[coord_line_idx][0]
+    # VASP only looks at the first letter of this line (c/C/k/K = Cartesian, anything
+    # else = Direct), so "direct", "D", "Cart", ... are all valid. Normalize to the
+    # canonical 'Direct'/'Cartesian' the rest of this module compares against.
+    typevectors = 'Cartesian' if datavasp[coord_line_idx][0][0].lower() in ('c', 'k') else 'Direct'
     getatoms = []
     for i in range(len(datavasp[5])):
         getatoms.append([i+1, element[datavasp[5][i]],datavasp[5][i], datavasp[6][i]])

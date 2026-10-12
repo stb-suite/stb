@@ -261,6 +261,19 @@ else
     echo -e "   -> ${RED}Falha: Formato 'Direct' não encontrado.${NC}"
 fi
 
+# POSCAR com a linha de coordenadas em minúsculas ('direct'): VASP só olha a primeira letra,
+# e o resultado sem -cf deve ser 'Fractional', não 'Ang' com valores fracionários.
+echo -n "Testando: POSCAR ('direct' minúsculo) -> FDF sem -cf"
+sed 's/^Direct$/direct/' $TEST_DIR/si.poscar > $TEST_DIR/si_lower.poscar
+$BASE_CMD -if poscar -i $TEST_DIR/si_lower.poscar -of fdf -o $TEST_DIR/out_lower.fdf
+check_success "$TEST_DIR/out_lower.fdf"
+grep -q "AtomicCoordinatesFormat  Fractional" $TEST_DIR/out_lower.fdf
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verificado: 'Fractional' preservado.${NC}"
+else
+    echo -e "   -> ${RED}Falha: coordenadas fracionárias não rotuladas como 'Fractional'.${NC}"
+fi
+
 
 # --- 4. Limpeza ---
 echo -e "\n--- Testes Concluídos ---"

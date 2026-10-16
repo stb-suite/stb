@@ -141,6 +141,13 @@ check_contains 'href="../../../reference/stb-convergenceAnalysis/"' "$real45"
 check_not_contains "no hands-on guide for this tool yet" "$real45"
 check_contains "Tools without a hands-on guide yet" "$SITE_DIR/guides/index.html"
 
+echo "Testing: 4.15-gqca shows a figure -- the image is copied next to the page and the link works"
+gqca="$SITE_DIR/guides/4-workflows/4.15-gqca/index.html"
+check_success "$gqca"
+check_success "$SITE_DIR/guides/4-workflows/4.15-gqca/figures/ingaas_dashboard.png"
+check_contains 'src="figures/ingaas_dashboard.png"' "$gqca"
+check_contains 'href="../../../reference/stb-gqcaAnalysis/"' "$gqca"
+
 
 # --- 3. Sidebar: menu categories, numeric (not alphabetical) order, short labels ---
 echo -e "\n--- Testing the generated sidebar ---"

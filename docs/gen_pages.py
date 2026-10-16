@@ -5,8 +5,9 @@ itself -- nothing is copied into `docs/`:
 
 Guides (`guides/`), one page per menu item:
 - `examples/<code>-<name>/README.md` becomes that item's guide, with links
-  between guides rewritten and a footer pointing back at the example folder on
-  GitHub and forward to the command reference.
+  between guides rewritten, the images it shows (relative `![..](figures/x.png)`
+  links) copied next to the page, and a footer pointing back at the example
+  folder on GitHub and forward to the command reference.
 - A menu item with no example gets a short generated page (a "stub") that says
   so and points at its commands, so every tool in the suite has a page.
 - `guides/index.md` is `examples/README.md` plus a table of the stubs.
@@ -65,6 +66,9 @@ FOLDER_RE = re.compile(r"^(\d+)\.(\d+)-.+$")
 #   "4.7 — Workflow: Hubbard U (Linear Response) (`stb-a` / `stb-b`)"
 _H1_CMD_FIRST = re.compile(r"^(?P<code>\d+\.\d+) — `[^`]+`: (?P<title>.+)$")
 _H1_CMD_LAST = re.compile(r"^(?P<code>\d+\.\d+) — (?P<title>.+?)(?: \(`[^)]*`\))?$")
+
+# A relative image in an example README: `![alt](figures/plot.png)`.
+_IMAGE_LINK = re.compile(r"!\[([^\]]*)\]\((?!https?://|/|#)([^)\s]+)\)")
 
 # A link to another example folder: `](1.1-stb-inputfile/)` or
 # `](../4.3-cohesive/)`, optionally with a `#anchor`.
@@ -172,6 +176,34 @@ def write_page(dest, content, edit_source):
 def write_nav(dest, lines):
     with mkdocs_gen_files.open(dest, "w") as f:
         f.writelines(line + "\n" for line in lines)
+
+
+def copy_page_images(text, page):
+    """Publishes the images a guide README shows. A README written for GitHub
+    refers to its pictures relative to its own folder (`figures/plot.png`); on
+    the site the page lives elsewhere, so each image is copied next to the
+    page, under a folder named after the example, and the link is rewritten to
+    it. Images outside the example folder, or missing, are left alone with a
+    warning (which fails the strict build). Fenced code blocks are untouched."""
+    stem = posixpath.splitext(page.dest)[0]
+
+    def replace(match):
+        alt, target = match.group(1), match.group(2)
+        source = (page.directory / target).resolve()
+        if page.directory.resolve() not in source.parents or not source.is_file():
+            log.warning("%s: image %r is missing or outside the example folder", page.dest, target)
+            return match.group(0)
+        asset = f"{stem}/{posixpath.normpath(target)}"
+        with mkdocs_gen_files.open(asset, "wb") as f:
+            f.write(source.read_bytes())
+        return f"![{alt}]({rel(asset, page.dest)})"
+
+    out, in_fence = [], False
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+        out.append(line if in_fence else _IMAGE_LINK.sub(replace, line))
+    return "".join(out)
 
 
 def rewrite_folder_links(text, source_page, dest_by_folder):
@@ -390,7 +422,7 @@ def main():
             write_page(page.dest, stub_page(page, helps),
                        "docs/gen_pages.py" if page.entry.source is catalog.PUBLIC else None)
         else:
-            content = github_markdown_to_python_markdown(page.text)
+            content = copy_page_images(github_markdown_to_python_markdown(page.text), page)
             write_page(page.dest, rewrite_folder_links(content, page.dest, dest_by_folder) + guide_footer(page),
                        page.edit_source)
 

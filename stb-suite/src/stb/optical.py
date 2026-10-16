@@ -224,7 +224,8 @@ with this in mind.""",
         print(color_text(f"[ERROR] Structure file '{args.file}' not found.", 'red'))
         sys.exit(1)
     if not os.path.exists(args.calc):
-        print(color_text(f"[ERROR] Calc file '{args.calc}' not found.", 'red'))
+        print(color_text(f"[ERROR] Calc file '{args.calc}' not found. The calc.fdf template defaults to "
+                          "./calc.fdf -- pass -c/--calc to point at another file.", 'red'))
         sys.exit(1)
     if args.pseudo_dir:
         try:

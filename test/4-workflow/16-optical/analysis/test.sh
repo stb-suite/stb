@@ -198,6 +198,18 @@ print('OK')
 " > log_summary_check.txt 2>&1
 check_contains "OK" log_summary_check.txt
 
+echo "Testing: the Kohn-Sham band gap is read from <label>.EIG (insulator, then a semimetal)"
+printf -- '0.0\n2 1 2\n1 -1.0 1.5\n2 -0.5 2.0\n' > bulk_study/dir_xx/siesta.EIG
+stb-opticalAnalysis --directory bulk_study --no-intro > log_eig_gap.txt 2>&1
+check_exit_code $? 0
+check_contains "fundamental 2.000 eV (indirect); smallest direct gap 2.500 eV" log_eig_gap.txt
+printf -- '0.0\n2 1 2\n1 -1.0 0.00001\n2 -0.00001 2.0\n' > bulk_study/dir_xx/siesta.EIG
+stb-opticalAnalysis --directory bulk_study --no-intro > log_eig_metal.txt 2>&1
+check_contains "metallic/semimetallic -- no gap" log_eig_metal.txt
+check_contains "Zero Kohn-Sham gap: this is a metal/semimetal" log_eig_metal.txt
+check_contains "Metallic/semimetallic response (zero Kohn-Sham gap)" log_eig_metal.txt
+rm -f bulk_study/dir_xx/siesta.EIG
+
 echo "Testing: --png writes the dashboard; --scissor adds its section and file; --energies / --n-peaks are honoured"
 stb-opticalAnalysis --directory bulk_study --png --scissor 0.5 --energies 0 1 2.5 --n-peaks 3 -o dash \
     --no-intro > log_dash.txt 2>&1

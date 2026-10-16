@@ -916,3 +916,33 @@ def get_optical_info(path: str) -> dict:
         else:
             info[key] = float(m.group(1))
     return info
+
+
+def read_eig_gap(path: str) -> dict:
+    """Kohn-Sham band gap from a SIESTA `<label>.EIG` file (SCF k-mesh): the Fermi level, the
+    fundamental gap (CBM - VBM over all k and spins; 0 and `metallic` True when bands cross the Fermi
+    level), the smallest direct gap over the mesh and whether the fundamental gap is direct. {} if the
+    file is missing or malformed. Only as good as the SCF k-mesh (a band edge between mesh points is
+    missed), which the caller should say."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            tokens = f.read().split()
+        ef = float(tokens[0])
+        nbands, nspin, nk = int(tokens[1]), int(tokens[2]), int(tokens[3])
+        values = np.array(tokens[4:], dtype=float)
+        block = 1 + nbands * nspin
+        values = values[:nk * block].reshape(nk, block)[:, 1:].reshape(nk, nspin, nbands)
+    except (OSError, ValueError, IndexError):
+        return {}
+    occupied = values <= ef
+    if not occupied.any() or occupied.all():
+        return {}
+    vb = np.where(occupied, values, -np.inf).max(axis=2).max(axis=1)     # per k: highest occupied
+    cb = np.where(~occupied, values, np.inf).min(axis=2).min(axis=1)     # per k: lowest empty
+    vbm, cbm = float(vb.max()), float(cb.min())
+    # a band that straddles the Fermi level in some k makes the system metallic: occupied and empty states overlap
+    metallic = cbm <= vbm + 1e-4
+    direct_gaps = cb - vb
+    return {"ef": ef, "vbm": vbm, "cbm": cbm, "gap": max(cbm - vbm, 0.0), "metallic": bool(metallic),
+            "direct_min": float(direct_gaps.min()), "n_k": int(nk),
+            "direct": bool(int(np.argmax(vb)) == int(np.argmin(cb)))}

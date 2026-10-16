@@ -25,7 +25,7 @@ from stb.core.optical_properties import (
     free_electron_plasmon_ev, effective_electrons, penn_gap_ev, apply_scissor,
 )
 from stb.core.optical_setup import reciprocal_spacings, spacing_band, symmetry_analysis
-from stb.core.siesta_log import get_scf_convergence, get_optical_info
+from stb.core.siesta_log import get_scf_convergence, get_optical_info, read_eig_gap
 from stb.core.spectrum import read_experimental_spectrum, find_spectrum_peaks, match_peaks
 
 REPORT_FILE = "optical_stage2.txt"
@@ -938,6 +938,15 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
     siesta_infos = [r.get("siesta") or {} for r in results if r["axis"] != "avg"]
     n_valence = next((i["nelectrons"] for i in siesta_infos if "nelectrons" in i), None)
     n_valence_known = n_valence is not None
+    gap_info = {}
+    for r in results:
+        if r["axis"] != "avg":
+            gap_info = read_eig_gap(os.path.join(r["folder"], f"{r['label']}.EIG"))
+            if gap_info:
+                break
+    metallic = bool(gap_info.get("metallic"))
+    is_vacuum_cell = bool(vacuum_axes is not None and any(vacuum_axes))
+    volume_density = None if is_vacuum_cell else volume   # free-electron plasmon/Penn need the real electron density
     diag_results = [r for r in results if r["axis"] in _DIAGONAL_AXES]
     plotted_results = [r for r in results if r["axis"] in _DIAGONAL_AXES or r["axis"] == "avg"] or results
 
@@ -1065,29 +1074,45 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
     stats_by_axis = {}
     static_rows = []
     for r in plotted_results:
-        st = static_properties(r, volume, n_valence if n_valence_known else None)
+        st = static_properties(r, volume_density, n_valence if n_valence_known else None)
         stats_by_axis[r["axis"]] = st
         static_rows.append(([r["axis"], f"{st['eps1_0']:.4f}", f"{st['n0']:.4f}", f"{st['R0']:.4f}",
                               f"{st['onset']:.2f}" if np.isfinite(st['onset']) else "-",
-                              f"{st['tauc']:.2f}" if np.isfinite(st['tauc']) else "-",
+                              f"{st['tauc']:.2f}" if (np.isfinite(st['tauc']) and not metallic) else "-",
                               f"{st['penn']:.2f}" if np.isfinite(st['penn']) else "-"], None))
     print_table(["Dir", "eps1(E->0)", "n(E->0)", "R(E->0)", "eps2 onset (eV)", "Tauc direct gap (eV)",
                  "Penn gap (eV)"], static_rows, f_out)
-    ref_stats = stats_by_axis.get(ref["axis"]) or static_properties(ref, volume, n_valence if n_valence_known else None)
+    ref_stats = stats_by_axis.get(ref["axis"]) or static_properties(ref, volume_density, n_valence if n_valence_known else None)
+    if metallic:
+        ref_stats = dict(ref_stats, tauc=float('nan'), tauc_fit=None, tauc_window=None)   # a Tauc gap means nothing for a metal
     print_dual(color_text(
         "eps2 onset: first energy where the smoothed eps2 exceeds 5 % of its maximum (the independent-particle "
         "direct absorption edge; no indirect transitions exist in this spectrum). Tauc: extrapolation of "
         "(alpha E)^2 vs E on the rising edge -- indicative, it assumes parabolic bands. Penn gap: "
         "hbar*omega_p / sqrt(eps1(0) - 1), the one-oscillator gap that would give this static constant.", 'cyan'), f_out)
-    if np.isfinite(ref_stats["onset"]):
-        print_dual(f"Reference spectrum '{ref['axis']}': the absorption edge starts at {ref_stats['onset']:.2f} eV "
-                    f"(wavelength {HC_EV_NM / ref_stats['onset']:.0f} nm).", f_out)
-    if ref_stats["onset"] > 0.05 and abs(ref_stats["eps1_0"]) > 0:
-        print_dual(f"No absorption below the edge: the spectrum describes a dielectric (non-metallic) response; "
-                    f"eps1(0) = {ref_stats['eps1_0']:.2f}.", f_out)
+    if gap_info:
+        kind = "direct" if gap_info["direct"] else "indirect"
+        if metallic:
+            print_dual(f"Kohn-Sham band structure (SCF k-mesh, {gap_info['n_k']} points): metallic/semimetallic -- no gap "
+                        "(bands reach the Fermi level).", f_out)
+        else:
+            print_dual(f"Kohn-Sham band gap (SCF k-mesh, {gap_info['n_k']} points): fundamental {gap_info['gap']:.3f} eV "
+                        f"({kind}); smallest direct gap {gap_info['direct_min']:.3f} eV.", f_out)
+    if metallic:
+        print_dual(color_text(
+            "[NOTE] Zero Kohn-Sham gap: this is a metal/semimetal. The eps2 'onset' above is NOT a gap: it is set by the "
+            "smallest transition energy the optical k-mesh samples and by the broadening (a Dirac point, for instance, "
+            "needs a very dense mesh), and SIESTA's optical module has no intraband (Drude) term, so the low-energy "
+            "response is incomplete.", 'cyan'), f_out)
     elif np.isfinite(ref_stats["onset"]):
-        print_dual(color_text("[NOTE] eps2 is non-zero down to ~0 eV: a metallic/zero-gap response (SIESTA's optical "
-                               "module has no intraband/Drude term).", 'cyan'), f_out)
+        print_dual(f"Reference spectrum '{ref['axis']}': the absorption edge starts at {ref_stats['onset']:.2f} eV "
+                    f"(wavelength {HC_EV_NM / ref_stats['onset']:.0f} nm)."
+                    + (f" It matches the smallest direct Kohn-Sham gap ({gap_info['direct_min']:.2f} eV): the edge is direct"
+                       + (", and the indirect gap is invisible here." if not gap_info['direct'] else ".")
+                       if gap_info and abs(ref_stats['onset'] - gap_info['direct_min']) < 0.3 else ""), f_out)
+        if ref_stats["onset"] > 0.05:
+            print_dual(f"No absorption below the edge: the spectrum describes a dielectric (non-metallic) response; "
+                        f"eps1(0) = {ref_stats['eps1_0']:.2f}.", f_out)
 
     # ================================================================ spectral features
     feature_emax = min(float(ref["omega"].max()), 30.0)
@@ -1123,6 +1148,9 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
     if features["eps1_zeros"]:
         print_dual("Zero crossings of eps1: " + ", ".join(
             f"{e:.2f} eV ({'rising' if d > 0 else 'falling'})" for e, d in features["eps1_zeros"][:8]), f_out)
+    if is_vacuum_cell:
+        print_dual(color_text("[NOTE] Vacuum-padded cell: the free-electron plasmon comparison and the Penn gap are skipped (the cell "
+                               "volume includes the vacuum, so the electron density is not the material's).", 'cyan'), f_out)
     if lp and np.isfinite(ref_stats["plasmon_free"]):
         print_dual(f"Free-electron plasma energy for {n_valence:g} valence electrons in this cell: "
                     f"{ref_stats['plasmon_free']:.2f} eV; the loss peak sits at {lp['E']:.2f} eV "
@@ -1325,7 +1353,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
         eps2_sc = apply_scissor(ref["omega"], ref["eps2"], args.scissor)
         scissor_result = compute_all(ref["omega"], eps2_sc)
         scissor_result["axis"], scissor_result["delta"] = ref["axis"], args.scissor
-        st_sc = static_properties(scissor_result, volume, n_valence if n_valence_known else None)
+        st_sc = static_properties(scissor_result, volume_density, n_valence if n_valence_known else None)
         feat_sc = spectral_features(scissor_result, args.n_peaks, args.smoothing, feature_emax)
         e2_pk = lambda f: (f"{f['eps2_peaks'][0]['E']:.2f}" if f["eps2_peaks"] else "-")
         main_pk = lambda f: (f"{max(f['eps2_peaks'], key=lambda p: p['value'])['E']:.2f}" if f["eps2_peaks"] else "-")
@@ -1376,16 +1404,22 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
     section('INTERPRETATION')
     bullets = []
     st = ref_stats
-    if np.isfinite(st["onset"]) and st["onset"] > 0.05:
+    if metallic:
+        bullets.append("Metallic/semimetallic response (zero Kohn-Sham gap): interband absorption starts at the lowest "
+                       "transition energy the k-mesh samples, not at a gap; the free-carrier (Drude) response is absent "
+                       f"from SIESTA's optical module. eps1(0) = {st['eps1_0']:.2f} is the interband contribution only.")
+    elif np.isfinite(st["onset"]) and st["onset"] > 0.05:
         bullets.append(f"Dielectric (gapped) response: no absorption below {st['onset']:.2f} eV "
                        f"({HC_EV_NM / st['onset']:.0f} nm); static dielectric constant eps1(0) = {st['eps1_0']:.2f}, "
                        f"refractive index n(0) = {st['n0']:.2f}, normal-incidence reflectivity R(0) = {st['R0']:.2f}.")
     elif np.isfinite(st["onset"]):
-        bullets.append("Absorption starts at ~0 eV: a metallic/zero-gap response (no Drude term in SIESTA's optical module).")
+        bullets.append("Absorption starts at ~0 eV: a zero-gap response (no Drude term in SIESTA's optical module).")
     if features["eps2_peaks"]:
-        main = max(features["eps2_peaks"], key=lambda p: p["value"])
+        cands = [p for p in features["eps2_peaks"] if not metallic or p["E"] > 1.0] or features["eps2_peaks"]
+        main = max(cands, key=lambda p: p["value"])
         bullets.append(f"Strongest interband structure: eps2 = {main['value']:.1f} at {main['E']:.2f} eV "
-                       f"(absorption coefficient up to {features['alpha_max'][1]:.2e} cm^-1 at {features['alpha_max'][0]:.2f} eV).")
+                       f"(absorption coefficient up to {features['alpha_max'][1]:.2e} cm^-1 at {features['alpha_max'][0]:.2f} eV)."
+                       + (" Peaks below 1 eV are set by the k-mesh sampling of the Dirac/Fermi region and are not listed here." if metallic else ""))
     if features["loss_peak"]:
         lp = features["loss_peak"]
         extra = ""
@@ -1419,13 +1453,14 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
 
     summary_csv = os.path.join(args.directory, f"{args.output}_summary.csv")
     with open(summary_csv, "w") as fh:
-        fh.write("direction,eps1_static,n_static,R_static,onset_eV,tauc_direct_gap_eV,penn_gap_eV,N_eff_Emax,fsum_siesta\n")
+        fh.write("direction,eps1_static,n_static,R_static,onset_eV,tauc_direct_gap_eV,penn_gap_eV,N_eff_Emax,fsum_siesta,ks_gap_eV,ks_direct_min_eV\n")
         for r in plotted_results:
             s_r = stats_by_axis[r["axis"]]
             neff_end = neff_by_axis[r["axis"]][-1] if r["axis"] in neff_by_axis else float("nan")
             fsum = (r.get("siesta") or {}).get("fsum", float("nan"))
             fh.write(f"{r['axis']},{s_r['eps1_0']:.6f},{s_r['n0']:.6f},{s_r['R0']:.6f},{s_r['onset']:.4f},"
-                     f"{s_r['tauc']:.4f},{s_r['penn']:.4f},{neff_end:.4f},{fsum}\n")
+                     f"{s_r['tauc']:.4f},{s_r['penn']:.4f},{neff_end:.4f},{fsum},"
+                     f"{gap_info.get('gap', float('nan')):.4f},{gap_info.get('direct_min', float('nan')):.4f}\n")
     print_dual(f"CSV (summary)        : {summary_csv}", f_out)
 
     dat_paths_by_axis = {}

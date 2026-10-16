@@ -877,3 +877,42 @@ def _parse_float_line(line: str) -> list[float] | None:
         if len(nums) == 3:
             break
     return nums if len(nums) == 3 else None
+
+
+_OPTICAL_LINE_RES = {
+    "fsum": re.compile(r"Optical:\s*Checking f-sum rule\s+([-+0-9.eE]+)"),
+    "nbands": re.compile(r"Optical:\s*Number of bands\s*=\s*(\d+)"),
+    "nelectrons": re.compile(r"Optical:\s*Number of electrons\s*=\s*([-+0-9.eE]+)"),
+    "emax_ry": re.compile(r"Optical:\s*Maximum of energy range\s*=\s*([-+0-9.eE]+)\s*Ry"),
+    "emin_ry": re.compile(r"Optical:\s*Minimum of energy range\s*=\s*([-+0-9.eE]+)\s*Ry"),
+    "broaden_ry": re.compile(r"Optical:\s*Gaussian broadening\s*=\s*([-+0-9.eE]+)\s*Ry"),
+    "scissor_ry": re.compile(r"Optical:\s*Scissor operator\s*=\s*([-+0-9.eE]+)\s*Ry"),
+    "mesh": re.compile(r"Optical:\s*BZ mesh dimensions\s*=\s*(\d+)\s+(\d+)\s+(\d+)"),
+    "polarization": re.compile(r"Optical:\s*Polarization type\s*=\s*(\S+)"),
+}
+
+
+def get_optical_info(path: str) -> dict:
+    """What SIESTA itself reports about an Optical run in `path`'s log: the f-sum-rule check
+    (1 = complete), number of bands and electrons, energy range, Gaussian broadening, scissor
+    operator (the last three in Ry), the BZ mesh and the polarization type. A key is absent when
+    its line is not in the log; an empty dict when the file can't be read."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            text = f.read()
+    except OSError:
+        return {}
+    info = {}
+    for key, regex in _OPTICAL_LINE_RES.items():
+        m = regex.search(text)
+        if not m:
+            continue
+        if key == "mesh":
+            info[key] = tuple(int(g) for g in m.groups())
+        elif key in ("nbands",):
+            info[key] = int(m.group(1))
+        elif key == "polarization":
+            info[key] = m.group(1)
+        else:
+            info[key] = float(m.group(1))
+    return info

@@ -5701,9 +5701,17 @@ def run_optical_prep() -> None:
         args.extend(["-p", pseudo_dir])
 
     show_advanced = get_input(
-        "\nConfigure advanced settings (Optical.Mesh/Optical.Broaden/Optical.NumberOfBands)? "
+        "\nConfigure advanced settings (SCF k-grid/Optical.Mesh/Optical.Broaden/Optical.NumberOfBands)? "
         "[y/N]: ").strip().lower()
     if show_advanced == 'y':
+        kgrid_str = get_input("SCF k-grid, 3 integers [blank = keep the template's grid; "
+                               "auto-suggested if it has none]: ").strip()
+        if kgrid_str:
+            kgrid_vals = kgrid_str.split()
+            if len(kgrid_vals) == 3:
+                args.extend(["--kgrid", *kgrid_vals])
+            else:
+                print(color_text("Expected 3 integers -- keeping the template's grid.", 'yellow'))
         mesh_str = get_input("Optical.Mesh, 3 integers [default: 10 10 10]: ").strip()
         if mesh_str:
             mesh_vals = mesh_str.split()
@@ -5772,6 +5780,19 @@ def run_optical_analysis() -> None:
         ).strip()
         if thickness:
             args.extend(["--thickness", thickness])
+
+    print(f"\n{color_text('Extras (all optional):', 'yellow')}")
+    if get_input("  Show the 9-panel analysis dashboard on screen (needs a display)? [y/N]: ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("  Save the dashboard as a PNG? [y/N]: ").strip().lower() == 'y':
+        args.append("--png")
+    scissor = get_input("  Scissor what-if shift in eV (post-processing; blank = skip): ").strip()
+    if scissor:
+        args.extend(["--scissor", scissor])
+    energies = get_input("  Energies (eV) for the 'optical constants at selected energies' table, "
+                          "space-separated [blank = 0 1 2 3 4 5 10]: ").strip()
+    if energies:
+        args.extend(["--energies", *energies.split()])
 
     show_advanced = get_input(
         "\nConfigure advanced settings (energy range/output name)? [y/N]: ").strip().lower()

@@ -13,19 +13,24 @@ import re
 import sys
 import glob
 import argparse
+import datetime
 import numpy as np
-from stb.core import structure_io, kspace
-from stb.core.cli import color_text, show_intro, print_dual, print_section
+from stb.core import structure_io, kspace, fdf_directives
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.dielectric import read_epsimg
 from stb.core.calc_directives import OPTICAL_DIRECTION_VECTORS, OPTICAL_OFFDIAG_PAIRS
 from stb.core.optical_properties import (
     compute_all, correct_2d_perpendicular, correct_2d_parallel, molecular_polarizability,
-    derive_from_eps,
+    derive_from_eps, find_peaks_table, absorption_onset, tauc_direct_gap, zero_crossings,
+    free_electron_plasmon_ev, effective_electrons, penn_gap_ev, apply_scissor,
 )
-from stb.core.siesta_log import get_scf_convergence
+from stb.core.optical_setup import reciprocal_spacings, spacing_band, symmetry_analysis
+from stb.core.siesta_log import get_scf_convergence, get_optical_info
 from stb.core.spectrum import read_experimental_spectrum, find_spectrum_peaks, match_peaks
 
 REPORT_FILE = "optical_stage2.txt"
+RY_TO_EV = 13.605693122994
+HC_EV_NM = 1239.841984  # photon energy (eV) * wavelength (nm)
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 _VECTOR_BLOCK_RE = re.compile(
@@ -169,6 +174,7 @@ def read_direction_result(folder, out_file, label_override=None):
     result["label"] = label
     result["scf_ok"] = scf_ok
     result["folder"] = folder
+    result["siesta"] = get_optical_info(os.path.join(folder, out_file))
     return result
 
 
@@ -490,6 +496,201 @@ def write_combined_gplot(gplot_path, dat_paths_by_axis, quantity, experimental=N
         f.writelines(lines)
 
 
+# --- Analyses and dashboard ---------------------------------------------------------
+
+
+def reference_result(results):
+    """The spectrum the single-spectrum tables use: the isotropic average when xx/yy/zz are all
+    present, else the first diagonal direction, else the first result."""
+    for r in results:
+        if r["axis"] == "avg":
+            return r
+    for r in results:
+        if r["axis"] in _DIAGONAL_AXES:
+            return r
+    return results[0]
+
+
+def static_properties(result, volume_ang3, n_valence):
+    """eps1(0), n(0), R(0), absorption onset, Tauc gap and the Penn gap of one spectrum."""
+    omega = result["omega"]
+    i0 = int(np.argmin(omega))
+    eps1_0, n0 = float(result["eps1"][i0]), float(result["n"][i0])
+    onset = absorption_onset(omega, result["eps2"])
+    peaks = find_peaks_table(omega, result["eps2"], 1, 0.05, 0.05)
+    first_peak = peaks[0]["E"] if peaks else float("nan")
+    tauc, fit, window = tauc_direct_gap(omega, result["alpha"], onset, first_peak)
+    plasmon = free_electron_plasmon_ev(n_valence, volume_ang3) if n_valence and volume_ang3 else float("nan")
+    return {"eps1_0": eps1_0, "n0": n0, "R0": float(((n0 - 1.0) / (n0 + 1.0)) ** 2),
+            "onset": onset, "tauc": tauc, "tauc_fit": fit, "tauc_window": window,
+            "penn": penn_gap_ev(eps1_0, plasmon) if np.isfinite(plasmon) else float("nan"),
+            "plasmon_free": plasmon}
+
+
+def spectral_features(result, n_peaks, sigma_ev, e_max):
+    """Peaks of eps2, the absorption/reflectivity maxima, the loss-function peak (bulk plasmon
+    candidate) and the zero crossings of eps1, for one spectrum."""
+    omega = result["omega"]
+    features = {"eps2_peaks": find_peaks_table(omega, result["eps2"], n_peaks, sigma_ev, 0.05, e_max)}
+    mask = omega <= (e_max if e_max else omega.max())
+    for key in ("alpha", "R", "eps1"):
+        arr = np.where(mask, result[key], -np.inf)
+        j = int(np.argmax(arr))
+        features[key + "_max"] = (float(omega[j]), float(result[key][j]))
+    loss_peaks = find_peaks_table(omega, result["L"], 1, sigma_ev, 0.2)
+    features["loss_peak"] = loss_peaks[0] if loss_peaks else None
+    features["eps1_zeros"] = [(e, d) for e, d in zero_crossings(omega, result["eps1"], sigma_ev) if e <= omega.max()]
+    return features
+
+
+def interp_at(result, key, energy):
+    return float(np.interp(energy, result["omega"], result[key]))
+
+
+def make_dashboard(results, ref, stats, offdiag_results, scissor_result, neff, n_valence, plot_emax,
+                    png_path, show, experimental=None, exp_quantity=None, title=""):
+    """3x3 matplotlib figure that completes the analysis visually: eps1/eps2, n/k, absorption
+    coefficient with its onset, the direct-gap Tauc plot, reflectivity, energy-loss function with the
+    plasmon, optical conductivity, the f-sum-rule accumulation N_eff(E), and either the scissor
+    what-if, the reconstructed off-diagonal components, or the anisotropy. Saved to `png_path` and/or
+    shown on screen. Returns True when something was produced."""
+    try:
+        import matplotlib
+        if not show:
+            matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print(color_text("[WARNING] matplotlib is not installed -- skipping the dashboard.", 'yellow'))
+        return False
+    if show and (matplotlib.get_backend().lower() == "agg"
+                 or (sys.platform.startswith("linux") and not (os.environ.get("DISPLAY")
+                                                               or os.environ.get("WAYLAND_DISPLAY")))):
+        print(color_text("[WARNING] --show needs a display (local desktop or `ssh -X`); "
+                          "only saving the figure.", 'yellow'))
+        show = False
+        plt.switch_backend("Agg")
+
+    okabe = {"xx": "#0072B2", "yy": "#D55E00", "zz": "#009E73", "avg": "#000000",
+             "xy": "#CC79A7", "xz": "#E69F00", "yz": "#56B4E9"}
+    plotted = [r for r in results if r["axis"] in _DIAGONAL_AXES or r["axis"] == "avg"] or results
+    fig, axes = plt.subplots(3, 3, figsize=(16, 12))
+    ax = axes.ravel()
+
+    def style(a, xlabel="Photon energy (eV)", ylabel=""):
+        a.set_xlim(0, plot_emax)
+        a.set_xlabel(xlabel)
+        a.set_ylabel(ylabel)
+        a.grid(alpha=0.3)
+
+    def lw_of(r):
+        return 2.4 if r["axis"] == "avg" else 1.3
+
+    for r in plotted:
+        c, lab = okabe.get(r["axis"], "0.4"), r["axis"]
+        ax[0].plot(r["omega"], r["eps1"], color=c, lw=lw_of(r), label=f"eps1 {lab}")
+        ax[0].plot(r["omega"], r["eps2"], color=c, lw=lw_of(r), ls="--", label=f"eps2 {lab}")
+        ax[1].plot(r["omega"], r["n"], color=c, lw=lw_of(r), label=f"n {lab}")
+        ax[1].plot(r["omega"], r["k"], color=c, lw=lw_of(r), ls="--", label=f"k {lab}")
+        ax[2].semilogy(r["omega"], np.clip(r["alpha"], 1.0, None), color=c, lw=lw_of(r), label=lab)
+        ax[4].plot(r["omega"], r["R"], color=c, lw=lw_of(r), label=lab)
+        ax[5].plot(r["omega"], r["L"], color=c, lw=lw_of(r), label=lab)
+        ax[6].plot(r["omega"], r["sigma1"] / 1e6, color=c, lw=lw_of(r), label=lab)
+    ax[0].axhline(0, color="0.5", lw=0.8)
+    style(ax[0], ylabel="dielectric function"); ax[0].set_title("Dielectric function")
+    style(ax[1], ylabel="n, k"); ax[1].set_title("Refractive index (solid) / extinction (dashed)")
+    ax[1].axhline(0, color="0.5", lw=0.8)
+    style(ax[2], ylabel="alpha (cm$^{-1}$)"); ax[2].set_title("Absorption coefficient")
+    ax[2].set_ylim(1e2, max(1e6, 2 * float(np.max([r["alpha"].max() for r in plotted]))))
+    onset = stats["onset"]
+    if np.isfinite(onset):
+        ax[2].axvline(onset, color="0.4", ls=":", lw=1.2)
+        ax[2].annotate(f"onset {onset:.2f} eV", (onset, ax[2].get_ylim()[1] / 3), rotation=90,
+                       va="top", ha="right", fontsize=9, color="0.3")
+    style(ax[4], ylabel="R"); ax[4].set_title("Normal-incidence reflectivity"); ax[4].set_ylim(0, 1)
+    style(ax[5], ylabel="-Im(1/eps)"); ax[5].set_title("Energy-loss function")
+    lp = stats.get("loss_peak")
+    if lp:
+        ax[5].plot([lp["E"]], [lp["value"]], "o", color="#CC0000")
+        ax[5].annotate(f"{lp['E']:.2f} eV", (lp["E"], lp["value"]), textcoords="offset points",
+                       xytext=(6, 4), fontsize=9)
+    if np.isfinite(stats["plasmon_free"]):
+        ax[5].axvline(stats["plasmon_free"], color="0.4", ls=":", lw=1.2,
+                      label=f"free-electron {stats['plasmon_free']:.1f} eV")
+    style(ax[6], ylabel="sigma1 (10$^6$ S/m)"); ax[6].set_title("Real optical conductivity")
+    for a in (ax[0], ax[1], ax[2], ax[4], ax[5], ax[6]):
+        a.legend(fontsize=7, ncol=2)
+
+    # Tauc plot of the reference spectrum
+    y = (ref["alpha"] * ref["omega"]) ** 2
+    ax[3].plot(ref["omega"], y / 1e12, color="#0072B2", lw=1.6)
+    if stats["tauc_fit"] is not None and np.isfinite(stats["tauc"]):
+        slope, intercept = stats["tauc_fit"]
+        xs = np.linspace(stats["tauc"], stats["tauc_window"][1] + 0.3, 20)
+        ax[3].plot(xs, (slope * xs + intercept) / 1e12, color="#CC0000", lw=1.3, ls="--",
+                   label=f"fit -> E$_g^{{Tauc}}$ = {stats['tauc']:.2f} eV")
+        ax[3].axvline(stats["tauc"], color="#CC0000", ls=":", lw=1)
+        ax[3].legend(fontsize=8)
+    style(ax[3], ylabel=r"($\alpha E$)$^2$ (10$^{12}$)"); ax[3].set_title(f"Direct-gap Tauc plot ({ref['axis']})")
+    ax[3].set_xlim(max(stats["onset"] - 0.6, 0) if np.isfinite(stats["onset"]) else 0,
+                   min(plot_emax, (stats["onset"] + 3.0) if np.isfinite(stats["onset"]) else plot_emax))
+    ymax_t = y[(ref["omega"] >= ax[3].get_xlim()[0]) & (ref["omega"] <= ax[3].get_xlim()[1])]
+    if len(ymax_t):
+        ax[3].set_ylim(0, 1.1 * float(ymax_t.max()) / 1e12)
+
+    # f-sum accumulation
+    if neff is not None:
+        ax[7].plot(ref["omega"], neff, color="#0072B2", lw=1.8, label=f"N$_{{eff}}$({ref['axis']})")
+        if n_valence:
+            ax[7].axhline(n_valence, color="0.4", ls="--", lw=1.2, label=f"valence electrons = {n_valence:g}")
+        ax[7].legend(fontsize=8)
+    style(ax[7], ylabel="electrons per cell"); ax[7].set_title("f-sum rule: transitions accounted for")
+    ax[7].set_xlim(0, max(plot_emax, 30))
+
+    # panel 9: scissor what-if / off-diagonal / anisotropy
+    if scissor_result is not None:
+        ax[8].plot(ref["omega"], ref["eps2"], color="0.4", lw=1.4, label="eps2 (DFT)")
+        ax[8].plot(scissor_result["omega"], scissor_result["eps2"], color="#CC0000", lw=1.6, label="eps2 (scissor)")
+        ax[8].plot(ref["omega"], ref["eps1"], color="0.6", lw=1.0, ls="--", label="eps1 (DFT)")
+        ax[8].plot(scissor_result["omega"], scissor_result["eps1"], color="#CC79A7", lw=1.2, ls="--", label="eps1 (scissor)")
+        ax[8].set_title(f"Scissor what-if ({scissor_result['delta']:+.2f} eV)")
+        style(ax[8], ylabel="dielectric function"); ax[8].legend(fontsize=8)
+    elif offdiag_results:
+        for r in offdiag_results:
+            c = okabe.get(r["axis"], "0.4")
+            ax[8].plot(r["omega"], r["eps1"], color=c, lw=1.3, label=f"eps1_{r['axis']}")
+            ax[8].plot(r["omega"], r["eps2"], color=c, lw=1.3, ls="--", label=f"eps2_{r['axis']}")
+        ax[8].set_title("Off-diagonal tensor components (reconstructed)")
+        style(ax[8], ylabel="eps$_{ij}$"); ax[8].legend(fontsize=8)
+    else:
+        diag = [r for r in results if r["axis"] in _DIAGONAL_AXES]
+        if len(diag) > 1:
+            mean2 = np.mean([r["eps2"] for r in diag], axis=0)
+            for r in diag:
+                ax[8].plot(r["omega"], r["eps2"] - mean2, color=okabe.get(r["axis"], "0.4"), lw=1.3,
+                           label=f"eps2_{r['axis']} - mean")
+            ax[8].set_title("Anisotropy: eps2 minus the directional mean")
+            style(ax[8], ylabel="Delta eps2"); ax[8].legend(fontsize=8)
+        else:
+            ax[8].text(0.5, 0.5, "single direction:\nno anisotropy to show", ha="center", va="center")
+            ax[8].set_axis_off()
+
+    if experimental is not None and exp_quantity is not None:
+        panel = {"alpha": 2, "R": 4, "L": 5, "sigma1": 6}.get(exp_quantity)
+        if panel is not None:
+            twin = ax[panel].twinx()
+            twin.plot(experimental[0], experimental[1], color="#333333", lw=1.4, ls="-.", label="experimental")
+            twin.set_ylabel("experimental (arb. units)")
+            twin.legend(fontsize=8, loc="lower right")
+    fig.suptitle(title or "Optical properties", fontsize=14)
+    fig.tight_layout()
+    if png_path:
+        fig.savefig(png_path, dpi=150)
+    if show:
+        plt.show()
+    plt.close(fig)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 2 of 2: aggregates every direction folder written by "
@@ -523,7 +724,14 @@ correction is only ever applied to the 3 diagonal directions, never to a biaxial
 When all 3 of xx/yy/zz are present, also computes and reports/plots an isotropic ('avg') average --
 eps2 averaged across the 3 directions first, then every other quantity (including eps1) re-derived
 from that averaged eps2 -- the standard convention for comparing against a polycrystalline/powder
-experimental measurement, which doesn't correspond to any single crystallographic direction.""",
+experimental measurement, which doesn't correspond to any single crystallographic direction.
+
+[REPORT] System/ground state and per-folder Optical settings read back from the folders; data quality
+(SCF, SIESTA's f-sum check, the f-sum rule recomputed from eps2 as N_eff(E)); static eps1/n/R, absorption
+onset, Tauc direct gap and Penn gap; peaks of eps2 and the plasmon; anisotropy and a symmetry-consistency
+check of the tensor; optical constants at chosen energies; a plain-language interpretation. Optional:
+--show/--png (9-panel matplotlib dashboard), --scissor (post-processing what-if for the DFT gap error),
+--energies, --n-peaks.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --directory optical_study --plot-quantity alpha\n"
@@ -588,6 +796,26 @@ experimental measurement, which doesn't correspond to any single crystallographi
     parser.add_argument("-v", "--version", action="version", version=f"stb-opticalAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
+    parser.add_argument("--show", action="store_true",
+                         help="Open the analysis dashboard (matplotlib, 9 panels) on screen. Needs a display.")
+    parser.add_argument("--png", action="store_true",
+                         help="Save the dashboard as <directory>/<output>_summary.png.")
+    parser.add_argument("--plot-emax", type=float, default=None, metavar="EV",
+                         help="Upper energy of the dashboard's x axes (default: the data range, at most 20 eV). "
+                              "--energy-min/--energy-max instead trim the DATA used by every analysis.")
+    parser.add_argument("--energies", type=float, nargs="+", default=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
+                         metavar="EV",
+                         help="Photon energies (eV) of the 'optical constants at selected energies' table "
+                              "(0 = static limit; default: 0 1 2 3 4 5 10).")
+    parser.add_argument("--n-peaks", type=int, default=6, metavar="N",
+                         help="Number of eps2 peaks listed in the spectral-features table (default: 6).")
+    parser.add_argument("--smoothing", type=float, default=0.05, metavar="EV",
+                         help="Gaussian sigma (eV) used only to locate peaks/zero crossings in a spiky "
+                              "spectrum (default: 0.05).")
+    parser.add_argument("--scissor", type=float, default=None, metavar="EV",
+                         help="What-if scissor shift (eV) applied in post-processing to the reference spectrum: "
+                              "eps2'(E) = eps2(E - EV), eps1 re-derived by Kramers-Kronig; reports the effect on the "
+                              "static constant, edge, peaks and plasmon and overlays it on the dashboard.")
     args = parser.parse_args()
 
     if args.experimental is not None and args.plot_quantity in ("eps", "n_k", "all"):
@@ -625,11 +853,32 @@ experimental measurement, which doesn't correspond to any single crystallographi
     report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
     f_out = open(report_path, 'w') if report_path else None
 
+    warnings = []                       # collected, repeated together at the end
+
+    def warn(text):
+        warnings.append(text)
+        return color_text(f"[WARNING] {text}", 'yellow')
+
+    section_counter = [0]
+
+    def section(title):
+        print_section(f"[{section_counter[0]}] {title}", f_out)
+        section_counter[0] += 1
+
     print_dual(f"{color_text('===== OPTICAL STAGE 2 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 
-    print_section('[0] RUN METADATA', f_out)
+    section('RUN METADATA')
+    print_dual(f"Tool            : stb-opticalAnalysis {VERSION}", f_out)
+    print_dual(f"Date            : {datetime.datetime.now():%Y-%m-%d %H:%M}", f_out)
     print_dual(f"Directory       : {args.directory}", f_out)
     print_dual(f"Folders found   : {len(folders)}", f_out)
+    print_dual(f"SIESTA log      : <folder>/{args.file}" + ("  (default)" if args.file == "calc.out" else ""), f_out)
+    window = []
+    if args.energy_min is not None:
+        window.append(f">= {args.energy_min:g} eV")
+    if args.energy_max is not None:
+        window.append(f"<= {args.energy_max:g} eV")
+    print_dual(f"Energy window   : {' and '.join(window) if window else 'whole EPSIMG range (no trim)'}", f_out)
 
     results = []
     seen_axes = {}
@@ -664,6 +913,7 @@ experimental measurement, which doesn't correspond to any single crystallographi
         sys.exit(1)
 
     results.sort(key=lambda r: (_AXIS_ORDER.get(r["axis"], 99), r["axis"]))
+    print_dual(f"Usable folders  : {len(results)} ({', '.join(r['axis'] for r in results)})", f_out)
 
     avg_result = compute_isotropic_average(results)
     if avg_result is not None:
@@ -673,70 +923,307 @@ experimental measurement, which doesn't correspond to any single crystallographi
                 "the xx direction's grid before averaging.", 'yellow'), f_out)
         results.append(avg_result)
 
-    structure = None
-    vacuum_axes = None
+    # ---- structure, symmetry, ground state
+    structure, vacuum_axes, lattice, volume = None, None, None, None
     struct_path = os.path.join(results[0]["folder"], "structure.fdf")
     if os.path.isfile(struct_path):
         structure = structure_io.read_fdf(struct_path)
+        lattice = np.array(structure.lattice, dtype=float)
+        volume = float(abs(np.linalg.det(lattice)))
         positions = np.array([pos for _, pos in structure.atoms])
         is_cartesian = structure.coord_format == 'cartesian'
         frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
         vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, 10.0)
-        print_section('[1] DIMENSIONALITY', f_out)
+    ref = reference_result(results)
+    siesta_infos = [r.get("siesta") or {} for r in results if r["axis"] != "avg"]
+    n_valence = next((i["nelectrons"] for i in siesta_infos if "nelectrons" in i), None)
+    n_valence_known = n_valence is not None
+    diag_results = [r for r in results if r["axis"] in _DIAGONAL_AXES]
+    plotted_results = [r for r in results if r["axis"] in _DIAGONAL_AXES or r["axis"] == "avg"] or results
+
+    # ================================================================ system & calculation
+    section('SYSTEM & CALCULATION (read back from the folders)')
+    if structure is not None:
+        counts = structure_io.atom_counts(structure)
+        formula = " ".join(f"{s}{counts[s]}" for s in structure_io.species_list(structure))
+        lengths = [float(np.linalg.norm(v)) for v in lattice]
+        print_dual(f"Structure       : {formula}  ({len(structure.atoms)} atoms), cell volume {volume:.4f} Ang^3", f_out)
+        print_dual(f"Lattice (Ang)   : a={lengths[0]:.4f}  b={lengths[1]:.4f}  c={lengths[2]:.4f}", f_out)
         print_dual(f"Detected : {kspace.dimensionality_label(vacuum_axes)}", f_out)
         if any(vacuum_axes):
             print_dual(color_text(
                 "[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- see stb-optical --help; "
                 "every direction's dielectric response below is diluted by the vacuum region, "
                 "no rescaling applied unless --dimensionality-correction is given.", 'yellow'), f_out)
+        if n_valence_known:
+            print_dual(f"Valence electrons : {n_valence:g} (from SIESTA's optical log)", f_out)
+    else:
+        print_dual("(structure.fdf not found in the first folder: cell-dependent analyses are skipped)", f_out)
 
-    print_section('[2] RESULTS BY DIRECTION', f_out)
-    for result in results:
-        i0 = int(np.argmin(result["omega"]))
-        i_alpha_max = int(np.argmax(result["alpha"]))
-        i_R_max = int(np.argmax(result["R"]))
-        print_dual(f"  Direction {result['axis']} ({result['folder']}):", f_out)
-        print_dual(f"    eps1(E->0)      : {result['eps1'][i0]:.4f}", f_out)
-        print_dual(f"    n(E->0)         : {result['n'][i0]:.4f}", f_out)
-        print_dual(f"    alpha peak      : {result['alpha'][i_alpha_max]:.4e} cm^-1 "
-                    f"at {result['omega'][i_alpha_max]:.4f} eV", f_out)
-        print_dual(f"    R peak          : {result['R'][i_R_max]:.4f} "
-                    f"at {result['omega'][i_R_max]:.4f} eV", f_out)
-        if not result["scf_ok"]:
-            print_dual(color_text(
-                f"    [WARNING] Could not confirm SCF convergence for '{result['folder']}' -- "
-                "this direction's spectrum may be unreliable.", 'yellow'), f_out)
+    first_folder = results[0]["folder"]
+    folder_texts = []
+    for name in ("config_extra.fdf", "calc.fdf"):
+        path = os.path.join(first_folder, name)
+        if os.path.isfile(path):
+            with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+                folder_texts.append(fh.read())
+    template_values = fdf_directives.parse_directives(*folder_texts)
+    template_kgrid = fdf_directives.parse_kgrid(*folder_texts)
+    theory_keys = [("xcfunctional", "XC functional"), ("xcauthors", "XC authors"),
+                   ("paobasissize", "Basis size"), ("paoenergyshift", "PAO energy shift"),
+                   ("meshcutoff", "Mesh cutoff"), ("spin", "Spin"),
+                   ("electronictemperature", "Electronic temperature")]
+    theory_rows = [([label, template_values[key]], None) for key, label in theory_keys if key in template_values]
+    if template_kgrid:
+        theory_rows.append((["SCF k-grid", "x".join(str(v) for v in template_kgrid)], None))
+    if theory_rows:
+        print_dual("\nGround state (from the first folder's calc.fdf + config_extra.fdf):", f_out)
+        print_table(["Setting", "Value"], theory_rows, f_out)
+
+    optical_rows, signature = [], {}
+    for r in results:
+        if r["axis"] == "avg":
+            continue
+        info = r.get("siesta") or {}
+        mesh = info.get("mesh")
+        sp = ""
+        if mesh and lattice is not None:
+            spacings = reciprocal_spacings(lattice, mesh)
+            worst = max(s for i, s in enumerate(spacings) if not (vacuum_axes and vacuum_axes[i])) \
+                if not (vacuum_axes and all(vacuum_axes)) else 0.0
+            sp = f"{'x'.join(str(m) for m in mesh)} ({spacing_band(worst)})"
+        elif mesh:
+            sp = "x".join(str(m) for m in mesh)
+        broaden_ev = info.get("broaden_ry", float('nan')) * RY_TO_EV if "broaden_ry" in info else float('nan')
+        scissor_ev = info.get("scissor_ry", 0.0) * RY_TO_EV if "scissor_ry" in info else float('nan')
+        optical_rows.append(([r["axis"], os.path.basename(r["folder"]), sp or "?",
+                               f"{broaden_ev:.3f}" if np.isfinite(broaden_ev) else "?",
+                               str(info.get("nbands", "?")), f"{scissor_ev:.3f}" if np.isfinite(scissor_ev) else "?",
+                               info.get("polarization", "?")], None))
+        signature[r["axis"]] = (info.get("mesh"), info.get("nbands"), round(broaden_ev, 4) if np.isfinite(broaden_ev) else None,
+                                 round(scissor_ev, 4) if np.isfinite(scissor_ev) else None)
+    if optical_rows:
+        print_dual("\nOptical settings (as SIESTA ran them):", f_out)
+        print_table(["Dir", "Folder", "Optical.Mesh (spacing)", "Broaden (eV)", "Bands", "Scissor (eV)", "Polarization"],
+                    optical_rows, f_out)
+        if len(set(signature.values())) > 1:
+            print_dual(warn("The direction folders were NOT run with identical Optical.Mesh / Broaden / "
+                             "NumberOfBands / Scissor: eps(E) of different directions is then not directly "
+                             "comparable (anisotropy and the eps_ij reconstruction are affected)."), f_out)
+    sym = symmetry_analysis(structure) if structure is not None else None
+    if sym is not None:
+        print_dual(f"\nSymmetry        : {sym['symbol']} (No. {sym['number']}), {sym['system']}; "
+                    f"independent dielectric-tensor components: {sym['independent']} of 6", f_out)
+
+    # ================================================================ data quality
+    section('DATA QUALITY & CONVERGENCE')
+    quality_rows, neff_by_axis = [], {}
+    for r in results:
+        omega = r["omega"]
+        info = r.get("siesta") or {}
+        step = float(np.median(np.diff(omega))) if len(omega) > 1 else float('nan')
+        neff = None
+        if volume is not None:
+            neff = effective_electrons(omega, r["eps2"], volume)
+            neff_by_axis[r["axis"]] = neff
+        frac = (neff[-1] / n_valence) if (neff is not None and n_valence_known and n_valence) else None
+        scf_txt = "yes" if r["scf_ok"] else "NO"
+        quality_rows.append(([r["axis"], scf_txt,
+                               f"{info['fsum']:.4f}" if "fsum" in info else "-",
+                               f"{neff[-1]:.3f}" if neff is not None else "-",
+                               f"{frac:.3f}" if frac is not None else "-",
+                               f"{omega.min():.2f}-{omega.max():.1f}", str(len(omega)),
+                               f"{step:.4f}"], None if r["scf_ok"] else 'yellow'))
+        if not r["scf_ok"] and r["axis"] != "avg":
+            print_dual(warn(f"SCF convergence not confirmed for direction {r['axis']} ('{r['folder']}'): "
+                             "its spectrum may be unreliable."), f_out)
+    fsum_low = {}
+    for r in results:
+        info = r.get("siesta") or {}
+        if "fsum" in info and info["fsum"] < 0.9 and r["axis"] != "avg":
+            fsum_low.setdefault(round(info["fsum"], 3), []).append(r["axis"])
+    for value, axes_low in sorted(fsum_low.items()):
+        n_bands_used = max((i.get("nbands", 0) for i in siesta_infos), default=0)
+        print_dual(warn(f"SIESTA's f-sum check is {value:.3f} for {', '.join(axes_low)} (1 = complete): the transition "
+                         "sum does not account for all valence electrons. More Optical.NumberOfBands helps only if "
+                         f"fewer than all bands were used ({n_bands_used} here); beyond that the limit is the basis "
+                         "set -- a richer basis (TZP/TZDP, smaller PAO.EnergyShift) is what raises it."), f_out)
+    print_table(["Dir", "SCF ok", "f-sum (SIESTA)", "N_eff(E_max)", "N_eff/N_val", "E range (eV)", "Points",
+                 "Step (eV)"], quality_rows, f_out)
+    print_dual(color_text(
+        "N_eff(E) = (2 eps0 m V / pi hbar^2) Int E eps2 dE is the f-sum rule evaluated on the spectrum: the "
+        "number of electrons whose transitions are included up to E. It should approach the valence "
+        "electron count (SIESTA's own check, f-sum, is that ratio). A value well below 1 means too few "
+        "bands/too small an energy range, i.e. a truncated spectrum.", 'cyan'), f_out)
+    if args.energy_max is not None:
+        print_dual(color_text(
+            f"[NOTE] --energy-max {args.energy_max:g} eV trims the data used here: N_eff and the Kramers-Kronig "
+            "eps1 are evaluated on the trimmed spectrum, so they are lower/less accurate than on the full range.", 'cyan'), f_out)
+
+    # ================================================================ static response & edge
+    section('STATIC RESPONSE & ABSORPTION EDGE')
+    stats_by_axis = {}
+    static_rows = []
+    for r in plotted_results:
+        st = static_properties(r, volume, n_valence if n_valence_known else None)
+        stats_by_axis[r["axis"]] = st
+        static_rows.append(([r["axis"], f"{st['eps1_0']:.4f}", f"{st['n0']:.4f}", f"{st['R0']:.4f}",
+                              f"{st['onset']:.2f}" if np.isfinite(st['onset']) else "-",
+                              f"{st['tauc']:.2f}" if np.isfinite(st['tauc']) else "-",
+                              f"{st['penn']:.2f}" if np.isfinite(st['penn']) else "-"], None))
+    print_table(["Dir", "eps1(E->0)", "n(E->0)", "R(E->0)", "eps2 onset (eV)", "Tauc direct gap (eV)",
+                 "Penn gap (eV)"], static_rows, f_out)
+    ref_stats = stats_by_axis.get(ref["axis"]) or static_properties(ref, volume, n_valence if n_valence_known else None)
+    print_dual(color_text(
+        "eps2 onset: first energy where the smoothed eps2 exceeds 5 % of its maximum (the independent-particle "
+        "direct absorption edge; no indirect transitions exist in this spectrum). Tauc: extrapolation of "
+        "(alpha E)^2 vs E on the rising edge -- indicative, it assumes parabolic bands. Penn gap: "
+        "hbar*omega_p / sqrt(eps1(0) - 1), the one-oscillator gap that would give this static constant.", 'cyan'), f_out)
+    if np.isfinite(ref_stats["onset"]):
+        print_dual(f"Reference spectrum '{ref['axis']}': the absorption edge starts at {ref_stats['onset']:.2f} eV "
+                    f"(wavelength {HC_EV_NM / ref_stats['onset']:.0f} nm).", f_out)
+    if ref_stats["onset"] > 0.05 and abs(ref_stats["eps1_0"]) > 0:
+        print_dual(f"No absorption below the edge: the spectrum describes a dielectric (non-metallic) response; "
+                    f"eps1(0) = {ref_stats['eps1_0']:.2f}.", f_out)
+    elif np.isfinite(ref_stats["onset"]):
+        print_dual(color_text("[NOTE] eps2 is non-zero down to ~0 eV: a metallic/zero-gap response (SIESTA's optical "
+                               "module has no intraband/Drude term).", 'cyan'), f_out)
+
+    # ================================================================ spectral features
+    feature_emax = min(float(ref["omega"].max()), 30.0)
+    features = spectral_features(ref, args.n_peaks, args.smoothing, feature_emax)
+    section(f"SPECTRAL FEATURES (reference spectrum: {ref['axis']})")
+    if features["eps2_peaks"]:
+        peak_rows = []
+        for j, pk in enumerate(features["eps2_peaks"], 1):
+            e = pk["E"]
+            peak_rows.append(([str(j), f"{e:.2f}", f"{pk['value']:.2f}",
+                               f"{pk['fwhm']:.2f}" if np.isfinite(pk['fwhm']) else "-",
+                               f"{interp_at(ref, 'eps1', e):+.2f}", f"{interp_at(ref, 'n', e):.3f}",
+                               f"{interp_at(ref, 'k', e):.3f}", f"{interp_at(ref, 'alpha', e):.3e}",
+                               f"{interp_at(ref, 'R', e):.3f}"], None))
+        print_dual(f"Peaks of eps2 up to {feature_emax:g} eV (smoothed with sigma = {args.smoothing:g} eV; "
+                    "interband critical-point-like structure):", f_out)
+        print_table(["#", "E (eV)", "eps2", "FWHM (eV)", "eps1", "n", "k", "alpha (cm^-1)", "R"], peak_rows, f_out)
+    else:
+        print_dual("No eps2 peak above the prominence threshold in this range.", f_out)
+    print_dual("", f_out)
+    feat_rows = []
+    for key, label, fmt in (("alpha_max", "Absorption coefficient maximum", "{:.4e} cm^-1"),
+                            ("R_max", "Reflectivity maximum", "{:.4f}"),
+                            ("eps1_max", "Maximum of eps1", "{:.3f}")):
+        e, v = features[key]
+        feat_rows.append(([label, f"{e:.2f}", fmt.format(v)], None))
+    lp = features["loss_peak"]
+    if lp:
+        feat_rows.append((["Energy-loss peak (bulk plasmon)", f"{lp['E']:.2f}",
+                            f"L = {lp['value']:.2f}, FWHM {lp['fwhm']:.2f} eV" if np.isfinite(lp['fwhm'])
+                            else f"L = {lp['value']:.2f}"], None))
+    print_table(["Feature", "E (eV)", "Value"], feat_rows, f_out)
+    if features["eps1_zeros"]:
+        print_dual("Zero crossings of eps1: " + ", ".join(
+            f"{e:.2f} eV ({'rising' if d > 0 else 'falling'})" for e, d in features["eps1_zeros"][:8]), f_out)
+    if lp and np.isfinite(ref_stats["plasmon_free"]):
+        print_dual(f"Free-electron plasma energy for {n_valence:g} valence electrons in this cell: "
+                    f"{ref_stats['plasmon_free']:.2f} eV; the loss peak sits at {lp['E']:.2f} eV "
+                    f"({lp['E'] / ref_stats['plasmon_free']:.3f} x). A ratio near 1 marks a collective "
+                    "valence-electron plasmon.", f_out)
+
+    # ================================================================ anisotropy & symmetry
+    section('ANISOTROPY & SYMMETRY CHECKS')
+    verdicts = []
+    if len(diag_results) >= 2:
+        eps_static = [stats_by_axis[r["axis"]]["eps1_0"] for r in diag_results]
+        n_static = [stats_by_axis[r["axis"]]["n0"] for r in diag_results]
+        mean2 = np.mean([r["eps2"] for r in diag_results], axis=0)
+        norm_mean = float(np.linalg.norm(mean2)) or 1.0
+        dev_rows = []
+        for r in diag_results:
+            dev = float(np.linalg.norm(r["eps2"] - mean2) / norm_mean)
+            j = int(np.argmax(r["eps2"]))
+            dev_rows.append(([r["axis"], f"{stats_by_axis[r['axis']]['eps1_0']:.4f}",
+                               f"{stats_by_axis[r['axis']]['n0']:.4f}", f"{r['omega'][j]:.2f}",
+                               f"{r['eps2'][j]:.2f}", f"{dev:.2e}"], None))
+        print_table(["Dir", "eps1(0)", "n(0)", "E of max eps2 (eV)", "max eps2", "||eps2 - mean|| / ||mean||"],
+                    dev_rows, f_out)
+        spread = (max(eps_static) - min(eps_static)) / (np.mean(eps_static) or 1.0)
+        print_dual(f"Static anisotropy (eps_max - eps_min)/mean : {spread:.3e};  birefringence "
+                    f"dn(0) = {max(n_static) - min(n_static):.4f}", f_out)
+        verdicts.append(("diag", spread, max(float(np.linalg.norm(r['eps2'] - mean2) / norm_mean) for r in diag_results)))
+    else:
+        print_dual("Fewer than two diagonal directions: no anisotropy to compare.", f_out)
+    if sym is not None and len(diag_results) >= 2:
+        locked = [c for cls in sym["classes"] for c in cls if len(cls) > 1 and c in _DIAGONAL_AXES]
+        have = [r for r in diag_results if r["axis"] in locked]
+        if len(have) >= 2:
+            ref_c = have[0]
+            worst = max(float(np.linalg.norm(r["eps2"] - ref_c["eps2"]) / (np.linalg.norm(ref_c["eps2"]) or 1.0))
+                        for r in have[1:])
+            ok = worst < 1e-2
+            print_dual(f"Symmetry expects {' = '.join('eps_' + c for c in locked)}: observed relative deviation "
+                        f"{worst:.2e} -> " + (color_text("consistent", 'green') if ok else
+                                               warn(f"directions that symmetry makes equal differ by {worst:.1e}: check that "
+                                                    "all folders used the same settings/structure")), f_out)
+    print_dual("", f_out)
 
     offdiag_results = reconstruct_offdiagonal(results)
+    section('OFF-DIAGONAL DIELECTRIC TENSOR (eps_ij RECONSTRUCTION)')
     if offdiag_results:
-        print_section('[2b] OFF-DIAGONAL DIELECTRIC TENSOR (eps_ij RECONSTRUCTION)', f_out)
         print_dual("eps_ij = eps_(bisector ij) - (eps_ii + eps_jj) / 2, applied to eps1(E) and "
                     "eps2(E) independently -- see stb-optical --help for the full derivation.", f_out)
+        scale = max((float(np.max(np.abs(r["eps2"]))) for r in diag_results), default=1.0) or 1.0
+        off_rows = []
         for r in offdiag_results:
             i0 = int(np.argmin(r["omega"]))
             need_a, need_b = r["needs"]
-            print_dual(f"  eps_{r['axis']} (from dir_{r['axis']}, dir_{need_a}, dir_{need_b}):", f_out)
-            print_dual(f"    eps1_{r['axis']}(E->0)  : {r['eps1'][i0]:.4f}", f_out)
-            print_dual(f"    eps2_{r['axis']}(E->0)  : {r['eps2'][i0]:.4f}", f_out)
+            jmax = int(np.argmax(np.abs(r["eps2"])))
+            rel = float(np.max(np.abs(r["eps2"])) / scale)
+            off_rows.append(([f"eps_{r['axis']}", f"dir_{r['axis']}, dir_{need_a}, dir_{need_b}",
+                               f"{r['eps1'][i0]:+.4f}", f"{r['eps2'][i0]:+.4f}",
+                               f"{r['eps2'][jmax]:+.4f} @ {r['omega'][jmax]:.2f} eV", f"{rel:.2e}"], None))
             if r["interpolated"]:
                 print_dual(color_text(
-                    f"    [NOTE] Direction energy grids did not match exactly -- interpolated "
+                    f"[NOTE] Direction energy grids did not match exactly -- interpolated "
                     f"onto {r['axis']}'s own grid before reconstructing.", 'yellow'), f_out)
             if not r["scf_ok"]:
-                print_dual(color_text(
-                    f"    [WARNING] Could not confirm SCF convergence for one of the 3 folders "
-                    f"feeding eps_{r['axis']} -- this component may be unreliable.", 'yellow'), f_out)
+                print_dual(warn(f"SCF convergence not confirmed for one of the 3 folders feeding eps_{r['axis']}: "
+                                 "this component may be unreliable."), f_out)
+        print_table(["Component", "From", "eps1(E->0)", "eps2(E->0)", "largest |eps2_ij|", "relative to max eps2_ii"],
+                    off_rows, f_out)
+        if sym is not None:
+            zero_by_sym = [c for c in sym["zero"] if c in {r["axis"] for r in offdiag_results}]
+            if zero_by_sym:
+                worst_rel = max(float(np.max(np.abs(r["eps2"])) / scale) for r in offdiag_results if r["axis"] in zero_by_sym)
+                ok = worst_rel < 1e-2
+                print_dual(f"Symmetry makes {', '.join('eps_' + c for c in zero_by_sym)} vanish: largest observed "
+                            f"{worst_rel:.2e} of max eps2 -> " + (color_text("consistent", 'green') if ok else
+                            warn("an off-diagonal component that symmetry forbids is not ~0: check the folders")), f_out)
         n_offdiag_possible = len(OPTICAL_OFFDIAG_PAIRS)
         if len(offdiag_results) < n_offdiag_possible:
             missing_pairs = [axis for axis in OPTICAL_OFFDIAG_PAIRS if axis not in
                               {r["axis"] for r in offdiag_results}]
-            print_dual(f"  ({', '.join(missing_pairs)} not reconstructed -- missing the biaxial "
+            print_dual(f"({', '.join(missing_pairs)} not reconstructed -- missing the biaxial "
                         "folder and/or one of its 2 matching diagonal folders.)", f_out)
+    else:
+        print_dual("Not available: it needs a biaxial folder (xy/xz/yz) plus the two matching diagonal folders.", f_out)
 
+    # ================================================================ selected energies
+    section(f"OPTICAL CONSTANTS AT SELECTED ENERGIES (reference spectrum: {ref['axis']})")
+    sel_rows = []
+    for e in args.energies:
+        e_eval = max(e, float(ref["omega"].min()))
+        sel_rows.append(([f"{e:g}" if e > 0 else "0 (static)", f"{HC_EV_NM / e_eval:.0f}" if e_eval > 0 else "-",
+                           f"{interp_at(ref, 'eps1', e_eval):+.3f}", f"{interp_at(ref, 'eps2', e_eval):.3f}",
+                           f"{interp_at(ref, 'n', e_eval):.4f}", f"{interp_at(ref, 'k', e_eval):.4f}",
+                           f"{interp_at(ref, 'alpha', e_eval):.3e}", f"{interp_at(ref, 'R', e_eval):.4f}",
+                           f"{interp_at(ref, 'L', e_eval):.3e}"], None))
+    print_table(["E (eV)", "lambda (nm)", "eps1", "eps2", "n", "k", "alpha (cm^-1)", "R", "L"], sel_rows, f_out)
+
+    # ================================================================ dimensionality correction
     corrected_dat_paths = []
     polarizability_rows = []
     if args.dimensionality_correction:
-        print_section('[2c] DIMENSIONALITY CORRECTION', f_out)
+        section('DIMENSIONALITY CORRECTION')
         if structure is None or vacuum_axes is None:
             print_dual(color_text(
                 "  [WARNING] Could not read structure.fdf -- --dimensionality-correction "
@@ -830,11 +1317,116 @@ experimental measurement, which doesn't correspond to any single crystallographi
                     write_polarizability_csv(pol_csv_path, polarizability_rows)
                     corrected_dat_paths.append(pol_csv_path)
 
-    print_section('[3] SUMMARY & FILES', f_out)
+
+    # ================================================================ scissor what-if
+    scissor_result = None
+    if args.scissor is not None:
+        section(f"SCISSOR WHAT-IF ({args.scissor:+g} eV, post-processing of the {ref['axis']} spectrum)")
+        eps2_sc = apply_scissor(ref["omega"], ref["eps2"], args.scissor)
+        scissor_result = compute_all(ref["omega"], eps2_sc)
+        scissor_result["axis"], scissor_result["delta"] = ref["axis"], args.scissor
+        st_sc = static_properties(scissor_result, volume, n_valence if n_valence_known else None)
+        feat_sc = spectral_features(scissor_result, args.n_peaks, args.smoothing, feature_emax)
+        e2_pk = lambda f: (f"{f['eps2_peaks'][0]['E']:.2f}" if f["eps2_peaks"] else "-")
+        main_pk = lambda f: (f"{max(f['eps2_peaks'], key=lambda p: p['value'])['E']:.2f}" if f["eps2_peaks"] else "-")
+        sc_rows = [
+            (["eps1(E->0)", f"{ref_stats['eps1_0']:.3f}", f"{st_sc['eps1_0']:.3f}"], None),
+            (["n(E->0)", f"{ref_stats['n0']:.3f}", f"{st_sc['n0']:.3f}"], None),
+            (["R(E->0)", f"{ref_stats['R0']:.4f}", f"{st_sc['R0']:.4f}"], None),
+            (["eps2 onset (eV)", f"{ref_stats['onset']:.2f}", f"{st_sc['onset']:.2f}"], None),
+            (["first eps2 peak (eV)", e2_pk(features), e2_pk(feat_sc)], None),
+            (["strongest eps2 peak (eV)", main_pk(features), main_pk(feat_sc)], None),
+            (["loss peak (eV)", f"{features['loss_peak']['E']:.2f}" if features['loss_peak'] else "-",
+              f"{feat_sc['loss_peak']['E']:.2f}" if feat_sc['loss_peak'] else "-"], None),
+        ]
+        print_table(["Quantity", "DFT", f"scissor {args.scissor:+g} eV"], sc_rows, f_out)
+        print_dual(color_text(
+            "eps2'(E) = eps2(E - delta) (zero below delta), the position-matrix-element-conserving scissor "
+            "(Levine and Allan, Phys. Rev. Lett. 63, 1719 (1989)); eps1 is re-derived by Kramers-Kronig. It "
+            "corrects the gap error of semilocal DFT as a rigid shift, not the excitonic/quasiparticle "
+            "physics, so use it to see where the peaks land, not as a prediction.", 'cyan'), f_out)
+
+    # ================================================================ experimental comparison
+    experimental, experimental_dat_path = None, None
+    if args.experimental is not None:
+        exp_energy, exp_value = read_experimental_spectrum(args.experimental)
+        experimental = (exp_energy, exp_value)
+        experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
+        section('EXPERIMENTAL COMPARISON')
+        ref_result = next((r for r in results if r["axis"] == "avg"), results[0])
+        print_dual(f"Simulated reference : direction '{ref_result['axis']}'", f_out)
+        sim_key = _QUANTITY_COLUMNS[args.plot_quantity][0][0]
+        sim_peaks = find_spectrum_peaks(ref_result["omega"], ref_result[sim_key], args.peak_prominence)
+        exp_peaks = find_spectrum_peaks(exp_energy, exp_value, args.peak_prominence)
+        matches = match_peaks(sim_peaks, exp_peaks)
+        if matches:
+            for exp_e, sim_e, delta in matches:
+                if sim_e is None:
+                    print_dual(f"  Exp {exp_e:.4f} eV -> no simulated peak to match", f_out)
+                else:
+                    print_dual(f"  Exp {exp_e:.4f} eV -> Sim {sim_e:.4f} eV (delta = {delta:+.4f} eV)", f_out)
+            deltas = [d for _e, s, d in matches if s is not None]
+            if deltas:
+                print_dual(f"  Mean shift (sim - exp): {np.mean([-d for d in deltas]):+.3f} eV over {len(deltas)} matched peak(s)"
+                            " -- a rigid shift of this size would be a scissor candidate (--scissor).", f_out)
+        else:
+            print_dual("  No experimental peaks found above --peak-prominence threshold.", f_out)
+
+    # ================================================================ interpretation
+    section('INTERPRETATION')
+    bullets = []
+    st = ref_stats
+    if np.isfinite(st["onset"]) and st["onset"] > 0.05:
+        bullets.append(f"Dielectric (gapped) response: no absorption below {st['onset']:.2f} eV "
+                       f"({HC_EV_NM / st['onset']:.0f} nm); static dielectric constant eps1(0) = {st['eps1_0']:.2f}, "
+                       f"refractive index n(0) = {st['n0']:.2f}, normal-incidence reflectivity R(0) = {st['R0']:.2f}.")
+    elif np.isfinite(st["onset"]):
+        bullets.append("Absorption starts at ~0 eV: a metallic/zero-gap response (no Drude term in SIESTA's optical module).")
+    if features["eps2_peaks"]:
+        main = max(features["eps2_peaks"], key=lambda p: p["value"])
+        bullets.append(f"Strongest interband structure: eps2 = {main['value']:.1f} at {main['E']:.2f} eV "
+                       f"(absorption coefficient up to {features['alpha_max'][1]:.2e} cm^-1 at {features['alpha_max'][0]:.2f} eV).")
+    if features["loss_peak"]:
+        lp = features["loss_peak"]
+        extra = ""
+        if np.isfinite(st["plasmon_free"]):
+            extra = f", {lp['E'] / st['plasmon_free']:.2f} x the free-electron plasma energy of {st['plasmon_free']:.1f} eV"
+        bullets.append(f"Bulk plasmon (energy-loss maximum) at {lp['E']:.2f} eV{extra}; eps1 crosses zero there.")
+    if np.isfinite(st["penn"]):
+        bullets.append(f"Penn gap {st['penn']:.2f} eV: the single average gap consistent with eps1(0) = {st['eps1_0']:.2f}.")
+    fsums = [i["fsum"] for i in siesta_infos if "fsum" in i]
+    if fsums:
+        worst = min(fsums)
+        bullets.append("Sum rule: SIESTA's f-sum check is " + f"{worst:.3f}" + (
+            " -- complete." if worst >= 0.95 else " -- the transition sum is incomplete (limited by the number of bands "
+            "and, once all are used, by the basis set): more weight at high energy would lower eps1(0)."))
+    if verdicts:
+        _kind, spread, dev = verdicts[0]
+        bullets.append("The three diagonal directions " + ("agree (isotropic response)" if spread < 1e-2 and dev < 1e-2 else
+                       f"differ (static anisotropy {spread:.1e}, spectral deviation {dev:.1e})") + ".")
+    bullets.append("This is an independent-particle (RPA, no local fields, no excitons) spectrum on top of a semilocal "
+                   "ground state: expect the whole spectrum red-shifted by about the DFT gap error and eps1(0) "
+                   "overestimated; --scissor shows where the peaks would land.")
+    for b in bullets:
+        print_dual(f"* {b}", f_out)
+
+    # ================================================================ summary & files
+    section('SUMMARY & FILES')
 
     csv_path = os.path.join(args.directory, f"{args.output}.csv")
     write_results_csv(csv_path, results)
     print_dual(f"CSV (all directions) : {csv_path}", f_out)
+
+    summary_csv = os.path.join(args.directory, f"{args.output}_summary.csv")
+    with open(summary_csv, "w") as fh:
+        fh.write("direction,eps1_static,n_static,R_static,onset_eV,tauc_direct_gap_eV,penn_gap_eV,N_eff_Emax,fsum_siesta\n")
+        for r in plotted_results:
+            s_r = stats_by_axis[r["axis"]]
+            neff_end = neff_by_axis[r["axis"]][-1] if r["axis"] in neff_by_axis else float("nan")
+            fsum = (r.get("siesta") or {}).get("fsum", float("nan"))
+            fh.write(f"{r['axis']},{s_r['eps1_0']:.6f},{s_r['n0']:.6f},{s_r['R0']:.6f},{s_r['onset']:.4f},"
+                     f"{s_r['tauc']:.4f},{s_r['penn']:.4f},{neff_end:.4f},{fsum}\n")
+    print_dual(f"CSV (summary)        : {summary_csv}", f_out)
 
     dat_paths_by_axis = {}
     for result in results:
@@ -842,6 +1434,11 @@ experimental measurement, which doesn't correspond to any single crystallographi
         write_direction_dat(dat_path, result)
         dat_paths_by_axis[result["axis"]] = dat_path
         print_dual(f"Direction {result['axis']} .dat     : {dat_path}", f_out)
+
+    if scissor_result is not None:
+        sc_dat = os.path.join(args.directory, f"{args.output}_{ref['axis']}_scissor.dat")
+        write_direction_dat(sc_dat, dict(scissor_result, axis=f"{ref['axis']}_scissor{args.scissor:+g}eV"))
+        print_dual(f"Scissor what-if .dat : {sc_dat}", f_out)
 
     if offdiag_results:
         offdiag_csv_path = os.path.join(args.directory, f"{args.output}_offdiagonal.csv")
@@ -867,38 +1464,34 @@ experimental measurement, which doesn't correspond to any single crystallographi
             write_combined_gplot(gplot_path, dat_paths_by_axis, quantity)
             print_dual(f"Combined plot ({quantity}) : {gplot_path}", f_out)
     else:
-        experimental = None
-        experimental_dat_path = None
-        if args.experimental is not None:
-            exp_energy, exp_value = read_experimental_spectrum(args.experimental)
-            experimental = (exp_energy, exp_value)
-            experimental_dat_path = os.path.join(args.directory, f"{args.output}_experimental.dat")
-
-            print_section('[3b] EXPERIMENTAL COMPARISON', f_out)
-            ref_result = next((r for r in results if r["axis"] == "avg"), results[0])
-            print_dual(f"Simulated reference : direction '{ref_result['axis']}'", f_out)
-            sim_key = _QUANTITY_COLUMNS[args.plot_quantity][0][0]
-            sim_peaks = find_spectrum_peaks(ref_result["omega"], ref_result[sim_key],
-                                             args.peak_prominence)
-            exp_peaks = find_spectrum_peaks(exp_energy, exp_value, args.peak_prominence)
-            matches = match_peaks(sim_peaks, exp_peaks)
-            if matches:
-                for exp_e, sim_e, delta in matches:
-                    if sim_e is None:
-                        print_dual(f"  Exp {exp_e:.4f} eV -> no simulated peak to match", f_out)
-                    else:
-                        print_dual(f"  Exp {exp_e:.4f} eV -> Sim {sim_e:.4f} eV "
-                                    f"(delta = {delta:+.4f} eV)", f_out)
-            else:
-                print_dual("  No experimental peaks found above --peak-prominence threshold.", f_out)
-
         gplot_path = os.path.join(args.directory, f"{args.output}.gplot")
         write_combined_gplot(gplot_path, dat_paths_by_axis, args.plot_quantity,
                               experimental, experimental_dat_path)
-        print_dual(f"\nCombined plot ({args.plot_quantity}) : {gplot_path} "
+        print_dual(f"Combined plot ({args.plot_quantity}) : {gplot_path} "
                     f"(cd {args.directory} && gnuplot {os.path.basename(gplot_path)})", f_out)
+
+    if args.png or args.show:
+        plot_emax = args.plot_emax if args.plot_emax else min(float(ref["omega"].max()), 20.0)
+        png_path = os.path.join(args.directory, f"{args.output}_summary.png") if args.png else None
+        if args.show:
+            print_dual("Dashboard            : opening on screen (close the window to continue)...", f_out)
+        label = os.path.basename(os.path.abspath(args.directory))
+        done = make_dashboard(results, ref, ref_stats | {"loss_peak": features["loss_peak"]}, offdiag_results,
+                               scissor_result, neff_by_axis.get(ref["axis"]), n_valence if n_valence_known else None,
+                               plot_emax, png_path, args.show, experimental,
+                               args.plot_quantity if args.experimental else None,
+                               title=f"Optical properties -- {label} (reference: {ref['axis']})")
+        if done and png_path:
+            print_dual(f"Dashboard (PNG)      : {png_path}", f_out)
+    else:
+        print_dual("Dashboard            : not requested (add --show to open it, --png to save it)", f_out)
     if report_path:
-        print_dual(f"Report                : {report_path}", f_out)
+        print_dual(f"Report               : {report_path}", f_out)
+
+    if warnings:
+        print_dual(color_text(f"\n{len(warnings)} warning(s) above:", 'yellow'), f_out)
+        for w in warnings:
+            print_dual(f"  - {w}", f_out)
 
     if f_out:
         f_out.close()

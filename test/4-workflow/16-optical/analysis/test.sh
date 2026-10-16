@@ -142,16 +142,18 @@ done
 echo -e "\n--- Gate 1: full analysis (isotropic average + off-diagonal reconstruction) ---"
 stb-opticalAnalysis --directory bulk_study --no-intro > log_gate1.txt 2>&1
 check_exit_code $? 0
-check_contains "Direction xx (bulk_study/dir_xx):" log_gate1.txt
-check_contains "Direction xy (bulk_study/dir_xy):" log_gate1.txt
+check_contains "DATA QUALITY & CONVERGENCE" log_gate1.txt
+check_contains "xx  | yes" log_gate1.txt
+check_contains "xy  | yes" log_gate1.txt
+check_contains "STATIC RESPONSE & ABSORPTION EDGE" log_gate1.txt
 
 echo "Testing: isotropic average ('avg') is computed once xx/yy/zz are all present"
-check_contains "Direction avg ((isotropic average of xx, yy, zz)):" log_gate1.txt
+check_contains "avg | yes" log_gate1.txt
 
 echo "Testing: off-diagonal eps_xy is reconstructed to EXACTLY the known value (0.5000)"
-check_contains "\[2b\] OFF-DIAGONAL DIELECTRIC TENSOR" log_gate1.txt
-check_contains "eps_xy (from dir_xy, dir_xx, dir_yy):" log_gate1.txt
-check_contains "eps2_xy(E->0)  : 0.5000" log_gate1.txt
+check_contains "OFF-DIAGONAL DIELECTRIC TENSOR" log_gate1.txt
+check_contains "eps_xy    | dir_xy, dir_xx, dir_yy" log_gate1.txt
+check_contains "eps_xy .*+0.5000" log_gate1.txt
 
 echo "Testing: eps2_xy = 0.5 independently, reading the .dat file's own column (not just the log)"
 python3 -c "
@@ -173,6 +175,44 @@ check_success bulk_study/optical_results_xy_offdiag.dat
 check_success bulk_study/optical_results_offdiagonal.gplot
 check_success bulk_study/optical_results.gplot
 
+echo "Testing: the richer Stage 2 report -- system, quality, edge, features, anisotropy, selected energies, interpretation"
+check_contains "SYSTEM & CALCULATION" log_gate1.txt
+check_contains "Symmetry        : Pm-3m (No. 221), cubic" log_gate1.txt
+check_contains "SPECTRAL FEATURES" log_gate1.txt
+check_contains "ANISOTROPY & SYMMETRY CHECKS" log_gate1.txt
+check_contains "OPTICAL CONSTANTS AT SELECTED ENERGIES" log_gate1.txt
+check_contains "0 (static)" log_gate1.txt
+check_contains "INTERPRETATION" log_gate1.txt
+check_success bulk_study/optical_results_summary.csv
+echo "Testing: fabricated anisotropic data on a CUBIC cell is flagged (symmetry says xx = yy = zz)"
+check_contains "Symmetry expects eps_xx = eps_yy = eps_zz" log_gate1.txt
+check_contains "directions that symmetry makes equal differ" log_gate1.txt
+echo "Testing: static eps1/n/R of the constant-eps2 fixture are reported per direction"
+python3 -c "
+import csv
+rows = list(csv.DictReader(open('bulk_study/optical_results_summary.csv')))
+by = {r['direction']: r for r in rows}
+assert set(by) >= {'xx', 'yy', 'zz', 'avg'}, by.keys()
+assert float(by['zz']['eps1_static']) > float(by['xx']['eps1_static']), 'eps1 must grow with the constant eps2'
+print('OK')
+" > log_summary_check.txt 2>&1
+check_contains "OK" log_summary_check.txt
+
+echo "Testing: --png writes the dashboard; --scissor adds its section and file; --energies / --n-peaks are honoured"
+stb-opticalAnalysis --directory bulk_study --png --scissor 0.5 --energies 0 1 2.5 --n-peaks 3 -o dash \
+    --no-intro > log_dash.txt 2>&1
+check_exit_code $? 0
+check_success bulk_study/dash_summary.png
+check_contains "SCISSOR WHAT-IF (+0.5 eV" log_dash.txt
+check_success bulk_study/dash_avg_scissor.dat
+check_contains "2.5        | 496" log_dash.txt
+check_contains "Dashboard (PNG)" log_dash.txt
+echo "Testing: --show without a display only warns (no crash)"
+env -u DISPLAY -u WAYLAND_DISPLAY stb-opticalAnalysis --directory bulk_study --show -o showtest \
+    --no-intro > log_show.txt 2>&1
+check_exit_code $? 0
+check_contains "needs a display" log_show.txt
+
 
 # --- 4. Gate 2: a biaxial direction WITHOUT its matching diagonal pair ---
 echo -e "\n--- Gate 2: xy present but yy missing -- no reconstruction possible ---"
@@ -186,7 +226,7 @@ write_calc_out partial_study/dir_xy
 
 stb-opticalAnalysis --directory partial_study --no-intro > log_gate2.txt 2>&1
 check_exit_code $? 0
-check_not_contains "\[2b\] OFF-DIAGONAL DIELECTRIC TENSOR" log_gate2.txt
+check_contains "Not available: it needs a biaxial folder" log_gate2.txt
 if [ -f partial_study/optical_results_offdiagonal.csv ]; then
     echo -e "   -> ${RED}Failed:${NC} optical_results_offdiagonal.csv unexpectedly written"
     FAIL=$((FAIL+1))
@@ -298,7 +338,7 @@ EOF
 stb-opticalAnalysis --directory bulk_study --plot-quantity alpha --experimental fake_experimental.dat \
     -o exp --no-intro > log_experimental.txt 2>&1
 check_exit_code $? 0
-check_contains "\[3b\] EXPERIMENTAL COMPARISON" log_experimental.txt
+check_contains "EXPERIMENTAL COMPARISON" log_experimental.txt
 check_success bulk_study/exp_experimental.dat
 
 echo "Testing: --experimental with a paired quantity (eps) is rejected"
@@ -337,11 +377,17 @@ echo "Testing: navigate 4.16.2 -> bulk_study -> defaults -> quit"
   echo ""               # output filename (default calc.out)
   echo ""                # plot quantity (default eps)
   echo ""                 # dimensionality correction (default N)
+  echo ""                 # show dashboard (default N)
+  echo "y"                # save PNG
+  echo "0.4"              # scissor what-if
+  echo ""                 # selected energies (default)
   echo ""                  # advanced settings (default N)
   echo ""                   # press enter to continue
   echo "0"                   # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
-check_contains "eps2_xy(E->0)  : 0.5000" log_menu.txt
+check_contains "eps_xy .*+0.5000" log_menu.txt
+check_contains "SCISSOR WHAT-IF (+0.4 eV" log_menu.txt
+check_success bulk_study/optical_results_summary.png
 
 
 popd > /dev/null

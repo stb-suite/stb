@@ -221,3 +221,158 @@ def molecular_polarizability(eps1_sc, eps2_sc, cell_volume_ang3):
     alpha_si = (eps_sc - 1.0) * constants.epsilon_0 * cell_volume_ang3 * 1e-30
     alpha_ang3 = alpha_si / (4.0 * np.pi * constants.epsilon_0) * _ANG3_PER_M3
     return alpha_si.real, alpha_si.imag, alpha_ang3.real, alpha_ang3.imag
+
+
+# ---------------------------------------------------------------------------
+# Derived analyses (spectral features, edge, sum rules, scissor) -- pure
+# functions of the arrays above, used by stb-opticalAnalysis's report/plots.
+# ---------------------------------------------------------------------------
+
+_trapz = getattr(np, "trapezoid", None) or np.trapz
+
+
+def smooth_curve(omega, y, sigma_ev):
+    """Gaussian-smoothed copy of `y` (sigma in eV on a uniform-ish grid) -- used only to
+    FIND peaks/crossings robustly in a spiky, finite-mesh spectrum; heights reported to
+    the user are read from the smoothed curve and labelled as such."""
+    from scipy.ndimage import gaussian_filter1d
+    omega = np.asarray(omega, dtype=float)
+    if sigma_ev <= 0 or len(omega) < 5:
+        return np.asarray(y, dtype=float)
+    step = float(np.median(np.diff(omega)))
+    return gaussian_filter1d(np.asarray(y, dtype=float), max(sigma_ev / step, 0.5), mode="nearest")
+
+
+def find_peaks_table(omega, y, n_peaks=6, sigma_ev=0.05, prominence_frac=0.05, e_max=None):
+    """The `n_peaks` most prominent peaks of `y(omega)` as dicts {E, value, index, fwhm}
+    (value from the smoothed curve, ordered by energy). `prominence_frac` is relative to
+    the curve's maximum inside [0, e_max]."""
+    from scipy.signal import find_peaks
+    omega = np.asarray(omega, dtype=float)
+    mask = np.ones_like(omega, dtype=bool) if e_max is None else omega <= e_max
+    ys = smooth_curve(omega, y, sigma_ev)
+    ys_m = np.where(mask, ys, 0.0)
+    if ys_m.max() <= 0:
+        return []
+    idx, props = find_peaks(ys_m, prominence=prominence_frac * ys_m.max())
+    order = np.argsort(props["prominences"])[::-1][:n_peaks]
+    peaks = []
+    for j in sorted(idx[order]):
+        peaks.append({"E": float(omega[j]), "value": float(ys[j]), "index": int(j),
+                      "fwhm": peak_fwhm(omega, ys, int(j))})
+    return peaks
+
+
+def peak_fwhm(omega, y, i):
+    """Full width at half maximum (eV) of the peak at index `i` of `y`, from the half-height
+    crossings on each side (linear interpolation); NaN if a side never drops to half height."""
+    half = y[i] / 2.0
+    left = i
+    while left > 0 and y[left] > half:
+        left -= 1
+    right = i
+    while right < len(y) - 1 and y[right] > half:
+        right += 1
+    if y[left] > half or y[right] > half:
+        return float("nan")
+    def cross(a, b):
+        return omega[a] + (half - y[a]) * (omega[b] - omega[a]) / (y[b] - y[a]) if y[b] != y[a] else omega[a]
+    return float(cross(right - 1, right) - cross(left, left + 1))
+
+
+def absorption_onset(omega, eps2, fraction=0.05, sigma_ev=0.03):
+    """First energy (eV) where the smoothed eps2 exceeds `fraction` of its maximum: the
+    optical absorption onset (NaN for a flat/zero spectrum). A robust, threshold-defined
+    proxy for the direct optical gap of an independent-particle (RPA) spectrum."""
+    ys = smooth_curve(omega, eps2, sigma_ev)
+    if ys.max() <= 0:
+        return float("nan")
+    above = np.where(ys > fraction * ys.max())[0]
+    return float(omega[above[0]]) if len(above) else float("nan")
+
+
+def tauc_direct_gap(omega, alpha, e_onset, e_peak, lo=0.05, hi=0.35):
+    """Direct-allowed Tauc estimate: (alpha*E)^2 is linear in E near the edge, and its
+    extrapolation to zero gives the gap. The fit uses the rising edge between the onset and
+    the first strong peak, restricted to where (alpha*E)^2 lies between `lo` and `hi` of its
+    maximum there. Returns (gap_eV, (slope, intercept), (E_lo, E_hi)) or (nan, None, None).
+    Indicative only: it assumes parabolic bands and constant matrix elements."""
+    omega = np.asarray(omega, dtype=float)
+    y = (np.asarray(alpha, dtype=float) * omega) ** 2
+    if not (np.isfinite(e_onset) and np.isfinite(e_peak)) or e_peak <= e_onset:
+        return float("nan"), None, None
+    win = (omega >= e_onset) & (omega <= e_peak)
+    if win.sum() < 6:
+        return float("nan"), None, None
+    ymax = y[win].max()
+    sel = win & (y >= lo * ymax) & (y <= hi * ymax)
+    # keep only the first contiguous rising block
+    idx = np.where(sel)[0]
+    if len(idx) < 4:
+        return float("nan"), None, None
+    breaks = np.where(np.diff(idx) > 1)[0]
+    if len(breaks):
+        idx = idx[:breaks[0] + 1]
+    if len(idx) < 4:
+        return float("nan"), None, None
+    slope, intercept = np.polyfit(omega[idx], y[idx], 1)
+    if slope <= 0:
+        return float("nan"), None, None
+    return float(-intercept / slope), (float(slope), float(intercept)), (float(omega[idx[0]]), float(omega[idx[-1]]))
+
+
+def zero_crossings(omega, y, sigma_ev=0.03):
+    """[(E, direction)] of the zero crossings of the (smoothed) curve, direction +1 for a
+    rising and -1 for a falling crossing."""
+    ys = smooth_curve(omega, y, sigma_ev)
+    sign = np.sign(ys)
+    out = []
+    for j in np.where(np.diff(sign) != 0)[0]:
+        if ys[j + 1] == ys[j]:
+            continue
+        e = omega[j] - ys[j] * (omega[j + 1] - omega[j]) / (ys[j + 1] - ys[j])
+        out.append((float(e), 1 if ys[j + 1] > ys[j] else -1))
+    return out
+
+
+def free_electron_plasmon_ev(n_electrons, volume_ang3):
+    """hbar*omega_p (eV) of a free-electron gas of `n_electrons` valence electrons in
+    `volume_ang3`: hbar*sqrt(N e^2 / (eps0 m V)). The reference for a bulk plasmon."""
+    volume = volume_ang3 * 1e-30
+    omega_p = np.sqrt(n_electrons * constants.e ** 2 / (constants.epsilon_0 * constants.m_e * volume))
+    return float(constants.hbar * omega_p / constants.e)
+
+
+def effective_electrons(omega, eps2, volume_ang3):
+    """Cumulative number of electrons per cell that contribute to the spectrum up to each
+    energy, from the f-sum rule  N_eff(E) = (2 eps0 m V / (pi hbar^2)) * Integral_0^E E' eps2(E') dE'
+    (E in eV, V the cell volume). It tends to the number of valence electrons when enough
+    transitions are included; the shortfall measures the spectrum truncated by too few
+    bands / too small an energy range."""
+    omega = np.asarray(omega, dtype=float)
+    eps2 = np.asarray(eps2, dtype=float)
+    integrand = omega * eps2
+    cumulative = np.concatenate([[0.0], np.cumsum(0.5 * (integrand[1:] + integrand[:-1]) * np.diff(omega))])
+    volume = volume_ang3 * 1e-30
+    prefactor = 2.0 * constants.epsilon_0 * constants.m_e * volume / (np.pi * constants.hbar ** 2)
+    # E in eV: Integral E eps2 dE [eV^2] = Integral [J^2] / e^2 and the SI formula carries 1/e^2 too -> no e factor left
+    return prefactor * cumulative
+
+
+def penn_gap_ev(eps1_static, plasmon_ev):
+    """Penn-model average gap E_P = hbar*omega_p / sqrt(eps1(0) - 1): the single energy that
+    would give this static dielectric constant in a one-oscillator model."""
+    if eps1_static <= 1.0:
+        return float("nan")
+    return float(plasmon_ev / np.sqrt(eps1_static - 1.0))
+
+
+def apply_scissor(omega, eps2, delta_ev):
+    """Rigid scissor shift of an independent-particle spectrum: eps2'(E) = eps2(E - delta)
+    (zero below delta). With position-matrix elements kept (Levine and Allan, Phys. Rev.
+    Lett. 63, 1719 (1989)) the shift is exact for eps2; eps1 follows from Kramers-Kronig
+    (compute_all). A what-if for the gap error of semilocal DFT, not a quasiparticle
+    calculation."""
+    omega = np.asarray(omega, dtype=float)
+    eps2 = np.asarray(eps2, dtype=float)
+    return np.interp(omega - delta_ev, omega, eps2, left=0.0, right=0.0)

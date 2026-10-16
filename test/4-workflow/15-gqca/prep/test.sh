@@ -84,19 +84,25 @@ check_success gqca_study_cubic/cluster_n2/structure.fdf
 check_success gqca_study_cubic/gqca_stage1.txt
 
 echo "Testing: every folder forces MD.TypeOfRun CG (real relaxation, not single-point)"
-check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n0/calc.fdf
-check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n1/calc.fdf
-check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n2/calc.fdf
+check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n0/config_extra.fdf
+check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n1/config_extra.fdf
+check_contains "MD.TypeOfRun          CG" gqca_study_cubic/cluster_n2/config_extra.fdf
+
+echo "Testing: calc.fdf %includes config_extra.fdf on top and keeps the template untouched"
+check_contains "%include config_extra.fdf" gqca_study_cubic/cluster_n0/calc.fdf
+check_contains "kgrid.MonkhorstPack   \\[" gqca_study_cubic/cluster_n0/config_extra.fdf
+check_contains "MD.NumCGsteps" gqca_study_cubic/cluster_n0/config_extra.fdf
 
 echo "Testing: 3D input gets MD.VariableCell T (full cell relaxes)"
-check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n0/calc.fdf
-check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n1/calc.fdf
+check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n0/config_extra.fdf
+check_contains "MD.VariableCell       T" gqca_study_cubic/cluster_n1/config_extra.fdf
 
 echo "Testing: bipartite (simple-cubic) sublattice reaches the ideal -1.0 AB ordering exactly"
 check_not_contains "deviates by" gqca_study_cubic/gqca_stage1.txt
 
 echo "Testing: report documents the pair orbit and Sublattice/Species B footer"
 check_contains "PAIR ORBIT" gqca_study_cubic/gqca_stage1.txt
+check_contains "CONFIG_EXTRA.FDF" gqca_study_cubic/gqca_stage1.txt
 check_contains "Sublattice     : Na" gqca_study_cubic/gqca_stage1.txt
 check_contains "Species B      : K" gqca_study_cubic/gqca_stage1.txt
 
@@ -114,9 +120,9 @@ check_success gqca_study_mos2/gqca_stage1.txt
 
 echo "Testing: 2D input is detected and cell relaxation left OFF (positions-only, KNOWN LIMITATION)"
 check_contains "KNOWN LIMITATION" gqca_study_mos2/gqca_stage1.txt
-check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n0/calc.fdf
-check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n1/calc.fdf
-check_contains "MD.TypeOfRun          CG" gqca_study_mos2/cluster_n1/calc.fdf
+check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n0/config_extra.fdf
+check_not_contains "MD.VariableCell       T" gqca_study_mos2/cluster_n1/config_extra.fdf
+check_contains "MD.TypeOfRun          CG" gqca_study_mos2/cluster_n1/config_extra.fdf
 
 echo "Testing: frustrated (triangular) Mo sublattice does NOT reach the ideal -1.0 exactly"
 check_contains "deviates by" gqca_study_mos2/gqca_stage1.txt

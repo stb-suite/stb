@@ -160,10 +160,12 @@ assert close(x_j[2], 0.25, 1e-6), x_j
 assert close(float(row_half['H_mix_eV']), 0.0, 1e-6), row_half
 assert close(float(row_half['SRO']), 0.0, 1e-6), row_half
 
-g = [1, 2, 1]
-s_expected = -kB * sum(xj * math.log(xj / gj) for xj, gj in zip(x_j, g))
-assert close(float(row_half['S_mix_eV_per_K']), s_expected, 1e-9), \
-    (row_half['S_mix_eV_per_K'], s_expected)
+# Random alloy (all Delta_j = 0): the mixing entropy must be EXACTLY the ideal-solution
+# value PER SITE, -kB*[x ln x + (1-x) ln(1-x)] (a per-cluster value would be N=2x larger).
+for xrow in (0.25, 0.5, 0.75):
+    r = next(r for r in rows if close(float(r['x']), xrow, 1e-9))
+    s_ideal = -kB * (xrow * math.log(xrow) + (1 - xrow) * math.log(1 - xrow))
+    assert close(float(r['S_mix_eV_per_K']), s_ideal, 1e-9), (xrow, r['S_mix_eV_per_K'], s_ideal)
 
 print('OK')
 " > log_gate12_check.txt 2>&1
@@ -204,6 +206,40 @@ print('OK')
 check_contains "OK" log_gate3_check.txt
 
 
+# --- 4b. Gate 4: closed-form populations == brute-force minimum of the per-site free energy ---
+echo -e "\n--- Testing Gate 4 (mass-action solution minimizes H - T*S per site, independent check) ---"
+write_energy 0 "-50.000000"
+write_energy 2 "-50.000000"
+write_energy 1 "-99.900000"
+stb-gqcaAnalysis --directory gqca_study --temp 500 --x-min 0.0 --x-max 1.0 --x-points 3 \
+    -o gate4 --no-intro > log_gate4.txt 2>&1
+check_exit_code $? 0
+python3 -c "
+import csv, math
+import numpy as np
+from scipy.optimize import minimize
+kB = 8.617333262e-5
+T, d1 = 500.0, 0.05           # per-site Delta_1 = (-99.9/2) - (-50) = +0.05 eV
+g = np.array([1.0, 2.0, 1.0]); delta = np.array([0.0, d1, 0.0])
+def F(v):
+    xs = np.array([v[0], v[1], 1 - v[0] - v[1]])
+    if xs.min() <= 0: return 1e9
+    H = float(np.sum(xs * delta))                        # per site
+    S = -kB * float(np.sum(xs * np.log(xs / g))) / 2.0   # cluster entropy / N, per site
+    return H - T * S
+cons = ({'type': 'eq', 'fun': lambda v: (v[1] / 2 + (1 - v[0] - v[1])) - 0.5},)
+r = minimize(F, [0.4, 0.2], constraints=cons, bounds=[(1e-9, 1), (1e-9, 1)], tol=1e-12)
+with open('gqca_study/gate4.csv') as f:
+    rows = list(csv.DictReader(f))
+row = next(r_ for r_ in rows if abs(float(r_['x']) - 0.5) < 1e-9)
+x1 = float(row['x_1'])
+assert abs(x1 - r.x[1]) < 1e-4, (x1, r.x[1])
+assert abs(float(row['G_mix_eV']) - F(r.x)) < 1e-8, (row['G_mix_eV'], F(r.x))
+print('OK')
+" > log_gate4_check.txt 2>&1
+check_contains "OK" log_gate4_check.txt
+
+
 # --- 5. Temperature sweep ---
 echo -e "\n--- Testing --temp-min/--temp-max/--temp-points (sweep) ---"
 stb-gqcaAnalysis --directory gqca_study --temp-min 300 --temp-max 1200 --temp-points 4 \
@@ -221,6 +257,37 @@ assert len(rows) == 4 * 3, len(rows)
 print('OK')
 " > log_sweep_check.txt 2>&1
 check_contains "OK" log_sweep_check.txt
+
+
+# --- 5b. Default sweep, report sections and optional outputs ---
+echo -e "\n--- Testing default temperature sweep, report sections, PNG dashboard and relaxed-structure export ---"
+stb-gqcaAnalysis --directory gqca_study --x-points 3 -o extras --png --export-relaxed cif \
+    --x-target 0.25 0.5 --save-report --no-intro > log_extras.txt 2>&1
+check_exit_code $? 0
+check_success gqca_study/extras.csv
+check_success gqca_study/extras_clusters.csv
+check_success gqca_study/extras_summary.png
+check_success gqca_study/relaxed/cluster_n1.cif
+check_contains "default sweep" log_extras.txt
+check_contains "LEVEL OF THEORY" log_extras.txt
+check_contains "INTERPRETATION" log_extras.txt
+check_contains "Regular-solution equivalent" log_extras.txt
+check_contains "x = 0.250" log_extras.txt
+check_contains "x = 0.500" log_extras.txt
+python3 -c "
+import csv
+with open('gqca_study/extras.csv') as f:
+    rows = list(csv.DictReader(f))
+temps = sorted(set(float(r['T_K']) for r in rows))
+assert temps == [300.0, 600.0, 900.0, 1200.0, 1500.0], temps
+print('OK')
+" > log_extras_check.txt 2>&1
+check_contains "OK" log_extras_check.txt
+
+echo "Testing: only one of --temp-min/--temp-max is rejected"
+stb-gqcaAnalysis --directory gqca_study --temp-min 300 --no-intro > log_onlymin.txt 2>&1
+check_exit_code $? 1
+check_contains "Provide both" log_onlymin.txt
 
 
 # --- 6. Error cases ---
@@ -254,6 +321,12 @@ echo "Testing: navigate 4.15.2 -> gqca_study -> fixed T -> quit"
   echo ""                # output filename (default calc.out)
   echo "1"                 # single fixed temperature
   echo "500"                 # T
+  echo ""                     # target composition (default 0.5)
+  echo ""                     # show dashboard (default N)
+  echo ""                     # save PNG (default N)
+  echo ""                     # 3D viewer (default N)
+  echo ""                     # export relaxed structures (default none)
+  echo "y"                    # save the text report
   echo ""                     # advanced settings (default N)
   echo ""                      # press enter to continue
   echo "0"                      # quit stage submenu

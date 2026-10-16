@@ -23,6 +23,17 @@ original Sher et al. 1987 formalism (their Eq. 3, 4, 13-15) before
 extending it. The exact configurational entropy expression could NOT be
 pinned to a primary-source closed form during this tool's development --
 see mixing_entropy's own docstring, flagged [UNVERIFIED] there.
+
+NORMALIZATION (important, fixed 2026-10-15): the reference energies handed to
+this module are PER SUBLATTICE SITE (stb-gqcaAnalysis divides each FreeEng by
+that folder's number of A+B sites). The cluster gas itself is made of N-site
+clusters, so (i) the Boltzmann weight of a cluster uses its CLUSTER energy
+N*Delta_j (cluster_fractions), (ii) the mixing entropy -kB*Sum x_j ln(x_j/g_j)
+is per cluster and is divided by N to get a per-site value (mixing_entropy),
+and (iii) the mixing enthalpy Sum x_j*Delta_j is already per site. With all
+Delta_j = 0 this reproduces the exact ideal-solution entropy per site,
+-kB*[x ln x + (1-x) ln(1-x)] -- before the fix the entropy came out exactly N
+times larger, which silently doubled the entropy term for the pair cluster.
 """
 
 from __future__ import annotations
@@ -64,9 +75,11 @@ def mixing_energies(e: np.ndarray, N: int) -> np.ndarray:
 
 
 def cluster_fractions(eta: float, T: float, g: list[int], delta_e: np.ndarray, N: int) -> np.ndarray:
-    """x_j(eta,T) = g_j * eta^n_j * exp(-Delta_j / kB*T) / Z, the mass-action
+    """x_j(eta,T) = g_j * eta^n_j * exp(-N*Delta_j / kB*T) / Z, the mass-action
     equilibrium cluster-composition distribution (CONFIRMED against
-    Ferreira et al. 2024 Eq. 13, same functional form) -- exposed
+    Ferreira et al. 2024 Eq. 13, same functional form, whose Delta_j is the
+    energy of the whole N-site CLUSTER: here `delta_e` is per sublattice
+    site, hence the factor N -- see the module NORMALIZATION note) -- exposed
     separately from solve_eta so callers can inspect x_j(eta) at a trial
     eta, not just the self-consistent solution.
 
@@ -91,7 +104,7 @@ def cluster_fractions(eta: float, T: float, g: list[int], delta_e: np.ndarray, N
         result[N] = 1.0
         return result
     kT = _BOLTZMANN_EV_K * T
-    log_weights = np.log(g) + n * np.log(eta) - delta_e / kT
+    log_weights = np.log(g) + n * np.log(eta) - N * delta_e / kT
     weights = np.exp(log_weights - log_weights.max())
     return weights / weights.sum()
 
@@ -154,8 +167,12 @@ def mixing_enthalpy(x_j: np.ndarray, delta_e: np.ndarray) -> float:
 
 
 def mixing_entropy(x_j: np.ndarray, g: list[int]) -> float:
-    """Delta_S_mix = -kB * Sum_j x_j * ln(x_j / g_j), eV/K per alloy
-    sublattice site (same normalization as mixing_enthalpy).
+    """Delta_S_mix = -(kB / N) * Sum_j x_j * ln(x_j / g_j), eV/K per alloy
+    sublattice site (same normalization as mixing_enthalpy; N = len(x_j) - 1
+    is the cluster size). The Sum is the entropy of the cluster gas PER
+    CLUSTER; the 1/N turns it into the per-site value. Check: for all
+    Delta_j = 0 (binomial x_j) it equals the exact ideal-solution entropy
+    -kB*[x ln x + (1-x) ln(1-x)] per site.
 
     [UNVERIFIED] This is the standard "gas of non-interacting clusters"
     Boltzmann/Stirling entropy (same spirit as Rao et al., Acta Mater.
@@ -185,7 +202,8 @@ def mixing_entropy(x_j: np.ndarray, g: list[int]) -> float:
     for xj, gj in zip(x_j, g):
         if xj > 0:
             total += xj * math.log(xj / gj)
-    return -_BOLTZMANN_EV_K * total
+    N = len(x_j) - 1
+    return -_BOLTZMANN_EV_K * total / N
 
 
 def free_energy(H: float, S: float, T: float) -> float:

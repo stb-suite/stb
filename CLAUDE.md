@@ -375,6 +375,32 @@ call = one real-DFT NEB step for modes 2/3, using the `SinglePointCalculator`
 MODE: N` marker in `neb_setup.txt`; for modes 2/3 always analyzes the
 highest-numbered `cycle_NN/`, plots barrier-vs-cycle once 2+ complete cycles exist).
 
+**4-Workflow item 15, GQCA** — `stb-gqca` (Stage 1: pair-cluster (N=2) reference
+structures AA/AB/BB of a substitutional alloy on one sublattice, via icet's
+Hart-Forcade enumeration; the AB structure is the 50:50 cell whose nearest-neighbour
+pair correlation is closest to -1, which a frustrated (FCC/triangular) sublattice cannot
+reach -- reported, never hidden; all 3 folders are written for a real CG relaxation,
+`MD.VariableCell T` only for a 3D input) -> `stb-gqcaAnalysis` (Stage 2: per-site energies,
+`Delta_j`, mass-action solve, `Omega = 2*Delta_1` and `T_c` estimate, level-of-theory and
+convergence checks read back from each folder, tables/interpretation, optional dashboard
+`--png/--show`, `--view`, `--export-relaxed`). Conventions worth knowing: the forced
+directives (`MD.TypeOfRun CG`, `MD.NumCGsteps` > 0 -- SIESTA's default 0 would skip the
+relaxation --, `MD.VariableCell T`, the per-cell `kgrid.MonkhorstPack`) go into each folder's
+`config_extra.fdf`, `%include`d on top of an untouched `calc.fdf` template (the old append-at-the-end
+form lost to a template's own `kgrid` because the fdf reader is first-occurrence-wins);
+`--calc` defaults to `calc.fdf`; `--kdensity` defaults to 0.2 1/Ang like the other
+workflows. **Normalization in `core/gqca_solver.py`**: the reference energies are per
+sublattice site, the cluster gas is made of N-site clusters -- Boltzmann weights use the
+cluster energy `N*Delta_j`, the cluster entropy is divided by `N`; the random limit must
+reproduce the exact ideal entropy per site (a per-cluster entropy once made it exactly 2x
+too large and shifted every result to 2T; `test/4-workflow/15-gqca/analysis/test.sh` guards
+this with an ideal-entropy check and a brute-force minimization of `H - T*S`). The entropy's
+closed form beyond the random limit is still flagged `[UNVERIFIED]`. The example
+(`examples/4.15-gqca/`) ships REAL finished SIESTA runs in `reference_results/` (InGaAs/AlGaAs,
+DZP/TZP, one mesh test) so Stage 2 runs genuine data; its README documents an unresolved
+AlGaAs `Delta_1` anomaly (~29 meV left after ruling out k-points, cell shape, mesh, strain and
+partly the basis) -- do not present AlGaAs numbers as validated.
+
 **4-Workflow item 17, MLFF** — `stb-mlff` (Stage 1: generates rattled/AIMD-sampled
 training configs from a reference `calc.fdf`) → `stb-mlffAnalysis` (Stage 2: splits
 train/valid in Python — not via `mace_run_train --valid_fraction`, which is ignored

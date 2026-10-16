@@ -5554,10 +5554,12 @@ def run_gqca_prep() -> None:
                             "(e.g. Mo): ").strip()
     species_b = get_input("Second alloy species (e.g. W): ").strip()
 
-    calc_file = get_input("\nCalc.fdf template for the 3 cluster relaxations: ")
+    calc_file = get_input("\nCalc.fdf template for the 3 cluster relaxations [default: calc.fdf]: ").strip()
+    if not calc_file:
+        calc_file = "calc.fdf"
     while not os.path.isfile(calc_file):
         print(color_text("File not found!", 'red'))
-        calc_file = get_input("Calc.fdf template for the 3 cluster relaxations: ")
+        calc_file = get_input("Calc.fdf template for the 3 cluster relaxations [default: calc.fdf]: ").strip() or "calc.fdf"
 
     pseudo_dir = prompt_pseudo_source(optional=True)
 
@@ -5576,7 +5578,7 @@ def run_gqca_prep() -> None:
         "\nConfigure advanced settings (k-point density/vacuum-gap)? [y/N]: ").strip().lower()
     if show_advanced == 'y':
         kdensity = get_float_input("k-point density, same convention as stb-kgrid "
-                                    "[default: 0.04]: ", 0.04)
+                                    "[default: 0.2]: ", 0.2)
         args.extend(["--kdensity", str(kdensity)])
         vacuum_gap = get_float_input(
             "Vacuum-axis detection threshold in Ang [default: 10.0]: ", 10.0)
@@ -5603,8 +5605,9 @@ def run_gqca_analysis() -> None:
 
     print(f"\n{color_text('Temperature:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Single fixed temperature (default)")
-    print(f"  {color_text('2', 'cyan')} = Temperature sweep")
-    temp_choice = get_input("Select option (1-2) [default: 1]: ").strip()
+    print(f"  {color_text('2', 'cyan')} = Temperature sweep (custom range)")
+    print(f"  {color_text('3', 'cyan')} = Default sweep 300-1500 K, 5 points")
+    temp_choice = get_input("Select option (1-3) [default: 1]: ").strip()
 
     args = ["--directory", run_dir, "--file", output_filename, "--no-intro"]
     if temp_choice == '2':
@@ -5613,9 +5616,30 @@ def run_gqca_analysis() -> None:
         temp_points = get_int_input("  Number of T points [default: 5]: ", 5)
         args.extend(["--temp-min", str(temp_min), "--temp-max", str(temp_max),
                      "--temp-points", str(temp_points)])
+    elif temp_choice == '3':
+        pass   # no temperature option -> the tool's own default sweep
     else:
         temp = get_float_input("  Temperature in K [default: 300.0]: ", 300.0)
         args.extend(["--temp", str(temp)])
+
+    x_target = get_input("\nTarget composition(s) x for the detailed tables, space-separated "
+                          "[default: 0.5]: ").strip()
+    if x_target:
+        args.extend(["--x-target"] + x_target.split())
+
+    print(f"\n{color_text('Extras (all optional):', 'yellow')}")
+    if get_input("  Show the analysis dashboard on screen (needs a display)? [y/N]: ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("  Save the dashboard as a PNG? [y/N]: ").strip().lower() == 'y':
+        args.append("--png")
+    if get_input("  View the 3 relaxed structures in the 3D viewer (needs a display)? [y/N]: ").strip().lower() == 'y':
+        args.append("--view")
+    export_fmt = get_input("  Export the relaxed structures? cif / xsf / xyz / vasp / none "
+                            "[default: none]: ").strip().lower()
+    if export_fmt in ("cif", "xsf", "xyz", "vasp"):
+        args.extend(["--export-relaxed", export_fmt])
+    if get_input("  Save the text report to <dir>/gqca_stage2.txt? [y/N]: ").strip().lower() == 'y':
+        args.append("--save-report")
 
     show_advanced = get_input(
         "\nConfigure advanced settings (composition grid/force tolerance/output name)? "

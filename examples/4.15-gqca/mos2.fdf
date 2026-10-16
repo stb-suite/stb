@@ -1,0 +1,30 @@
+# Fixture: 2H-MoS2 monolayer (a = 3.16 Ang, S-Mo-S thickness 3.13 Ang, 15 Ang
+# vacuum on each side), built with ase.build.mx2. This is 2D: one vacuum axis
+# (c). The Mo sublattice is TRIANGULAR -- frustrated like FCC -- and the cell
+# carries a vacuum axis, so stb-gqca relaxes positions only (README section
+# 3.5). --sublattice Mo --species-b W models the Mo(1-x)W(x)S2 alloy.
+# (A fixture for stb-gqca's Stage 1 only; no real DFT is run on it.)
+
+NumberOfSpecies    2
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   42   Mo
+ 2   16   S
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.16000000   0.00000000   0.00000000
+ -1.58000000   2.73664028   0.00000000
+ 0.00000000   -0.00000000   33.13000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.50000000   1
+  0.66666667   0.33333333   0.54723815   2
+  0.66666667   0.33333333   0.45276185   2
+%endblock AtomicCoordinatesAndAtomicSpecies

@@ -1,25 +1,36 @@
 #!/bin/bash
-# Guided example: GQCA (Generalized Quasi-Chemical Approximation) workflow
-# (stb-gqca / stb-gqcaAnalysis, codes 4.15.1 / 4.15.2)
+# Guided example: Workflow 4.15 -- GQCA, Generalized Quasi-Chemical
+# Approximation (both stages: stb-gqca, code 4.15.1, and stb-gqcaAnalysis,
+# code 4.15.2, in the stb-suite menu).
 #
 # Not an automated test (see test/4-workflow/15-gqca/{prep,analysis}/test.sh
-# for that, including its own bipartite-vs-frustrated-lattice and 2D
-# fixtures) -- a commented walk-through: it runs real commands, one group
-# at a time, and shows you the piece of output that proves what just
-# happened. It pauses between sections so you can read before moving on.
+# for that) -- a commented walk-through: it runs real commands, one case at a
+# time, into its own output/<case>/ folder, and shows you the piece of output
+# that proves what just happened. Pauses between sections so you can read
+# before moving on. Safe to re-run any time -- it always starts by wiping its
+# own output/.
 #
-# stb-gqca is exercised for real -- it only builds structures, no SIESTA
-# dependency at all. stb-gqcaAnalysis needs real SIESTA calc.out files to
-# read, which this walkthrough doesn't have (no SIESTA binary here) -- so
-# Section 2 fabricates calc.out files with HAND-CHOSEN FreeEng values, the
-# same "worked backward from a known answer" convention 4.13-her/4.14-oer's
-# own examples use. See the README's Section 3 for why these particular
-# numbers were picked and what real literature they're standing in for.
+# structure.fdf/calc.fdf are GaAs (zincblende, DZP/GGA-PBE) -- the host of the
+# two alloys studied here: Ga(1-x)In(x)As (size-mismatched, ~7%) and
+# Ga(1-x)Al(x)As (nearly lattice-matched, ~0.1%).
+#
+# Stage 1 (stb-gqca) runs for real in every case below (cheap -- it only
+# writes .fdf files, no SCF). Stage 2 (stb-gqcaAnalysis) runs on REAL SIESTA
+# results: reference_results/{ingaas,algaas}/ hold the 3 finished cluster
+# relaxations of each alloy (calc.out, siesta.XV, the exact input files),
+# computed with the stb-gqca output of Case 1 and the calc.fdf in this folder
+# (SIESTA 5.4.2, mpirun -np 2, ~15 min per alloy). Nothing in Stage 2 is
+# fabricated -- every number the tool prints is genuine output on genuine DFT
+# data. See the README (section 6) for how to regenerate them yourself.
 
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
+
+# Stage 2's --show / --view need a display; MPLBACKEND=Agg keeps this script
+# headless-safe (the figure is still saved with --png).
+export MPLBACKEND=Agg
 
 OUT="$DIR/output"
 rm -rf "$OUT"
@@ -31,225 +42,342 @@ pause() {
     echo
 }
 
-write_energy() {
-    local cluster_dir="$1" free_eng="$2"
-    cat > "$cluster_dir/calc.out" <<EOF
-siesta: SCF Convergence by DM criterion
-SCF cycle converged after 12 iterations
-siesta: FreeEng =        ${free_eng}
-siesta: Atomic forces (eV/Ang):
-     1    0.001    0.001    0.001
-     Max    0.001
-EOF
+banner() {
+    echo "=================================================================="
+    echo " $1"
+    echo "=================================================================="
 }
 
-echo "=================================================================="
-echo " Why 3 fixed structures are the whole workflow, and what they solve"
-echo "=================================================================="
+strip_colors() { sed 's/\x1b\[[0-9;]*m//g'; }
+
+
+banner "Welcome: from 3 DFT relaxations to a whole alloy phase behaviour"
 cat <<'EOF'
-The pair-cluster (N=2) Generalized Quasi-Chemical Approximation (GQCA,
-Sher, van Schilfgaarde, Chen, Chen, Phys. Rev. B 36, 4279, 1987) treats a
-substitutional alloy A(1-x)Bx as a lattice of independent nearest-neighbor
-PAIRS, each in one of 3 local states:
+A substitutional alloy A(1-x)Bx has astronomically many atomic arrangements,
+and you cannot run DFT on all of them. The pair-cluster (N=2) Generalized
+Quasi-Chemical Approximation (Sher, van Schilfgaarde, Chen, Chen, Phys. Rev.
+B 36, 4279, 1987) sidesteps that: it treats the alloy as a gas of independent
+nearest-neighbour PAIRS, each AA, AB or BB, in a mass-action equilibrium
+    2 AB  <->  AA + BB
+driven by only THREE numbers -- the energies of the three ordered reference
+structures. Stage 1 (stb-gqca) builds and prepares them; you run SIESTA on
+them ONCE; Stage 2 (stb-gqcaAnalysis) turns the three energies into the
+mixing enthalpy, entropy, free energy and short-range order at ANY
+composition x and ANY temperature T.
 
-  n_j = 0 (AA)   n_j = 1 (AB)   n_j = 2 (BB)
-
-Stage 1 (stb-gqca) builds and relaxes exactly these 3 reference
-structures -- ONCE, regardless of which composition x you actually care
-about. Stage 2 (stb-gqcaAnalysis) combines their 3 energies via a
-mass-action equilibrium (like a chemical reaction 2(AB) <-> AA + BB) to
-get the pair-population fractions x_j(x,T) at ANY x in [0,1] and ANY T,
-then reports the mixing enthalpy/entropy/free energy and a short-range-
--order (SRO) parameter from them. Nothing is re-run per composition --
-the 3 DFT calculations ARE the whole x/T thermodynamic surface.
+This tour: Stage 1 on GaAs -> InGaAs (Cases 1-6), then Stage 2 on REAL SIESTA
+results for InGaAs and AlGaAs (Cases 7-11). See README.md for the theory
+(section 1) and the worked, literature-checked example (section 5).
 EOF
 pause
 
-echo "=================================================================="
-echo " output/algaas/  --  Stage 1 on a real semiconductor: GaAs -> AlGaAs"
-echo "=================================================================="
+
+banner "Case 1: Stage 1 -- GaAs -> InGaAs, what stb-gqca reports"
 cat <<'EOF'
-structure.fdf is GaAs in the zincblende structure (conventional cubic
-cell, a = 5.6533 Ang, the real experimental lattice constant) --
---sublattice Ga --species-b Al disorders the CATION sublattice, modeling
-Al(x)Ga(1-x)As: the most widely used III-V heterostructure alloy (laser
-diodes, HEMTs, solar cells), chosen here specifically because it's the
-textbook example of a NEARLY IDEAL solid solution -- AlAs and GaAs share
-almost exactly the same lattice constant (~0.1% mismatch), so real AlGaAs
-mixes close to randomly at any composition. Section 3 below checks
-whether stb-gqcaAnalysis reproduces exactly that.
+--sublattice Ga marks the cation sites as THE alloy sublattice, --species-b In
+is what replaces Ga on it. No -c flag: calc.fdf in the current folder is the
+default template. -p dojo copies the PseudoDojo pseudopotentials into each
+folder. Watch [1] (what was read), [2] (the nearest-neighbour pair the whole
+method is built on) and [4] (the 3 structures written).
 EOF
-echo "\$ stb-gqca -f structure.fdf --sublattice Ga --species-b Al -c calc.fdf -O output/algaas"
-stb-gqca -f structure.fdf --sublattice Ga --species-b Al -c calc.fdf \
-    -O "$OUT/algaas" --no-intro > "$OUT/algaas_stage1.log"
+mkdir -p "$OUT/case1-stage1"
+cp structure.fdf calc.fdf "$OUT/case1-stage1/"
+echo "\$ stb-gqca -f structure.fdf --sublattice Ga --species-b In -p dojo --no-intro"
+(cd "$OUT/case1-stage1" && stb-gqca -f structure.fdf --sublattice Ga --species-b In \
+    -p dojo --no-intro > stage1.log 2>&1)
+strip_colors < "$OUT/case1-stage1/stage1.log" | sed -n '/\[1\] INPUT STRUCTURE/,/\[3\] CONFIG_EXTRA/p' | sed '$d'
 echo
-echo "[2] PAIR ORBIT -- the shortest Ga-Ga distance and the orbit built on it:"
-sed -n '/\[2\] PAIR ORBIT/,/multiplicity/p' "$OUT/algaas_stage1.log"
+strip_colors < "$OUT/case1-stage1/stage1.log" | sed -n '/Written structures/,/Folder contents/p' | sed '$d'
 echo
-echo "[3] CLUSTER STRUCTURES -- 3 folders, one full-cell 3D relaxation each:"
-sed -n '/\[3\] CLUSTER STRUCTURES/,/AB-ordered)/p' "$OUT/algaas_stage1.log" | grep "\[OK\]"
+echo "On disk:"
+(cd "$OUT/case1-stage1" && ls gqca_study gqca_study/cluster_n1)
 pause
 
-echo "------------------------------------------------------------------"
-echo " The Ga sublattice is FCC: a real, unavoidable geometric limit"
-echo "------------------------------------------------------------------"
+
+banner "Case 2: config_extra.fdf -- how the relaxation is forced WITHOUT touching your calc.fdf"
 cat <<'EOF'
-Zincblende's cation sublattice is FCC -- the same lattice rocksalt's own
-cation sublattice has (stb-gqca --help gives NaCl as its own worked
-example of this). FCC contains triangles (an odd cycle), so no
-2-coloring of it can make EVERY nearest-neighbor pair unlike: the
-smallest exact-50:50-composition cell can only get so close to a pure
-AB (every-pair-unlike) local environment before running out of distinct
-orderings to try. This is real crystallography, not a fixture quirk --
-it shows up for ANY zincblende- or rocksalt-based alloy, not just AlGaAs:
+The 3 clusters must be REALLY relaxed (positions AND cell: In and Ga have
+different bond lengths, and a fixed cell would put spurious strain into the
+mixing energy -- README section 1.5). stb-gqca forces that through a
+config_extra.fdf written next to each calc.fdf, %included at the very TOP
+of it. SIESTA's fdf reader is first-occurrence-wins, so the forced values win
+even over directives already in your template -- and your template is copied
+byte for byte.
 EOF
-grep "NOTE.*deviates by\|NOTE.*sensitivity check" "$OUT/algaas_stage1.log"
+F="$OUT/case1-stage1/gqca_study/cluster_n1"
+echo "\$ cat gqca_study/cluster_n1/config_extra.fdf"
+cat "$F/config_extra.fdf"
 echo
-echo "-- and it's also why cluster_n1/ has FEWER atoms than cluster_n0/n2"
-echo "(icet's own primitive-cell enumeration, not the 8-atom input cell):"
-python3 -c "
-from stb.core import structure_io
-for n in (0, 1, 2):
-    s = structure_io.read_fdf('$OUT/algaas/cluster_n' + str(n) + '/structure.fdf')
-    print(f'  cluster_n{n}: {len(s.atoms)} atoms')
-"
-pause
-
-echo "=================================================================="
-echo " output/algaas/  --  Section 2: fabricating the 3 calc.out files"
-echo "=================================================================="
-cat <<'EOF'
-Real SIESTA output isn't available here (no SIESTA binary to invoke), so
--- exactly like 4.13-her/4.14-oer's own examples -- this section writes
-calc.out files with a HAND-CHOSEN FreeEng, worked backward from the two
-cases the README's Section 3 discusses:
-
-  CASE A (ideal): e_0 = e_2 = -50.0 eV/site, e_1 = -50.0 eV/site exactly
-                  -> Delta_1 = 0 -- what real, nearly lattice-matched
-                     AlGaAs should look like.
-  CASE B (illustrative, NOT real AlGaAs): e_1 shifted by -0.1 eV/site
-                  -> Delta_1 = -0.1 eV/site -- a HYPOTHETICAL
-                     ordering-favoring alloy, shown only to demonstrate
-                     what stb-gqcaAnalysis reports when the physics is
-                     NOT ideal (see the README for why real AlGaAs is
-                     not expected to look like this).
-
-cluster_n0/cluster_n2 have 4 Ga(Al) sites each (the 8-atom input cell);
-cluster_n1 has 2 (icet's smaller primitive-based AB cell) -- FreeEng is
-scaled by site count so all 3 land on the SAME per-site energy for a
-Delta_1 = 0 case, exactly like write_energy's own docstring in
-test/4-workflow/15-gqca/analysis/test.sh.
-EOF
-echo "Done -- Case A written first (see Section 3)."
-write_energy "$OUT/algaas/cluster_n0" "-200.000000"
-write_energy "$OUT/algaas/cluster_n2" "-200.000000"
-write_energy "$OUT/algaas/cluster_n1" "-100.000000"
-pause
-
-echo "=================================================================="
-echo " Section 3, CASE A: does the tool reproduce a well-known fact?"
-echo "=================================================================="
-echo "\$ stb-gqcaAnalysis --directory output/algaas --temp 900 -o ideal"
-stb-gqcaAnalysis --directory "$OUT/algaas" --temp 900 --x-points 5 -o ideal \
-    --no-intro > "$OUT/ideal_stage2.log"
+echo "\$ head -4 gqca_study/cluster_n1/calc.fdf     # the %include is line 1"
+head -4 "$F/calc.fdf"
 echo
-echo "[1] CLUSTER ENERGIES -- Delta_j = 0 for all j, exactly by construction:"
-sed -n '/Mixing energies/,/Delta_2/p' "$OUT/ideal_stage2.log"
-echo
-echo "At x=0.5, T=900 K (~a typical AlGaAs MBE/MOCVD growth temperature):"
-grep "^0.500000," "$OUT/algaas/ideal.csv"
-echo "x_j = [0.25, 0.50, 0.25] -- EXACTLY the random/binomial mixing"
-echo "distribution, H_mix = 0, SRO = 0: this IS the well-established"
-echo "textbook fact about real Al(x)Ga(1-x)As -- an almost perfectly"
-echo "ideal (Vegard's-law) solid solution, with no measurable"
-echo "short-range order at any accessible growth temperature."
-pause
-
-echo "=================================================================="
-echo " Section 3, CASE B: a HYPOTHETICAL non-ideal alloy, same host lattice"
-echo "=================================================================="
-echo "Overwriting cluster_n1's calc.out with the Case B energy:"
-write_energy "$OUT/algaas/cluster_n1" "-100.200000"
-echo "\$ stb-gqcaAnalysis --directory output/algaas --temp 900 -o ordering"
-stb-gqcaAnalysis --directory "$OUT/algaas" --temp 900 --x-points 5 -o ordering \
-    --no-intro > "$OUT/ordering_stage2.log"
-echo
-grep "^0.500000," "$OUT/algaas/ordering.csv"
-echo
-echo "x_1 pushed from 0.50 up to ~0.78, and SRO from 0 to ~ -0.57: the"
-echo "solver responds correctly to a NEGATIVE Delta_1 (AB pairing favored)"
-echo "by favoring AB-ordering over random mixing -- this is NOT real"
-echo "AlGaAs (see Section 3 above), just proof the machinery tracks the"
-echo "sign/magnitude of whatever Delta_1 you actually give it."
-echo
-echo "And yet -- even at this artificially strong ordering bias -- the"
-echo "miscibility-gap search still reports no gap, by mathematical"
-echo "necessity of this model (read carefully, this is a documented"
-echo "STRUCTURAL LIMITATION, not a claim about real AlGaAs miscibility):"
-sed -n '/\[4\] MISCIBILITY GAP/,/no gap\|gap(s)/p' "$OUT/ordering_stage2.log" | tail -3
-pause
-
-echo "=================================================================="
-echo " output/algaas/  --  a temperature sweep: order fades out with heat"
-echo "=================================================================="
-echo "\$ stb-gqcaAnalysis --directory output/algaas --temp-min 300 --temp-max 1500 --temp-points 5"
-stb-gqcaAnalysis --directory "$OUT/algaas" --temp-min 300 --temp-max 1500 \
-    --temp-points 5 --x-points 3 -o ordering_sweep --no-intro \
-    > "$OUT/sweep_stage2.log"
-echo
-echo "SRO at x=0.5 (Case B energies), 300 K -> 1500 K:"
-grep "^0.500000," "$OUT/algaas/ordering_sweep.csv" | awk -F, '{printf "  T = %6.0f K   SRO = %8.4f\n", $2, $10}'
-echo "|SRO| shrinks monotonically as T rises -- thermal disorder"
-echo "competing against the (hypothetical) ordering energy, the same"
-echo "qualitative order-disorder temperature dependence real alloys show."
-pause
-
-echo "=================================================================="
-echo " Proof: CLI and the interactive stb-suite menu agree (Stage 1)"
-echo "=================================================================="
-echo "Driving 4.15.1 through the interactive menu (piped input, Ga -> Al,"
-echo "pseudopotentials skipped) and comparing against output/algaas/ above."
-TMP="$(mktemp -d)"
-cp structure.fdf calc.fdf "$TMP/"
-echo
-echo "\$ printf '4.15.1\\nstructure.fdf\\nGa\\nAl\\ncalc.fdf\\n\\nalgaas_menu\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.15.1\nstructure.fdf\nGa\nAl\ncalc.fdf\n\nalgaas_menu\n\n\n0\n' \
-    | stb-suite > menu1.log 2>&1)
-python3 -c "
-import sys
-from stb.core import structure_io
-import numpy as np
-a = structure_io.read_fdf('$TMP/algaas_menu/cluster_n0/structure.fdf')
-b = structure_io.read_fdf('$OUT/algaas/cluster_n0/structure.fdf')
-a_frac = sorted([tuple(np.round(pos, 6)) for _s, pos in a.atoms])
-b_frac = sorted([tuple(np.round(pos, 6)) for _s, pos in b.atoms])
-sys.exit(0 if a_frac == b_frac else 1)
-"
-if [ $? -eq 0 ]; then
-    echo "Confirmed: the interactive-menu cluster_n0 and the direct-CLI cluster_n0 have the same geometry."
-else
-    echo "Unexpected: interactive-menu and direct-CLI results differ."
-    exit 1
+echo "The rest of calc.fdf is your template, unchanged:"
+if diff <(tail -n +3 "$F/calc.fdf") calc.fdf > /dev/null; then
+    echo "  confirmed -- calc.fdf (minus the 2 include lines) is identical to ./calc.fdf"
 fi
-rm -rf "$TMP"
+echo
+echo "--- A hostile template: kgrid 1x1x1, MD.NumCGsteps 0 (= no relaxation!), Broyden ---"
+mkdir -p "$OUT/case2-hostile"
+cp structure.fdf "$OUT/case2-hostile/"
+{ cat calc.fdf; printf 'kgrid.MonkhorstPack [1 1 1]\nMD.TypeOfRun Broyden\n'; } > "$OUT/case2-hostile/calc_hostile.fdf"
+sed -i 's/^MD.NumCGsteps 150/MD.NumCGsteps 0/' "$OUT/case2-hostile/calc_hostile.fdf"
+echo "\$ stb-gqca -f structure.fdf --sublattice Ga --species-b In -c calc_hostile.fdf --no-intro"
+(cd "$OUT/case2-hostile" && stb-gqca -f structure.fdf --sublattice Ga --species-b In \
+    -c calc_hostile.fdf --no-intro 2>&1 | strip_colors | sed -n '/\[3\] CONFIG_EXTRA/,/^Why:/p')
+echo
+echo "Resulting config_extra.fdf (steps raised, k-grid + run type overridden):"
+cat "$OUT/case2-hostile/gqca_study/cluster_n0/config_extra.fdf"
 pause
 
-echo "=================================================================="
-echo " Done"
-echo "=================================================================="
-cat <<EOF
-Folders generated under output/:
-  algaas/cluster_n{0,1,2}/   -- Stage 1 structures + fabricated calc.out
-  algaas/gqca_stage1.txt     -- Stage 1 report
-  algaas/{ideal,ordering,ordering_sweep}.csv/.dat/.gplot -- Stage 2 runs
 
-As a next step, on your OWN alloy (any lattice, 2D or 3D):
-  stb-gqca -f structure.fdf --sublattice <A> --species-b <B> -c calc.fdf -O gqca_study
-  # run SIESTA (a real CG/variable-cell relaxation) in every
-  # gqca_study/cluster_n{0,1,2}/ folder, then:
-  stb-gqcaAnalysis --directory gqca_study --temp <T_K>
-  # or --temp-min/--temp-max/--temp-points for a sweep. Read the
-  # [NOTE]/[WARNING] lines in gqca_stage1.txt first if your sublattice is
-  # FCC/HCP/triangular (see Section 2 above) -- Delta_1 is then a less
-  # clean estimate, still qualitatively meaningful.
+banner "Case 3: the k-point density -- --kdensity (default 0.2 1/Ang)"
+cat <<'EOF'
+The k-grid is recomputed PER FOLDER from a density (same convention as
+stb-kgrid and the other workflows), because the 3 cells differ in shape and
+size -- the same density gives each its own proper grid. 0.2 is the suite's
+usual starting point for semiconductors; tighten it (0.1, 0.05) for metals or
+when you want a convergence check of the mixing energy itself (README 5.4).
+EOF
+for d in 0.5 0.2 0.1; do
+    mkdir -p "$OUT/case3-k$d"
+    cp structure.fdf calc.fdf "$OUT/case3-k$d/"
+    echo "\$ stb-gqca ... --kdensity $d"
+    (cd "$OUT/case3-k$d" && stb-gqca -f structure.fdf --sublattice Ga --species-b In \
+        --kdensity "$d" --no-intro 2>&1 | strip_colors | grep -E "^(cluster_n[012]|Folder) +\\|" | cut -d'|' -f1,10)
+    echo
+done
+pause
+
+
+banner "Case 4: three lattices, three behaviours -- bipartite vs frustrated vs 2D"
+cat <<'EOF'
+The AB structure should make every nearest-neighbour pair UNLIKE. Whether
+that is geometrically possible depends on the lattice:
+  * simple cubic (cubic.fdf, Na -> K)   -- bipartite, a checkerboard works
+  * FCC cation sublattice (GaAs)        -- triangles, can't be perfect
+  * triangular Mo sublattice of a 2D MoS2 monolayer (mos2.fdf, Mo -> W)
+    -- frustrated AND vacuum-padded, so positions-only relaxation
+Compare the "Pair correlation" line (ideal AB = -1) and the cell treatment.
+EOF
+mkdir -p "$OUT/case4-lattices"
+cp cubic.fdf mos2.fdf calc.fdf "$OUT/case4-lattices/"
+for spec in "cubic.fdf Na K" "structure.fdf Ga In" "mos2.fdf Mo W"; do
+    set -- $spec
+    [ "$1" = "structure.fdf" ] && cp structure.fdf "$OUT/case4-lattices/"
+    echo "------------------------------------------------------------------"
+    echo "\$ stb-gqca -f $1 --sublattice $2 --species-b $3 -O study_$2$3"
+    (cd "$OUT/case4-lattices" && stb-gqca -f "$1" --sublattice "$2" --species-b "$3" \
+        -O "study_$2$3" --no-intro 2>&1 | strip_colors > "log_$2$3.txt")
+    grep -E "^Detected|^Cell treatment|Pair correlation|Deviation from ideal" "$OUT/case4-lattices/log_$2$3.txt"
+done
+echo
+echo "A 2D input also prints a [KNOWN LIMITATION] note (cell relaxation OFF, positions only):"
+grep -c "KNOWN LIMITATION" "$OUT/case4-lattices/log_MoW.txt" | sed 's/^/  occurrences in the MoS2 report: /'
+pause
+
+
+banner "Case 5: validation -- what stb-gqca correctly refuses"
+cat <<'EOF'
+Four real mistakes, each exiting with a clear [ERROR] and a non-zero status:
+an unknown sublattice species, sublattice == species B, a missing structure,
+and a missing calc.fdf (the default template that is not there).
+EOF
+mkdir -p "$OUT/case5-validation"
+cp structure.fdf "$OUT/case5-validation/"     # note: NO calc.fdf copied
+cd "$OUT/case5-validation"
+echo "\$ stb-gqca -f structure.fdf --sublattice Xx --species-b In -c $DIR/calc.fdf"
+stb-gqca -f structure.fdf --sublattice Xx --species-b In -c "$DIR/calc.fdf" --no-intro 2>&1 | strip_colors | grep ERROR || true
+echo
+echo "\$ stb-gqca -f structure.fdf --sublattice Ga --species-b Ga -c $DIR/calc.fdf"
+stb-gqca -f structure.fdf --sublattice Ga --species-b Ga -c "$DIR/calc.fdf" --no-intro 2>&1 | strip_colors | grep ERROR || true
+echo
+echo "\$ stb-gqca -f nothere.fdf --sublattice Ga --species-b In -c $DIR/calc.fdf"
+stb-gqca -f nothere.fdf --sublattice Ga --species-b In -c "$DIR/calc.fdf" --no-intro 2>&1 | strip_colors | grep ERROR || true
+echo
+echo "\$ stb-gqca -f structure.fdf --sublattice Ga --species-b In      # no ./calc.fdf here"
+stb-gqca -f structure.fdf --sublattice Ga --species-b In --no-intro 2>&1 | strip_colors | grep ERROR || true
+cd "$DIR"
+pause
+
+
+banner "Case 6: CLI vs. the interactive stb-suite menu (4.15.1) -- same result"
+cat <<'EOF'
+The menu asks the same questions instead of flags. Reproducing Case 1 through
+stb-suite -> 4.15.1 (structure, sublattice Ga, species B In, calc.fdf default,
+pseudopotential bank 1 = dojo, output name, no advanced settings) and
+comparing the generated folders with Case 1's proves the two paths equal.
+EOF
+mkdir -p "$OUT/case6-interactive"
+cp structure.fdf calc.fdf "$OUT/case6-interactive/"
+(cd "$OUT/case6-interactive" && \
+    printf '4.15.1\nstructure.fdf\nGa\nIn\n\n1\n\n\n\n0\n' | stb-suite > menu.log 2>&1)
+if diff -rq -x '*.psml' "$OUT/case1-stage1/gqca_study" "$OUT/case6-interactive/gqca_study" 2>&1 \
+        | grep -v "gqca_stage1.txt" | grep -q .; then
+    echo "UNEXPECTED: CLI and interactive menu folders differ -- see"
+    echo "  diff -rq -x '*.psml' '$OUT/case1-stage1/gqca_study' '$OUT/case6-interactive/gqca_study'"
+else
+    echo "CLI (Case 1) and interactive menu (4.15.1) produced identical cluster folders"
+    echo "(the Stage 1 report differs only by its own timestamp)."
+fi
+pause
+
+
+banner "Case 7: Stage 2 on REAL SIESTA data -- Ga(1-x)In(x)As"
+cat <<'EOF'
+reference_results/ingaas/ holds the 3 finished SIESTA relaxations of this
+alloy. Stage 2 reads each folder's calc.out, normalizes the energies per
+sublattice site (the 3 cells have different sizes!), and solves the pair
+mass-action equilibrium. Default: --directory gqca_study (here we point it at
+the reference), calc.out files, and a 300-1500 K sweep. Four sections of the
+report, in turn: level of theory, convergence/geometry, energies, tables.
+EOF
+cp -r reference_results/ingaas "$OUT/ingaas"
+echo "\$ stb-gqcaAnalysis --directory output/ingaas --x-target 0.25 0.5 --png --no-intro"
+stb-gqcaAnalysis --directory "$OUT/ingaas" --x-target 0.25 0.5 --png \
+    --no-intro 2>&1 | strip_colors > "$OUT/ingaas_stage2.log"
+echo
+echo "----- [1] Did the 3 folders use the SAME level of theory? -----"
+sed -n '/\[1\] LEVEL OF THEORY/,/^All 3 folders/p' "$OUT/ingaas_stage2.log" | tail -n +2
+pause
+echo "----- [2] Are they converged, and what did they relax to? -----"
+sed -n '/^Convergence:/,/AB volume vs Vegard/p' "$OUT/ingaas_stage2.log"
+pause
+echo "----- [3] The three energies that carry the whole method -----"
+sed -n '/\[3\] MIXING ENERGIES/,/H_mix(x=0.5/p' "$OUT/ingaas_stage2.log" | tail -n +2
+sed -n '/T_c = Omega/p' "$OUT/ingaas_stage2.log"
+pause
+echo "----- [4] What happens at x = 0.5 as the temperature rises -----"
+sed -n '/x = 0.500/,/^$/p' "$OUT/ingaas_stage2.log"
+echo "(random-alloy x_1 would be 0.50; SRO > 0 = like pairs clustered, -> 0 as T grows)"
+pause
+echo "----- [5]-[6] Sanity checks and the plain-language interpretation -----"
+sed -n '/\[5\] SANITY/,/\[7\] MISCIBILITY/p' "$OUT/ingaas_stage2.log" | sed '$d' | tail -n +2
+pause
+
+
+banner "Case 8: the contrast -- REAL Ga(1-x)Al(x)As (and why you must not trust one basis)"
+cat <<'EOF'
+Same workflow, same level of theory, on the NEARLY LATTICE-MATCHED alloy: AlAs
+and GaAs differ by ~0.1% experimentally, so there is almost no strain to pay
+for and the mixing enthalpy should be tiny. Put the two alloys side by side
+(both with the DZP basis of calc.fdf). Then read the surprise: Delta_1 of
+AlGaAs is NOT near zero. Case 9 investigates.
+EOF
+cp -r reference_results/algaas "$OUT/algaas"
+stb-gqcaAnalysis --directory "$OUT/algaas" --x-target 0.5 --no-intro 2>&1 | strip_colors > "$OUT/algaas_stage2.log"
+echo "\$ stb-gqcaAnalysis --directory output/algaas --x-target 0.5 --no-intro      # [3] only"
+sed -n '/\[3\] MIXING ENERGIES/,/T_c = Omega/p' "$OUT/algaas_stage2.log" | tail -n +2 | cut -c1-110
+echo
+python3 "$DIR/compare_runs.py" "$OUT" ingaas algaas
+pause
+
+
+banner "Case 9: convergence of the mixing energy -- basis (DZP/TZP) and mesh cut-off"
+cat <<'EOF'
+Delta_1 is a small difference (tens of meV) of three total energies of
+thousands of eV: it inherits every incompleteness of the numerical set-up.
+reference_results/ also holds the same 3 relaxations of each alloy re-run with
+PAO.BasisSize TZP, and of AlGaAs with Mesh.Cutoff 450 Ry. The tool reads the
+basis and mesh back from each folder (watch the first two rows). Watch also
+the GaAs lattice constant (experiment 5.653 A; plane-wave PBE ~5.67 A).
+EOF
+for r in ingaas_tzp algaas_tzp algaas_mesh450; do
+    cp -r reference_results/$r "$OUT/$r"
+    stb-gqcaAnalysis --directory "$OUT/$r" --x-target 0.5 --no-intro 2>&1 | strip_colors > "$OUT/${r}_stage2.log"
+done
+python3 "$DIR/compare_runs.py" "$OUT" ingaas ingaas_tzp algaas algaas_tzp algaas_mesh450
+echo
+echo "Reading it: TZP moves Delta_1 by about -7 meV (InGaAs) and -11 meV (AlGaAs)"
+echo "and brings the GaAs lattice constant down 0.05 A; the denser mesh does NOT"
+echo "lower Delta_1 (+3 meV). Delta_1 of AlGaAs stays far from the ~few-meV value"
+echo "an almost ideal alloy should have: DO NOT quote a number from one set-up."
+echo "README section 5.3 lists what was ruled out and what remains open."
+pause
+
+
+banner "Case 10: the optional extras -- dashboard, CSV, gnuplot, relaxed structures"
+cat <<'EOF'
+Besides the report, Stage 2 writes machine-readable and visual outputs, and
+can show them on screen:
+  --png / --show        6-panel dashboard (saved / opened with matplotlib)
+  --view                the 3 relaxed structures in ASE's 3D viewer
+  --export-relaxed FMT  the 3 relaxed structures (cif|xsf|xyz|vasp) to files
+  --save-report         the text report as gqca_stage2.txt
+Here the headless-safe ones (--show/--view need a display, see the README):
+EOF
+echo "\$ stb-gqcaAnalysis --directory output/ingaas --png --export-relaxed cif --save-report --no-intro"
+stb-gqcaAnalysis --directory "$OUT/ingaas" --png --export-relaxed cif --save-report \
+    --no-intro 2>&1 | strip_colors | sed -n '/\[8\] SUMMARY/,/UNVERIFIED/p' | sed '$d' | sed "s#$DIR/##g"
+echo
+echo "gqca_results_clusters.csv (one row per cluster):"
+cat "$OUT/ingaas/gqca_results_clusters.csv"
+echo
+echo "gqca_results.csv, first rows (x, T, eta, x_0, x_1, x_2, H, S, G, SRO):"
+head -3 "$OUT/ingaas/gqca_results.csv"
+echo
+echo "Open the dashboard yourself:  xdg-open output/ingaas/gqca_results_summary.png"
+echo "On a desktop you can also run:  stb-gqcaAnalysis --directory output/ingaas --show --view"
+pause
+
+
+banner "Case 11: Stage 2 guard rails -- what it flags when the data is not trustworthy"
+cat <<'EOF'
+Three realistic problems, all detected from the files alone:
+  (a) results missing         -> clean error, nothing computed
+  (b) one folder computed with a different level of theory (e.g. a 200 Ry
+      mesh in cluster_n1) -> WARNING in [1]: mixing energies are only
+      meaningful when all 3 clusters are computed identically
+  (c) a calc.out that never confirmed SCF convergence -> WARNING in [2]
+EOF
+echo "--- (a) an empty folder"
+mkdir -p "$OUT/guard_empty"
+stb-gqcaAnalysis --directory "$OUT/guard_empty" --temp 500 --no-intro 2>&1 | strip_colors | grep ERROR | sed "s#$DIR/##" || true
+echo
+echo "--- (b) different mesh cutoff in cluster_n1"
+cp -r reference_results/ingaas "$OUT/guard_theory"
+sed -i 's/^Mesh.Cutoff 250 Ry/Mesh.Cutoff 200 Ry/' "$OUT/guard_theory/cluster_n1/calc.fdf"
+stb-gqcaAnalysis --directory "$OUT/guard_theory" --temp 500 --no-intro 2>&1 | strip_colors \
+    | grep -E "^Mesh cutoff|WARNING.*level of theory" | cut -c1-175
+echo
+echo "--- (c) SCF convergence line removed from cluster_n2's calc.out"
+cp -r reference_results/ingaas "$OUT/guard_scf"
+sed -i '/SCF cycle converged after/d' "$OUT/guard_scf/cluster_n2/calc.out"
+stb-gqcaAnalysis --directory "$OUT/guard_scf" --temp 500 --no-intro 2>&1 | strip_colors \
+    | grep -E "WARNING.*SCF|all clusters SCF" | sed "s#$DIR/##" | cut -c1-175
+pause
+
+
+banner "Case 12: CLI vs. the interactive stb-suite menu (4.15.2) -- same result"
+cat <<'EOF'
+Stage 2 through stb-suite -> 4.15.2: directory, default output name, option 1
+(single temperature) = 500 K, default target composition, none of the
+optional extras except saving the report, no advanced settings.
+EOF
+cp -r reference_results/ingaas "$OUT/menu_study"
+(cd "$OUT" && printf '4.15.2\nmenu_study\n\n1\n500\n\n\n\n\n\ny\n\n\n0\n' | stb-suite > menu_stage2.log 2>&1)
+stb-gqcaAnalysis --directory "$OUT/ingaas" --temp 500 -o cli_check --no-intro > /dev/null 2>&1
+if diff -q "$OUT/menu_study/gqca_results.csv" "$OUT/ingaas/cli_check.csv" > /dev/null; then
+    echo "CLI and interactive menu (4.15.2) produced an identical results CSV."
+else
+    echo "UNEXPECTED: the two results CSVs differ."
+fi
+pause
+
+
+banner "Workflow 4.15 complete"
+cat <<EOF
+Stage 1 (stb-gqca, 4.15.1): 3 relaxation-ready folders (cluster_n0/n1/n2):
+structure.fdf, your untouched calc.fdf, a config_extra.fdf that forces the
+relaxation + the per-cell k-grid, and the pseudopotentials.
+Stage 2 (stb-gqcaAnalysis, 4.15.2): level-of-theory check, convergence and
+relaxed geometry, Delta_j in several units, regular-solution Omega and T_c,
+tables at your target compositions, sanity checks, an interpretation, CSV /
+gnuplot / PNG dashboard / relaxed structures.
+
+On YOUR alloy (any lattice, 2D or 3D):
+  stb-gqca -f structure.fdf --sublattice <A> --species-b <B> -p dojo
+  for c in n0 n2 n1; do (cd gqca_study/cluster_\$c && mpirun -np 4 siesta calc.fdf > calc.out); done
+  stb-gqcaAnalysis --x-target 0.25 0.5 0.75 --png
+Read [WARNING]/[NOTE] lines in both reports first -- README section 5.5
+explains how far to trust the numbers.
 EOF

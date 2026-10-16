@@ -223,7 +223,11 @@ per-mode intensities, degenerate-group combining, and the spectrum).
 `4.15-gqca/` covers the 2-stage Generalized
 Quasi-Chemical Approximation alloy-thermodynamics workflow: `stb-gqca`
 (`4.15.1`, the 3 pair-cluster structures) and `stb-gqcaAnalysis`
-(`4.15.2`, the mass-action solve over composition/temperature).
+(`4.15.2`, the mass-action solve over composition/temperature). Unlike
+the earlier workflow examples it ships **real, finished SIESTA runs**
+(`reference_results/`: Ga(1-x)In(x)As and Ga(1-x)Al(x)As, DZP and TZP) so its
+Stage 2 runs genuine data, and its README includes a convergence
+investigation of the mixing energy.
 
 ## Adding another example
 

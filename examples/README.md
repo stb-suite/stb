@@ -188,6 +188,7 @@ through.
 | 4.9  | `stb-neb` / `stb-nebCycle` / `stb-nebAnalysis` | [`4.9-neb/`](4.9-neb/) |
 | 4.12 | `stb-ir` / `stb-irModes` / `stb-irAnalysis` | [`4.12-ir/`](4.12-ir/) |
 | 4.15 | `stb-gqca` / `stb-gqcaAnalysis` | [`4.15-gqca/`](4.15-gqca/) |
+| 4.16 | `stb-optical` / `stb-opticalAnalysis` | [`4.16-optical/`](4.16-optical/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -228,6 +229,14 @@ the earlier workflow examples it ships **real, finished SIESTA runs**
 (`reference_results/`: Ga(1-x)In(x)As and Ga(1-x)Al(x)As, DZP and TZP) so its
 Stage 2 runs genuine data, and its README includes a convergence
 investigation of the mixing energy.
+`4.16-optical/` covers the 2-stage Optical Properties workflow: `stb-optical`
+(`4.16.1`, one SIESTA folder per polarization direction, with the SCF k-grid and the
+single-point guards forced through `config_extra.fdf`) and `stb-opticalAnalysis`
+(`4.16.2`, the dielectric function and everything derived from it, with sum-rule,
+symmetry and Kohn-Sham-gap checks, a scissor what-if and a dashboard). It ships real
+finished SIESTA runs of bulk silicon (plus an 11-run convergence study) and of
+graphene, and its README covers the theory, the numerical parameters and the
+limitations of independent-particle optics.
 
 ## Adding another example
 

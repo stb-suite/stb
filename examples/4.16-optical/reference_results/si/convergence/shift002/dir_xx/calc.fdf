@@ -1,0 +1,20 @@
+%include config_extra.fdf
+
+# calc.fdf template for the optical direction folders of bulk Si.
+# It deliberately has NO k-grid and no MD directives: stb-optical writes the SCF k-grid (a
+# required input -- SIESTA would sample Gamma only) and the single-point guards into each
+# folder's config_extra.fdf. Basis: TZP with a small PAO.EnergyShift, because optical transitions
+# involve the unoccupied bands, which a small or confined basis describes poorly (README 5.4).
+SystemLabel siesta
+%include structure.fdf
+
+XC.functional GGA
+XC.authors PBE
+PAO.BasisType split
+PAO.BasisSize TZP
+PAO.EnergyShift 0.002 Ry
+Mesh.Cutoff 300 Ry
+Spin non-polarized
+
+ElectronicTemperature 25 meV
+DM.Tolerance 1.0e-6

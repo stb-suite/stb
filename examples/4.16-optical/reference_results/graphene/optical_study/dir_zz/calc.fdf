@@ -1,0 +1,17 @@
+%include config_extra.fdf
+
+# calc.fdf template for the graphene optical folders (same idea as calc.fdf: no k-grid and no MD
+# directives -- stb-optical forces them; a vacuum axis gets a single SCF k-point division).
+SystemLabel siesta
+%include structure.fdf
+
+XC.functional GGA
+XC.authors PBE
+PAO.BasisType split
+PAO.BasisSize TZP
+PAO.EnergyShift 0.01 Ry
+Mesh.Cutoff 300 Ry
+Spin non-polarized
+
+ElectronicTemperature 25 meV
+DM.Tolerance 1.0e-6

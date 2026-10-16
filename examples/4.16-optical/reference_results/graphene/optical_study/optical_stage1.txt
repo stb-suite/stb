@@ -1,0 +1,111 @@
+===== OPTICAL STAGE 1 REPORT (DIRECTION FOLDERS) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Tool            : stb-optical 1.9.277
+Date            : 2026-10-16 10:52
+Structure       : relaxed.fdf
+Formula         : C2  (2 atom(s), 1 species: C)
+Cell volume     : 106.5280 Ang^3
+Calc template   : calc_optical.fdf
+Directions      : xx zz
+Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
+Output root     : optical_study
+
+[1] INPUT STRUCTURE
+------------------------------------------------------------
+Lattice (Ang)   : a=2.4800  b=2.4800  c=20.0000
+Angles (deg)    : alpha=90.00  beta=90.00  gamma=120.00
+Atoms per Ang^3 : 0.0188
+Species | Z | Atoms | Valence e- | Total e- | Valence from                                                       
+-----------------------------------------------------------------------------------------------------------------
+C       | 6 | 2     | 4          | 8        | textbook valence (no pseudopotential read; semicore pseudos differ)
+Valence electrons : 8  ->  4 occupied band(s) in a spin-unpolarized calculation
+Detected : 2D (e.g., a slab or surface)
+[KNOWN LIMITATION] Vacuum-padded (2D/slab) input -- the periodic-supercell dielectric response along ANY direction (including out-of-plane) is diluted by the vacuum region, a known methodological caveat for slab dielectric/polarizability DFT calculations. No vacuum-thickness rescaling is applied. Every requested direction is still computed (no direction is skipped for 2D inputs). Stage 2 can restore the intrinsic response: stb-opticalAnalysis --dimensionality-correction (2D also needs --thickness).
+
+[2] GROUND STATE READ FROM YOUR calc.fdf (the optical response sits on top of it)
+------------------------------------------------------------
+Setting                | Value in the template
+----------------------------------------------
+XC functional          | GGA                  
+XC authors             | PBE                  
+Basis type             | split                
+Basis size             | TZP                  
+PAO energy shift       | 0.01 Ry              
+Mesh cutoff            | 300 Ry               
+Spin                   | non-polarized        
+Electronic temperature | 25 meV               
+DM tolerance           | 1.0e-6               
+SCF k-grid forced     : 24x24x1  (spacing 0.122 0.122 0.314 1/Ang) -- explicit --kgrid; written into config_extra.fdf
+
+[3] OPTICAL PARAMETERS (applied identically to every direction)
+------------------------------------------------------------
+Optical.Mesh | Divisions | Spacing (1/Ang) | Assessment 
+--------------------------------------------------------
+axis a       | 72        | 0.0406          | fine       
+axis b       | 72        | 0.0406          | fine       
+axis c       | 1         | 0.3142          | vacuum axis
+Optical k-points  : 5184 total (independent of the SCF k-grid; the optical integral is evaluated on this mesh)
+
+Parameter                | Value     | Meaning                                                                               
+-----------------------------------------------------------------------------------------------------------------------------
+Optical.Broaden          | 0.1 eV    | Gaussian width applied to every interband transition before summing into eps2(E)      
+Optical.NumberOfBands    | 24        | bands entering the transition sum; must include conduction bands                      
+Optical.PolarizationType | polarized | makes SIESTA honour Optical.Vector (the default would silently average all directions)
+Bands included    : 24 = 4 occupied + 20 unoccupied
+
+[4] DIRECTIVES FORCED THROUGH config_extra.fdf (your template is not edited)
+------------------------------------------------------------
+Every direction folder gets its own config_extra.fdf, and calc.fdf starts with '%include config_extra.fdf' followed by your template untouched. SIESTA's fdf reader is first-occurrence-wins for a duplicate label, so the forced values win over anything the template says.
+Directive                | Forced value           | Template had | Effect                                                
+-------------------------------------------------------------------------------------------------------------------------
+kgrid.MonkhorstPack      | 24x24x1                | (absent)     | explicit --kgrid                                      
+MD.TypeOfRun             | CG                     | (absent)     | single-point run                                      
+MD.Steps                 | 0                      | (absent)     | no relaxation step                                    
+MD.NumCGsteps            | 0                      | (absent)     | belt and braces: no CG step whatever the template says
+MD.VariableCell          | false                  | (absent)     | the input cell is evaluated as given                  
+OpticalCalculation       | T                      | (absent)     | switches the optical module on                        
+Optical.PolarizationType | polarized              | (absent)     | required for Optical.Vector to be used                
+Optical.Broaden          | 0.1 eV                 | (absent)     | from --optical-broaden                                
+Optical.Mesh             | 72 72 1                | (absent)     | from --optical-mesh                                   
+Optical.Vector           | per direction, see [5] | (absent)     | one polarization direction per folder                 
+Optical.NumberOfBands    | 24                     | (absent)     | from --optical-nbands                                 
+The rest of the ground-state SCF (structure, basis, mesh cutoff, ...) is whatever your template says: every folder repeats the same SCF and only the polarization differs.
+
+[5] DIRECTIONS & DIELECTRIC-TENSOR MAPPING
+------------------------------------------------------------
+Direction  Kind         Optical.Vector           Gives access to              Needs also  
+------------------------------------------------------------
+xx         diagonal     1.0000 0.0000 0.0000     eps_xx (direct)              --          
+zz         diagonal     0.0000 0.0000 1.0000     eps_zz (direct)              --          
+
+What crystal symmetry says about the tensor (in the Cartesian frame of your cell):
+  Space group           : P6/mmm (No. 191), hexagonal -- 24 operations at symprec 0.01 Ang
+  Independent components: 2 of 6
+  Non-zero components   : eps_xx=eps_yy; eps_zz
+  Zero by symmetry      : eps_xy, eps_xz, eps_yz
+  Minimal direction set : xx zz
+
+[6] FOLDERS WRITTEN
+------------------------------------------------------------
+Under optical_study/:
+Folder  | Dir | Kind     | Optical.Vector       | Files                                           
+--------------------------------------------------------------------------------------------------
+dir_xx/ | xx  | diagonal | 1.0000 0.0000 0.0000 | structure.fdf, calc.fdf, config_extra.fdf, C.psf
+dir_zz/ | zz  | diagonal | 0.0000 0.0000 1.0000 | structure.fdf, calc.fdf, config_extra.fdf, C.psf
+
+[7] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+2 direction folder(s) written under 'optical_study' (2 diagonal, 0 biaxial).
+Cost                 : 2 independent SCF + optical runs (optical mesh 5184 k-points each).
+Report               : optical_study/optical_stage1.txt
+
+Next steps:
+  1. Run SIESTA in every folder, e.g.:
+       for d in optical_study/dir_*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+  2. Check that each folder finished and wrote <SystemLabel>.EPSIMG, then run:
+       stb-opticalAnalysis --directory optical_study --energy-max 20 --dimensionality-correction --thickness <Ang>
+     (--plot-quantity all writes eps, n/k, alpha, R, loss and sigma plots; --energy-max trims the energy range of the reports and plots)
+
+Convergence checklist (what changes the spectrum): Optical.Mesh (peak positions/heights), PAO.EnergyShift and basis size (conduction bands), SCF k-grid, Optical.NumberOfBands (energy range). Re-run Stage 1 with a different value and compare the Stage 2 results.

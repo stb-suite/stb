@@ -1,0 +1,22 @@
+# Step 1: variable-cell relaxation of bulk Si (si_start.fdf -> structure.fdf).
+# Same level of theory as the optical runs (calc.fdf) so geometry and spectrum are consistent.
+SystemLabel siesta
+%include structure.fdf
+
+XC.functional GGA
+XC.authors PBE
+PAO.BasisType split
+PAO.BasisSize TZP
+PAO.EnergyShift 0.005 Ry
+Mesh.Cutoff 300 Ry
+Spin non-polarized
+
+kgrid.MonkhorstPack [11 11 11]
+ElectronicTemperature 25 meV
+DM.Tolerance 1.0e-6
+
+MD.TypeOfRun CG
+MD.VariableCell T
+MD.NumCGsteps 100
+MD.MaxForceTol 0.005 eV/Ang
+MD.MaxStressTol 0.05 GPa

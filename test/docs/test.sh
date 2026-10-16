@@ -148,6 +148,14 @@ check_success "$SITE_DIR/guides/4-workflows/4.15-gqca/figures/ingaas_dashboard.p
 check_contains 'src="figures/ingaas_dashboard.png"' "$gqca"
 check_contains 'href="../../../reference/stb-gqcaAnalysis/"' "$gqca"
 
+echo "Testing: 4.16-optical shows two figures -- copied next to the page and linked"
+opt16="$SITE_DIR/guides/4-workflows/4.16-optical/index.html"
+check_success "$opt16"
+check_success "$SITE_DIR/guides/4-workflows/4.16-optical/figures/si_dashboard.png"
+check_success "$SITE_DIR/guides/4-workflows/4.16-optical/figures/graphene_dashboard.png"
+check_contains 'src="figures/si_dashboard.png"' "$opt16"
+check_contains 'href="../../../reference/stb-opticalAnalysis/"' "$opt16"
+
 
 # --- 3. Sidebar: menu categories, numeric (not alphabetical) order, short labels ---
 echo -e "\n--- Testing the generated sidebar ---"

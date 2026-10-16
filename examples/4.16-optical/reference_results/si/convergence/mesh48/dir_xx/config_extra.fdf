@@ -1,0 +1,21 @@
+# Ground-state SCF k-grid (explicit --kgrid) -- takes precedence over --calc's own grid.
+kgrid.MonkhorstPack   [11  11  11]
+
+# Auto-generated -- forces a single-point evaluation (no relaxation): this
+# folder is one independent, uncoupled sample point, not something SIESTA
+# should be moving on its own.
+MD.TypeOfRun          CG
+MD.Steps              0
+MD.NumCGsteps         0
+MD.VariableCell       false
+
+OpticalCalculation T
+Optical.PolarizationType    polarized
+Optical.Broaden       0.1 eV
+%block Optical.Mesh
+  48  48  48
+%endblock Optical.Mesh
+%block Optical.Vector
+  1.0000  0.0000  0.0000
+%endblock Optical.Vector
+Optical.NumberOfBands  16

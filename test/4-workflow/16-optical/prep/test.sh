@@ -119,6 +119,49 @@ check_not_contains "\[KNOWN LIMITATION\] Vacuum-padded" log_default.txt
 echo "Testing: summary line counts diagonal/biaxial directions correctly"
 check_contains "3 direction folder(s) written under 'study_default' (3 diagonal, 0 biaxial)" log_default.txt
 
+echo "Testing: the richer Stage 1 report -- structure, template read-back, mesh assessment, symmetry, folders"
+check_contains "\[1\] INPUT STRUCTURE" log_default.txt
+check_contains "Valence electrons : 8  ->  4 occupied band(s)" log_default.txt
+check_contains "Basis size .* DZP" log_default.txt
+check_contains "SCF k-grid forced     : 8x8x8" log_default.txt
+check_contains "auto-suggested, density 0.2" log_default.txt
+check_contains "Optical k-points  : 1000 total" log_default.txt
+check_contains "Space group           : Pm-3m (No. 221), cubic" log_default.txt
+check_contains "Independent components: 1 of 6" log_default.txt
+check_contains "Minimal direction set : xx" log_default.txt
+check_contains "yy zz follow from symmetry" log_default.txt
+check_contains "MD.Steps .* 0 .* 150" log_default.txt
+check_contains "1 warning(s) above" log_default.txt   # only the coarse default Optical.Mesh; no k-grid warning any more
+check_not_contains "defines no SCF k-grid" log_default.txt
+
+echo "Testing: everything mandatory is in config_extra.fdf (SCF k-grid + single-point guards), template untouched"
+check_contains "kgrid.MonkhorstPack   \[8  8  8\]" study_default/dir_xx/config_extra.fdf
+check_contains "MD.NumCGsteps         0" study_default/dir_xx/config_extra.fdf
+check_contains "MD.VariableCell       false" study_default/dir_xx/config_extra.fdf
+check_not_contains "kgrid" study_default/dir_xx/calc.fdf
+
+echo "Testing: a template that already has a k-grid keeps it (nothing forced); --kgrid / --kgrid-density override it"
+cp calc.fdf calc_k.fdf && printf '\nkgrid.MonkhorstPack [5 5 5]\n' >> calc_k.fdf
+stb-optical -f bulk.fdf -c calc_k.fdf -O study_keepk --no-intro > log_keepk.txt 2>&1
+check_exit_code $? 0
+check_contains "SCF k-grid forced     : no" log_keepk.txt
+check_not_contains "kgrid" study_keepk/dir_xx/config_extra.fdf
+stb-optical -f bulk.fdf -c calc_k.fdf -O study_kexp --kgrid 3 4 5 --no-intro > log_kexp.txt 2>&1
+check_contains "kgrid.MonkhorstPack   \[3  4  5\]" study_kexp/dir_xx/config_extra.fdf
+stb-optical -f bulk.fdf -c calc_k.fdf -O study_kden --kgrid-density 0.1 --no-intro > log_kden.txt 2>&1
+check_contains "kgrid.MonkhorstPack   \[16  16  16\]" study_kden/dir_xx/config_extra.fdf
+stb-optical -f slab.fdf -c calc.fdf -O study_kslab --no-intro > log_kslab.txt 2>&1
+check_contains "15x15x1" log_kslab.txt
+rm -f calc_k.fdf
+
+echo "Testing: advisories -- coarse mesh, no conduction bands, tiny broadening"
+stb-optical -f bulk.fdf -c calc.fdf -O study_adv --optical-mesh 8 8 8 --optical-nbands 3 \
+    --optical-broaden 0.01 --no-intro > log_adv.txt 2>&1
+check_exit_code $? 0
+check_contains "Optical.Mesh is coarse along a, b, c" log_adv.txt
+check_contains "does not exceed the 4 occupied bands" log_adv.txt
+check_contains "very small" log_adv.txt
+
 
 # --- 3. Biaxial direction + missing-diagonal-pair warning ---
 echo -e "\n--- Testing biaxial direction xy without its yy pair (missing-pair warning) ---"
@@ -160,6 +203,11 @@ stb-optical -f slab.fdf -c calc.fdf -O study_slab --no-intro > log_slab.txt 2>&1
 check_exit_code $? 0
 check_contains "Detected : 2D (e.g., a slab or surface)" log_slab.txt
 check_contains "\[KNOWN LIMITATION\] Vacuum-padded (2D/slab) input" log_slab.txt
+echo "Testing: 2D input -- vacuum-axis mesh note, in-plane symmetry (hexagonal: xx=yy, zz independent)"
+stb-optical -f slab.fdf -c calc.fdf -O study_slab_mesh --optical-mesh 12 12 12 --no-intro > log_slab_mesh.txt 2>&1
+check_contains "more than 1 division along the vacuum axis" log_slab_mesh.txt
+check_contains "vacuum axis" log_slab_mesh.txt
+check_contains "Minimal direction set : xx zz" log_slab.txt
 echo "Testing: out-of-plane (zz) direction is still written for a 2D input, not skipped"
 check_success study_slab/dir_zz/structure.fdf
 

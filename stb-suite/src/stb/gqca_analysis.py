@@ -14,7 +14,7 @@ import sys
 import argparse
 import datetime
 import numpy as np
-from stb.core import siesta_log, structure_io, gqca_solver
+from stb.core import siesta_log, structure_io, gqca_solver, fdf_directives
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "gqca_stage2.txt"
@@ -101,55 +101,21 @@ _THEORY_KEYS = [
     ("mdvariablecell", "Variable cell"), ("mdmaxforcetol", "Max force tol"),
     ("mdmaxstresstol", "Max stress tol"),
 ]
-_KGRID_LIST_RE = re.compile(r'kgrid[._\-]?monkhorstpack\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s*\]', re.IGNORECASE)
-_KGRID_BLOCK_RE = re.compile(r'%block\s+kgrid[._\-]?monkhorstpack\s*\n(.*?)%endblock', re.IGNORECASE | re.DOTALL)
-
-
-def _fdf_key(label):
-    """fdf labels ignore case and '.', '_', '-'."""
-    return re.sub(r'[._\-]', '', label.lower())
-
 
 def read_level_of_theory(cluster_dir):
     """{normalized key: value} + 'kgrid' for one cluster folder, merging
     config_extra.fdf then calc.fdf with SIESTA's first-occurrence-wins rule
-    (block contents and comments skipped). Empty dict if neither file exists."""
+    (core.fdf_directives). Empty dict if neither file exists."""
     texts = []
     for name in ("config_extra.fdf", "calc.fdf"):
         path = os.path.join(cluster_dir, name)
         if os.path.isfile(path):
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 texts.append(f.read())
-    values, in_block = {}, False
-    for text in texts:
-        for raw in text.splitlines():
-            line = raw.split('#', 1)[0].strip()
-            if not line:
-                continue
-            low = line.lower()
-            if low.startswith('%block'):
-                in_block = True
-                continue
-            if low.startswith('%endblock'):
-                in_block = False
-                continue
-            if in_block or low.startswith('%'):
-                continue
-            parts = line.split(None, 1)
-            if len(parts) == 2:
-                values.setdefault(_fdf_key(parts[0]), parts[1].strip())
-    combined = "\n".join(texts)
-    m = _KGRID_LIST_RE.search(combined)
-    if m:
-        values['kgrid'] = "x".join(m.groups())
-    else:
-        mb = _KGRID_BLOCK_RE.search(combined)
-        if mb:
-            try:
-                rows = [r.split() for r in mb.group(1).strip().splitlines()][:3]
-                values['kgrid'] = "x".join(str(int(float(r[i]))) for i, r in enumerate(rows))
-            except (ValueError, IndexError):
-                pass
+    values = fdf_directives.parse_directives(*texts)
+    kgrid = fdf_directives.parse_kgrid(*texts)
+    if kgrid:
+        values['kgrid'] = "x".join(str(v) for v in kgrid)
     nsteps = values.get('mdnumcgsteps') or values.get('mdsteps')
     if nsteps:
         values['mdnumcgsteps'] = nsteps

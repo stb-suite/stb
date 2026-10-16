@@ -401,6 +401,33 @@ DZP/TZP, one mesh test) so Stage 2 runs genuine data; its README documents an un
 AlGaAs `Delta_1` anomaly (~29 meV left after ruling out k-points, cell shape, mesh, strain and
 partly the basis) -- do not present AlGaAs numbers as validated.
 
+**4-Workflow item 16, Optical Properties** — `stb-optical` (Stage 1: one folder per polarization
+direction of an ALREADY-RELAXED structure -- `xx/yy/zz` diagonal, `xy/xz/yz` biaxial bisectors whose
+reconstruction `eps_ij = eps_bisector - (eps_ii + eps_jj)/2` Stage 2 does automatically) ->
+`stb-opticalAnalysis` (Stage 2: reads each folder's `.EPSIMG` + the `Optical:` block of `calc.out`,
+Kramers-Kronig `eps1`, n/k/alpha/R/L/sigma1, and the diagnostics around them: SIESTA's f-sum check
+and `N_eff(E)` recomputed from `eps2` (the two agree), static constants, onset/Tauc/Penn gap, Kohn-Sham
+gap read from `<label>.EIG`, peaks and plasmon, anisotropy checked against the symmetry-allowed
+tensor, `--scissor` what-if (rigid `eps2` shift), `--dimensionality-correction`, `--show/--png`
+9-panel dashboard). Conventions worth knowing: every mandatory directive goes into each folder's
+`config_extra.fdf` -- single-point guards (`MD.Steps 0`, `MD.NumCGsteps 0`, `MD.VariableCell false`), the
+optical block, and the SCF k-grid, which is forced ONLY when the template has none (SIESTA would sample
+Gamma) or on `--kgrid/--kgrid-density`, never over a template's own grid; **`Optical.PolarizationType
+polarized` is mandatory** (the default `polycrystal` silently ignores `Optical.Vector`). The tensor
+symmetry analysis (`core/optical_setup.symmetry_analysis`) projects onto the subspace invariant under the
+space group in the cell's own Cartesian frame, so it works for any orientation; Stage 1 reports the minimal
+direction set and Stage 2 checks finished spectra against it. Shared helpers: `core/fdf_directives.py`
+(SIESTA's first-occurrence-wins reading of directives/k-grids, also used by `stb-gqcaAnalysis`),
+`core/optical_setup.py`, the analysis functions in `core/optical_properties.py`, and
+`siesta_log.get_optical_info/read_eig_gap`. Hard-won facts (documented in `examples/4.16-optical/`, whose
+README is the page of this function on the site): the optical mesh (`Optical.Mesh`, independent of the SCF
+grid) sets peak positions -- converge it first; broadening sets heights; once all bands are used the f-sum
+is limited by the BASIS, not the band count; a metal's low-energy "onset" is a k-mesh artifact, not a gap;
+the 2D out-of-plane correction is ill-conditioned and depends on the user's `--thickness`. The example
+ships REAL finished SIESTA runs (Si with an 11-run convergence study, graphene). Pseudopotential caution:
+a bank's quality is not guaranteed -- check the relaxed geometry against a known value first (the
+PseudoDojo S gave a wrong Mo-S bond in one test; graphene uses the `virtual_vault` PSF carbon).
+
 **4-Workflow item 17, MLFF** — `stb-mlff` (Stage 1: generates rattled/AIMD-sampled
 training configs from a reference `calc.fdf`) → `stb-mlffAnalysis` (Stage 2: splits
 train/valid in Python — not via `mace_run_train --valid_fraction`, which is ignored

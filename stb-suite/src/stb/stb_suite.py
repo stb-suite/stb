@@ -5835,6 +5835,16 @@ def run_mlff_prep() -> None:
     args = ["--file", calc_file, "--pseudo-dir", pseudo_dir,
             "--n-configs", str(n_configs), "--stdev", *stdevs, "--no-intro"]
 
+    strains_str = get_input(
+        "Volume strains in %, space-separated (e.g. -5 -3 -1 1 3 5) -- needed for the model "
+        "to learn E(V)/bulk modulus; bulk only [default: none]: ").strip()
+    if strains_str:
+        args.extend(["--volume-strains", *strains_str.split()])
+
+    n_test = get_int_input("Held-out test configurations, scored by Stage 3 (Validate) "
+                           "[default: 8, 0 = none]: ", 8)
+    args.extend(["--n-test", str(n_test)])
+
     use_aimd = get_input(
         "\nAlso sample starting geometries from an existing AIMD trajectory (<label>.ANI)? "
         "[y/N]: ").strip().lower()
@@ -5857,17 +5867,20 @@ def run_mlff_prep() -> None:
 def run_mlff_analysis() -> None:
     """Interface for the Custom ML Force Field Stage 2 (stb-mlffAnalysis)"""
     print("\n" + "="*60)
-    print(color_text("CUSTOM ML FORCE FIELD - STAGE 2: FINE-TUNING", 'bold').center(60))
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 2: TRAIN", 'bold').center(60))
     print("="*60 + "\n")
     print(color_text(
-        "Aggregates the finished SIESTA calculations from Stage 1 (energy + forces, "
-        "best-effort stress) and fine-tunes a MACE-MP foundation model on them via "
-        "'mace_run_train'.", 'cyan'))
+        "Aggregates the finished SIESTA calculations (energy + forces, best-effort stress) "
+        "and fine-tunes a committee of MACE-MP models on them via 'mace_run_train' -- one "
+        "training round, recorded in mlff_workflow.json.", 'cyan'))
     print()
 
-    path = get_input("Glob pattern for the config folders [default: mlff_config_*]: ").strip()
-    if not path:
-        path = "mlff_config_*"
+    workflow = _mlff_workflow_summary()
+    path = None
+    if workflow is None:
+        path = get_input("Glob pattern for the config folders [default: mlff_config_*]: ").strip()
+        if not path:
+            path = "mlff_config_*"
 
     print(f"\n{color_text('Foundation model to fine-tune from:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = small (default -- fastest)")
@@ -5877,8 +5890,13 @@ def run_mlff_analysis() -> None:
     model_map = {'1': 'small', '2': 'medium', '3': 'large'}
     foundation_model = model_map.get(model_choice, 'small')
 
+    committee = get_int_input("Committee size -- models trained with different seeds; their "
+                              "disagreement drives Stage 4 [default: 3, 1 = single model]: ", 3)
+
     epochs = get_int_input("Max training epochs [default: 100]: ", 100)
     batch_size = get_int_input("Batch size [default: 5]: ", 5)
+    stress_weight = get_float_input(
+        "Stress weight in the loss, used when SIESTA stress is available [default: 10000]: ", 10000.0)
 
     device = get_input("Device (cpu/cuda) [default: auto-detect]: ").strip().lower()
     if device == "cuda":
@@ -5892,11 +5910,12 @@ def run_mlff_analysis() -> None:
                               "switch back to cpu.", 'yellow'))
 
     name = get_input("Experiment/model name [default: mlff_model]: ").strip() or "mlff_model"
-    work_dir = get_input("Working directory [default: .]: ").strip() or "."
-
-    args = ["--path", path, "--foundation-model", foundation_model,
+    args = ["--foundation-model", foundation_model, "--committee", str(max(1, committee)),
             "--epochs", str(epochs), "--batch-size", str(batch_size),
-            "--name", name, "--work-dir", work_dir, "--no-intro"]
+            "--stress-weight", str(stress_weight), "--name", name, "--no-intro"]
+    if workflow is None:
+        work_dir = get_input("Working directory [default: .]: ").strip() or "."
+        args.extend(["--path", path, "--work-dir", work_dir])
     if device in ("cpu", "cuda"):
         args.extend(["--device", device])
 
@@ -5914,29 +5933,114 @@ def run_mlff_analysis() -> None:
     run_tool("stb-mlffAnalysis", args)
 
 
-def run_mlff_active_learning() -> None:
-    """Interface for the Custom ML Force Field Stage 3 (stb-mlffActiveLearning)"""
+def _mlff_workflow_summary(need_round=False):
+    """Prints what ./mlff_workflow.json holds and returns its state (None when
+    absent/unreadable, or when `need_round` and it has no training round)."""
+    from stb.core import mlff_workflow
+    try:
+        state = mlff_workflow.load(mlff_workflow.WORKFLOW_FILE)
+    except ValueError as e:
+        print(color_text(f"[WARNING] {e} -- ignoring it.", 'yellow'))
+        return None
+    if state is None:
+        return None
+    n_train = sum(1 for c in state["configs"] if c.get("set") == "train")
+    n_test = sum(1 for c in state["configs"] if c.get("set") == "test")
+    latest = mlff_workflow.get_round(state)
+    print(color_text(f"[INFO] {mlff_workflow.WORKFLOW_FILE}: {n_train} training + {n_test} test "
+                     f"config(s), {len(state['rounds'])} round(s)"
+                     + (f", latest round {latest['round']} ({len(latest.get('committee', []))} model(s))"
+                        if latest else "") + ".", 'green'))
+    if need_round and latest is None:
+        return None
+    return state
+
+
+def run_mlff_validate() -> None:
+    """Interface for the Custom ML Force Field Stage 3 (stb-mlffValidate)"""
     print("\n" + "="*60)
-    print(color_text("CUSTOM ML FORCE FIELD - STAGE 3: ACTIVE LEARNING", 'bold').center(60))
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 3: VALIDATE", 'bold').center(60))
     print("="*60 + "\n")
     print(color_text(
-        "Uses the fine-tuned model itself to screen a fresh batch of candidate "
-        "configurations and suggests the ones it's least confident about (largest "
-        "predicted force) as new SIESTA calculations to run -- NOT rigorous uncertainty "
-        "quantification, a cheap single-model heuristic.", 'cyan'))
+        "Scores every training round in mlff_workflow.json against the held-out SIESTA "
+        "test set (Stage 1 --n-test), checks the committee's calibration, and says whether "
+        "another active-learning round is worth it.", 'cyan'))
     print()
 
-    model_path = get_input("Fine-tuned model file (from stb-mlffAnalysis): ").strip()
-    while not os.path.isfile(model_path):
-        print(color_text("File not found!", 'red'))
-        model_path = get_input("Fine-tuned model file: ").strip()
+    args = ["--no-intro"]
+    if _mlff_workflow_summary(need_round=True) is None:
+        print(color_text("No mlff_workflow.json with a training round here -- give the models "
+                         "and the test folders instead.", 'yellow'))
+        paths = get_input("Model file(s), space-separated: ").split()
+        while not paths or any(not os.path.isfile(p) for p in paths):
+            print(color_text("File not found!", 'red'))
+            paths = get_input("Model file(s), space-separated: ").split()
+        test_path = get_input("Glob pattern for the test folders [default: mlff_test/test_*]: ").strip()
+        args.extend(["--model", *paths, "--test-path", test_path or "mlff_test/test_*"])
 
-    calc_file = get_input("Reference calc.fdf (same one stb-mlff used): ").strip()
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Reference calc.fdf: ").strip()
+    target = get_input("Target test force RMSE, meV/Ang -- stop once reached [default: none]: ").strip()
+    if target:
+        try:
+            args.extend(["--target-force", str(float(target))])
+        except ValueError:
+            print(color_text("  Not a number -- ignored.", 'yellow'))
 
-    pseudo_dir = prompt_pseudo_source(optional=True) or "."
+    phonon_ref = get_input("Finished stb-phononsCreate folder to compare phonons against "
+                           "[default: none]: ").strip()
+    if phonon_ref:
+        if os.path.isfile(os.path.join(phonon_ref, "phonopy_disp.yaml")):
+            args.extend(["--phonon-ref", phonon_ref])
+        else:
+            print(color_text("  No phonopy_disp.yaml there -- phonons skipped.", 'yellow'))
+
+    device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
+    args.extend(["--device", device_choice if device_choice in ("cpu", "cuda") else "cpu"])
+
+    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nScoring the rounds...", 'green'))
+    run_tool("stb-mlffValidate", args)
+
+
+def run_mlff_active_learning() -> None:
+    """Interface for the Custom ML Force Field Stage 4 (stb-mlffActiveLearning)"""
+    print("\n" + "="*60)
+    print(color_text("CUSTOM ML FORCE FIELD - STAGE 4: ACTIVE LEARNING", 'bold').center(60))
+    print("="*60 + "\n")
+    print(color_text(
+        "Uses the fine-tuned model(s) to screen a fresh batch of candidate configurations "
+        "and suggests the most informative ones as new SIESTA calculations to run. With 2+ "
+        "models (a committee: same configs, different --seed) the score is their force "
+        "disagreement; with one model, the largest predicted force (a cheap heuristic).", 'cyan'))
+    print()
+
+    def _read_models(prompt):
+        paths = get_input(prompt).split()
+        missing = [p for p in paths if not os.path.isfile(p)]
+        return paths, missing
+
+    workflow = _mlff_workflow_summary(need_round=True)
+    use_workflow = False
+    if workflow is not None:
+        use_workflow = get_input("Use the latest round's committee and the reference .fdf from "
+                                 "mlff_workflow.json? [Y/n]: ").strip().lower() != 'n'
+    base_args = []
+    if not use_workflow:
+        model_paths, missing = _read_models(
+            "Fine-tuned model file(s) from stb-mlffAnalysis, space-separated (2+ = committee): ")
+        while not model_paths or missing:
+            print(color_text(f"File not found: {' '.join(missing)}" if missing else "No model given!", 'red'))
+            model_paths, missing = _read_models("Fine-tuned model file(s): ")
+
+        calc_file = get_input("Reference calc.fdf (same one stb-mlff used): ").strip()
+        while not os.path.isfile(calc_file):
+            print(color_text("File not found!", 'red'))
+            calc_file = get_input("Reference calc.fdf: ").strip()
+
+        pseudo_dir = prompt_pseudo_source(optional=True) or "."
+        base_args = ["--model", *model_paths, "--file", calc_file, "--pseudo-dir", pseudo_dir]
 
     print(f"\n{color_text('Candidate sampling method:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Rattle -- independent, static displaced snapshots (default, cheap)")
@@ -5945,8 +6049,14 @@ def run_mlff_active_learning() -> None:
     method_choice = get_input("Select option (1-2) [default: 1]: ").strip()
     sampling_method = {'1': 'rattle', '2': 'md'}.get(method_choice, 'rattle')
 
-    args = ["--model", model_path, "--file", calc_file, "--pseudo-dir", pseudo_dir,
-            "--sampling-method", sampling_method, "--no-intro"]
+    args = [*base_args, "--sampling-method", sampling_method, "--no-intro"]
+
+    supercell = get_input("Sample in a supercell NA NB NC? (e.g. 2 2 2) [default: 1 1 1, "
+                          "the reference cell]: ").split()
+    if len(supercell) == 3 and all(v.isdigit() and int(v) >= 1 for v in supercell):
+        args.extend(["--supercell", *supercell])
+    elif supercell:
+        print(color_text("  Not 3 positive integers -- using the reference cell.", 'yellow'))
 
     if sampling_method == "rattle":
         n_candidates = get_int_input("Number of candidates to screen [default: 50]: ", 50)
@@ -5955,15 +6065,18 @@ def run_mlff_active_learning() -> None:
         stdevs = stdev_str.split() if stdev_str else ["0.15"]
         args.extend(["--n-candidates", str(n_candidates), "--stdev", *stdevs])
     else:
-        md_steps = get_int_input("Total MD steps to run [default: 500]: ", 500)
-        md_temperature = get_float_input("NVT temperature, K [default: 800]: ", 800.0)
-        stride = get_int_input("Score one frame every Nth MD step [default: 10]: ", 10)
-        args.extend(["--md-steps", str(md_steps), "--md-temperature", str(md_temperature),
+        md_steps = get_int_input("MD steps per temperature [default: 500]: ", 500)
+        temp_str = get_input("NVT temperature(s), K, space-separated [default: 800]: ").strip()
+        temperatures = temp_str.split() if temp_str else ["800"]
+        stride = get_int_input("Keep one frame every Nth MD step [default: 10]: ", 10)
+        args.extend(["--md-steps", str(md_steps), "--md-temperature", *temperatures,
                      "--stride", str(stride)])
 
-    top_k = get_int_input("Number of highest-scoring candidates to write out [default: 5]: ", 5)
-    output_dir = get_input("Output directory [default: .]: ").strip() or "."
-    args.extend(["--top-k", str(top_k), "--output-dir", output_dir])
+    top_k = get_int_input("Number of candidates to write out [default: 5]: ", 5)
+    args.extend(["--top-k", str(top_k)])
+    if not use_workflow:
+        output_dir = get_input("Output directory [default: .]: ").strip() or "."
+        args.extend(["--output-dir", output_dir])
 
     device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
     device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -8821,24 +8934,29 @@ WORKFLOW_TOOLS = {
                 'func': run_optical_analysis},
         }},
     17: {'title': "Custom ML Force Field (MACE fine-tuning)",
-        'description': "Generate training configurations (rattled and/or AIMD-sampled), then "
-                        "fine-tune a MACE-MP foundation model on the resulting SIESTA "
-                        "energy/forces/stress -- a fast potential specialized to your own "
-                        "material instead of the generic foundation model. Optionally exports "
-                        "a LAMMPS-loadable model.",
+        'description': "Generate training configurations (rattled, strained and/or "
+                        "AIMD-sampled) and a held-out test set, fine-tune a committee of MACE-MP "
+                        "models on the resulting SIESTA energy/forces/stress, validate each "
+                        "round against the test set and pick new configurations where the "
+                        "committee disagrees -- stages linked by mlff_workflow.json. Optionally "
+                        "exports a LAMMPS-loadable model.",
         'stages': {
             1: {'title': "Stage 1 - Prep (stb-mlff)",
-                'description': "Generate rattled/AIMD-sampled training configurations, ready "
-                                "for SIESTA.",
+                'description': "Generate rattled/strained/AIMD-sampled training configurations "
+                                "and a held-out test set, ready for SIESTA.",
                 'func': run_mlff_prep},
-            2: {'title': "Stage 2 - Analysis (stb-mlffAnalysis)",
+            2: {'title': "Stage 2 - Train (stb-mlffAnalysis)",
                 'description': "Aggregate the finished SIESTA calculations and fine-tune a "
-                                "MACE-MP foundation model on them.",
+                                "committee of MACE-MP models on them (one training round).",
                 'func': run_mlff_analysis},
-            3: {'title': "Stage 3 - Active Learning (stb-mlffActiveLearning)",
-                'description': "Use the fine-tuned model to suggest new configurations to "
-                                "label with SIESTA (largest predicted force), for another "
-                                "round of refinement.",
+            3: {'title': "Stage 3 - Validate (stb-mlffValidate)",
+                'description': "Score every round against the held-out SIESTA test set "
+                                "(optionally phonons) and say whether another round is worth it.",
+                'func': run_mlff_validate},
+            4: {'title': "Stage 4 - Active Learning (stb-mlffActiveLearning)",
+                'description': "Use the latest round's committee to pick new configurations "
+                                "to label with SIESTA (where the models disagree most), for the "
+                                "next round.",
                 'func': run_mlff_active_learning},
         }},
     18: {'title': "Equation of State",

@@ -93,6 +93,100 @@ else
 fi
 
 
+echo "Testing: every folder forces a single-point run through config_extra.fdf"
+check_success mlff_config_001/config_extra.fdf
+check_contains "MD.Steps              0" mlff_config_001/config_extra.fdf
+check_contains "MD.VariableCell       false" mlff_config_001/config_extra.fdf
+if [ "$(head -1 mlff_config_001/calc.fdf)" = "%include config_extra.fdf" ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} '%include config_extra.fdf' is the first line of calc.fdf"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} '%include config_extra.fdf' is not the first line of calc.fdf"
+    FAIL=$((FAIL+1))
+fi
+
+
+# --- 2b. --volume-strains ---
+echo -e "\n--- Testing --volume-strains (rattled + 2 strained configs) ---"
+rm -rf mlff_config_*
+stb-mlff --file calc.fdf --n-configs 2 --stdev 0.05 --volume-strains -3 3 --pseudo-dir . \
+    --no-intro > log_strain.txt 2>&1
+check_exit_code $? 0
+check_contains "Generated 2 strained configuration(s)" log_strain.txt
+check_success mlff_config_004/calc.fdf
+echo "Testing: strained cells have volume (1 +/- 0.03) x reference, rattled configs keep it"
+python3 -c "
+import numpy as np, sys
+from stb.core import structure_io
+v = lambda p: abs(np.linalg.det(structure_io.read_fdf(p).lattice))
+v0 = v('calc.fdf')
+ok = (np.isclose(v('mlff_config_001/calc.fdf'), v0) and np.isclose(v('mlff_config_002/calc.fdf'), v0)
+      and np.isclose(v('mlff_config_003/calc.fdf'), 0.97 * v0) and np.isclose(v('mlff_config_004/calc.fdf'), 1.03 * v0))
+sys.exit(0 if ok else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} strained volumes are 0.97 / 1.03 x reference"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} strained volumes are wrong"
+    FAIL=$((FAIL+1))
+fi
+stb-mlff --file calc.fdf --n-configs 1 --volume-strains -100 --pseudo-dir . --no-intro > log_strain_bad.txt 2>&1
+check_exit_code $? 1
+check_contains "must be > -100" log_strain_bad.txt
+rm -rf mlff_config_*
+
+
+# --- 2c. --n-test + the workflow file ---
+echo -e "\n--- Testing --n-test (held-out test set) and mlff_workflow.json ---"
+rm -rf mlff_config_* mlff_test mlff_workflow.json*
+stb-mlff --file calc.fdf --n-configs 4 --stdev 0.05 0.1 --volume-strains -3 3 --n-test 5 \
+    --pseudo-dir . --no-intro > log_ntest.txt 2>&1
+check_exit_code $? 0
+check_contains "Generated 5 held-out test configuration(s)" log_ntest.txt
+check_contains "Configurations    : 6 training + 5 test" log_ntest.txt
+check_success mlff_test/test_001/calc.fdf
+check_success mlff_test/test_005/calc.fdf
+check_success mlff_test/test_005/config_extra.fdf
+check_success mlff_workflow.json
+echo "Testing: workflow file lists train/test configs with kinds; test kinds cycle rattle/strain; tests differ from training"
+python3 -c "
+import json, sys, numpy as np
+from stb.core import structure_io
+d = json.load(open('mlff_workflow.json'))
+train = [c for c in d['configs'] if c['set'] == 'train']
+test = [c for c in d['configs'] if c['set'] == 'test']
+kinds_test = [c['kind'] for c in test]
+pos = lambda p: np.array([a[1] for a in structure_io.read_fdf(p + '/calc.fdf').atoms])
+v = lambda p: abs(np.linalg.det(structure_io.read_fdf(p + '/calc.fdf').lattice))
+v0 = abs(np.linalg.det(structure_io.read_fdf('calc.fdf').lattice))
+distinct = all(not np.allclose(pos(t['folder']), pos(r['folder'])) for t in test for r in train)
+ok = (d['format'] == 'stb-mlff-workflow' and d['reference']['file'] == 'calc.fdf'
+      and d['reference']['pseudo_dir'] == '.' and len(train) == 6 and len(test) == 5
+      and [c['kind'] for c in train] == ['rattle'] * 4 + ['strain'] * 2
+      and kinds_test == ['rattle', 'rattle', 'strain', 'strain', 'rattle']
+      and np.isclose(v('mlff_test/test_003'), 0.97 * v0) and np.isclose(v('mlff_test/test_004'), 1.03 * v0)
+      and distinct and d['rounds'] == [] and d['history'][0]['stage'] == 'prep')
+sys.exit(0 if ok else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 6 train + 5 test entries, kinds/volumes right, test geometries independent"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} workflow file / test set not as expected"
+    FAIL=$((FAIL+1))
+fi
+echo "Testing: a second run keeps the old workflow file as .bak"
+stb-mlff --file calc.fdf --n-configs 1 --pseudo-dir . --no-intro > log_ntest2.txt 2>&1
+check_contains "already existed -- copied to" log_ntest2.txt
+check_success mlff_workflow.json.bak
+echo "Testing: --n-test negative is rejected"
+stb-mlff --file calc.fdf --n-configs 1 --n-test -1 --pseudo-dir . --no-intro > log_ntest_bad.txt 2>&1
+check_exit_code $? 1
+check_contains "--n-test must be >= 0" log_ntest_bad.txt
+rm -rf mlff_config_* mlff_test mlff_workflow.json*
+
+
 # --- 3. --n-configs 0 with no --from-aimd (expects failure) ---
 echo -e "\n--- Testing --n-configs 0 with no --from-aimd (expects failure) ---"
 stb-mlff --file calc.fdf --n-configs 0 --pseudo-dir . --no-intro > log_empty.txt 2>&1
@@ -138,15 +232,20 @@ stb-mlff --help > log_help.txt 2>&1
 check_contains "stdev" log_help.txt
 check_contains "from-aimd" log_help.txt
 check_contains "n-samples" log_help.txt
+check_contains "volume-strains" log_help.txt
+check_contains "n-test" log_help.txt
+check_contains "workflow" log_help.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.17.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.17.1) ---"
 rm -rf mlff_config_001 mlff_config_002 mlff_config_003
-printf '4.17.1\ncalc.fdf\n\n3\n0.05\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '4.17.1\ncalc.fdf\n\n3\n0.05\n\n2\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success mlff_config_001/calc.fdf
 check_success mlff_config_003/calc.fdf
+check_success mlff_test/test_002/calc.fdf
+check_success mlff_workflow.json
 
 
 popd > /dev/null

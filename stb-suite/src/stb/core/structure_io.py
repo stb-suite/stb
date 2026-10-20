@@ -761,6 +761,81 @@ def rewrite_fdf_positions(source_path: str, new_positions: np.ndarray, out_path:
         f.writelines(out_lines)
 
 
+def replicate_fdf_cell(source_path: str, dims, out_path: str) -> int:
+    """Writes out_path as an NA x NB x NC supercell of source_path, keeping
+    everything else (basis, SCF settings, species, comments...) verbatim:
+    %block LatticeVectors scaled row by row (still in the file's own
+    LatticeConstant basis), %block AtomicCoordinatesAndAtomicSpecies
+    replicated, `NumberOfAtoms` updated when present. Returns the new atom count.
+
+    The atom order is ase.Atoms.repeat()'s -- image-major, outer loop over the
+    first axis, every original atom per image -- so positions computed on
+    `atoms.repeat(dims)` can be written back with rewrite_fdf_positions().
+    Coordinates stay in the file's own AtomicCoordinatesFormat (fractional
+    ones are divided by `dims`, cartesian ones shifted by the lattice vectors).
+    """
+    dims = [int(n) for n in dims]
+    if len(dims) != 3 or min(dims) < 1:
+        raise ValueError(f"Supercell dimensions must be 3 positive integers, got {dims}.")
+    structure = read_fdf(source_path)
+    with open(source_path, "r") as f:
+        lines = f.readlines()
+
+    images = [(m0, m1, m2) for m0 in range(dims[0]) for m1 in range(dims[1]) for m2 in range(dims[2])]
+    out_lines: list[str] = []
+    in_lattice = in_coords = False
+    lattice_row = 0
+    atom_lines: list[tuple[np.ndarray, str]] = []
+    for line in lines:
+        cleaned = _strip_comment(line)
+        lower = cleaned.lower()
+        if lower == "%block latticevectors":
+            in_lattice = True
+            out_lines.append(line)
+            continue
+        if lower == "%block atomiccoordinatesandatomicspecies":
+            in_coords = True
+            out_lines.append(line)
+            continue
+        if lower.startswith("%endblock") and (in_lattice or in_coords):
+            if in_coords:
+                for m in images:
+                    for pos, suffix in atom_lines:
+                        if structure.coord_format == "fractional":
+                            new = (pos + np.array(m)) / np.array(dims)
+                        else:
+                            new = pos + np.array(m) @ structure.lattice
+                        out_lines.append(f"  {new[0]:20.12f}  {new[1]:20.12f}  {new[2]:20.12f}   {suffix}")
+            in_lattice = in_coords = False
+            out_lines.append(line)
+            continue
+        if in_lattice and cleaned:
+            vec = np.array([float(x) for x in cleaned.split()[:3]]) * dims[lattice_row]
+            out_lines.append(f"  {vec[0]:20.12f}  {vec[1]:20.12f}  {vec[2]:20.12f}\n")
+            lattice_row += 1
+            continue
+        if in_coords and cleaned:
+            parts = line.split(None, 3)
+            atom_lines.append((np.array([float(v) for v in parts[:3]]),
+                               parts[3] if len(parts) > 3 else "\n"))
+            continue
+        out_lines.append(line)
+
+    n_atoms = len(atom_lines) * len(images)
+
+    def _is_number_of_atoms(line):
+        cleaned = _strip_comment(line)
+        return bool(cleaned) and re.sub(r"[._\-]", "", cleaned.split()[0].lower()) == "numberofatoms"
+
+    # Rewritten after the loop: NumberOfAtoms usually comes before the block.
+    out_lines = [f"NumberOfAtoms    {n_atoms}\n" if _is_number_of_atoms(l) else l for l in out_lines]
+    if lattice_row != 3 or not atom_lines:
+        raise ValueError(f"{source_path}: LatticeVectors/AtomicCoordinatesAndAtomicSpecies block not found.")
+    with open(out_path, "w") as f:
+        f.writelines(out_lines)
+    return n_atoms
+
+
 def alias_single_atom_species(source_path: str, out_path: str, species: str,
                                atom_index: int, alias_label: str) -> None:
     """Writes out_path as a copy of source_path with exactly one atom

@@ -143,7 +143,7 @@ cp "$FIXTURE_DIR/si8.fdf" .
 cp -r "$FIXTURE_DIR/si_mlff_fixtures" mlff_config_src
 mv mlff_config_src/mlff_config_* .
 rmdir mlff_config_src
-stb-mlffAnalysis --path "mlff_config_*" --epochs 3 --batch-size 4 --device cpu \
+stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o . --epochs 3 --batch-size 4 --device cpu \
     --name si_quick_model --skip-foundation-comparison --no-intro > log_quicktrain.txt 2>&1
 QUICK_MODEL=$(find . -maxdepth 1 -name "si_quick_model*.model" | sort | tail -1)
 if [ -z "$QUICK_MODEL" ]; then

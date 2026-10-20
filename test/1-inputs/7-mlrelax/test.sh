@@ -163,7 +163,7 @@ MLFF_FIXTURES="$FIXTURE_DIR/../../4-workflow/17-mlff/analysis"
 if command -v mace_run_train &> /dev/null && [ -d "$MLFF_FIXTURES" ]; then
     mkdir -p custom_model_src
     cp -r "$MLFF_FIXTURES"/mlff_config_* custom_model_src/
-    (cd custom_model_src && stb-mlffAnalysis --path "mlff_config_*" --epochs 2 --batch-size 4 \
+    (cd custom_model_src && stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o . --epochs 2 --batch-size 4 \
         --device cpu --name quick_model --skip-foundation-comparison --no-intro > ../log_quicktrain.txt 2>&1)
     QUICK_MODEL=$(find custom_model_src -maxdepth 1 -name "quick_model*.model" | sort | tail -1)
     if [ -n "$QUICK_MODEL" ]; then

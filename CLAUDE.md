@@ -112,6 +112,8 @@ needs it).
   preserving everything else (basis, SCF, pseudopotential blocks) verbatim — used
   where many rattled/derived copies of one reference calculation are needed without
   hand-reconstructing the whole `.fdf` (`write_fdf` only writes a bare-minimum file).
+  `replicate_fdf_cell(source, dims, out)` writes an NA x NB x NC supercell of a full
+  calculation `.fdf` (same atom order as `ase.Atoms.repeat`, `NumberOfAtoms` updated).
   `read_relaxed_or_input(path)` resolves a bare `.fdf` (unchanged `read_fdf`
   behavior) or a directory into `(FdfStructure, used_relaxed)`, preferring a `*.XV`
   inside that directory over its `structure.fdf` guess when one exists, and
@@ -206,6 +208,8 @@ needs it).
   producer). A consumer (`stb-neb`) that finds a valid manifest on both sides skips
   distance-based atom matching entirely instead of guessing; missing/inconsistent
   manifests fall back to the pre-existing distance-based (`--autosort-tol`) behavior.
+- `mlff_workflow.py` — load/save of `mlff_workflow.json`, the state file the four MLFF
+  stages (4.17.x) communicate through (schema in its docstring; paths relative to the file).
 - `ase_view.py` — `view_structure_interactive`: shared, graceful (no-display-safe)
   wrapper around ASE's interactive 3D viewer, used by every tool's `--view` flag.
 
@@ -428,16 +432,59 @@ ships REAL finished SIESTA runs (Si with an 11-run convergence study, graphene).
 a bank's quality is not guaranteed -- check the relaxed geometry against a known value first (the
 PseudoDojo S gave a wrong Mo-S bond in one test; graphene uses the `virtual_vault` PSF carbon).
 
-**4-Workflow item 17, MLFF** — `stb-mlff` (Stage 1: generates rattled/AIMD-sampled
-training configs from a reference `calc.fdf`) → `stb-mlffAnalysis` (Stage 2: splits
-train/valid in Python — not via `mace_run_train --valid_fraction`, which is ignored
-once `--valid_file` is given — then fine-tunes with `--E0s average`, not
-`--multiheads_finetuning`/`foundation`, because SIESTA's absolute total energy is
-not on the foundation model's energy scale; `average` and
-`multiheads_finetuning`/`foundation` are mutually exclusive in `mace_run_train`
-itself) → `stb-mlffActiveLearning` (Stage 3: screens new candidates with the
-fine-tuned model, `--sampling-method rattle|md`, keeps the `--top-k` highest
-predicted-force configs for real labeling).
+**4-Workflow item 17, MLFF** — 4 stages that talk through one `mlff_workflow.json` next to
+the `mlff_config_*` folders (`core/mlff_workflow.py`: reference .fdf + pseudo source, every
+config with `set` train/test, `kind`, origin, proposing round; one entry per training round
+with its committee — seed, model path, validation metrics —, settings, test-set scores and
+active-learning picks; history of every call; paths relative to the file, atomic writes).
+Every stage still accepts explicit paths and works without the file.
+`stb-mlff` (Stage 1, Prep: rattled/AIMD-sampled training configs from a reference
+`calc.fdf`, plus `--volume-strains` cells — isotropic, rattled — without which the training set
+has one volume and the model cannot learn E(V)/B0/pressure; `--n-test N` held-out configs in
+`mlff_test/test_NNN/`, the same kinds cycled with an independent seed; creates the JSON, an
+old one is kept as `.bak`; every folder, Stage 4's too, gets a single-point `config_extra.fdf`,
+so a relaxation/variable-cell template can't move the sampled geometry) → `stb-mlffAnalysis`
+(Stage 2, Train: configs from the JSON (else `--path`/`mlff_config_*`), a `--committee N`
+(default 3) of models with seeds `--seed`, `--seed+1`, ... — each its own train/valid split —
+in `round_NN/m_s<seed>/` (`--committee 1` and no JSON: the old single model in `.`), recorded
+as a new round. Splits train/valid in Python — not via `mace_run_train --valid_fraction`, which
+is ignored once `--valid_file` is given — then fine-tunes without `--multiheads_finetuning`/
+`--E0s foundation`, because SIESTA's absolute total energy is not on the foundation model's
+energy scale (`average` and `multiheads_finetuning`/`foundation` are mutually exclusive in
+`mace_run_train` itself). The recipe defaults come from a 3-seed bulk-Si benchmark against a
+held-out SIESTA test set (see `DEFAULT_LR`/`DEFAULT_STRESS_WEIGHT`): E0s default to
+`foundation_residual_e0s` (`--e0s foundation-residual`: lstsq of E_SIESTA minus the
+foundation's own interaction energy, passed as an explicit `{Z: E0}`) because `average`
+assumes zero interaction energy and starts the model eV/atom off; `--lr` 0.001 because
+0.01 wrecks the pretrained model in epochs 0-1; stress is fitted only through `--loss
+stress` — `--stress_key`/`--compute_stress` alone leave the energy+forces loss, which once
+silently ignored it — and `--stress-weight` defaults to 1e4, since stress in eV/Ang^3 is a
+~2 % term of the loss even at 100. Energy metrics vs the foundation model are offset-removed:
+its absolute E RMSE is the ~1e5 meV/atom scale offset, not an error) → `stb-mlffValidate`
+(Stage 3, Validate: scores every round's committee mean and members on the test set — E
+absolute and offset-removed, F, stress, per `kind` —, the committee calibration (true error /
+spread, per-config and per-atom correlation), optionally phonons vs a finished
+stb-phononsCreate folder (`--phonon-ref`: the committee-mean model on the SAME displacements,
+in an Angstrom/eV phonopy object built from the SIESTA one, frequencies compared q-point by
+q-point); verdict STOP (`--target-force` met) / PLATEAU (F RMSE gain < `--plateau` %, default
+5) / CONTINUE; scores stored per round; writes no folders) → `stb-mlffActiveLearning` (Stage 4:
+committee, reference, pseudo source, training set and output dir from the JSON (latest round,
+or `--round K`) unless given; picks recorded as training configs of the proposing round.
+Screens candidates — `--sampling-method rattle|md`, `--md-temperature` one NVT trajectory per
+value, optional `--supercell NA NB NC` of the reference, written with
+`structure_io.replicate_fdf_cell` (ase `repeat()` atom order) and the reference k-grid
+divided by the supercell in `config_extra.fdf`, since a small training cell only constrains
+what its own periodicity allows (8-atom Si: Gamma and X phonons, not L; a 2x2x2 MD round cut
+the Si phonon RMSE 0.49 -> 0.31 THz). Score: with 2+ models the max per-atom force spread
+across the committee; with one model the largest predicted force. Benchmark caveat: seeds
+fine-tuned from the same foundation model are nearly the same model — on Si the spread tracked
+the error per config (corr 0.81) but not per atom (~0) and was 3-15x smaller, so it ranked
+candidates about like max|F| does. Greedy pick by score, skipping candidates over
+`--max-force` and those whose atomic environments are all within `--min-novelty` of the
+training set or of an earlier pick; novelty uses a model-independent fingerprint (sorted
+distances to the 16 nearest neighbours) in units of the training set's own typical spacing,
+because `MACECalculator.get_descriptors` fails on the compiled model; max-over-atoms novelty is
+weak in a supercell — consecutive MD frames of a 64-atom cell all pass it).
 
 **4-Workflow item 18, EOS** — `stb-eosInputs`/`stb-eosAnalysis`: real-SIESTA analog
 of `stb-mleos`, same isotropic volume-scan convention (`factor = (1 +

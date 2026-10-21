@@ -36,7 +36,7 @@ OUTPUT_FORMATS = {
 
 
 def build_dynamics(atoms, ensemble, timestep_fs, temperature_k, friction_fs, pressure_gpa, seed,
-                   taut_fs=100.0, taup_fs=500.0, compressibility_au=4.57e-5):
+                   taut_fs=100.0, taup_fs=500.0, compressibility_bar=4.57e-5):
     """Returns a configured ASE MD driver, already given Maxwell-Boltzmann
     initial velocities (net momentum removed) at `temperature_k`. Timestep/
     friction/pressure are given in physically intuitive units (fs, fs^-1,
@@ -47,10 +47,14 @@ def build_dynamics(atoms, ensemble, timestep_fs, temperature_k, friction_fs, pre
     step size; fixed there alongside adding this tool, see amorphize.py's
     own comment).
 
-    `compressibility_au` (eV/Ang^3, NPT only) defaults to water's value (the
+    `compressibility_bar` (1/bar, NPT only) defaults to water's value (the
     same generic placeholder stb-amorphize uses) -- NOT material-specific;
     --compressibility lets a caller override it with something closer to the
-    real material's 1/bulk-modulus for a better-calibrated barostat response.
+    real material's 1/bulk-modulus (1/(B[GPa] * 1e4) in 1/bar) for a
+    better-calibrated barostat response. It is converted to ASE's internal
+    1/(eV/Ang^3) here: passed raw (as this function once did, labelled
+    eV/Ang^3), 4.57e-5 is ~1.6e6 x too small and the barostat never moves the
+    cell -- an 8-atom Si cell at 10 GPa changed its volume by 1e-6.
     """
     from ase import units
     from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
@@ -71,7 +75,7 @@ def build_dynamics(atoms, ensemble, timestep_fs, temperature_k, friction_fs, pre
     return NPTBerendsen(atoms, timestep=dt, temperature_K=temperature_k,
                         pressure_au=pressure_gpa * units.GPa,
                         taut=taut_fs * units.fs, taup=taup_fs * units.fs,
-                        compressibility_au=compressibility_au)
+                        compressibility_au=compressibility_bar / units.bar)
 
 
 def main():
@@ -118,10 +122,10 @@ def main():
     parser.add_argument("--taup", type=float, default=500.0,
                         help="Barostat coupling time, fs (npt only, default: 500).")
     parser.add_argument("--compressibility", type=float, default=4.57e-5,
-                        help="Compressibility, eV/Ang^3 (npt only, default: 4.57e-5 -- water's "
+                        help="Compressibility, 1/bar (npt only, default: 4.57e-5 -- water's "
                              "value, a generic placeholder; override with something closer to "
-                             "1/bulk-modulus for the actual material for a better-calibrated "
-                             "barostat response).")
+                             "1/bulk-modulus for the actual material, 1/(B[GPa] x 1e4) -- e.g. Si, "
+                             "B ~ 98 GPa: 1e-6 -- for a better-calibrated barostat response).")
     parser.add_argument("--stride", type=int, default=10,
                         help="Save one trajectory frame every Nth MD step (default: 10).")
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
@@ -218,7 +222,7 @@ def main():
 
     dyn = build_dynamics(atoms, args.ensemble, args.timestep, args.temperature,
                          args.friction, args.pressure, args.seed,
-                         taut_fs=args.taut, taup_fs=args.taup, compressibility_au=args.compressibility)
+                         taut_fs=args.taut, taup_fs=args.taup, compressibility_bar=args.compressibility)
 
     if args.equilibration_steps > 0:
         print_section("[2] EQUILIBRATION (discarded)", f_out)

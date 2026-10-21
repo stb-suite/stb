@@ -103,8 +103,10 @@ def run_phonon_pipeline(atoms_ref, calc, args, f_out, tag=""):
         if i % report_every == 0 or i == n:
             print(f"  ... [{tag}] {i}/{n}")
 
-    mace_phonons.compute_force_constants(phonon, calc, progress_callback=_progress)
+    res_max = mace_phonons.compute_force_constants(phonon, calc, progress_callback=_progress)
     phonon.symmetrize_force_constants(show_drift=False)
+    print_dual(f"[{tag}] Residual forces in the undisplaced supercell: max {res_max:.4f} eV/Ang per atom "
+               "-- subtracted from every displacement's", f_out)
 
     result = {"phonon": phonon}
 

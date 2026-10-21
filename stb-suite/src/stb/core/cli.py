@@ -186,11 +186,26 @@ def capture_library_noise(collector, label):
     exact same "collect noisy third-party output, report it once at the
     end" need.
     """
+    import logging
     buf = io.StringIO()
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        with contextlib.redirect_stdout(buf):
-            yield
+    records = []
+
+    class _Grab(logging.Handler):
+        def emit(self, record):
+            records.append(f"{record.levelname}: {record.getMessage()}")
+
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    root.handlers = [_Grab()]   # e.g. mace's 'No dtype selected' goes through the root logger
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with contextlib.redirect_stdout(buf):
+                yield
+    finally:
+        root.handlers = saved
+    for rec in dict.fromkeys(records):
+        collector.append(f"[{label}] {rec}")
     text = buf.getvalue().strip()
     if text:
         collector.append(f"[{label}]\n{text}")
@@ -216,6 +231,7 @@ def run_with_spinner(func, *args, label: str = "Working", **kwargs):
     bar. Falls back to periodic plain-text lines when stderr isn't a terminal
     (e.g. output redirected to a file/log). Re-raises whatever `func` raised.
     """
+    sys.stdout.flush()   # report lines printed so far must not land after the spinner's
     done = threading.Event()
     outcome = {}
 

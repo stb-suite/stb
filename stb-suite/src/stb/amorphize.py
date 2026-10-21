@@ -241,9 +241,10 @@ vacuum-padded axis is detected.""",
                         help="Berendsen pressure-coupling time constant, fs "
                              "(default: 200.0).")
     parser.add_argument("--compressibility", type=float, default=4.57e-5,
-                        help="Compressibility in eV/Ang^3 for the Berendsen barostat "
+                        help="Compressibility in 1/bar for the Berendsen barostat "
                              "(default: 4.57e-5, water's value -- a generic placeholder; "
-                             "override with your material's real compressibility if known).")
+                             "override with your material's real compressibility if known, "
+                             "1/(B[GPa] x 1e4) -- e.g. Si, B ~ 98 GPa: 1e-6).")
     parser.add_argument("--model", choices=["small", "medium", "large"], default="medium",
                         help="MACE-MP-0 model size: speed/accuracy tradeoff (default: medium).")
     parser.add_argument("--custom-model", default=None, metavar="PATH",
@@ -321,7 +322,7 @@ vacuum-padded axis is detected.""",
     print_dual(f"Quench protocol: ramp to {args.quench_temp:.0f} K over {args.quench_steps} steps", f_out)
     print_dual(f"Timestep       : {args.timestep} fs", f_out)
     print_dual(f"taut/taup      : {args.taut} fs / {args.taup} fs", f_out)
-    print_dual(f"Compressibility: {args.compressibility} eV/Ang^3", f_out)
+    print_dual(f"Compressibility: {args.compressibility:g} 1/bar", f_out)
     print_dual(f"Model          : {model_desc} ({args.device})", f_out)
     print_dual(f"Final relax    : {'yes (position+cell)' if args.final_relax else 'no'}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
@@ -385,7 +386,7 @@ vacuum-padded axis is detected.""",
     # --compressibility's own help text).
     dyn = NPTBerendsen(atoms, timestep=args.timestep * units.fs, temperature_K=args.melt_temp,
                        pressure_au=0.0, taut=args.taut * units.fs, taup=args.taup * units.fs,
-                       compressibility_au=args.compressibility)
+                       compressibility_au=args.compressibility / units.bar)   # 1/bar -> ASE's 1/(eV/Ang^3)
 
     # Per-step diagnostics/trajectory collection: a plain manual loop (same
     # pattern as stb-mlmd, no dyn.attach() observer), sampled every --stride

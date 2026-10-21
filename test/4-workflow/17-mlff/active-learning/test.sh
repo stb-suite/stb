@@ -281,6 +281,50 @@ check_exit_code $? 1
 check_contains "dimensions must be >= 1" log_supercell_bad.txt
 
 
+# --- 1d'. structure.fdf + calc.fdf pair (-s / -c) ---
+echo -e "\n--- Testing -s structure.fdf -c calc.fdf (explicit, then from the workflow) ---"
+mkdir -p pair
+# NumberOfAtoms stays in calc.fdf on purpose: a supercell must override it.
+python3 - <<'PY'
+lines = open('mlff_config_001/calc.fdf').read().splitlines(keepends=True)
+start = next(i for i, l in enumerate(lines) if l.startswith('NumberOfSpecies'))
+end = next(i for i, l in enumerate(lines) if l.startswith('%endblock AtomicCoordinates')) + 1
+keep = lambda l: l.startswith(('PAO.', 'MeshCutoff'))
+open('pair/structure.fdf', 'w').writelines(l for l in lines[start:end] if not keep(l))
+open('pair/calc.fdf', 'w').writelines(lines[:start] + ['%include structure.fdf\n'] +
+                                      [l for l in lines[start:end] if keep(l)] + lines[end:])
+PY
+stb-mlffActiveLearning --model "$QUICK_MODEL" -s pair/structure.fdf -c pair/calc.fdf --pseudo-dir . \
+    --n-candidates 4 --stdev 0.1 --top-k 1 --supercell 2 1 1 --min-novelty 0 \
+    --output-dir pair_test --no-intro > log_pair.txt 2>&1
+check_exit_code $? 0
+check_contains "Structure file    : pair/structure.fdf" log_pair.txt
+check_contains "Calc file         : pair/calc.fdf" log_pair.txt
+check_success pair_test/mlff_config_001/structure.fdf
+check_success pair_test/mlff_config_001/calc.fdf
+check_contains "NumberOfAtoms 4" pair_test/mlff_config_001/config_extra.fdf
+check_contains "%include structure.fdf" pair_test/mlff_config_001/calc.fdf
+python3 -c "
+import sys
+from stb.core import structure_io as sio
+s = sio.read_fdf('pair_test/mlff_config_001/structure.fdf')
+sys.exit(0 if len(s.atoms) == 4 and abs(s.lattice[0][0] - 20.0) < 1e-6 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} supercell written to structure.fdf (4 atoms, a doubled)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} supercell structure.fdf wrong"
+    FAIL=$((FAIL+1))
+fi
+echo "Testing: -s/-c together with --file -> clear error"
+stb-mlffActiveLearning --model "$QUICK_MODEL" -s pair/structure.fdf --file mlff_config_001/calc.fdf \
+    --no-intro > log_pair_both.txt 2>&1
+check_exit_code $? 1
+check_contains "not both" log_pair_both.txt
+rm -rf pair_test
+
+
 # --- 1e. Driven by mlff_workflow.json (committee + reference + training set from the file) ---
 echo -e "\n--- Testing a run driven by mlff_workflow.json ---"
 rm -rf mlff_config_009 mlff_config_01*
@@ -317,6 +361,21 @@ echo "Testing: the next run's novelty reference includes the recorded picks (8 +
 stb-mlffActiveLearning --n-candidates 4 --top-k 1 --output-dir wf_next --no-intro > log_workflow2.txt 2>&1
 check_contains "Novelty reference: 10 config(s) from 'mlff_workflow.json (training configs)'" log_workflow2.txt
 rm -rf wf_next mlff_config_009 mlff_config_010
+echo "Testing: workflow recording a structure.fdf + calc.fdf pair"
+cp mlff_workflow.json wf_single.json
+python3 -c "
+import json
+d = json.load(open('mlff_workflow.json'))
+d['reference'].update({'file': 'pair/structure.fdf', 'calc': 'pair/calc.fdf'})
+json.dump(d, open('mlff_workflow.json', 'w'), indent=1)
+"
+stb-mlffActiveLearning --n-candidates 4 --stdev 0.2 --top-k 1 --output-dir wf_pair --no-intro > log_workflow_pair.txt 2>&1
+check_exit_code $? 0
+check_contains "Calc file         : pair/calc.fdf" log_workflow_pair.txt
+check_success wf_pair/mlff_config_001/structure.fdf
+check_success wf_pair/mlff_config_001/calc.fdf
+mv wf_single.json mlff_workflow.json
+rm -rf wf_pair
 
 
 # --- 2. --save-report ---
@@ -336,9 +395,9 @@ echo -e "\n--- Testing error and robustness cases ---"
 echo "Testing: no --model and no workflow file -> clear error"
 stb-mlffActiveLearning --workflow no_such_workflow.json --no-intro > log_missing_args.txt 2>&1
 check_exit_code $? 1
-check_contains "pass --model and --file" log_missing_args.txt
+check_contains "pass --model and -s/-c (or --file)" log_missing_args.txt
 
-echo "Testing: workflow without a recorded reference .fdf -> asks for --file"
+echo "Testing: workflow without a recorded reference .fdf -> asks for -s/-c or --file"
 python3 -c "
 import json
 d = json.load(open('mlff_workflow.json')); d['reference'] = {}
@@ -346,7 +405,7 @@ json.dump(d, open('wf_noref.json', 'w'))
 "
 stb-mlffActiveLearning --workflow wf_noref.json --no-intro > log_missing_file.txt 2>&1
 check_exit_code $? 1
-check_contains "records no reference .fdf -- pass --file" log_missing_file.txt
+check_contains "records no reference .fdf -- pass -s/-c or --file" log_missing_file.txt
 rm -f wf_noref.json
 
 echo "Testing: nonexistent model file"
@@ -378,13 +437,13 @@ check_contains "round" log_help.txt
 # --- 4. Interactive path (stb-suite, shortcut 4.17.4) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.17.4) ---"
 rm -rf mlff_config_012 mlff_config_013
-printf '4.17.4\nn\n%s\nmlff_config_001/calc.fdf\n\n\n\n5\n0.2\n1\n.\n\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
+printf '4.17.4\nn\n%s\nmlff_config_001/calc.fdf\n-\n\n\n\n5\n0.2\n1\n.\n\nn\n\n0\n' "$QUICK_MODEL" | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Suggested configs" log_menu.txt
 rm -rf mlff_config_009
 
 echo "Testing: menu with a 2-model committee and a supercell"
-printf '4.17.4\nn\n%s %s\nmlff_config_001/calc.fdf\n\n\n2 1 1\n4\n0.1\n1\n.\n\nn\n\n0\n' "$QUICK_MODEL" "$QUICK_MODEL_B" | stb-suite > log_menu_committee.txt 2>&1
+printf '4.17.4\nn\n%s %s\nmlff_config_001/calc.fdf\n-\n\n\n2 1 1\n4\n0.1\n1\n.\n\nn\n\n0\n' "$QUICK_MODEL" "$QUICK_MODEL_B" | stb-suite > log_menu_committee.txt 2>&1
 check_exit_code $? 0
 check_contains "committee force disagreement (2 models" log_menu_committee.txt
 check_contains "Supercell         : 2 x 1 x 1" log_menu_committee.txt

@@ -79,18 +79,28 @@ def compute_force_constants(phonon, calc, progress_callback=None):
     displaced supercells' forces are computed (i is 1-based) -- callers
     print their own progress line, this module stays print-free (same
     convention as core/mace_relax.py).
+
+    The forces on the UNDISPLACED supercell (the residual left by the
+    pre-relax, up to its fmax) are subtracted from every displacement's:
+    summed over a sublattice even 0.005 eV/Ang per atom shifts Gamma-point
+    optical modes by THz (graphene, 5x5: 25 %). Returns the max residual
+    force per atom (eV/Ang).
     """
     from ase import Atoms
 
+    def forces_of(cell):
+        a = Atoms(numbers=cell.numbers, positions=cell.positions, cell=cell.cell, pbc=True)
+        a.calc = calc
+        return a.get_forces()
+
+    residual = forces_of(phonon.supercell)
     supercells = phonon.supercells_with_displacements
     force_sets = []
     for i, scell in enumerate(supercells):
-        disp_atoms = Atoms(numbers=scell.numbers, positions=scell.positions,
-                            cell=scell.cell, pbc=True)
-        disp_atoms.calc = calc
-        force_sets.append(disp_atoms.get_forces())
+        force_sets.append(forces_of(scell) - residual)
         if progress_callback is not None:
             progress_callback(i + 1, len(supercells))
 
     phonon.forces = force_sets
     phonon.produce_force_constants()
+    return float(np.linalg.norm(residual, axis=1).max())

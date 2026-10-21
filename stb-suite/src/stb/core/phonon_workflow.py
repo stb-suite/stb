@@ -141,8 +141,43 @@ def write_displacement_folders(output_root, phonon, supercells, structure_filena
     return folders, yaml_path
 
 
+# The undisplaced supercell, run with SIESTA next to the disp-NNN/ folders. Not
+# named disp-000: every consumer globs disp-* for the displacements.
+PERFECT_DIR = "perfect_supercell"
+
+
+def write_perfect_supercell(output_root, phonon, structure_filename, calc_path, pseudos_to_copy):
+    """Writes <output_root>/perfect_supercell/ -- the undisplaced supercell with
+    the same calc.fdf and pseudopotentials as the disp-NNN/ folders. Its SIESTA
+    forces are the reference's residual forces in the supercell, subtracted
+    from every displacement's by load_phonon_with_force_constants: a residual
+    that is harmless per atom (e.g. 0.004 eV/Ang left by a relaxation) adds up
+    coherently over a sublattice and, in a 5x5 graphene supercell, halved the
+    Gamma force constants (E2g 31.9 instead of 41.0 THz). Returns the folder."""
+    folder = os.path.join(output_root, PERFECT_DIR)
+    os.makedirs(folder, exist_ok=True)
+    write_siesta(os.path.join(folder, os.path.basename(structure_filename)), phonon.supercell)
+    shutil.copy(calc_path, os.path.join(folder, os.path.basename(calc_path)))
+    for pseudo_path in pseudos_to_copy:
+        shutil.copy(pseudo_path, os.path.join(folder, os.path.basename(pseudo_path)))
+    return folder
+
+
+def subtract_residual_forces(phonon, residual):
+    """Subtracts `residual` (n_atoms x 3, the undisplaced supercell's forces, in
+    the same units as the dataset) from every displacement's forces and rebuilds
+    the force constants (symmetrized). Returns the max |residual| per atom."""
+    ds = phonon.dataset
+    for d in ds["first_atoms"]:
+        d["forces"] = np.asarray(d["forces"]) - residual
+    phonon.dataset = ds
+    phonon.produce_force_constants()
+    phonon.symmetrize_force_constants(show_drift=False)
+    return float(np.linalg.norm(residual, axis=1).max())
+
+
 def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None,
-                                      symprec=None):
+                                      symprec=None, info=None):
     """Builds FORCE_SETS from disp-*/<system_label>.FA (subprocess
     phonopy-init --siesta -f, falling back to plain `phonopy` on older
     installs -- same fallback phonons_pos.py already used) and loads the
@@ -169,6 +204,14 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
     inline code in phonons_pos.py. Returns
     (phonon, internal_to_angstrom, original_dir); callers must
     os.chdir(original_dir) themselves once done.
+
+    When <phonon_dir>/perfect_supercell/<label>.FA exists (stb-phononsCreate
+    writes the folder), its forces -- the reference's residual forces -- are
+    subtracted from every displacement's before the force constants are built,
+    and FORCE_SETS is rewritten with the corrected forces (the original is kept
+    as FORCE_SETS.raw). `info` (a dict), if given, receives 'residual_max'
+    (eV/Ang, None when not subtracted) and 'residual_status' ('subtracted',
+    'not finished' or 'absent').
 
     Raises SystemExit(1) (after printing a report-visible error via
     print_dual) on any failure -- same fail-loud behavior as the code
@@ -211,6 +254,8 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
 
     print("[INFO] Initializing Phonopy API and loading FORCE_SETS ...")
     original_dir = os.getcwd()
+    perfect_fa = os.path.abspath(os.path.join(phonon_dir, PERFECT_DIR, f"{system_label}.FA"))
+    perfect_dir = os.path.abspath(os.path.join(phonon_dir, PERFECT_DIR))
     load_kwargs = {} if symprec is None else {"symprec": symprec}
     try:
         os.chdir(phonon_dir)
@@ -219,6 +264,39 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
         print_dual(color_text(f"[ERROR] Could not load phonopy data: {e}", 'red'), f_out)
         os.chdir(original_dir)
         raise SystemExit(1)
+
+    status, res_max = "absent", None
+    if not has_embedded_fc:
+        if os.path.isfile(perfect_fa):
+            from stb.core.siesta_log import read_fa_forces
+            residual = read_fa_forces(perfect_fa)
+            if residual is None or len(residual) != len(phonon.supercell.symbols):
+                print_dual(color_text(f"[WARNING] {PERFECT_DIR}/{system_label}.FA is unreadable or has the wrong "
+                                      "atom count -- residual forces NOT subtracted.", 'yellow'), f_out)
+                status = "unreadable"
+            else:
+                from phonopy.file_IO import write_FORCE_SETS
+                if os.path.isfile("FORCE_SETS"):
+                    shutil.copy("FORCE_SETS", "FORCE_SETS.raw")
+                res_max = subtract_residual_forces(phonon, residual)
+                write_FORCE_SETS(phonon.dataset, filename="FORCE_SETS")
+                status = "subtracted"
+                print_dual(color_text(f"Residual forces  : subtracted (undisplaced supercell, max {res_max:.4f} "
+                                      "eV/Ang per atom); FORCE_SETS rewritten, original in FORCE_SETS.raw",
+                                      'green'), f_out)
+        elif os.path.isdir(perfect_dir):
+            status = "not finished"
+            print_dual(color_text(f"[WARNING] {PERFECT_DIR}/ has no finished SIESTA run ({system_label}.FA) -- the "
+                                  "reference's residual forces are NOT subtracted; run SIESTA there and analyse again.",
+                                  'yellow'), f_out)
+        else:
+            print_dual(color_text(f"[WARNING] No {PERFECT_DIR}/ folder: the reference's residual forces are NOT "
+                                  "subtracted. Even ~0.005 eV/Ang per atom adds up over the supercell and can shift "
+                                  "Gamma-point optical modes by many THz -- rerun the prep stage (stb-phononsCreate, stb-ir and "
+                                  "stb-raman write the folder) and run SIESTA there, or relax the reference much "
+                                  "tighter.", 'yellow'), f_out)
+    if info is not None:
+        info["residual_max"], info["residual_status"] = res_max, status
 
     # phonon's internal cell/positions are in bohr (SIESTA-interface
     # convention, calculator="siesta") for a stb-phononsCreate-sourced run,

@@ -79,7 +79,7 @@ _COORD_FORMAT_CARTESIAN = {"ang", "notscaledcartesianang"}
 @dataclass
 class FdfStructure:
     lattice: np.ndarray  # 3x3, Angstrom, LatticeConstant already applied
-    lattice_constant: float  # as declared in the file (1.0 if absent)
+    lattice_constant: float  # as declared in the file, converted to Ang (1.0 if absent)
     species: list[str]  # unique symbols, in %block ChemicalSpeciesLabel order
     species_meta: dict[str, dict]  # {symbol: {'id': str, 'Z': int}}, as declared in the file
     atoms: list[tuple[str, np.ndarray]]  # (symbol, position as given in file)
@@ -89,6 +89,10 @@ class FdfStructure:
 
 def _strip_comment(line: str) -> str:
     return line.split("#", 1)[0].strip()
+
+
+_LATTICE_UNITS = {"ang": 1.0, "angstrom": 1.0, "bohr": 0.529177210903, "au": 0.529177210903,
+                  "a.u.": 0.529177210903, "nm": 10.0}
 
 
 def read_fdf(path: str) -> FdfStructure:
@@ -123,6 +127,13 @@ def read_fdf(path: str) -> FdfStructure:
                 lattice_constant = float(parts[1])
             except (IndexError, ValueError):
                 raise ValueError(f"Malformed 'LatticeConstant' line in {path}: {line!r}")
+            # The unit counts: phonopy's SIESTA writer (stb-phononsCreate's supercells) uses
+            # 'LatticeConstant 1.0 Bohr'; read as Ang, such a cell came out 1.89x too large.
+            unit = parts[2].lower() if len(parts) > 2 else "ang"
+            if unit not in _LATTICE_UNITS:
+                raise ValueError(f"Unsupported LatticeConstant unit '{parts[2]}' in {path} "
+                                 f"(supported: Ang, Bohr/au, nm).")
+            lattice_constant *= _LATTICE_UNITS[unit]
             continue
 
         if lower.startswith("atomiccoordinatesformat"):

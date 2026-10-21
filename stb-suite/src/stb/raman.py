@@ -19,7 +19,8 @@ from phonopy.interface.siesta import read_siesta, get_physical_units
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace
-from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
+from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
+                                     write_perfect_supercell, PERFECT_DIR)
 from stb.core.structure_io import read_md_state, prepend_include
 
 REPORT_FILE = "raman_stage1.txt"
@@ -122,6 +123,11 @@ machinery is shared, via core/phonon_workflow.py).""",
     parser.add_argument("-O", "--output-dir", type=str, default="raman_study",
                         help="Root directory for the whole Raman workflow (default: raman_study) -- "
                              "phonon displacements are written under <output-dir>/phonon_disp/.")
+    parser.add_argument("--no-perfect-supercell", dest="perfect", action="store_false",
+                        help=f"Do not write {PERFECT_DIR}/ (the undisplaced supercell, one more SIESTA run). "
+                             "Written by default: the next stage subtracts its forces -- the reference's residual "
+                             "forces -- from every displacement's; left in, a small relaxation residual adds up over "
+                             "the supercell and shifts the Gamma-point modes by up to several THz.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-raman {VERSION}")
@@ -340,6 +346,11 @@ machinery is shared, via core/phonon_workflow.py).""",
     print_dual(f"Building {len(supercells)} displacement folders in '{phonon_disp_dir}' ...", f_out)
     folders, yaml_path = write_displacement_folders(
         phonon_disp_dir, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
+    n_disp = len(folders)
+    perfect_folder = (write_perfect_supercell(phonon_disp_dir, phonon, args.structure, args.calc, pseudos_to_copy)
+                      if args.perfect else None)
+    if perfect_folder:
+        folders = folders + [perfect_folder]
 
     # write_displacement_folders copies --calc verbatim -- overwrite each
     # folder's copy with the forced single-point/supercell-k-grid version
@@ -353,7 +364,10 @@ machinery is shared, via core/phonon_workflow.py).""",
     print_dual(f"Saved Phonopy metadata to '{yaml_path}'", f_out)
 
     print_section('[5] SUMMARY & NEXT STEPS', f_out)
-    print_dual(f"Displacement folders : {len(folders)} (disp-001 .. disp-{len(folders):03d})", f_out)
+    print_dual(f"Displacement folders : {n_disp} (disp-001 .. disp-{n_disp:03d})", f_out)
+    if perfect_folder:
+        print_dual(f"Undisplaced supercell: {perfect_folder}/ (its residual forces are subtracted in the next stage)",
+                   f_out)
     if report_path:
         print_dual(f"Report               : {report_path}", f_out)
     print_dual(f"Files                : {yaml_path}, {phonon_disp_dir}/disp-*/", f_out)
@@ -362,7 +376,8 @@ machinery is shared, via core/phonon_workflow.py).""",
         f"supercell k-grid ({kgrid[0]} {kgrid[1]} {kgrid[2]}, see [2]) in every disp-* folder.",
         'yellow'), f_out)
     print_dual(color_text("\nNext steps:", 'yellow'), f_out)
-    print_dual(f"  1. Run SIESTA in every '{phonon_disp_dir}/disp-*/' folder.", f_out)
+    print_dual(f"  1. Run SIESTA in every '{phonon_disp_dir}/disp-*/' folder"
+               + (f" and in '{perfect_folder}/'." if perfect_folder else "."), f_out)
     print_dual(f"  2. Once they're done, run: stb-ramanModes --directory {output_root}", f_out)
 
     if f_out:

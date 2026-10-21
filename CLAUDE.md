@@ -101,7 +101,11 @@ needs it).
 
 ### Core shared modules (`stb-suite/src/stb/core/`)
 
-- `structure_io.py` — the only `.fdf` reader/writer (`read_fdf`, `write_fdf`,
+- `structure_io.py` — `read_fdf` honors the `LatticeConstant` unit (Ang, Bohr/au, nm) and
+  stores `lattice_constant` in Ang, so `raw_lattice_vectors()` still returns the block as
+  written; before, `LatticeConstant 1.0 Bohr` (phonopy's SIESTA writer) was read as Ang and
+  such a cell came out 1.89x too large.
+  The only `.fdf` reader/writer (`read_fdf`, `write_fdf`,
   `to_pymatgen`, `from_pymatgen`, `rewrite_fdf_lattice`, `rewrite_fdf_positions`,
   `read_relaxed_or_input`, plus thin accessors like `lattice_only`,
   `species_list`/`species_dict`). Use `raw_lattice_vectors()` instead of
@@ -192,6 +196,17 @@ needs it).
   forces the heavy `ml` extra to load just to fit a curve.
 - `mace_phonons.py` — `generate_ml_displacements`/`compute_force_constants`: the
   MACE-driven phonon physics shared by `stb-mlphonons` (its sole consumer today).
+  `compute_force_constants` subtracts the model's forces on the UNDISPLACED supercell.
+- `phonon_workflow.py` — **residual forces**: `write_perfect_supercell` writes
+  `<disp dir>/perfect_supercell/` (the undisplaced supercell; not `disp-000`, every
+  consumer globs `disp-*`), written by stb-phononsCreate, stb-ir and stb-raman by default
+  (`--no-perfect-supercell`), and `load_phonon_with_force_constants` subtracts its `.FA`
+  from every displacement's (FORCE_SETS rewritten, original kept as FORCE_SETS.raw; warns
+  when the folder is absent/unfinished) -- so every SIESTA phonon consumer (phonons, IR,
+  Raman, adsorption Gibbs) benefits. A residual that is tiny per atom adds up over a
+  sublattice: graphene relaxed to 0.004 eV/Ang, 5x5 supercell, gave Gamma E2g 31.9 instead
+  of 41.0 THz. Load with `symprec=0.01` (phonopy's 1e-5 made graphene Cmmm and split LO/TO);
+  stb-mlffValidate `--phonon-ref` now does both (the model's own residual subtracted too).
 - `xrd.py` — pattern computation/experimental-pattern reading shared by `stb-xrd`,
   `stb-xrdsearch`/`stb-xrdrank`. `looks_like_peak_list` (coefficient-of-variation
   heuristic on point spacing) auto-detects a sparse peak-list-shaped
@@ -210,6 +225,10 @@ needs it).
   manifests fall back to the pre-existing distance-based (`--autosort-tol`) behavior.
 - `mlff_workflow.py` — load/save of `mlff_workflow.json`, the state file the four MLFF
   stages (4.17.x) communicate through (schema in its docstring; paths relative to the file).
+- `atomic_env.py` — `environment_fingerprints`/`EnvironmentSet`: model-independent
+  atomic-environment fingerprints (sorted distances to the 16 nearest neighbours), novelty in
+  units of a set's typical spacing; stb-mlffActiveLearning's novelty filter and stb-mlff's
+  near-duplicate check.
 - `ase_view.py` — `view_structure_interactive`: shared, graceful (no-display-safe)
   wrapper around ASE's interactive 3D viewer, used by every tool's `--view` flag.
 
@@ -432,18 +451,42 @@ ships REAL finished SIESTA runs (Si with an 11-run convergence study, graphene).
 a bank's quality is not guaranteed -- check the relaxed geometry against a known value first (the
 PseudoDojo S gave a wrong Mo-S bond in one test; graphene uses the `virtual_vault` PSF carbon).
 
-**4-Workflow item 17, MLFF** — 4 stages that talk through one `mlff_workflow.json` next to
-the `mlff_config_*` folders (`core/mlff_workflow.py`: reference .fdf + pseudo source, every
+**4-Workflow item 17, MLFF** — shared across the 4 stages: one definition of an unphysical config,
+`mlff_workflow.UNPHYSICAL_FMAX` (15 eV/Ang) / `UNPHYSICAL_DE` (1000 meV/atom) -- Stage 1's ML-screen flag,
+Stage 2's SIESTA-label warning, Stage 4's default `--max-force` and `--auto-sampling` limit (before, 10 / 15 /
+none: an auto-sampled 0.15 Ang graphene round gave 33-45 eV/Ang labels and a REGRESSED round); every report
+is numbered with ALL warnings in a last section and third-party output (prints, `warnings`, and the root
+`logging` logger -- mace's 'No dtype selected' -- via `core.cli.capture_library_noise`) only counted; every
+stage has `--show` (Stage 1 adds coverage/mlff_coverage.png next to its gnuplot files) and `--save-report`
+writes into the run folder (Stage 2: the round dir); a volume strain changes only the periodic axes in both
+Stage 1 `--volume-strains` and Stage 4 `--sampling-method strain`; Stage 3's E(V) needs 5+ distinct test
+volumes (Birch-Murnaghan has 4 parameters) and Stage 1 says whether its plan gives them. Device defaults
+differ on purpose: Stage 2 auto-detects cuda (training), Stages 3-4 default to cpu like every MACE tool.
+4 stages that talk through one `mlff_workflow.json` inside the
+run folder `mlff_runs/` (Stage 1's default `-o`, like the other workflows' `*_runs`; it holds the
+`mlff_config_*`, `mlff_test/` and `round_NN/` folders; the later stages default to
+`mlff_runs/mlff_workflow.json`, or `./mlff_workflow.json` when run inside it — `default_path`) (`core/mlff_workflow.py`: reference .fdf + pseudo source, every
 config with `set` train/test, `kind`, origin, proposing round; one entry per training round
 with its committee — seed, model path, validation metrics —, settings, test-set scores and
 active-learning picks; history of every call; paths relative to the file, atomic writes).
 Every stage still accepts explicit paths and works without the file.
-`stb-mlff` (Stage 1, Prep: rattled/AIMD-sampled training configs from a reference
-`calc.fdf`, plus `--volume-strains` cells — isotropic, rattled — without which the training set
+`stb-mlff` (Stage 1, Prep: rattled/AIMD-sampled training configs from the reference — the
+suite's usual `-s structure.fdf -c calc.fdf` pair (defaults; calc.fdf must `%include` the
+structure file, which is the one rewritten per folder, calc.fdf copied verbatim) or one
+self-contained `--file`; the JSON records `reference.file` (structure) + `reference.calc`, and
+Stage 4 takes the same inputs, adding `NumberOfAtoms` to a supercell's `config_extra.fdf` since
+the calc.fdf one is not rewritten —, plus `--volume-strains` cells — isotropic, rattled — without which the training set
 has one volume and the model cannot learn E(V)/B0/pressure; `--n-test N` held-out configs in
 `mlff_test/test_NNN/`, the same kinds cycled with an independent seed; creates the JSON, an
 old one is kept as `.bak`; every folder, Stage 4's too, gets a single-point `config_extra.fdf`,
-so a relaxation/variable-cell template can't move the sampled geometry) → `stb-mlffAnalysis`
+so a relaxation/variable-cell template can't move the sampled geometry; the report reads every
+written folder back and tabulates volume, displacement from the reference and shortest distance
+per config, flags close contacts, near-duplicates (`--dup-threshold`, core/atomic_env) and test configs
+outside the training range; `--ml-screen` runs a MACE-MP foundation model on every config
+before SIESTA (max force, energy above the reference) to catch unphysical geometries; writes
+gnuplot coverage plots to `<run folder>/coverage/` (`--no-plots`), stores each config's numbers
+in the JSON, `--export-traj` writes all structures as one .xsf/.pdb/.xyz, and `--view` opens
+them in ASE's viewer) → `stb-mlffAnalysis`
 (Stage 2, Train: configs from the JSON (else `--path`/`mlff_config_*`), a `--committee N`
 (default 3) of models with seeds `--seed`, `--seed+1`, ... — each its own train/valid split —
 in `round_NN/m_s<seed>/` (`--committee 1` and no JSON: the old single model in `.`), recorded
@@ -460,14 +503,52 @@ assumes zero interaction energy and starts the model eV/atom off; `--lr` 0.001 b
 stress` — `--stress_key`/`--compute_stress` alone leave the energy+forces loss, which once
 silently ignored it — and `--stress-weight` defaults to 1e4, since stress in eV/Ang^3 is a
 ~2 % term of the loss even at 100. Energy metrics vs the foundation model are offset-removed:
-its absolute E RMSE is the ~1e5 meV/atom scale offset, not an error) → `stb-mlffValidate`
+its absolute E RMSE is the ~1e5 meV/atom scale offset, not an error. Report: dataset per kind
+(energy spread, forces, pressure, volume; SCF convergence read from each log), the recipe, a
+per-member training table (learning history from mace_run_train's `results/*_train.txt`, kept
+epoch from its log), every model evaluated on every config (train/valid errors, an out-of-sample
+pool -- each config scored by the members that did not train on it -- per kind vs the
+foundation), committee spread vs held-out error; ALL warnings are collected into a last
+`[10] WARNINGS` section, library noise captured; `round_NN/mlff_training.png` (6 panels),
+`--show` displays it, `--save-data` writes per-config errors. Also: a level-of-theory check
+across folders (settings in SIESTA's reading order, k-sampling as k x a so a divided supercell
+grid still matches, PAO.Basis block and pseudopotential md5); `--cv K` (K-fold: member k
+validates on fold k, every config out-of-sample once; overrides --committee); a comparison table
+against earlier rounds; the worst-predicted configs (`--view-worst N` writes them with per-atom
+`F_error`, also as initial charges for ASE's viewer coloring, and opens them); an MD stability
+test per model (NVT then NVE in an auto supercell of the reference, blow-up criteria, NVE drift;
+`--no-stability`) that also times the model (ms/step, ns/day); `--init-from previous|PATH`
+continues from the last round's plain `.model` -- mace_run_train accepts a model file as
+`--foundation_model` -- while the comparison baseline stays the MACE-MP checkpoint) → `stb-mlffValidate`
 (Stage 3, Validate: scores every round's committee mean and members on the test set — E
 absolute and offset-removed, F, stress, per `kind` —, the committee calibration (true error /
 spread, per-config and per-atom correlation), optionally phonons vs a finished
 stb-phononsCreate folder (`--phonon-ref`: the committee-mean model on the SAME displacements,
 in an Angstrom/eV phonopy object built from the SIESTA one, frequencies compared q-point by
-q-point); verdict STOP (`--target-force` met) / PLATEAU (F RMSE gain < `--plateau` %, default
-5) / CONTINUE; scores stored per round; writes no folders) → `stb-mlffActiveLearning` (Stage 4:
+q-point, imaginary modes counted); verdict STOP (`--target-force` met) / REGRESSED (latest round
+worse than the best earlier one by more than `--plateau` -- it names the round to use) / PLATEAU (F RMSE
+gain < `--plateau` %, default 5) / CONTINUE; scores stored per round, per config too; writes no folders except with --md-check (below).
+Report in the Stage-2 style: numbered sections, ALL warnings in a last `[10] WARNINGS`, library noise
+captured; every round's errors with a bootstrap +/- over test configs (how small a difference the test set
+can resolve) and F relative to the RMS SIESTA force; the test set compared with the detailed round's
+training configs (level of theory via Stage 2's `check_theory`, which test configs fall outside the
+training V/F/E range); one round in detail (`--detail-round`, default latest): per kind vs foundation, per
+config (worst atom, spread, novelty, range), error vs force/novelty correlations, test vs Stage-2
+out-of-sample error (generalization gap), member table with outliers and the averaging gain; test folders
+missing from the JSON are flagged; without a JSON the kind comes from the folder name (`large_01` ->
+`large`); equilibrium configs (spread < 1 meV/Ang) are left out of error/spread ratios. Also: force
+errors per element; a Birch-Murnaghan E(V) of every test kind spanning >= 4 volumes (V0/B0 of each
+round and the foundation vs SIESTA -- on the Si benchmark B0 94.4 SIESTA, +3.4 % fine-tuned, -21 %
+foundation); a power-law learning curve F = a N^-b across rounds (N = `n_usable`, needs 3+ sizes;
+configs needed for `--target-force`); `--compare A B` config by config and per kind. `--md-check` is
+the ONE option that writes folders: an NVT run with the best round's first model (optionally in a
+`--md-check-supercell`, k-grid divided via stb-mlffActiveLearning's `supercell_kgrid_block`), frames
+written with `stb.mlff.write_config_folder` to `<run>/md_check/rNN_<T>K/frame_NNN/` and recorded in the
+JSON as their own set `md_check` (never the test set); after SIESTA, every later run reports the
+error along the trajectory (growth first->last third), `--md-check-to-train` moves the finished frames
+into training. Sections [0]-[13], warnings last. `--show`, `--save-data` (mlff_validation_errors.dat),
+`--view-worst N` (mlff_test_worst.xyz), mlff_validation.png: 6 panels plus a third row with whichever
+of learning curve / E(V) / MD check / comparison is available) → `stb-mlffActiveLearning` (Stage 4:
 committee, reference, pseudo source, training set and output dir from the JSON (latest round,
 or `--round K`) unless given; picks recorded as training configs of the proposing round.
 Screens candidates — `--sampling-method rattle|md`, `--md-temperature` one NVT trajectory per
@@ -484,7 +565,7 @@ candidates about like max|F| does. Greedy pick by score, skipping candidates ove
 training set or of an earlier pick; novelty uses a model-independent fingerprint (sorted
 distances to the 16 nearest neighbours) in units of the training set's own typical spacing,
 because `MACECalculator.get_descriptors` fails on the compiled model; max-over-atoms novelty is
-weak in a supercell — consecutive MD frames of a 64-atom cell all pass it).
+weak in a supercell — consecutive MD frames of a 64-atom cell all pass it. Report in the Stage-2/3 style ([0]-[8], ALL warnings last, library noise captured, progress while screening): the committee's quality from the JSON (4.17.2 out-of-sample, 4.17.3 test F and verdict) and Validate's error/spread calibration, which turns each spread into an estimated error -- only when the models ARE that round's committee, never for an explicit --model; the labelled training range (SIESTA max|F|, shortest distance, wall time); the pool per sampling setting (max|F|, spread, novelty vs the training set alone, d_min), MD runs that stopped early, spread-vs-max|F| correlation (> 0.9: the spread only ranks by distortion), the share of the pool that is new territory; the selection funnel; each pick (estimated error, novelty, d_min, pool rank, worst atom, beyond-training flags, close contacts), the picks' mutual diversity; a SIESTA cost estimate (median training wall time scaled as N^3). `--dry-run` writes no folder and leaves the JSON alone; `--show`, `--save-data` (mlff_al_<tag>_pool.dat), `--view-picks` (mlff_al_<tag>_picks.xyz, per-atom spread as initial charges), mlff_al_<tag>.png (6 panels), tag rNN_<run>; the JSON's active_learning entry also stores the pool statistics and skip counts; picks are wrapped into the cell before writing. Sampling `strain` (random symmetric strain up to `--strain-max`, periodic axes only, rattled; the pick's own cell goes into `%block LatticeVectors` via `write_config_folder(raw_lattice=cell / template LatticeConstant)`) and `--md-ensemble npt` (bulk only; refused with a vacuum axis). `--score force|energy|both`: the energy spread is taken after removing each member's constant offset over the pool (`center_energy_spread` -- members have their own E0s, the raw spread was ~100 meV/atom of pure offset). `--selection diverse` (default): score x min(1, novelty/`--diversity`) against training + picks so far, reported against the greedy pick (overlap, score ratio, closest pair). `--auto-sampling` scans `--scan-values` (default stdev 0.03-0.3 Ang / 300-1500 K / strain 1-8 %) with `--scan-n` candidates each and samples with the highest median score that is still physical (<= 10 % close contacts, stable MD, --max-force), warning when that is the scan's edge. `--target-force` gives a verdict STOP / SMALL (only a tail above target) / CONTINUE / UNSURE (no calibration: the spread is only a lower bound). Seeds: the effective seed is `--seed + 1000 x` the round the picks will train (recorded as `seed` in the active_learning entry), so every round screens a fresh pool, and rattle candidates add their own +30000 (`RATTLE_SEED_OFFSET`) -- Stage 1 rattles config i with seed + i through the same generator and ASE draws stdev x one fixed normal vector per seed, so with the shared default 42 candidate i used to be training config i along the very same direction, 3x larger (cos = 1.00; now ~0.1). An ACTIVE-LEARNING HISTORY table lists every earlier run of the workflow (pool score, calibrated max error, new territory). Sections [0]-[10]; the figure gains a third row (scan, energy-vs-force spread, history) when available).
 
 **4-Workflow item 18, EOS** — `stb-eosInputs`/`stb-eosAnalysis`: real-SIESTA analog
 of `stb-mleos`, same isotropic volume-scan convention (`factor = (1 +
@@ -492,8 +573,13 @@ strain_pct/100)**(1/3)`); both share `core/eos_fit.py`.
 
 **5-ML Simulations** (category order): `stb-mlmd` (NVE/NVT/NPT; all physical units
 explicitly converted to ASE's internal unit system before use — `* ase.units.fs`,
-`* ase.units.GPa`, not passed through raw; tracks `E_total`, not just `E_pot`, for
-NVE drift). `stb-mlphonons` (standalone phonon calc; ASR correction via
+`* ase.units.GPa`, `/ ase.units.bar` for `--compressibility`, given in 1/bar; tracks
+`E_total`, not just `E_pot`, for NVE drift). The compressibility was once passed raw and
+labelled eV/Ang^3 -- ASE wants 1/(eV/Ang^3), so water's 4.57e-5 1/bar was ~1.6e6 x too small
+and every NPT cell (stb-mlmd, stb-amorphize, stb-mlffActiveLearning --md-ensemble npt) stayed
+put (1e-6 volume change at 10 GPa); converted, an 8-atom Si cell shrinks ~10 % at 10 GPa, as
+B0 ~95 GPa implies. `build_dynamics(..., compressibility_bar=)` does the conversion; stb-amorphize
+calls NPTBerendsen itself and converts there. `stb-mlphonons` (standalone phonon calc; ASR correction via
 `symmetrize_force_constants`; imaginary-mode check uses a small negative tolerance,
 `_IMAGINARY_MODE_TOL_THZ`, not a strict `< 0`; `--freeze-unstable-mode`/
 `--animate-mode` displacement amplitude must be calibrated via a minimum-image

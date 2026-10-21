@@ -22,7 +22,8 @@ from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_sect
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
-from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
+from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
+                                     write_perfect_supercell, PERFECT_DIR)
 from stb.core.structure_io import read_md_state, prepend_include
 
 REPORT_FILE = "phonon_prep_properties.txt"
@@ -128,6 +129,11 @@ def main():
                         help="Force threshold (eV/Ang) for --ml-prerelax: above this, a "
                              "warning is shown and a relax is offered (default: 0.05).")
 
+    parser.add_argument("--no-perfect-supercell", dest="perfect", action="store_false",
+                        help=f"Do not write {PERFECT_DIR}/ (the undisplaced supercell, one more SIESTA run). "
+                             "It is written by default: stb-phononsPos subtracts its forces -- the reference's "
+                             "residual forces -- from every displacement's, which a small relaxation residual "
+                             "otherwise turns into errors of several THz at Gamma.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
@@ -375,6 +381,10 @@ def main():
 
     _folders, yaml_path = write_displacement_folders(
         output_root, phonon, supercells, args.structure, args.calc, pseudos_to_copy)
+    perfect_folder = None
+    if args.perfect:
+        perfect_folder = write_perfect_supercell(output_root, phonon, args.structure, args.calc, pseudos_to_copy)
+        _folders = _folders + [perfect_folder]
 
     # write_displacement_folders copies --calc verbatim (it's shared with
     # her_refs.py/ir.py/oer_refs.py/raman.py, which don't force single-point)
@@ -390,12 +400,22 @@ def main():
 
     print_section('[5] SUMMARY & FILES', f_out)
     print_dual(f"Displacement folders : {len(supercells)} (disp-001 .. disp-{len(supercells):03d})", f_out)
+    if perfect_folder:
+        print_dual(f"Undisplaced supercell: {perfect_folder}/ -- run SIESTA here too; stb-phononsPos subtracts "
+                   "its (residual) forces from every displacement's", f_out)
+    else:
+        print_dual(color_text("Undisplaced supercell: not written (--no-perfect-supercell) -- residual forces of the "
+                              "reference will NOT be subtracted", 'yellow'), f_out)
+    run_dirs = f"{output_root}/disp-*" + (f" {perfect_folder}" if perfect_folder else "")
+    print_dual(color_text(f"Run SIESTA in        : {run_dirs}  ({len(supercells) + (1 if perfect_folder else 0)} "
+                          "folder(s))", 'cyan'), f_out)
     if report_path:
         print_dual(f"Report               : {report_path}", f_out)
     print_dual(f"Files                : {yaml_path}, {output_root}/disp-*/", f_out)
     print_dual(color_text(
         f"\n[NOTE] '{calc_basename}' was forced to single-point SCF with its own supercell "
-        f"k-grid ({kgrid[0]} {kgrid[1]} {kgrid[2]}, see [1]) in every disp-* folder.",
+        f"k-grid ({kgrid[0]} {kgrid[1]} {kgrid[2]}, see [1]) in every disp-* folder"
+        + (f" and in {PERFECT_DIR}/." if perfect_folder else "."),
         'yellow'), f_out)
 
     print_section('[6] LIBRARY WARNINGS', f_out)

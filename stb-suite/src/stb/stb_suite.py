@@ -5810,6 +5810,23 @@ def run_optical_analysis() -> None:
     run_tool("stb-opticalAnalysis", args)
 
 
+def _prompt_structure_calc(what: str) -> List[str]:
+    """-s/-c arguments for the MLFF stages: the usual structure.fdf + calc.fdf
+    pair, or one self-contained .fdf when the calc file is left out ('-')."""
+    struct_file = get_input(f"{what} structure file [default: structure.fdf]: ").strip() or "structure.fdf"
+    while not os.path.isfile(struct_file):
+        print(color_text(f"File '{struct_file}' not found!", 'red'))
+        struct_file = get_input(f"{what} structure file: ").strip()
+    calc_file = get_input("Calc.fdf template that %includes it [default: calc.fdf; "
+                          "'-' = the structure file is a self-contained .fdf]: ").strip() or "calc.fdf"
+    if calc_file == "-":
+        return ["--file", struct_file]
+    while not os.path.isfile(calc_file):
+        print(color_text(f"File '{calc_file}' not found!", 'red'))
+        calc_file = get_input("Calc.fdf template: ").strip()
+    return ["--structure", struct_file, "--calc", calc_file]
+
+
 def run_mlff_prep() -> None:
     """Interface for the Custom ML Force Field Stage 1 (stb-mlff)"""
     print("\n" + "="*60)
@@ -5821,18 +5838,14 @@ def run_mlff_prep() -> None:
         "2 to fine-tune a MACE-MP foundation model on the results.", 'cyan'))
     print()
 
-    calc_file = get_input("Reference calc.fdf (basis/mesh cutoff/pseudos/SCF settings reused as-is): ").strip()
-    while not os.path.isfile(calc_file):
-        print(color_text("File not found!", 'red'))
-        calc_file = get_input("Reference calc.fdf: ").strip()
-
+    ref_args = _prompt_structure_calc("Reference")
     pseudo_dir = prompt_pseudo_source(optional=True) or "."
 
     n_configs = get_int_input("Number of rattled configurations [default: 10]: ", 10)
     stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated [default: 0.05]: ").strip()
     stdevs = stdev_str.split() if stdev_str else ["0.05"]
 
-    args = ["--file", calc_file, "--pseudo-dir", pseudo_dir,
+    args = [*ref_args, "--pseudo-dir", pseudo_dir,
             "--n-configs", str(n_configs), "--stdev", *stdevs, "--no-intro"]
 
     strains_str = get_input(
@@ -5853,12 +5866,30 @@ def run_mlff_prep() -> None:
         n_samples = get_int_input("Number of AIMD frames to sample [default: 5]: ", 5)
         args.extend(["--from-aimd", aimd_label, "--n-samples", str(n_samples)])
 
-    output_dir = get_input("\nOutput directory [default: .]: ").strip() or "."
+    output_dir = get_input("\nRun folder [default: mlff_runs]: ").strip() or "mlff_runs"
     args.extend(["--output-dir", output_dir])
+    if output_dir != "mlff_runs":
+        print(color_text(f"  The next stages find '{output_dir}/mlff_workflow.json' when run from "
+                         "inside that folder.", 'yellow'))
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
+    ml_screen = get_input("Screen every config with a MACE-MP foundation model before SIESTA "
+                          "(flags unphysical geometries; needs the 'ml' extra)? (y/N): ").strip().lower()
+    if ml_screen == 'y':
+        ml_model = get_input("  Model (small/medium/large or a .model file) [default: medium]: ").strip() or "medium"
+        args.extend(["--ml-screen", "--ml-model", ml_model])
+    export = get_input("Also write every structure to one multi-frame file (xsf/pdb/xyz) "
+                       "[default: no; e.g. mlff_configs.xsf]: ").strip()
+    if export:
+        args.extend(["--export-traj", export])
+    view = get_input("Open the configurations in ASE's 3D viewer afterwards (needs a display)? "
+                     "(y/N): ").strip().lower()
+    if view == 'y':
+        args.append("--view")
+    if get_input("Display the coverage figure on screen? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
 
     print(color_text("\nGenerating training configurations...", 'green'))
     run_tool("stb-mlff", args)
@@ -5878,20 +5909,29 @@ def run_mlff_analysis() -> None:
     workflow = _mlff_workflow_summary()
     path = None
     if workflow is None:
-        path = get_input("Glob pattern for the config folders [default: mlff_config_*]: ").strip()
-        if not path:
-            path = "mlff_config_*"
+        path = get_input("Glob pattern for the config folders [default: every mlff_config_* here or in "
+                         "mlff_runs/, in configs_round_*/ or directly]: ").strip() or None
 
     print(f"\n{color_text('Foundation model to fine-tune from:', 'yellow')}")
-    print(f"  {color_text('1', 'cyan')} = small (default -- fastest)")
-    print(f"  {color_text('2', 'cyan')} = medium")
+    print(f"  {color_text('1', 'cyan')} = small (fastest)")
+    print(f"  {color_text('2', 'cyan')} = medium (default)")
     print(f"  {color_text('3', 'cyan')} = large")
-    model_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    model_choice = get_input("Select option (1-3) [default: 2]: ").strip()
     model_map = {'1': 'small', '2': 'medium', '3': 'large'}
-    foundation_model = model_map.get(model_choice, 'small')
+    foundation_model = model_map.get(model_choice, 'medium')
 
-    committee = get_int_input("Committee size -- models trained with different seeds; their "
-                              "disagreement drives Stage 4 [default: 3, 1 = single model]: ", 3)
+    cv = get_int_input("K-fold cross-validation -- every config gets an out-of-sample check, the "
+                       "committee is the K fold models (best with few configs) [default: 0 = off; e.g. 5]: ", 0)
+    committee = 3
+    if cv < 2:
+        cv = 0
+        committee = get_int_input("Committee size -- models trained with different seeds; their "
+                                  "disagreement drives Stage 4 [default: 3, 1 = single model]: ", 3)
+    init_from = "foundation"
+    if workflow is not None and workflow.get("rounds"):
+        if get_input("Start from the previous round's models instead of the foundation model "
+                     "(faster active-learning rounds)? (y/N): ").strip().lower() == 'y':
+            init_from = "previous"
 
     epochs = get_int_input("Max training epochs [default: 100]: ", 100)
     batch_size = get_int_input("Batch size [default: 5]: ", 5)
@@ -5911,13 +5951,23 @@ def run_mlff_analysis() -> None:
 
     name = get_input("Experiment/model name [default: mlff_model]: ").strip() or "mlff_model"
     args = ["--foundation-model", foundation_model, "--committee", str(max(1, committee)),
+            "--init-from", init_from,
             "--epochs", str(epochs), "--batch-size", str(batch_size),
             "--stress-weight", str(stress_weight), "--name", name, "--no-intro"]
     if workflow is None:
         work_dir = get_input("Working directory [default: .]: ").strip() or "."
-        args.extend(["--path", path, "--work-dir", work_dir])
+        args.extend((["--path", path] if path else []) + ["--work-dir", work_dir])
     if device in ("cpu", "cuda"):
         args.extend(["--device", device])
+    if cv:
+        args.extend(["--cv", str(cv)])
+    if get_input("Run the MD stability + speed test of each model at the end (a few minutes on CPU)? "
+                 "(Y/n): ").strip().lower() == 'n':
+        args.append("--no-stability")
+    worst = get_int_input("Open the N worst-predicted configs in ASE's viewer at the end, colored by "
+                          "per-atom force error (needs a display) [default: 0 = no]: ", 0)
+    if worst > 0:
+        args.extend(["--view-worst", str(worst)])
 
     export_lammps = get_input(
         "\nAlso export a LAMMPS-loadable model (needs a LAMMPS build with the MACE pair "
@@ -5925,6 +5975,13 @@ def run_mlff_analysis() -> None:
     if export_lammps == 'y':
         args.append("--export-lammps")
 
+    show = get_input("Show the round summary figure on screen when done (needs a display)? "
+                     "(y/N): ").strip().lower()
+    if show == 'y':
+        args.append("--show")
+    save_data = get_input("Also write the per-config errors (.dat)? (y/N): ").strip().lower()
+    if save_data == 'y':
+        args.append("--save-data")
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
@@ -5934,11 +5991,14 @@ def run_mlff_analysis() -> None:
 
 
 def _mlff_workflow_summary(need_round=False):
-    """Prints what ./mlff_workflow.json holds and returns its state (None when
-    absent/unreadable, or when `need_round` and it has no training round)."""
+    """Prints what the workflow file (mlff_runs/mlff_workflow.json, or
+    ./mlff_workflow.json from inside that folder -- the same one the tools pick
+    by default) holds and returns its state (None when absent/unreadable, or
+    when `need_round` and it has no training round)."""
     from stb.core import mlff_workflow
+    path = mlff_workflow.default_path()
     try:
-        state = mlff_workflow.load(mlff_workflow.WORKFLOW_FILE)
+        state = mlff_workflow.load(path)
     except ValueError as e:
         print(color_text(f"[WARNING] {e} -- ignoring it.", 'yellow'))
         return None
@@ -5947,7 +6007,7 @@ def _mlff_workflow_summary(need_round=False):
     n_train = sum(1 for c in state["configs"] if c.get("set") == "train")
     n_test = sum(1 for c in state["configs"] if c.get("set") == "test")
     latest = mlff_workflow.get_round(state)
-    print(color_text(f"[INFO] {mlff_workflow.WORKFLOW_FILE}: {n_train} training + {n_test} test "
+    print(color_text(f"[INFO] {path}: {n_train} training + {n_test} test "
                      f"config(s), {len(state['rounds'])} round(s)"
                      + (f", latest round {latest['round']} ({len(latest.get('committee', []))} model(s))"
                         if latest else "") + ".", 'green'))
@@ -5968,7 +6028,8 @@ def run_mlff_validate() -> None:
     print()
 
     args = ["--no-intro"]
-    if _mlff_workflow_summary(need_round=True) is None:
+    workflow = _mlff_workflow_summary(need_round=True)
+    if workflow is None:
         print(color_text("No mlff_workflow.json with a training round here -- give the models "
                          "and the test folders instead.", 'yellow'))
         paths = get_input("Model file(s), space-separated: ").split()
@@ -5995,6 +6056,48 @@ def run_mlff_validate() -> None:
 
     device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
     args.extend(["--device", device_choice if device_choice in ("cpu", "cuda") else "cpu"])
+
+    if get_input("Display the summary figure on screen? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("Write the per-config errors to a data file? (y/N): ").strip().lower() == 'y':
+        args.append("--save-data")
+    worst = get_int_input("Open the N worst-predicted test configs in ASE's viewer, colored by "
+                          "force error (0 = no) [default: 0]: ", default=0)
+    if worst > 0:
+        args.extend(["--view-worst", str(worst)])
+
+    if workflow is not None and len(workflow["rounds"]) > 1:
+        available = [r["round"] for r in workflow["rounds"]]
+        listed = ", ".join(map(str, available))
+        while True:
+            pair = get_input(f"Compare two rounds config by config -- two of {listed}, e.g. "
+                             f"'{available[-2]} {available[-1]}' [default: no]: ").split()
+            if not pair:
+                break
+            if (len(pair) == 2 and all(p.isdigit() and int(p) in available for p in pair)
+                    and pair[0] != pair[1]):
+                args.extend(["--compare", *pair])
+                break
+            print(color_text(f"  Give two different round numbers among {listed} (Enter to skip).", 'red'))
+
+    if workflow is not None:
+        n_md = sum(1 for c in workflow["configs"] if c.get("set") == "md_check")
+        if n_md:
+            print(color_text(f"[INFO] {n_md} MD-check frame(s) in the workflow: the finished ones are scored "
+                             "along their trajectory.", 'green'))
+            if get_input("Move the finished MD-check frames into the training set? (y/N): ").strip().lower() == 'y':
+                args.append("--md-check-to-train")
+        if get_input("Run an MD check -- an MD with the best model, frames written as SIESTA folders "
+                     "to score on the next validation? (y/N): ").strip().lower() == 'y':
+            args.append("--md-check")
+            temp = get_float_input("  MD temperature in K [default: 300]: ", default=300.0)
+            steps = get_int_input("  MD steps of 1 fs [default: 2000]: ", default=2000)
+            frames = get_int_input("  Frames to write for SIESTA [default: 8]: ", default=8)
+            args.extend(["--md-check-temperature", str(temp), "--md-check-steps", str(steps),
+                         "--md-check-frames", str(frames)])
+            cell = get_input("  Supercell NA NB NC [default: 1 1 1]: ").split()
+            if len(cell) == 3 and all(c.isdigit() and int(c) > 0 for c in cell):
+                args.extend(["--md-check-supercell", *cell])
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -6024,7 +6127,7 @@ def run_mlff_active_learning() -> None:
     workflow = _mlff_workflow_summary(need_round=True)
     use_workflow = False
     if workflow is not None:
-        use_workflow = get_input("Use the latest round's committee and the reference .fdf from "
+        use_workflow = get_input("Use a round's committee and the reference .fdf from "
                                  "mlff_workflow.json? [Y/n]: ").strip().lower() != 'n'
     base_args = []
     if not use_workflow:
@@ -6034,20 +6137,29 @@ def run_mlff_active_learning() -> None:
             print(color_text(f"File not found: {' '.join(missing)}" if missing else "No model given!", 'red'))
             model_paths, missing = _read_models("Fine-tuned model file(s): ")
 
-        calc_file = get_input("Reference calc.fdf (same one stb-mlff used): ").strip()
-        while not os.path.isfile(calc_file):
-            print(color_text("File not found!", 'red'))
-            calc_file = get_input("Reference calc.fdf: ").strip()
-
+        ref_args = _prompt_structure_calc("Reference (same as stb-mlff)")
         pseudo_dir = prompt_pseudo_source(optional=True) or "."
-        base_args = ["--model", *model_paths, "--file", calc_file, "--pseudo-dir", pseudo_dir]
+        base_args = ["--model", *model_paths, *ref_args, "--pseudo-dir", pseudo_dir]
+    elif len(workflow["rounds"]) > 1:
+        available = [r["round"] for r in workflow["rounds"]]
+        while True:
+            pick = get_input(f"Round whose committee screens the candidates ({', '.join(map(str, available))}) "
+                             f"[default: {available[-1]}, the latest]: ").strip()
+            if not pick:
+                break
+            if pick.isdigit() and int(pick) in available:
+                base_args = ["--round", pick]
+                break
+            print(color_text(f"  Not a round of the workflow ({', '.join(map(str, available))}).", 'red'))
 
     print(f"\n{color_text('Candidate sampling method:', 'yellow')}")
     print(f"  {color_text('1', 'cyan')} = Rattle -- independent, static displaced snapshots (default, cheap)")
-    print(f"  {color_text('2', 'cyan')} = MD -- short NVT trajectory with the model itself "
+    print(f"  {color_text('2', 'cyan')} = MD -- short NVT/NPT trajectory with the model itself "
           "(stb-mlmd's own dynamics, more physically representative)")
-    method_choice = get_input("Select option (1-2) [default: 1]: ").strip()
-    sampling_method = {'1': 'rattle', '2': 'md'}.get(method_choice, 'rattle')
+    print(f"  {color_text('3', 'cyan')} = Strain -- random cell deformations (volume and shear), rattled: "
+          "the stress/volume response")
+    method_choice = get_input("Select option (1-3) [default: 1]: ").strip()
+    sampling_method = {'1': 'rattle', '2': 'md', '3': 'strain'}.get(method_choice, 'rattle')
 
     args = [*base_args, "--sampling-method", sampling_method, "--no-intro"]
 
@@ -6058,19 +6170,45 @@ def run_mlff_active_learning() -> None:
     elif supercell:
         print(color_text("  Not 3 positive integers -- using the reference cell.", 'yellow'))
 
-    if sampling_method == "rattle":
+    auto = get_input("Let a quick scan choose the sampling amplitude/temperature/strain "
+                     "(--auto-sampling)? (y/N): ").strip().lower() == 'y'
+    if auto:
+        args.append("--auto-sampling")
+    if sampling_method in ("rattle", "strain"):
         n_candidates = get_int_input("Number of candidates to screen [default: 50]: ", 50)
-        stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated "
-                              "[default: 0.15]: ").strip()
-        stdevs = stdev_str.split() if stdev_str else ["0.15"]
-        args.extend(["--n-candidates", str(n_candidates), "--stdev", *stdevs])
+        args.extend(["--n-candidates", str(n_candidates)])
+        if sampling_method == "strain" and not auto:
+            args.extend(["--strain-max", str(get_float_input("Largest strain component, % [default: 3]: ", 3.0))])
+        if not (auto and sampling_method == "rattle"):
+            stdev_str = get_input("Rattling standard deviation(s) in Ang, space-separated "
+                                  f"[default: {'0.05' if sampling_method == 'strain' else '0.15'}]: ").strip()
+            stdevs = stdev_str.split() if stdev_str else (["0.05"] if sampling_method == "strain" else ["0.15"])
+            args.extend(["--stdev", *stdevs])
     else:
+        if get_input("NPT (the cell breathes; bulk only) instead of NVT? (y/N): ").strip().lower() == 'y':
+            args.extend(["--md-ensemble", "npt"])
         md_steps = get_int_input("MD steps per temperature [default: 500]: ", 500)
-        temp_str = get_input("NVT temperature(s), K, space-separated [default: 800]: ").strip()
-        temperatures = temp_str.split() if temp_str else ["800"]
+        if not auto:
+            temp_str = get_input("MD temperature(s), K, space-separated [default: 800]: ").strip()
+            args.extend(["--md-temperature", *(temp_str.split() if temp_str else ["800"])])
         stride = get_int_input("Keep one frame every Nth MD step [default: 10]: ", 10)
-        args.extend(["--md-steps", str(md_steps), "--md-temperature", *temperatures,
-                     "--stride", str(stride)])
+        args.extend(["--md-steps", str(md_steps), "--stride", str(stride)])
+
+    print(f"\n{color_text('Disagreement measured on (committee only):', 'yellow')}")
+    print(f"  {color_text('1', 'cyan')} = Forces (default)   {color_text('2', 'cyan')} = Energy   "
+          f"{color_text('3', 'cyan')} = Both")
+    args.extend(["--score", {'2': 'energy', '3': 'both'}.get(get_input("Select option (1-3) [default: 1]: ").strip(),
+                                                              'force')])
+    if get_input("Batch selection: diverse (no near-duplicate picks) [default] or greedy by score? "
+                 "(D/g): ").strip().lower() == 'g':
+        args.extend(["--selection", "greedy"])
+    target = get_input("Error good enough for your use, meV/Ang -- says if another round is worth it "
+                       "[default: none]: ").strip()
+    if target:
+        try:
+            args.extend(["--target-force", str(float(target))])
+        except ValueError:
+            print(color_text("  Not a number -- ignored.", 'yellow'))
 
     top_k = get_int_input("Number of candidates to write out [default: 5]: ", 5)
     args.extend(["--top-k", str(top_k)])
@@ -6090,6 +6228,15 @@ def run_mlff_active_learning() -> None:
                               "the tool will report a clear error when it runs unless you "
                               "switch back to cpu.", 'yellow'))
     args.extend(["--device", device])
+
+    if get_input("Dry run -- screen and report only, write no folder? (y/N): ").strip().lower() == 'y':
+        args.append("--dry-run")
+    if get_input("Display the screening figure on screen? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("Write the whole candidate pool to a data file? (y/N): ").strip().lower() == 'y':
+        args.append("--save-data")
+    if get_input("Open the picks in ASE's viewer, colored by uncertainty? (y/N): ").strip().lower() == 'y':
+        args.append("--view-picks")
 
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     if save_report == 'y':
@@ -6429,7 +6576,8 @@ def run_mlmd_generator() -> None:
         if ensemble == "npt":
             taup = get_float_input("Barostat coupling time, fs [default: 500]: ", 500.0)
             compressibility = get_float_input(
-                "Compressibility, eV/Ang^3 [default: 4.57e-5 -- water's value]: ", 4.57e-5)
+                "Compressibility, 1/bar [default: 4.57e-5 -- water's value; 1/(B[GPa] x 1e4) "
+                "for your material]: ", 4.57e-5)
             args.extend(["--taup", str(taup), "--compressibility", str(compressibility)])
         device_choice = get_input("ML device [cpu/cuda, default: cpu]: ").strip().lower()
         device = device_choice if device_choice in ("cpu", "cuda") else "cpu"

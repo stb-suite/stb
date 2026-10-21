@@ -257,7 +257,7 @@ stb-amorphize -f si8.fdf --custom-model my_finetuned.model --save-data
 | `--quench-steps`      | MD steps for the linear cooling ramp (default `1000`)                   |
 | `--timestep`          | MD timestep, fs (default `1.0`)                                         |
 | `--taut`/`--taup`     | Berendsen thermostat/barostat response times, fs (default `50.0`/`200.0`) |
-| `--compressibility`   | Barostat compressibility, eV/Ang^3 (default `4.57e-5`, water's value — a generic placeholder) |
+| `--compressibility`   | Barostat compressibility, 1/bar (default `4.57e-5`, water's value — a generic placeholder; `1/(B[GPa] x 1e4)` for your material, e.g. Si `1e-6`) |
 | `--stride`            | Sample every N MD steps for `--save-data`/`--save-traj` (default `10`)  |
 | `--save-data`         | Write `<stem>_md_diagnostics.dat` + `.gplot`                            |
 | `--save-traj`         | Write a multi-frame MD trajectory                                       |

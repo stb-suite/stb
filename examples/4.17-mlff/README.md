@@ -991,6 +991,38 @@ contain. The difference, 10.5 meV/Å, is larger than either bootstrap error bar
 (8.2, 6.2): it is real. The committee also became better calibrated (true error /
 spread 3.5 → 1.7). The verdict is **STOP**: 26.8 ≤ 30 meV/Å.
 
+**The dispersion itself.** Stage 3 compares frequencies on a q-mesh and reports
+numbers; `phonon_dispersion_compare.py` draws the bands along Γ–M–K–Γ for every
+model on the same displaced 5×5 supercell (each with its own undisplaced-supercell
+forces subtracted), together with the SIESTA reference and the coarse-k SIESTA
+calculation of Section 8.1:
+
+```
+$ python phonon_dispersion_compare.py --phonon-dir phonons/phonon_runs --workflow mlff_runs/mlff_workflow.json \
+      --rounds 1 2 --extra-ref <15x15 phonon_runs> "SIESTA, k 15x15 (coarse)" -o figures/phonon_dispersion.png
+model                                        RMSE  max|d|  Gamma E2g   K top   M top  (THz)
+SIESTA                                       0.00    0.00      45.86   41.42   42.66
+SIESTA, k 15x15 (coarse)                     0.92    4.83      41.03   41.63   42.56
+fine-tuned, round 1 (3 models)               0.62    2.28      46.93   39.14   41.88
+fine-tuned, round 2 (3 models)               0.56    2.29      46.98   39.13   42.15
+MACE-MP medium (no fine-tuning)              4.88    9.73      36.59   34.07   37.05
+```
+
+![Graphene phonon dispersion: SIESTA vs the fine-tuned committees vs MACE-MP](figures/phonon_dispersion.png)
+
+- The fine-tuned models follow SIESTA over the whole Brillouin zone (RMSE along the
+  path 0.6 THz; on Stage 3's q-mesh 0.43–0.48 THz); the raw MACE-MP medium is 5–10
+  THz too soft in the optical branches — the level-of-theory gap of Section 1.4, seen
+  in the physics.
+- The coarse-k SIESTA (grey) dips near Γ: the Kohn-anomaly artifact of Section 8.1.
+- At **Γ** the models give 47.0 THz, closer to the converged frozen phonon of Section 8.1
+  (46.5–47.1 THz) than the 5×5 SIESTA supercell itself (45.9 THz, a one-atom
+  displacement in a finite supercell).
+- At **K** the models are ~2.3 THz below SIESTA in the highest (TO) branch, where the
+  Kohn anomaly at K acts: the largest remaining difference. The 3×3 training cell
+  contains K, but only 27 configurations sample it; an active-learning round aimed at it
+  (MD in a `--supercell`) would be the next step if that branch matters.
+
 ### 8.8 The MD check: the model on its own trajectory
 
 The test set was drawn like the training set. The test closest to real use is a
@@ -1039,7 +1071,7 @@ The figures of the run (all written by the stages themselves):
 | Forces | 26.8 ± 6.2 meV/Å (1.2 % of the RMS force) | MD and relaxations of graphene up to ~1500 K |
 | Energy differences | 0.5 meV/atom | relative energies of distorted configurations of this phase |
 | Stress | 0.06 GPa (of a cell with 20 Å vacuum) | in-plane stress trends; not a bulk property |
-| Phonons | 0.43 THz RMSE, no imaginary modes | the full dispersion, at the SIESTA level of Section 8.1 |
+| Phonons | 0.43 THz RMSE (q-mesh), 0.56 THz along Γ–M–K–Γ, no imaginary modes; K-point TO branch ~2 THz soft | the full dispersion, at the SIESTA level of Section 8.1 |
 | E(V) | not tested cleanly (Section 8.5) | — run a strain-only Stage 1 first |
 | Outside the training range | **nothing** | defects, edges, other phases, bilayers, > ~2000 K |
 
@@ -1190,6 +1222,7 @@ stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-dat
 #   SIESTA in mlff_runs/configs_round_02/*
 stb-mlffAnalysis --committee 3 --device cpu --init-from previous --save-data --save-report
 stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-data --save-report
+python phonon_dispersion_compare.py --phonon-dir phonons/phonon_runs --rounds 1 2 -o figures/phonon_dispersion.png
 stb-mlffValidate --md-check --md-check-temperature 600 --md-check-frames 6 --target-force 30
 #   SIESTA in mlff_runs/md_check/*/frame_*
 stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-report
@@ -1278,7 +1311,8 @@ models are not shipped (~160 MB per round); the reports of every stage are.
 | `calc_phonons.fdf` | template of the SIESTA phonon reference (primitive cell, k 30×30) |
 | `calc_primitive.fdf` | the primitive-cell template of Section 9 and of the k-grid study (k 15×15, relaxation settings) |
 | `e2g_frozen_phonon.py` | helper: Γ E2g frequency by frozen phonon (Section 8.1) |
-| `figures/` | the flowchart (`mlff_flowchart.png`, from `mlff_flowchart.dot`) and the summary figures of Section 8 |
+| `phonon_dispersion_compare.py` | helper: the phonon dispersion of SIESTA vs every round vs MACE-MP (Section 8.7; needs the trained models) |
+| `figures/` | the flowchart (`mlff_flowchart.png`, from `mlff_flowchart.dot`), the summary figures of Section 8 and the phonon dispersion |
 | `reference_results/graphene_3x3/` | the run of Section 8: every SIESTA folder (outputs only), the stage reports, the state file and two snapshots of it |
 | `reference_results/phonons/` | the finished SIESTA phonon reference (5×5 supercell) |
 | `reference_results/kgrid_e2g/` | the 8 single points of the k-grid study |

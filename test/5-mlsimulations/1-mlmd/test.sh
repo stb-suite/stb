@@ -203,6 +203,39 @@ stb-mlmd --file si_bulk.fdf --ensemble npt --n-steps 20 --stride 10 \
     --taut 50 --taup 300 --compressibility 1.0e-6 --no-intro > log_nptparams.txt 2>&1
 check_exit_code $? 0
 
+echo "Testing: --compressibility is in 1/bar and converted for ASE -- the barostat moves the cell"
+check_contains "Compressibility, 1/bar" log_help.txt
+python3 -c "
+import sys
+import numpy as np
+from ase import units
+from ase.build import bulk
+from stb.mlmd import build_dynamics
+dyn = build_dynamics(bulk('Si', 'diamond', 5.43), 'npt', 1.0, 300, 0.01, 0.0, 1, compressibility_bar=1e-6)
+sys.exit(0 if np.isclose(dyn.compressibility, 1e-6 / units.bar) else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} compressibility handed to NPTBerendsen as 1e-6 / units.bar"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} compressibility not converted from 1/bar"; FAIL=$((FAIL+1))
+fi
+stb-mlmd --file si_bulk.fdf --ensemble npt --pressure 20 --temperature 300 --n-steps 300 --stride 50 \
+    --compressibility 1.0e-6 -o npt_p20.xsf --output-structure npt_p20.fdf --no-intro > log_npt_p20.txt 2>&1
+check_exit_code $? 0
+python3 -c "
+import sys, numpy as np
+from stb.core import structure_io as s
+v0 = abs(np.linalg.det(s.read_fdf('si_bulk.fdf').lattice))
+v1 = abs(np.linalg.det(s.read_fdf('npt_p20.fdf').lattice))
+print(f'   V(20 GPa)/V0 = {v1 / v0:.3f}')
+sys.exit(0 if v1 / v0 < 0.95 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} at 20 GPa the Si cell shrinks by more than 5 % (it stayed put when the unit was wrong)"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} the NPT cell did not shrink under 20 GPa"; FAIL=$((FAIL+1))
+fi
+
 
 # --- 9. Interactive path (stb-suite, shortcut 5.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.1) ---"

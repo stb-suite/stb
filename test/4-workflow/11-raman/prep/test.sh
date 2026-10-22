@@ -62,19 +62,23 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Default run (dim 1 1 1, small enough to be fast) ---
 echo -e "\n--- Testing default generation (-dim 1 1 1) ---"
-stb-raman -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-intro > log_basic.txt 2>&1
+stb-raman -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --save-report --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_success raman_study/phonon_disp/disp-001/structure.fdf
+check_success raman_study/phonon_disp/perfect_supercell/structure.fdf
+check_success raman_study/phonon_disp/perfect_supercell/config_extra.fdf
+check_contains "Undisplaced supercell: raman_study/phonon_disp/perfect_supercell/" log_basic.txt
+check_contains "and in 'raman_study/phonon_disp/perfect_supercell/'" log_basic.txt
 check_success raman_study/phonon_disp/disp-001/calc.fdf
 check_success raman_study/phonon_disp/disp-001/O.psf
 check_success raman_study/phonon_disp/disp-001/Sn.psf
 check_success raman_study/phonon_disp/phonopy_disp.yaml
 check_success raman_study/raman_stage1.txt
 check_contains "\[0\] RUN METADATA" raman_study/raman_stage1.txt
-check_contains "\[1\] PSEUDOPOTENTIALS" raman_study/raman_stage1.txt
-check_contains "\[2\] PHONON DISPLACEMENTS" raman_study/raman_stage1.txt
-check_contains "\[3\] SUMMARY & NEXT STEPS" raman_study/raman_stage1.txt
-check_contains "Displacement folders : 84" log_basic.txt
+check_contains "\[3\] PSEUDOPOTENTIALS" raman_study/raman_stage1.txt
+check_contains "\[4\] PHONON DISPLACEMENTS" raman_study/raman_stage1.txt
+check_contains "\[5\] SUMMARY & NEXT STEPS" raman_study/raman_stage1.txt
+check_contains "Displacement folders : 42" log_basic.txt
 check_contains "stb-ramanModes --directory raman_study" raman_study/raman_stage1.txt
 
 
@@ -134,7 +138,7 @@ rm -rf raman_study
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
-check_contains "Displacement folders : 84" log_menu.txt
+check_contains "Displacement folders : 42" log_menu.txt
 check_success raman_study/phonon_disp/disp-001/structure.fdf
 
 

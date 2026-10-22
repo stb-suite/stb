@@ -1,0 +1,144 @@
+===== STB-MLFF REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-21 18:54:30
+Structure file    : structure.fdf
+Calc file         : calc.fdf
+Rattled configs   : 16 (stdev [0.015, 0.03, 0.045, 0.06])
+Volume strains    : -3, -1.5, +1.5, +3, +4.5 %
+Test configs      : 9 (in mlff_test/)
+Run folder        : mlff_runs
+Seed              : 42 (test set: 42 + 777000)
+Pseudo source     : virtual_vault
+Report file       : mlff_runs/stb_mlff_report.txt
+
+[1] REFERENCE STRUCTURE
+------------------------------------------------------------
+Structure source  : structure.fdf
+Calc template     : calc.fdf (%include structure.fdf)
+Formula           : C18 (18 atoms: C 18)
+Cell a, b, c      : 7.4503  7.4503  19.9998 Ang
+Cell angles       : 90.00  90.00  120.00 deg
+Volume            : 961.398 Ang^3 (53.411 Ang^3/atom), density 0.3734 g/cm^3
+Coordinates       : fractional, LatticeConstant 1
+Dimensionality    : 2D (e.g., a slab or surface) -- vacuum along c
+Shortest distances: C-C 1.434 Ang
+
+[2] CALCULATION SETTINGS (inherited by every folder)
+------------------------------------------------------------
+SystemLabel          : siesta
+XC.functional        : GGA
+XC.authors           : PBE
+PAO.BasisSize        : DZP
+PAO.EnergyShift      : 0.005 Ry
+Mesh.Cutoff          : 320 Ry
+ElectronicTemperature: 300 K
+Spin                 : non-polarized
+DM.Tolerance         : 1.0d-5 eV
+MaxSCFIterations     : 300
+k-grid               : 10 x 10 x 1  (k x a = 74.5  74.5  20.0 Ang)
+Run type             : single point in every folder (config_extra.fdf)
+Pseudopotentials     : bundled bank 'virtual_vault' -> C.psf (140 KiB)
+
+[3] SAMPLING PLAN
+------------------------------------------------------------
+Kind   | Count | Parameters                                                                                       
+------------------------------------------------------------------------------------------------------------------
+rattle | 16    | 0.015 Ang x4, 0.03 Ang x4, 0.045 Ang x4, 0.06 Ang x4 (RMS shift ~ 0.026, 0.052, 0.078, 0.104 Ang)
+strain | 5     | volume -3, -1.5, +1.5, +3, +4.5 % (+ rattle)                                                     
+test   | 9     | same kinds, cycled, independent seed                                                             
+Volume strains    : periodic axes only (the vacuum keeps its size) -- an area strain for a 2D cell
+Test-set E(V)     : yes -- Stage 3 fits it on the test strains
+[OK] No issues found in the plan.
+
+[4] GENERATING CONFIGURATIONS
+------------------------------------------------------------
+[OK] Generated 16 rattled configuration(s).
+[OK] Generated 5 strained configuration(s) (volume -3, -1.5, +1.5, +3, +4.5 %).
+[OK] Generated 9 held-out test configuration(s) in mlff_runs/mlff_test/ (never trained on).
+[OK] Each folder forces a single-point run via config_extra.fdf (no relaxation, no cell change).
+
+[5] CONFIGURATIONS
+------------------------------------------------------------
+[INFO] Foundation-model screen (medium, cpu) of 31 structures ...
+#  | Folder                           | Set   | Kind   | Detail                           | V (Ang^3) | dV %  | u_rms | u_max | d_min | nov  | dE_ML | Fmax_ML
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+1  | configs_round_01/mlff_config_001 | train | rattle | rattle 0.015 Ang                 | 961.40    | +0.00 | 0.024 | 0.039 | 1.394 | -    | +10   | 2.14   
+2  | configs_round_01/mlff_config_002 | train | rattle | rattle 0.03 Ang                  | 961.40    | +0.00 | 0.053 | 0.077 | 1.363 | 2.16 | +52   | 4.16   
+3  | configs_round_01/mlff_config_003 | train | rattle | rattle 0.045 Ang                 | 961.40    | +0.00 | 0.081 | 0.141 | 1.314 | 2.89 | +133  | 7.29   
+4  | configs_round_01/mlff_config_004 | train | rattle | rattle 0.06 Ang                  | 961.40    | +0.00 | 0.103 | 0.174 | 1.317 | 3.90 | +180  | 8.49   
+5  | configs_round_01/mlff_config_005 | train | rattle | rattle 0.015 Ang                 | 961.40    | +0.00 | 0.024 | 0.043 | 1.383 | 0.96 | +11   | 2.02   
+6  | configs_round_01/mlff_config_006 | train | rattle | rattle 0.03 Ang                  | 961.40    | +0.00 | 0.049 | 0.083 | 1.366 | 1.20 | +40   | 4.16   
+7  | configs_round_01/mlff_config_007 | train | rattle | rattle 0.045 Ang                 | 961.40    | +0.00 | 0.083 | 0.124 | 1.298 | 2.19 | +141  | 6.74   
+8  | configs_round_01/mlff_config_008 | train | rattle | rattle 0.06 Ang                  | 961.40    | +0.00 | 0.104 | 0.159 | 1.219 | 3.15 | +221  | 13.68  
+9  | configs_round_01/mlff_config_009 | train | rattle | rattle 0.015 Ang                 | 961.40    | +0.00 | 0.028 | 0.057 | 1.387 | 0.72 | +16   | 2.74   
+10 | configs_round_01/mlff_config_010 | train | rattle | rattle 0.03 Ang                  | 961.40    | +0.00 | 0.047 | 0.081 | 1.345 | 1.16 | +37   | 3.99   
+11 | configs_round_01/mlff_config_011 | train | rattle | rattle 0.045 Ang                 | 961.40    | +0.00 | 0.075 | 0.105 | 1.304 | 1.85 | +87   | 6.44   
+12 | configs_round_01/mlff_config_012 | train | rattle | rattle 0.06 Ang                  | 961.40    | +0.00 | 0.113 | 0.211 | 1.206 | 3.04 | +209  | 17.41  
+13 | configs_round_01/mlff_config_013 | train | rattle | rattle 0.015 Ang                 | 961.40    | +0.00 | 0.024 | 0.046 | 1.400 | 0.57 | +10   | 1.91   
+14 | configs_round_01/mlff_config_014 | train | rattle | rattle 0.03 Ang                  | 961.40    | +0.00 | 0.048 | 0.079 | 1.361 | 1.24 | +39   | 3.72   
+15 | configs_round_01/mlff_config_015 | train | rattle | rattle 0.045 Ang                 | 961.40    | +0.00 | 0.075 | 0.115 | 1.335 | 1.67 | +93   | 5.66   
+16 | configs_round_01/mlff_config_016 | train | rattle | rattle 0.06 Ang                  | 961.40    | +0.00 | 0.114 | 0.194 | 1.272 | 2.67 | +166  | 10.90  
+17 | configs_round_01/mlff_config_017 | train | strain | volume -3 % (rattle 0.015 Ang)   | 932.56    | -3.00 | 0.023 | 0.039 | 1.369 | 2.00 | +15   | 2.21   
+18 | configs_round_01/mlff_config_018 | train | strain | volume -1.5 % (rattle 0.03 Ang)  | 946.98    | -1.50 | 0.052 | 0.108 | 1.306 | 1.54 | +50   | 6.25   
+19 | configs_round_01/mlff_config_019 | train | strain | volume +1.5 % (rattle 0.045 Ang) | 975.82    | +1.50 | 0.083 | 0.129 | 1.276 | 2.24 | +167  | 9.47   
+20 | configs_round_01/mlff_config_020 | train | strain | volume +3 % (rattle 0.06 Ang)    | 990.24    | +3.00 | 0.114 | 0.200 | 1.310 | 3.63 | +251  | 7.90   
+21 | configs_round_01/mlff_config_021 | train | strain | volume +4.5 % (rattle 0.015 Ang) | 1004.66   | +4.50 | 0.024 | 0.048 | 1.420 | 3.10 | +59   | 1.91   
+22 | mlff_test/test_001               | test  | rattle | rattle 0.015 Ang                 | 961.40    | +0.00 | 0.027 | 0.045 | 1.377 | 0.66 | +14   | 2.76   
+23 | mlff_test/test_002               | test  | rattle | rattle 0.03 Ang                  | 961.40    | +0.00 | 0.052 | 0.089 | 1.363 | 1.09 | +45   | 3.61   
+24 | mlff_test/test_003               | test  | rattle | rattle 0.045 Ang                 | 961.40    | +0.00 | 0.084 | 0.111 | 1.296 | 2.02 | +105  | 7.80   
+25 | mlff_test/test_004               | test  | rattle | rattle 0.06 Ang                  | 961.40    | +0.00 | 0.112 | 0.161 | 1.220 | 2.59 | +210  | 14.66  
+26 | mlff_test/test_005               | test  | strain | volume -3 % (rattle 0.015 Ang)   | 932.56    | -3.00 | 0.023 | 0.039 | 1.387 | 0.69 | +16   | 1.77   
+27 | mlff_test/test_006               | test  | strain | volume -1.5 % (rattle 0.03 Ang)  | 946.98    | -1.50 | 0.053 | 0.088 | 1.360 | 1.28 | +39   | 3.49   
+28 | mlff_test/test_007               | test  | strain | volume +1.5 % (rattle 0.045 Ang) | 975.82    | +1.50 | 0.074 | 0.100 | 1.347 | 1.81 | +94   | 6.32   
+29 | mlff_test/test_008               | test  | strain | volume +3 % (rattle 0.06 Ang)    | 990.24    | +3.00 | 0.108 | 0.157 | 1.314 | 2.92 | +237  | 8.67   
+30 | mlff_test/test_009               | test  | strain | volume +4.5 % (rattle 0.015 Ang) | 1004.66   | +4.50 | 0.025 | 0.042 | 1.423 | 0.71 | +56   | 1.47   
+u = displacement from the reference (Ang, nearest image, in the config's own cell); d_min = shortest interatomic distance (Ang; reference 1.434).
+nov = novelty vs the training configs before it (a test config: vs all training + earlier test), in units of the set's typical environment spacing (0.076 Ang); < 0.25 = near-duplicate.
+dE_ML = foundation-model (medium) energy above the reference, meV/atom; Fmax_ML = its largest atomic force, eV/Ang (before any SIESTA run).
+Yellow: d_min < 80% of the reference's or a near-duplicate; red: d_min < 65%, Fmax_ML > 15 eV/Ang or dE_ML > 1000 meV/atom.
+
+[6] COVERAGE & CHECKS
+------------------------------------------------------------
+Set   | N  | u_rms (Ang)    | u_max (Ang)    | dV (%)         | d_min (Ang)   
+------------------------------------------------------------------------------
+train | 21 | 0.023 .. 0.114 | 0.039 .. 0.211 | -3.00 .. +4.50 | 1.206 .. 1.420
+test  | 9  | 0.023 .. 0.112 | 0.039 .. 0.161 | -3.00 .. +4.50 | 1.220 .. 1.423
+Training labels   : 21 energies, 1134 force components (stress: only meaningful along periodic axes)
+[OK] Every test config lies inside the training range (volume and displacement).
+[OK] No close contacts (every d_min >= 80% of the reference's).
+[OK] No near-duplicates (novelty 0.57 .. 3.90).
+Foundation model  : medium -- reference max force 0.003 eV/Ang
+Checks            : 1 issue(s) -- see [9]
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see [9])
+Configurations    : 21 training + 9 test = 30 SIESTA single points, 540 atoms in total
+Run folder        : mlff_runs/
+  configs_round_01/mlff_config_001 .. mlff_config_021  (training, round 1)
+  mlff_test/test_001 .. test_009  (held-out test)
+Each folder       : calc.fdf, structure.fdf, config_extra.fdf, C.psf
+Workflow file     : mlff_runs/mlff_workflow.json (+ each config's geometry numbers and ML screen)
+Coverage figure   : mlff_runs/coverage/mlff_coverage.png
+Coverage plots    : mlff_runs/coverage/coverage_distances.gplot, mlff_runs/coverage/coverage_configs.gplot
+                    (cd mlff_runs/coverage && gnuplot coverage_distances.gplot coverage_configs.gplot  -> .pdf)
+All structures    : mlff_runs/mlff_configs.xsf (31 frames: 0 = reference, then the # column)
+Report            : mlff_runs/stb_mlff_report.txt
+
+[8] NEXT STEPS
+------------------------------------------------------------
+Run SIESTA in     : mlff_runs/configs_round_01/ (21 folders) and mlff_runs/mlff_test/ (9 folders)
+1. Run SIESTA in every folder (serial example; on a cluster, one job per folder):
+     for d in mlff_runs/configs_round_01/mlff_config_* mlff_runs/mlff_test/test_*; do (cd "$d" && siesta < calc.fdf > siesta.out); done
+   Each run writes siesta.out/.FA/.XV -- Stage 2 needs all three.
+2. Train a committee: stb-mlffAnalysis (4.17.2) -- it finds the configs through the workflow file.
+3. Score it on the test set: stb-mlffValidate (4.17.3); then stb-mlffActiveLearning (4.17.4).
+Also available    : --view (ASE viewer); --show (display the coverage figure).
+
+[9] WARNINGS
+------------------------------------------------------------
+ 1. Checks: 1 config(s) look unphysical to the foundation model (Fmax > 15 eV/Ang or dE > 1000 meV/atom: mlff_config_012) -- check them (--view) before spending SIESTA time; a smaller --stdev usually fixes it.
+ 2. SIESTA: run it in mlff_runs/configs_round_01/ (21 folders) and mlff_runs/mlff_test/ (9 folders) before Stage 2 (stb-mlffAnalysis).
+Library messages  : 4 informational message(s) from mace/torch captured (model loading, dtype).

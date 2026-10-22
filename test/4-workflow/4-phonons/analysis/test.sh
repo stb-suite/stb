@@ -67,6 +67,18 @@ check_exit_code() {
 }
 
 
+check_python() {   # $1 = description, $2 = python code exiting 0 on success
+    python3 -c "$2"
+    if [ $? -eq 0 ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} $1"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} $1"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+
 # --- 1. Preparation ---
 echo "--- Starting tester for STB-PhononsPos analysis (item 4.4.2) ---"
 rm -rf "$TEST_DIR"
@@ -150,6 +162,58 @@ MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos
     --view --no-intro > log_pos_view.txt 2>&1
 check_exit_code $? 0
 check_contains "SUMMARY & FILES" log_pos_view.txt
+
+
+# --- 2b. Residual forces of the undisplaced supercell (perfect_supercell/) ---
+echo -e "\n--- Testing the subtraction of the undisplaced supercell's (residual) forces ---"
+check_contains "perfect_supercell/ has no finished SIESTA run" log_pos_siesta.txt
+cp phonon_runs/band.yaml band_ref.yaml
+python3 - <<'PYEOF'
+import glob
+import numpy as np
+rows = [l.split() for l in open("Sn3O4.FA").readlines()[1:]]
+n = len(rows)
+resid = np.random.default_rng(3).normal(scale=0.02, size=(n, 3))   # a fixed residual pattern
+def write(path, f):
+    with open(path, "w") as out:
+        out.write(f"{n}\n" + "".join(f"{i + 1:>6}  {a: .9E}  {b: .9E}  {c: .9E}\n" for i, (a, b, c) in enumerate(f)))
+write("phonon_runs/perfect_supercell/Sn3O4.FA", resid)
+for d in sorted(glob.glob("phonon_runs/disp-*")):
+    f = np.array([[float(x) for x in l.split()[1:4]] for l in open(f"{d}/Sn3O4.FA").readlines()[1:]])
+    write(f"{d}/Sn3O4.FA", f + resid)
+PYEOF
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_residual.txt 2>&1
+check_exit_code $? 0
+check_contains "Residual forces  : subtracted (undisplaced supercell, max" log_pos_residual.txt
+check_success phonon_runs/FORCE_SETS.raw
+check_python "residual added to every displacement and subtracted again: the same frequencies as without it" "
+import sys, yaml, numpy as np
+f = lambda p: np.array([[b['frequency'] for b in q['band']] for q in yaml.safe_load(open(p))['phonon']])
+sys.exit(0 if np.abs(f('band_ref.yaml') - f('phonon_runs/band.yaml')).max() < 1e-3 else 1)
+"
+check_python "without the subtraction, the same residual changes the frequencies by far more (> 0.01 THz)" "
+import sys, numpy as np, phonopy, warnings
+warnings.filterwarnings('ignore')
+ph = phonopy.load('phonon_runs/phonopy_disp.yaml', force_sets_filename='phonon_runs/FORCE_SETS.raw', symprec=0.01, log_level=0)
+ph2 = phonopy.load('phonon_runs/phonopy_disp.yaml', force_sets_filename='phonon_runs/FORCE_SETS', symprec=0.01, log_level=0)
+q = [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0.5]]
+ph.run_qpoints(q); ph2.run_qpoints(q)
+d = np.abs(ph.get_qpoints_dict()['frequencies'] - ph2.get_qpoints_dict()['frequencies']).max()
+sys.exit(0 if d > 0.01 else 1)
+"
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_residual2.txt 2>&1
+check_python "a second analysis does not subtract twice (FORCE_SETS is rebuilt from the .FA files)" "
+import sys, yaml, numpy as np
+f = lambda p: np.array([[b['frequency'] for b in q['band']] for q in yaml.safe_load(open(p))['phonon']])
+sys.exit(0 if np.abs(f('band_ref.yaml') - f('phonon_runs/band.yaml')).max() < 1e-3 else 1)
+"
+check_python "the undisplaced supercell (phonopy's 'LatticeConstant 1.0 Bohr') is read back in Angstrom" "
+import sys, numpy as np
+from stb.core import structure_io as s
+a = s.read_fdf('phonon_runs/perfect_supercell/structure.fdf').lattice
+b = s.read_fdf('structure.fdf').lattice
+sys.exit(0 if 'Bohr' in open('phonon_runs/perfect_supercell/structure.fdf').read() and np.allclose(a, b, atol=1e-5) else 1)
+"
 
 
 # --- 3. ML-computed force constants path (no SIESTA .FA needed) -- this is

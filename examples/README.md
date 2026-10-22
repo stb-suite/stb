@@ -189,6 +189,7 @@ through.
 | 4.12 | `stb-ir` / `stb-irModes` / `stb-irAnalysis` | [`4.12-ir/`](4.12-ir/) |
 | 4.15 | `stb-gqca` / `stb-gqcaAnalysis` | [`4.15-gqca/`](4.15-gqca/) |
 | 4.16 | `stb-optical` / `stb-opticalAnalysis` | [`4.16-optical/`](4.16-optical/) |
+| 4.17 | `stb-mlff` / `stb-mlffAnalysis` / `stb-mlffValidate` / `stb-mlffActiveLearning` | [`4.17-mlff/`](4.17-mlff/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -237,6 +238,16 @@ symmetry and Kohn-Sham-gap checks, a scissor what-if and a dashboard). It ships 
 finished SIESTA runs of bulk silicon (plus an 11-run convergence study) and of
 graphene, and its README covers the theory, the numerical parameters and the
 limitations of independent-particle optics.
+`4.17-mlff/` covers the 4-stage Custom ML Force Field workflow: `stb-mlff` (`4.17.1`,
+training and held-out test configurations, with a foundation-model screen and optional
+DFT-D3), `stb-mlffAnalysis` (`4.17.2`, a committee of MACE models fine-tuned on the
+SIESTA labels), `stb-mlffValidate` (`4.17.3`, test-set errors with error bars, phonons
+against SIESTA, an MD check and a verdict) and `stb-mlffActiveLearning` (`4.17.4`, the
+committee picks the next SIESTA runs from MD with the model), linked by
+`mlff_workflow.json`. It ships real finished SIESTA runs of graphene (a 3x3 supercell:
+two rounds that reach the target, the phonon reference, a k-grid study of the Kohn
+anomaly) and of a primitive-cell run where active learning sampled too hard and the
+model got worse; its README has the flowchart of the loop.
 
 ## Adding another example
 

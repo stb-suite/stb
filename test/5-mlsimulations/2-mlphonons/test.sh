@@ -80,6 +80,8 @@ stb-mlphonons --file si_bulk.fdf --dim 1 1 1 --mesh 8 8 8 --band-points 11 \
     --save-data --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Displacements needed" log_basic.txt
+check_contains "Residual forces in the undisplaced supercell: max" log_basic.txt
+check_contains "subtracted from every displacement" log_basic.txt
 check_contains "Detected symmetry" log_basic.txt
 check_contains "Reduction" log_basic.txt
 check_contains "BAND STRUCTURE" log_basic.txt

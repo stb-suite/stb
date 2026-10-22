@@ -24,7 +24,7 @@ from stb.core.cli import (color_text, show_intro, print_dual, print_section, pri
                           print_progress_line, finish_progress_line, capture_library_noise,
                           run_with_spinner)
 from stb.mlff_analysis import (collect_training_configs, _EV_A3_TO_GPA, predict_all, metrics,
-                               dataset_table, check_theory, _versions, _fmt)
+                               dataset_table, check_theory, dispersion_check, _versions, _fmt)
 from stb.mlff import write_config_folder
 
 REPORT_FILE = "stb_mlffValidate_report.txt"
@@ -221,6 +221,36 @@ def eos_fit_set(atoms_list, idx, energies):
             "_points": (v, np.asarray(energies, float) - float(fit["e0"]))}
 
 
+def _power_law(lc):
+    """'a N^-b' with the sign written once (b < 0: the error grows with N)."""
+    b = lc["b"]
+    return f"{lc['a']:.3g} N^{'-' if b >= 0 else '+'}{abs(b):.2f}"
+
+
+def far_training_configs(train_atoms, test_atoms):
+    """Training configs whose energy per atom lies more than the test set's own
+    energy spread above its highest energy (compared only between configs of
+    the same composition, since E per atom depends on it): [(folder name,
+    meV/atom above the highest test energy)], largest first. Too-hard sampling
+    shows up here -- 1-2 eV/atom picks for a test set within 0.4 eV/atom."""
+    def comp(a):
+        sym = a.get_chemical_symbols()
+        return tuple(sorted((el, round(sym.count(el) / len(sym), 4)) for el in set(sym)))
+    test_e = {}
+    for a in test_atoms:
+        test_e.setdefault(comp(a), []).append(a.info["REF_energy"] / len(a))
+    out = []
+    for a in train_atoms:
+        es = test_e.get(comp(a))
+        if not es or len(es) < 2:
+            continue
+        top, spread = max(es), max(es) - min(es)
+        de = a.info["REF_energy"] / len(a) - top
+        if spread > 0 and de > spread:
+            out.append((os.path.basename(a.info["folder"]), 1000 * de))
+    return sorted(out, key=lambda x: -x[1])
+
+
 def learning_curve(points, target=None):
     """Power law F = a * N^-b through the test F RMSE of the rounds against
     their number of training configs N (the best round per N). Returns
@@ -294,6 +324,7 @@ def md_check_reference(state, wf_base, dims):
         if calc:
             out["extra"] += f"NumberOfAtoms {n_super}\n\n"
         out["atoms"] = atoms.repeat(list(dims))   # replicate_fdf_cell uses the same atom order
+    out["extra"] += mlff_workflow.dftd3_block(state)    # the same dispersion as every folder
     return out
 
 
@@ -346,7 +377,7 @@ def compare_rounds(res_a, res_b, atoms_list, kinds):
 # Phonons against a finished stb-phononsCreate run
 # --------------------------------------------------------------------------
 
-def load_siesta_phonons(phonon_dir, f_out):
+def load_siesta_phonons(phonon_dir, f_out, info=None):
     """(SIESTA phonopy object with force constants, internal_to_angstrom),
     from a finished stb-phononsCreate folder -- the same loader stb-phononsPos
     uses. Restores the working directory."""
@@ -356,7 +387,7 @@ def load_siesta_phonons(phonon_dir, f_out):
     # symmetry of a DFT-relaxed cell (graphene came out Cmmm), and the few displacements
     # generated under the full symmetry are then expanded wrongly (LO/TO split at Gamma).
     phonon, to_ang, original = load_phonon_with_force_constants(phonon_dir, label, False, f_out,
-                                                                symprec=PHONON_SYMPREC)
+                                                                symprec=PHONON_SYMPREC, info=info)
     os.chdir(original)
     phonon.symmetrize_force_constants(show_drift=False)
     return phonon, to_ang
@@ -442,7 +473,8 @@ def verdict(history, target_force, plateau_pct, sigma=None):
                              f"{100 * (latest - best) / best:.0f} % WORSE than round {best_k} "
                              f"({best:.1f}){target_txt}: the newest training did not help. Use round "
                              f"{best_k}'s models, and check round {latest_k}'s settings in [2] "
-                             "(epochs, starting weights, training set).")
+                             "(epochs, starting weights, training set) and its configs far above the test "
+                             "set in energy ([1]).")
     prev = history[-2][1]
     gain = 100 * (prev - latest) / prev
     noise = (f" -- within the test set's own noise (+/- {sigma:.1f} meV/Ang); more test configs "
@@ -618,7 +650,7 @@ def plot_validation(scored, detail_k, found, test_atoms, kinds, target, out_path
                 n_hi = max(pts[:, 0].max(), data.get("n_target") or 0) * 1.3
                 nn = np.geomspace(pts[:, 0].min() * 0.8, n_hi, 50)
                 ax.loglog(nn, data["a"] * nn ** -data["b"], "--", color="tab:blue",
-                          label=f"F = a N^-{data['b']:.2f} (R2 {data['r2']:.2f})")
+                          label=f"F = {_power_law(data)} (R2 {data['r2']:.2f})")
             if target:
                 ax.axhline(target, color="tab:green", ls="-.", label="target")
                 if data.get("n_target"):
@@ -1008,8 +1040,9 @@ def main():
             train_atoms, _, _ = collect_training_configs([d for d in tdirs if os.path.isdir(d)], f_out, [])
     if train_atoms:
         print_dual(f"Compared with     : the {len(train_atoms)} training config(s) of round {detail_k}", f_out)
-        check_theory(train_atoms + test_atoms, f_out,
-                     lambda m: warn(m.replace("Data: ", "Level of theory (train + test): ", 1)))
+        th_common, th_odd = check_theory(train_atoms + test_atoms, f_out,
+                                         lambda m: warn(m.replace("Data: ", "Level of theory (train + test): ", 1)))
+        dispersion_check(th_common, th_odd, state, f_out, warn)
         tr_vol = np.array([a.get_volume() / len(a) for a in train_atoms])
         tr_fmax = np.array([np.linalg.norm(a.arrays["REF_forces"], axis=1).max() for a in train_atoms])
         tr_e = np.array([a.info["REF_energy"] / len(a) for a in train_atoms])
@@ -1035,6 +1068,18 @@ def main():
             warn(f"Test set: {n_out} test config(s) lie outside the training range (marked in [4]): their errors "
                  "measure extrapolation, not interpolation. Expected for a harder test set; if those "
                  "configurations matter, add similar ones to training (4.17.4 or stb-mlff).")
+        far = far_training_configs(train_atoms, test_atoms)
+        if far:
+            print_dual(f"Far from the test : {len(far)} training config(s) lie more than one test-set energy spread "
+                       f"above the highest test energy: " + ", ".join(
+                           f"{n} (+{de:.0f})" for n, de in far[:6]) + (" ..." if len(far) > 6 else "")
+                       + " meV/atom", f_out)
+            warn(f"Training set: {len(far)} config(s) of round {detail_k} lie far above every test config in energy "
+                 f"(up to +{max(de for _, de in far):.0f} meV/atom above the highest test energy; listed in [1]) -- "
+                 "the model spends capacity on geometries that the tests (and phonons or MD near equilibrium) never "
+                 "visit, which can make it WORSE near equilibrium. Usually an active-learning round sampled too "
+                 "hard (4.17.4: a smaller --stdev or a lower --md-temperature, or --max-energy); drop them, or add "
+                 "test configs of that kind if such geometries matter.")
     else:
         outside = [""] * len(test_atoms)
     novelty = [((e.get("geometry") or {}).get("novelty")) for e in entries]
@@ -1064,12 +1109,13 @@ def main():
         fail("mace-torch not found. This tool needs the optional 'ml' extra: pip install stb_suite[ml]")
 
     ref_phonon = to_ang = None
+    ph_info = {}
     if args.phonon_ref:
         if not os.path.isfile(os.path.join(args.phonon_ref, "phonopy_disp.yaml")):
             fail(f"'{args.phonon_ref}' has no phonopy_disp.yaml (expected a stb-phononsCreate folder).")
         try:
-            with capture_library_noise(library_noise, "phonopy"):
-                ref_phonon, to_ang = load_siesta_phonons(args.phonon_ref, f_out)
+            with capture_library_noise(library_noise, "phonopy"):   # its own lines are reported in [6]
+                ref_phonon, to_ang = load_siesta_phonons(args.phonon_ref, None, ph_info)
         except SystemExit:
             raise
         except Exception as e:
@@ -1351,6 +1397,16 @@ def main():
     # ---- [6] phonons
     if args.phonon_ref:
         print_section("[6] PHONONS vs SIESTA", f_out)
+        st = ph_info.get("residual_status")
+        if st == "subtracted":
+            print_dual(f"Residual forces  : subtracted (undisplaced supercell, max {ph_info['residual_max']:.4f} eV/Ang "
+                       "per atom) -- SIESTA's and each model's own", f_out)
+        else:
+            print_dual(color_text(f"Residual forces  : NOT subtracted from the SIESTA forces ({st})", 'yellow'), f_out)
+            warn(f"Phonons: {args.phonon_ref}/perfect_supercell/ " + ("has no finished SIESTA run" if st == "not finished"
+                 else "is missing" if st == "absent" else "is unreadable") + " -- the reference's residual forces stay in "
+                 "the SIESTA force constants (each model's are subtracted), which biases Gamma-point modes; run SIESTA "
+                 "in the undisplaced supercell (stb-phononsCreate writes it).")
         rows = []
         for k, v in scored:
             ph = v.get("phonons")
@@ -1646,9 +1702,16 @@ def main():
                             args.target_force)
         if "b" in lc:
             n_now = max(n for n, _ in lc["points"])
-            print_dual(f"Learning curve    : F = {lc['a']:.0f} N^-{lc['b']:.2f} over {len(lc['points'])} training-set "
+            print_dual(f"Learning curve    : F = {_power_law(lc)} over {len(lc['points'])} training-set "
                        f"sizes (R2 {lc['r2']:.2f}; best round per N, assumes the same recipe)", f_out)
-            if lc["b"] <= 0.02:
+            if lc["b"] < -0.02:
+                print_dual("                    the test error GROWS with the training-set size -- the added configs "
+                           "pull the model away from the test region", f_out)
+                warn("Learning curve: the test error grows as configs are added -- the newer configs are unlike the "
+                     "test set (see 'Far from the test' in [1]: usually an active-learning round sampled too hard). "
+                     "Go back to the best round and sample closer to the region of use (4.17.4: smaller --stdev, "
+                     "--md-temperature near the use temperature, --supercell for longer wavelengths).")
+            elif lc["b"] <= 0.02:
                 print_dual("                    more configs have not lowered the test error -- the sampling, not the "
                            "amount of data, limits the model", f_out)
                 warn("Learning curve: the test error does not fall with the training-set size -- add DIFFERENT "
@@ -1778,7 +1841,8 @@ def main():
     steps = {
         "stop": [f"Use the model: {use}"],
         "regressed": [f"Use {_round_label(best_k)} ({use})",
-                      "Retrain the latest data from the foundation model, with more --epochs (4.17.2)."],
+                      "Retrain the latest data from the foundation model, with more --epochs (4.17.2) -- "
+                      "without the configs far above the test set in energy, if [1] lists any."],
         "plateau": ["Change the sampling: stb-mlffActiveLearning (4.17.4) with --supercell, a higher "
                     "--md-temperature or a larger --stdev, then SIESTA, 4.17.2, 4.17.3.",
                     "Or stop and use the best round: " + use],

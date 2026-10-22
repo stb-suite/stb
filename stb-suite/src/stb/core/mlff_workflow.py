@@ -38,10 +38,14 @@ and os.replace, so an interrupted stage never leaves a truncated file.
 Schema (version 1)::
 
     {"format": "stb-mlff-workflow", "version": 1, "created": ..., "updated": ...,
-     "reference": {"file", "calc", "n_atoms", "species", "pseudo_dir"},
+     "reference": {"file", "calc", "n_atoms", "species", "pseudo_dir", "dftd3"},
                   -- "file" is the structure .fdf (or the one self-contained
                   .fdf); "calc" the calc.fdf template that %includes it,
-                  absent for a self-contained file.
+                  absent for a self-contained file; "dftd3" {"on", "forced",
+                  "source"}: whether the labels include Grimme's DFT-D3, and
+                  whether Stage 1 forced it (--d3) into every config_extra.fdf
+                  -- then every later folder (Stage 4 picks, Stage 3
+                  --md-check frames) gets it too (dftd3_block).
      "configs":   [{"folder", "set": "train"|"test"|"md_check", "kind", "origin",
                     "stage", "round", "n_atoms",
                     "geometry": {volume, dV_pct, u_rms, u_max, d_min, novelty}  (Stage 1),
@@ -79,6 +83,35 @@ from datetime import datetime
 # configs dominate the force loss.
 UNPHYSICAL_FMAX = 15.0       # eV/Ang, largest atomic force
 UNPHYSICAL_DE = 1000.0       # meV/atom above the reference
+
+# Dispersion (stb-mlff --d3): forced into every folder's config_extra.fdf, so the
+# labels -- and therefore the model -- are PBE+D3 (SIESTA's own DFTD3 defaults:
+# BJ damping, the functional's parameters). Once there, it must be there in
+# every folder of the workflow: one energy surface.
+DFTD3_BLOCK = (
+    "# Grimme DFT-D3 dispersion (stb-mlff --d3): every label of this workflow includes\n"
+    "# it, so the trained model is PBE+D3 -- do not add a D3 correction on top of it.\n"
+    "DFTD3                 .true.\n"
+)
+
+
+def fdf_true(value):
+    """An fdf logical: .true./T/true/yes (case-insensitive) -> True."""
+    return str(value).strip().lower().strip(".") in ("true", "t", "yes", "y")
+
+
+def dftd3_info(state):
+    """The workflow's dispersion setting, {"on", "forced", "source"} (empty
+    dict for a file written before it was recorded)."""
+    return dict(((state or {}).get("reference") or {}).get("dftd3") or {})
+
+
+def dftd3_block(state):
+    """config_extra.fdf text every new folder of this workflow needs for the
+    same dispersion as Stage 1's: DFTD3_BLOCK when Stage 1 forced it, else ''
+    (a template's own DFTD3 travels with the copied calc.fdf)."""
+    return DFTD3_BLOCK if dftd3_info(state).get("forced") else ""
+
 
 WORKFLOW_FILE = "mlff_workflow.json"
 RUN_DIR = "mlff_runs"   # stb-mlff's default --output-dir, like the other workflows' *_runs

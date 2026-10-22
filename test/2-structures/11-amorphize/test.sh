@@ -157,7 +157,9 @@ stb-amorphize -f si8.fdf --melt-steps 5 --quench-steps 5 --taut 30 --taup 150 \
     --compressibility 1e-5 -o custom_barostat.fdf --no-intro > log_barostat.txt 2>&1
 check_exit_code $? 0
 check_contains "taut/taup      : 30.0 fs / 150.0 fs" log_barostat.txt
-check_contains "Compressibility: 1e-05 eV/Ang\^3" log_barostat.txt
+check_contains "Compressibility: 1e-05 1/bar" log_barostat.txt
+stb-amorphize --help > log_help_barostat.txt 2>&1
+check_contains "Compressibility in 1/bar" log_help_barostat.txt
 check_success custom_barostat.fdf
 
 

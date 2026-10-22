@@ -1,0 +1,23 @@
+# Per-config errors, stb-mlffAnalysis
+# folder kind n_atoms E_ref(eV/atom) Fmax_ref(eV/Ang) F_rmse_oos(meV/Ang) F_rmse_found(meV/Ang) spread_max(meV/Ang)
+mlff_config_001 rattle 18 -154.953288 2.6883 nan 198.10 10.01
+mlff_config_002 rattle 18 -154.899927 5.1032 nan 391.05 21.49
+mlff_config_003 rattle 18 -154.793923 8.5843 nan 659.71 47.07
+mlff_config_004 rattle 18 -154.740809 10.4228 41.05 711.13 38.54
+mlff_config_005 rattle 18 -154.950156 2.7149 nan 278.76 12.36
+mlff_config_006 rattle 18 -154.914858 5.0895 nan 372.38 18.84
+mlff_config_007 rattle 18 -154.786660 8.3873 40.73 695.48 37.82
+mlff_config_008 rattle 18 -154.687935 16.0484 61.25 779.67 44.14
+mlff_config_009 rattle 18 -154.945261 3.3835 nan 249.59 12.38
+mlff_config_010 rattle 18 -154.914977 5.4114 19.18 491.73 20.53
+mlff_config_011 rattle 18 -154.848931 8.0948 nan 622.95 34.24
+mlff_config_012 rattle 18 -154.704451 19.5767 nan 712.42 51.01
+mlff_config_013 rattle 18 -154.951200 2.5339 nan 270.30 11.74
+mlff_config_014 rattle 18 -154.915359 4.3821 nan 411.87 18.40
+mlff_config_015 rattle 18 -154.843342 7.0987 nan 610.44 28.06
+mlff_config_016 rattle 18 -154.747328 12.9146 nan 790.84 37.44
+mlff_config_017 strain 18 -154.936806 2.8291 nan 223.57 7.81
+mlff_config_018 strain 18 -154.894227 7.6769 22.95 463.40 21.81
+mlff_config_019 strain 18 -154.761034 11.5763 nan 738.47 47.61
+mlff_config_020 strain 18 -154.678683 9.3139 nan 631.07 51.97
+mlff_config_021 strain 18 -154.920707 2.4607 nan 204.57 19.37

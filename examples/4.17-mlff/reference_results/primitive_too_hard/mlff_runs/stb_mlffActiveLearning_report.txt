@@ -1,0 +1,122 @@
+===== STB-MLFFACTIVELEARNING REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-21 11:32:52
+Versions          : stb 1.9.281, mace 0.3.16, torch 2.12.1+cpu, ase 3.29.0
+Device            : cpu
+Workflow file     : mlff_runs/mlff_workflow.json
+Committee from    : round 2 (5 model(s): seed 123, seed 124, seed 125, seed 126, seed 127)
+Model(s)          : mlff_runs/round_02/m_s123/mlff_model_compiled.model (+4 more)
+Reference         : structure.fdf + calc.fdf
+Sampling          : rattle, 50 candidates, stdev 0.15 Ang, supercell 1x1x1, seed 3042 (--seed 42 + 1000 x round 3) -- the setting is chosen by --auto-sampling
+Score             : both disagreement
+Selection         : diverse (diversity 1), top 5; novelty >= 0.5 vs the training set and earlier picks; max|F| <= 15 eV/Ang
+Output            : mlff_runs/configs_round_03/ (the configs that will train round 3)
+Report file       : mlff_runs/stb_mlffActiveLearning_report.txt
+
+[1] REFERENCE, COMMITTEE & TRAINING SET
+------------------------------------------------------------
+Reference cell    : C2 (2 atoms), cell 2.483 x 2.483 x 20.000 Ang, shortest distance 1.434 Ang
+Pseudopotentials  : C from 'virtual_vault'
+Committee quality : out-of-sample F 42.1 meV/Ang (4.17.2), test F - meV/Ang (4.17.3)
+Calibration       : not known yet (run stb-mlffValidate on this round to turn spreads into error estimates)
+Training set      : 19 config(s) from 'mlff_runs/mlff_workflow.json (training configs)', 19 labelled by SIESTA
+Training range    : SIESTA max|F| 2.90-13.59 eV/Ang, shortest distance 1.212-1.391 Ang, 2-2 atoms
+
+[2] CANDIDATE POOL
+------------------------------------------------------------
+Auto-sampling scan (12 candidates per setting, a fresh seed):
+Setting Ang (stdev) | N  | Score med/max    | max|F| med | New % | Close % | MD
+-------------------------------------------------------------------------------
+0.03                | 12 | 0.026 / 0.065    | 2.91       | 33    | 0       | ok
+0.05                | 12 | 0.051 / 0.155    | 4.90       | 58    | 0       | ok
+0.1                 | 12 | 0.108 / 0.360    | 10.02      | 92    | 0       | ok
+0.15                | 12 | 0.189 / 1.635    | 12.49      | 92    | 8       | ok
+0.2                 | 12 | 0.202 / 7.996    | 15.61      | 100   | 8       | ok
+0.3                 | 12 | 0.311 / 3780.145 | 23.49      | 100   | 33      | ok
+Chosen            : 0.15 Ang -- highest median score among the settings with <= 10 % close contacts, no MD blow-up and median max|F| <= 15 eV/Ang
+
+Screened          : 50 of 50 candidate(s) of 2 atoms (0 s generating, 5 s scoring, 19 ms per model evaluation)
+Setting         | N  | max|F| med/max | F spread med/max | Novelty med | d_min
+------------------------------------------------------------------------------
+rattle 0.15 Ang | 50 | 9.88 / 60.14   | 0.150 / 1.379    | 1.70        | 0.954
+Units: eV/Ang, novelty in typical training spacings, d_min = shortest interatomic distance (Ang).
+Score (both)      : median 2.023, 90th percentile 3.827, max 18.439 (x pool median)
+Energy spread     : median 6.94, max 64.16 meV/atom; corr with the force spread +0.84; 0 candidate(s) in the top 10 % by energy spread but below the median force spread
+Spread vs force   : corr +0.93 -- the spread mostly tracks how distorted a candidate is; it ranks about like max|F|
+Novelty unit      : 0.0713 Ang (typical spacing of the training set)
+New territory     : 92 % of the pool has novelty >= 0.5 (environments unlike any training config)
+Beyond training   : 34 % of the pool has a predicted max|F| above the training set's largest SIESTA force (13.59 eV/Ang)
+
+[3] SELECTION
+------------------------------------------------------------
+Selection funnel                 | Count           
+---------------------------------------------------
+Screened                         | 50              
+Considered (highest scores)      | 33              
+Skipped: max|F| > --max-force    | 17              
+Skipped: novelty < --min-novelty | 4               
+Picked                           | 5 of 5 requested
+Score cut         : picks have score 2.275-5.215 (x pool median), i.e. within the top 18 of 50 by score (36 %)
+vs greedy         : 0 of 5 pick(s) differ from score-only; mean score 100 % of greedy's; closest pair novelty 2.10 (greedy 2.10)
+
+[4] PICKED CONFIGURATIONS
+------------------------------------------------------------
+# | Origin          | Score | Est. err | E spr | max|F| | Novelty | d_min | Rank | Worst atom | Range
+-----------------------------------------------------------------------------------------------------
+1 | rattle 0.15 Ang | 5.215 | -        | 26.62 | 5.25   | 4.50    | 1.396 | 4    | C1         | in   
+2 | rattle 0.15 Ang | 2.693 | -        | 10.74 | 13.47  | 1.51    | 1.185 | 13   | C1         | in   
+3 | rattle 0.15 Ang | 2.622 | -        | 11.35 | 7.77   | 2.52    | 1.427 | 14   | C0         | in   
+4 | rattle 0.15 Ang | 2.607 | -        | 8.42  | 11.72  | 1.10    | 1.230 | 15   | C1         | in   
+5 | rattle 0.15 Ang | 2.275 | -        | 4.16  | 13.72  | 1.88    | 1.240 | 18   | C0         | in   
+Score (x pool median), max|F| eV/Ang; Est. err = calibration x force spread (meV/Ang, from 4.17.3); E spr = energy spread (meV/atom); novelty vs training set + earlier picks;
+Rank by score in the pool; worst atom = largest spread; Range: in, or beyond the training set in F (max|F|) / d (shortest distance).
+Diversity         : each pick vs the other picks, novelty min 2.10, median 4.06
+From              : rattle 0.15 Ang 5
+
+[5] IS ANOTHER ROUND WORTH IT?
+------------------------------------------------------------
+Pool uncertainty  : force spread (a LOWER bound of the error: no calibration): 90th percentile 262, max 1379 meV/Ang
+(Give --target-force, the error good enough for your use, for a verdict.)
+
+[6] ACTIVE-LEARNING HISTORY
+------------------------------------------------------------
+Round.run | Sampling | Score | Pool | Score med | Score max | Est. err max | New % | Picked
+-------------------------------------------------------------------------------------------
+1.1       | rattle   | force | 50   | 0.289     | 6011.060  | 5372358      | 100   | 5     
+2.1 (now) | rattle   | both  | 50   | 2.023     | 18.439    | -            | 92    | 5     
+Trend             : no earlier run with the same sampling, settings and score mode to compare with
+Scores compare only within the same sampling, settings and score mode; Est. err uses each round's own 4.17.3 calibration.
+
+[7] SIESTA COST ESTIMATE
+------------------------------------------------------------
+New calculations  : 5 single point(s) of 2 atoms
+Estimate          : ~4 s each, ~0.4 min in total (median training run 4 s for 2 atoms, scaled as N^3; same cores)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK, 5 pick(s) from 50 candidate(s) in 46 s
+Pick 1            : mlff_runs/configs_round_03/mlff_config_020
+Pick 2            : mlff_runs/configs_round_03/mlff_config_021
+Pick 3            : mlff_runs/configs_round_03/mlff_config_022
+Pick 4            : mlff_runs/configs_round_03/mlff_config_023
+Pick 5            : mlff_runs/configs_round_03/mlff_config_024
+Workflow file     : mlff_runs/mlff_workflow.json (5 config(s) added to the training set, proposed by round 2)
+Figure            : mlff_runs/mlff_al_r02_1.png
+Pool data         : mlff_runs/mlff_al_r02_1_pool.dat
+Report            : mlff_runs/stb_mlffActiveLearning_report.txt
+
+[9] NEXT STEPS
+------------------------------------------------------------
+Run SIESTA in     : mlff_runs/configs_round_03/ (5 new folder(s): mlff_config_020, mlff_config_021, mlff_config_022, mlff_config_023, mlff_config_024)
+1. Run SIESTA in each new folder, e.g.:
+     for d in mlff_runs/configs_round_03/mlff_config_020 mlff_runs/configs_round_03/mlff_config_021 mlff_runs/configs_round_03/mlff_config_022 mlff_runs/configs_round_03/mlff_config_023 mlff_runs/configs_round_03/mlff_config_024; do (cd "$d" && siesta < calc.fdf > siesta.out); done
+2. Train the next round: stb-mlffAnalysis (4.17.2) -- it takes the configs from the workflow file; --init-from previous is faster.
+3. Score it: stb-mlffValidate (4.17.3); repeat 4.17.4 while the verdict says CONTINUE.
+Also available    : --dry-run (screen only); --view-picks (picks in ASE's viewer, colored by uncertainty); --supercell NA NB NC (longer-range environments); --sampling-method md.
+
+[10] WARNINGS
+------------------------------------------------------------
+ 1. SIESTA: run it in mlff_runs/configs_round_03/ (5 new folder(s)) before the next stb-mlffAnalysis -- unlabelled picks are left out of training.
+Library messages  : 4 informational message(s) from mace/torch captured (model loading, dtype).

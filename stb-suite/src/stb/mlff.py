@@ -683,6 +683,13 @@ def main():
                              f"<output-dir>/{mlff_workflow.WORKFLOW_FILE}). Created here; an "
                              "existing one is copied to .bak first.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for rattling (default: 42).")
+    parser.add_argument("--d3", action="store_true",
+                        help="Add Grimme's DFT-D3 dispersion correction (SIESTA's DFTD3 .true., its own "
+                             "defaults) to every folder's config_extra.fdf, so the labels -- and the model -- are "
+                             "PBE+D3. Recorded in the workflow file: Stage 4's picks and Stage 3's --md-check "
+                             "frames get it too, and Stage 2 checks every folder has it. For vdW-bonded "
+                             "systems (layers, molecular crystals, physisorption). Default: whatever the "
+                             "template says (off if nothing).")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <run folder>/{REPORT_FILE}. Off by default.")
     parser.add_argument("--ml-screen", action="store_true",
@@ -808,6 +815,23 @@ def main():
     pseudo_label = (f"bundled bank '{args.pseudo_dir}'" if args.pseudo_dir in BANKS else f"'{args.pseudo_dir}'")
     plan_warnings = report_settings(texts, ase_atoms, vacuum_axes, pseudo_label, pseudos_to_copy, f_out)
     system_label = parse_directives(*texts).get("systemlabel", "siesta")
+    tmpl_d3 = parse_directives(*texts).get("dftd3")
+    if args.d3:
+        d3 = {"on": True, "forced": True, "source": "--d3 (config_extra.fdf)"}
+        print_dual(f"{'Dispersion':<21}: DFT-D3 forced in every folder (config_extra.fdf, --d3; SIESTA's own "
+                   "DFTD3 defaults) -- the model will be PBE+D3", f_out)
+        if tmpl_d3 is not None and not mlff_workflow.fdf_true(tmpl_d3):
+            print_dual(f"{'':<21}  (the template's 'DFTD3 {tmpl_d3}' is overridden: config_extra.fdf is read "
+                       "first)", f_out)
+    elif tmpl_d3 is not None and mlff_workflow.fdf_true(tmpl_d3):
+        d3 = {"on": True, "forced": False, "source": "template"}
+        print_dual(f"{'Dispersion':<21}: DFT-D3 from the template (DFTD3 {tmpl_d3}) -- the model will be PBE+D3",
+                   f_out)
+    else:
+        d3 = {"on": False, "forced": False, "source": "template" if tmpl_d3 is not None else "none"}
+        print_dual(f"{'Dispersion':<21}: none (no DFT-D3; --d3 adds it -- for layered or vdW-bonded systems)",
+                   f_out)
+    d3_block = mlff_workflow.DFTD3_BLOCK if args.d3 else ""
 
     print_section("[3] SAMPLING PLAN", f_out)
     n_aimd = args.n_samples if args.from_aimd else 0
@@ -900,7 +924,7 @@ def main():
             index += 1
             folder = write_config_folder(
                 train_root, index, ref_file, ref_basename, positions, None, pseudos_to_copy,
-                calc_template=calc_template)
+                extra_block=d3_block, calc_template=calc_template)
             folders.append(folder)
             _entry(folder, "rattle", f"rattle {args.stdev[i % len(args.stdev)]:g} Ang")
         print_dual(f"[OK] Generated {len(rattled)} rattled configuration(s).", f_out)
@@ -917,7 +941,7 @@ def main():
             index += 1
             folder = write_config_folder(
                 train_root, index, ref_file, ref_basename, positions, raw_lattice, pseudos_to_copy,
-                calc_template=calc_template)
+                extra_block=d3_block, calc_template=calc_template)
             folders.append(folder)
             _entry(folder, "strain", f"volume {args.volume_strains[i]:+g} % "
                                      f"(rattle {args.stdev[i % len(args.stdev)]:g} Ang)")
@@ -935,7 +959,7 @@ def main():
             index += 1
             folder = write_config_folder(
                 train_root, index, ref_file, ref_basename, positions, raw_lattice, pseudos_to_copy,
-                calc_template=calc_template)
+                extra_block=d3_block, calc_template=calc_template)
             folders.append(folder)
             _entry(folder, "aimd", f"AIMD frame {i + 1}/{len(aimd_configs)} of '{args.from_aimd}'")
         print_dual(f"[OK] Generated {len(aimd_configs)} AIMD-sampled configuration(s).", f_out)
@@ -953,14 +977,14 @@ def main():
         for i, (positions, raw_lattice, kind, origin) in enumerate(tests, start=1):
             folder = write_config_folder(test_root, i, ref_file, ref_basename, positions,
                                          raw_lattice, pseudos_to_copy, prefix="test",
-                                         calc_template=calc_template)
+                                         extra_block=d3_block, calc_template=calc_template)
             test_folders.append(folder)
             _entry(folder, kind, origin, which="test")
         print_dual(f"[OK] Generated {len(test_folders)} held-out test configuration(s) in "
                    f"{test_root}/ (never trained on).", f_out)
 
     print_dual(f"[OK] Each folder forces a single-point run via {CONFIG_EXTRA_FILE} "
-               "(no relaxation, no cell change).", f_out)
+               "(no relaxation, no cell change)" + (" and DFT-D3 (--d3)" if args.d3 else "") + ".", f_out)
     stale = sorted(before - {os.path.normpath(f) for f in folders + test_folders}
                    - set(folders + test_folders))
     if stale:
@@ -978,6 +1002,7 @@ def main():
     # (dojo, virtual_vault) as given.
     state["reference"]["pseudo_dir"] = (args.pseudo_dir if args.pseudo_dir in BANKS
                                         else mlff_workflow.rel(pseudo_path, wf_base))
+    state["reference"]["dftd3"] = d3
     mlff_workflow.add_configs(state, entries, wf_base)
     mlff_workflow.record(state, "prep", "stb-mlff", sys.argv[1:])
     mlff_workflow.save(state, workflow_path)

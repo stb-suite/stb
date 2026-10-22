@@ -167,6 +167,9 @@ def subtract_residual_forces(phonon, residual):
     """Subtracts `residual` (n_atoms x 3, the undisplaced supercell's forces, in
     the same units as the dataset) from every displacement's forces and rebuilds
     the force constants (symmetrized). Returns the max |residual| per atom."""
+    # phonopy (FORCE_SETS creation) removes each force set's drift -- its mean force per atom --
+    # so the residual is centred the same way, or its own drift would be left in every set.
+    residual = np.asarray(residual) - np.asarray(residual).mean(axis=0)
     ds = phonon.dataset
     for d in ds["first_atoms"]:
         d["forces"] = np.asarray(d["forces"]) - residual

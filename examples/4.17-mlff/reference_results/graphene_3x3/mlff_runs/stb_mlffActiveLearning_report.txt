@@ -1,0 +1,130 @@
+===== STB-MLFFACTIVELEARNING REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-21 19:46:22
+Versions          : stb 1.9.282, mace 0.3.16, torch 2.12.1+cpu, ase 3.29.0
+Device            : cpu
+Workflow file     : mlff_runs/mlff_workflow.json
+Committee from    : round 1 (3 model(s): seed 123, seed 124, seed 125)
+Model(s)          : mlff_runs/round_01/m_s123/mlff_model_compiled.model (+2 more)
+Reference         : structure.fdf + calc.fdf
+Sampling          : md, 500 NVT steps at 800 K, one frame every 10, supercell 1x1x1, seed 2042 (--seed 42 + 1000 x round 2) -- the setting is chosen by --auto-sampling
+Score             : force disagreement
+Selection         : diverse (diversity 1), top 6; novelty >= 0.5 vs the training set and earlier picks; max|F| <= 15 eV/Ang
+Output            : mlff_runs/configs_round_02/ (the configs that will train round 2)
+Report file       : mlff_runs/stb_mlffActiveLearning_report.txt
+
+[1] REFERENCE, COMMITTEE & TRAINING SET
+------------------------------------------------------------
+Reference cell    : C18 (18 atoms), cell 7.450 x 7.450 x 20.000 Ang, shortest distance 1.434 Ang
+Pseudopotentials  : C from 'virtual_vault'
+Committee quality : out-of-sample F 40.0 meV/Ang (4.17.2), test F 37.3 meV/Ang (4.17.3), verdict CONTINUE
+Calibration       : true error ~ 3.5 x spread on the test set (4.17.3) -- used below to turn a spread into an error estimate
+Training set      : 21 config(s) from 'mlff_runs/mlff_workflow.json (training configs)', 21 labelled by SIESTA
+Training range    : SIESTA max|F| 2.46-19.58 eV/Ang, shortest distance 1.206-1.420 Ang, 18-18 atoms
+Training energies : 90 % within 263, all within 289 meV/atom above the reference (model-predicted; ~2036 / ~2232 K as 3/2 kT per atom)
+Energy cap        : picks at most 395 meV/atom above the reference (~3054 K as 3/2 kT; --frontier 1.5 x the training set's 90th percentile 263)
+
+[2] CANDIDATE POOL
+------------------------------------------------------------
+Auto-sampling scan (12 candidates per setting, a fresh seed):
+Setting K | N  | Score med/max | max|F| med | E med (meV/atom) | New % | Close % | MD
+-------------------------------------------------------------------------------------
+300       | 12 | 0.012 / 0.019 | 3.32       | 37 (~288 K)      | 100   | 0       | ok
+600       | 12 | 0.019 / 0.025 | 4.69       | 76 (~589 K)      | 100   | 0       | ok
+900       | 12 | 0.025 / 0.033 | 5.44       | 111 (~861 K)     | 100   | 0       | ok
+1200      | 12 | 0.029 / 0.042 | 5.90       | 144 (~1114 K)    | 100   | 0       | ok
+1500      | 12 | 0.031 / 0.046 | 6.79       | 184 (~1423 K)    | 100   | 0       | ok
+E med = median predicted energy above the reference; the temperature is that energy as 3/2 kT per atom (harmonic).
+Chosen            : 1500 K -- highest median score among the settings whose median energy stays within --frontier 1.5 x the training set's 90th-percentile energy (263 -> 395 meV/atom above the reference), with <= 10 % close contacts, no MD blow-up, median max|F| <= 15 eV/Ang, median E <= 1000 meV/atom above the reference
+
+Screened          : 50 of 50 candidate(s) of 18 atoms (50 s generating, 15 s scoring, 99 ms per model evaluation)
+T target (K) | Steps run | Frames | T inst (K)   | Status   
+------------------------------------------------------------
+1500         | 500/500   | 50     | 1240 +/- 324 | completed
+Setting   | N  | max|F| med/max | F spread med/max | Novelty med | d_min
+------------------------------------------------------------------------
+md 1500 K | 50 | 6.85 / 11.08   | 0.033 / 0.058    | 1.83        | 1.285
+Units: eV/Ang, novelty in typical training spacings, d_min = shortest interatomic distance (Ang).
+Score (force)     : median 0.033, 90th percentile 0.039, max 0.058 eV/Ang
+Estimated error   : force spread x 3.5 (4.17.3 calibration) = median 114, 90th percentile 137, max 201 meV/Ang
+Energy spread     : median 0.15, max 0.48 meV/atom; corr with the force spread -0.07; 2 candidate(s) in the top 10 % by energy spread but below the median force spread -- --score energy/both would add them
+Spread vs force   : corr +0.52 -- the spread carries information beyond the force magnitude
+Novelty unit      : 0.0874 Ang (typical spacing of the training set)
+New territory     : 100 % of the pool has novelty >= 0.5 (environments unlike any training config)
+Beyond training   : 0 % of the pool has a predicted max|F| above the training set's largest SIESTA force (19.58 eV/Ang)
+Energy above ref. : median 168, max 264 meV/atom (model-predicted; median ~1300 K as 3/2 kT); 0 above the cap (395)
+
+[3] SELECTION
+------------------------------------------------------------
+Selection funnel                 | Count           
+---------------------------------------------------
+Screened                         | 50              
+Considered (highest scores)      | 50              
+Skipped: max|F| > --max-force    | 0               
+Skipped: E above the energy cap  | 0               
+Skipped: novelty < --min-novelty | 0               
+Picked                           | 6 of 6 requested
+Score cut         : picks have score 0.039-0.058 eV/Ang, i.e. within the top 6 of 50 by score (12 %)
+vs greedy         : 0 of 6 pick(s) differ from score-only; mean score 100 % of greedy's; closest pair novelty 1.73 (greedy 1.73)
+
+[4] PICKED CONFIGURATIONS
+------------------------------------------------------------
+# | Origin             | Score | Est. err | E spr | max|F| | Novelty | d_min | Rank | Worst atom | Range
+--------------------------------------------------------------------------------------------------------
+1 | md 1500 K step 470 | 0.058 | 201      | 0.07  | 9.61   | 2.27    | 1.291 | 1    | C12        | in   
+2 | md 1500 K step 130 | 0.042 | 147      | 0.08  | 7.25   | 1.96    | 1.323 | 2    | C3         | in   
+3 | md 1500 K step 400 | 0.041 | 141      | 0.11  | 6.68   | 1.50    | 1.336 | 3    | C4         | in   
+4 | md 1500 K step 310 | 0.040 | 140      | 0.10  | 6.38   | 1.87    | 1.340 | 4    | C5         | in   
+5 | md 1500 K step 280 | 0.040 | 138      | 0.15  | 8.02   | 2.96    | 1.329 | 5    | C16        | in   
+6 | md 1500 K step 500 | 0.039 | 137      | 0.17  | 10.79  | 1.91    | 1.285 | 6    | C10        | in   
+Score eV/Ang, max|F| eV/Ang; Est. err = calibration x force spread (meV/Ang, from 4.17.3); E spr = energy spread (meV/atom); novelty vs training set + earlier picks;
+Rank by score in the pool; worst atom = largest spread; Range: in, or beyond the training set in F (max|F|) / d (shortest distance) / E (energy).
+Energy above ref. : picks 162 .. 264 meV/atom (~1256 .. 2040 K as 3/2 kT); training set up to 289
+Diversity         : each pick vs the other picks, novelty min 1.73, median 2.12
+From              : md 1500 K 6
+
+[5] IS ANOTHER ROUND WORTH IT?
+------------------------------------------------------------
+Pool uncertainty  : estimated error (calibrated): 90th percentile 137, max 201 meV/Ang
+Test set (4.17.3) : F RMSE 37.3 meV/Ang, verdict CONTINUE
+(Give --target-force, the error good enough for your use, for a verdict.)
+
+[6] ACTIVE-LEARNING HISTORY
+------------------------------------------------------------
+First active-learning run of this workflow -- the next runs will be compared with it here.
+
+[7] SIESTA COST ESTIMATE
+------------------------------------------------------------
+New calculations  : 6 single point(s) of 18 atoms
+Estimate          : no finished training run with a timing to scale from.
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK, 6 pick(s) from 50 candidate(s) in 217 s (2 warning(s), see [10])
+Pick 1            : mlff_runs/configs_round_02/mlff_config_022
+Pick 2            : mlff_runs/configs_round_02/mlff_config_023
+Pick 3            : mlff_runs/configs_round_02/mlff_config_024
+Pick 4            : mlff_runs/configs_round_02/mlff_config_025
+Pick 5            : mlff_runs/configs_round_02/mlff_config_026
+Pick 6            : mlff_runs/configs_round_02/mlff_config_027
+Workflow file     : mlff_runs/mlff_workflow.json (6 config(s) added to the training set, proposed by round 1)
+Figure            : mlff_runs/mlff_al_r01_1.png
+Pool data         : mlff_runs/mlff_al_r01_1_pool.dat
+Report            : mlff_runs/stb_mlffActiveLearning_report.txt
+
+[9] NEXT STEPS
+------------------------------------------------------------
+Run SIESTA in     : mlff_runs/configs_round_02/ (6 new folder(s): mlff_config_022, mlff_config_023, mlff_config_024, mlff_config_025, mlff_config_026, mlff_config_027)
+1. Run SIESTA in each new folder, e.g.:
+     for d in mlff_runs/configs_round_02/mlff_config_022 mlff_runs/configs_round_02/mlff_config_023 mlff_runs/configs_round_02/mlff_config_024 mlff_runs/configs_round_02/mlff_config_025 mlff_runs/configs_round_02/mlff_config_026 mlff_runs/configs_round_02/mlff_config_027; do (cd "$d" && siesta < calc.fdf > siesta.out); done
+2. Train the next round: stb-mlffAnalysis (4.17.2) -- it takes the configs from the workflow file; --init-from previous is faster.
+3. Score it: stb-mlffValidate (4.17.3); repeat 4.17.4 while the verdict says CONTINUE.
+Also available    : --dry-run (screen only); --show (display the figure); --view-picks (picks in ASE's viewer, colored by uncertainty); --supercell NA NB NC (longer-range environments).
+
+[10] WARNINGS
+------------------------------------------------------------
+ 1. Auto-sampling: the chosen setting (1500) is the largest one scanned and still physical -- larger values may be even more informative; extend the range with --scan-values.
+ 2. SIESTA: run it in mlff_runs/configs_round_02/ (6 new folder(s)) before the next stb-mlffAnalysis -- unlabelled picks are left out of training.
+Library messages  : 16 informational message(s) from mace/torch captured (model loading, dtype).

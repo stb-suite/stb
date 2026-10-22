@@ -86,6 +86,43 @@ check_success phonon_runs/disp-001/calc.fdf
 check_success phonon_runs/disp-001/Sn.psf
 check_success phonon_runs/disp-001/O.psf
 check_success phonon_runs/disp-042/structure.fdf
+
+echo "Testing: the undisplaced supercell is written too (its residual forces are subtracted in Stage 2)"
+check_success phonon_runs/perfect_supercell/structure.fdf
+check_success phonon_runs/perfect_supercell/calc.fdf
+check_success phonon_runs/perfect_supercell/config_extra.fdf
+check_success phonon_runs/perfect_supercell/Sn.psf
+check_contains "Undisplaced supercell: phonon_runs/perfect_supercell/" log_create.txt
+check_contains "Run SIESTA in        : phonon_runs/disp-\* phonon_runs/perfect_supercell  (43 folder(s))" log_create.txt
+cmp -s phonon_runs/disp-001/config_extra.fdf phonon_runs/perfect_supercell/config_extra.fdf && cmp -s phonon_runs/disp-001/calc.fdf phonon_runs/perfect_supercell/calc.fdf
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} same forced calc.fdf/config_extra.fdf as the displacements"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} perfect_supercell/ settings differ from disp-001/"; FAIL=$((FAIL+1))
+fi
+python3 -c "
+import sys, re, numpy as np
+def frac(p):
+    b = re.search(r'%block AtomicCoordinatesAndAtomicSpecies(.*?)%endblock', open(p).read(), re.S | re.I).group(1)
+    return np.array([[float(x) for x in l.split()[:3]] for l in b.strip().splitlines()])
+d = np.abs(frac('phonon_runs/disp-001/structure.fdf') - frac('phonon_runs/perfect_supercell/structure.fdf')).max(1)
+sys.exit(0 if (d > 1e-6).sum() == 1 else 1)
+"
+if [ $? -eq 0 ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} perfect supercell = disp-001 with its one displaced atom put back"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} perfect supercell does not match the undisplaced geometry"; FAIL=$((FAIL+1))
+fi
+echo "Testing: --no-perfect-supercell skips it and says so"
+mkdir -p noperf && cp structure.fdf calc.fdf Sn.psf O.psf noperf/
+(cd noperf && stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-perfect-supercell --no-intro > ../log_noperf.txt 2>&1)
+check_contains "not written (--no-perfect-supercell)" log_noperf.txt
+if [ ! -e noperf/phonon_runs/perfect_supercell ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} no perfect_supercell/ with --no-perfect-supercell"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} perfect_supercell/ written despite --no-perfect-supercell"; FAIL=$((FAIL+1))
+fi
+rm -rf noperf
 check_success phonon_runs/phonon_prep_properties.txt
 check_contains "RUN METADATA" phonon_runs/phonon_prep_properties.txt
 check_contains "Displacements needed" phonon_runs/phonon_prep_properties.txt

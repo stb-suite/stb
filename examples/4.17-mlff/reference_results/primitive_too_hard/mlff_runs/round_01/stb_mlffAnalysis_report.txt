@@ -1,0 +1,169 @@
+===== STB-MLFFANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-21 10:42:37
+Software          : stb 1.9.281, mace-torch 0.3.16, torch 2.12.1+cpu, ase 3.29.0
+Device            : cpu
+Configs from      : mlff_runs/mlff_workflow.json (training configs)
+Workflow file     : mlff_runs/mlff_workflow.json (round 1)
+Round directory   : mlff_runs/round_01
+Committee         : 5 model(s), seed(s) 123, 124, 125, 126, 127
+Foundation model  : mace-mp-0 (medium)
+Starting weights  : foundation model
+Report file       : mlff_runs/round_01/stb_mlffAnalysis_report.txt
+
+[1] TRAINING DATA
+------------------------------------------------------------
+Folders           : 14 listed, 14 usable, 0 skipped
+Composition       : C2 (2 atoms/config; species C)
+Labels            : 14 energies, 84 force components, 84 stress components
+Kind   | N  | E - E_min (meV/atom) | F_rms (eV/Ang) | F_max (eV/Ang) | P (GPa)        | V/atom (Ang^3)  
+--------------------------------------------------------------------------------------------------------
+rattle | 10 | 0.0 .. 299.5         | 2.90 .. 9.05   | 2.90 .. 9.06   | +0.13 .. +1.68 | 53.411 .. 53.411
+strain | 4  | 66.6 .. 348.3        | 4.50 .. 9.30   | 4.50 .. 9.30   | -0.88 .. +3.39 | 51.275 .. 55.547
+Energy spread     : 348.3 meV/atom (E/atom -154.9142 .. -154.5658 eV)
+Force magnitude   : mean 5.884, max 9.297 eV/Ang
+Pressure range    : -0.88 .. +3.39 GPa (from SIESTA stress)
+Volume/atom range : 51.275 .. 55.547 Ang^3
+Level of theory   : DFTD3 .false., ElectronicTemperature 300 K, Mesh.Cutoff 320 Ry, PAO.Basis block 23efe7cb
+                    PAO.BasisSize DZP, PAO.EnergyShift 0.005 Ry, SCF tolerance 1.0e-5 eV, Spin non-polarized
+                    XC.authors PBE, XC.functional GGA, k x a (Ang) 37 37 G
+Pseudopotentials  : C.psf 9422c8ad (md5, first 8)
+[OK] SCF converged in every config the log reports on.
+
+[2] TRAINING SETUP
+------------------------------------------------------------
+Epochs / batch    : 100 / 5
+Learning rate     : 0.001
+Loss              : energy 1 + forces 100 + stress 10000 (--loss stress)
+E0s               : foundation-residual
+Validation        : 5-fold cross-validation (fold sizes 3, 3, 3, 3, 2; every config held out once)
+
+[3] TRAINING
+------------------------------------------------------------
+Member 1/5 -- seed 123: 11 train / 3 valid (valid: mlff_config_003, mlff_config_008, mlff_config_013)
+  E0s             : C -154.1261 eV ('average' -154.7875); start E RMSE 28.1 meV/atom
+  done in 42 s, 100 epochs logged, kept epoch 63 -> mlff_runs/round_01/m_s123/mlff_model_compiled.model
+Member 2/5 -- seed 124: 11 train / 3 valid (valid: mlff_config_001, mlff_config_009, mlff_config_012)
+  E0s             : C -154.1136 eV ('average' -154.7480); start E RMSE 27.8 meV/atom
+  done in 43 s, 100 epochs logged, kept epoch 51 -> mlff_runs/round_01/m_s124/mlff_model_compiled.model
+Member 3/5 -- seed 125: 11 train / 3 valid (valid: mlff_config_002, mlff_config_005, mlff_config_011)
+  E0s             : C -154.1113 eV ('average' -154.7327); start E RMSE 33.3 meV/atom
+  done in 44 s, 100 epochs logged, kept epoch 81 -> mlff_runs/round_01/m_s125/mlff_model_compiled.model
+Member 4/5 -- seed 126: 11 train / 3 valid (valid: mlff_config_004, mlff_config_006, mlff_config_007)
+  E0s             : C -154.1162 eV ('average' -154.7545); start E RMSE 33.8 meV/atom
+  done in 44 s, 100 epochs logged, kept epoch 62 -> mlff_runs/round_01/m_s126/mlff_model_compiled.model
+Member 5/5 -- seed 127: 12 train / 2 valid (valid: mlff_config_010, mlff_config_014)
+  E0s             : C -154.1155 eV ('average' -154.7595); start E RMSE 30.4 meV/atom
+  done in 43 s, 100 epochs logged, kept epoch 82 -> mlff_runs/round_01/m_s127/mlff_model_compiled.model
+Seed | Train/valid | Start E (meV/at) | Val F start | Val F kept | Kept epoch | Time (s) | Model
+------------------------------------------------------------------------------------------------
+123  | 11/3        | 28.1             | 1276        | 26         | 63/99      | 42       | ok   
+124  | 11/3        | 27.8             | 885         | 13         | 51/99      | 43       | ok   
+125  | 11/3        | 33.3             | 960         | 11         | 81/99      | 44       | ok   
+126  | 11/3        | 33.8             | 938         | 23         | 62/99      | 44       | ok   
+127  | 12/2        | 30.4             | 890         | 11         | 82/99      | 43       | ok   
+Start E = foundation model with the fitted E0s on the training split, before any epoch; Val F = mace_run_train's validation force RMSE (meV/Ang) before training and at the kept checkpoint.
+
+[4] ERRORS ON THE DATA (independent evaluation, every model on every config)
+------------------------------------------------------------
+Model               | Set   | N  | E abs          | E rel | F RMSE | F MAE | F max | S RMSE
+-------------------------------------------------------------------------------------------
+seed 123            | train | 11 | 7.2            | 1.0   | 17.0   | 12.2  | 54    | 0.097 
+seed 123            | valid | 3  | 6.5            | 0.2   | 26.3   | 19.5  | 62    | 0.083 
+seed 124            | train | 11 | 1.3            | 0.4   | 26.3   | 21.1  | 64    | 0.075 
+seed 124            | valid | 3  | 1.1            | 0.6   | 13.0   | 9.2   | 27    | 0.097 
+seed 125            | train | 11 | 10.6           | 1.0   | 49.4   | 32.5  | 138   | 0.087 
+seed 125            | valid | 3  | 11.2           | 0.1   | 11.4   | 8.6   | 25    | 0.068 
+seed 126            | train | 11 | 20.3           | 1.6   | 41.8   | 29.3  | 90    | 0.141 
+seed 126            | valid | 3  | 19.4           | 0.8   | 23.0   | 16.6  | 47    | 0.075 
+seed 127            | train | 12 | 13.9           | 0.8   | 35.9   | 20.5  | 132   | 0.063 
+seed 127            | valid | 2  | 14.5           | 0.2   | 11.0   | 8.4   | 19    | 0.146 
+foundation (medium) | all   | 14 | (scale offset) | 31.2  | 1007.8 | 768.9 | 2233  | 0.683 
+E in meV/atom (abs = absolute; rel = mean offset removed), F in meV/Ang (max = largest component error), S in GPa. The foundation's absolute E is on another energy scale.
+
+Out-of-sample pool: 14/14 configs were held out by at least one member -- each scored with the members that did not train on it:
+Kind   | N  | F RMSE fine-tuned | E RMSE fine-tuned* | F RMSE foundation | F gain
+---------------------------------------------------------------------------------
+rattle | 10 | 20.5              | 0.8                | 971.5             | +98 % 
+strain | 4  | 12.4              | 0.9                | 1093.5            | +99 % 
+ALL    | 14 | 18.5              | 0.8                | 1007.8            | +98 % 
+* each member's mean energy offset on its own training split removed first (meV/atom).
+
+Valid/train F RMSE: 1.55, 0.50, 0.23, 0.55, 0.31 (1 = no overfitting; > 2 flagged)
+Fine-tuning gain  : out-of-sample force error +98 % vs the raw foundation model
+Energy differences: 0.8 meV/atom out-of-sample vs 31.2 for the foundation model (offset removed)
+
+Worst-predicted configs:
+Config          | Kind   | F RMSE (meV/Ang) | Prediction    | SIESTA F_max (eV/Ang) | Worst atom (|dF|)
+-------------------------------------------------------------------------------------------------------
+mlff_config_008 | rattle | 36               | out-of-sample | 9.06                  | C2 (64)          
+mlff_config_004 | rattle | 27               | out-of-sample | 4.13                  | C2 (48)          
+mlff_config_007 | rattle | 27               | out-of-sample | 5.43                  | C1 (47)          
+mlff_config_003 | rattle | 27               | out-of-sample | 7.18                  | C1 (47)          
+mlff_config_001 | rattle | 17               | out-of-sample | 2.90                  | C1 (31)          
+
+[5] COMMITTEE
+------------------------------------------------------------
+Force spread      : mean 44.2, max 92.5 meV/Ang (per-atom RMS deviation from the committee mean)
+Energy spread     : mean 6.41, max 7.53 meV/atom
+Spread vs error   : correlation +0.25 over 14 held-out configs (error / spread ~ 0.4x)
+Most disputed configs (where the committee disagrees most):
+Config          | Kind   | Max spread (meV/Ang) | Held-out F RMSE
+-----------------------------------------------------------------
+mlff_config_012 | strain | 93                   | 14             
+mlff_config_008 | rattle | 69                   | 36             
+mlff_config_014 | strain | 66                   | 11             
+mlff_config_003 | rattle | 59                   | 27             
+mlff_config_006 | rattle | 47                   | 12             
+
+[6] COMPARISON WITH EARLIER ROUNDS
+------------------------------------------------------------
+First round -- nothing to compare yet.
+
+[7] MODEL CHECKS: MD STABILITY & SPEED
+------------------------------------------------------------
+MD cell           : reference structure x 4x4x1 = 32 atoms; NVT 400 fs at 300 K, then NVE 200 fs (1 fs steps)
+Seed | Status | T mean (K) | d_min/start | F_max (eV/Ang) | NVE drift (meV/atom/ps) | ms/step | Note
+----------------------------------------------------------------------------------------------------
+123  | OK     | 271        | 0.95        | 4.75           | -0.02                   | 90.5    | -   
+124  | OK     | 253        | 0.94        | 4.91           | -0.04                   | 86.2    | -   
+125  | OK     | 317        | 0.93        | 6.02           | -0.05                   | 86.1    | -   
+126  | OK     | 285        | 0.93        | 5.08           | +0.02                   | 83.4    | -   
+127  | OK     | 282        | 0.95        | 5.10           | +0.01                   | 88.7    | -   
+d_min/start = shortest distance seen / at the start (< 0.6 = blow-up); a good NVE drift is |drift| < ~1 meV/atom/ps at 1 fs.
+Speed             : 86.2 ms/step for 32 atoms = 2693 us/atom/step on cpu -> ~1.00 ns/day at 1 fs (float32; ~0.03 ns/day for 1000 atoms, linear scaling)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (2 warning(s), see [10])
+Round             : 1 (mlff_runs/round_01), 857 s in total
+Model seed 123    : mlff_runs/round_01/m_s123/mlff_model_compiled.model
+                    mlff_runs/round_01/m_s123/mlff_model_parity.png, mlff_runs/round_01/m_s123/mace_run_train.log
+Model seed 124    : mlff_runs/round_01/m_s124/mlff_model_compiled.model
+                    mlff_runs/round_01/m_s124/mlff_model_parity.png, mlff_runs/round_01/m_s124/mace_run_train.log
+Model seed 125    : mlff_runs/round_01/m_s125/mlff_model_compiled.model
+                    mlff_runs/round_01/m_s125/mlff_model_parity.png, mlff_runs/round_01/m_s125/mace_run_train.log
+Model seed 126    : mlff_runs/round_01/m_s126/mlff_model_compiled.model
+                    mlff_runs/round_01/m_s126/mlff_model_parity.png, mlff_runs/round_01/m_s126/mace_run_train.log
+Model seed 127    : mlff_runs/round_01/m_s127/mlff_model_compiled.model
+                    mlff_runs/round_01/m_s127/mlff_model_parity.png, mlff_runs/round_01/m_s127/mace_run_train.log
+Summary figure    : mlff_runs/round_01/mlff_training.png
+Per-config errors : mlff_runs/round_01/mlff_training_errors.dat
+Worst configs     : mlff_runs/round_01/worst_configs.xyz (per-atom F_error; color by initial charge in ASE)
+Workflow file     : mlff_runs/mlff_workflow.json (round 1 recorded with every number above)
+Report            : mlff_runs/round_01/stb_mlffAnalysis_report.txt
+
+[9] NEXT STEPS
+------------------------------------------------------------
+1. Score the round on the held-out test set: stb-mlffValidate (4.17.3).
+2. Look for configs the committee is unsure of: stb-mlffActiveLearning (4.17.4).
+3. Use a model now: --custom-model mlff_runs/round_01/m_s123/mlff_model_compiled.model in stb-mlmd, stb-mlphonons, stb-mlelastic, ...
+Also available    : --init-from previous (continue from the last round).
+
+[10] WARNINGS
+------------------------------------------------------------
+ 1. Data: level of theory differs in 3 folder(s) for k x a (Ang) (most use '37 37 G'): mlff_config_011 '36 36 G', mlff_config_013 '38 38 G', mlff_config_014 '38 38 G' -- energies from different settings are not on one surface; rerun or remove them.
+ 2. Committee: its force spread barely tracks the real error here (corr +0.25) -- seeds fine-tuned from one foundation model are nearly the same model; Stage 4 then ranks candidates almost like max|F| does.
+Library messages  : 84 informational message(s) from mace/torch captured (model loading, dtype); the full training output of each member is in its mace_run_train.log.

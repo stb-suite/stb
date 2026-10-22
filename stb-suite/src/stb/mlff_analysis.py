@@ -530,6 +530,7 @@ def theory_signature(folder, atoms):
     if kg:
         lengths = atoms.cell.lengths()
         sig["k x a (Ang)"] = " ".join(f"{k * l:.0f}" if k > 1 else "G" for k, l in zip(kg, lengths))
+        sig["_kgrid"] = (tuple(int(k) for k in kg), tuple(float(l) for l in lengths))
     else:
         sig["k x a (Ang)"] = f"cutoff {d['kgridcutoff']}" if "kgridcutoff" in d else "Gamma"
     blob = "\n".join(texts)
@@ -541,10 +542,52 @@ def theory_signature(folder, atoms):
     return sig
 
 
+def _kxa_in_reference_cell(sigs):
+    """Rewrites each signature's 'k x a (Ang)' as the k-grid per reference cell
+    times that cell's length: per axis, the folder's cell is round(l / l_min)
+    reference cells (l_min = the shortest length of that axis in the set), so
+    k x multiple x l_min. A strained cell with the reference's own grid
+    (Stage 1 --volume-strains, Stage 4 strain sampling: the same grid on
+    purpose) then matches, and so does a supercell with a divided grid; only a
+    different k-point count per reference cell shows up. Pops '_kgrid'."""
+    grids = [s_.pop("_kgrid", None) for s_ in sigs]
+    known = [g for g in grids if g]
+    if not known:
+        return
+    l_min = [min(g[1][i] for g in known) for i in range(3)]
+    for s_, g in zip(sigs, grids):
+        if not g:
+            continue
+        ks, ls = g
+        mult = [max(1, int(round(l / lm))) if lm > 0 else 1 for l, lm in zip(ls, l_min)]
+        s_["k x a (Ang)"] = " ".join(f"{k * m * lm:.0f}" if k * m > 1 else "G"
+                                     for k, m, lm in zip(ks, mult, l_min))
+
+
+def dispersion_check(theory_common, theory_odd, state, f_out, warn):
+    """Prints whether the labels include DFT-D3 (the folders' own DFTD3, as
+    SIESTA reads it) and checks it against the workflow file's record of
+    Stage 1 (--d3). Returns True/False (D3 in most folders or not)."""
+    on = mlff_workflow.fdf_true(theory_common.get("DFTD3", "default"))
+    rec = mlff_workflow.dftd3_info(state)
+    mixed = "DFTD3" in theory_odd
+    print_dual("Dispersion        : " + ("DFT-D3 in the labels -- the model learns PBE+D3; never add a D3 "
+                                         "correction on top of it" if on else "no DFT-D3 in the labels")
+               + (f" (workflow: {rec['source']})" if rec.get("source") else "")
+               + (" -- MIXED across folders, see [10]" if mixed else ""), f_out)
+    if rec and bool(rec.get("on")) != on:
+        warn(f"Dispersion: the workflow file says the labels {'include' if rec.get('on') else 'do not include'} "
+             f"DFT-D3 (Stage 1: {rec.get('source')}), but the folders' own settings say "
+             f"{'they do' if on else 'they do not'} -- a folder was edited or written outside the workflow; "
+             "every label must come from the same energy surface.")
+    return on
+
+
 def check_theory(atoms_list, f_out, warn):
     """Compares every folder's theory_signature with the most common one;
     prints the common settings and warns about every folder that differs."""
     sigs = [theory_signature(a.info["folder"], a) for a in atoms_list]
+    _kxa_in_reference_cell(sigs)
     keys = sorted({k for s_ in sigs for k in s_}, key=lambda k: (k.startswith("pseudo"), k))
     common, odd = {}, {}
     for k in keys:
@@ -984,6 +1027,7 @@ def main():
                    "(from SIESTA stress)", f_out)
     print_dual(f"Volume/atom range : {ds['vol'].min():.3f} .. {ds['vol'].max():.3f} Ang^3", f_out)
     theory_common, theory_odd = check_theory(atoms_list, f_out, warn)
+    labels_d3 = dispersion_check(theory_common, theory_odd, state, f_out, warn)
     not_conv = [os.path.basename(a.info["folder"]) for a in atoms_list if a.info.get("scf_converged") is False]
     if not_conv:
         warn(f"Data: SCF did not converge in {len(not_conv)} config(s) ({', '.join(not_conv)}): their energies "
@@ -1326,9 +1370,15 @@ def main():
 
     # ---- plots
     summary_png = os.path.join(work_dir, "mlff_training.png")
+    show = args.show
+    if show:
+        import matplotlib
+        if matplotlib.get_backend().lower() in ("agg", "pdf", "ps", "svg", "pgf", "cairo", "template"):
+            warn("Plots: --show needs a display (no interactive matplotlib backend here) -- the figure is only saved.")
+            show = False
     try:
         plot_round_summary(summary_png, [m["history"] for m in usable], [m["seed"] for m in usable],
-                           atoms_list, oos, found, kinds, args.show)
+                           atoms_list, oos, found, kinds, show)
     except Exception as e:
         warn(f"Plots: summary figure not written ({e}).")
         summary_png = None
@@ -1383,7 +1433,7 @@ def main():
         "settings": {"foundation_model": args.foundation_model, "epochs": args.epochs,
                      "batch_size": args.batch_size, "lr": args.lr, "e0s": args.e0s,
                      "stress_trained": bool(train_stress), "stress_weight": args.stress_weight,
-                     "valid_fraction": args.valid_fraction},
+                     "valid_fraction": args.valid_fraction, "dftd3": bool(labels_d3)},
         "training_errors": {"out_of_sample": _valid_entry(oos_all), "foundation": _valid_entry(found_all),
                             "gain_pct": gain_all, "committee": comm,
                             "cv_folds": args.cv or None},
@@ -1420,6 +1470,9 @@ def main():
     print_dual("2. Look for configs the committee is unsure of: stb-mlffActiveLearning (4.17.4).", f_out)
     print_dual(f"3. Use a model now: --custom-model {usable[0]['model']} in stb-mlmd, stb-mlphonons, "
                "stb-mlelastic, ...", f_out)
+    if labels_d3:
+        print_dual("   It is PBE+D3 already (the labels include DFT-D3): use it without any extra D3 "
+                   "correction (MACE's dispersion=True / torch-dftd would count it twice).", f_out)
     extras = [t for t, used in (("--show (display the summary figure)", args.show),
                                 ("--save-data (per-config errors)", args.save_data),
                                 ("--view-worst N (worst configs in ASE's viewer)", args.view_worst),

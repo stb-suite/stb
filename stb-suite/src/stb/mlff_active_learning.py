@@ -206,7 +206,7 @@ def select_diverse(candidates, evaluations, top_k, reference, scale, min_novelty
     for i in order:
         if max_force and evaluations[i]["max_f"] > max_force:
             n_force += 1
-        else:
+        elif not evaluations[i].get("too_high"):
             eligible.append(i)
     consider = eligible[:max(pool_factor * top_k, 50)]
     smax = max((evaluations[i]["score"] for i in consider), default=1.0) or 1.0
@@ -240,19 +240,49 @@ def scan_values(method, given):
             "strain": [1.0, 2.0, 3.0, 5.0, 8.0]}[method]
 
 
-def choose_scanned(rows, max_force, max_close_pct=10.0):
-    """The scanned setting to sample with: the one with the highest median
-    score among the 'physical' ones -- MD did not blow up, at most
-    `max_close_pct` % close contacts, median max|F| within --max-force (if
-    set). Uncertainty grows with distortion, so this is the edge of the
-    physical range; none physical -> the mildest setting. Returns (value, reason)."""
+KB_MEV = 0.08617333   # Boltzmann constant, meV/K
+
+
+def equipartition_t(de_mev):
+    """Temperature (K) whose harmonic potential energy, 3/2 kT per atom, is
+    `de_mev` meV/atom above the minimum -- a physical reading of how hard a
+    geometry is distorted (graphene melts near 4500 K = ~580 meV/atom)."""
+    return de_mev / (1.5 * KB_MEV)
+
+
+def choose_scanned(rows, max_force, max_close_pct=10.0, max_energy=None, train_de=None, frontier=1.5):
+    """The scanned setting to sample with. 'Physical' settings: MD did not
+    blow up, at most `max_close_pct` % close contacts, median max|F| within
+    --max-force and median energy above the reference within --max-energy (if
+    set). The committee spread grows with distortion, so the highest score
+    alone always sits at the edge of the physical range -- a 0.15 Ang rattle of
+    graphene, 1-2 eV/atom picks that made the model worse. So, when the
+    training set's own energy range is known (`train_de`, its 90th-percentile
+    energy above the reference, meV/atom -- robust to a few outliers), the choice is the highest-score setting whose
+    median energy stays within `frontier` x that: the training range grows
+    step by step, round after round, instead of jumping far from it. None
+    physical -> the mildest setting. Returns (value, reason)."""
     ok = [r for r in rows if not r["stopped"] and r["close_pct"] <= max_close_pct
-          and (not max_force or r["maxf_med"] <= max_force) and r["n"] > 0]
+          and (not max_force or r["maxf_med"] <= max_force)
+          and (not max_energy or r.get("de_med") is None or r["de_med"] <= max_energy) and r["n"] > 0]
+    crit = (f"<= {max_close_pct:g} % close contacts, no MD blow-up"
+            + (f", median max|F| <= {max_force:g} eV/Ang" if max_force else "")
+            + (f", median E <= {max_energy:g} meV/atom above the reference" if max_energy else ""))
     if not ok:
         return rows[0]["value"], "no setting is physical by these criteria -- the mildest one"
+    if train_de and train_de > 0 and frontier and all(r.get("de_med") is not None for r in ok):
+        limit = frontier * train_de
+        within = [r for r in ok if r["de_med"] <= limit]
+        if within:
+            best = max(within, key=lambda r: r["score_med"])
+            return best["value"], (f"highest median score among the settings whose median energy stays within "
+                                   f"--frontier {frontier:g} x the training set's 90th-percentile energy ({train_de:.0f} -> "
+                                   f"{limit:.0f} meV/atom above the reference), with {crit}")
+        best = min(ok, key=lambda r: r["de_med"])
+        return best["value"], (f"every physical setting lies beyond --frontier {frontier:g} x the training set's "
+                               f"90th-percentile energy ({limit:.0f} meV/atom) -- the mildest one")
     best = max(ok, key=lambda r: r["score_med"])
-    return best["value"], (f"highest median score among the settings with <= {max_close_pct:g} % close contacts, "
-                           "no MD blow-up" + (f" and median max|F| <= {max_force:g} eV/Ang" if max_force else ""))
+    return best["value"], f"highest median score among the settings with {crit}"
 
 
 def md_candidates(base_atoms, calc, n_steps, temperatures_k, stride, seed, friction_fs=0.01, info=None,
@@ -343,6 +373,8 @@ def select_candidates(candidates, evaluations, top_k, reference, scale, min_nove
         ev = evaluations[i]
         if max_force and ev["max_f"] > max_force:
             n_force += 1
+            continue
+        if ev.get("too_high"):          # above --max-energy, counted by the caller
             continue
         atoms = candidates[i][0]
         nov = reference.novelty(atoms, scale) if scale else math.inf
@@ -698,7 +730,9 @@ def main():
     parser.add_argument("--auto-sampling", action="store_true",
                         help="First scan several settings of the sampling method (stdev / temperature / "
                              "strain, --scan-values) with a few candidates each, then sample with the one "
-                             "of highest median score that is still physical (few close contacts, stable MD).")
+                             "of highest median score that is still physical (few close contacts, stable MD, "
+                             "--max-force, --max-energy) and whose median energy stays within --frontier x "
+                             "the training set's -- one step beyond the labelled range, not its edge.")
     parser.add_argument("--scan-values", type=float, nargs="+", default=None, metavar="V",
                         help="Settings for --auto-sampling (default: stdev 0.03-0.3 Ang, 300-1500 K, or "
                              "strain 1-8 %%).")
@@ -744,6 +778,21 @@ def main():
                              "geometries too distorted to matter for the intended use (default: "
                              f"{mlff_workflow.UNPHYSICAL_FMAX:g}, the workflow's 'unphysical' line, the same "
                              "Stage 1 and 2 warn at; 0 = no limit).")
+    parser.add_argument("--d3", action="store_true",
+                        help="Add DFT-D3 (DFTD3 .true.) to every pick's config_extra.fdf. Not needed with a "
+                             "workflow file: the picks follow Stage 1's --d3 recorded there; for explicit "
+                             "--model/-s/-c runs without one.")
+    parser.add_argument("--max-energy", type=float, default=mlff_workflow.UNPHYSICAL_DE, metavar="MEV_ATOM",
+                        help="Skip candidates whose predicted energy lies more than this above the "
+                             "reference's, meV/atom (committee mean; default: "
+                             f"{mlff_workflow.UNPHYSICAL_DE:g}, the workflow's 'unphysical' line; 0 = no "
+                             "limit). The report also gives each energy as a temperature (3/2 kT per atom).")
+    parser.add_argument("--frontier", type=float, default=1.5, metavar="FACTOR",
+                        help="--auto-sampling: choose the highest-score setting whose median predicted "
+                             "energy stays within FACTOR x the training set's 90th-percentile energy above "
+                             "the reference (default: 1.5), so each round extends the training range a step "
+                             "instead of jumping to the most distorted physical setting. 0 = off (the "
+                             "highest score among the physical settings).")
     parser.add_argument("--seed", type=int, default=42,
                         help="Base random seed for rattling / straining / initial MD velocities (default: 42). "
                              f"The seed used is --seed + {ROUND_SEED_STEP} x the round the picks will train, so "
@@ -866,6 +915,8 @@ def main():
         round_entry = mlff_workflow.get_round(state, proposer_round)
     n_al_runs = len((round_entry or {}).get("active_learning", []))
     tag = f"r{proposer_round:02d}_{n_al_runs + 1}" if proposer_round is not None else "models"
+    if not args.dry_run:   # the report and figure go to the run folder, created here if new
+        os.makedirs(args.output_dir, exist_ok=True)
     out_dir_files = args.output_dir if os.path.isdir(args.output_dir) else "."
     near_out = lambda name: os.path.join(out_dir_files, name)
     # the picks train the next round: <run>/configs_round_NN/ (no workflow file: the output dir itself)
@@ -902,9 +953,12 @@ def main():
     print_dual(f"Versions          : stb {VERSION}, mace {vers['mace']}, torch {vers['torch']}, ase {vers['ase']}", f_out)
     print_dual(f"Device            : {args.device}", f_out)
     print_dual(f"Workflow file     : {args.workflow}" + ("" if state else " (not found)"), f_out)
-    if round_entry is not None:
+    if round_entry is not None and models_from_round:
         print_dual(f"Committee from    : round {round_entry['round']} ({len(args.model)} model(s): "
                    f"{', '.join(model_labels)})", f_out)
+    elif round_entry is not None:
+        print_dual(f"Committee from    : --model ({len(args.model)} model(s)); picks recorded as proposed by round "
+                   f"{round_entry['round']}", f_out)
     print_dual(f"Model(s)          : {args.model[0]}" + (f" (+{len(args.model) - 1} more)" if committee else ""), f_out)
     if calc_template:
         print_dual(f"Reference         : {ref_file} + {calc_template}", f_out)
@@ -992,6 +1046,17 @@ def main():
                    f"{k_note.replace('[WARNING] ', '')}", f_out)
         if "[WARNING]" in k_note:
             warn(f"Supercell: {k_note.replace('[WARNING] ', '')}")
+    # dispersion: the same as every other folder of the workflow (Stage 1 --d3)
+    d3 = mlff_workflow.dftd3_info(state)
+    if d3.get("forced") or args.d3:
+        extra_block += mlff_workflow.DFTD3_BLOCK
+        print_dual("Dispersion        : DFT-D3 in every pick's config_extra.fdf ("
+                   + ("as Stage 1 --d3 recorded in the workflow file" if d3.get("forced") else "--d3") + ")", f_out)
+        if args.d3 and state is not None and d3 and not d3.get("on"):
+            warn("Dispersion: --d3 given, but the workflow's labels have NO DFT-D3 (Stage 1 ran without it) -- "
+                 "these picks would sit on another energy surface; drop --d3, or redo Stage 1 with --d3.")
+    elif d3.get("on"):
+        print_dual("Dispersion        : DFT-D3 from the calc template (as in every folder of the workflow)", f_out)
     base_atoms = ase_atoms.repeat(dims)
     if args.sampling_method == "md" and args.md_ensemble == "npt":
         from stb.core.kspace import detect_vacuum_axes
@@ -1053,6 +1118,37 @@ def main():
     reference = EnvironmentSet()
     for a in train_atoms:
         reference.add(a)
+
+    # energy scale: the committee-mean energy of the (undistorted) reference
+    # cell, and the training configs' predicted energies above it
+    def _comp(a):
+        sym = a.get_chemical_symbols()
+        return tuple(sorted((el, round(sym.count(el) / len(sym), 4)) for el in set(sym)))
+    e_ref, train_de, train_de90 = None, None, None
+    with capture_library_noise(library_noise, "reference energy"):
+        ev_ref = evaluate_candidate(base_atoms, calcs)
+        if ev_ref is not None:
+            e_ref = ev_ref["energy"]
+            same = [a for a in train_atoms if _comp(a) == _comp(base_atoms)]
+            if len(same) > 200:
+                same = [same[i] for i in np.random.default_rng(0).choice(len(same), 200, replace=False)]
+            des = [1000 * (ev["energy"] - e_ref) for ev in (evaluate_candidate(a, calcs) for a in same)
+                   if ev is not None]
+            train_de = max(des) if des else None
+            train_de90 = float(np.percentile(des, 90)) if des else None
+    if train_de is not None:
+        print_dual(f"Training energies : 90 % within {train_de90:.0f}, all within {train_de:.0f} meV/atom above the "
+                   f"reference (model-predicted; ~{equipartition_t(max(train_de90, 0)):.0f} / "
+                   f"~{equipartition_t(max(train_de, 0)):.0f} K as 3/2 kT per atom)", f_out)
+    # the energy cap of every pick: --max-energy, and --frontier x the training
+    # set's 90th-percentile energy (each round extends the labelled range a step)
+    e_cap, e_cap_why = (args.max_energy or None), (f"--max-energy {args.max_energy:g}" if args.max_energy else "")
+    if args.frontier and train_de90 and train_de90 > 0 and (e_cap is None or args.frontier * train_de90 < e_cap):
+        e_cap = args.frontier * train_de90
+        e_cap_why = f"--frontier {args.frontier:g} x the training set's 90th percentile {train_de90:.0f}"
+    if e_cap is not None and e_ref is not None:
+        print_dual(f"Energy cap        : picks at most {e_cap:.0f} meV/atom above the reference "
+                   f"(~{equipartition_t(e_cap):.0f} K as 3/2 kT; {e_cap_why})", f_out)
     if not committee:
         warn("Score: single model -- the score is its largest predicted force, which favours the most "
              "distorted geometries rather than the ones it gets wrong. Train a committee (4.17.2 "
@@ -1088,6 +1184,8 @@ def main():
                 print_progress_line(f"{label} {n}/{len(cands)} with {len(calcs)} model(s)...", n, len(cands))
                 ev = evaluate_candidate(cand[0], calcs)
                 if ev is not None:
+                    ev["de"] = 1000 * (ev["energy"] - e_ref) if e_ref is not None else None
+                    ev["too_high"] = bool(e_cap is not None and ev["de"] is not None and ev["de"] > e_cap)
                     out.append((cand, ev))
         finish_progress_line()
         return out
@@ -1116,20 +1214,29 @@ def main():
             dm = np.array([shortest_distance(c[0]) for c, _ in ev_s]) if ev_s else np.array([np.nan])
             nv = np.array([reference.novelty(c[0], scale) if scale else np.nan for c, _ in ev_s]) if ev_s else np.array([np.nan])
             nv = np.where(np.isinf(nv), np.nan, nv)
+            de_s = [e["de"] for _, e in ev_s if e.get("de") is not None]
             scan_rows.append({"value": v, "n": len(ev_s), "score_med": float(np.nanmedian(sc)),
+                              "de_med": float(np.median(de_s)) if de_s else None,
                               "score_max": float(np.nanmax(sc)), "maxf_med": float(np.nanmedian(mf)),
                               "new_pct": (float(100 * np.mean(nv >= args.min_novelty))
                                           if args.min_novelty > 0 and np.isfinite(nv).any() else None),
                               "close_pct": float(100 * np.mean(dm < _CLOSE_CONTACT_FRAC * ref_dmin)),
                               "stopped": any(i_["stopped"] for i_ in info.values())})
-        scan_choice, why = choose_scanned(scan_rows, args.max_force)
+        scan_choice, why = choose_scanned(scan_rows, args.max_force, max_energy=args.max_energy,
+                                          train_de=train_de90, frontier=args.frontier)
         print_dual(color_text(f"Auto-sampling scan ({args.scan_n} candidates per setting, a fresh seed):", 'bold'), f_out)
         rows = [([f"{r['value']:g}", str(r["n"]), f"{r['score_med']:.3f} / {r['score_max']:.3f}",
-                  f"{r['maxf_med']:.2f}", _fmt(r["new_pct"], "{:.0f}"), f"{r['close_pct']:.0f}",
+                  f"{r['maxf_med']:.2f}",
+                  (f"{r['de_med']:.0f} (~{equipartition_t(max(r['de_med'], 0)):.0f} K)" if r["de_med"] is not None
+                   else "-"),
+                  _fmt(r["new_pct"], "{:.0f}"), f"{r['close_pct']:.0f}",
                   "blew up" if r["stopped"] else "ok"],
                  'green' if r["value"] == scan_choice else ('yellow' if r["stopped"] or r["close_pct"] > 10 else None))
                 for r in scan_rows]
-        print_table([f"Setting {unit}", "N", "Score med/max", "max|F| med", "New %", "Close %", "MD"], rows, f_out)
+        print_table([f"Setting {unit}", "N", "Score med/max", "max|F| med", "E med (meV/atom)", "New %", "Close %",
+                     "MD"], rows, f_out)
+        print_dual("E med = median predicted energy above the reference; the temperature is that energy as "
+                   "3/2 kT per atom (harmonic).", f_out)
         print_dual(f"Chosen            : {scan_choice:g} {unit.split()[0]} -- {why}", f_out)
         if scan_choice == max(r["value"] for r in scan_rows) and len(scan_rows) > 1:
             warn(f"Auto-sampling: the chosen setting ({scan_choice:g}) is the largest one scanned and still physical -- "
@@ -1251,6 +1358,12 @@ def main():
         beyond = 100 * float(np.mean(maxf > max(tr["fmax"]) * 1.1))
         print_dual(f"Beyond training   : {beyond:.0f} % of the pool has a predicted max|F| above the training "
                    f"set's largest SIESTA force ({max(tr['fmax']):.2f} eV/Ang)", f_out)
+    de_arr = np.array([e["de"] for e in evaluations if e.get("de") is not None])
+    if de_arr.size:
+        print_dual(f"Energy above ref. : median {np.median(de_arr):.0f}, max {de_arr.max():.0f} meV/atom (model-predicted; "
+                   f"median ~{equipartition_t(max(np.median(de_arr), 0)):.0f} K as 3/2 kT)"
+                   + (f"; {int(np.sum(de_arr > e_cap))} above the cap ({e_cap:.0f})" if e_cap is not None else ""),
+                   f_out)
 
     # ---- [3] selection
     print_section("[3] SELECTION", f_out)
@@ -1270,6 +1383,8 @@ def main():
             out.append(others.novelty(candidates[i][0], scale))
         return out
 
+    n_energy = sum(1 for e in evaluations if e.get("too_high")
+                   and not (args.max_force and e["max_f"] > args.max_force))
     nov_scale = scale if args.min_novelty > 0 or args.selection == "diverse" else None
     g_picked, g_force, g_red = select_candidates(
         candidates, evaluations, args.top_k, fresh_reference(), scale if args.min_novelty > 0 else None,
@@ -1278,18 +1393,24 @@ def main():
         picked, n_force, n_redundant = select_diverse(
             candidates, evaluations, args.top_k, fresh_reference(), nov_scale, args.min_novelty,
             args.max_force, args.diversity)
-        examined = min(len(candidates) - n_force, max(20 * args.top_k, 50))
+        examined = min(len(candidates) - n_force - n_energy, max(20 * args.top_k, 50))
         ex_label = "Considered (highest scores)"
     else:
         picked, n_force, n_redundant = g_picked, g_force, g_red
-        examined = len(picked) + n_force + n_redundant
+        examined = len(picked) + n_force + n_energy + n_redundant
         ex_label = "Examined (highest score first)"
     rows = [(["Screened", str(len(candidates))], None),
             ([ex_label, str(examined)], None),
             (["Skipped: max|F| > --max-force", str(n_force)], 'yellow' if n_force else None),
+            (["Skipped: E above the energy cap", str(n_energy)], 'yellow' if n_energy else None),
             (["Skipped: novelty < --min-novelty", str(n_redundant)], 'yellow' if n_redundant else None),
             (["Picked", f"{len(picked)} of {args.top_k} requested"], 'green')]
     print_table(["Selection funnel", "Count"], rows, f_out)
+    if n_energy and len(picked) < args.top_k:
+        warn(f"Selection: the energy cap ({e_cap:.0f} meV/atom above the reference, {e_cap_why}) left only "
+             f"{len(picked)} of {args.top_k} picks -- the pool is sampled harder than the training set reaches; "
+             "use a smaller --stdev / --md-temperature (or let --auto-sampling choose), or raise --frontier / "
+             "--max-energy (0 = off) if such geometries matter.")
     sel_compare = None
     if picked:
         ps = [ev["score"] for _, ev, _ in picked]
@@ -1325,6 +1446,8 @@ def main():
             flags.append("F")
         if tr_dmin and dmin[i] < min(tr_dmin) * 0.97:
             flags.append("d")
+        if train_de is not None and ev.get("de") is not None and ev["de"] > max(train_de, 0) * 1.1 + 1.0:
+            flags.append("E")
         if tr_dmin and dmin[i] < min(tr_dmin) * _CLOSE_CONTACT_FRAC:
             close.append(f"{n} ({dmin[i]:.2f} Ang)")
         worst = (int(np.argmax(ev["spread_atom"])) if ev["spread_atom"] is not None else int(np.argmax(ev["f_atom"])))
@@ -1341,7 +1464,18 @@ def main():
         print_dual(f"Score {s_unit}, max|F| eV/Ang; Est. err = calibration x force spread (meV/Ang, from 4.17.3); E spr = "
                    "energy spread (meV/atom); novelty vs training set + earlier picks;", f_out)
         print_dual("Rank by score in the pool; worst atom = largest " + ("spread" if committee else "force")
-                   + "; Range: in, or beyond the training set in F (max|F|) / d (shortest distance).", f_out)
+                   + "; Range: in, or beyond the training set in F (max|F|) / d (shortest distance) / E (energy).", f_out)
+        pde = [ev["de"] for _, ev, _ in picked if ev.get("de") is not None]
+        if pde:
+            print_dual(f"Energy above ref. : picks {min(pde):.0f} .. {max(pde):.0f} meV/atom (~{equipartition_t(max(min(pde), 0)):.0f}"
+                       f" .. {equipartition_t(max(max(pde), 0)):.0f} K as 3/2 kT)"
+                       + (f"; training set up to {train_de:.0f}" if train_de is not None else ""), f_out)
+            if train_de is not None and train_de > 0 and np.median(pde) > 2 * train_de:
+                warn(f"Picks: their median energy ({np.median(pde):.0f} meV/atom above the reference, "
+                     f"~{equipartition_t(np.median(pde)):.0f} K) is more than twice the training set's highest "
+                     f"({train_de:.0f}) -- a jump far from the labelled region; such configs can make the model WORSE "
+                     "near equilibrium (check with 4.17.3). A smaller --stdev / --md-temperature, or --max-energy, "
+                     "keeps the next round closer.")
         if close:
             warn(f"Picks: {len(close)} pick(s) have atoms closer than {100 * _CLOSE_CONTACT_FRAC:.0f} % of the training "
                  f"set's shortest distance ({min(tr_dmin):.2f} Ang): pick {', '.join(close)} -- SIESTA may struggle to "
@@ -1516,7 +1650,7 @@ def main():
                          "energy_spread_max": float(max(e["sigma_e"] for e in evaluations)) if committee else None,
                          "new_share_pct": (float(100 * np.mean(nov_arr >= args.min_novelty))
                                            if args.min_novelty > 0 and np.isfinite(nov_arr).any() else None)},
-                "skipped": {"max_force": n_force, "novelty": n_redundant},
+                "skipped": {"max_force": n_force, "max_energy": n_energy, "novelty": n_redundant},
                 "picked": [mlff_workflow.rel(f, wf_base) for f in folders]})
         mlff_workflow.record(state, "active-learning", "stb-mlffActiveLearning", sys.argv[1:])
         mlff_workflow.save(state, args.workflow)
@@ -1567,7 +1701,10 @@ def main():
         picks_path = near_out(f"mlff_al_{tag}_picks.xyz")
         ase_write(picks_path, frames, format="extxyz")
 
-    # ---- [6] files
+    # ---- [8] files
+    if folders:   # before the status line counts the warnings
+        warn(f"SIESTA: run it in {os.path.relpath(picks_root)}/ ({len(folders)} new folder(s)) before the next "
+             "stb-mlffAnalysis -- unlabelled picks are left out of training.")
     print_section("[8] SUMMARY & FILES", f_out)
     print_dual(f"Status            : OK, {len(picked)} pick(s) from {len(candidates)} candidate(s) in "
                f"{time.monotonic() - t_start:.0f} s" + (f" ({len(warns)} warning(s), see [10])" if warns else ""), f_out)
@@ -1616,9 +1753,6 @@ def main():
     if extras:
         print_dual(f"Also available    : {'; '.join(extras)}.", f_out)
 
-    if folders:
-        warn(f"SIESTA: run it in {os.path.relpath(picks_root)}/ ({len(folders)} new folder(s)) before the next "
-             "stb-mlffAnalysis -- unlabelled picks are left out of training.")
     # ---- [10] warnings
     print_section("[10] WARNINGS", f_out)
     if warns:

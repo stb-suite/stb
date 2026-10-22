@@ -5857,6 +5857,9 @@ def run_mlff_prep() -> None:
     n_test = get_int_input("Held-out test configurations, scored by Stage 3 (Validate) "
                            "[default: 8, 0 = none]: ", 8)
     args.extend(["--n-test", str(n_test)])
+    if get_input("Add the DFT-D3 dispersion correction to every SIESTA run (layered / vdW-bonded "
+                 "systems; the model will be PBE+D3, and later stages keep it)? (y/N): ").strip().lower() == 'y':
+        args.append("--d3")
 
     use_aimd = get_input(
         "\nAlso sample starting geometries from an existing AIMD trajectory (<label>.ANI)? "

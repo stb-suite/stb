@@ -1,0 +1,424 @@
+{
+ "format": "stb-mlff-workflow",
+ "version": 1,
+ "created": "2026-10-21T10:36:03",
+ "updated": "2026-10-21T11:46:35",
+ "reference": {
+  "file": "../structure.fdf",
+  "n_atoms": 2,
+  "species": [
+   "C"
+  ],
+  "calc": "../calc.fdf",
+  "pseudo_dir": "virtual_vault"
+ },
+ "configs": [
+  {
+   "folder": "configs_round_01/mlff_config_001",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.0624,
+    "u_max": 0.07793,
+    "d_min": 1.38779,
+    "novelty": null
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_002",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.05277,
+    "u_max": 0.05461,
+    "d_min": 1.34615,
+    "novelty": 2.2014
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_003",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.12001,
+    "u_max": 0.1385,
+    "d_min": 1.33908,
+    "novelty": 2.72677
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_004",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.10385,
+    "u_max": 0.14494,
+    "d_min": 1.39117,
+    "novelty": 1.66311
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_005",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.06493,
+    "u_max": 0.07958,
+    "d_min": 1.35427,
+    "novelty": 1.85962
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_006",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.10021,
+    "u_max": 0.10902,
+    "d_min": 1.31264,
+    "novelty": 1.82486
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_007",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.07805,
+    "u_max": 0.07946,
+    "d_min": 1.37315,
+    "novelty": 1.58931
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_008",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.09785,
+    "u_max": 0.11678,
+    "d_min": 1.29511,
+    "novelty": 1.32556
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_009",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.09478,
+    "u_max": 0.10447,
+    "d_min": 1.36178,
+    "novelty": 0.45436
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_010",
+   "set": "train",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.06639,
+    "u_max": 0.06827,
+    "d_min": 1.38888,
+    "novelty": 0.22465
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_011",
+   "set": "train",
+   "kind": "strain",
+   "origin": "volume -4 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 102.5491,
+    "dV_pct": -4.0,
+    "u_rms": 0.07735,
+    "u_max": 0.09385,
+    "d_min": 1.34515,
+    "novelty": 4.97244
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_012",
+   "set": "train",
+   "kind": "strain",
+   "origin": "volume -2 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 104.68554,
+    "dV_pct": -2.0,
+    "u_rms": 0.09827,
+    "u_max": 0.12036,
+    "d_min": 1.28934,
+    "novelty": 3.17947
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_013",
+   "set": "train",
+   "kind": "strain",
+   "origin": "volume +2 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 108.95842,
+    "dV_pct": 2.0,
+    "u_rms": 0.09478,
+    "u_max": 0.11749,
+    "d_min": 1.33102,
+    "novelty": 2.61442
+   }
+  },
+  {
+   "folder": "configs_round_01/mlff_config_014",
+   "set": "train",
+   "kind": "strain",
+   "origin": "volume +4 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 111.09486,
+    "dV_pct": 4.0,
+    "u_rms": 0.11654,
+    "u_max": 0.14881,
+    "d_min": 1.35411,
+    "novelty": 3.33773
+   }
+  },
+  {
+   "folder": "mlff_test/test_001",
+   "set": "test",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.10944,
+    "u_max": 0.13755,
+    "d_min": 1.30193,
+    "novelty": 0.34549
+   }
+  },
+  {
+   "folder": "mlff_test/test_002",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume -4 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 102.5491,
+    "dV_pct": -4.0,
+    "u_rms": 0.11964,
+    "u_max": 0.14368,
+    "d_min": 1.32968,
+    "novelty": 2.03554
+   }
+  },
+  {
+   "folder": "mlff_test/test_003",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume -2 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 104.68554,
+    "dV_pct": -2.0,
+    "u_rms": 0.08337,
+    "u_max": 0.09339,
+    "d_min": 1.37497,
+    "novelty": 2.48316
+   }
+  },
+  {
+   "folder": "mlff_test/test_004",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume +2 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 108.95842,
+    "dV_pct": 2.0,
+    "u_rms": 0.0644,
+    "u_max": 0.07606,
+    "d_min": 1.42319,
+    "novelty": 3.10128
+   }
+  },
+  {
+   "folder": "mlff_test/test_005",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume +4 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 111.09486,
+    "dV_pct": 4.0,
+    "u_rms": 0.05693,
+    "u_max": 0.05856,
+    "d_min": 1.37892,
+    "novelty": 3.32721
+   }
+  },
+  {
+   "folder": "mlff_test/test_006",
+   "set": "test",
+   "kind": "rattle",
+   "origin": "rattle 0.05 Ang",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 106.82198,
+    "dV_pct": 0.0,
+    "u_rms": 0.08207,
+    "u_max": 0.08247,
+    "d_min": 1.3863,
+    "novelty": 0.85034
+   }
+  },
+  {
+   "folder": "mlff_test/test_007",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume -4 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 102.5491,
+    "dV_pct": -4.0,
+    "u_rms": 0.07634,
+    "u_max": 0.09989,
+    "d_min": 1.35609,
+    "novelty": 0.81525
+   }
+  },
+  {
+   "folder": "mlff_test/test_008",
+   "set": "test",
+   "kind": "strain",
+   "origin": "volume -2 % (rattle 0.05 Ang)",
+   "stage": "prep",
+   "round": 0,
+   "n_atoms": 2,
+   "geometry": {
+    "volume": 104.68554,
+    "dV_pct": -2.0,
+    "u_rms": 0.07687,
+    "u_max": 0.10294,
+    "d_min": 1.38651,
+    "novelty": 1.0
+   }
+  }
+ ],
+ "rounds": [],
+ "history": [
+  {
+   "time": "2026-10-21T10:36:03",
+   "stage": "prep",
+   "tool": "stb-mlff",
+   "argv": [
+    "--structure",
+    "structure.fdf",
+    "--calc",
+    "calc.fdf",
+    "--pseudo-dir",
+    "virtual_vault",
+    "--n-configs",
+    "10",
+    "--stdev",
+    "0.05",
+    "--no-intro",
+    "--volume-strains",
+    "-4",
+    "-2",
+    "2",
+    "4",
+    "--n-test",
+    "8",
+    "--output-dir",
+    "mlff_runs",
+    "--save-report",
+    "--view",
+    "--show"
+   ]
+  }
+ ]
+}

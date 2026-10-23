@@ -148,6 +148,7 @@ rmdir mlff_config_src
 stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o . --epochs 3 --batch-size 4 --device cpu \
     --name si_quick_model --skip-foundation-comparison --no-intro > log_quicktrain.txt 2>&1
 QUICK_MODEL=$(find . -maxdepth 1 -name "si_quick_model*.model" | sort | tail -1)
+QUICK_CARD="$(dirname "$QUICK_MODEL")/mlff_model_card.json"
 if [ -z "$QUICK_MODEL" ]; then
     echo -e "${RED}FAIL${NC}: could not produce a quick fine-tuned Si model to test against."
 else
@@ -160,7 +161,7 @@ rm -rf mlff_config_001 mlff_config_002 mlff_config_003 mlff_config_004 \
 # --- 1c. --custom-model + foundation-model comparison (default on) ---
 if [ -n "$QUICK_MODEL" ]; then
     echo -e "\n--- Testing --custom-model with foundation comparison (default on) ---"
-    stb-mlphonons --file si8.fdf --custom-model "$QUICK_MODEL" --dim 1 1 1 --mesh 8 8 8 \
+    stb-mlphonons --file si8.fdf --custom-model "$QUICK_MODEL" --custom-model-card "$QUICK_CARD" --dim 1 1 1 --mesh 8 8 8 \
         --band-points 11 --no-intro -o mlphonons_compare > log_compare.txt 2>&1
     check_exit_code $? 0
     check_contains "Comparison        : also evaluating with foundation model" log_compare.txt
@@ -172,7 +173,7 @@ if [ -n "$QUICK_MODEL" ]; then
     rm -rf mlphonons_compare
 
     echo "Testing: --skip-foundation-comparison disables the second run"
-    stb-mlphonons --file si8.fdf --custom-model "$QUICK_MODEL" --dim 1 1 1 --mesh 8 8 8 \
+    stb-mlphonons --file si8.fdf --custom-model "$QUICK_MODEL" --custom-model-card "$QUICK_CARD" --dim 1 1 1 --mesh 8 8 8 \
         --band-points 11 --skip-foundation-comparison --no-intro -o mlphonons_nocompare > log_nocompare.txt 2>&1
     check_exit_code $? 0
     grep -q "also evaluating with foundation model" log_nocompare.txt
@@ -303,9 +304,14 @@ rm -rf mlphonons_animate_bad
 
 # --- 2. --custom-model with a nonexistent file (expects failure) ---
 echo -e "\n--- Testing --custom-model with a nonexistent file (expects failure) ---"
-stb-mlphonons --file si_bulk.fdf --custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+stb-mlphonons --file si_bulk.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --no-intro > log_custommodel.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlphonons --file si_bulk.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 
 # --- 3. --save-report ---
@@ -338,6 +344,7 @@ echo "Testing: --help documents --dim, --custom-model, --mesh, --no-relax, --qha
 stb-mlphonons --help > log_help.txt 2>&1
 check_contains "dim" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "mesh" log_help.txt
 check_contains "no-relax" log_help.txt
 check_contains "\-\-qha" log_help.txt

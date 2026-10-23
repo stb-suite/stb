@@ -110,6 +110,19 @@ check_success train_set.xyz
 check_success valid_set.xyz
 check_success mace_run_train.log
 check_success mace_run_train.cmd
+check_success mlff_model_card.json
+check_python "the model card records the model hash, elements, level of theory, trained range, recipe and metrics" "
+import json, hashlib, sys
+c = json.load(open('mlff_model_card.json'))
+f = {x['file']: x['sha256'] for x in c['model']['files']}
+ok = (c['format'] == 'stb-mlff-model-card' and c['elements'] == ['O']
+      and f['test_model_compiled.model'] == hashlib.sha256(open('test_model_compiled.model', 'rb').read()).hexdigest()
+      and c['level_of_theory']['settings'] and 'dftd3' in c['level_of_theory']
+      and c['domain']['elements'] == ['O'] and c['domain']['d_min_ang'] and c['domain']['force_max_eV_per_ang']
+      and c['recipe']['epochs_max'] == 5 and 'F_rmse_meV' in c['metrics']['valid']
+      and c['training_data']['n_configs'] == 8 and c['usage']['notes'])
+sys.exit(0 if ok else 1)
+"
 check_python "train_set.xyz + valid_set.xyz together have 8 frames with REF_energy/REF_forces" "
 import sys
 from ase.io import read
@@ -219,6 +232,15 @@ check_contains "Force spread      :" log_committee1.txt
 check_success c_round1/m_s123/train_set.xyz
 check_success c_round1/m_s124/valid_set.xyz
 check_success wf_test.json
+check_success c_round1/m_s123/mlff_model_card.json
+check_python "each round entry stores its cards; a card knows its committee, round and seed" "
+import json, sys
+d = json.load(open('wf_test.json'))
+c = json.load(open('c_round1/m_s124/mlff_model_card.json'))
+ok = (all(m.get('card') for r in d['rounds'] for m in r['committee'])
+      and c['committee']['size'] == 2 and c['committee']['round'] == 1 and c['model']['seed'] == 124)
+sys.exit(0 if ok else 1)
+"
 echo "Testing: the second run takes the configs from the workflow file, goes to round_02/, continues from round 1"
 stb-mlffAnalysis --committee 2 $FAST --workflow wf_test.json --init-from previous \
     --skip-foundation-comparison --no-intro > log_committee2.txt 2>&1
@@ -241,6 +263,12 @@ ok = (d['format'] == 'stb-mlff-workflow' and [r['round'] for r in d['rounds']] =
       and len(r2['configs']) == 8 and [h['stage'] for h in d['history']] == ['train', 'train'])
 sys.exit(0 if ok else 1)
 "
+echo "Testing: --make-cards rewrites the cards of a trained round without training"
+rm -f c_round1/m_s123/mlff_model_card.json
+stb-mlffAnalysis --make-cards 1 --workflow wf_test.json --no-intro > log_makecards.txt 2>&1
+check_exit_code $? 0
+check_contains "MODEL CARDS -- round 1" log_makecards.txt
+check_success c_round1/m_s123/mlff_model_card.json
 echo "Testing: --committee 0 is rejected"
 stb-mlffAnalysis --committee 0 --workflow wf_test.json --no-intro > log_committee0.txt 2>&1
 check_exit_code $? 1
@@ -284,7 +312,7 @@ echo "Testing: --help documents the options"
 stb-mlffAnalysis --help > log_help.txt 2>&1
 for opt in foundation-model epochs valid-fraction export-lammps skip-foundation-comparison stress-weight \
            no-stress-training foundation-residual committee workflow "\-\-cv" init-from no-stability \
-           view-worst save-data skip-unlabelled; do
+           view-worst save-data skip-unlabelled make-cards; do
     check_contains "$opt" log_help.txt
 done
 

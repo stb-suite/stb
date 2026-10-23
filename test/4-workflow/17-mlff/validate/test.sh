@@ -133,6 +133,20 @@ for sec in "\[0\] RUN METADATA" "\[1\] TEST SET" "\[2\] MODELS SCORED" "\[3\] TE
            "\[12\] NEXT STEPS" "\[13\] WARNINGS"; do
     check_contains "$sec" log_val1.txt
 done
+echo "Testing: the best model and its card are copied to best_model/"
+check_success best_model/mlff_model_compiled.model
+check_success best_model/mlff_model_card.json
+check_contains "Best model        : round" log_val1.txt
+check_python "best_model/ holds the model with a matching hash, a selection section and the 'best' entry of the workflow file" "
+import json, hashlib, sys
+c = json.load(open('best_model/mlff_model_card.json'))
+b = json.load(open('mlff_workflow.json'))['best']
+f = {x['file']: x['sha256'] for x in c['model']['files']}
+ok = (c['selection']['round'] == b['round'] == 1 and c['selection']['seed'] == b['seed'] and b['folder'] == 'best_model'
+      and f['mlff_model_compiled.model'] == hashlib.sha256(open('best_model/mlff_model_compiled.model', 'rb').read()).hexdigest()
+      and len(c['selection']['rounds_compared']) == 1 and c['validation'].get('overall'))
+sys.exit(0 if ok else 1)
+"
 check_contains "Test set from     : mlff_workflow.json (test set)" log_val1.txt
 check_contains "Configs           : 2 finished of 2 folder(s), 4 atoms, rattle 1, strain 1" log_val1.txt
 check_contains "\[OK\] Same level of theory in all 8 folders" log_val1.txt
@@ -201,6 +215,7 @@ echo "Testing: --rounds 1 scores only round 1; --detail-round"
 stb-mlffValidate --rounds 1 --skip-foundation-comparison --no-intro > log_val_r1.txt 2>&1
 check_contains "Scoring           : round 1 (2 model(s))" log_val_r1.txt
 check_not_contains "round 2 (2 model(s))" log_val_r1.txt
+check_contains "was chosen among the rounds scored in this run only" log_val_r1.txt
 stb-mlffValidate --detail-round 1 --skip-foundation-comparison --no-intro > log_val_d1.txt 2>&1
 check_contains "\[4\] ROUND 1 IN DETAIL" log_val_d1.txt
 stb-mlffValidate --rounds 7 --no-intro > log_val_r7.txt 2>&1

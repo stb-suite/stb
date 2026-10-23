@@ -181,7 +181,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-mlneb --initial initial.fdf --final final.fdf\n"
                "  stb-mlneb --initial initial.fdf --final final.fdf --custom-model "
-               "mlff_model.model --n-images 9 --freeze-substrate\n",
+               "mlff_model.model --custom-model-card mlff_model_card.json --n-images 9 --freeze-substrate\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--initial", required=True, help="Initial (relaxed) endpoint structure (.fdf).")

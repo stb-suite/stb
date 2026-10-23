@@ -311,7 +311,7 @@ def main():
                      "finding the true global minimum -- both are heuristic searches.",
         epilog="Example usage:\n"
                "  stb-mlsearch --file structure.fdf --steps 100\n"
-               "  stb-mlsearch --file structure.fdf --custom-model mlff_model.model "
+               "  stb-mlsearch --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json "
                "--dr 0.4 --temperature 1500\n"
                "  stb-mlsearch --file structure.fdf --algorithm simulated-annealing "
                "--steps 2000 --temp-start 1500 --temp-end 50\n",

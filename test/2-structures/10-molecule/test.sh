@@ -158,8 +158,16 @@ check_contains "Cell relaxation : n/a (isolated molecule, positions only)" log_m
 check_success ml_relaxed.fdf
 check_contains "ML pre-relaxed with" ml_relaxed.fdf
 
-echo "Testing: --custom-model rejected without --ml-relax"
-stb-molecule --name H2O --custom-model does_not_exist.model --no-intro > log_bad_custom.txt 2>&1
+echo "Testing: --custom-model rejected without --ml-relax (with a valid model + card pair)"
+python3 - <<'EOF'
+import hashlib, json
+data = b"not a real model"
+open("dummy.model", "wb").write(data)
+json.dump({"format": "stb-mlff-model-card", "version": 1, "elements": ["O"],
+           "model": {"files": [{"file": "dummy.model", "sha256": hashlib.sha256(data).hexdigest()}]}},
+          open("dummy_card.json", "w"))
+EOF
+stb-molecule --name H2O --custom-model dummy.model --custom-model-card dummy_card.json --no-intro > log_bad_custom.txt 2>&1
 check_exit_code $? 2
 check_contains "only valid together with --ml-relax" log_bad_custom.txt
 

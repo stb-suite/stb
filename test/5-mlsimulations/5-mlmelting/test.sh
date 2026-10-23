@@ -152,9 +152,14 @@ check_exit_code $? 1
 check_contains "not found" log_missing_input.txt
 
 echo "Testing: --custom-model with a nonexistent file"
-stb-mlmelting --file al4.fdf --custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+stb-mlmelting --file al4.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --no-intro > log_custommodel.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlmelting --file al4.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: a single temperature is rejected (needs at least 2)"
 stb-mlmelting --file al4.fdf --temperatures 500 --no-intro > log_singletemp.txt 2>&1
@@ -172,6 +177,7 @@ check_contains "temp-max" log_help.txt
 check_contains "temperatures" log_help.txt
 check_contains "lindemann-threshold" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "save-trajectories" log_help.txt
 
 

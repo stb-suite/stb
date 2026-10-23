@@ -447,7 +447,7 @@ def main():
                      "workflow.",
         epilog="Example usage:\n"
                "  stb-mlelastic --file structure.fdf\n"
-               "  stb-mlelastic --file structure.fdf --custom-model mlff_model.model "
+               "  stb-mlelastic --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json "
                "--max 1.0 --steps 6\n"
                "  stb-mlelastic --file structure.fdf --check-convergence\n",
         formatter_class=argparse.RawTextHelpFormatter,

@@ -540,7 +540,7 @@ def main():
                      "markedly less reliable for phonons (imaginary modes especially) than DFT.",
         epilog="Example usage:\n"
                "  stb-mlphonons --file structure.fdf --dim 2 2 2\n"
-               "  stb-mlphonons --file structure.fdf --custom-model mlff_model.model --dim 3 3 3\n"
+               "  stb-mlphonons --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json --dim 3 3 3\n"
                "  stb-mlphonons --file structure.fdf --qha --n-volumes 7 --strain-range 5",
         formatter_class=argparse.RawTextHelpFormatter,
     )

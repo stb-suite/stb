@@ -155,7 +155,7 @@ def main():
                      "A fast heuristic, not a substitute for a real SIESTA volume scan.",
         epilog="Example usage:\n"
                "  stb-mleos --file structure.fdf\n"
-               "  stb-mleos --file structure.fdf --custom-model mlff_model.model "
+               "  stb-mleos --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json "
                "--n-volumes 11 --strain-range 8.0\n"
                "  stb-mleos --file structure.fdf --eos vinet\n",
         formatter_class=argparse.RawTextHelpFormatter,

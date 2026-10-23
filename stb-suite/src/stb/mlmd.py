@@ -90,7 +90,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-mlmd --file structure.fdf --ensemble nvt --temperature 300 --n-steps 5000\n"
                "  stb-mlmd --file structure.fdf --ensemble nvt --equilibration-steps 200 --n-steps 5000\n"
-               "  stb-mlmd --file structure.fdf --custom-model mlff_model.model --ensemble npt \\\n"
+               "  stb-mlmd --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json --ensemble npt \\\n"
                "                           --temperature 500 --pressure 0.0 --n-steps 10000",
         formatter_class=argparse.RawTextHelpFormatter,
     )

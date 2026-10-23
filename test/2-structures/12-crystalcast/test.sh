@@ -443,8 +443,16 @@ stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --model medium --no-in
 check_exit_code $? 2
 check_contains "only valid together with --ml-rank" log_model_norank.txt
 
-echo "Testing: --custom-model without --ml-rank is rejected"
-stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --custom-model foo.model --no-intro > log_custommodel_norank.txt 2>&1
+echo "Testing: --custom-model without --ml-rank is rejected (with a valid model + card pair)"
+python3 - <<'EOF'
+import hashlib, json
+data = b"not a real model"
+open("dummy.model", "wb").write(data)
+json.dump({"format": "stb-mlff-model-card", "version": 1, "elements": ["O"],
+           "model": {"files": [{"file": "dummy.model", "sha256": hashlib.sha256(data).hexdigest()}]}},
+          open("dummy_card.json", "w"))
+EOF
+stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --custom-model dummy.model --custom-model-card dummy_card.json --no-intro > log_custommodel_norank.txt 2>&1
 check_exit_code $? 2
 check_contains "only valid together with --ml-rank" log_custommodel_norank.txt
 
@@ -510,6 +518,7 @@ check_contains "subgroup" log_help.txt
 check_contains "supergroup" log_help.txt
 check_contains "ml-rank" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "save-report" log_help.txt
 check_contains "view" log_help.txt
 if grep -q -- "--analyze" log_help.txt; then

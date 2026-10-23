@@ -125,7 +125,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-mldiffusion --file bulk.fdf --vacancy-index 0\n"
                "  stb-mldiffusion --file bulk.fdf --vacancy-index 0 --custom-model "
-               "mlff_model.model\n",
+               "mlff_model.model --custom-model-card mlff_model_card.json\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--file", required=True, help="Perfect bulk reference structure (.fdf).")

@@ -162,6 +162,7 @@ if [ -d "$PHONONS_FIXTURES" ]; then
     stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o . --epochs 3 --batch-size 4 --device cpu \
         --name si_quick_model --skip-foundation-comparison --no-intro > log_quicktrain.txt 2>&1
     QUICK_MODEL=$(find . -maxdepth 1 -name "si_quick_model*.model" | sort | tail -1)
+    QUICK_CARD="$(dirname "$QUICK_MODEL")/mlff_model_card.json"
     rm -rf mlff_config_001 mlff_config_002 mlff_config_003 mlff_config_004 \
            mlff_config_005 mlff_config_006 mlff_config_007 mlff_config_008
 else
@@ -172,7 +173,7 @@ if [ -n "$QUICK_MODEL" ]; then
     echo "Using model: $QUICK_MODEL"
 
     echo -e "\n--- Testing --custom-model with foundation comparison (default on) ---"
-    stb-mleos --file si8.fdf --custom-model "$QUICK_MODEL" --n-volumes 5 \
+    stb-mleos --file si8.fdf --custom-model "$QUICK_MODEL" --custom-model-card "$QUICK_CARD" --n-volumes 5 \
         --no-intro -o si_compare > log_compare.txt 2>&1
     check_exit_code $? 0
     check_contains "Comparison        : also fitting with foundation model" log_compare.txt
@@ -182,7 +183,7 @@ if [ -n "$QUICK_MODEL" ]; then
     rm -rf si_compare
 
     echo "Testing: --skip-foundation-comparison disables the second run"
-    stb-mleos --file si8.fdf --custom-model "$QUICK_MODEL" --n-volumes 5 \
+    stb-mleos --file si8.fdf --custom-model "$QUICK_MODEL" --custom-model-card "$QUICK_CARD" --n-volumes 5 \
         --skip-foundation-comparison --no-intro -o si_nocompare > log_nocompare.txt 2>&1
     check_exit_code $? 0
     if grep -q "FOUNDATION MODEL COMPARISON" log_nocompare.txt; then
@@ -211,9 +212,14 @@ check_exit_code $? 1
 check_contains "not found" log_missing_input.txt
 
 echo "Testing: --custom-model with a nonexistent file"
-stb-mleos --file si8.fdf --custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+stb-mleos --file si8.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --no-intro > log_custommodel.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mleos --file si8.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: --version"
 stb-mleos --version > log_version.txt 2>&1
@@ -226,6 +232,7 @@ check_contains "eos" log_help.txt
 check_contains "n-volumes" log_help.txt
 check_contains "strain-range" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "skip-foundation-comparison" log_help.txt
 
 

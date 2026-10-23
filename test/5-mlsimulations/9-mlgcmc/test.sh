@@ -211,10 +211,16 @@ check_exit_code $? 1
 check_contains "not found" log_missing_host.txt
 
 echo "Testing: --custom-model with a nonexistent file"
-stb-mlgcmc --host graphene.fdf --adsorbate Ar --mu -0.5 --custom-model does_not_exist.model \
+stb-mlgcmc --host graphene.fdf --adsorbate Ar --mu -0.5 --custom-model does_not_exist.model --custom-model-card does_not_exist.json \
     --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlgcmc --host graphene.fdf --adsorbate Ar --mu -0.5 --custom-model does_not_exist.model \
+    --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: --version"
 stb-mlgcmc --version > log_version.txt 2>&1
@@ -227,6 +233,7 @@ check_contains "\-\-mu" log_help.txt
 check_contains "mu-scan" log_help.txt
 check_contains "adsorbate" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "insertion-zmin" log_help.txt
 
 

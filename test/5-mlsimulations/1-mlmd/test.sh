@@ -135,9 +135,26 @@ rm -f slab_for_test.fdf
 
 # --- 5. --custom-model with a nonexistent file (expects failure) ---
 echo -e "\n--- Testing --custom-model with a nonexistent file (expects failure) ---"
-stb-mlmd --file si_bulk.fdf --custom-model does_not_exist.model --n-steps 10 --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+stb-mlmd --file si_bulk.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --n-steps 10 --no-intro > log_custommodel.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlmd --file si_bulk.fdf --custom-model does_not_exist.model --n-steps 10 --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
+
+echo "Testing: a card that belongs to another model is refused (SHA-256)"
+python3 - <<'EOF'
+import hashlib, json
+open("dummy_a.model", "wb").write(b"model A")
+json.dump({"format": "stb-mlff-model-card", "version": 1, "elements": ["Si"],
+           "model": {"files": [{"file": "dummy_b.model", "sha256": hashlib.sha256(b"model B").hexdigest()}]}},
+          open("dummy_card_b.json", "w"))
+EOF
+stb-mlmd --file si_bulk.fdf --custom-model dummy_a.model --custom-model-card dummy_card_b.json --n-steps 10 --no-intro > log_custommodel_sha.txt 2>&1
+check_exit_code $? 2
+check_contains "SHA-256" log_custommodel_sha.txt
 
 
 # --- 6. --out-format xyz embeds per-frame Epot/Temp/Time ---
@@ -191,6 +208,7 @@ echo "Testing: --help documents --ensemble, --custom-model, --friction, --pressu
 stb-mlmd --help > log_help.txt 2>&1
 check_contains "ensemble" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "friction" log_help.txt
 check_contains "pressure" log_help.txt
 check_contains "equilibration-steps" log_help.txt

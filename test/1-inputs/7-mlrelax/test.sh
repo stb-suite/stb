@@ -166,12 +166,13 @@ if command -v mace_run_train &> /dev/null && [ -d "$MLFF_FIXTURES" ]; then
     (cd custom_model_src && stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o . --epochs 2 --batch-size 4 \
         --device cpu --name quick_model --skip-foundation-comparison --no-intro > ../log_quicktrain.txt 2>&1)
     QUICK_MODEL=$(find custom_model_src -maxdepth 1 -name "quick_model*.model" | sort | tail -1)
+    QUICK_CARD="$(dirname "$QUICK_MODEL")/mlff_model_card.json"
     if [ -n "$QUICK_MODEL" ]; then
         # Relax the SAME O2 reference the model was fine-tuned on (not
         # si_ge_defect.fdf) -- a model trained only on O never learned Si/Ge,
         # so it would (correctly) fail on elements outside its training set.
         rm -f custom_relaxed.fdf
-        stb-mlrelax -f custom_model_src/mlff_config_001/calc.fdf --custom-model "$QUICK_MODEL" \
+        stb-mlrelax -f custom_model_src/mlff_config_001/calc.fdf --custom-model "$QUICK_MODEL" --custom-model-card "$QUICK_CARD" \
             -o custom_relaxed.fdf --no-intro > log_custommodel.txt 2>&1
         check_exit_code $? 0
         check_contains "Model.*custom" log_custommodel.txt
@@ -186,9 +187,14 @@ else
 fi
 
 echo "Testing: --custom-model with a nonexistent file (expects failure)"
-stb-mlrelax -f si_ge_defect.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_missing.txt 2>&1
-check_exit_code $? 1
+stb-mlrelax -f si_ge_defect.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --no-intro > log_custommodel_missing.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel_missing.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlrelax -f si_ge_defect.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_missing_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_missing_nocard.txt
 
 
 # --- 5. --help / --version ---
@@ -201,6 +207,7 @@ check_contains "relax-cell" log_help.txt
 check_contains "fmax" log_help.txt
 check_contains "model" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "save-report" log_help.txt
 check_contains "save-data" log_help.txt
 check_contains "view" log_help.txt

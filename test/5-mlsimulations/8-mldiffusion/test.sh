@@ -161,10 +161,16 @@ check_exit_code $? 1
 check_contains "not found" log_missing_input.txt
 
 echo "Testing: --custom-model with a nonexistent file"
-stb-mldiffusion --file si8.fdf --vacancy-index 0 --custom-model does_not_exist.model \
+stb-mldiffusion --file si8.fdf --vacancy-index 0 --custom-model does_not_exist.model --custom-model-card does_not_exist.json \
     --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mldiffusion --file si8.fdf --vacancy-index 0 --custom-model does_not_exist.model \
+    --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: --version"
 stb-mldiffusion --version > log_version.txt 2>&1
@@ -175,6 +181,7 @@ stb-mldiffusion --help > log_help.txt 2>&1
 check_contains "vacancy-index" log_help.txt
 check_contains "shell-tolerance" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "freeze-substrate" log_help.txt
 
 

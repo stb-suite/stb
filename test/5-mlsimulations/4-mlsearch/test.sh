@@ -218,9 +218,14 @@ check_exit_code $? 1
 check_contains "not found" log_missing_input.txt
 
 echo "Testing: --custom-model with a nonexistent file"
-stb-mlsearch --file si8.fdf --custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
-check_exit_code $? 1
+stb-mlsearch --file si8.fdf --custom-model does_not_exist.model --custom-model-card does_not_exist.json --no-intro > log_custommodel.txt 2>&1
+check_exit_code $? 2
 check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--custom-model-card) is rejected"
+stb-mlsearch --file si8.fdf --custom-model does_not_exist.model --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: --version"
 stb-mlsearch --version > log_version.txt 2>&1
@@ -233,6 +238,7 @@ check_contains "\-\-dr" log_help.txt
 check_contains "temperature" log_help.txt
 check_contains "seed" log_help.txt
 check_contains "custom-model" log_help.txt
+check_contains "custom-model-card" log_help.txt
 check_contains "no-pre-relax" log_help.txt
 check_contains "no-final-cell-relax" log_help.txt
 check_contains "trajectory-format" log_help.txt

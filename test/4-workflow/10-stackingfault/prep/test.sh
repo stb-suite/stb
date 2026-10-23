@@ -360,9 +360,15 @@ check_contains "not found" log_missing.txt
 
 echo "Testing: --ml-custom-model with a nonexistent file"
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf --mode 2 \
-    --ml-custom-model does_not_exist.model --no-intro > log_custommodel.txt 2>&1
+    --ml-custom-model does_not_exist.model --ml-custom-model-card does_not_exist.json --no-intro > log_custommodel.txt 2>&1
 check_exit_code $? 2
-check_contains "\-\-ml-custom-model file not found" log_custommodel.txt
+check_contains "not found" log_custommodel.txt
+
+echo "Testing: a custom model without its model card (--ml-custom-model-card) is rejected"
+stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf --mode 2 \
+    --ml-custom-model does_not_exist.model --no-intro > log_custommodel_nocard.txt 2>&1
+check_exit_code $? 2
+check_contains "custom-model-card" log_custommodel_nocard.txt
 
 echo "Testing: --version"
 stb-stackingfault --version > log_version.txt 2>&1

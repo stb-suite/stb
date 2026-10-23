@@ -1431,6 +1431,9 @@
   \newunicodechar{₃}{\textsubscript{3}}
   \newunicodechar{₄}{\textsubscript{4}}
   \newunicodechar{ₓ}{\textsubscript{x}}
+  \newunicodechar{ξ}{\ensuremath{\xi}}
+  \newunicodechar{₊}{\textsubscript{+}}
+  \newunicodechar{₋}{\textsubscript{-}}
   \newunicodechar{→}{\ensuremath{\rightarrow}}
   \newunicodechar{↔}{\ensuremath{\leftrightarrow}}
   \newunicodechar{⇌}{\ensuremath{\rightleftharpoons}}
@@ -32674,125 +32677,1337 @@ Example usage:
 \menucode{4.18.2} & Stage 2 - Analysis & \hyperref[cmd-stb-eosAnalysis]{\texttt{stb-\allowbreak{}eosAnalysis}} \\
 \end{tabularx}
 
-\textbf{Guided example:} none yet in the repository; this section is the reference.
+\textbf{Guided example:} \href{https://github.com/stb-suite/stb/tree/main/examples/4.18-eos}{\texttt{examples/\allowbreak{}4.\allowbreak{}18-\allowbreak{}eos/}}
 
 \textbf{Summary:} Generate isotropically-scaled-volume structures, then fit an E vs V equation of state (V0/E0/B0/B0') from the resulting SIESTA energies. For a fast ML-only preview (no SIESTA) instead, see ML Simulations \textgreater{} ML Equation of State (\texttt{stb-\allowbreak{}mleos}).
 \end{toolinfo}
 
-\subsection{Overview}
+\subsection{Guide}
+\label{guide-4.18}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}4.\allowbreak{}18-\allowbreak{}eos/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
-The equation of state $E(V)$ of a bulk crystal gives its equilibrium volume, cohesive
-curvature and bulk modulus from a handful of SIESTA total energies at isotropically scaled
-volumes. This is the DFT counterpart of \cmd{stb-mleos} (\menucode{5.11}), with the same
-volume convention, and an independent route to the bulk modulus obtained from the elastic
-tensor (\menucode{4.2}); agreement between the two is a check of the calculations themselves.
+This workflow has 2 stages: \textbf{Stage 1} (\texttt{stb-\allowbreak{}eosInputs}, code \texttt{4.\allowbreak{}18.\allowbreak{}1}) takes an
+\textbf{already relaxed} bulk structure and a \texttt{calc.\allowbreak{}fdf} template and writes one
+ready-to-run SIESTA folder per scanned volume --- the cell scaled isotropically,
+your template untouched, a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} that fixes the cell and makes every
+folder a single point, and the pseudopotentials. \textbf{Stage 2} (\texttt{stb-\allowbreak{}eosAnalysis},
+code \texttt{4.\allowbreak{}18.\allowbreak{}2}) reads the finished runs back and fits an \textbf{equation of state}
+\texttt{E(V)} --- equilibrium volume \texttt{V0}, energy \texttt{E0}, bulk modulus \texttt{B0} and its pressure
+derivative \texttt{B0\textquotesingle{}} --- plus the quantities that tell you whether to trust it: SIESTA\textquotesingle s
+own pressure (from the stress tensor) against \texttt{−dE/\allowbreak{}dV} of the fit, a second bulk
+modulus from the stress alone, leave-one-out uncertainties, residuals, the
+consistency of the level of theory across folders, the suggested new lattice
+constant, a pass/warn table of checks, and a 6-panel dashboard.
 
-\begin{theorybox}[Equations of state]
-With $V_0$, $E_0$, $B_0=V_0\,\partial^2E/\partial V^2|_{V_0}$ and $B_0'=\partial B/\partial P$,
-the third-order Birch--Murnaghan form \cite{Birch1947eos} is
-\[
-E(V) = E_0 + \frac{9V_0B_0}{16}\left\{\left[\Big(\frac{V_0}{V}\Big)^{2/3}-1\right]^3B_0'
-+\left[\Big(\frac{V_0}{V}\Big)^{2/3}-1\right]^2\left[6-4\Big(\frac{V_0}{V}\Big)^{2/3}\right]\right\}.
-\]
-The Vinet \cite{Vinet1987}, Murnaghan \cite{Murnaghan1944} and stabilized-jellium forms are also
-available (through ASE's \texttt{EquationOfState} \cite{Larsen2017ase}). The pressure is
-$P=-dE/dV$.
-\end{theorybox}
+It answers a question none of \texttt{4.\allowbreak{}1}--\texttt{4.\allowbreak{}17} does in this form: not how a structure
+responds to a small strain (that is \texttt{4.\allowbreak{}2} elastic constants), nor what a single
+relaxed cell costs (\texttt{4.\allowbreak{}3} cohesive energy), but \textbf{how the energy of the crystal
+depends on its volume over a finite range} --- the curve from which the lattice
+constant, the compressibility, the pressure at any volume and the volume at any
+pressure follow. The worked example (Section 5) runs the whole thing for real, with
+SIESTA, on bulk silicon: a 14-setup convergence study (k-points, mesh, basis) and the
+comparison with an all-electron calculation, which turns out to teach more about
+how to judge a basis set than about silicon.
 
-\subsection{Stage 1: volumes (\cmd{stb-eosInputs}, \menucode{4.18.1})}
+Both stages live in this one folder and this one tutorial --- same reasoning as
+\texttt{4.\allowbreak{}1}--\texttt{4.\allowbreak{}5}, \texttt{4.\allowbreak{}15} and \texttt{4.\allowbreak{}16}: Stage 1\textquotesingle s output exists only to feed Stage 2.
 
-From one \file{.fdf} with fractional coordinates (\opt{--file}; bulk only -- a vacuum axis is
-refused) it writes \opt{--n-volumes} folders (default 9, at least 5 recommended for a
-four-parameter fit) spanning volume strains from $-$\opt{--strain-range} to $+$\opt{--strain-range}
-per cent (default 5). Each cell is scaled isotropically by $f=(1+s/100)^{1/3}$, so $s$ is a
-percentage of \emph{volume}; only \fdf{\%block LatticeVectors} changes, everything else in the file
-is kept verbatim, in \file{<output-dir>/vol\_<pct>/} (default \file{eos\_runs}). Run SIESTA in each
-folder as a single point or a relaxation of atomic positions at \emph{fixed cell}; letting the cell
-relax would destroy the scan.
+\subsubsection{1. Theory}\label{g4.18-1-theory}
+
+\textbf{Symbols at a glance}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2174}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7826}}@{}}
+\toprule\noalign{}
+Symbol & Meaning \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{V}, \texttt{V0} & cell volume; its value at the energy minimum (Å³; per atom when stated) \\
+\texttt{E(V)}, \texttt{E0} & total energy of the cell at volume \texttt{V}; its minimum (eV) \\
+\texttt{P\ =\allowbreak{}\ −dE/\allowbreak{}dV} & pressure of the static lattice (GPa; \texttt{1\ eV/\allowbreak{}Å³\ =\allowbreak{}\ 160.\allowbreak{}2177\ GPa}) \\
+\texttt{B\ =\allowbreak{}\ −V\ dP/\allowbreak{}dV\ =\allowbreak{}\ V\ d²E/\allowbreak{}dV²} & bulk modulus at volume \texttt{V}; \texttt{B0\ =\allowbreak{}\ B(V0)} (GPa) \\
+\texttt{B0\textquotesingle{}\ =\allowbreak{}\ dB/\allowbreak{}dP} & pressure derivative of the bulk modulus at \texttt{P\ =\allowbreak{}\ 0} (dimensionless) \\
+\texttt{σ} & SIESTA\textquotesingle s stress tensor (eV/Å³): positive means the cell is under tension \\
+\texttt{P\_\allowbreak{}SIESTA\ =\allowbreak{}\ −tr(σ)/\allowbreak{}3} & the pressure each run reports through its own stress \\
+\texttt{x\ =\allowbreak{}\ V0/\allowbreak{}V} & compression ratio \\
+\texttt{f\ =\ {[}(V0/V)\^{}(2/3)\ −\ 1{]}\ /\ 2} & Eulerian finite strain \\
+\texttt{Δ} & Delta-test distance between two equations of state (meV/atom) \\
+\texttt{N} & number of atoms of the cell \\
+\end{longtable}
+\endgroup
+
+\paragraph{1.1 Why an equation of state}\label{g4.18-11-why-an-equation-of-state}
+
+At zero temperature and with the nuclei held at their lattice sites (the \emph{static
+lattice}), a crystal at volume \texttt{V} has the energy \texttt{E(V)} obtained by relaxing
+everything else. That one function holds:
+
+\begin{itemize}
+\tightlist
+\item
+  the \textbf{equilibrium volume} \texttt{V0}, hence the lattice constant of the material at the
+  level of theory used;
+\item
+  the \textbf{cohesive-energy minimum} \texttt{E0} (a reference for energy differences between
+  phases);
+\item
+  the \textbf{bulk modulus} \texttt{B0} --- how hard it is to compress --- and its pressure
+  derivative \texttt{B0\textquotesingle{}} --- how fast it hardens;
+\item
+  the \textbf{pressure} at any volume, \texttt{P\ =\allowbreak{}\ −dE/\allowbreak{}dV}, and by inversion the \textbf{volume under
+  any pressure}.
+\end{itemize}
+
+It is the input of many other calculations: the quasi-harmonic approximation (\texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha} scans exactly this volume range), thermal expansion, the transition pressure
+between two phases (the crossing of their enthalpies, Section 1.10), the volume at
+which a high-pressure experiment is to be simulated. And it is the cheapest honest
+test of a SIESTA setup: pseudopotential, basis, mesh cutoff and k-sampling all leave a
+mark on \texttt{V0} and \texttt{B0} that can be compared with experiment and with other codes
+(Section 1.8).
+
+One SIESTA run gives one point \texttt{E(V)}. A scan of 9--11 volumes and a fit gives the curve.
+
+\paragraph{1.2 Thermodynamics in four lines}\label{g4.18-12-thermodynamics-in-four-lines}
+
+For the static lattice the pressure, the bulk modulus and its derivative are
 
 \begin{codeblock}
-stb-eosInputs --file si.fdf --n-volumes 9 --strain-range 6
-# ... run SIESTA in eos_runs/vol_*/  (fixed cell)
-stb-eosAnalysis --dir eos_runs --eos all
-stb-eosAnalysis --dir eos_runs --target-pressure 5 10 20
+P(V)  = −dE/dV                                                              (1)
+B(V)  = −V dP/dV = V d²E/dV²                                                (2)
+B0'   = dB/dP at P = 0                                                      (3)
+H(P)  = E(V) + P V      (enthalpy; at T = 0 it is the Gibbs energy)        (4)
 \end{codeblock}
 
-\subsection{Stage 2: fit (\cmd{stb-eosAnalysis}, \menucode{4.18.2})}
+At zero external pressure the equilibrium volume satisfies \texttt{dE/\allowbreak{}dV\ =\allowbreak{}\ 0}; under an
+external pressure \texttt{P} it satisfies \texttt{dE/\allowbreak{}dV\ =\allowbreak{}\ −P}, i.e. it minimizes \texttt{H}. Near the
+minimum a parabola is the first approximation,
 
-It reads the total energy and the cell actually used (last \texttt{outcell} block) from every
-log (\opt{--file}, default \file{calc.out}), fits the chosen form (\opt{--eos}, default
-\texttt{birchmurnaghan}) and reports $V_0$, $E_0$, $B_0$ (GPa), $B_0'$ and $R^2$, warning when $V_0$
-falls outside the scanned volumes (the minimum is then extrapolated: widen or recentre the scan).
-\texttt{--eos all} fits every form on the same data, a robustness check of the fit.
-\opt{--target-pressure} inverts the fitted curve and gives, for each pressure, the volume and the
-linear scale factor of the lattice, flagged \texttt{[EXTRAPOLATED]} when the pressure lies outside
-the range the scan actually spans. Outputs: \file{eos\_curve.dat} and \file{.gplot} (\opt{-o}).
+\begin{codeblock}
+E(V) ≈ E0 + (B0 / 2 V0) (V − V0)²          so       B0 ≈ V0 · d²E/dV²          (5)
+\end{codeblock}
 
-\subsection{Practical notes}
+and its failure --- the curve is stiffer when compressed than when expanded ---
+is exactly what \texttt{B0\textquotesingle{}} measures (about 4 for most solids: Section 5.2 finds 4.1--4.3
+for silicon). A solid\textquotesingle s \texttt{B} rises with pressure; the energy is therefore \emph{not}
+symmetric about \texttt{V0}, and a fit that forgets it returns a wrong \texttt{B0}.
+
+\paragraph{1.3 What the SIESTA runs give, and how the cell is scaled}\label{g4.18-13-what-the-siesta-runs-give-and-how-the-cell-is-scaled}
+
+Each folder is one SCF calculation at a fixed cell: the total (free) energy \texttt{E}, the
+atomic forces and the stress tensor \texttt{σ} come out of the same run. This workflow
+scales the cell \textbf{isotropically},
+
+\begin{codeblock}
+L = L0 · (1 + ε_V / 100)^(1/3)          on every lattice vector                     (6)
+\end{codeblock}
+
+with \texttt{ε\_\allowbreak{}V} the volume strain in percent (from \texttt{−strain\_\allowbreak{}range} to \texttt{+strain\_\allowbreak{}range}),
+the same convention as \texttt{stb-\allowbreak{}mleos} and \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha}. The \emph{shape} of the cell
+(its angles and axis ratios) is kept, and the atomic positions are fractional, so
+they scale for free: for a crystal whose atoms have no free internal coordinates
+(diamond, fcc, bcc, rocksalt...) every folder is already the relaxed structure at
+its volume, and one SCF each is enough (\textbf{single point}, the default). If the
+crystal has free internal coordinates (wurtzite, rutile, quartz...), \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions}
+lets the ions relax at each volume, \emph{with the cell fixed}: letting the cell relax
+would undo the scan.
+
+Two routes to the pressure exist inside every run: the derivative of the energy
+across the scan (Eq. 1) and the stress tensor of each run,
+
+\begin{codeblock}
+P_SIESTA = −tr(σ) / 3                                                       (7)
+\end{codeblock}
+
+(\texttt{σ\ \textgreater{}\ 0}: the cell is under tension, it wants to shrink; so a cell \emph{larger} than \texttt{V0} has
+\texttt{σ\ \textgreater{}\ 0} and \texttt{P\ \textless{}\ 0}). Stage 2 compares them (Section 1.6).
+
+\paragraph{1.4 Equation-of-state forms}\label{g4.18-14-equation-of-state-forms}
+
+An equation of state is a function \texttt{E(V;\ E0,\allowbreak{}\ V0,\allowbreak{}\ B0,\allowbreak{}\ B0\textquotesingle{})} with four parameters, fitted
+by least squares to the scanned points. The ones \texttt{stb-\allowbreak{}eosAnalysis} offers (via ASE\textquotesingle s
+\texttt{EquationOfState}, {[}15{]}):
+
+\textbf{Murnaghan} {[}1{]} --- assumes the bulk modulus is linear in pressure, \texttt{B(P)\ =\allowbreak{}\ B0\ +\ B0\textquotesingle{}\ P}:
+
+\begin{codeblock}
+E(V) = E0 + (B0 V / B0') [ (V0/V)^B0' / (B0' − 1) + 1 ] − B0 V0 / (B0' − 1)         (8)
+P(V) = (B0 / B0') [ (V0/V)^B0' − 1 ]
+\end{codeblock}
+
+\textbf{Birch--Murnaghan, third order} {[}2{]} --- the finite-strain (Eulerian) expansion of the
+energy carried to third order in \texttt{f}:
+
+\begin{codeblock}
+E(V) = E0 + (9 V0 B0 / 16) { [(V0/V)^(2/3) − 1]³ B0' + [(V0/V)^(2/3) − 1]² [6 − 4 (V0/V)^(2/3)] }   (9)
+     = E0 + (9/2) V0 B0 f² + (9/2) V0 B0 (B0' − 4) f³
+P(V) = (3 B0 / 2) (x^(7/3) − x^(5/3)) { 1 + (3/4)(B0' − 4)(x^(2/3) − 1) },        x = V0/V
+\end{codeblock}
+
+It is the default of the suite and of the Delta test {[}7{]}. Setting \texttt{B0\textquotesingle{}\ =\allowbreak{}\ 4} removes the
+cubic term: the \emph{second-order} Birch--Murnaghan form.
+
+\textbf{Vinet} {[}3{]} --- the "universal" form derived from an exponential interatomic
+potential, better behaved than Birch--Murnaghan for strong compression:
+
+\begin{codeblock}
+E(V) = E0 + (9 B0 V0 / ξ²) { 1 + [ξ (1 − X) − 1] exp[ξ (1 − X)] },      X = (V/V0)^(1/3),  ξ = (3/2)(B0' − 1)    (10)
+\end{codeblock}
+
+\textbf{Stabilized jellium (\texttt{sj})} {[}5{]} --- a polynomial in \texttt{V\^{}(−1/3)}, motivated by the
+stabilized-jellium model; ASE\textquotesingle s fit returns \texttt{V0}, \texttt{E0} and \texttt{B0} but no \texttt{B0\textquotesingle{}}, which the
+report then prints as \texttt{-}.
+
+Near the minimum all four coincide to within the numerical noise of the SCF: with the
+parameters of silicon, Birch--Murnaghan and Vinet differ by at most 0.05 meV/atom inside a ±8 \%
+window of volume (Murnaghan, the stiffest, by 0.11), by 0.8 and 1.7 meV/atom at ±15 \%, by 3 and 6
+meV/atom at ±20 \%, and by tens of meV beyond ±30 \% (Fig. 1). That is
+why \texttt{-\/-\allowbreak{}eos\ all} is a \emph{robustness check of the fit}, not a physical choice: if the forms agree on
+\texttt{B0} (the report tests 1 \%), the result does not depend on the functional form; if they
+do not, the scan is too wide or too narrow. \texttt{B0\textquotesingle{}} is the poorly determined parameter:
+it controls the \emph{asymmetry} of the curve, which a ±8 \% window barely samples.
+
+\stbfigure{4.18-eos/figures/eos_forms.png}{Equation-of-state forms for silicon: energy, pressure and bulk modulus}
+
+\emph{Fig. 1 --- The four equation-of-state forms for silicon\textquotesingle s parameters (all-electron
+reference \texttt{V0\ =\allowbreak{}\ 20.\allowbreak{}453\ Å³/\allowbreak{}atom}, \texttt{B0\ =\allowbreak{}\ 88.\allowbreak{}5\ GPa}, \texttt{B0\textquotesingle{}\ =\allowbreak{}\ 4.\allowbreak{}31}; \texttt{theory\_\allowbreak{}figures.\allowbreak{}py}). The
+grey band is the ±8 \% scan of the example. The harmonic approximation (Eq. 5) is the dotted
+parabola.}
+
+\paragraph{1.5 Fitting, and how sure the numbers are}\label{g4.18-15-fitting-and-how-sure-the-numbers-are}
+
+The fit is a non-linear least squares in the \textbf{energies}, \texttt{min\ Σ\ {[}E\_i\ −\ E(V\_i;\ E0,\ V0,\ B0,\ B0\textquotesingle{}){]}²}.
+Energies --- not pressures --- are fitted because they are the quantity SIESTA converges
+to the tightest tolerance; the pressure of each run is kept as an independent check
+(Section 1.6). Four parameters need at least 4 volumes; the tool asks for 5 and defaults
+to 9. A scan has to satisfy three practical conditions:
+
 \begin{itemize}
-  \item Converge \fdf{Mesh.Cutoff} and the k-grid first; $E(V)$ curvature is sensitive to both
-    (Pulay-like basis effects of a localized basis also change with volume).
-  \item Keep the k-grid identical at every volume (the template's own grid is copied unchanged).
-  \item For non-cubic crystals an isotropic scan ignores the relaxation of axial ratios; relax the
-    shape at each volume (fixed volume) for an accurate $B_0$ of anisotropic materials.
+\tightlist
+\item
+  it must \textbf{bracket the minimum}: points on both sides of \texttt{V0}, at least two each ---
+  otherwise \texttt{V0} is an extrapolation and \texttt{B0} is dominated by one branch of the curve;
+\item
+  it must be \textbf{wide enough} that the curvature stands above the SCF noise (a few
+  percent in volume is the usual lower bound), and \textbf{narrow enough} to stay where the
+  chosen form is accurate (up to \textasciitilde10 \% is typical; Section 1.4);
+\item
+  an \textbf{odd number} of volumes keeps the input volume itself in the scan.
 \end{itemize}
+
+\emph{Uncertainty.} The report gives the \textbf{leave-one-out} (jackknife) standard error of \texttt{V0}
+and \texttt{B0}: the fit is repeated with each point removed in turn, and
+
+\begin{codeblock}
+σ_jack = sqrt( (n − 1)/n · Σ_i (θ_i − θ̄)² )                                 (11)
+\end{codeblock}
+
+with \texttt{θ\_\allowbreak{}i} the parameter without point \texttt{i} {[}21{]}. It measures how much a single run can
+move the answer --- it is a statement about the \emph{scan}, not about the physics: it says
+nothing about the basis, the pseudopotential or the functional, which usually dominate
+(Section 5.5). A second diagnostic, the \textbf{window sensitivity}, refits with the central
+60 \% of the points only: a \texttt{B0} that moves by more than \textasciitilde2 \% means the answer depends on
+how far from \texttt{V0} you look, i.e. the curve is not described by the chosen form over the
+whole range.
+
+\emph{The parabolic limit} (Eq. 5) is the by-hand check of Section 1.12.
+
+\paragraph{\texorpdfstring{1.6 Two routes to the pressure: the stress and \texttt{−dE/\allowbreak{}dV}}{1.6 Two routes to the pressure: the stress and −dE/dV}}\label{g4.18-16-two-routes-to-the-pressure-the-stress-and-dedv}
+
+SIESTA prints the stress tensor of every run. For an atom-centred basis whose orbitals
+keep their \emph{shape and range} when the cell is scaled, the stress is the exact derivative
+of the energy with respect to the strain --- apart from the real-space mesh (Section
+1.7) and the SCF tolerance --- so \texttt{P\_\allowbreak{}SIESTA} (Eq. 7) must coincide with \texttt{−dE/\allowbreak{}dV}
+(Eq. 1) evaluated on the fitted curve. Stage 2 prints both for every volume and flags
+the maximum difference. This is a strong test: two different observables of the same
+SCF calculation, one of them not used in the fit.
+
+It is also worth contrasting with plane-wave codes: there the number of plane waves changes
+with the volume at a fixed cutoff, so the stress and \texttt{−dE/\allowbreak{}dV} differ by the \emph{Pulay stress}
+(finite-basis-set correction {[}6{]}) unless the cutoff is converged or the number of plane
+waves is held constant. SIESTA\textquotesingle s orbitals are tied to the atoms, so this particular
+inconsistency is absent; the residual disagreement points to the mesh, the SCF or a poor fit.
+
+The stress gives a \textbf{second bulk modulus} from the same runs: fit \texttt{P\_\allowbreak{}SIESTA(V)} with a
+cubic polynomial (a quadratic over ±8 \% truncates the curvature of \texttt{P(V)} and overestimates \texttt{B} by \textasciitilde2 \%) and take \texttt{B\ =\allowbreak{}\ −V\ dP/\allowbreak{}dV} at \texttt{V0} (the report calls it \emph{B0 from the stress alone}).
+It uses no energy at all; a \texttt{B0} that disagrees by more than a few percent with the
+energy route is a diagnostic, not a competition.
+
+\paragraph{\texorpdfstring{1.7 What moves \texttt{V0} and \texttt{B0}: the numerical settings}{1.7 What moves V0 and B0: the numerical settings}}\label{g4.18-17-what-moves-v0-and-b0-the-numerical-settings}
+
+Everything below is a \emph{convergence parameter} of the SIESTA calculation, not a physical
+one; the point of the example (Section 5) is to measure how much each moves the answer.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{K-point sampling.} A semiconductor with a gap converges quickly (smooth integrand);
+  a metal needs a much denser grid and a smearing (\texttt{ElectronicTemperature}), and its
+  \texttt{E(V)} is correspondingly noisier. The grid is the \emph{same} in every folder: a scaled cell
+  with the same divisions samples the scaled Brillouin zone consistently.
+\item
+  \textbf{Mesh cutoff.} SIESTA evaluates the Hartree and exchange-correlation terms on a
+  real-space grid whose spacing is set by \texttt{Mesh.\allowbreak{}Cutoff}. A scaled cell at the same cutoff
+  gets a grid of \emph{another integer size}, so \texttt{E(V)} carries a small, irregular noise (the
+  egg-box effect {[}10{]}) that a finer mesh reduces. It acts on the energy and, slightly
+  differently, on the stress: it is the main source of any residual \texttt{P\_\allowbreak{}SIESTA\ ≠\ −dE/\allowbreak{}dV}.
+\item
+  \textbf{Basis set.} Numerical atomic orbitals (NAOs) of finite range. Their size
+  (\texttt{PAO.\allowbreak{}BasisSize}: SZ \textless{} DZ \textless{} DZP \textless{} TZP...) and, above all, their \textbf{radii}, set by
+  \texttt{PAO.\allowbreak{}EnergyShift} (the energy a confined orbital is allowed to rise: a \emph{smaller} shift
+  means \emph{longer} orbitals) change the equilibrium volume and the stiffness. Short orbitals
+  overlap little: the basis functions of neighbouring atoms lend variational freedom to one
+  another more when the atoms are compressed (the basis-set superposition error), which
+  favours small volumes. Hence a poor or short basis tends to give a \texttt{V0} that is too
+  small and a \texttt{B0} that is too large; a longer basis moves both toward the complete-basis
+  value, and --- as the example shows --- may overshoot. Basis convergence is the slowest of the
+  three.
+\item
+  \textbf{Pseudopotential and functional.} Norm-conserving PseudoDojo pseudopotentials {[}13{]}
+  with PBE {[}12{]} are used here. Any other choice changes \texttt{V0} and \texttt{B0} systematically: that
+  is the physics of the approximation, not a convergence error.
+\end{itemize}
+
+\paragraph{1.8 Comparing with experiment and with an all-electron calculation}\label{g4.18-18-comparing-with-experiment-and-with-an-all-electron-calculation}
+
+Two comparisons, with different meanings.
+
+\textbf{Against experiment.} A static-lattice DFT calculation at 0 K differs from a
+laboratory measurement by (i) the functional\textquotesingle s own error --- PBE overestimates lattice
+constants by about 1 \% and underestimates bulk moduli by about 10 \% for silicon (Section
+5.6) --- and (ii) the thermal and zero-point motion the experiment contains and the static lattice
+does not. For silicon the zero-point correction is small; for light elements (diamond) it matters.
+So agreement within a few percent of experiment says the setup is sane, not that it is converged.
+
+\textbf{Against an all-electron calculation of the \emph{same functional}.} This isolates the
+numerical error of the pseudopotential-plus-basis machinery from the physics of PBE.
+The standard tool is the \textbf{Delta test} {[}7, 8, 9{]}: the root-mean-square energy difference
+between the two equations of state, integrated over ±6 \% of the mean volume,
+
+\begin{codeblock}
+Δ = sqrt( ∫ [E_a(V) − E_b(V)]² dV / (0.12 V̄0) ),      V̄0 = (V0,a + V0,b) / 2         (12)
+\end{codeblock}
+
+with each curve referred to its own minimum (this is how ASE\textquotesingle s \texttt{deltacodesdft.\allowbreak{}delta} and the
+\texttt{calcDelta} package evaluate it). \texttt{Δ} in meV/atom condenses \texttt{V0}, \texttt{B0} and \texttt{B0\textquotesingle{}} into one
+number. In the Delta test, the reference is the all-electron WIEN2k calculation; for silicon
+its numbers are \texttt{V0\ =\allowbreak{}\ 20.\allowbreak{}4530\ Å³/\allowbreak{}atom}, \texttt{B0\ =\allowbreak{}\ 88.\allowbreak{}545\ GPa} and \texttt{B0\textquotesingle{}\ =\allowbreak{}\ 4.\allowbreak{}31} ({[}9{]}, file
+\texttt{WIEN2k.\allowbreak{}txt}). The example (Section 5.6) uses exactly this reference.
+
+\emph{Why \texttt{B0} alone is a poor figure of merit.} \texttt{B} depends strongly on the volume at which
+it is evaluated: \texttt{dB/\allowbreak{}dV\ ≈\ −B0\ B0\textquotesingle{}/\allowbreak{}V0}, so a \texttt{V0} that is wrong by 1 \% moves \texttt{B0} by \texttt{B0\textquotesingle{}} \% ≈
+4 \% (about 4 GPa for silicon) \emph{in the other direction}. A basis that makes \texttt{V0} too large and
+\texttt{B} at a given volume unchanged will look as though it fixed \texttt{B0}. \texttt{V0}, \texttt{B0} at the same volume
+and \texttt{Δ} must be read together.
+
+\paragraph{1.9 Non-cubic crystals and internal coordinates}\label{g4.18-19-non-cubic-crystals-and-internal-coordinates}
+
+The isotropic scaling (Eq. 6) keeps the shape of the cell. For a cubic crystal that is the
+whole story. For a hexagonal, tetragonal or lower-symmetry one it is a \emph{constrained path}:
+\texttt{c/\allowbreak{}a} (and any angle) stays at the input\textquotesingle s value, although the fully relaxed solid under
+pressure would change it. The \texttt{B0} obtained is the modulus along that path, not
+the hydrostatic bulk modulus --- the two differ by an amount that depends on how soft \texttt{c/\allowbreak{}a} is
+(large for layered materials). The report prints a note whenever the crystal is not cubic. To
+get the hydrostatic curve, relax the shape at each volume
+(SIESTA\textquotesingle s \texttt{MD.\allowbreak{}VariableCell} with \texttt{Constant.\allowbreak{}Volume}, outside this workflow), or at least
+relax \texttt{c/\allowbreak{}a} at \texttt{V0} first and scan from there.
+
+Internal coordinates are a separate issue: with free coordinates a single point is not
+the relaxed energy at that volume, so use \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions}; the report\textquotesingle s residual-force
+check flags a scan that needs it.
+
+\paragraph{1.10 Target pressure, enthalpy and phase stability}\label{g4.18-110-target-pressure-enthalpy-and-phase-stability}
+
+The fit is also a pressure--volume relation. \texttt{-\/-\allowbreak{}target-\allowbreak{}pressure\ P1\ P2\ .\allowbreak{}.\allowbreak{}.\allowbreak{}} inverts
+\texttt{P(V)\ =\allowbreak{}\ −dE/\allowbreak{}dV} of the fit and reports, for each pressure, the volume and the linear
+scale \texttt{L/L(V0)\ =\ (V/V0)\^{}(1/3)} of the cell --- for example the lattice constant to use for a
+calculation at 5 GPa. Pressures outside the range the scan covered (\texttt{P(V)} at the ends of the
+scanned volumes) are flagged \textbf{EXTRAPOLATED}: there the equation of state\textquotesingle s \emph{form} decides the
+answer, not the data.
+
+A transition between two phases at \texttt{T\ =\allowbreak{}\ 0} happens where their enthalpies cross,
+\texttt{H\_\allowbreak{}1(P)\ =\allowbreak{}\ E\_\allowbreak{}1(V\_\allowbreak{}1)\ +\ P\ V\_\allowbreak{}1\ =\allowbreak{}\ H\_\allowbreak{}2(P)}: run this workflow for each phase with the same
+settings and compare \texttt{H(P)} --- the common tangent construction in \texttt{E(V)}.
+
+\paragraph{1.11 What this workflow simplifies --- explicitly}\label{g4.18-111-what-this-workflow-simplifies--explicitly}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Static lattice}: no zero-point energy, no thermal pressure; it is the 0 K curve. Finite
+  temperature needs phonons (\texttt{4.\allowbreak{}4}, \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha}).
+\item
+  \textbf{Isotropic scaling only}: Section 1.9.
+\item
+  \textbf{Four-parameter empirical forms}: none of them is exact; their agreement is evidence,
+  not proof (and \texttt{B0\textquotesingle{}} is the weakest parameter).
+\item
+  \textbf{The jackknife} quantifies the scan\textquotesingle s sensitivity to single points, not the systematic
+  error of the setup.
+\item
+  \textbf{Single point by default}: valid only when atoms have no free internal coordinates.
+\item
+  \textbf{No automatic convergence}: the tool reports what a setting does (Section 5); you decide
+  how far to push it.
+\item
+  \textbf{One SIESTA output file per folder} (\texttt{calc.\allowbreak{}out}) is the source of energy, volume and stress.
+\end{itemize}
+
+\paragraph{1.12 A calculation you can check by hand}\label{g4.18-112-a-calculation-you-can-check-by-hand}
+
+Take three consecutive rows of the table of the example\textquotesingle s base scan (Section 5.2) --- the volume
+of the input cell and its two neighbours:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3889}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.6111}}@{}}
+\toprule\noalign{}
+\texttt{V} (Å³) & \texttt{E} (eV) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+40.2401 & −229.937172 \\
+40.8944 & −229.938064 \\
+41.5487 & −229.933014 \\
+\end{longtable}
+\endgroup
+
+With a step \texttt{h\ =\allowbreak{}\ 0.\allowbreak{}6543\ Å³}, the second finite difference is
+
+\begin{codeblock}
+E'' ≈ (E₋ + E₊ − 2 E₀) / h² = (−229.937172 − 229.933014 + 2·229.938064) / 0.6543² = 0.013879 eV/Å⁶
+B(40.894) = V E'' = 40.894 · 0.013879 · 160.2177 = 90.9 GPa
+\end{codeblock}
+
+and the central difference of the energy gives the pressure,
+
+\begin{codeblock}
+P(40.894) = −(E₊ − E₋)/(2h) · 160.2177 = −0.509 GPa
+\end{codeblock}
+
+For comparison, the full Birch--Murnaghan fit of the 11 points gives \texttt{B\ =\allowbreak{}\ 92.\allowbreak{}0\ GPa} and \texttt{P\ =\allowbreak{}\ −0.\allowbreak{}54\ GPa}
+at that volume, SIESTA\textquotesingle s own stress gives \texttt{P\_\allowbreak{}SIESTA\ =\allowbreak{}\ −0.\allowbreak{}52\ GPa}, and the parabola through the three
+points above gives \texttt{V0\ =\allowbreak{}\ 40.\allowbreak{}666\ Å³} against \texttt{40.\allowbreak{}659\ Å³} of the fit. Three numbers, no software:
+\texttt{B} is right to \textasciitilde1 \%, the pressure to 0.03 GPa, and the equilibrium volume to 0.02 \%. The
+\texttt{1\ \%} in \texttt{B} is the asymmetry of the curve (\texttt{B0\textquotesingle{}}) that the parabola ignores.
+
+\subsubsection{2. Libraries and external dependencies used}\label{g4.18-2-libraries-and-external-dependencies-used}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{SIESTA} {[}10, 11{]} itself is \emph{not} called by the suite. It does the real work: the
+  SCF calculation of each volume, writing \texttt{calc.\allowbreak{}out} with the free energy, the cell
+  (\texttt{outcell:} block), the forces and the stress tensor. The reference data of Section 5 was
+  produced with SIESTA 5.4.2, GGA-PBE {[}12{]}, PseudoDojo norm-conserving pseudopotentials {[}13{]}
+  and Monkhorst--Pack k-grids {[}14{]}.
+\item
+  \textbf{\href{https://wiki.fysik.dtu.dk/ase/}{ASE}} {[}15{]} --- \texttt{ase.\allowbreak{}eos.\allowbreak{}EquationOfState} fits the four
+  forms (\texttt{stb.\allowbreak{}core.\allowbreak{}eos\_\allowbreak{}fit}, shared with \texttt{stb-\allowbreak{}mleos}); \texttt{ase.\allowbreak{}utils.\allowbreak{}deltacodesdft.\allowbreak{}delta}
+  evaluates Eq. 12 in \texttt{convergence\_\allowbreak{}table.\allowbreak{}py}; \texttt{ase.\allowbreak{}neighborlist} gives the shortest bond.
+\item
+  \textbf{numpy} / \textbf{\href{https://scipy.org/}{SciPy}} {[}16{]} --- the cubic splines that turn the fitted
+  curve into \texttt{P(V)} and \texttt{B(V)}, the polynomial fits of the pressure, the leave-one-out refits.
+\item
+  \textbf{\href{https://pymatgen.org/}{pymatgen}} {[}17{]} / \textbf{\href{https://spglib.readthedocs.io/}{spglib}}
+  {[}18{]} --- space group and crystal system, density, structure reading.
+\item
+  \textbf{\href{https://matplotlib.org/}{matplotlib}} {[}19{]} --- the dashboard (\texttt{-\/-\allowbreak{}png} / \texttt{-\/-\allowbreak{}show}). The
+  \texttt{.\allowbreak{}dat/\allowbreak{}.\allowbreak{}gplot} pair (\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}) is for gnuplot, which the suite never invokes.
+\end{itemize}
+
+\subsubsection{\texorpdfstring{3. Stage 1: generating the volume folders (\texttt{stb-\allowbreak{}eosInputs}, code \texttt{4.\allowbreak{}18.\allowbreak{}1})}{3. Stage 1: generating the volume folders (stb-eosInputs, code 4.18.1)}}\label{g4.18-3-stage-1-generating-the-volume-folders-stb-eosinputs-code-4181}
+
+\paragraph{3.1 What it does}\label{g4.18-31-what-it-does}
+
+\texttt{stb-\allowbreak{}eosInputs} takes an \textbf{already relaxed} structure (\texttt{-f}, fractional coordinates, bulk only)
+and your \texttt{calc.\allowbreak{}fdf} template (\texttt{-c}, default \texttt{.\allowbreak{}/\allowbreak{}calc.\allowbreak{}fdf}) and, for each of \texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} volumes
+between \texttt{−-\/-\allowbreak{}strain-\allowbreak{}range} and \texttt{+-\/-\allowbreak{}strain-\allowbreak{}range} percent, writes
+
+\begin{codeblock}
+<output-dir>/vol_<pct>/
+    structure.fdf        the structure, ONLY %block LatticeVectors scaled (Eq. 6)
+    calc.fdf             '%include config_extra.fdf' + your template, untouched
+    config_extra.fdf     the forced directives (Section 3.2)
+    <species>.psml       the pseudopotentials (-p: a bundled bank or a folder)
+<output-dir>/eos_scan.json   the plan: structure, volumes, forced directives
+\end{codeblock}
+
+It does not run SIESTA. Run each folder (\texttt{mpirun\ -np\ N\ siesta\ calc.\allowbreak{}fdf\ \textgreater{}\ calc.\allowbreak{}out}) and call
+Stage 2. Pseudopotentials follow the suite\textquotesingle s convention (\texttt{-p\ dojo}, \texttt{-p\ virtual\_\allowbreak{}vault} or a folder path;
+the same as \texttt{stb-\allowbreak{}optical}, \texttt{stb-\allowbreak{}inputfile}, ...), and the interactive menu asks for them with the same prompt.
+
+\paragraph{\texorpdfstring{3.2 \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}: everything mandatory, the template untouched}{3.2 config\_extra.fdf: everything mandatory, the template untouched}}\label{g4.18-32-config_extrafdf-everything-mandatory-the-template-untouched}
+
+The scan only makes sense if every folder is \emph{one} SCF at \emph{its} fixed cell. Those requirements
+are written into each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, and \texttt{calc.\allowbreak{}fdf} starts with
+\texttt{\%include\ config\_\allowbreak{}extra.\allowbreak{}fdf} followed by your template byte for byte. SIESTA\textquotesingle s fdf reader is
+first-occurrence-wins, so the forced values beat anything the template says --- even a template
+meant for a variable-cell relaxation:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1739}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2464}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.5797}}@{}}
+\toprule\noalign{}
+Directive & Forced & Why \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{MD.\allowbreak{}VariableCell} & \texttt{false} & the cell is the scan variable: it must never relax \\
+\texttt{MD.\allowbreak{}TypeOfRun} & \texttt{CG} & no molecular dynamics \\
+\texttt{MD.\allowbreak{}Steps} / \texttt{MD.\allowbreak{}NumCGsteps} & \texttt{0} (single point) or \texttt{-\/-\allowbreak{}relax-\allowbreak{}steps} & no relaxation, or an ionic budget with \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions} \\
+\texttt{MD.\allowbreak{}MaxForceTol} & \texttt{0.\allowbreak{}01\ eV/\allowbreak{}Ang} & only with \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions} \\
+\texttt{kgrid.\allowbreak{}MonkhorstPack} & from \texttt{-\/-\allowbreak{}kgrid}/\texttt{-\/-\allowbreak{}kgrid-\allowbreak{}density} & only when the template has no grid (SIESTA would sample Gamma only) or you ask for one; a template\textquotesingle s own grid is kept \\
+\end{longtable}
+\endgroup
+
+Only these directives are forced: basis, mesh cutoff, functional, SCF settings are whatever the
+template says, identical in all folders. The same convention as every other prep stage of the suite
+(\texttt{stb-\allowbreak{}optical}, \texttt{stb-\allowbreak{}gqca}, \texttt{stb-\allowbreak{}adsorb}...): your \texttt{calc.\allowbreak{}fdf} is never edited.
+
+Special cases: if no \texttt{calc.\allowbreak{}fdf} exists and \texttt{-c} was not given, only the scaled structures are written
+(the earlier behavior of the tool); if \texttt{-c} is the same file as \texttt{-\/-\allowbreak{}file} (a self-contained input), the scaled
+copy of it is the run input, with the \texttt{\%include} on top.
+
+\paragraph{3.3 The report, live}\label{g4.18-33-the-report-live}
+
+\begin{codeblock}
+[1] INPUT STRUCTURE
+------------------------------------------------------------
+Formula         : Si2  (2 atom(s), 1 species)
+Lattice (Ang)   : a=3.8672  b=3.8672  c=3.8672
+Angles (deg)    : alpha=60.00  beta=60.00  gamma=60.00
+Volume          : 40.8944 Ang^3  (20.4472 Ang^3/atom)
+Density         : 2.2809 g/cm^3
+Shortest bond   : 2.3681 Ang
+Detected        : 3D (bulk material)
+Space group     : Fd-3m (No. 227), cubic system
+Species | Z  | Atoms | Valence e- | Total e- | Valence from
+-----------------------------------------------------------
+Si      | 14 | 2     | 4          | 8        | Si.psml
+Valence electrons : 8
+
+[2] LEVEL OF THEORY READ FROM THE TEMPLATE
+------------------------------------------------------------
+XC functional ... GGA / PBE        Basis ... split DZP, PAO.EnergyShift 0.02 Ry
+Mesh cutoff ... 320 Ry             SCF k-grid ... 10x10x10 (spacing 0.199 1/Ang)
+SCF k-grid forced : no -- the template's own grid is kept (--kgrid / --kgrid-density override it)
+[NOTE] PAO.EnergyShift 0.02 Ry: V0 and B0 depend on the orbital cutoff radii; converge them ...
+
+[3] SCAN DEFINITION
+------------------------------------------------------------
+Volume strain   : -8.00 % .. +8.00 %, 11 points (step 1.600 %)
+Cell scaling    : L = L0 * (1 + strain/100)^(1/3) on every lattice vector (shape kept); fractional positions unchanged
+Folder     | dV/V0 (%) | V (Ang^3) | V/atom  | L/L0    | a b c (Ang)          | d_min (Ang)
+-------------------------------------------------------------------------------------------
+vol_m8.00/ | -8.00     | 37.6228   | 18.8114 | 0.97259 | 3.7612 3.7612 3.7612 | 2.3032
+ ...
+vol_0.00/  | +0.00     | 40.8944   | 20.4472 | 1.00000 | 3.8672 3.8672 3.8672 | 2.3681
+ ...
+vol_8.00/  | +8.00     | 44.1659   | 22.0830 | 1.02599 | 3.9677 3.9677 3.9677 | 2.4297
+
+[4] DIRECTIVES FORCED THROUGH config_extra.fdf (your template is not edited)
+------------------------------------------------------------
+Directive           | Forced value | Template had | Effect
+kgrid.MonkhorstPack | (not forced) | 10x10x10     | the template's own grid
+MD.TypeOfRun        | CG           | (absent)     | no molecular dynamics
+MD.Steps            | 0            | (absent)     | single point, no relaxation
+MD.NumCGsteps       | 0            | (absent)     | older spelling of the same budget, forced for templates that still use it
+MD.VariableCell     | false        | (absent)     | the cell is the scan variable: it must NEVER relax
+
+[5] FOLDERS WRITTEN        (one line per folder: structure.fdf, calc.fdf, config_extra.fdf, Si.psml)
+
+[6] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+11 volume folder(s) written under 'eos_runs' (calc.fdf is the SIESTA input).
+Scan record          : eos_runs/eos_scan.json (read by stb-eosAnalysis)
+Cost                 : 11 independent runs (single-point SCF each)
+Next steps:
+  1. Run SIESTA in every folder, e.g.:
+       for d in eos_runs/vol_*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+  2. Check that every run finished (SCF converged), then:
+       stb-eosAnalysis --dir eos_runs --eos all --show
+\end{codeblock}
+
+(\texttt{{[}0{]}} is the run metadata; the \texttt{a\ b\ c} of the primitive fcc cell are the primitive vectors, \texttt{a\_\allowbreak{}conventional\ /\allowbreak{}\ √2}.) Every warning
+of the run is repeated in a list at the end of the report.
+
+\paragraph{3.4 The advisories}\label{g4.18-34-the-advisories}
+
+Printed where they apply and repeated at the end of the report:
+
+\begin{itemize}
+\tightlist
+\item
+  the template does not \texttt{\%include} the structure file (SIESTA would use the unscaled cell in every
+  folder: eleven copies of the same calculation);
+\item
+  the template defines a lattice of its own (\texttt{LatticeVectors}, \texttt{LatticeParameters}, \texttt{LatticeConstant})
+  next to the included structure --- whichever SIESTA reads first wins;
+\item
+  a non-cubic crystal (Section 3.5), a small basis (SZ/DZ/SZP), no \texttt{Mesh.\allowbreak{}Cutoff}, Cartesian coordinates
+  (which would not scale), a \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} below 2 \% (curvature lost in SCF noise) or above 15 \%, and an even
+  number of volumes (no point at the input volume).
+\end{itemize}
+
+\paragraph{3.5 Bulk only, and the crystal system}\label{g4.18-35-bulk-only-and-the-crystal-system}
+
+A vacuum-padded structure (slab, wire, molecule) has no bounded cell volume: it is refused with an
+error. For a non-cubic crystal the report adds the \emph{constrained-path} note of Section 1.9 and records the crystal
+system in \texttt{eos\_\allowbreak{}scan.\allowbreak{}json}, from where Stage 2 repeats it.
+
+\paragraph{3.6 Validation}\label{g4.18-36-validation}
+
+\texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} below 5 and a \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} outside (0, 40) \% are rejected; a missing \texttt{-\/-\allowbreak{}file},
+an explicit \texttt{-c} that does not exist, an unknown \texttt{-p} source, and a vacuum-padded structure all exit
+with a clear \texttt{{[}ERROR{]}}.
+
+\paragraph{3.7 Running it both ways}\label{g4.18-37-running-it-both-ways}
+
+\begin{codeblock}
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-suite            # then: 4 (Workflow) -> 18 (Equation of State) -> 1 (Stage 1)  (or type 4.18.1)
+\end{codeblock}
+
+\subsubsection{\texorpdfstring{4. Stage 2: analyzing the results (\texttt{stb-\allowbreak{}eosAnalysis}, code \texttt{4.\allowbreak{}18.\allowbreak{}2})}{4. Stage 2: analyzing the results (stb-eosAnalysis, code 4.18.2)}}\label{g4.18-4-stage-2-analyzing-the-results-stb-eosanalysis-code-4182}
+
+\paragraph{4.1 Before running Stage 2}\label{g4.18-41-before-running-stage-2}
+
+Every \texttt{vol\_\allowbreak{}*} folder must hold the SIESTA output (\texttt{calc.\allowbreak{}out} by default, \texttt{-\/-\allowbreak{}file} to change it). A
+folder without it, or with an unparseable one, is \emph{skipped, not fatal}, and reported. Stage 2 reads each
+run\textquotesingle s free energy, the \textbf{last} \texttt{outcell:} block (the cell SIESTA actually used), the SCF convergence line,
+the forces and the stress tensor. \texttt{eos\_\allowbreak{}scan.\allowbreak{}json} next to the folders is optional but recommended: it enables
+the planned-versus-actual volume check and the suggested lattice constant.
+
+\paragraph{4.2 Report structure}\label{g4.18-42-report-structure}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.0805}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.9195}}@{}}
+\toprule\noalign{}
+Section & Content \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{{[}0{]}} & run metadata \\
+\texttt{{[}1{]}} & the scan (from \texttt{eos\_\allowbreak{}scan.\allowbreak{}json}) and the \textbf{level of theory of every folder}, checked for being identical \\
+\texttt{{[}2{]}} & one line per folder: read, skipped, SCF not confirmed \\
+\texttt{{[}3{]}} & the table: \texttt{V}, \texttt{V/\allowbreak{}atom}, \texttt{dV}, \texttt{E}, \texttt{E/\allowbreak{}atom}, \texttt{E\ −\ E\_\allowbreak{}min}, \texttt{P\_\allowbreak{}SIESTA}, SCF, force \\
+\texttt{{[}4{]}} & the fit(s): \texttt{V0}, \texttt{V0/\allowbreak{}atom}, \texttt{E0}, \texttt{B0}, \texttt{B0\textquotesingle{}}, \texttt{R²}, residual rms; uncertainty, window sensitivity, form spread; suggested \texttt{LatticeConstant} \\
+\texttt{{[}5{]}} & the \textbf{pressure cross-check}: \texttt{P\_\allowbreak{}SIESTA} vs \texttt{−dE/\allowbreak{}dV} per volume, the second \texttt{B0} from the stress, the pressure at \texttt{V0} \\
+\texttt{{[}6{]}} & \texttt{-\/-\allowbreak{}target-\allowbreak{}pressure}: volume and cell scale at each pressure \\
+\texttt{{[}7{]}} & the \textbf{checks table} (OK/WARN) with hints \\
+\texttt{{[}8{]}} & summary and the files written \\
+\texttt{{[}9{]}} & next steps \\
+\texttt{{[}10{]}} & every warning again \\
+\end{longtable}
+\endgroup
+
+\paragraph{\texorpdfstring{4.3 \texttt{{[}1{]}}--\texttt{{[}3{]}}: is the scan what you think?}{4.3 {[}1{]}--{[}3{]}: is the scan what you think?}}\label{g4.18-43-13-is-the-scan-what-you-think}
+
+\texttt{{[}1{]}} reads \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}fdf} and the pseudopotential files of \emph{each} folder, compares the settings
+(functional, basis, mesh cutoff, spin, smearing, D3, k-grid, pseudopotential hash) and warns on any difference ---
+\texttt{E(V)} is one curve only if they are all identical. \texttt{{[}2{]}} compares each run\textquotesingle s cell with the plan
+(a folder edited after Stage 1, or a \texttt{\%include} problem, shows as "SIESTA ran a cell of ... but the plan says ...").
+\texttt{{[}3{]}} prints the data with the pressure of each run\textquotesingle s own stress tensor.
+
+\paragraph{\texorpdfstring{4.4 \texttt{{[}4{]}}: the fit}{4.4 {[}4{]}: the fit}}\label{g4.18-44-4-the-fit}
+
+With \texttt{-\/-\allowbreak{}eos\ all} the four forms are fitted on the same data and listed side by side, with \texttt{Bracket\ ok} when
+\texttt{V0} lies in the scanned range; the reference fit (Birch--Murnaghan) feeds everything below. Besides the parameters:
+
+\begin{itemize}
+\tightlist
+\item
+  \emph{Uncertainty (leave-one-out)} --- Eq. 11 for \texttt{V0} and \texttt{B0};
+\item
+  \emph{Window sensitivity} --- \texttt{B0} from the central 60 \% of the points;
+\item
+  \emph{Spread between EOS forms} --- \texttt{B0} and \texttt{V0} range over the four forms;
+\item
+  \emph{Fit quality} --- \texttt{R²} and the residuals, in meV/atom;
+\item
+  \emph{Compressibility} \texttt{1/\allowbreak{}B0} in TPa⁻¹ and \texttt{B} of the curve at \texttt{V0};
+\item
+  \emph{Versus the input structure} --- \texttt{V0/\allowbreak{}V\_\allowbreak{}input}, the linear scale, and the \textbf{suggested \texttt{LatticeConstant}}
+  (the input\textquotesingle s \texttt{LatticeConstant} times the scale: the equilibrium volume at the input\textquotesingle s shape).
+\end{itemize}
+
+\paragraph{\texorpdfstring{4.5 \texttt{{[}5{]}}: the pressure cross-check}{4.5 {[}5{]}: the pressure cross-check}}\label{g4.18-45-5-the-pressure-cross-check}
+
+The table of \texttt{P\_\allowbreak{}SIESTA}, \texttt{−dE/\allowbreak{}dV} and the difference per volume; the maximum difference; the SIESTA pressure at the
+fitted \texttt{V0} (it should be \textasciitilde0); and the \textbf{second \texttt{B0}}, from the stress alone (Section 1.6). See Section 5.3 for what
+these numbers look like on real data and what moves them.
+
+\paragraph{\texorpdfstring{4.6 \texttt{{[}7{]}}: the checks}{4.6 {[}7{]}: the checks}}\label{g4.18-46-7-the-checks}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2929}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2857}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4214}}@{}}
+\toprule\noalign{}
+Check & Passes when & If it fails \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+All planned runs available & every folder of the plan was read & run the missing folders \\
+SCF converged in every run & each \texttt{calc.\allowbreak{}out} has the convergence line & rerun with more iterations / smaller mixing weight \\
+\texttt{V0} inside the scanned range & the fitted minimum lies within the data & widen \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} \\
+Points on both sides of \texttt{V0} (≥ 2 each) & \texttt{n\_\allowbreak{}below\ ≥\ 2} and \texttt{n\_\allowbreak{}above\ ≥\ 2} & re-centre the scan on \texttt{V0} (suggested \texttt{LatticeConstant}) \\
+Fit \texttt{R²} ≥ 0.9999 & --- & change the strain range; check the SCF settings \\
+Residual rms ≤ 0.5 meV/atom & --- & same \\
+\texttt{B0\textquotesingle{}} within 2.5--7 & physically plausible & too narrow a scan, or a noisy one \\
+EOS forms agree on \texttt{B0} (\textless{} 1 \%) & only with \texttt{-\/-\allowbreak{}eos\ all} & the functional form matters: the scan is too wide or narrow \\
+\texttt{B0} uncertainty (leave-one-out) \textless{} 1 \% & --- & a single run is moving the fit: inspect the table \\
+\texttt{B0} stable against the window (\textless{} 2 \%) & --- & the curve is not described by the form over the whole range \\
+\texttt{P\_\allowbreak{}SIESTA} agrees with \texttt{−dE/\allowbreak{}dV} (\textless{} 0.5 GPa) & --- & raise \texttt{Mesh.\allowbreak{}Cutoff}, tighten \texttt{DM.\allowbreak{}Tolerance}, widen the scan \\
+Residual pressure at \texttt{V0} small (\textless{} 0.2 GPa) & --- & same \\
+\texttt{B0} from stress agrees with energy (\textless{} 5 \%) & --- & same \\
+Residual forces ≤ 0.05 eV/Å & atoms are at equilibrium in every folder & use \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions} \\
+Same level of theory in every folder & --- & a folder was edited: rerun with identical settings \\
+\end{longtable}
+\endgroup
+
+The thresholds are conventions of the tool (they are constants at the top of \texttt{eos\_\allowbreak{}analysis.\allowbreak{}py}), not laws; a WARN says
+\emph{look here}.
+
+\paragraph{4.7 Plots and data on request}\label{g4.18-47-plots-and-data-on-request}
+
+Nothing is written unless asked for:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1579}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8421}}@{}}
+\toprule\noalign{}
+Option & Writes \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{-\/-\allowbreak{}show} & opens the 6-panel matplotlib dashboard (needs a display; without one it warns and only saves with \texttt{-\/-\allowbreak{}png}) \\
+\texttt{-\/-\allowbreak{}png} & \texttt{\textless{}output\textgreater{}\_\allowbreak{}summary.\allowbreak{}png}, the same dashboard \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & \texttt{\textless{}output\textgreater{}.\allowbreak{}dat} (data block and fitted curve) + \texttt{\textless{}output\textgreater{}.\allowbreak{}gplot} (E(V) and P(V), \texttt{gnuplot\ \textless{}output\textgreater{}.\allowbreak{}gplot} renders \texttt{\textless{}output\textgreater{}.\allowbreak{}pdf}) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}data} & \texttt{\textless{}output\textgreater{}\_\allowbreak{}table.\allowbreak{}csv} (one row per volume) + \texttt{\textless{}output\textgreater{}\_\allowbreak{}results.\allowbreak{}json} (every fit, check and number) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}report} & \texttt{stb\_\allowbreak{}eosAnalysis\_\allowbreak{}report.\allowbreak{}txt} \\
+\end{longtable}
+\endgroup
+
+The dashboard has six panels: \texttt{E(V)} with the data and every fit, the fit residuals, the pressure from the stress and from
+the fit, the bulk modulus along the curve \texttt{B(P)} (its slope at \texttt{P\ =\allowbreak{}\ 0} is \texttt{B0\textquotesingle{}}) with the stress-derived \texttt{B0} marked, \texttt{B0} by
+EOS form with the leave-one-out band, and a text summary.
+
+\paragraph{4.8 Guard rails}\label{g4.18-48-guard-rails}
+
+A missing or unparseable run is skipped and the fit uses the rest (fewer than 4 valid volumes is a hard error); a scan that
+does not bracket the minimum, a different level of theory in one folder, an unconverged SCF and a cell that is not the planned
+one are each reported where they apply, in \texttt{{[}7{]}}, and in \texttt{{[}10{]}}.
+
+\paragraph{4.9 Running it both ways}\label{g4.18-49-running-it-both-ways}
+
+\begin{codeblock}
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --target-pressure 0 5 10 --show
+stb-suite            # then: 4 -> 18 -> 2  (or type 4.18.2): it asks for the options above
+\end{codeblock}
+
+\subsubsection{5. Worked example: bulk silicon, end to end}\label{g4.18-5-worked-example-bulk-silicon-end-to-end}
+
+\paragraph{5.1 Set-up}\label{g4.18-51-set-up}
+
+Bulk silicon (diamond, Fd-3m), the 2-atom primitive fcc cell (\texttt{structure.\allowbreak{}fdf}, \texttt{a\ =\allowbreak{}\ 5.\allowbreak{}469\ Å}, the
+conventional-cell constant), PBE {[}12{]}, the PseudoDojo norm-conserving pseudopotential {[}13{]}, DZP basis with the default
+\texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}, a 10×10×10 Monkhorst--Pack grid, 300 K electronic temperature,
+\texttt{DM.\allowbreak{}Tolerance\ 1e-\allowbreak{}5} (\texttt{calc.\allowbreak{}fdf}). Eleven volumes from −8 \% to +8 \%, SIESTA 5.4.2, \texttt{mpirun\ -np\ 2}: about 6 s per
+volume. The reference data are \textbf{14 such scans} (Section 6): this \emph{base} setup and 13 others that change exactly one
+thing --- the k-grid (4³, 6³, 8³, 14³), the \texttt{Mesh.\allowbreak{}Cutoff} (150, 200, 450, 600 Ry), the basis (DZP and TZP with
+\texttt{PAO.\allowbreak{}EnergyShift} 0.02, 0.01, 0.005 Ry). Note that the 2-atom cell reports \texttt{a\ =\allowbreak{}\ b\ =\allowbreak{}\ c\ =\allowbreak{}\ 3.\allowbreak{}867\ Å} and angles of 60°: those are
+the primitive vectors (\texttt{a\_\allowbreak{}conventional\ /\allowbreak{}\ √2}); the conventional lattice constant is \texttt{a0\ =\ (8\ V0/atom)\^{}(1/3)}, which
+\texttt{convergence\_\allowbreak{}table.\allowbreak{}py} prints.
+
+\paragraph{5.2 The base scan}\label{g4.18-52-the-base-scan}
+
+\begin{codeblock}
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+\end{codeblock}
+
+The 11 energies (Section 4\textquotesingle s report \texttt{{[}3{]}}, shortened) follow a smooth curve with a minimum between the −1.6 \% and +0
+points, and a pressure that changes sign there:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1333}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1556}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.4000}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3111}}@{}}
+\toprule\noalign{}
+\texttt{dV} (\%) & \texttt{V} (Å³) & \texttt{E\ −\ E\_\allowbreak{}min} (meV/atom) & \texttt{P\_\allowbreak{}SIESTA} (GPa) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+−8.0 & 37.6228 & 37.95 & +8.650 \\
+−4.8 & 38.9315 & 11.49 & +4.450 \\
+−1.6 & 40.2401 & 0.45 & +1.023 \\
+0.0 & 40.8944 & 0.00 & −0.518 \\
++1.6 & 41.5487 & 2.53 & −1.918 \\
++4.8 & 42.8573 & 15.83 & −4.462 \\
++8.0 & 44.1660 & 38.32 & −6.530 \\
+\end{longtable}
+\endgroup
+
+The fit (\texttt{{[}4{]}}):
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2571}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1000}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1143}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0857}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1143}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.3286}}@{}}
+\toprule\noalign{}
+EOS form & \texttt{V0} (Å³) & \texttt{B0} (GPa) & \texttt{B0\textquotesingle{}} & \texttt{R²} & residual rms (meV/atom) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Birch--Murnaghan & 40.6594 & 94.26 & 4.188 & 0.999994 & 0.0325 \\
+Vinet & 40.6594 & 94.35 & 4.186 & 0.999995 & 0.0306 \\
+Murnaghan & 40.6593 & 94.05 & 4.193 & 0.999992 & 0.0378 \\
+stabilized jellium & 40.6593 & 94.29 & --- & 0.999995 & 0.0317 \\
+\end{longtable}
+\endgroup
+
+so \texttt{V0\ =\allowbreak{}\ 40.\allowbreak{}659\ Å³} (20.330 Å³/atom, \texttt{a0\ =\allowbreak{}\ 5.\allowbreak{}4585\ Å}), \texttt{E0\ =\allowbreak{}\ −229.\allowbreak{}938437\ eV} and \texttt{B0\ =\allowbreak{}\ 94.\allowbreak{}26\ ±\ 0.\allowbreak{}14\ GPa}
+(leave-one-out), \texttt{B0\textquotesingle{}\ =\allowbreak{}\ 4.\allowbreak{}19}. The four forms agree on \texttt{B0} to 0.32 \% and on \texttt{V0} to 0.0001 Å³; the central 7 of 11 points give
+\texttt{B0\ =\allowbreak{}\ 94.\allowbreak{}62} (+0.37 GPa); the residuals are 0.03 meV/atom --- the SCF noise. \texttt{V0} lies 0.57 \% below the volume of the input cell: the
+report suggests \texttt{LatticeConstant\ 5.\allowbreak{}4585} for the next scan. \textbf{All 15 checks of \texttt{{[}7{]}} are OK.} Statistically this is as clean a fit as
+one gets; Sections 5.4--5.6 show that "clean" is not "accurate".
+
+\stbfigure{4.18-eos/figures/si_dashboard.png}{The dashboard of stb-eosAnalysis on the base scan}
+
+\emph{Fig. 2 --- The dashboard (\texttt{-\/-\allowbreak{}png}) of the base scan: \texttt{E(V)} with the four fits, residuals, \texttt{P(V)} from the stress and from the fit,
+\texttt{B(P)}, \texttt{B0} by EOS form and by method, and the summary.}
+
+\paragraph{5.3 The pressure cross-check}\label{g4.18-53-the-pressure-cross-check}
+
+\texttt{{[}5{]}} compares the pressure of each run\textquotesingle s stress tensor with \texttt{−dE/\allowbreak{}dV} of the fit:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1667}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3333}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2619}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2381}}@{}}
+\toprule\noalign{}
+\texttt{V} (Å³) & \texttt{P\_\allowbreak{}SIESTA} (GPa) & \texttt{P\_\allowbreak{}fit} (GPa) & difference \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+37.6228 & +8.6495 & +8.6097 & +0.040 \\
+39.5858 & +2.7179 & +2.6678 & +0.050 \\
+40.8944 & −0.5181 & −0.5368 & +0.019 \\
+42.2030 & −3.2870 & −3.2488 & −0.038 \\
+44.1660 & −6.5302 & −6.5593 & +0.029 \\
+\end{longtable}
+\endgroup
+
+The largest difference over the 11 volumes is \textbf{0.050 GPa} (0.3 \% of the pressure range), the SIESTA pressure at the fitted \texttt{V0} is
+\texttt{+0.\allowbreak{}004\ GPa}, and the bulk modulus from the stress alone (a cubic polynomial of \texttt{P\_\allowbreak{}SIESTA(V)}, \texttt{B\ =\allowbreak{}\ −V\ dP/\allowbreak{}dV}) is \textbf{94.50 GPa}
+against 94.26 from the energies: two independent observables of the same runs agree to 0.3 \%. (A \emph{quadratic} fit of the pressure gives
+96.25 GPa, +2.1 \%: over a ±8 \% window it truncates the curvature of \texttt{P(V)}; the tool uses a cubic for that reason.)
+
+What moves this agreement is the \textbf{mesh}, not the basis or the k-points. At \texttt{Mesh.\allowbreak{}Cutoff} 150, 200, 320, 450, 600 Ry the largest
+\texttt{abs(P\_\allowbreak{}SIESTA\ −\ P\_\allowbreak{}fit)} is 0.124, 0.077, 0.050, 0.047, 0.055 GPa, while the \emph{energy} curve does not move at all (\texttt{V0} 20.328--20.330 Å³/atom,
+\texttt{E0} identical to 0.02 meV/atom): the stress feels the real-space grid before the energy does, and \textasciitilde0.05 GPa is the floor set by
+the SCF tolerance. A mesh cutoff that is fine for \texttt{E(V)} can still be too coarse for a pressure.
+
+\paragraph{5.4 Convergence: k-points and mesh}\label{g4.18-54-convergence-k-points-and-mesh}
+
+\stbfigure{4.18-eos/figures/convergence.png}{What converges and what does not: k-points, mesh, basis}
+
+\emph{Fig. 3 --- \texttt{V0} and \texttt{B0} (top), and below the total-energy convergence (k), the stress/energy agreement (mesh) and the distance to
+the all-electron reference (basis). Dotted: the all-electron values. \texttt{python3\ convergence\_\allowbreak{}table.\allowbreak{}py\ -\/-\allowbreak{}png}.}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2083}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1111}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.0833}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.4306}}@{}}
+\toprule\noalign{}
+k-grid & \texttt{V0} (Å³/atom) & \texttt{B0} (GPa) & \texttt{B0\textquotesingle{}} & \texttt{E0} above the densest (meV/atom) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+4×4×4 & 20.460 & 94.04 & 4.160 & 92.6 \\
+6×6×6 & 20.343 & 94.51 & 4.191 & 11.2 \\
+8×8×8 & 20.331 & 94.34 & 4.188 & 1.5 \\
+\textbf{10×10×10 (base)} & 20.330 & 94.26 & 4.188 & 0.32 \\
+14×14×14 & 20.330 & 94.22 & 4.190 & 0 \\
+\end{longtable}
+\endgroup
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2254}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1690}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1127}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.0845}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.4085}}@{}}
+\toprule\noalign{}
+\texttt{Mesh.\allowbreak{}Cutoff} (Ry) & \texttt{V0} (Å³/atom) & \texttt{B0} (GPa) & \texttt{B0\textquotesingle{}} & max \texttt{abs(P\_\allowbreak{}SIESTA\ −\ P\_\allowbreak{}fit)} (GPa) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+150 & 20.328 & 94.17 & 4.252 & 0.124 \\
+200 & 20.330 & 94.29 & 4.173 & 0.077 \\
+\textbf{320 (base)} & 20.330 & 94.26 & 4.188 & 0.050 \\
+450 & 20.330 & 94.29 & 4.185 & 0.047 \\
+600 & 20.330 & 94.27 & 4.165 & 0.055 \\
+\end{longtable}
+\endgroup
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The EOS properties converge faster than the total energy.} \texttt{E0} falls 92.6 → 11.2 → 1.5 → 0.3 meV/atom from 4³ to 14³, but the
+  error of a sparse grid is nearly the same at every volume and cancels in \texttt{E(V)} differences: \texttt{V0} is within 0.06 \% from 6³ and
+  \texttt{B0} within 0.3 GPa. The 10³ base grid is converged for this purpose; 6³ would have sufficed --- for a \emph{semiconductor}.
+\item
+  \textbf{The mesh does nothing to \texttt{V0} or \texttt{B0} above 150 Ry here} (the spread, 0.12 GPa, is the noise of the fit); it shows only in the
+  stress agreement (Section 5.3) and in \texttt{B0\textquotesingle{}}, which wanders between 4.17 and 4.25: it is determined to ±0.05 at best --- do not read a
+  difference of 0.1 in \texttt{B0\textquotesingle{}} between two setups as physics.
+\item
+  \textbf{Convergence is not monotone in the one number you look at.} The 4×4×4 row has a \texttt{V0} closer to the all-electron value (20.460 vs
+  20.453) than the converged grids (20.330), and the \emph{smallest} Delta distance (0.60 meV/atom) of all the k-point runs --- with a total energy
+  93 meV/atom off. A good agreement obtained from an unconverged setup is a coincidence; check the total energy before believing it.
+\end{itemize}
+
+\paragraph{5.5 The basis: the knob that matters}\label{g4.18-55-the-basis-the-knob-that-matters}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2933}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1600}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0800}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1067}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0800}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2800}}@{}}
+\toprule\noalign{}
+Basis, \texttt{PAO.\allowbreak{}EnergyShift} & \texttt{V0} (Å³/atom) & \texttt{a0} (Å) & \texttt{B0} (GPa) & \texttt{B0\textquotesingle{}} & \texttt{E0} vs base (meV/atom) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{DZP, 0.02 Ry (base)} & 20.330 & 5.4585 & 94.26 & 4.19 & 0 \\
+DZP, 0.01 Ry & 20.570 & 5.4799 & 88.76 & 4.33 & −48.2 \\
+DZP, 0.005 Ry & 20.705 & 5.4919 & 88.30 & 4.30 & −58.3 \\
+TZP, 0.02 Ry & 20.413 & 5.4660 & 92.70 & 4.08 & −28.6 \\
+TZP, 0.01 Ry & 20.606 & 5.4831 & 88.53 & 4.22 & −69.7 \\
+TZP, 0.005 Ry & 20.685 & 5.4901 & 86.56 & 4.24 & −78.1 \\
+\end{longtable}
+\endgroup
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The basis moves \texttt{V0} by 1.8 \% and \texttt{B0} by 8 GPa (8.5 \%)} --- 60 times the 0.14 GPa leave-one-out uncertainty of any single scan,
+  and 20 times the effect of any k-grid or mesh above. The fit\textquotesingle s uncertainty is a statement about the scan, not about the answer
+  (Section 1.5).
+\item
+  \textbf{Longer orbitals make a larger, softer crystal.} In both DZP and TZP, every halving of \texttt{PAO.\allowbreak{}EnergyShift} raises \texttt{V0} and lowers
+  \texttt{B0}. This is the direction expected from Section 1.7 (short orbitals favour compression through the basis-superposition error), but
+  the table cannot prove the mechanism: it only shows the trend.
+\item
+  \textbf{The total energy is not converged.} From 0.02 to 0.005 Ry it drops 58 meV/atom (DZP) and 50 meV/atom (TZP), and TZP lies another 20--29 meV/atom
+  below DZP at the same radii --- two orders of magnitude above the k-point or mesh error, and still falling. No setting of this tutorial is a "converged basis": the question
+  is how much each moves the \emph{properties}.
+\end{itemize}
+
+\paragraph{5.6 Compared with an all-electron calculation and with experiment}\label{g4.18-56-compared-with-an-all-electron-calculation-and-with-experiment}
+
+The all-electron PBE reference of the Delta test {[}9{]} --- \texttt{V0\ =\allowbreak{}\ 20.\allowbreak{}453\ Å³/\allowbreak{}atom} (\texttt{a0\ =\allowbreak{}\ 5.\allowbreak{}4695\ Å}), \texttt{B0\ =\allowbreak{}\ 88.\allowbreak{}545\ GPa}, \texttt{B0\textquotesingle{}\ =\allowbreak{}\ 4.\allowbreak{}31} --- is the
+benchmark for the \emph{numerical} error of the SIESTA setup (same functional, so the physics of PBE cancels). \texttt{Δ} is Eq. 12;
+\texttt{B(V\_\allowbreak{}AE)} is the bulk modulus of \emph{our} curve at the all-electron volume.
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.3167}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1333}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1333}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2167}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+Setup & \texttt{V0} vs AE & \texttt{B0} (GPa) & \texttt{B(V\_\allowbreak{}AE)} (GPa) & \texttt{Δ} (meV/atom) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\textbf{all-electron WIEN2k} & 20.453 & 88.55 & 88.55 & 0 \\
+DZP, 0.02 Ry (base) & −0.6 \% & 94.26 & 91.9 & 2.45 \\
+DZP, 0.01 Ry & +0.6 \% & 88.76 & 91.0 & 2.28 \\
+DZP, 0.005 Ry & +1.2 \% & 88.30 & 93.0 & 4.86 \\
+TZP, 0.02 Ry & −0.2 \% & 92.70 & 92.0 & \textbf{0.85} \\
+TZP, 0.01 Ry & +0.7 \% & 88.53 & 91.4 & 2.95 \\
+TZP, 0.005 Ry & +1.1 \% & 86.56 & 90.8 & 4.40 \\
+\end{longtable}
+\endgroup
+
+Read in this order:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{\texttt{B0} alone would have picked the wrong setups.} The DZP 0.01 and TZP 0.01 rows reproduce the reference \texttt{B0} (88.76, 88.53 vs
+  88.55) --- because their \texttt{V0} is 0.6--0.7 \% too large, which softens the crystal (\texttt{dB\ ≈\ −B0\ B0\textquotesingle{}\ dV/\allowbreak{}V0}). At the \emph{same volume} every
+  setup has \texttt{B\ =\allowbreak{}\ 91–93\ GPa}: the curvature agrees across the basis sets to ±1 GPa and is 2.5--5 \% \emph{above} the all-electron value. The
+  \texttt{B0} differences between setups are mostly a volume effect.
+\item
+  \textbf{\texttt{Δ} ranks them differently:} TZP at the default shift (0.85 meV/atom) is the closest to the all-electron curve, and the two
+  longest-orbital DZP/TZP runs the farthest (4.4--4.9). Neither end of the shift scan is "right": \texttt{V0} is too small at 0.02 Ry and too
+  large at 0.005 Ry, and \texttt{Δ} is smallest where the two errors balance. The agreement of the best row (0.85) therefore comes from a
+  cancellation as much as from a converged basis --- the energy of the same TZP basis falls another 49 meV/atom at 0.005 Ry.
+\item
+  \textbf{The all-electron \texttt{V0} is bracketed, the remainder is not understood.} With the longest orbitals \texttt{V0} overshoots the reference by
+  1.1--1.2 \%. A good norm-conserving pseudopotential in a complete basis should reproduce the all-electron \texttt{V0} of silicon to a fraction
+  of a percent, so that residue points to the NAO bases of this tutorial (no extra polarization or diffuse functions) or to the SIESTA
+  implementation of the pseudopotential --- a question these runs cannot settle (not tested: shift 0.01 with a larger split, another
+  pseudopotential).
+\item
+  \textbf{Against experiment} (\texttt{a\ =\allowbreak{}\ 5.\allowbreak{}43\ Å}, \texttt{B\ ≈\ 97.\allowbreak{}9\ GPa} as quoted in {[}23{]}; compilations differ): every setup gives \texttt{a0} 0.5--1.1 \% too large
+  (5.459--5.492 Å) and \texttt{B0} 86.6--94.3 GPa, 4--12 \% too small --- the PBE signature (the all-electron PBE itself is 0.7 \% and 10 \% off, and the
+  literature PBE modulus for Si is 88.0 GPa {[}22{]}). It confirms that the setup is a sensible PBE calculation; it says nothing about whether
+  the basis is converged.
+\end{enumerate}
+
+\paragraph{5.7 How far to trust each number}\label{g4.18-57-how-far-to-trust-each-number}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3143}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4571}}@{}}
+\toprule\noalign{}
+Quantity & Spread across this tutorial\textquotesingle s setups & Verdict \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{V0}, \texttt{a0} & 1.8 \% across the basis (0.06 \% across k ≥ 6³ and mesh) & ±1 \% unless the basis is tested; converged in k and mesh \\
+\texttt{B0} & 8.5 \% across the basis (0.3 GPa across k ≥ 6³ and mesh) & ±5 \%: do not over-read; compare at a fixed volume \\
+\texttt{B0\textquotesingle{}} & 4.1--4.3, noise ±0.05 & two figures at most \\
+\texttt{E0} & tens of meV/atom with the basis, \textasciitilde100 with k = 4³ & meaningless in absolute value: differences between setups of the \emph{same} basis only \\
+\texttt{P(V)} inside the scan & 0.05 GPa between stress and energy & reliable to \textasciitilde0.05 GPa for ≥ 320 Ry \\
+\texttt{V(P)} outside the scan & not testable & \texttt{-\/-\allowbreak{}target-\allowbreak{}pressure} flags it as EXTRAPOLATED: do not use \\
+the leave-one-out uncertainty (0.14 GPa) & --- & the precision of the \emph{scan}, 60× smaller than the basis effect \\
+\end{longtable}
+\endgroup
+
+\paragraph{5.8 What to take from the example}\label{g4.18-58-what-to-take-from-the-example}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  A statistically perfect fit (\texttt{R²\ =\allowbreak{}\ 0.\allowbreak{}99999}, 15 checks OK, 0.03 meV/atom residuals) can still sit 6 \% from the all-electron \texttt{B0}.
+  The checks table says \emph{the scan is clean}, not \emph{the number is right}.
+\item
+  The stress is a free second opinion: it agrees with \texttt{−dE/\allowbreak{}dV} to 0.05 GPa and gives \texttt{B0} again to 0.3 \%. It is sensitive to the mesh
+  before the energy is.
+\item
+  k-points and mesh converge fast for silicon; the basis does not, and it is the one that decides \texttt{V0} and \texttt{B0}.
+\item
+  Judge a basis with a reference (all-electron or experiment) using \texttt{V0}, \texttt{B} at a fixed volume and \texttt{Δ}, together with the convergence of
+  the total energy --- never \texttt{B0} alone. A good number from an unconverged setting is a coincidence.
+\item
+  Use \texttt{-\/-\allowbreak{}eos\ all}, \texttt{-\/-\allowbreak{}png} and the checks as a habit: they cost nothing and catch bracketing, noise and inconsistent folders.
+\end{enumerate}
+
+\subsubsection{6. Reproducing the reference data}\label{g4.18-6-reproducing-the-reference-data}
+
+\texttt{reference\_\allowbreak{}results/\allowbreak{}si/\allowbreak{}} holds the finished SIESTA runs of the 14 setups of Section 5, so Stage 2 works out of
+the box without a SIESTA installation.
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1564}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3966}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4469}}@{}}
+\toprule\noalign{}
+Folder & What & Contents \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{base/\allowbreak{}} & Case 1\textquotesingle s scan: DZP, \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}, k 10×10×10 & \texttt{calc\_\allowbreak{}template.\allowbreak{}fdf}, \texttt{eos\_\allowbreak{}scan.\allowbreak{}json}, \texttt{stb\_\allowbreak{}eosInputs\_\allowbreak{}report.\allowbreak{}txt}, per \texttt{vol\_\allowbreak{}*}: \texttt{structure.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}fdf}, \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out} \\
+\texttt{k04}, \texttt{k06}, \texttt{k08}, \texttt{k14} & k-grid 4, 6, 8, 14 (all else as \texttt{base}) & same \\
+\texttt{m150}, \texttt{m200}, \texttt{m450}, \texttt{m600} & \texttt{Mesh.\allowbreak{}Cutoff} 150, 200, 450, 600 Ry & same \\
+\texttt{dzp\_\allowbreak{}s010}, \texttt{dzp\_\allowbreak{}s005} & DZP with \texttt{PAO.\allowbreak{}EnergyShift} 0.01, 0.005 Ry & same \\
+\texttt{tzp\_\allowbreak{}s020}, \texttt{tzp\_\allowbreak{}s010}, \texttt{tzp\_\allowbreak{}s005} & TZP with \texttt{PAO.\allowbreak{}EnergyShift} 0.02, 0.01, 0.005 Ry & same \\
+\end{longtable}
+\endgroup
+
+Pseudopotentials and SIESTA\textquotesingle s by-products (\texttt{.\allowbreak{}DM}, \texttt{.\allowbreak{}EIG}, ...) are omitted to keep the repository small
+(\texttt{-p\ dojo} regenerates the pseudopotential). \texttt{make\_\allowbreak{}reference.\allowbreak{}sh} regenerates everything: for each setup it
+edits the template (\texttt{calc.\allowbreak{}fdf} of this folder), runs \texttt{stb-\allowbreak{}eosInputs} and SIESTA in each of the 11 folders:
+
+\begin{codeblock}
+bash make_reference.sh                 # ~30 minutes on 2 cores; writes reference_run/ and reference_results/si/
+\end{codeblock}
+
+The single commands of the base setup are those of Case 1 of the script:
+
+\begin{codeblock}
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+\end{codeblock}
+
+Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), \texttt{mpirun\ -np\ 2} on a 2-core machine: 5--25 seconds
+per volume depending on the setup (the denser k-grid, finer mesh and TZP basis are the slow ones).
+
+\subsubsection{7. Known, deliberate limitations}\label{g4.18-7-known-deliberate-limitations}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Static lattice, 0 K.} No zero-point energy and no thermal pressure; comparing \texttt{V0} and \texttt{B0} with a
+  room-temperature experiment includes that omission (small for Si, larger for light elements). Section 1.8.
+\item
+  \textbf{Isotropic scaling.} For non-cubic crystals the result is the modulus along the constrained path; the tool says so
+  but does not relax the shape. Section 1.9.
+\item
+  \textbf{Bulk only.} A vacuum-padded cell is refused; layered materials with van der Waals gaps are bulk --- use \texttt{-\/-\allowbreak{}d3} in
+  the template and expect \texttt{B0\textquotesingle{}} and the c-axis to need care.
+\item
+  \textbf{\texttt{B0\textquotesingle{}} is poorly determined} by a narrow scan (it describes the asymmetry of the curve); do not quote it
+  to more than two figures and do not over-interpret differences between setups of 0.1--0.2.
+\item
+  \textbf{The reported uncertainty is the scan\textquotesingle s}, not the setup\textquotesingle s: leave-one-out says nothing about the basis, the
+  pseudopotential or the functional (Section 5.5 shows that these are an order of magnitude larger).
+\item
+  \textbf{Basis sets are not converged by construction.} The default (DZP, \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}) is a
+  \emph{starting point}; Section 5.5 measures a ±1 \% spread in \texttt{V0} and ±4 \% in \texttt{B0} between reasonable
+  choices. Treat SIESTA\textquotesingle s \texttt{B0} as good to about ±5 \% unless the basis has been tested against a reference.
+\item
+  \textbf{A pseudopotential\textquotesingle s quality is not guaranteed} (the suite\textquotesingle s usual caution): compare the relaxed geometry
+  with a known value before trusting an EOS built on it.
+\item
+  \textbf{The all-electron comparison is for one element} with the PseudoDojo pseudopotential and the plain DZP/TZP
+  bases of this tutorial; the Delta-test value of an optimized SIESTA basis can be much smaller.
+\item
+  \textbf{Metals} need a denser k-grid and a sensible smearing than silicon; the checks flag the symptoms (noisy
+  residuals, \texttt{B0} unstable against the window) but not the cause.
+\item
+  \textbf{Energy vs stress agreement} is a test of the numerics, not of the physics: it passes for a wrong
+  functional as well as for a right one.
+\end{itemize}
+
+\subsubsection{8. Step-by-step: running this workflow on your own crystal}\label{g4.18-8-step-by-step-running-this-workflow-on-your-own-crystal}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Relax the structure} (cell and atoms) at the level of theory you will scan with. The scan is centred on the
+  input volume; one that starts within a few percent of equilibrium needs the fewest points.
+\item
+  \textbf{Write a \texttt{calc.\allowbreak{}fdf} with the physics only}: functional, basis, \texttt{PAO.\allowbreak{}EnergyShift}, \texttt{Mesh.\allowbreak{}Cutoff}, \texttt{Spin},
+  smearing, \texttt{\%include\ structure.\allowbreak{}fdf}. A k-grid is optional: Stage 1 suggests one at density 0.2 Å⁻¹ if absent.
+\item
+  \textbf{Run Stage 1} with \texttt{-p\ \textless{}bank\textgreater{}} and an \emph{odd} \texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} (9--11), \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} 6--8 \%. Read the report: the
+  level of theory, the crystal-system note, every advisory. Add \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions} if atoms have free coordinates.
+\item
+  \textbf{Run SIESTA} in each \texttt{vol\_\allowbreak{}*} folder (all folders take about the same time).
+\item
+  \textbf{Run Stage 2} with \texttt{-\/-\allowbreak{}eos\ all\ -\/-\allowbreak{}png} and read, in this order: \texttt{{[}1{]}} (same settings in every folder? did SIESTA run the
+  planned cells?), \texttt{{[}3{]}} (SCF, forces), then \texttt{{[}4{]}}, \texttt{{[}5{]}} and the checks \texttt{{[}7{]}}.
+\item
+  \textbf{Re-centre} if \texttt{V0} is not near the middle (the report gives the new \texttt{LatticeConstant}): rerun Stage 1 from there.
+\item
+  \textbf{Converge} what shapes the curve, one change at a time, comparing \texttt{V0}, \texttt{B0} \emph{and} the volume-independent
+  figures: k-grid, \texttt{Mesh.\allowbreak{}Cutoff}, then basis size and \texttt{PAO.\allowbreak{}EnergyShift} (Section 5 shows the order of effects). Judge
+  a basis by \texttt{V0} and by a reference (experiment or all-electron \texttt{Δ}), never by \texttt{B0} alone.
+\item
+  \textbf{Interpret with the limitations in mind}: compare with experiment \emph{including} the functional\textquotesingle s known bias and the
+  static-lattice omission; use \texttt{-\/-\allowbreak{}target-\allowbreak{}pressure} to get the geometry at the pressure of interest.
+\end{enumerate}
+
+\subsubsection{9. Files in this folder}\label{g4.18-9-files-in-this-folder}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2079}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7921}}@{}}
+\toprule\noalign{}
+File & What it is \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{README.\allowbreak{}md} & this tutorial \\
+\texttt{example\_\allowbreak{}4.\allowbreak{}18.\allowbreak{}sh} & guided, runnable walk-through (11 cases) \\
+\texttt{convergence\_\allowbreak{}table.\allowbreak{}py} & helper of the script: fits every setup of \texttt{reference\_\allowbreak{}results/\allowbreak{}si/\allowbreak{}}, prints the table and draws \texttt{figures/\allowbreak{}convergence.\allowbreak{}png} \\
+\texttt{theory\_\allowbreak{}figures.\allowbreak{}py} & draws \texttt{figures/\allowbreak{}eos\_\allowbreak{}forms.\allowbreak{}png} (Fig. 1) \\
+\texttt{make\_\allowbreak{}reference.\allowbreak{}sh} & regenerates \texttt{reference\_\allowbreak{}results/\allowbreak{}si/\allowbreak{}} with SIESTA (Section 6) \\
+\texttt{structure.\allowbreak{}fdf} & bulk silicon, 2-atom primitive cell, \texttt{a\ =\allowbreak{}\ 5.\allowbreak{}469\ Å} --- the input of Stage 1 \\
+\texttt{calc.\allowbreak{}fdf} & the template: PBE, DZP, \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}, k 10×10×10 \\
+\texttt{reference\_\allowbreak{}results/\allowbreak{}si/\allowbreak{}} & real finished SIESTA runs, 14 setups × 11 volumes (Section 6) \\
+\texttt{figures/\allowbreak{}} & \texttt{eos\_\allowbreak{}forms.\allowbreak{}png}, \texttt{si\_\allowbreak{}dashboard.\allowbreak{}png}, \texttt{convergence.\allowbreak{}png} \\
+\texttt{output/\allowbreak{}} & created by the script (git-ignored) \\
+\end{longtable}
+\endgroup
+
+\subsubsection{10. Running the script}\label{g4.18-10-running-the-script}
+
+\begin{codeblock}
+bash example_4.18.sh
+\end{codeblock}
+
+It pauses between cases (\texttt{{[}Press\ Enter\ to\ continue{]}}); \texttt{yes\ \textquotesingle{}\textquotesingle{}\ \textbar{}\ bash\ example\_\allowbreak{}4.\allowbreak{}18.\allowbreak{}sh} runs it straight through. It starts
+by wiping its own \texttt{output/\allowbreak{}}. Cases 1--5 run Stage 1 (no SIESTA needed); Cases 6--11 run Stage 2 on \texttt{reference\_\allowbreak{}results/\allowbreak{}}. It sets
+\texttt{MPLBACKEND=\allowbreak{}Agg}, so \texttt{-\/-\allowbreak{}show} is replaced by \texttt{-\/-\allowbreak{}png} in the script; try it on a desktop:
+
+\begin{codeblock}
+stb-eosAnalysis --dir reference_results/si/base --eos all --show --target-pressure 0 5 10
+\end{codeblock}
+
+\subsubsection{11. Flag reference}\label{g4.18-11-flag-reference}
+
+\textbf{\texttt{stb-\allowbreak{}eosInputs}} --- \texttt{-f\ FILE} relaxed structure (fractional, bulk) · \texttt{-c\ CALC} (default \texttt{.\allowbreak{}/\allowbreak{}calc.\allowbreak{}fdf}; absent and not
+given = scaled structures only; the same file as \texttt{-f} = self-contained input) · \texttt{-p\ PSEUDO} (bank or folder) ·
+\texttt{-\/-\allowbreak{}n-\allowbreak{}volumes\ N} (default 9, ≥ 5) · \texttt{-\/-\allowbreak{}strain-\allowbreak{}range\ \%} (default 5.0) · \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions} · \texttt{-\/-\allowbreak{}relax-\allowbreak{}steps\ N}
+(default 100) · \texttt{-\/-\allowbreak{}kgrid\ NX\ NY\ NZ} · \texttt{-\/-\allowbreak{}kgrid-\allowbreak{}density\ D} (1/Å) · \texttt{-\/-\allowbreak{}vacuum-\allowbreak{}gap\ Å} (default 10) · \texttt{-o\ DIR}
+(default \texttt{eos\_\allowbreak{}runs}) · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\textbf{\texttt{stb-\allowbreak{}eosAnalysis}} --- \texttt{-\/-\allowbreak{}dir\ DIR} (default \texttt{eos\_\allowbreak{}runs}) · \texttt{-\/-\allowbreak{}file\ NAME} (default \texttt{calc.\allowbreak{}out}) ·
+\texttt{-\/-\allowbreak{}eos\ \{birchmurnaghan,\allowbreak{}vinet,\allowbreak{}murnaghan,\allowbreak{}sj,\allowbreak{}all\}} · \texttt{-\/-\allowbreak{}target-\allowbreak{}pressure\ GPA\ .\allowbreak{}.\allowbreak{}.\allowbreak{}} · \texttt{-o\ NAME} (default \texttt{eos\_\allowbreak{}curve}) ·
+\texttt{-\/-\allowbreak{}show} · \texttt{-\/-\allowbreak{}png} · \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} · \texttt{-\/-\allowbreak{}save-\allowbreak{}data} · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\subsubsection{12. What\textquotesingle s next}\label{g4.18-12-whats-next}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{4.\allowbreak{}2-\allowbreak{}elastic} computes the full elastic tensor by stress--strain; its bulk modulus is the independent cross-check of
+  \texttt{B0} here. \texttt{stb-\allowbreak{}mleos} (\texttt{5.\allowbreak{}11}) is the MACE analog of this method (\texttt{-\/-\allowbreak{}custom-\allowbreak{}model} with your own fine-tuned
+  potential, \texttt{4.\allowbreak{}17}, gives an \texttt{E(V)} at the level of theory of \emph{your} SIESTA calculation in seconds).
+\item
+  \texttt{4.\allowbreak{}4-\allowbreak{}phonons} and \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha} use this same volume scan to get thermal expansion and the finite-temperature
+  equation of state.
+\item
+  \texttt{4.\allowbreak{}5-\allowbreak{}convergence} is the same convergence discipline applied to a ground-state total energy; this tutorial\textquotesingle s Section 5
+  applies it to the properties derived from \texttt{E(V)}.
+\item
+  For the fully relaxed hydrostatic modulus of a non-cubic crystal, relax the shape at each volume
+  (\texttt{MD.\allowbreak{}VariableCell} + \texttt{Constant.\allowbreak{}Volume}) and feed the energies to \texttt{stb-\allowbreak{}eosAnalysis} by hand.
+\end{itemize}
+
+\subsubsection{13. References}\label{g4.18-13-references}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  F. D. Murnaghan, \emph{The compressibility of media under extreme pressures}, Proc. Natl. Acad. Sci. USA \textbf{30},
+  244 (1944).
+\item
+  F. Birch, \emph{Finite elastic strain of cubic crystals}, Phys. Rev. \textbf{71}, 809 (1947).
+\item
+  P. Vinet, J. Ferrante, J. R. Smith, J. H. Rose, \emph{A universal equation of state for solids}, J. Phys. C \textbf{19}, L467
+  (1986); P. Vinet, J. H. Rose, J. Ferrante, J. R. Smith, \emph{Universal features of the equation of state of solids},
+  J. Phys.: Condens. Matter \textbf{1}, 1941 (1989).
+\item
+  O. L. Anderson, \emph{Equations of State of Solids for Geophysics and Ceramic Science}, Oxford University Press (1995).
+\item
+  A. B. Alchagirov, J. P. Perdew, J. C. Boettger, R. C. Albers, C. Fiolhais, \emph{Energy and pressure versus volume:
+  Equations of state motivated by the stabilized jellium model}, Phys. Rev. B \textbf{63}, 224115 (2001).
+\item
+  G. P. Francis, M. C. Payne, \emph{Finite basis set corrections to total energy pseudopotential calculations}, J. Phys.:
+  Condens. Matter \textbf{2}, 4395 (1990).
+\item
+  K. Lejaeghere \emph{et al.}, \emph{Reproducibility in density functional theory calculations of solids}, Science \textbf{351},
+  aad3000 (2016).
+\item
+  K. Lejaeghere, V. Van Speybroeck, G. Van Oost, S. Cottenier, \emph{Error estimates for solid-state density-functional
+  theory predictions: an overview by means of the ground-state elemental crystals}, Crit. Rev. Solid State Mater. Sci.
+  \textbf{39}, 1 (2014).
+\item
+  The Delta-codes DFT repository, \url{https://github.com/molmod/DeltaCodesDFT} --- file \texttt{WIEN2k.\allowbreak{}txt}: all-electron PBE
+  reference (WIEN2k 13.1) of the elemental crystals; Si: \texttt{V0\ =\allowbreak{}\ 20.\allowbreak{}4530\ Å³/\allowbreak{}atom}, \texttt{B0\ =\allowbreak{}\ 88.\allowbreak{}545\ GPa}, \texttt{B1\ =\allowbreak{}\ 4.\allowbreak{}31}.
+\item
+  J. M. Soler \emph{et al.}, \emph{The SIESTA method for ab initio order-N materials simulation}, J. Phys.: Condens. Matter
+  \textbf{14}, 2745 (2002).
+\item
+  A. García \emph{et al.}, \emph{Siesta: Recent developments and applications}, J. Chem. Phys. \textbf{152}, 204108 (2020).
+\item
+  J. P. Perdew, K. Burke, M. Ernzerhof, \emph{Generalized gradient approximation made simple}, Phys. Rev. Lett. \textbf{77},
+  3865 (1996).
+\item
+  M. J. van Setten \emph{et al.}, \emph{The PseudoDojo: Training and grading a 85 element optimized norm-conserving
+  pseudopotential table}, Comput. Phys. Commun. \textbf{226}, 39 (2018). doi:10.1016/j.cpc.2018.01.012
+\item
+  H. J. Monkhorst, J. D. Pack, \emph{Special points for Brillouin-zone integrations}, Phys. Rev. B \textbf{13}, 5188 (1976).
+\item
+  A. H. Larsen \emph{et al.}, \emph{The atomic simulation environment}, J. Phys.: Condens. Matter \textbf{29}, 273002 (2017).
+\item
+  P. Virtanen \emph{et al.}, \emph{SciPy 1.0}, Nat. Methods \textbf{17}, 261 (2020).
+\item
+  S. P. Ong \emph{et al.}, \emph{Python Materials Genomics (pymatgen)}, Comput. Mater. Sci. \textbf{68}, 314 (2013).
+\item
+  A. Togo, I. Tanaka, \emph{Spglib: a software library for crystal symmetry search}, arXiv:1808.01590 (2018).
+\item
+  J. D. Hunter, \emph{Matplotlib: A 2D graphics environment}, Comput. Sci. Eng. \textbf{9}, 90 (2007).
+\item
+  P. Pernot, B. Civalleri, D. Presti, A. Savin, \emph{Prediction uncertainty of density functional approximations for
+  properties of crystals with cubic symmetry}, J. Phys. Chem. A \textbf{119}, 5288 (2015) (supplementary tables:
+  PBE and experimental lattice constants).
+\item
+  B. Efron, R. J. Tibshirani, \emph{An Introduction to the Bootstrap}, Chapman \& Hall (1993) (the jackknife).
+\item
+  PBE bulk modulus of Si, 88.0 GPa, and the weak role of zero-point corrections outside carbon: \emph{Lattice dynamics
+  and structural phase stability of group-IV elemental solids with the r²SCAN functional}, arXiv:2601.11177.
+\item
+  Experimental lattice constant (10.26 bohr = 5.43 Å) and bulk modulus (97.9 GPa) of Si as quoted in
+  \emph{Iterative minimization in reduced density matrix functional theory for periodic systems}, arXiv:2607.27679;
+  compilations of the experimental modulus differ (about 98--99 GPa), and the original measurements were
+  not consulted.
+\end{enumerate}
 
 \subsection{Command-line reference}
 \label{ref-4.18}
 \subsubsection{\texorpdfstring{\texttt{stb-eosInputs}}{stb-eosInputs}}
 \label{cmd-stb-eosInputs}\index{stb-eosInputs@\texttt{stb-eosInputs}|textbf}
-Generates a set of isotropically-scaled-volume SIESTA input folders for a real-DFT equation-of-state (E vs V) scan -- run SIESTA in each one (fixed cell, positions may relax), then aggregate with \texttt{stb-\allowbreak{}eosAnalysis}. The real-SIESTA analog of \texttt{stb-\allowbreak{}mleos's} MACE-driven in-memory scan.
+Stage 1 of 2 (equation of state): writes one SIESTA folder per scanned volume. Takes an ALREADY-RELAXED structure (\texttt{-{}-file}, fractional coordinates) and your \texttt{calc.\allowbreak{}fdf} template (\texttt{-{}-calc}, default ./\texttt{calc.\allowbreak{}fdf}), and writes '\textless{}output-dir\textgreater{}/vol\_\textless{}pct\textgreater{}/' with the cell scaled isotropically (volume strain from -strain-range to +strain-range), your template untouched except for a '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}' at its top, the \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} sidecar with the forced directives (fixed cell, single point -- or ionic relaxation with \texttt{-{}-relax-\allowbreak{}positions} --, and the SCF k-grid when the template defines none or you ask for one) and the pseudopotentials (-p). Also writes \texttt{eos\_\allowbreak{}scan.\allowbreak{}json} (the plan, read by \texttt{stb-\allowbreak{}eosAnalysis}). Does not run SIESTA: run each folder, then use \texttt{stb-\allowbreak{}eosAnalysis}.
 
 \paragraph{Synopsis}
 \begin{helpblock}
-usage: stb-eosInputs [-h] --file FILE [--n-volumes N_VOLUMES]
-                     [--strain-range STRAIN_RANGE] [-o OUTPUT_DIR]
-                     [--vacuum-gap VACUUM_GAP] [-v] [--no-intro]
+usage: stb-eosInputs [-h] -f FILE [-c FDF] [-p PSEUDO_DIR] [--n-volumes N_VOLUMES]
+                     [--strain-range STRAIN_RANGE] [--relax-positions]
+                     [--relax-steps RELAX_STEPS] [--kgrid NX NY NZ]
+                     [--kgrid-density D] [-o OUTPUT_DIR] [--vacuum-gap VACUUM_GAP]
+                     [--save-report] [-v] [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
-\optitem{-{}-file FILE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--file@\texttt{--file}}Input structure (.fdf). Atomic coordinates must be in fractional (ScaledCartesian/Fractional) format, same requirement as \texttt{stb-\allowbreak{}strain}.\optmeta{required}}
-\optitem{-{}-n-\allowbreak{}volumes N\_\allowbreak{}VOLUMES}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--n-volumes@\texttt{--n-volumes}}Number of volumes to scan (default: 9). Needs \textgreater{}= 5 for a robust 4-parameter EOS fit downstream in \texttt{stb-\allowbreak{}eosAnalysis}.\optmeta{type: int}}
-\optitem{-{}-strain-\allowbreak{}range STRAIN\_\allowbreak{}RANGE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--strain-range@\texttt{--strain-range}}Max isotropic volume strain, \% (default: 5.0), spanning [\texttt{-strain-\allowbreak{}range}, +strain-range] -- same meaning as \texttt{stb-\allowbreak{}mleos's} own \texttt{-{}-strain-\allowbreak{}range}.\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--output-dir@\texttt{--output-dir}}Directory to write the 'vol\_\textless{}pct\textgreater{}' run folders into (default: eos\_runs).}
-\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes -- bulk-only, rejects any vacuum-padded structure (default: 10.0).\optmeta{type: float}}
+\optitem{-f, -{}-file FILE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--file@\texttt{--file}}Input structure (.fdf), already relaxed. Atomic coordinates must be in fractional format (same requirement as \texttt{stb-\allowbreak{}strain}). It is written, scaled, under the same name into every folder, and your \texttt{calc.\allowbreak{}fdf} must \%include it.\optmeta{required}}
+\optitem{-c, -{}-calc FDF}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--calc@\texttt{--calc}}SIESTA input template (default: \texttt{calc.\allowbreak{}fdf}). Copied into every folder with '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}' prepended; not edited otherwise. If it does not exist and -c was not given, only the scaled structures are written (the earlier behavior). If it is the same file as \texttt{-{}-file} (a self-contained input), the scaled copy of it is the run input.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotential source: a bundled bank (dojo, virtual\_vault) or a folder. The .psml/.psf of each species is copied into every folder.}
+\optitem{-{}-n-\allowbreak{}volumes N\_\allowbreak{}VOLUMES}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--n-volumes@\texttt{--n-volumes}}Number of volumes to scan (default: 9). At least 5 for the 4-parameter fit of \texttt{stb-\allowbreak{}eosAnalysis}; an odd number includes the input volume itself.\optmeta{type: int}}
+\optitem{-{}-strain-\allowbreak{}range STRAIN\_\allowbreak{}RANGE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--strain-range@\texttt{--strain-range}}Max isotropic volume strain, \% (default: 5.0), spanning [-strain-range, +strain-range] -- the same meaning as \texttt{stb-\allowbreak{}mleos}'s \texttt{-{}-strain-\allowbreak{}range}.\optmeta{type: float}}
+\optitem{-{}-relax-\allowbreak{}positions}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--relax-positions@\texttt{--relax-positions}}Let the ions relax at every volume (cell fixed): needed for crystals with free internal coordinates. Default: single point (positions as given).\optmeta{switch, off by default}}
+\optitem{-{}-relax-\allowbreak{}steps RELAX\_\allowbreak{}STEPS}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--relax-steps@\texttt{--relax-steps}}Max CG steps per volume with \texttt{-{}-relax-\allowbreak{}positions} (default: 100).\optmeta{type: int}}
+\optitem{-{}-kgrid NX NY NZ}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--kgrid@\texttt{--kgrid}}Force this SCF k-grid in every folder (\texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}), over the template's.\optmeta{type: int}}
+\optitem{-{}-kgrid-\allowbreak{}density D}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--kgrid-density@\texttt{--kgrid-density}}Force an SCF k-grid of this density, 1/Ang (as \texttt{stb-\allowbreak{}kgrid}), over the template's. Without \texttt{-{}-kgrid}/\texttt{-{}-kgrid-\allowbreak{}density} the template's own grid is kept; if it has none, one of density 0.2 is forced (SIESTA would sample Gamma only).\optmeta{type: float}}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--output-dir@\texttt{--output-dir}}Directory for the 'vol\_\textless{}pct\textgreater{}' folders (default: eos\_runs).}
+\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes -- bulk only, a vacuum-padded structure is rejected (default: 10.0).\optmeta{type: float}}
+\optitem{-{}-save-\allowbreak{}report}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--save-report@\texttt{--save-report}}Also persist the report to \textless{}output-dir\textgreater{}/\texttt{stb\_\allowbreak{}eosInputs\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
 \paragraph{From the built-in help}
 \begin{helpblock}
 Example usage:
-  stb-eosInputs --file structure.fdf
-  stb-eosInputs --file structure.fdf --n-volumes 11 --strain-range 8.0 -o eos_runs
+  stb-eosInputs --file structure.fdf -p dojo
+  stb-eosInputs --file structure.fdf --calc calc.fdf --n-volumes 11 --strain-range 8.0 -p dojo
+  stb-eosInputs --file structure.fdf --kgrid-density 0.15 --relax-positions -o eos_runs
 \end{helpblock}
 
 \subsubsection{\texorpdfstring{\texttt{stb-eosAnalysis}}{stb-eosAnalysis}}
 \label{cmd-stb-eosAnalysis}\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}|textbf}
-Aggregates a \texttt{stb-\allowbreak{}eosInputs} 'vol\_*' sweep of real SIESTA calculations and fits an equation of state (Birch-Murnaghan by default) to get V0/E0/B0 (bulk modulus)/B0'.
+Stage 2 of 2 (equation of state): aggregates the 'vol\_*' folders written by \texttt{stb-\allowbreak{}eosInputs} and fits an equation of state (Birch-Murnaghan by default) to get V0/E0/B0 (bulk modulus)/B0'. Also reads each run's SIESTA pressure (stress tensor) and checks it against -dE/dV of the fit, gives a second B0 from the stress alone, the uncertainty of V0/B0 (leave-one-out), the residuals, the consistency of the level of theory across folders, and the suggested LatticeConstant; every warning is repeated in the last section. \texttt{-{}-show} / \texttt{-{}-png} draw a dashboard, \texttt{-{}-save-\allowbreak{}gnuplot} writes the .dat/.gplot pair, \texttt{-{}-save-\allowbreak{}data} a CSV + JSON.
 
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-eosAnalysis [-h] [--dir DIR] [--file FILE]
                        [--eos {birchmurnaghan,birch_murnaghan,vinet,murnaghan,sj,all}]
-                       [--target-pressure GPA [GPA ...]] [-o OUTPUT] [--save-report]
-                       [-v] [--no-intro]
+                       [--target-pressure GPA [GPA ...]] [-o OUTPUT] [--show] [--png]
+                       [--save-gnuplot] [--save-data] [--save-report] [-v]
+                       [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
 \optitem{-{}-dir DIR}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--dir@\texttt{--dir}}Directory containing the 'vol\_*' run folders (default: eos\_runs).}
 \optitem{-{}-file FILE}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--file@\texttt{--file}}SIESTA output filename inside each run folder (default: \texttt{calc.\allowbreak{}out}).}
-\optitem{-{}-eos \{birchmurnaghan,\allowbreak{}birch\_\allowbreak{}murnaghan,\allowbreak{}vinet,\allowbreak{}murnaghan,\allowbreak{}sj,\allowbreak{}all\}}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--eos@\texttt{--eos}}Equation-of-state form to fit (default: birchmurnaghan). 'sj' = stabilized jellium (no B0' reported). 'all' fits every form on the same data and reports them side by side (the plotted curve still uses birchmurnaghan); mutually exclusive with \texttt{-{}-target-\allowbreak{}pressure}.\optmeta{choices: birchmurnaghan, birch\_murnaghan, vinet, murnaghan, sj, all}}
-\optitem{-{}-target-\allowbreak{}pressure GPA [GPA .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--target-pressure@\texttt{--target-pressure}}One or more target external pressures (GPa) -- inverts the fitted EOS (P = \texttt{-dE/\allowbreak{}dV}) to report the predicted equilibrium volume and linear lattice-parameter scale factor at each one. Not available with \texttt{-{}-eos} all (pick one specific form first).\optmeta{type: float}}
-\optitem{-o, -{}-output OUTPUT}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--output@\texttt{--output}}Base filename (no extension) for the .dat/.gplot outputs (default: eos\_curve).}
+\optitem{-{}-eos \{birchmurnaghan,\allowbreak{}birch\_\allowbreak{}murnaghan,\allowbreak{}vinet,\allowbreak{}murnaghan,\allowbreak{}sj,\allowbreak{}all\}}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--eos@\texttt{--eos}}Equation-of-state form to fit (default: birchmurnaghan). 'sj' = stabilized jellium (no B0' reported). 'all' fits every form on the same data and reports them side by side (the reference fit for everything else is then birchmurnaghan); mutually exclusive with \texttt{-{}-target-\allowbreak{}pressure}.\optmeta{switch, off by default}}
+\optitem{-{}-target-\allowbreak{}pressure GPA [GPA ...]}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--target-pressure@\texttt{--target-pressure}}One or more target external pressures (GPa) -- inverts the fitted EOS (P = -dE/dV) to report the predicted equilibrium volume and linear lattice-parameter scale factor at each one. Not available with \texttt{-{}-eos} all.\optmeta{type: float}}
+\optitem{-o, -{}-output OUTPUT}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--output@\texttt{--output}}Base filename (no extension) of the output files (default: eos\_curve).}
+\optitem{-{}-show}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--show@\texttt{--show}}Open the analysis dashboard (matplotlib, 6 panels) on screen. Needs a display.\optmeta{switch, off by default}}
+\optitem{-{}-png}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--png@\texttt{--png}}Save the dashboard as \textless{}output\textgreater{}\texttt{\_\allowbreak{}summary.\allowbreak{}png}.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \textless{}output\textgreater{}.dat and \textless{}output\textgreater{}.gplot (E(V) and P(V), data + fit); 'gnuplot \textless{}output\textgreater{}.gplot' renders \textless{}output\textgreater{}.pdf. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}data}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--save-data@\texttt{--save-data}}Also write \textless{}output\textgreater{}\texttt{\_\allowbreak{}table.\allowbreak{}csv} (one row per volume) and \textless{}output\textgreater{}\texttt{\_\allowbreak{}results.\allowbreak{}json} (every fit, check and number of the report). Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-eosAnalysis@\texttt{stb-eosAnalysis}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{stb\_\allowbreak{}eosAnalysis\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
 \paragraph{From the built-in help}
 \begin{helpblock}
 Example usage:
-  stb-eosAnalysis --dir eos_runs --file calc.out
-  stb-eosAnalysis --dir eos_runs --eos vinet
+  stb-eosAnalysis --dir eos_runs --show
+  stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-report
+  stb-eosAnalysis --dir eos_runs --eos vinet --target-pressure 0 5 10
 \end{helpblock}
-
 
 \section{Charge Density Difference}
 \label{tool-4.19}

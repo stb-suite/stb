@@ -269,6 +269,19 @@ check_exit_code $? 0
 check_contains "detected (SIESTA log)" log_ref.txt
 
 
+# --- 7b. A MOVED study still works: the manifests hold relative paths ---
+echo -e "\n--- Testing a moved study (relative manifest paths) ---"
+make_prep_and_neutral_rho
+rm -rf moved_study
+mv hirshfeld_study moved_study
+stb-hirshfeldIons -O moved_study -p . --no-intro > log_moved.txt 2>&1
+check_exit_code $? 0
+check_contains "Hirshfeld-I Ions (Stage 2) complete" log_moved.txt
+check_contains "moved_study/combined/structure.fdf" log_moved.txt
+check_contains '"hirshfeld_manifest": "hirshfeld_manifest.json"' moved_study/hirshfeld_ions_manifest.json
+rm -rf moved_study
+
+
 # --- 8. Interactive path (stb-suite, shortcut 4.20.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.20.2) ---"
 make_prep_and_neutral_rho

@@ -26,6 +26,8 @@ wrapping genuinely matters).
 
 from __future__ import annotations
 
+import json
+import os
 import time
 
 import numpy as np
@@ -33,55 +35,154 @@ import numpy as np
 from stb.core.cli import print_progress_line, finish_progress_line
 
 
+HIRSHFELD_MANIFEST_FILE = "hirshfeld_manifest.json"
+STUDY_LAYOUT = {
+    "combined_dir": "combined",
+    "combined_structure": os.path.join("combined", "structure.fdf"),
+}
+
+
+def resolve_study_path(study_dir, recorded, default_rel):
+    """Path of one study file/folder, from the value a manifest recorded.
+
+    Manifests are written with paths RELATIVE to the study folder, so a study
+    can be copied or moved. Older manifests held absolute paths: a `cp -r`
+    of a study then silently read the ORIGINAL study's combined/ (another
+    density) with the copy's references. An absolute path is therefore only
+    trusted when it is this study's own; when it points elsewhere, the
+    study's own `default_rel` wins whenever it exists.
+
+    Returns (path, note): note is None, ('info', text) when the study's own
+    path replaced a foreign one, or ('warning', text) when only the foreign
+    path exists and is used."""
+    local = os.path.join(study_dir, default_rel)
+    if not recorded:
+        return local, None
+    if not os.path.isabs(recorded):
+        return os.path.join(study_dir, recorded), None
+    if os.path.exists(local):
+        if os.path.realpath(recorded) == os.path.realpath(local):
+            return local, None
+        return local, ("info",
+                       f"The manifest records '{recorded}', outside this study (the study was "
+                       f"copied or moved); using this study's own '{local}'.")
+    if os.path.exists(recorded):
+        return recorded, ("warning",
+                          f"'{local}' does not exist, so '{recorded}' -- recorded by the manifest, "
+                          "in ANOTHER study folder -- is read instead. Make sure that is the "
+                          "system you mean, or rerun stb-hirshfeldPrep here.")
+    return local, None
+
+
+def load_study_manifest(study_dir):
+    """Reads <study_dir>/hirshfeld_manifest.json (stb-hirshfeldPrep) and
+    resolves its combined_dir/combined_structure against study_dir
+    (resolve_study_path). Returns (manifest, notes); raises OSError /
+    ValueError like open()/json.load()."""
+    with open(os.path.join(study_dir, HIRSHFELD_MANIFEST_FILE)) as f:
+        manifest = json.load(f)
+    notes = []
+    for key, default_rel in STUDY_LAYOUT.items():
+        manifest[key], note = resolve_study_path(study_dir, manifest.get(key), default_rel)
+        if note and not any(kind == note[0] for kind, _ in notes):
+            notes.append(note)
+    return manifest, notes
+
+
+BIN_WIDTH_PER_SPACING = 0.25
+
+
 def radial_density_profile(grid_data: np.ndarray, lattice: np.ndarray, center_frac,
-                            r_max: float | None = None, n_bins: int = 200):
+                            r_max: float | None = None, n_bins: int | None = None):
     """Spherically-averages `grid_data` (a real-space density grid, e.g. an
     isolated atom's own total .RHO) around `center_frac` (fractional
     coordinates of the atom, e.g. (0.5, 0.5, 0.5) for
     write_isolated_atom_fdf's box-centered convention), using minimum
-    -image distance. Returns (r_bin_centers, rho_of_r), each a (n_bins,)
-    array -- rho_of_r is the mean grid value among voxels whose
-    minimum-image distance to `center_frac` falls in that bin (0.0 for a
-    bin no voxel reaches, e.g. one near r_max in a cubic box's corner
-    region no sphere of that radius fully samples).
+    -image distance. Returns (r, rho_of_r): r is the MEAN distance of the
+    voxels that fell in each bin (not the bin centre) and rho_of_r their
+    mean density. Bins no voxel reaches are dropped, not set to 0.
 
-    `r_max` defaults to the largest distance actually present on the grid
-    (so the profile always covers every voxel) -- for an isolated atom in
-    a large vacuum box this comfortably exceeds where the density has
-    already decayed to ~0, which is exactly what
-    interpolate_reference_density's zero-extrapolation beyond r_max
-    relies on.
+    Bin width: `BIN_WIDTH_PER_SPACING` x the finest grid spacing unless
+    `n_bins` is given. The old fixed 200 bins over the whole box (0.087 Ang
+    in a 20 Ang box, while an O atom's density sits within ~1.9 Ang) lost
+    1.4 % of the electrons (O neutral 5.91 of 6) and moved the H2O
+    Hirshfeld-I charge by 0.015 e-; finer fixed bins were worse, since
+    empty bins near the nucleus read as rho = 0 (2000 bins: 5.13 of 6).
+    Dropping empty bins and using the voxels' own mean radius makes the
+    profile converge with bin width (6.003 of 6).
+
+    `r_max` defaults to the largest distance on the grid, so every voxel is
+    covered; beyond it interpolate_reference_density extrapolates to 0.
     """
     nx, ny, nz = grid_data.shape
+    lattice = np.asarray(lattice, dtype=float)
     fx, fy, fz = np.meshgrid(np.arange(nx) / nx, np.arange(ny) / ny, np.arange(nz) / nz,
                               indexing='ij')
     disp = np.stack([fx, fy, fz], axis=-1) - np.asarray(center_frac, dtype=float)
     disp -= np.round(disp)
     cart = disp @ lattice
-    r = np.linalg.norm(cart, axis=-1)
+    r = np.linalg.norm(cart, axis=-1).ravel()
+    del disp, cart
 
     if r_max is None:
         r_max = float(r.max())
+    if n_bins is None:
+        spacing = min(np.linalg.norm(lattice[i]) / n for i, n in enumerate(grid_data.shape))
+        n_bins = max(1, int(np.ceil(r_max / (BIN_WIDTH_PER_SPACING * spacing))))
     bin_edges = np.linspace(0.0, r_max, n_bins + 1)
-    bin_idx = np.clip(np.digitize(r.ravel(), bin_edges) - 1, 0, n_bins - 1)
+    bin_idx = np.clip(np.digitize(r, bin_edges) - 1, 0, n_bins - 1)
     sums = np.bincount(bin_idx, weights=grid_data.ravel(), minlength=n_bins)
+    r_sums = np.bincount(bin_idx, weights=r, minlength=n_bins)
     counts = np.bincount(bin_idx, minlength=n_bins)
-    rho_of_r = np.divide(sums, counts, out=np.zeros(n_bins), where=counts > 0)
-    r_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    filled = counts > 0
+    rho_of_r = sums[filled] / counts[filled]
+    r_mean = r_sums[filled] / counts[filled]
 
-    # Prepend r=0 and append r=r_max as explicit interpolation anchors,
-    # reusing the first/last bin's own average. Without this, EVERY query
-    # exactly at r=0 (the atom's own position -- the single most important
-    # point of the whole profile, its density peak) or r=r_max falls
-    # OUTSIDE [r_centers.min(), r_centers.max()] (bin centers sit strictly
-    # inside (0, r_max) by construction), which silently zeroed out the
-    # nucleus's own density under callers' left=0.0/right=0.0 np.interp
-    # convention -- a real bug caught by this module's own analytic unit
-    # test (a single isolated atom's reconstructed population came out
-    # measurably short of its true integral; traced to exactly this gap).
-    r_out = np.concatenate(([0.0], r_centers, [r_max]))
+    # Explicit anchors at r=0 and r=r_max (first/last bin's density): every
+    # query at the nucleus itself would otherwise fall outside the profile
+    # and be zeroed by the callers' left=0.0 np.interp convention.
+    r_out = np.concatenate(([0.0], r_mean, [max(r_max, r_mean[-1])]))
     rho_out = np.concatenate(([rho_of_r[0]], rho_of_r, [rho_of_r[-1]]))
-    return r_out, rho_out
+    keep = np.concatenate(([True], np.diff(r_out) > 0))
+    return r_out[keep], rho_out[keep]
+
+
+def profile_electron_count(r, rho):
+    """4 pi integral r^2 rho(r) dr of a radial profile (electrons)."""
+    r = np.asarray(r, dtype=float)
+    return float(np.trapezoid(4.0 * np.pi * r ** 2 * np.asarray(rho, dtype=float), r))
+
+
+def profile_radius(r, rho, fraction=0.999):
+    """Radius enclosing `fraction` of a radial profile's electrons (None for
+    an empty profile, e.g. H's bare-proton cation)."""
+    r = np.asarray(r, dtype=float)
+    shell = 4.0 * np.pi * r ** 2 * np.asarray(rho, dtype=float)
+    cumulative = np.concatenate(([0.0], np.cumsum(0.5 * (shell[1:] + shell[:-1]) * np.diff(r))))
+    if cumulative[-1] <= 0:
+        return None
+    return float(r[min(np.searchsorted(cumulative, fraction * cumulative[-1]), len(r) - 1)])
+
+
+def estimate_remaining_error(history):
+    """From the last rounds of a (iteration, max|Delta q|) history: the
+    contraction ratio rho = d_n / d_(n-1) (median of the last 3 ratios) and
+    the estimated distance of the last charges from the fixed point,
+    d_n * rho / (1 - rho) -- a geometric series. The max|Delta q| < tol test
+    only says the LAST STEP was small; with a slow ratio (0.7 on H2O) the
+    charges are still 2-3 x tol away. Returns (ratio, remaining) or
+    (None, None) with fewer than 3 rounds or a non-contracting tail."""
+    deltas = [d for _, d in history if d is not None]
+    if len(deltas) < 3:
+        return None, None
+    ratios = [deltas[k] / deltas[k - 1] for k in range(max(1, len(deltas) - 3), len(deltas))
+              if deltas[k - 1] > 0]
+    if not ratios:
+        return None, None
+    ratio = float(np.median(ratios))
+    if not 0.0 < ratio < 1.0:
+        return ratio, None
+    return ratio, deltas[-1] * ratio / (1.0 - ratio)
 
 
 def interpolate_reference_density(target_r, r_neutral, rho_neutral, r_ion, rho_ion,

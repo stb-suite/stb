@@ -589,9 +589,15 @@ weak in a supercell — consecutive MD frames of a 64-atom cell all pass it. Rep
 over the box lost 1.4 % of an O atom's electrons and moved the H2O charge by 0.02 e-, and finer fixed bins were
 worse (empty bins near the nucleus read as 0). The `max|Delta q| < tol` stop only bounds the last step: at
 H2O's contraction ratio ~0.68 the charges are still ~2x tol away, so Stage 3 reports
-`estimate_remaining_error` and warns. Stage 3 checks every reference (electrons on grid / in the profile vs
+`estimate_remaining_error` and warns (not below 0.001 e-, `REMAINING_ERROR_FLOOR`). Stage 3 checks every reference (electrons on grid / in the profile vs
 Z_val -+ 1, radius vs box, SCF), flags |q| > 1 (reference capped at the +-1 ion), compares point-charge dipoles
 with SIESTA's along non-periodic axes, collects ALL warnings last; `--save-data`, `--png`, `--show` are opt-in.
+`test/4-workflow/20-hirshfeld/analysis/test.sh` 6c has an EXACT answer: Gaussians normalized to the electrons
+(`make_synthetic_rho.py --electrons`), each ion with its neutral's shape, so the reference at q is the combined
+atom itself and Hirshfeld-I must return +-0.4 (and the density's dipole). Manifest paths are RELATIVE to the
+study folder (`hf.STUDY_LAYOUT`): they used to be absolute, and a `cp -r` of a study silently read the ORIGINAL's
+combined/ (+1.25 instead of +0.4 in one test). `hf.resolve_study_path`/`load_study_manifest` read old manifests
+too: a foreign absolute path yields to the study's own folder ([INFO]); used only when the copy has none ([WARNING]).
 
 **4-Workflow item 18, EOS** — `stb-eosInputs`/`stb-eosAnalysis`: real-SIESTA analog
 of `stb-mleos`, same isotropic volume-scan convention (`factor = (1 +

@@ -77,11 +77,19 @@ check_success hirshfeld_study/neutral/C/C.psf
 check_success hirshfeld_study/neutral/O/structure.fdf
 check_success hirshfeld_study/neutral/O/O.psf
 
-echo "Testing: manifest records both species + the combined/ folder just written (absolute paths)"
+echo "Testing: manifest records both species + the combined/ folder just written, with paths"
+echo "         RELATIVE to the study folder (absolute ones made a copied study read the"
+echo "         original's combined/)"
 check_contains '"symbol": "C"' hirshfeld_study/hirshfeld_manifest.json
 check_contains '"symbol": "O"' hirshfeld_study/hirshfeld_manifest.json
 check_contains '"neutral_folder": "neutral/C"' hirshfeld_study/hirshfeld_manifest.json
-check_contains "hirshfeld_study/combined" hirshfeld_study/hirshfeld_manifest.json
+check_contains '"combined_dir": "combined"' hirshfeld_study/hirshfeld_manifest.json
+check_contains '"combined_structure": "combined/structure.fdf"' hirshfeld_study/hirshfeld_manifest.json
+if grep -q -- "\"$PWD" hirshfeld_study/hirshfeld_manifest.json; then
+    echo -e "   -> ${RED}Failed:${NC} an absolute path is still recorded in the manifest"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no absolute path in the manifest"; PASS=$((PASS+1))
+fi
 
 echo "Testing: combined/ has the full 2-atom system, fixed cell + single-point + SaveRho"
 echo "         + mandatory native Hirshfeld/Voronoi charges, but NO forced k-grid/Spin"

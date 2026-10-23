@@ -10,7 +10,12 @@ structure.fdf (works unmodified for both a single-isolated-atom folder
 and the multi-atom combined folder), minimum-image aware -- same
 convention core/hirshfeld.py itself uses.
 
-Usage: make_synthetic_rho.py <structure.fdf> <output.RHO> <n_grid> <amp1,amp2,...> <sigma1,sigma2,...>
+Usage: make_synthetic_rho.py <structure.fdf> <output.RHO> <n_grid> <amp1,amp2,...> <sigma1,sigma2,...> [--electrons]
+
+With --electrons each amp is the number of ELECTRONS of that atom's Gaussian
+(normalized: amp = N / ((2 pi)^1.5 sigma^3)), so a folder holds exactly the
+electrons a real SIESTA run would (Z_val, Z_val -+ 1) -- used where the test
+checks numbers, not only plumbing. Without it, amp is the raw peak height.
 """
 import sys
 
@@ -22,9 +27,12 @@ from stb.core import structure_io, kspace
 
 def main():
     structure_path, out_path, n_grid_str, amps_str, sigmas_str = sys.argv[1:6]
+    as_electrons = "--electrons" in sys.argv[6:]
     n_grid = int(n_grid_str)
     amps = [float(x) for x in amps_str.split(",")]
     sigmas = [float(x) for x in sigmas_str.split(",")]
+    if as_electrons:
+        amps = [n / ((2 * np.pi) ** 1.5 * s ** 3) for n, s in zip(amps, sigmas)]
 
     structure = structure_io.read_fdf(structure_path)
     positions = np.array([pos for _, pos in structure.atoms])

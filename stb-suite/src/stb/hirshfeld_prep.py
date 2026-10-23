@@ -77,7 +77,7 @@ from datetime import datetime
 
 import numpy as np
 
-from stb.core import structure_io
+from stb.core import structure_io, hirshfeld as hf
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, BANKS
 
@@ -216,7 +216,9 @@ def write_species_folder(out_dir, symbol, z_num, calc_text, pseudo_dir, mesh_cut
 def write_hirshfeld_manifest(out_dir, combined_dir, combined_structure,
                               mesh_cutoff, vacuum, species_entries):
     """`combined_dir`/`combined_structure` point at the freshly-written
-    combined/ folder (absolute paths) -- NOT a pre-existing external
+    combined/ folder, RELATIVE to the study folder (out_dir) so the study can
+    be copied or moved -- absolute paths made a copy read the original's
+    combined/ (core.hirshfeld.resolve_study_path). NOT a pre-existing external
     calculation. combined/'s own '*.RHO' does not exist yet at Stage-1
     write time (SIESTA hasn't run there), so it is deliberately NOT
     recorded here; Stage 2/3 locate it themselves (core.rho_io.find_one_rho
@@ -377,8 +379,7 @@ def main():
                    f"pseudopotential copied for: {sym}", f_out)
 
     write_hirshfeld_manifest(
-        args.output_dir, os.path.abspath(combined_out_dir),
-        os.path.abspath(os.path.join(combined_out_dir, "structure.fdf")),
+        args.output_dir, hf.STUDY_LAYOUT["combined_dir"], hf.STUDY_LAYOUT["combined_structure"],
         args.mesh_cutoff, args.vacuum, species_entries)
 
     print_section("[4] SUMMARY", f_out)

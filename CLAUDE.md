@@ -585,7 +585,29 @@ weak in a supercell — consecutive MD frames of a 64-atom cell all pass it. Rep
 
 **4-Workflow item 18, EOS** — `stb-eosInputs`/`stb-eosAnalysis`: real-SIESTA analog
 of `stb-mleos`, same isotropic volume-scan convention (`factor = (1 +
-strain_pct/100)**(1/3)`); both share `core/eos_fit.py`.
+strain_pct/100)**(1/3)`); both share `core/eos_fit.py`. Stage 1 follows the optical/other prep
+conventions: `-f structure.fdf` (fractional, bulk only), `-c/--calc` template (default `calc.fdf`; with
+no `calc.fdf` and no `-c` it falls back to the earlier structure-only mode, and `-c` equal to `--file`
+means a self-contained input), `-p/--pseudo-dir` (bank or folder, `copy_pseudo`), every mandatory
+directive in each folder's `config_extra.fdf` `%include`d on top of an untouched `calc.fdf` (fixed cell:
+`MD.VariableCell false`, `MD.Steps 0`/`MD.NumCGsteps 0`, or `--relax-positions` with a CG budget and
+`MD.MaxForceTol`; the SCF k-grid only when the template has none or `--kgrid`/`--kgrid-density`),
+a numbered report ([0]-[6], warnings repeated last, checks that the template `%include`s the scaled
+structure and does not define a lattice of its own) and `eos_scan.json` (the plan: reference
+structure, planned volumes, forced directives, `LatticeConstant`). Stage 2 reads it (planned vs
+actual volumes, suggested new `LatticeConstant`) and adds, from the same runs: the level-of-theory
+consistency of all folders, SIESTA's own pressure from each stress tensor against -dE/dV of the fit
+(mesh/SCF-noise check), a second B0 from the stress alone, leave-one-out uncertainties of V0/B0, window
+sensitivity, EOS-form spread, residuals, a pass/warn CHECKS table ([0]-[10]). Plots: `--show`
+(matplotlib dashboard), `--png`, `--save-gnuplot` (opt-in `.dat`+`.gplot`, no longer written by
+default), `--save-data` (CSV + JSON). The B0 "from the stress" is a cubic polynomial of P_SIESTA(V) (a quadratic over a
++/-8 % window truncates the curvature and overestimates it by ~2 %). `examples/4.18-eos/` ships REAL finished SIESTA runs
+of bulk Si (14 setups x 11 volumes: k-grid, Mesh.Cutoff, DZP/TZP x PAO.EnergyShift) and its README compares them with the
+all-electron Delta-test reference (WIEN2k.txt: V0 20.4530 A^3/atom, B0 88.545 GPa, B1 4.31; Delta via
+`ase.utils.deltacodesdft.delta`). Its lesson: V0/B0 barely move with k-grid (>= 6^3) or Mesh.Cutoff (>= 150 Ry; the stress
+feels the mesh first) but the basis moves V0 by 1.8 % and B0 by ~8 GPa, and a B0 that matches the reference can come from a
+V0 that is too large (compare B at a fixed volume and Delta, and keep the total-energy convergence in view). Do not call
+the stress/-dE/dV difference "Pulay stress": SIESTA's orbitals keep their shape, so it is mesh/SCF/fit.
 
 **5-ML Simulations** (category order): `stb-mlmd` (NVE/NVT/NPT; all physical units
 explicitly converted to ASE's internal unit system before use — `* ase.units.fs`,

@@ -1,0 +1,13 @@
+# Template of the stb-eosInputs test: physics only, includes the structure, NO k-grid
+SystemName      si_eos_test
+SystemLabel     siesta
+%include si_cubic.fdf
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           DZP
+PAO.EnergyShift         0.02 Ry
+Mesh.Cutoff             200 Ry
+ElectronicTemperature   300 K
+MD.TypeOfRun            CG
+MD.VariableCell         true

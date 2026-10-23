@@ -20,7 +20,7 @@ from stb.core.optical_setup import (reciprocal_spacings, spacing_band, symmetry_
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.calc_directives import build_optical_block, OPTICAL_DIRECTION_VECTORS, OPTICAL_OFFDIAG_PAIRS
 from stb.core.adsorption_sites import SINGLE_POINT_BLOCK
-from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo, pseudo_valence
 
 REPORT_FILE = "optical_stage1.txt"
 DEFAULT_KGRID_DENSITY = 0.2     # 1/Ang, same convention as stb-kgrid and the other workflows
@@ -54,29 +54,6 @@ def detect_structure_vacuum(fdf_structure, vacuum_gap):
 
 
 # --- Report helpers ---------------------------------------------------------------
-
-_PSML_ZVAL_RE = re.compile(r'z-pseudo\s*=\s*"([0-9.eE+-]+)"')
-
-
-def pseudo_valence(label, pseudo_dir):
-    """(valence electrons, source note) of species `label`: the `z-pseudo` of its
-    .psml when it can be found under `pseudo_dir`, else the textbook valence
-    (which differs for semicore pseudopotentials), else (None, ...)."""
-    if pseudo_dir:
-        path = os.path.join(pseudo_dir, f"{label}.psml")
-        if os.path.isfile(path):
-            try:
-                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                    m = _PSML_ZVAL_RE.search(f.read(20000))
-                if m:
-                    return float(m.group(1)), f"{label}.psml"
-            except OSError:
-                pass
-    zval = siesta_log.FALLBACK_VALENCE.get(label)
-    if zval is not None:
-        return zval, "textbook valence (no pseudopotential read; semicore pseudos differ)"
-    return None, "unknown"
-
 
 _MD_EXTRA_BLOCK = (
     "MD.NumCGsteps         0\n"

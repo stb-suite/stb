@@ -13,6 +13,7 @@ also bringing the link target along; a real copy travels with the folder.
 """
 
 import os
+import re
 import shutil
 import importlib.resources
 
@@ -177,3 +178,29 @@ def copy_pseudo(pp_path, symbol, target_dir, dest_label=None):
             return
     print(color_text(f"[WARNING] Pseudopotential '{symbol}.psml' or '{symbol}.psf' not found in {pp_path}", 'yellow'))
     return
+
+
+_PSML_ZVAL_RE = re.compile(r'z-pseudo\s*=\s*"([0-9.eE+-]+)"')
+
+
+def pseudo_valence(label, pseudo_dir):
+    """(valence electrons, source note) of species `label`: the `z-pseudo` of its
+    .psml when it can be found under `pseudo_dir`, else the textbook valence
+    (which differs for semicore pseudopotentials), else (None, ...). Shared by
+    stb-optical and stb-eosInputs for their reports."""
+    from stb.core import siesta_log
+    if pseudo_dir:
+        path = os.path.join(pseudo_dir, f"{label}.psml")
+        if os.path.isfile(path):
+            try:
+                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                    m = _PSML_ZVAL_RE.search(f.read(20000))
+                if m:
+                    return float(m.group(1)), f"{label}.psml"
+            except OSError:
+                pass
+    zval = siesta_log.FALLBACK_VALENCE.get(label)
+    if zval is not None:
+        return zval, "textbook valence (no pseudopotential read; semicore pseudos differ)"
+    return None, "unknown"
+

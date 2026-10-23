@@ -6265,28 +6265,69 @@ def run_mlff_active_learning() -> None:
 
 
 def run_eos_inputs_generator() -> None:
-    """Interface for the Equation of State Prep (stb-eosInputs)"""
+    """Interface for the Equation of State Stage 1 (stb-eosInputs)"""
     print("\n" + "="*60)
-    print(color_text("EQUATION OF STATE - STAGE 1: PREP", 'bold').center(60))
+    print(color_text("EQUATION OF STATE - STAGE 1: VOLUME FOLDERS", 'bold').center(60))
     print("="*60 + "\n")
+    print(color_text(
+        "Writes one SIESTA folder per scanned volume: the already-relaxed structure scaled "
+        "isotropically, your calc.fdf (untouched, plus a config_extra.fdf with the forced fixed-cell "
+        "directives) and the pseudopotentials.", 'cyan'))
+    print()
 
-    struct_file = get_input("Input structure file (bulk, 3D periodic, fractional coords): ")
+    struct_file = get_input("Already-relaxed structure file (bulk, 3D periodic, fractional coords) "
+                            "[default: structure.fdf]: ").strip() or "structure.fdf"
     while not os.path.isfile(struct_file):
         print(color_text("File not found!", 'red'))
         struct_file = get_input("Input structure file: ")
 
-    n_volumes = get_int_input("Number of volumes to scan [default: 9, min 5]: ", 9)
-    strain_range = get_float_input("Max isotropic volume strain, %% [default: 5.0]: ", 5.0)
+    calc_file = get_input("\nCalc.fdf template [default: calc.fdf; blank with no calc.fdf = scaled structures "
+                          "only]: ").strip() or "calc.fdf"
+    use_calc = os.path.isfile(calc_file)
+    if not use_calc and calc_file != "calc.fdf":
+        while not os.path.isfile(calc_file):
+            print(color_text("File not found!", 'red'))
+            calc_file = get_input("Calc.fdf template: ")
+        use_calc = True
+
+    pseudo_dir = prompt_pseudo_source(optional=True) if use_calc else ""
+
+    n_volumes = get_int_input("\nNumber of volumes to scan [default: 9, min 5; odd keeps the input volume]: ", 9)
+    strain_range = get_float_input("Max isotropic volume strain, % [default: 5.0]: ", 5.0)
     output_dir = get_input("Output directory [default: eos_runs]: ").strip() or "eos_runs"
 
     args = ["--file", struct_file, "--n-volumes", str(n_volumes),
             "--strain-range", str(strain_range), "--output-dir", output_dir, "--no-intro"]
+    if use_calc:
+        args.extend(["--calc", calc_file])
+    if pseudo_dir:
+        args.extend(["-p", pseudo_dir])
 
+    if use_calc:
+        relax = get_input("\nLet the ions relax at every volume (cell fixed)? Needed for crystals with free "
+                          "internal coordinates [y/N]: ").strip().lower()
+        if relax == 'y':
+            args.append("--relax-positions")
+            steps = get_int_input("Max CG steps per volume [default: 100]: ", 100)
+            args.extend(["--relax-steps", str(steps)])
+        kgrid_str = get_input("SCF k-grid, 3 integers [blank = keep the template's grid; auto-suggested if it "
+                              "has none]: ").strip()
+        if kgrid_str:
+            kgrid_vals = kgrid_str.split()
+            if len(kgrid_vals) == 3:
+                args.extend(["--kgrid", *kgrid_vals])
+            else:
+                print(color_text("Expected 3 integers -- keeping the template's grid.", 'yellow'))
+    save_report = get_input("\nSave the report to <output>/stb_eosInputs_report.txt? [y/N]: ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nWriting the volume folders...", 'green'))
     run_tool("stb-eosInputs", args)
 
 
 def run_eos_analysis_generator() -> None:
-    """Interface for the Equation of State Analysis (stb-eosAnalysis)"""
+    """Interface for the Equation of State Stage 2 (stb-eosAnalysis)"""
     print("\n" + "="*60)
     print(color_text("EQUATION OF STATE - STAGE 2: ANALYSIS", 'bold').center(60))
     print("="*60 + "\n")
@@ -6294,14 +6335,34 @@ def run_eos_analysis_generator() -> None:
     run_dir = get_input("Directory with 'vol_*' folders [default: eos_runs]: ").strip() or "eos_runs"
     output_filename = get_input("SIESTA output filename inside each folder [default: calc.out]: ").strip() \
         or "calc.out"
-    eos = get_input("EOS form, birchmurnaghan/vinet/murnaghan/sj [default: birchmurnaghan]: ").strip()
-    curve_output = get_input("Base filename for the .dat/.gplot outputs [default: eos_curve]: ").strip() \
-        or "eos_curve"
+    eos = get_input("EOS form, birchmurnaghan/vinet/murnaghan/sj/all [default: birchmurnaghan]: ").strip()
+    curve_output = get_input("Base filename of the output files [default: eos_curve]: ").strip() or "eos_curve"
 
     args = ["--dir", run_dir, "--file", output_filename, "--output", curve_output, "--no-intro"]
     if eos:
         args.extend(["--eos", eos])
+    if eos != "all":
+        targets = get_input("Target pressure(s) in GPa, space-separated [blank = skip]: ").strip()
+        if targets:
+            args.extend(["--target-pressure", *targets.split()])
 
+    show = get_input("\nShow the dashboard on screen (matplotlib)? [y/N]: ").strip().lower()
+    if show == 'y':
+        args.append("--show")
+    png = get_input("Save the dashboard as PNG? [y/N]: ").strip().lower()
+    if png == 'y':
+        args.append("--png")
+    gnuplot = get_input("Write the gnuplot files (.dat + .gplot)? [y/N]: ").strip().lower()
+    if gnuplot == 'y':
+        args.append("--save-gnuplot")
+    data = get_input("Write the data files (CSV + JSON)? [y/N]: ").strip().lower()
+    if data == 'y':
+        args.append("--save-data")
+    save_report = get_input("Save the report to stb_eosAnalysis_report.txt? [y/N]: ").strip().lower()
+    if save_report == 'y':
+        args.append("--save-report")
+
+    print(color_text("\nFitting the equation of state...", 'green'))
     run_tool("stb-eosAnalysis", args)
 
 

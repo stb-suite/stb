@@ -1,0 +1,204 @@
+{
+ "format": "stb-eos-scan",
+ "version": 1,
+ "tool": "stb-eosInputs 1.9.286",
+ "created": "2026-10-22T22:29:44",
+ "structure": {
+  "file": "structure.fdf",
+  "formula": "Si2",
+  "n_atoms": 2,
+  "species": [
+   "Si"
+  ],
+  "volume": 40.894394177250014,
+  "lengths": [
+   3.8671669863092286,
+   3.8671669863092286,
+   3.8671669863092286
+  ],
+  "angles": [
+   60.00000000000001,
+   60.00000000000001,
+   60.00000000000001
+  ],
+  "space_group": "Fd-3m",
+  "crystal_system": "cubic",
+  "d_min": 2.3681464666485477,
+  "latticeconstant": 5.469
+ },
+ "calc": {
+  "mode": "template",
+  "file": "calc_template.fdf",
+  "run_input": "calc.fdf",
+  "output_expected": "calc.out",
+  "kgrid_forced": null,
+  "kgrid_template": [
+   10,
+   10,
+   10
+  ],
+  "relax_positions": false,
+  "relax_steps": 100,
+  "settings": {
+   "xcfunctional": "GGA",
+   "xcauthors": "PBE",
+   "paobasistype": "split",
+   "paobasissize": "DZP",
+   "paoenergyshift": "0.01 Ry",
+   "meshcutoff": "320 Ry",
+   "electronictemperature": "300 K",
+   "spin": "non-polarized",
+   "dmtolerance": "1.0e-5"
+  }
+ },
+ "scan": {
+  "n_volumes": 11,
+  "strain_range_pct": 8.0,
+  "points": [
+   {
+    "folder": "vol_m8.00",
+    "strain_pct": -8.0,
+    "linear_factor": 0.972588826218856,
+    "volume": 37.622842643070015,
+    "volume_per_atom": 18.811421321535008,
+    "lengths": [
+     3.7611634000068035,
+     3.7611634000068035,
+     3.7611634000068035
+    ],
+    "d_min": 2.303232792312042
+   },
+   {
+    "folder": "vol_m6.40",
+    "strain_pct": -6.4,
+    "linear_factor": 0.9781946493017496,
+    "volume": 38.27715294990601,
+    "volume_per_atom": 19.138576474953005,
+    "lengths": [
+     3.78284205396406,
+     3.78284205396406,
+     3.78284205396406
+    ],
+    "d_min": 2.3165082024384533
+   },
+   {
+    "folder": "vol_m4.80",
+    "strain_pct": -4.8,
+    "linear_factor": 0.9837369468917456,
+    "volume": 38.93146325674201,
+    "volume_per_atom": 19.465731628371007,
+    "lengths": [
+     3.804275044232394,
+     3.804275044232394,
+     3.804275044232394
+    ],
+    "d_min": 2.3296331748933174
+   },
+   {
+    "folder": "vol_m3.20",
+    "strain_pct": -3.1999999999999993,
+    "linear_factor": 0.9892174886497401,
+    "volume": 39.58577356357801,
+    "volume_per_atom": 19.792886781789004,
+    "lengths": [
+     3.825469214385999,
+     3.825469214385999,
+     3.825469214385999
+    ],
+    "d_min": 2.342611900492832
+   },
+   {
+    "folder": "vol_m1.60",
+    "strain_pct": -1.5999999999999996,
+    "linear_factor": 0.9946379666537181,
+    "volume": 40.24008387041401,
+    "volume_per_atom": 20.120041935207006,
+    "lengths": [
+     3.846431107972998,
+     3.846431107972998,
+     3.846431107972998
+    ],
+    "d_min": 2.3554483863254982
+   },
+   {
+    "folder": "vol_0.00",
+    "strain_pct": 0.0,
+    "linear_factor": 1.0,
+    "volume": 40.894394177250014,
+    "volume_per_atom": 20.447197088625007,
+    "lengths": [
+     3.8671669863092286,
+     3.8671669863092286,
+     3.8671669863092286
+    ],
+    "d_min": 2.3681464666485477
+   },
+   {
+    "folder": "vol_1.60",
+    "strain_pct": 1.6000000000000014,
+    "linear_factor": 1.005305139062696,
+    "volume": 41.54870448408602,
+    "volume_per_atom": 20.77435224204301,
+    "lengths": [
+     3.8876828449502656,
+     3.8876828449502656,
+     3.8876828449502656
+    ],
+    "d_min": 2.38070981297495
+   },
+   {
+    "folder": "vol_3.20",
+    "strain_pct": 3.200000000000001,
+    "linear_factor": 1.0105548694417121,
+    "volume": 42.20301479092202,
+    "volume_per_atom": 21.10150739546101,
+    "lengths": [
+     3.907984428959022,
+     3.907984428959022,
+     3.907984428959022
+    ],
+    "d_min": 2.393141943422875
+   },
+   {
+    "folder": "vol_4.80",
+    "strain_pct": 4.800000000000001,
+    "linear_factor": 1.0157506156265401,
+    "volume": 42.857325097758014,
+    "volume_per_atom": 21.428662548879007,
+    "lengths": [
+     3.928077247074231,
+     3.928077247074231,
+     3.928077247074231
+    ],
+    "d_min": 2.405446231392078
+   },
+   {
+    "folder": "vol_6.40",
+    "strain_pct": 6.4,
+    "linear_factor": 1.0208937444002926,
+    "volume": 43.51163540459402,
+    "volume_per_atom": 21.75581770229701,
+    "lengths": [
+     3.947966584874423,
+     3.947966584874423,
+     3.947966584874423
+    ],
+    "d_min": 2.4176259136251583
+   },
+   {
+    "folder": "vol_8.00",
+    "strain_pct": 8.0,
+    "linear_factor": 1.0259855680060181,
+    "volume": 44.16594571143002,
+    "volume_per_atom": 22.08297285571501,
+    "lengths": [
+     3.9676575170225954,
+     3.9676575170225954,
+     3.9676575170225954
+    ],
+    "d_min": 2.429684097705855
+   }
+  ]
+ },
+ "pseudo_source": "dojo"
+}

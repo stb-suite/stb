@@ -738,17 +738,7 @@ def _siesta_version(folder):
     """SIESTA's version string from the folder's log ('Version : 5.4.2'), or None."""
     label = structure_io.find_fdf_system_label(folder)
     out_file = siesta_log.find_out_file(folder, label) if label else None
-    if not out_file:
-        return None
-    try:
-        with open(out_file, errors="replace") as fh:
-            for _, line in zip(range(200), fh):
-                m = re.match(r"\s*Version\s*:\s*(\S+)", line)
-                if m:
-                    return m.group(1)
-    except OSError:
-        pass
-    return None
+    return siesta_log.get_siesta_version(out_file) if out_file else None
 
 
 def _model_architecture(model_path):

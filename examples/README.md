@@ -190,6 +190,7 @@ through.
 | 4.15 | `stb-gqca` / `stb-gqcaAnalysis` | [`4.15-gqca/`](4.15-gqca/) |
 | 4.16 | `stb-optical` / `stb-opticalAnalysis` | [`4.16-optical/`](4.16-optical/) |
 | 4.17 | `stb-mlff` / `stb-mlffAnalysis` / `stb-mlffValidate` / `stb-mlffActiveLearning` | [`4.17-mlff/`](4.17-mlff/) |
+| 4.18 | `stb-eosInputs` / `stb-eosAnalysis` | [`4.18-eos/`](4.18-eos/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -248,6 +249,14 @@ committee picks the next SIESTA runs from MD with the model), linked by
 two rounds that reach the target, the phonon reference, a k-grid study of the Kohn
 anomaly) and of a primitive-cell run where active learning sampled too hard and the
 model got worse; its README has the flowchart of the loop.
+`4.18-eos/` covers the 2-stage Equation of State workflow: `stb-eosInputs` (`4.18.1`, one SIESTA
+folder per volume, the cell scaled isotropically, your `calc.fdf` untouched with the forced
+fixed-cell directives in `config_extra.fdf`, the pseudopotentials) and `stb-eosAnalysis`
+(`4.18.2`, the fit of `V0`/`E0`/`B0`/`B0'` with leave-one-out uncertainties, SIESTA's own pressure
+against `-dE/dV`, a second bulk modulus from the stress, a checks table, a dashboard, gnuplot
+files). It ships real finished SIESTA runs of bulk silicon -- 14 setups changing k-points, mesh
+and basis one at a time -- and compares them with the all-electron Delta-test reference, which
+shows why `B0` alone is a poor figure of merit for a basis set.
 
 ## Adding another example
 

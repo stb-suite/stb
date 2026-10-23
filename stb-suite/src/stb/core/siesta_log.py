@@ -446,6 +446,21 @@ def get_stress_voigt_kbar(path: str) -> list[float] | None:
     return last_stress
 
 
+def get_siesta_version(path: str) -> str | None:
+    """SIESTA's version string from the header of a .out file ('Version : 5.4.2'),
+    or None when it is not found in the first 200 lines. Shared by stb-mlffAnalysis
+    (model cards) and stb-eosAnalysis."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for _, line in zip(range(200), f):
+                m = re.match(r"\s*Version\s*:\s*(\S+)", line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
 def get_free_energy(path: str) -> float | None:
     """Last 'siesta: FreeEng' value (eV) from a SIESTA .out file."""
     energy = None

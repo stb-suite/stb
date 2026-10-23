@@ -1434,6 +1434,12 @@
   \newunicodechar{ξ}{\ensuremath{\xi}}
   \newunicodechar{₊}{\textsubscript{+}}
   \newunicodechar{₋}{\textsubscript{-}}
+  \newunicodechar{å}{\aa{}}
+  \newunicodechar{ζ}{\ensuremath{\zeta}}
+  \newunicodechar{λ}{\ensuremath{\lambda}}
+  \newunicodechar{₈}{\textsubscript{8}}
+  \newunicodechar{↑}{\ensuremath{\uparrow}}
+  \newunicodechar{↓}{\ensuremath{\downarrow}}
   \newunicodechar{→}{\ensuremath{\rightarrow}}
   \newunicodechar{↔}{\ensuremath{\leftrightarrow}}
   \newunicodechar{⇌}{\ensuremath{\rightleftharpoons}}
@@ -34022,64 +34028,1176 @@ Example usage:
 \menucode{4.19.2} & Stage 2 - Analysis & \hyperref[cmd-stb-chargediffAnalysis]{\texttt{stb-\allowbreak{}chargediffAnalysis}} \\
 \end{tabularx}
 
-\textbf{Guided example:} none yet in the repository; this section is the reference.
+\textbf{Guided example:} \href{https://github.com/stb-suite/stb/tree/main/examples/4.19-chargediff}{\texttt{examples/\allowbreak{}4.\allowbreak{}19-\allowbreak{}chargediff/}}
 
 \textbf{Summary:} Generate ghosted fragment folders for an already-relaxed combined system (bilayer, molecule-on-slab, or any N-fragment system), then compute Delta rho = rho\_combined - sum(rho\_fragment\_i) to visualize charge accumulation/depletion regions.
 \end{toolinfo}
 
-\subsection{Overview}
+\subsection{Guide}
+\label{guide-4.19}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}4.\allowbreak{}19-\allowbreak{}chargediff/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
-The charge-density difference
-\[
-\Delta\rho(\mathbf{r}) = \rho_\mathrm{AB}(\mathbf{r}) - \sum_i \rho_{i}(\mathbf{r})
-\]
-shows where electrons accumulate ($\Delta\rho>0$) and deplete ($\Delta\rho<0$) when fragments --
-two layers of a heterostructure, a molecule and a surface, or any $N\ge2$ parts -- come together.
-It is meaningful only if every density is computed at the \emph{same} atomic positions, on the
-\emph{same} real-space grid, with the \emph{same} basis set; this workflow enforces all three.
-
-\subsection{Stage 1: folders (\cmd{stb-chargediffPrep}, \menucode{4.19.1})}
-
-The combined structure (\opt{-s}, used exactly as given -- normally your relaxed geometry) is split
-into fragments in one of three ways:
-\begin{itemize}
-  \item \opt{--fragment-manifest} -- the slab/adsorbate split recorded by \cmd{stb-adsorb};
-  \item \opt{--fragment-sizes N1,N2,...} -- consecutive blocks of atoms in file order;
-  \item \opt{--fragment-species 'C;B,N'} -- by element, each group one fragment.
-\end{itemize}
-It writes \file{combined/} (all atoms real) and one folder per fragment in which the atoms of the
-other fragments are \emph{ghosts} (\texttt{<El>\_ghost}: same basis, no charge), so every calculation
-has the same basis functions -- otherwise the basis-set difference itself would show up in
-$\Delta\rho$. Every folder gets, in its \file{config\_extra.fdf}: a fixed cell, a single-point SCF,
-the same explicit \fdf{Mesh.Cutoff} (\opt{--mesh-cutoff}, default 400~Ry; an implicit default could
-differ between calculations and give different grids), and \fdf{SaveRho true}. Spin, dipole correction
-and DFT-D3 are inherited from the combined system's own \file{config\_extra.fdf}, or forced on/off with
-\opt{--force-spin}/\opt{--no-force-spin}, \opt{--force-dipole}/\opt{--no-force-dipole},
-\opt{--force-vdw}/\opt{--no-force-vdw}. Pseudopotentials come from \opt{-p} or the folder of the
-structure. \texttt{chargediff\_manifest.json} records the split; \opt{--view} shows the combined
-structure and each fragment (ghosts drawn hollow).
-
-\subsection{Stage 2: analysis (\cmd{stb-chargediffAnalysis}, \menucode{4.19.2})}
-
-It reads every \file{.RHO} (total density; with \opt{--spin} the magnetization density instead,
-when all runs are spin-polarized), checks that the grids are identical, and computes $\Delta\rho$.
-Output modes are those of \cmd{stb-density} (\menucode{3.8}): a 2D slice perpendicular to
-\opt{--axis} at \opt{--pos}, the planar average along the axis (\opt{--profile}, the usual plot for
-interfaces, often integrated to give the charge transferred across a plane), or a 3D point cloud
-(\opt{--3d}, \opt{--iso-min}); a Gaussian cube is written by default for VESTA isosurfaces
-(\opt{--no-cube} to skip). Grids of different shape are refused. The report prints the integral of
-$\Delta\rho$ over the cell, which should be close to zero for neutral fragments.
+This workflow has 2 stages: \textbf{Stage 1} (\texttt{stb-\allowbreak{}chargediffPrep}, code \texttt{4.\allowbreak{}19.\allowbreak{}1}) takes a
+\textbf{combined structure} --- two molecules, a molecule on a surface, two layers, any system made
+of \texttt{N\ ≥\ 2} fragments --- and a fragment split, and writes \texttt{N\ +\ 1} ready-to-run SIESTA folders:
+one with the whole system and one per fragment, each fragment keeping the atoms of all the
+others as \textbf{ghost atoms}, every folder with the same cell, mesh and level of theory, the
+template untouched and everything mandatory in a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}. \textbf{Stage 2}
+(\texttt{stb-\allowbreak{}chargediffAnalysis}, code \texttt{4.\allowbreak{}19.\allowbreak{}2}) reads the finished runs back and computes the
+\textbf{charge density difference}
 
 \begin{codeblock}
-stb-chargediffPrep -s relaxed.fdf --fragment-species 'C;B,N' --calc calc.fdf -p dojo
-# ... run SIESTA in chargediff_run/*/
-stb-chargediffAnalysis --dir chargediff_run --profile --axis 2 --save-gnuplot
+Δρ(r) = ρ_combined(r) − Σ_i ρ_fragment_i(r)
 \end{codeblock}
 
-\paragraph{Interpretation.}
-$\Delta\rho$ visualizes polarization and bonding; it does not assign charges to atoms. For a number
-per atom use Bader (\menucode{3.6}), Hirshfeld-I (\menucode{4.20}) or SIESTA's own Hirshfeld/Voronoi
-charges (\menucode{6.8}).
+with what you need to read it and to trust it: the consistency of the runs (grid, cell,
+mesh SIESTA actually used, level of theory, pseudopotentials, SCF, electron count), the
+\textbf{counterpoise-corrected interaction energy} from the same runs, the statistics of \texttt{Δρ},
+the charge gained or lost by each fragment and atom, the charge that crossed the plane
+between two fragments, the \textbf{dipole} the rearrangement induces (checked against SIESTA\textquotesingle s
+own dipoles) and the work-function shift it causes, a 2D map, a planar profile, a Gaussian
+cube for isosurfaces and a 4-panel dashboard.
+
+It answers a question none of \texttt{4.\allowbreak{}1}--\texttt{4.\allowbreak{}18} does: not how strongly two things bind (that is
+\texttt{4.\allowbreak{}8} adsorption, \texttt{4.\allowbreak{}3} cohesive energy) but \textbf{where the electrons go when they meet} --- which
+regions gain and lose charge, how much moves, how much crosses from one fragment to the other,
+and what dipole that leaves behind. The worked example (Section 5) runs the whole thing for
+real, with SIESTA, on three systems that span the chemistry of an interface --- a hydrogen bond
+(the water dimer), a dative bond (ammonia borane) and an alkali atom on a 2D sheet (Li on
+graphene) --- plus three studies on the water dimer (basis set, mesh, distance) that show what
+the numbers depend on.
+
+Both stages live in this one folder and this one tutorial --- same reasoning as \texttt{4.\allowbreak{}1}--\texttt{4.\allowbreak{}5},
+\texttt{4.\allowbreak{}15}--\texttt{4.\allowbreak{}18}: Stage 1\textquotesingle s output exists only to feed Stage 2.
+
+\subsubsection{1. Theory}\label{g4.19-1-theory}
+
+\textbf{Symbols at a glance}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2000}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8000}}@{}}
+\toprule\noalign{}
+Symbol & Meaning \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{ρ\_\allowbreak{}AB(r)}, \texttt{ρ\_\allowbreak{}A(r)} & electron density of the combined system and of fragment A (e/Å³) \\
+\texttt{Δρ(r)} & charge density difference; \texttt{\textgreater{}\ 0} where the electrons accumulate \\
+\texttt{Q\_\allowbreak{}moved\ =\allowbreak{}\ ½\ ∫\ abs(Δρ)} & the charge moved by the interaction (e) \\
+\texttt{Δq\_\allowbreak{}A} & net charge change of fragment A (e; \texttt{\textgreater{}\ 0}: it gained electrons) \\
+\texttt{ρ̄(z)}, \texttt{λ(z)} & planar average of \texttt{Δρ}, and its planar integral \texttt{λ\ =\allowbreak{}\ A\ ρ̄} (e/Å) \\
+\texttt{ΔQ(z)} & charge below the plane at \texttt{z}, \texttt{∫\ λ\ dz\textquotesingle{}} (e) \\
+\texttt{Δμ} & dipole induced by the rearrangement (e Å, or Debye: 1 e Å = 4.803 D) \\
+\texttt{ΔΦ} & work-function shift caused by \texttt{Δμ} (eV) \\
+\texttt{E\_\allowbreak{}X(Y)} & energy of fragment X computed in the basis of the set of atoms Y (eV) \\
+\texttt{E\_\allowbreak{}int}, \texttt{E\_\allowbreak{}def}, \texttt{E\_\allowbreak{}bind} & interaction, deformation and binding energies (eV or kcal/mol; 1 eV = 23.06 kcal/mol) \\
+BSSE & basis-set superposition error \\
+\texttt{A} & cell area normal to the profile axis (Å²) \\
+\end{longtable}
+\endgroup
+
+\paragraph{1.1 What the difference shows}\label{g4.19-11-what-the-difference-shows}
+
+Bring two fragments \texttt{A} and \texttt{B} together, keep their geometries, and let the electrons relax. The
+density of the pair is not the sum of the densities of the parts: some electrons moved. The
+difference
+
+\begin{codeblock}
+Δρ(r) = ρ_AB(r) − ρ_A(r) − ρ_B(r)                                            (1)
+\end{codeblock}
+
+evaluated with every density \textbf{at the same atomic positions}, isolates that rearrangement from
+everything that was already there. Its integral is zero --- nothing is created, only moved:
+
+\begin{codeblock}
+∫ Δρ d³r = N_AB − N_A − N_B = 0                                                (2)
+\end{codeblock}
+
+What the map shows depends on the interaction:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Polarization} --- each fragment\textquotesingle s cloud is distorted by the field of the other: gain and loss
+  side by side \emph{inside the same fragment}, a dipole-like pattern. Present in every interaction.
+\item
+  \textbf{Charge transfer} --- electrons cross from one fragment to the other: a net gain on one side and
+  a net loss on the other. Large for a dative bond or an alkali on a surface, a few hundredths of an
+  electron for a hydrogen bond.
+\item
+  \textbf{Covalent bonding} --- accumulation between the atoms that bond, depletion from the lone pair or
+  orbital that formed it.
+\item
+  \textbf{Pauli repulsion} --- depletion where two closed shells overlap, pushing density back onto each
+  fragment.
+\end{itemize}
+
+The magnitude of the effect is condensed in the \textbf{charge moved},
+
+\begin{codeblock}
+Q_moved = ∫_{Δρ>0} Δρ d³r = −∫_{Δρ<0} Δρ d³r = ½ ∫ |Δρ| d³r                    (3)
+\end{codeblock}
+
+which counts polarization and transfer together, and in the \textbf{net charge change of each fragment}
+\texttt{Δq\_\allowbreak{}A}, which only counts the transfer (Section 1.5) but needs a rule to decide which part of space
+belongs to whom (Section 1.6).
+
+\texttt{Δρ} of fragments is different from the \emph{deformation density} \texttt{ρ\ −\ Σ\ ρ\_\allowbreak{}atom} of crystallography,
+which subtracts spherical free atoms and shows every bond of the system. This workflow subtracts the
+fragments you choose, so only the interaction between them remains; split the system into single
+atoms (\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ 1,\allowbreak{}1,\allowbreak{}1,\allowbreak{}.\allowbreak{}.\allowbreak{}.\allowbreak{}}) and you get the deformation density back.
+
+\paragraph{1.2 Three conditions for a meaningful subtraction}\label{g4.19-12-three-conditions-for-a-meaningful-subtraction}
+
+Eq. 1 is evaluated \textbf{point by point} on SIESTA\textquotesingle s real-space grid. That only works if:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{The same geometry.} The fragments are not relaxed apart: \texttt{ρ\_\allowbreak{}A} is computed with the atoms of
+  \texttt{A} exactly where they are in \texttt{AB}. (The energy of relaxing them is a separate quantity, Section 1.4.)
+\item
+  \textbf{The same grid.} Every density must sit on the same grid points. SIESTA builds its grid from the
+  cell and \texttt{Mesh.\allowbreak{}Cutoff}; the same cell and the same cutoff give the same grid. Stage 1 forces
+  \texttt{MeshCutoff} into every folder, and Stage 2 checks the mesh SIESTA actually used --- which is not the
+  requested one: SIESTA rounds up to a grid that fits the cell (320 Ry requested, 361 Ry used for the
+  14 Å box of the example). A different grid is refused (it cannot be subtracted); a different cutoff
+  with the same grid is flagged.
+\item
+  \textbf{The same basis.} SIESTA expands the orbitals in numerical atomic orbitals (NAOs) centred on
+  the atoms. A fragment computed alone has only its own orbitals; in the complex it can also use its
+  partner\textquotesingle s. Section 1.3.
+\end{enumerate}
+
+There is also the \textbf{egg-box effect}: the integration grid is fixed in space while the atoms are not,
+so energies and densities depend slightly on where the atoms sit relative to the grid points. Because
+every folder has the atoms at the same place on the same grid, this error is the same in every term of
+Eq. 1 and largely cancels --- one more reason the three conditions matter.
+
+\paragraph{1.3 Ghost atoms and the basis-set superposition error}\label{g4.19-13-ghost-atoms-and-the-basis-set-superposition-error}
+
+In a finite atom-centred basis the energy of a fragment is lowered when extra basis functions are
+nearby, whether or not they belong to anything physical. In the complex, \texttt{A} borrows \texttt{B}\textquotesingle s orbitals (and
+vice versa) and is artificially stabilized; the energy difference \texttt{E\_\allowbreak{}AB\ −\ E\_\allowbreak{}A\ −\ E\_\allowbreak{}B} then includes a
+spurious attraction, the \textbf{basis-set superposition error} (BSSE). The \textbf{counterpoise} correction of
+Boys and Bernardi {[}1{]} computes every fragment in the \emph{full} basis of the complex:
+
+\begin{codeblock}
+E_int(CP)  = E_AB(AB) − E_A(AB) − E_B(AB)                                      (4)
+E_int(raw) = E_AB(AB) − E_A(A) − E_B(B)
+BSSE       = E_int(CP) − E_int(raw) = [E_A(A) − E_A(AB)] + [E_B(B) − E_B(AB)] ≥ 0   (5)
+\end{codeblock}
+
+where \texttt{E\_\allowbreak{}X(Y)} is the energy of \texttt{X} in the basis of the atoms \texttt{Y}. The partner\textquotesingle s orbitals are supplied
+by \textbf{ghost atoms}: in SIESTA, a species with a \emph{negative} atomic number in \texttt{\%block\ ChemicalSpeciesLabel} places its orbitals at the atom\textquotesingle s position with no nucleus and no electrons. Stage
+1 always does this --- every fragment folder contains every other fragment as ghosts --- so
+
+\begin{itemize}
+\tightlist
+\item
+  the \textbf{density} of each fragment is computed in the same basis as the combined system, and \texttt{Δρ}
+  contains no basis artefact near the partner;
+\item
+  the three energies of the runs \textbf{are} the counterpoise interaction energy (Eq. 4): Stage 2 reports it
+  at no extra cost.
+\end{itemize}
+
+The BSSE shrinks as the basis grows (Section 5.3 measures it); in the complete-basis limit it vanishes and
+the two energies of Eq. 4 coincide. Whether the full counterpoise \emph{over}corrects has been debated for decades
+{[}2, 3{]}; for density functionals a systematic assessment {[}4{]} finds that counterpoise-corrected interaction
+energies with a double-ζ basis are close to the complete-basis values --- and SIESTA\textquotesingle s DZP is a double-ζ basis.
+
+\paragraph{1.4 Interaction energy and binding energy}\label{g4.19-14-interaction-energy-and-binding-energy}
+
+\texttt{E\_\allowbreak{}int} of Eq. 4 is evaluated at the geometry of the complex. The fragments are not at their own equilibrium
+there: their geometries are \emph{deformed} by the interaction. The energy needed to deform them is
+
+\begin{codeblock}
+E_def = Σ_X [ E_X(X; geometry in the complex) − E_X(X; relaxed alone) ]  ≥ 0      (6)
+\end{codeblock}
+
+computed in the fragments\textquotesingle{} own basis {[}5{]}, and the \textbf{binding energy} --- what you would measure to separate
+the complex into relaxed fragments --- is
+
+\begin{codeblock}
+E_bind = E_int(CP) + E_def,          D_e = −E_bind                                  (7)
+\end{codeblock}
+
+For a hydrogen bond \texttt{E\_\allowbreak{}def} is a small correction; for a dative bond it can be a large fraction of \texttt{E\_\allowbreak{}int}
+(Section 5.5). Stage 2 reports \texttt{E\_\allowbreak{}int} and says so; the example computes \texttt{E\_\allowbreak{}def} from relaxed monomers.
+
+\paragraph{1.5 Planar averages, the charge across a plane, and the induced dipole}\label{g4.19-15-planar-averages-the-charge-across-a-plane-and-the-induced-dipole}
+
+For a layered system --- a slab and an adsorbate, two layers, two molecules facing each other --- the natural
+view of \texttt{Δρ} is its \textbf{planar average} along the normal \texttt{z}:
+
+\begin{codeblock}
+λ(z) = ∫∫_cell Δρ(x, y, z) dx dy                     (e/Å)                         (8)
+ΔQ(z) = ∫_0^z λ(z') dz'                               (e)                           (9)
+\end{codeblock}
+
+\texttt{ΔQ(z)} is the charge that sits below the plane at height \texttt{z}: if the two fragments are separated along
+\texttt{z}, its value at a plane between them is the \textbf{net charge transferred}, with no partition of space
+needed --- only the choice of the plane, which Stage 2 puts halfway between the two fragments\textquotesingle{} closest atoms
+along the axis. Where \texttt{λ} is non-zero at that plane the number depends on the plane; it is unambiguous when
+\texttt{λ} vanishes in a vacuum gap between the fragments.
+
+The first moment of the profile is the \textbf{dipole induced} by the rearrangement,
+
+\begin{codeblock}
+Δμ_z = −∫ z λ(z) dz                    (electrons counted positive; e Å)           (10)
+\end{codeblock}
+
+measured from the middle of the vacuum so the cell boundary does not cut the system. Since the nuclei are the
+same in the combined system and in the fragments, \texttt{Δμ} must equal the difference of the total dipoles SIESTA
+prints in each run, \texttt{μ\_\allowbreak{}AB\ −\ Σ\ μ\_\allowbreak{}X}: Stage 2 checks it (Section 4.3), a strong test of the whole chain (grids,
+units, signs). For a \textbf{periodic 2D system} a dipole layer of density \texttt{Δμ/\allowbreak{}A} makes the electrostatic potential
+jump across the layer (Helmholtz):
+
+\begin{codeblock}
+ΔΦ = −e Δμ_z / (ε0 A) = −180.95 eV Å · Δμ_z(e Å) / A(Å²)                          (11)
+\end{codeblock}
+
+the change of the work function on the \texttt{+z} side relative to the \texttt{−z} side. An alkali atom that gives its
+electron to the surface points \texttt{Δμ} away from the surface and \emph{lowers} the work function on its side --- the
+classic alkali-adsorption effect {[}6{]}.
+
+\paragraph{1.6 Charges of fragments and atoms: a partition is a choice}\label{g4.19-16-charges-of-fragments-and-atoms-a-partition-is-a-choice}
+
+The \emph{net} charge of a fragment inside a complex is not an observable: it needs a rule that assigns each
+point of space to a fragment or an atom. Every rule gives a different number {[}7{]}:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Voronoi / nearest atom} --- each grid point belongs to the nearest atom. Simple, parameter-free,
+  works on \texttt{Δρ} directly. The one Stage 2 uses (\texttt{{[}5{]}} of the report).
+\item
+  \textbf{Bader} (QTAIM) --- the zero-flux surfaces of the total density {[}8{]} (\texttt{stb-\allowbreak{}bader}, 3.6).
+\item
+  \textbf{Hirshfeld} --- shares each point in proportion to free-atom densities {[}9{]} (\texttt{stb-\allowbreak{}hirshfeld}).
+\item
+  \textbf{Mulliken} --- partitions the basis functions, not space; strongly basis-dependent.
+\end{itemize}
+
+Two things make the numbers of this workflow more robust than an absolute charge: they are \emph{differences}
+(of the same partition applied to \texttt{ρ\_\allowbreak{}AB} and to \texttt{Σ\ ρ\_\allowbreak{}X}), so much of the arbitrariness cancels; and the
+plane-integrated value of Section 1.5 needs no partition at all. In the example they agree to 1e-4 e for the
+water dimer, whose fragments are well separated along the axis (Section 5.2). For a partition into atoms
+there is no such cross-check: compare atoms within one system, and systems with the same rule.
+
+\paragraph{1.7 What SIESTA\textquotesingle s density is, and the units}\label{g4.19-17-what-siestas-density-is-and-the-units}
+
+The \texttt{.\allowbreak{}RHO} file is the \textbf{valence} pseudo-density on the real-space grid: the core electrons of the
+pseudopotential are not in it, so the total is the number of valence electrons (16 for the water dimer; 75 for Li on 3×3 graphene, whose
+PseudoDojo Li has its 1s in the valence: 18 × 4 + 3), and near a nucleus the density is the
+smooth pseudo-density, not the all-electron cusp. Features of \texttt{Δρ} within a few tenths of an ångström of a
+nucleus are real \emph{pseudo}-valence rearrangements but should not be compared with an all-electron density
+there.
+
+Units: SIESTA\textquotesingle s grid, read by sisl, is in e/Å³; the report and the \texttt{.\allowbreak{}dat} files use e/Å³. A Gaussian \textbf{cube}
+file carries its lattice in bohr and, by convention, its values in \textbf{e/bohr³} --- \texttt{1\ e/\allowbreak{}bohr³\ =\allowbreak{}\ 6.\allowbreak{}748\ e/\allowbreak{}Å³} ---
+and Stage 2 writes it that way, so isosurface levels typed in VESTA or VMD and charges integrated there are
+right. The report prints a first isosurface level in that unit.
+
+\textbf{Spin.} For spin-polarized runs (\texttt{-\/-\allowbreak{}force-\allowbreak{}spin}), \texttt{Δρ} is the difference of the total densities (up +
+down); \texttt{-\/-\allowbreak{}spin} gives instead the difference of the spin densities \texttt{m\ =\allowbreak{}\ ρ↑\ −\ ρ↓}, which shows where a moment
+appears or disappears (Section 5.6).
+
+\paragraph{1.8 Where the electrons can go: what the map is not}\label{g4.19-18-where-the-electrons-can-go-what-the-map-is-not}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{Δρ} is the response \textbf{at a fixed geometry}: it does not contain the rearrangement caused by the atoms
+  moving (that is in \texttt{E\_\allowbreak{}def}, not in \texttt{Δρ}).
+\item
+  It depends on the \textbf{functional}: semilocal functionals (PBE) delocalize electrons too easily and
+  overestimate charge transfer between fragments with very different electronegativity (the
+  self-interaction error); hybrid functionals reduce it. The example\textquotesingle s numbers are PBE numbers.
+\item
+  It depends on the \textbf{basis} a little even with ghosts (a richer basis polarizes more freely; Section 5.3)
+  and on the \textbf{mesh} very little once the three conditions of Section 1.2 hold (Section 5.4).
+\item
+  Dispersion (van der Waals) does not change the density in a semilocal functional with an additive D3
+  correction: \texttt{-\/-\allowbreak{}force-\allowbreak{}vdw} changes energies and, through relaxation, geometries --- not \texttt{Δρ} at a given
+  geometry.
+\end{itemize}
+
+\paragraph{1.9 A calculation you can check by hand}\label{g4.19-19-a-calculation-you-can-check-by-hand}
+
+From the report of the water dimer (Section 5.2) --- three energies and nothing else:
+
+\begin{codeblock}
+E_AB(AB)  = −962.477198 eV       E_A(AB) = −481.249919 eV       E_B(AB) = −481.035089 eV
+E_int(CP) = −962.477198 + 481.249919 + 481.035089 = −0.192190 eV = −4.43 kcal/mol
+\end{codeblock}
+
+and from the runs without ghost atoms (\texttt{fragmentN\_\allowbreak{}alone/\allowbreak{}}, Section 5.3), \texttt{E\_\allowbreak{}A(A)\ =\allowbreak{}\ −481.\allowbreak{}004966} and \texttt{E\_\allowbreak{}B(B)\ =\allowbreak{}\ −481.\allowbreak{}002416}
+eV, Eq. 5 gives the BSSE: \texttt{0.\allowbreak{}244953\ +\ 0.\allowbreak{}032673\ =\allowbreak{}\ 0.\allowbreak{}277626\ eV\ =\allowbreak{}\ 6.\allowbreak{}40\ kcal/\allowbreak{}mol}. The dipole check is just as direct: SIESTA prints \texttt{Electric\ dipole\ (Debye)} in each \texttt{calc.\allowbreak{}out}; subtract
+the fragments\textquotesingle{} from the combined one and compare with the \texttt{Induced\ dipole} line of \texttt{{[}5{]}}.
+
+\subsubsection{2. Libraries and external dependencies used}\label{g4.19-2-libraries-and-external-dependencies-used}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{SIESTA} {[}10, 11{]} itself is \emph{not} called by the suite. It does the real work: one SCF calculation per
+  folder, writing the density on the real-space grid (\texttt{\textless{}label\textgreater{}.\allowbreak{}RHO}, because \texttt{SaveRho} is forced) and the log
+  (\texttt{calc.\allowbreak{}out}) with the energy, the electron count, the mesh used, the SCF convergence and the dipole. The
+  reference data of Section 5 was produced with SIESTA 5.4.2, GGA-PBE {[}12{]}, PseudoDojo norm-conserving
+  pseudopotentials {[}13{]} and Monkhorst--Pack k-grids {[}14{]}.
+\item
+  \textbf{\href{https://zerothi.github.io/sisl/}{sisl}} {[}15{]} --- reads the \texttt{.\allowbreak{}RHO} grids (any spin layout) and writes the
+  cube file.
+\item
+  \textbf{numpy} --- the subtraction, the integrals, the nearest-atom partition (on fractional coordinates, minimum
+  image), the planar profile and its moments.
+\item
+  \textbf{\href{https://wiki.fysik.dtu.dk/ase/}{ASE}} {[}16{]} / \textbf{\href{https://pymatgen.org/}{pymatgen}} {[}17{]} --- structure
+  reading, closest contact between fragments, dimensionality (Stage 1), the \texttt{-\/-\allowbreak{}view} window.
+\item
+  \textbf{\href{https://matplotlib.org/}{matplotlib}} {[}18{]} --- the fragment figure of Stage 1 and the dashboard of Stage 2
+  (\texttt{-\/-\allowbreak{}png} / \texttt{-\/-\allowbreak{}show}). The \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} pair (\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}) is for gnuplot, which the suite never
+  invokes.
+\end{itemize}
+
+\subsubsection{\texorpdfstring{3. Stage 1: generating the folders (\texttt{stb-\allowbreak{}chargediffPrep}, code \texttt{4.\allowbreak{}19.\allowbreak{}1})}{3. Stage 1: generating the folders (stb-chargediffPrep, code 4.19.1)}}\label{g4.19-3-stage-1-generating-the-folders-stb-chargediffprep-code-4191}
+
+\paragraph{3.1 What it does}\label{g4.19-31-what-it-does}
+
+\texttt{stb-\allowbreak{}chargediffPrep} takes the \textbf{combined structure} (\texttt{-s}, default \texttt{structure.\allowbreak{}fdf}; the real geometry ---
+relax it first), a \textbf{fragment split} and your \textbf{template} (\texttt{-\/-\allowbreak{}calc}, default \texttt{calc.\allowbreak{}fdf}), and writes
+
+\begin{codeblock}
+<output-dir>/                         (default chargediff_run)
+    combined/      structure.fdf (all atoms real), calc.fdf, config_extra.fdf, one pseudopotential per label
+    fragment1/     structure.fdf (fragment 1 real, every other fragment as ghosts), calc.fdf, config_extra.fdf, ...
+    fragment2/     ...
+    chargediff_manifest.json          the split, read by Stage 2
+    chargediff_fragments.png          with --png: the system projected on xy/xz/yz, atoms coloured by fragment
+    chargediff_prep_report.txt        with --save-report
+    references.bib
+\end{codeblock}
+
+Three ways to split:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1646}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4241}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4114}}@{}}
+\toprule\noalign{}
+Option & Split & Use it for \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ N1,\allowbreak{}N2,\allowbreak{}.\allowbreak{}.\allowbreak{}.\allowbreak{}} & by atom count, in file order & molecules, any system whose atoms are listed fragment by fragment \\
+\texttt{-\/-\allowbreak{}fragment-\allowbreak{}species\ \textquotesingle{}C;B,\allowbreak{}N\textquotesingle{}} & by element, \texttt{;} between fragments & heterostructures whose fragments share no element \\
+\texttt{-\/-fragment-manifest\ {[}PATH{]}} & the slab/adsorbate split \texttt{stb-\allowbreak{}adsorb} (4.8) records next to each site & an adsorption site \\
+\end{longtable}
+\endgroup
+
+Every species of every fragment gets \textbf{its own label}, as in the adsorption workflow: \texttt{O\_\allowbreak{}frag1}, \texttt{H\_\allowbreak{}frag2}, and in
+the folders where they are ghosts \texttt{O\_\allowbreak{}frag2\_\allowbreak{}ghost}, with the same pseudopotential file renamed after the label
+(\texttt{-p\ dojo}, \texttt{-p\ virtual\_\allowbreak{}vault} or a folder). A ghost label has a negative atomic number in \texttt{\%block\ ChemicalSpeciesLabel} (Section 1.3). The atom order of the structure is kept in every folder, so atom \texttt{i} is the same
+atom everywhere.
+
+\paragraph{\texorpdfstring{3.2 \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}: everything mandatory, the template untouched}{3.2 config\_extra.fdf: everything mandatory, the template untouched}}\label{g4.19-32-config_extrafdf-everything-mandatory-the-template-untouched}
+
+Every folder\textquotesingle s \texttt{calc.\allowbreak{}fdf} is \texttt{\%include\ config\_\allowbreak{}extra.\allowbreak{}fdf} followed by your template byte for byte. SIESTA\textquotesingle s fdf
+reader is first-occurrence-wins, so the forced values beat the template\textquotesingle s --- even a template written for a
+relaxation:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1729}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3759}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4511}}@{}}
+\toprule\noalign{}
+Directive & Forced & Why \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{MD.\allowbreak{}VariableCell} & \texttt{false} & the cell is shared by all folders \\
+\texttt{MD.\allowbreak{}TypeOfRun} / \texttt{MD.\allowbreak{}Steps} & \texttt{CG} / \texttt{0} & single point: the geometry is the one you gave (Section 1.2) \\
+\texttt{MeshCutoff} & \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} (default 400 Ry) & the same real-space grid in every folder (Section 1.2) \\
+\texttt{SaveRho} & \texttt{true} & SIESTA must write the \texttt{.\allowbreak{}RHO} Stage 2 reads \\
+\texttt{Spin\ polarized} & inherited, or \texttt{-\/-\allowbreak{}force-\allowbreak{}spin} / \texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}spin} & the same spin treatment everywhere \\
+\texttt{Slab.\allowbreak{}DipoleCorrection} & inherited, or \texttt{-\/-\allowbreak{}force-\allowbreak{}dipole} / \texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}dipole} & for a slab with a dipole \\
+\texttt{DFTD3\ .\allowbreak{}true.\allowbreak{}} & inherited, or \texttt{-\/-\allowbreak{}force-\allowbreak{}vdw} / \texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}vdw} & dispersion (energies only, Section 1.8) \\
+\end{longtable}
+\endgroup
+
+"Inherited" means: whatever the combined system\textquotesingle s own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} next to \texttt{-s} says (for example a site of
+\texttt{stb-\allowbreak{}adsorb}), so the fragments run at the level of theory of the calculation they came from. Everything else ---
+functional, basis, k-grid, SCF settings --- is the template\textquotesingle s, identical in all folders.
+
+\paragraph{3.3 The report, live}\label{g4.19-33-the-report-live}
+
+\begin{codeblock}
+[2] FRAGMENT DEFINITION
+------------------------------------------------------------
+  Split by        : atom counts 3,3 (in file order)
+  Fragments       : 2
+Folder     | Formula | Atoms | Atom indices | Species labels (real) | Valence e-
+fragment1/ | H2O     | 3     | 1-3          | H_frag1, O_frag1      | 8
+fragment2/ | H2O     | 3     | 4-6          | H_frag2, O_frag2      | 8
+  Valence electrons: 16 in total (the combined system's SCF must find this number; each fragment folder finds only its
+  own, ghost atoms carry no electrons).
+  Closest contact between fragments: 1.810 Ang (O1 - H5)
+
+[3] LEVEL OF THEORY AND FORCED SETTINGS
+------------------------------------------------------------
+  Read from the template (identical in every folder):
+XC functional ... GGA / PBE    Basis ... split DZP, PAO energy shift 0.01 Ry    SCF k-grid ... 1x1x1
+  Every folder's config_extra.fdf (%include'd on top of calc.fdf, which is the template untouched):
+Directive               | Forced value | Template had        | Why
+MD.VariableCell         | false        | (absent)            | the cell is shared by all folders
+MD.TypeOfRun / MD.Steps | CG / 0       | (absent) / (absent) | single point: the geometry is the one you gave
+MeshCutoff              | 320 Ry       | 320 Ry              | the SAME real-space grid in every folder, or the densities cannot be subtracted
+SaveRho                 | true         | (absent)            | SIESTA must write the .RHO that Stage 2 reads
+Spin polarized          | no           | non-polarized       | inherited from the combined folder's config_extra.fdf
+...
+
+[4] FOLDERS WRITTEN
+------------------------------------------------------------
+Folder     | Real atoms | Ghost atoms | Species labels (SystemLabel entries)           | Files
+combined/  | all 6 real | none        | O, H                                           | 5
+fragment1/ | 3 real     | 3 ghost     | O_frag1, H_frag1, O_frag2_ghost, H_frag2_ghost | 7
+fragment2/ | 3 real     | 3 ghost     | O_frag1_ghost, H_frag1_ghost, O_frag2, H_frag2 | 7
+\end{codeblock}
+
+(\texttt{{[}0{]}} is the run metadata, \texttt{{[}1{]}} the combined structure --- formula, lattice, dimensionality ---, \texttt{{[}5{]}} the figure,
+\texttt{{[}6{]}} the references, \texttt{{[}7{]}} the summary with the next steps and every warning again.)
+
+\paragraph{3.4 Validation}\label{g4.19-34-validation}
+
+A split that does not cover every atom exactly once (sizes that do not add up, a species missing from
+\texttt{-\/-\allowbreak{}fragment-\allowbreak{}species} or in two groups, a manifest whose counts disagree with the structure) is refused before
+anything is written; so is a missing structure or template. \texttt{-\/-\allowbreak{}fragment-\allowbreak{}species} cannot separate two fragments
+that share an element (sulfur in both layers of MoS₂/WS₂, hydrogen in both halves of ammonia borane): use
+\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes}. A pseudopotential that cannot be found is warned about, per label.
+
+\paragraph{3.5 Running it both ways}\label{g4.19-35-running-it-both-ways}
+
+\begin{codeblock}
+stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 --png --save-report
+stb-suite            # then: 4 (Workflow) -> 19 (Charge Density Difference) -> 1 (Stage 1)   (or type 4.19.1)
+\end{codeblock}
+
+\subsubsection{\texorpdfstring{4. Stage 2: analyzing the results (\texttt{stb-\allowbreak{}chargediffAnalysis}, code \texttt{4.\allowbreak{}19.\allowbreak{}2})}{4. Stage 2: analyzing the results (stb-chargediffAnalysis, code 4.19.2)}}\label{g4.19-4-stage-2-analyzing-the-results-stb-chargediffanalysis-code-4192}
+
+\paragraph{4.1 Before running Stage 2}\label{g4.19-41-before-running-stage-2}
+
+Run SIESTA in every folder (\texttt{combined/\allowbreak{}} and each fragment):
+
+\begin{codeblock}
+for d in chargediff_run/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+\end{codeblock}
+
+Stage 2 needs, in each folder, the \texttt{.\allowbreak{}RHO} (forced by Stage 1) and one \texttt{*.\allowbreak{}out} log (for the energy, the
+electron count, the mesh, the SCF convergence and the dipole; without it those parts are skipped, not
+fatal). \texttt{-\/-\allowbreak{}dir} is the folder Stage 1 wrote into; the split is read from \texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}.
+
+\paragraph{4.2 Report structure}\label{g4.19-42-report-structure}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.0805}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.9195}}@{}}
+\toprule\noalign{}
+Section & Content \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{{[}0{]}} & run metadata \\
+\texttt{{[}1{]}} & the system: cell, grid (shape, spacing, voxel), SIESTA version, one line per folder (atoms real/ghost, \texttt{∫ρ}, SIESTA\textquotesingle s electron count, energy) \\
+\texttt{{[}2{]}} & the \textbf{consistency checks} (Section 4.3) \\
+\texttt{{[}3{]}} & the \textbf{counterpoise interaction energy} (Eq. 4) in eV, kcal/mol, kJ/mol \\
+\texttt{{[}4{]}} & statistics of \texttt{Δρ}: integral, charge moved (Eq. 3), rms, the extremes with the nearest atom, an isosurface level \\
+\texttt{{[}5{]}} & charge change by \textbf{atom and fragment} (nearest-atom partition), the \textbf{planar view}: separating plane, charge across it, induced dipole, work-function shift \\
+\texttt{{[}6{]}} & the map (slice, profile or 3D) and the cube \\
+\texttt{{[}7{]}} & references \\
+\texttt{{[}8{]}} & summary and files \\
+\texttt{{[}9{]}} & every warning again \\
+\end{longtable}
+\endgroup
+
+\paragraph{\texorpdfstring{4.3 \texttt{{[}2{]}}: is the subtraction legitimate?}{4.3 {[}2{]}: is the subtraction legitimate?}}\label{g4.19-43-2-is-the-subtraction-legitimate}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3125}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3846}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3029}}@{}}
+\toprule\noalign{}
+Check & Passes when & If it fails \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Same real-space grid in every folder & the \texttt{.\allowbreak{}RHO} shapes agree (otherwise Stage 2 stops: nothing to subtract) & rerun with the same \texttt{MeshCutoff} and cell \\
+Same cell in every folder & within 1e-3 Å (otherwise it stops) & the folders come from different structures \\
+Same level of theory & functional, basis, smearing, k-grid, spin, D3 ... read from each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} + \texttt{calc.\allowbreak{}fdf} in SIESTA\textquotesingle s reading order & a folder was edited: rerun it \\
+Same pseudopotential files & the set of pseudopotential contents (md5) is the same & labels differ by design, contents must not \\
+Same mesh actually used by SIESTA & the \texttt{Mesh\ cutoff\ (required,\allowbreak{}\ used)} lines agree & rerun with the same \texttt{MeshCutoff} \\
+SCF converged in every run & each log has \texttt{SCF\ cycle\ converged} & more iterations, smaller mixing \\
+Electron count of the combined \texttt{.\allowbreak{}RHO} equals the sum over fragments & \texttt{abs(ΔN)\ \textless{}\ 1e-\allowbreak{}3\ e} & a wrong electron count in one run (charge, pseudopotential) \\
+Net \texttt{Δρ} vanishes & \texttt{abs(∫Δρ)\ \textless{}\ 1e-\allowbreak{}3\ e} (Eq. 2) & same \\
+Induced dipole equals SIESTA\textquotesingle s own dipoles & within 0.005 e Å or 5 \% (Eq. 10) & a run without the dipole line, or a profile axis without vacuum \\
+\end{longtable}
+\endgroup
+
+A grid integral of a folder\textquotesingle s density that differs from SIESTA\textquotesingle s electron count by more than 5e-3 e is flagged too.
+
+\paragraph{\texorpdfstring{4.4 \texttt{{[}5{]}}: where the charge went}{4.4 {[}5{]}: where the charge went}}\label{g4.19-44-5-where-the-charge-went}
+
+The nearest-atom partition (Section 1.6) of \texttt{Δρ}, atom by atom and summed per fragment, then the \textbf{planar view}
+along the profile axis --- by default the lattice axis along which the fragments\textquotesingle{} centres are farthest apart; \texttt{-\/-\allowbreak{}axis}
+chooses it:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Separating plane} --- halfway across the gap between the two fragments\textquotesingle{} closest atoms along the axis (only for two
+  fragments that do not overlap along it), and the net charge on each side (Eq. 9): the partition-free charge transfer,
+  printed next to the partition\textquotesingle s;
+\item
+  \textbf{Induced dipole} (Eq. 10) when the axis has vacuum, with SIESTA\textquotesingle s value from the logs;
+\item
+  \textbf{Work-function shift} (Eq. 11) when the two other axes are periodic (a slab).
+\end{itemize}
+
+\paragraph{4.5 Maps and files}\label{g4.19-45-maps-and-files}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1837}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8163}}@{}}
+\toprule\noalign{}
+Option & Writes \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+(default) slice & \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}slice.\allowbreak{}dat}: a plane normal to \texttt{-\/-\allowbreak{}axis} (default z) at \texttt{-\/-\allowbreak{}pos} (default: the plane with the largest \texttt{∫\ abs(Δρ)}) \\
+\texttt{-\/-\allowbreak{}profile} & \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}profile.\allowbreak{}dat}: the planar average along \texttt{-\/-\allowbreak{}axis} \\
+\texttt{-\/-3d\ {[}-\/-iso-min\ X{]}} & \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}3d.\allowbreak{}dat}: the grid points with \texttt{abs(Δρ)\ ≥\ X} \\
+(default) cube & \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff.\allowbreak{}cube}, in e/bohr³ (\texttt{-\/-\allowbreak{}no-\allowbreak{}cube} to skip) \\
+\texttt{-\/-\allowbreak{}show} / \texttt{-\/-\allowbreak{}png} & the 4-panel dashboard on screen / \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}summary.\allowbreak{}png} (without a display \texttt{-\/-\allowbreak{}show} saves the PNG) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & a \texttt{.\allowbreak{}gplot} next to the \texttt{.\allowbreak{}dat} (\texttt{-\/-\allowbreak{}contour} overlays contours, \texttt{-\/-\allowbreak{}vmin/\allowbreak{}-\/-\allowbreak{}vmax} fix the colour range) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}data} & \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}atoms.\allowbreak{}csv} (charge change per atom) + \texttt{\textless{}dir\textgreater{}\_\allowbreak{}chargediff\_\allowbreak{}results.\allowbreak{}json} (every number of the report) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}report} & \texttt{chargediff\_\allowbreak{}analysis\_\allowbreak{}report.\allowbreak{}txt} \\
+\end{longtable}
+\endgroup
+
+The \textbf{dashboard}: the slice with the atoms near it (zoomed on the atoms of an isolated system); the planar integral
+\texttt{λ(z)} and the cumulative charge \texttt{ΔQ(z)} with every atom and the separating plane marked; the charge change by atom,
+coloured by fragment; a summary (integral, charge moved, extremes, \texttt{E\_\allowbreak{}int}, charge by fragment and across the plane,
+dipole, work-function shift, checks).
+
+\paragraph{4.6 Guard rails}\label{g4.19-46-guard-rails}
+
+A grid or cell that differs between folders stops the run with an \texttt{{[}ERROR{]}} (the subtraction is impossible); a missing
+\texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json} too; \texttt{-\/-\allowbreak{}spin} on runs that are not all spin-polarized too. Everything else --- a different
+setting, an unconverged SCF, a missing log, an electron count that does not add up --- is a \textbf{warning} in \texttt{{[}2{]}} and again
+in \texttt{{[}9{]}}, and the analysis goes on.
+
+\paragraph{4.7 Running it both ways}\label{g4.19-47-running-it-both-ways}
+
+\begin{codeblock}
+stb-chargediffAnalysis --dir chargediff_run --png --save-data --save-report
+stb-chargediffAnalysis --dir chargediff_run --profile --axis 2 --save-gnuplot --show
+stb-suite            # then: 4 -> 19 -> 2  (or type 4.19.2): it asks for the mode, axis, position and outputs
+\end{codeblock}
+
+\subsubsection{5. Worked example: three bonds, end to end}\label{g4.19-5-worked-example-three-bonds-end-to-end}
+
+\paragraph{5.1 Set-up}\label{g4.19-51-set-up}
+
+Three systems, chosen to span the strength and the nature of an interaction:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1716}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1493}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.3507}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2015}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1269}}@{}}
+\toprule\noalign{}
+System & Bond & Fragments & Cell & Template \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+water dimer (H₂O)₂ & hydrogen bond & acceptor H₂O / donor H₂O (\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ 3,\allowbreak{}3}) & 14 Å cube & \texttt{calc.\allowbreak{}fdf} \\
+ammonia borane H₃N--BH₃ & dative bond & NH₃ / BH₃ (\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ 4,\allowbreak{}4}) & 12 Å cube & \texttt{calc.\allowbreak{}fdf} \\
+Li on 3×3 graphene & alkali on a 2D sheet & C₁₈ / Li (\texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ 18,\allowbreak{}1}) & 7.40 × 7.40 Å, 20 Å along c & \texttt{calc\_\allowbreak{}graphene.\allowbreak{}fdf} \\
+\end{longtable}
+\endgroup
+
+All with SIESTA 5.4.2, PBE {[}12{]}, PseudoDojo pseudopotentials {[}13{]} (Li with its 1s in the valence: 3 electrons), DZP
+basis with \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}01\ Ry}. The molecules: Γ only, \texttt{MeshCutoff\ 320\ Ry} (SIESTA uses 361 Ry for the 14 Å box),
+300 K smearing. Li on graphene: a 6×6×1 k-grid, \texttt{MeshCutoff\ 300\ Ry} (322 Ry used), spin-polarized (the isolated Li has one
+unpaired electron) and the slab dipole correction, both forced in every folder by \texttt{-\/-\allowbreak{}force-\allowbreak{}spin\ -\/-\allowbreak{}force-\allowbreak{}dipole};
+\texttt{PAO.\allowbreak{}Polarization.\allowbreak{}NonPerturbative\ true}, because SIESTA cannot build the perturbative polarization orbital of this Li.
+Each complex was relaxed first (CG, fixed cell, 0.01 eV/Å), and the monomers H₂O, NH₃, BH₃ alone (for \texttt{E\_\allowbreak{}def}). The
+geometries are sensible: O···O = 2.777 Å (Section 5.4 explains why it is short), B--N = 1.642 Å against ≈ 1.67 Å from
+the microwave spectrum {[}19{]}, Li 1.743 Å above a sheet that stays flat (0.003 Å of corrugation).
+
+\begin{codeblock}
+stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 -o water
+for d in water/*/; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
+stb-chargediffAnalysis --dir water --png --save-data --save-report
+\end{codeblock}
+
+Every set also ran each fragment \textbf{without} its ghost atoms (\texttt{fragmentN\_\allowbreak{}alone/\allowbreak{}}, \texttt{build\_\allowbreak{}inputs.\allowbreak{}py\ alone}) --- the
+uncorrected energy of Eq. 4 --- so the BSSE is measured, not assumed.
+
+\paragraph{5.2 The water dimer: a hydrogen bond}\label{g4.19-52-the-water-dimer-a-hydrogen-bond}
+
+Stage 2 on the three finished runs (\texttt{{[}1{]}}--\texttt{{[}3{]}}, shortened):
+
+\begin{codeblock}
+Folder     | Atoms | Basis            | ∫rho (e) | SIESTA electrons | E_KS (eV)
+combined/  | 6     | all atoms real   | 16.0000  | 16.0000          | -962.477198
+fragment1/ | 3     | 3 real + 3 ghost | 8.0000   | 8.0000           | -481.249919
+fragment2/ | 3     | 3 real + 3 ghost | 8.0000   | 8.0000           | -481.035089
+
+Same real-space grid in every folder                                          | OK     | 160x160x160
+Same mesh actually used by SIESTA                                             | OK     | 361.0 Ry
+Electron count of the combined .RHO equals the sum over fragments (< 0.001 e) | OK     | 16.0000 vs 16.0000 e
+Net Delta rho vanishes (|integral| < 0.001 e)                                 | OK     | +6.70e-07 e
+Induced dipole from Delta rho equals SIESTA's own dipoles (along x)           | OK     | +0.797 vs +0.797 D
+   (and the 4 other checks: cell, level of theory, pseudopotentials, SCF -- all OK)
+
+E_int (CP)     : -0.1922 eV = -4.43 kcal/mol = -18.54 kJ/mol
+\end{codeblock}
+
+and what moved (\texttt{{[}4{]}}, \texttt{{[}5{]}}):
+
+\begin{codeblock}
+Charge moved   : 0.0810 e gained = 0.0810 e lost (half of the integral of |Delta rho|)
+maximum (gain) | +0.21494        | 5.51 7.00 7.17 | O4 (O_frag2), 0.25 Ang
+minimum (loss) | -0.06902        | 5.25 6.74 7.17 | O4 (O_frag2), 0.24 Ang
+fragment1     : -0.03148 e (loses electrons)          <- the acceptor
+fragment2     : +0.03148 e (gains electrons)          <- the donor
+Separating plane: x = 7.140 Ang, halfway across the 1.79 Ang between the two fragments' closest atoms along x
+Charge across  : fragment1 side -0.03145 e; fragment2 side +0.03145 e
+Induced dipole : +0.1660 e Ang = +0.797 D along +x (electrons pushed toward -x); SIESTA's dipoles give +0.797 D
+\end{codeblock}
+
+\stbfigure{4.19-chargediff/figures/water_dashboard.png}{Dashboard of the water dimer}
+
+\emph{Fig. 1 --- The dashboard of the water dimer (\texttt{-\/-\allowbreak{}png}). The donor (orange) is on the left, its bonding H at x ≈ 6.3 Å; the
+acceptor (blue) on the right. Slice through the molecular plane; planar integral and cumulative charge along x with the
+separating plane; charge change per atom; summary.}
+
+Reading it:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The pattern is the textbook one.} Along the O--H···O line: the bonding H of the donor \emph{loses} density (red, x ≈ 6.3 Å),
+  the region between it and the acceptor oxygen \emph{gains} (the acceptor\textquotesingle s lone pair pushed toward the proton, x ≈ 7.3 Å),
+  and the donor oxygen gains strongly --- the O--H bond polarizes toward O as the proton is pulled away. The
+  extremes sit within 0.25 Å of the donor oxygen, where the (pseudo-)valence density is large; their magnitude says little
+  (Section 1.7), the 1e-3 e/Å³ contour over 1 \% of the box says where the effect lives.
+\item
+  \textbf{Net transfer: 0.031 e from the acceptor to the donor} --- the direction of the charge-transfer (n → σ*) picture of the
+  hydrogen bond: the acceptor\textquotesingle s lone pair donates into the donor\textquotesingle s O--H antibond. The partition-free value across the
+  plane between the molecules is the same to 3e-5 e: the two molecules are well separated along x and both rules see the
+  same thing.
+\item
+  \textbf{The charge moved (0.081 e) is 2.6× the net transfer}: most of what happens is polarization \emph{inside} each molecule
+  (Section 1.1).
+\item
+  \textbf{The induced dipole, 0.797 D, is SIESTA\textquotesingle s own number} to the last digit: the dipole of the dimer minus those of the
+  two ghosted monomers. The grids, the units, the signs and the planar integration are all checked by this one line.
+\item
+  \textbf{Energies:} \texttt{E\_\allowbreak{}int(CP)\ =\allowbreak{}\ −4.\allowbreak{}43\ kcal/\allowbreak{}mol} at the relaxed geometry. With the deformation of the monomers (0.08
+  kcal/mol, from \texttt{relax/\allowbreak{}h2o}) the binding energy is \texttt{−4.\allowbreak{}35\ kcal/\allowbreak{}mol}, against the CCSD(T) complete-basis
+  \texttt{D\_\allowbreak{}e\ =\allowbreak{}\ 5.\allowbreak{}02\ ±\ 0.\allowbreak{}05\ kcal/\allowbreak{}mol} {[}20{]}. Section 5.4 shows the geometry is part of that difference.
+\end{itemize}
+
+\paragraph{5.3 The basis-set superposition error, measured}\label{g4.19-53-the-basis-set-superposition-error-measured}
+
+\texttt{python3\ study\_\allowbreak{}table.\allowbreak{}py} collects every set; \texttt{{[}A{]}} and \texttt{{[}B{]}}:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.2048}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0964}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1084}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0723}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0723}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0723}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1928}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1807}}@{}}
+\toprule\noalign{}
+System & \texttt{E\_\allowbreak{}int} CP & \texttt{E\_\allowbreak{}int} raw & BSSE & \texttt{E\_\allowbreak{}def} & \texttt{E\_\allowbreak{}bind} & charge moved (e) & fragments (e) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+(H₂O)₂ & −4.43 & −10.83 & +6.40 & +0.08 & −4.35 & 0.081 & −0.031 / +0.031 \\
+H₃N--BH₃ & −47.57 & −55.58 & +8.01 & +12.46 & −35.11 & 0.447 & −0.204 / +0.204 \\
+Li / graphene 3×3 & −17.16 & −22.63 & +5.47 & +0.33 & −16.83 & 0.458 & +0.204 / −0.204 \\
+\end{longtable}
+\endgroup
+
+(kcal/mol; "raw" is Eq. 4 with each fragment in its own basis, \texttt{E\_\allowbreak{}bind\ =\allowbreak{}\ E\_\allowbreak{}int(CP)\ +\ E\_\allowbreak{}def}.)
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.4146}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0976}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1098}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.0732}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1951}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1098}}@{}}
+\toprule\noalign{}
+Water dimer, basis (same geometry) & \texttt{E\_\allowbreak{}int} CP & \texttt{E\_\allowbreak{}int} raw & BSSE & charge moved (e) & donor (e) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+DZP, 0.02 Ry & −4.36 & −14.80 & +10.44 & 0.0804 & +0.0308 \\
+\textbf{DZP, 0.01 Ry (base)} & −4.43 & −10.83 & +6.40 & 0.0810 & +0.0315 \\
+DZP, 0.005 Ry & −4.41 & −9.00 & +4.59 & 0.0817 & +0.0318 \\
+TZP, 0.01 Ry & −4.55 & −11.34 & +6.79 & 0.0822 & +0.0312 \\
+TZP, 0.005 Ry & −4.62 & −9.17 & +4.55 & 0.0833 & +0.0317 \\
+\end{longtable}
+\endgroup
+
+\stbfigure{4.19-chargediff/figures/water_studies.png}{Water dimer studies}
+
+\emph{Fig. 2 --- The water dimer: interaction energy along a rigid O···O scan, with and without the counterpoise correction
+(left); net charge transfer and charge moved along the same scan, log scale (middle); the five basis sets (right). Dotted
+green: the CCSD(T)/CBS \texttt{D\_\allowbreak{}e} and \texttt{R\_\allowbreak{}e} {[}20{]}. \texttt{python3\ study\_\allowbreak{}table.\allowbreak{}py\ -\/-\allowbreak{}png}.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The BSSE is larger than the interaction itself} with SIESTA\textquotesingle s default orbitals: 6.4 kcal/mol for a 4.4 kcal/mol bond,
+  10.4 with the shorter orbitals of \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}. Without the ghost atoms the water dimer would come out bound
+  by 9--15 kcal/mol --- two to three times too much --- and the number would depend mostly on the orbital radii.
+\item
+  \textbf{It is not shared equally.} Of the 0.278 eV, 0.245 eV is the acceptor\textquotesingle s (its energy drops that much when the donor\textquotesingle s
+  orbitals are added) and 0.033 eV the donor\textquotesingle s: the donor\textquotesingle s hydrogen sits 1.79 Å from the acceptor\textquotesingle s oxygen, right in its
+  lone-pair region, and its orbitals are what the acceptor borrows. Ammonia borane shows the same asymmetry (0.277 eV for
+  NH₃, 0.070 eV for BH₃).
+\item
+  \textbf{Longer orbitals reduce it} (10.4 → 6.4 → 4.6 kcal/mol from 0.02 to 0.005 Ry, for both DZP and TZP), and a larger basis
+  does not by itself: TZP at 0.01 Ry has as much BSSE as DZP. In NAO bases the \emph{range} of the orbitals matters more than
+  their number for this error.
+\item
+  \textbf{The counterpoise value hardly moves}: −4.36 to −4.62 kcal/mol over five bases, approaching the reference from above as
+  the basis grows --- the behavior expected of a CP-corrected DFT interaction energy {[}4{]}. The density does not move either:
+  the net transfer varies by 3 \% and the charge moved by 4 \% across the bases. With the ghosts in place, \texttt{Δρ} is a basis-
+  converged quantity well before the energy is.
+\end{itemize}
+
+\paragraph{5.4 The mesh, and the distance}\label{g4.19-54-the-mesh-and-the-distance}
+
+\texttt{{[}C{]}} repeats the base set at five \texttt{MeshCutoff} values:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.2113}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.0845}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1127}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.0986}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.2254}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1268}}>{\raggedright\arraybackslash}p{(\linewidth - 14\tabcolsep) * \real{0.1408}}@{}}
+\toprule\noalign{}
+\texttt{MeshCutoff} (Ry) & used & \texttt{E\_\allowbreak{}int} CP & \texttt{∫Δρ} (e) & charge moved (e) & donor (e) & max (e/Å³) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+150 & 164.5 & −4.43 & +1.1e-6 & 0.0809 & +0.0319 & 0.2045 \\
+200 & 203.1 & −4.43 & −2.7e-7 & 0.0810 & +0.0319 & 0.2041 \\
+\textbf{320} & 361.0 & −4.43 & +6.7e-7 & 0.0810 & +0.0315 & 0.2149 \\
+450 & 456.9 & −4.43 & −4.9e-7 & 0.0810 & +0.0315 & 0.2174 \\
+600 & 657.9 & −4.43 & +2.1e-7 & 0.0810 & +0.0317 & 0.2142 \\
+\end{longtable}
+\endgroup
+
+Because every term of Eq. 1 is computed with the atoms at the same place on the same grid, the egg-box error cancels:
+\texttt{E\_\allowbreak{}int} does not change in the second decimal from 150 to 600 Ry, nor does the charge moved. What changes is the \emph{peak}
+value (by 6 \%), a point property sampled on a grid of spacing 0.14 → 0.07 Å near a nucleus, and the per-fragment charge in
+the fourth decimal. The column \emph{used} is the cutoff SIESTA actually used (the grid has to fit the cell): two runs with
+"the same" requested cutoff in different cells can differ, which is why Stage 2 compares the used value. Case 7 of the
+script edits one log to another mesh and shows the warning.
+
+\texttt{{[}D{]}}: the donor moved rigidly along O···O (the monomers keep their geometry in the dimer):
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2000}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1333}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1500}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1000}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1500}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2667}}@{}}
+\toprule\noalign{}
+d(O···O) (Å) & \texttt{E\_\allowbreak{}int} CP & \texttt{E\_\allowbreak{}int} raw & −BSSE & donor (e) & charge moved (e) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+2.50 & −0.64 & −8.25 & −7.61 & +0.0491 & 0.1288 \\
+2.60 & −2.79 & −9.96 & −7.17 & +0.0417 & 0.1077 \\
+2.70 & −3.97 & −10.69 & −6.72 & +0.0359 & 0.0912 \\
+\textbf{2.777} & −4.43 & −10.83 & −6.40 & +0.0315 & 0.0810 \\
+2.90 & \textbf{−4.65} & −10.59 & −5.94 & +0.0256 & 0.0681 \\
+3.00 & −4.54 & −10.14 & −5.60 & +0.0217 & 0.0600 \\
+3.20 & −3.99 & −8.91 & −4.92 & +0.0151 & 0.0475 \\
+3.50 & −3.01 & −6.75 & −3.74 & +0.0085 & 0.0342 \\
+4.00 & −1.72 & −3.42 & −1.70 & +0.0030 & 0.0200 \\
+5.00 & −0.55 & −0.61 & −0.05 & +0.0001 & 0.0089 \\
+\end{longtable}
+\endgroup
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The counterpoise curve has its minimum at 2.90 Å} (−4.65 kcal/mol), next to the CCSD(T) equilibrium distance of 2.912
+  Å {[}20{]}; the uncorrected curve has it at 2.78 Å, which is exactly where the \emph{uncorrected} relaxation of Section 5.1 stopped.
+  The BSSE grows as the molecules approach (from 0.05 kcal/mol at 5 Å to 7.6 at 2.5 Å) and so pulls the geometry in: a
+  relaxation with a small NAO basis and no counterpoise gives intermolecular distances that are too short. The geometry of
+  the base case is therefore 0.13 Å too short, and its \texttt{E\_\allowbreak{}int} (−4.43) is not the minimum of the CP surface (−4.65).
+\item
+  \textbf{Charge transfer is short-ranged, polarization is not.} The net charge of the donor decays exponentially, \texttt{q(R)\ ∝\ exp(−R/\allowbreak{}0.\allowbreak{}36\ Å)} beyond 2.9 Å --- it needs the orbitals of the two molecules to overlap --- and is 1e-4 e at 5 Å. The
+  charge moved falls from 0.13 to 0.009 e but much more slowly (Fig. 2, middle): at 5 Å, where nothing crosses any more,
+  each molecule is still polarized by the other\textquotesingle s dipole. This is the separation of polarization and charge transfer of
+  Section 1.1, made visible.
+\end{itemize}
+
+\paragraph{5.5 Ammonia borane: a dative bond}\label{g4.19-55-ammonia-borane-a-dative-bond}
+
+The same workflow on H₃N--BH₃ (Case 9 of the script):
+
+\begin{codeblock}
+E_int (CP)     : -2.0628 eV = -47.57 kcal/mol = -199.03 kJ/mol
+Charge moved   : 0.4465 e gained = 0.4465 e lost
+maximum (gain) | +0.31659        | 6.00 6.00 5.75 | B5 (B_frag2), 0.57 Ang
+minimum (loss) | -0.35030        | 6.00 6.00 6.58 | N1 (N_frag1), 0.24 Ang
+fragment1     : -0.20375 e (loses electrons)          <- NH3
+fragment2     : +0.20375 e (gains electrons)          <- BH3
+Separating plane: z = 5.999 Ang, halfway across the 1.64 Ang between the two fragments' closest atoms along z
+Charge across  : fragment1 side -0.20621 e; fragment2 side +0.20621 e
+Induced dipole : +0.6456 e Ang = +3.101 D along +z; SIESTA's dipoles give +3.101 D
+\end{codeblock}
+
+\stbfigure{4.19-chargediff/figures/nh3bh3_dashboard.png}{Dashboard of ammonia borane}
+
+\emph{Fig. 3 --- Ammonia borane: BH₃ (orange) below, NH₃ (blue) above along z. The planar integral shows the depletion on the
+nitrogen\textquotesingle s side and the accumulation on boron\textquotesingle s side of the B--N bond.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The donation is visible on the B--N axis}: the largest loss is 0.24 Å from N \emph{on the boron side} (the lone pair leaves),
+  the largest gain 0.57 Å from B \emph{toward N} (it arrives in boron\textquotesingle s empty p orbital and builds the B--N bond). 0.21 e
+  crosses the plane between the fragments --- seven times the hydrogen bond\textquotesingle s --- and it is the hydrogens of NH₃ that lose most
+  in the partition (−0.078 e each) while those of BH₃ gain (+0.056 e each): the whole NH₃ becomes more positive, the whole
+  BH₃ more negative, as in the familiar zwitterionic picture H₃N⁺--BH₃⁻.
+\item
+  \textbf{The deformation energy is a large part of the story.} BH₃ is planar alone and pyramidal in the complex: 12.5 kcal/mol
+  to bend it (NH₃: 0.05). \texttt{E\_\allowbreak{}int(CP)\ =\allowbreak{}\ −47.\allowbreak{}6} but \texttt{E\_\allowbreak{}bind\ =\allowbreak{}\ −35.\allowbreak{}1\ kcal/\allowbreak{}mol}. For a dative bond, an interaction energy at
+  the complex geometry is \emph{not} the bond strength; the report says so in \texttt{{[}3{]}}, the example computes the difference.
+\item
+  \textbf{Against the literature.} The binding energy, 35.1 kcal/mol, is close to the MP4 \texttt{D\_\allowbreak{}e} of 34.7 kcal/mol {[}21{]}; the best
+  ab initio binding \emph{enthalpy} is −27.5 ± 0.5 kcal/mol {[}22{]}, which includes zero-point and thermal terms that reduce the
+  electronic \texttt{D\_\allowbreak{}e} by several kcal/mol, so the two are not directly comparable. PBE is expected to do reasonably for this
+  bond; the B--N distance (1.642 Å, ≈ 1.67 Å measured {[}19{]}) is slightly short.
+\end{itemize}
+
+\paragraph{5.6 Li on graphene: an interface, a profile, a dipole}\label{g4.19-56-li-on-graphene-an-interface-a-profile-a-dipole}
+
+Case 10 of the script, with \texttt{-\/-\allowbreak{}profile\ -\/-\allowbreak{}axis\ 2}:
+
+\begin{codeblock}
+Same mesh actually used by SIESTA                                             | OK     | 322.4 Ry
+Electron count of the combined .RHO equals the sum over fragments (< 0.001 e) | OK     | 75.0000 vs 75.0000 e
+Induced dipole from Delta rho equals SIESTA's own dipoles (along z)           | OK     | +2.146 vs +2.146 D
+E_int (CP)     : -0.7441 eV = -17.16 kcal/mol = -71.79 kJ/mol
+19 | Li      | Li_frag2 | fragment2 | -0.20395
+Separating plane: z = 10.873 Ang, halfway across the 1.74 Ang between the two fragments' closest atoms along z
+Charge across  : fragment1 side +0.11618 e; fragment2 side -0.11618 e
+                 (nearest-atom partition above: fragment1 +0.20395 e; fragment2 -0.20395 e)
+Induced dipole : +0.4467 e Ang = +2.146 D along +z (electrons pushed toward -z); SIESTA's dipoles give +2.146 D
+Work function  : the dipole layer shifts the vacuum level by -1.704 eV on the +z side relative to the -z side
+\end{codeblock}
+
+\stbfigure{4.19-chargediff/figures/li_graphene_dashboard.png}{Dashboard of Li on graphene}
+
+\emph{Fig. 4 --- Li on 3×3 graphene: the slice 0.74 Å above the sheet (the hexagon under Li gains, in blue), the planar integral and
+the cumulative charge along z with the separating plane, the charge change per atom.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Electrons go from Li to the sheet, and mostly to the hexagon under it} (Fig. 4, slice). The induced dipole points
+  away from the sheet (2.15 D, again equal to SIESTA\textquotesingle s), and the Helmholtz estimate (Eq. 11) gives a work function \textbf{1.70 eV
+  lower} on the Li side at this coverage (one Li per 47.4 Å²) --- the alkali effect {[}6{]}. To compute the vacuum-level
+  difference itself, use \texttt{stb-\allowbreak{}workfunction} on the combined run\textquotesingle s electrostatic potential.
+\item
+  \textbf{How much charge was transferred depends on what you ask.} The nearest-atom partition gives 0.204 e, the plane halfway
+  between Li and the sheet 0.116 e. Neither is wrong: the 2s orbital of a free Li atom is so diffuse that a good part of it
+  already lies below that plane in the \emph{isolated} fragment, so the plane counts only the change, while the partition counts
+  the change inside Li\textquotesingle s Voronoi cell. A Bader analysis of the total density would give yet another number --- the common
+  statement that Li on graphene is "almost fully ionized" refers to that partition of the total density, not to a
+  difference. SIESTA\textquotesingle s Mulliken analysis of a similar system gave 0.39 e {[}24{]}. Quote the number together with its definition
+  (Section 1.6).
+\item
+  \textbf{Energies.} \texttt{E\_\allowbreak{}int(CP)\ =\allowbreak{}\ −0.\allowbreak{}744\ eV}, the deformation of the sheet is negligible (0.014 eV), so \texttt{E\_\allowbreak{}bind\ =\allowbreak{}\ −0.\allowbreak{}73\ eV};
+  without the counterpoise correction the same runs give −0.97 eV. Other GGA calculations report about 1.0--1.1 eV for Li at
+  the hollow site of graphene {[}23, 24{]} (other codes, bases and coverages; the SIESTA one {[}24{]} does not say it applies a
+  counterpoise correction). Our two numbers bracket the range; with a diffuse 2s electron and a DZP basis this is a case
+  where the counterpoise correction may overshoot, and a larger basis or a plane-wave check would settle it.
+\item
+  \textbf{Spin, and a caveat.} The isolated Li carries 1 μB, the sheet with the Li ghost none, so the spin-density difference
+  (\texttt{-\/-\allowbreak{}spin}) integrates to the disappearance of the Li moment. Here it integrates to −1.17 μB, not −1.00: the single point
+  of the combined system converged to a weakly polarized state (−0.17 μB) that lies 10 meV \emph{below} the non-magnetic state
+  the relaxation ended in. This metallic 3×3 cell with a 6×6 k-grid may have a weak spin instability, or the two SCF runs found
+  different local minima; these runs cannot tell which. It shifts \texttt{E\_\allowbreak{}int} by ≈ 0.01 eV and leaves the charge density
+  difference essentially unchanged, but it is the kind of thing \texttt{-\/-\allowbreak{}spin} is for: check the moments of every run (the script
+  prints them) before reading a spin-density map.
+\end{itemize}
+
+\paragraph{5.7 How far to trust each number}\label{g4.19-57-how-far-to-trust-each-number}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1840}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4908}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3252}}@{}}
+\toprule\noalign{}
+Quantity & What moves it (this example) & Verdict \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{∫Δρ}, electron counts & nothing (1e-6 e) & a check, not a result \\
+induced dipole & nothing: equal to SIESTA\textquotesingle s to 0.001 D & reliable whenever the axis has vacuum \\
+\texttt{E\_\allowbreak{}int} (CP) & basis ±0.13 kcal/mol, mesh \textless{} 0.01, geometry 0.2 (water) & good to a few tenths of kcal/mol for a given geometry \\
+\texttt{E\_\allowbreak{}int} (raw) & basis: 9 to 15 kcal/mol for the same bond & do not use with NAO bases \\
+\texttt{E\_\allowbreak{}bind} & \texttt{E\_\allowbreak{}def} from relaxed monomers; the geometry of the complex (relaxed without CP: too short) & relax with care; for dative bonds \texttt{E\_\allowbreak{}def} is essential \\
+charge moved & basis 4 \%, mesh 0.1 \% & robust \\
+net transfer, plane-integrated & basis 3 \%, mesh 1 \% & robust \emph{as defined} \\
+net transfer, partitioned & the partition rule (factor 2 for Li/graphene) & quote with its definition \\
+extreme values of \texttt{Δρ} & mesh 6 \%, near the nuclei (pseudo-valence) & locate features, do not quote \\
+work-function shift (Eq. 11) & coverage, depolarization & an estimate; compute it with \texttt{stb-\allowbreak{}workfunction} \\
+\end{longtable}
+\endgroup
+
+\paragraph{5.8 What to take from the example}\label{g4.19-58-what-to-take-from-the-example}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  The ghost atoms are not optional with a NAO basis: the BSSE of the water dimer is larger than its interaction energy, and
+  it pulls relaxed geometries in. The same runs that give \texttt{Δρ} give the counterpoise energy for free.
+\item
+  Read \texttt{{[}2{]}} first. The checks are cheap and they catch every mistake that makes a difference map meaningless --- another grid,
+  another mesh, another level of theory, a wrong electron count. The dipole check closes the loop: one number computed two
+  independent ways.
+\item
+  Polarization and charge transfer are different things: the charge moved counts both, the charge across a plane only the
+  transfer, and their ratio (2.6 for the hydrogen bond at equilibrium, \textasciitilde90 at 5 Å) says which dominates.
+\item
+  A net charge is a definition. For two well-separated fragments the partition and the plane agree (water, ammonia borane);
+  for a diffuse donor on a surface they differ by a factor of two (Li). Report the definition with the number.
+\item
+  An interaction energy at the complex geometry is not a binding energy: add the deformation of the fragments (12.5
+  kcal/mol for BH₃).
+\end{enumerate}
+
+\subsubsection{6. Reproducing the reference data}\label{g4.19-6-reproducing-the-reference-data}
+
+\texttt{reference\_\allowbreak{}results/\allowbreak{}} holds every finished SIESTA run of Section 5, so Stage 2 works out of the box without a SIESTA
+installation.
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3265}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2653}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4082}}@{}}
+\toprule\noalign{}
+Folder & What & Contents \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{relax/\allowbreak{}water\_\allowbreak{}dimer}, \texttt{relax/\allowbreak{}nh3bh3}, \texttt{relax/\allowbreak{}li\_\allowbreak{}graphene} & CG relaxations (fixed cell) of the three complexes & \texttt{calc.\allowbreak{}fdf}, \texttt{template.\allowbreak{}fdf}, start \texttt{structure.\allowbreak{}fdf}, \texttt{relaxed.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out} \\
+\texttt{relax/\allowbreak{}h2o}, \texttt{relax/\allowbreak{}nh3}, \texttt{relax/\allowbreak{}bh3} & the monomers relaxed alone (for \texttt{E\_\allowbreak{}def}) & same \\
+\texttt{graphene\_\allowbreak{}flat/\allowbreak{}} & the flat 3×3 sheet before Li (for the sheet\textquotesingle s \texttt{E\_\allowbreak{}def}) & \texttt{calc.\allowbreak{}fdf}, \texttt{template.\allowbreak{}fdf}, \texttt{structure.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out} \\
+\texttt{water/\allowbreak{}}, \texttt{nh3bh3/\allowbreak{}}, \texttt{li\_\allowbreak{}graphene/\allowbreak{}} & the three cases & \texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}, the prep report, per folder \texttt{structure.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}fdf}, \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out}, \textbf{\texttt{siesta.\allowbreak{}RHO.\allowbreak{}xz}}; \texttt{fragmentN\_\allowbreak{}alone/\allowbreak{}} (no ghosts); \texttt{analysis/\allowbreak{}} (report, CSV, JSON) \\
+\texttt{water\_\allowbreak{}mesh150} ... \texttt{water\_\allowbreak{}mesh600} & the dimer at \texttt{MeshCutoff} 150, 200, 450, 600 Ry & as above, without the \texttt{.\allowbreak{}RHO} \\
+\texttt{water\_\allowbreak{}dzp\_\allowbreak{}s002}, \texttt{water\_\allowbreak{}dzp\_\allowbreak{}s0005}, \texttt{water\_\allowbreak{}tzp\_\allowbreak{}s001}, \texttt{water\_\allowbreak{}tzp\_\allowbreak{}s0005} & the dimer with four other basis sets & same \\
+\texttt{water\_\allowbreak{}r2.\allowbreak{}50} ... \texttt{water\_\allowbreak{}r5.\allowbreak{}00} & the donor moved rigidly to \texttt{d(O···O)} = 2.5--5.0 Å & same \\
+\end{longtable}
+\endgroup
+
+The density grids of the three main cases are stored compressed (\texttt{xz}); \texttt{example\_\allowbreak{}4.\allowbreak{}19.\allowbreak{}sh} unpacks them into \texttt{output/\allowbreak{}}
+(\texttt{xz\ -d\ siesta.\allowbreak{}RHO.\allowbreak{}xz} by hand). The studies keep their analysis results (report, CSV, JSON) and the SIESTA logs but not the
+grids, to keep the repository small; \texttt{make\_\allowbreak{}reference.\allowbreak{}sh} regenerates everything:
+
+\begin{codeblock}
+bash make_reference.sh                 # ~2 h on 2 cores; writes reference_run/ and reference_results/
+\end{codeblock}
+
+It relaxes the three complexes and the monomers, runs \texttt{stb-\allowbreak{}chargediffPrep} for every set (the commands of Section 5),
+SIESTA in each folder, \texttt{build\_\allowbreak{}inputs.\allowbreak{}py\ alone} for the fragments without ghosts, and \texttt{stb-\allowbreak{}chargediffAnalysis\ -\/-\allowbreak{}save-\allowbreak{}data\ -\/-\allowbreak{}save-\allowbreak{}report}. Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), \texttt{mpirun\ -np\ 2}.
+
+\subsubsection{7. Known, deliberate limitations}\label{g4.19-7-known-deliberate-limitations}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Frozen geometry.} \texttt{Δρ} and \texttt{E\_\allowbreak{}int} are at the geometry of the complex; the relaxation of the fragments is in \texttt{E\_\allowbreak{}def}
+  (Section 1.4), which Stage 2 does not compute (it needs relaxed fragments: separate runs).
+\item
+  \textbf{The partition is geometric.} The per-atom and per-fragment charges of \texttt{{[}5{]}} use the nearest-atom rule; they are not
+  Bader or Hirshfeld charges (Section 1.6). The plane-integrated value is partition-free but needs the fragments to be
+  separable along an axis.
+\item
+  \textbf{Valence pseudo-density.} No core electrons, a smooth density near the nuclei (Section 1.7).
+\item
+  \textbf{One functional.} PBE delocalizes charge; the charge transferred between very different fragments is overestimated
+  (Section 1.8). The workflow reports what the functional gives.
+\item
+  \textbf{Same grid required.} The fragments must be computed in the same cell with the same cutoff; a fragment computed in a
+  smaller box cannot be used.
+\item
+  \textbf{The dipole and the work-function shift} need vacuum along the profile axis; the work-function shift is the
+  Helmholtz estimate for a periodic layer, not a computed vacuum-level difference.
+\item
+  \textbf{No convergence by itself.} The tool reports what the mesh, the basis and the geometry do (Section 5); you decide how
+  far to push them.
+\end{itemize}
+
+\subsubsection{8. Step-by-step: running this workflow on your own system}\label{g4.19-8-step-by-step-running-this-workflow-on-your-own-system}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Relax the combined system} at the level of theory you will use (and the fragments alone, if you want \texttt{E\_\allowbreak{}def}).
+\item
+  \textbf{Write a \texttt{calc.\allowbreak{}fdf} with the physics only} --- functional, basis, k-grid, smearing, \texttt{Spin} --- and \texttt{\%include\ structure.\allowbreak{}fdf}. List the atoms fragment by fragment if you will split by count.
+\item
+  \textbf{Run Stage 1} with \texttt{-p\ \textless{}bank\textgreater{}} and a \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} you have converged (Section 5.4). Read \texttt{{[}2{]}} (is the split what
+  you meant? the electron counts?) and \texttt{{[}3{]}} (what is forced, what is inherited). Use \texttt{-\/-\allowbreak{}png} to see the split.
+\item
+  \textbf{Run SIESTA} in \texttt{combined/\allowbreak{}} and every fragment folder.
+\item
+  \textbf{Run Stage 2} with \texttt{-\/-\allowbreak{}png\ -\/-\allowbreak{}save-\allowbreak{}data}. Read \texttt{{[}2{]}} first (every check OK?), then \texttt{{[}3{]}}, \texttt{{[}4{]}}, \texttt{{[}5{]}}. For an interface,
+  add \texttt{-\/-\allowbreak{}profile\ -\/-\allowbreak{}axis\ N}.
+\item
+  \textbf{Visualize} the cube in VESTA (isosurface level from \texttt{{[}4{]}}, in e/bohr³) --- positive (gain) and negative (loss) lobes in
+  two colours.
+\item
+  \textbf{Test what the picture depends on} (Section 5): the mesh, the basis, the distance. A feature that survives them is
+  physics.
+\end{enumerate}
+
+\subsubsection{9. Files in this folder}\label{g4.19-9-files-in-this-folder}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2523}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7477}}@{}}
+\toprule\noalign{}
+File & What it is \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{README.\allowbreak{}md} & this tutorial \\
+\texttt{example\_\allowbreak{}4.\allowbreak{}19.\allowbreak{}sh} & guided, runnable walk-through (11 cases) \\
+\texttt{study\_\allowbreak{}table.\allowbreak{}py} & helper of the script: collects every reference set (energies, BSSE, deformation, charges) into the tables of Section 5 and draws \texttt{figures/\allowbreak{}water\_\allowbreak{}studies.\allowbreak{}png} \\
+\texttt{build\_\allowbreak{}inputs.\allowbreak{}py} & helper of \texttt{make\_\allowbreak{}reference.\allowbreak{}sh}: start structures, the distance scan, the fragments without ghosts, the monomers \\
+\texttt{make\_\allowbreak{}reference.\allowbreak{}sh} & regenerates \texttt{reference\_\allowbreak{}results/\allowbreak{}} with SIESTA (Section 6) \\
+\texttt{water\_\allowbreak{}dimer.\allowbreak{}fdf} & the water dimer (acceptor O H H, donor O H H), 14 Å box \\
+\texttt{nh3bh3.\allowbreak{}fdf} & ammonia borane, staggered start geometry, 12 Å box \\
+\texttt{li\_\allowbreak{}graphene.\allowbreak{}fdf} & Li above a hollow site of 3×3 graphene, 20 Å along c \\
+\texttt{calc.\allowbreak{}fdf}, \texttt{calc\_\allowbreak{}graphene.\allowbreak{}fdf} & the templates: PBE, DZP, \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}01\ Ry}; the second spin-polarized with a 6×6 k-grid \\
+\texttt{reference\_\allowbreak{}results/\allowbreak{}} & real finished SIESTA runs (Section 6) \\
+\texttt{figures/\allowbreak{}} & the dashboards of the three cases and the water-dimer studies \\
+\texttt{output/\allowbreak{}} & created by the script (git-ignored) \\
+\end{longtable}
+\endgroup
+
+\subsubsection{10. Running the script}\label{g4.19-10-running-the-script}
+
+\begin{codeblock}
+bash example_4.19.sh
+\end{codeblock}
+
+It pauses between cases (\texttt{{[}Press\ Enter\ to\ continue{]}}); \texttt{yes\ \textquotesingle{}\textquotesingle{}\ \textbar{}\ bash\ example\_\allowbreak{}4.\allowbreak{}19.\allowbreak{}sh} runs it straight through. It starts
+by wiping its own \texttt{output/\allowbreak{}}. Cases 1--3 run Stage 1 (no SIESTA needed); Cases 4--11 run Stage 2 on \texttt{reference\_\allowbreak{}results/\allowbreak{}}. It
+sets \texttt{MPLBACKEND=\allowbreak{}Agg}, so \texttt{-\/-\allowbreak{}show} is replaced by \texttt{-\/-\allowbreak{}png} in the script; try it on a desktop:
+
+\begin{codeblock}
+cp -r reference_results/water /tmp/w && xz -d /tmp/w/*/siesta.RHO.xz && stb-chargediffAnalysis --dir /tmp/w --show
+\end{codeblock}
+
+\subsubsection{11. Flag reference}\label{g4.19-11-flag-reference}
+
+\textbf{\texttt{stb-\allowbreak{}chargediffPrep}} --- \texttt{-s\ STRUCTURE} (default \texttt{structure.\allowbreak{}fdf}) · one of \texttt{-\/-\allowbreak{}fragment-\allowbreak{}sizes\ N1,\allowbreak{}N2,\allowbreak{}.\allowbreak{}.\allowbreak{}.\allowbreak{}},
+\texttt{-\/-\allowbreak{}fragment-\allowbreak{}species\ \textquotesingle{}El,\allowbreak{}El;El\textquotesingle{}}, \texttt{-\/-fragment-manifest\ {[}PATH{]}} · \texttt{-\/-\allowbreak{}calc\ CALC} (default \texttt{calc.\allowbreak{}fdf}) · \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff\ RY}
+(default 400) · \texttt{-p\ PSEUDO} (bank or folder; default: the structure\textquotesingle s folder) · \texttt{-\/-\allowbreak{}force-\allowbreak{}spin}/\texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}spin} ·
+\texttt{-\/-\allowbreak{}force-\allowbreak{}dipole}/\texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}dipole} · \texttt{-\/-\allowbreak{}force-\allowbreak{}vdw}/\texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}vdw} · \texttt{-\/-\allowbreak{}output-\allowbreak{}dir\ DIR} (default \texttt{chargediff\_\allowbreak{}run}) ·
+\texttt{-\/-\allowbreak{}show} · \texttt{-\/-\allowbreak{}png} · \texttt{-\/-\allowbreak{}view} · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\textbf{\texttt{stb-\allowbreak{}chargediffAnalysis}} --- \texttt{-\/-\allowbreak{}dir\ DIR} (default \texttt{chargediff\_\allowbreak{}run}) · \texttt{-o\ OUTPUT\_\allowbreak{}DIR} (default \texttt{.\allowbreak{}}) · \texttt{-\/-\allowbreak{}profile} \textbar{}
+\texttt{-\/-\allowbreak{}3d} · \texttt{-a/\allowbreak{}-\/-\allowbreak{}axis\ \{0,\allowbreak{}1,\allowbreak{}2\}} · \texttt{-p/\allowbreak{}-\/-\allowbreak{}pos\ ANG} · \texttt{-\/-\allowbreak{}spin} · \texttt{-\/-\allowbreak{}iso-\allowbreak{}min\ RHO} · \texttt{-\/-\allowbreak{}no-\allowbreak{}cube} · \texttt{-\/-\allowbreak{}vmin}/\texttt{-\/-\allowbreak{}vmax} · \texttt{-\/-\allowbreak{}contour} ·
+\texttt{-\/-\allowbreak{}show} · \texttt{-\/-\allowbreak{}png} · \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} · \texttt{-\/-\allowbreak{}save-\allowbreak{}data} · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\subsubsection{12. What\textquotesingle s next}\label{g4.19-12-whats-next}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{4.\allowbreak{}8-\allowbreak{}adsorption} gives the adsorption energy of a molecule on a surface with its BSSE correction; its sites carry the
+  \texttt{fragment\_\allowbreak{}manifest.\allowbreak{}json} that \texttt{-\/-\allowbreak{}fragment-\allowbreak{}manifest} reads, so a site\textquotesingle s \texttt{Δρ} is one command away.
+\item
+  \texttt{stb-\allowbreak{}bader} (3.6) and the Hirshfeld tools give atomic charges by other partitions (Section 1.6): compare.
+\item
+  \texttt{stb-\allowbreak{}density} (3.8) maps a single density (or the difference of two \texttt{.\allowbreak{}RHO} files with \texttt{-\/-\allowbreak{}rho2}, without ghosts or checks);
+  \texttt{stb-\allowbreak{}workfunction} (3.7) computes the work function from the electrostatic potential --- the direct counterpart of Eq. 11.
+\item
+  \texttt{4.\allowbreak{}9-\allowbreak{}neb}: follow \texttt{Δρ} along a reaction path by running this workflow on the images.
+\end{itemize}
+
+\subsubsection{13. References}\label{g4.19-13-references}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  S. F. Boys, F. Bernardi, \emph{The calculation of small molecular interactions by the differences of separate total energies.
+  Some procedures with reduced errors}, Mol. Phys. \textbf{19}, 553 (1970).
+\item
+  J. Collins \emph{et al.}, \emph{The full versus the virtual counterpoise correction for basis set superposition error in
+  self-consistent field calculations}, Chem. Phys. Lett. (1986). doi:10.1016/0009-2614(86)87014-2
+\item
+  M. Gutowski \emph{et al.}, \emph{Does the Boys and Bernardi function counterpoise method actually overcorrect the basis set
+  superposition error?}, Chem. Phys. Lett. (1986). doi:10.1016/0009-2614(86)80221-4
+\item
+  M. Gray \emph{et al.}, \emph{Systematic evaluation of counterpoise correction in density functional theory}, J. Chem. Theory
+  Comput. (2022). doi:10.1021/acs.jctc.2c00883
+\item
+  I. Mayer \emph{et al.}, \emph{Monomer geometry relaxation and the basis set superposition error}, Chem. Phys. Lett. (1992).
+  doi:10.1016/0009-2614(92)85415-7
+\item
+  N. D. Lang, \emph{Theory of work-function changes induced by alkali adsorption}, Phys. Rev. B \textbf{4}, 4234 (1971).
+\item
+  K. B. Wiberg, P. R. Rablen, \emph{Comparison of atomic charges derived via different procedures}, J. Comput. Chem. \textbf{14},
+  1504 (1993). doi:10.1002/jcc.540141213
+\item
+  R. F. W. Bader, \emph{Atoms in Molecules: A Quantum Theory}, Oxford University Press (1990).
+\item
+  F. L. Hirshfeld, \emph{Bonded-atom fragments for describing molecular charge densities}, Theor. Chim. Acta \textbf{44}, 129 (1977).
+\item
+  J. M. Soler \emph{et al.}, \emph{The SIESTA method for ab initio order-N materials simulation}, J. Phys.: Condens. Matter \textbf{14},
+  2745 (2002).
+\item
+  A. García \emph{et al.}, \emph{Siesta: Recent developments and applications}, J. Chem. Phys. \textbf{152}, 204108 (2020).
+\item
+  J. P. Perdew, K. Burke, M. Ernzerhof, \emph{Generalized gradient approximation made simple}, Phys. Rev. Lett. \textbf{77}, 3865
+  (1996).
+\item
+  M. J. van Setten \emph{et al.}, \emph{The PseudoDojo: Training and grading a 85 element optimized norm-conserving pseudopotential
+  table}, Comput. Phys. Commun. \textbf{226}, 39 (2018). doi:10.1016/j.cpc.2018.01.012
+\item
+  H. J. Monkhorst, J. D. Pack, \emph{Special points for Brillouin-zone integrations}, Phys. Rev. B \textbf{13}, 5188 (1976).
+\item
+  sisl --- \url{https://zerothi.github.io/sisl/} (N. Papior).
+\item
+  A. H. Larsen \emph{et al.}, \emph{The atomic simulation environment}, J. Phys.: Condens. Matter \textbf{29}, 273002 (2017).
+\item
+  S. P. Ong \emph{et al.}, \emph{Python Materials Genomics (pymatgen)}, Comput. Mater. Sci. \textbf{68}, 314 (2013).
+\item
+  J. D. Hunter, \emph{Matplotlib: A 2D graphics environment}, Comput. Sci. Eng. \textbf{9}, 90 (2007).
+\item
+  L. R. Thorne, R. D. Suenram, F. J. Lovas, \emph{Microwave spectrum, torsional barrier, and structure of BH₃NH₃}, J. Chem. Phys.
+  \textbf{78}, 167 (1983) (B--N ≈ 1.67 Å).
+\item
+  W. Klopper \emph{et al.}, \emph{Computational determination of equilibrium geometry and dissociation energy of the water dimer},
+  Phys. Chem. Chem. Phys. \textbf{2}, 2227 (2000). doi:10.1039/a910312k ---
+  CCSD(T): \texttt{R\_\allowbreak{}e\ =\allowbreak{}\ 2.\allowbreak{}912\ ±\ 0.\allowbreak{}005\ Å}, \texttt{D\_\allowbreak{}e\ =\allowbreak{}\ 21.\allowbreak{}0\ ±\ 0.\allowbreak{}2\ kJ/\allowbreak{}mol} (5.02 kcal/mol).
+\item
+  J. Binkley \emph{et al.}, \emph{A theoretical study of the properties of BH₃NH₃}, J. Chem. Phys. (1983). doi:10.1063/1.446117 ---
+  MP4 B--N dissociation energy 34.7 kcal/mol.
+\item
+  J. A. Plumley \emph{et al.}, \emph{Covalent and ionic nature of the dative bond and account of accurate ammonia borane binding
+  enthalpies}, J. Phys. Chem. A (2007). doi:10.1021/jp074937z --- binding enthalpy −27.5 ± 0.5 kcal/mol.
+\item
+  C. Uthaisar \emph{et al.}, \emph{Lithium adsorption on zigzag graphene nanoribbons}, J. Appl. Phys. (2009). doi:10.1063/1.3265431 ---
+  Li at the hollow site of graphene: 1.04 eV (PBE), 1.55 eV (LSDA).
+\item
+  G. Kaur \emph{et al.}, \emph{Structures and energetics of lithium adatom and its dimer on graphene --- a DFT study}, Appl. Surf. Sci.
+  (2015). doi:10.1016/j.apsusc.2014.07.108 --- SIESTA, GGA: ≈ 1.07 eV, Mulliken transfer ≈ 0.39 e.
+\end{enumerate}
 
 \subsection{Command-line reference}
 \label{ref-4.19}
@@ -34089,82 +35207,86 @@ Stage 1 of the Charge Density Difference workflow: writes a 'combined/' SIESTA i
 
 \paragraph{Synopsis}
 \begin{helpblock}
-usage: stb-chargediffPrep [-h] [-s STRUCTURE] (--fragment-manifest PATH |
-                          --fragment-sizes N1,N2,...,NK |
-                          --fragment-species El_a,El_b;El_c;...) [--calc CALC]
-                          [--mesh-cutoff RY] [-p PSEUDO_DIR] [--force-spin]
-                          [--no-force-spin] [--force-dipole] [--no-force-dipole]
-                          [--force-vdw] [--no-force-vdw] [--output-dir OUTPUT_DIR]
-                          [--view] [--save-report] [--no-intro] [-v]
+usage: stb-chargediffPrep [-h] [-s STRUCTURE]
+                          (--fragment-manifest PATH | --fragment-sizes N1,N2,...,NK | --fragment-species El_a,El_b;El_c;...)
+                          [--calc CALC] [--mesh-cutoff RY] [-p PSEUDO_DIR]
+                          [--force-spin] [--no-force-spin] [--force-dipole]
+                          [--no-force-dipole] [--force-vdw] [--no-force-vdw]
+                          [-o OUTPUT_DIR] [--view] [--show] [--png] [--save-report]
+                          [--no-intro] [-v]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
-\optitem{-s, -{}-structure STRUCTURE}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--structure@\texttt{--structure}}Path to the combined system's own .fdf structure file -- taken directly as the REAL, authoritative geometry to be split into fragments (structure\_io.read\_fdf, no directory scanning, no automatic preference for a relaxed '\texttt{*.\allowbreak{}XV}' that might sit alongside it -- point this at whichever file you consider the real geometry, e.g. a fresh \texttt{structure.\allowbreak{}fdf} written from a converged '\texttt{*.\allowbreak{}XV}' via \texttt{stb-\allowbreak{}translate}). Default: '\texttt{structure.\allowbreak{}fdf}'.}
+\optitem{-s, -{}-structure STRUCTURE}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--structure@\texttt{--structure}}Path to the combined system's own .fdf structure file -- taken directly as the REAL, authoritative geometry to be split into fragments (structure\_io.read\_fdf, no directory scanning, no automatic preference for a relaxed '*.XV' that might sit alongside it -- point this at whichever file you consider the real geometry, e.g. a fresh \texttt{structure.\allowbreak{}fdf} written from a converged '*.XV' via \texttt{stb-\allowbreak{}translate}). Default: '\texttt{structure.\allowbreak{}fdf}'.}
 \optitem{-{}-fragment-\allowbreak{}manifest PATH}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-manifest@\texttt{--fragment-manifest}}Reuse an existing \texttt{fragment\_\allowbreak{}manifest.\allowbreak{}json} (written by \texttt{stb-\allowbreak{}adsorb}) to recover its slab/adsorbate split -- exactly 2 fragments. Pass an empty value ('') to default to '\texttt{fragment\_\allowbreak{}manifest.\allowbreak{}json}' next to \texttt{-{}-structure} itself.\optmeta{exclusive group 1}}
-\optitem{-{}-fragment-\allowbreak{}sizes N1,\allowbreak{}N2,\allowbreak{}.\allowbreak{}.\allowbreak{}.\allowbreak{},\allowbreak{}NK}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-sizes@\texttt{--fragment-sizes}}General split by ATOM COUNT: comma-separated atom counts, in the order fragments appear in the structure file (fragment 1 = first N1 atoms, fragment 2 = next N2, ...). Must sum to the combined structure's total atom count. K \textgreater{}= 2.\optmeta{exclusive group 1}}
-\optitem{-{}-fragment-\allowbreak{}species El\_\allowbreak{}a,\allowbreak{}El\_\allowbreak{}b;El\_\allowbreak{}c;.\allowbreak{}.\allowbreak{}.}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-species@\texttt{--fragment-species}}General split by CHEMICAL SPECIES, independent of atom order: ';'-separated groups, each a comma-separated list of element symbols belonging to that fragment (e.g. 'C;B,N' for a graphene/h-BN heterostructure). Every species present in the structure must appear in exactly one group. LIMITATION: cannot be used when two fragments physically share a species (e.g. MoS2 on WS2, sulfur in both layers) -- use \texttt{-{}-fragment-\allowbreak{}sizes} or \texttt{-{}-fragment-\allowbreak{}manifest} instead in that case.\optmeta{exclusive group 1}}
+\optitem{-{}-fragment-\allowbreak{}sizes N1,\allowbreak{}N2,\allowbreak{}...,\allowbreak{}NK}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-sizes@\texttt{--fragment-sizes}}General split by ATOM COUNT: comma-separated atom counts, in the order fragments appear in the structure file (fragment 1 = first N1 atoms, fragment 2 = next N2, ...). Must sum to the combined structure's total atom count. K \textgreater{}= 2.\optmeta{exclusive group 1}}
+\optitem{-{}-fragment-\allowbreak{}species El\_\allowbreak{}a,\allowbreak{}El\_\allowbreak{}b;El\_\allowbreak{}c;...}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-species@\texttt{--fragment-species}}General split by CHEMICAL SPECIES, independent of atom order: ';'-separated groups, each a comma-separated list of element symbols belonging to that fragment (e.g. 'C;B,N' for a graphene/h-BN heterostructure). Every species present in the structure must appear in exactly one group. LIMITATION: cannot be used when two fragments physically share a species (e.g. MoS2 on WS2, sulfur in both layers) -- use \texttt{-{}-fragment-\allowbreak{}sizes} or \texttt{-{}-fragment-\allowbreak{}manifest} instead in that case.\optmeta{exclusive group 1}}
 \optitem{-{}-calc CALC}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--calc@\texttt{--calc}}SIESTA input template (.fdf) used for every fragment folder -- same basis/SCF/k-grid as the combined system (default: '\texttt{calc.\allowbreak{}fdf}').}
-\optitem{-{}-mesh-\allowbreak{}cutoff RY}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--mesh-cutoff@\texttt{--mesh-cutoff}}Explicit MeshCutoff (Ry) to force in every fragment folder -- the SAME value on all of them, never auto-detected from \texttt{-{}-calc/\allowbreak{}the} combined system's own \texttt{calc.\allowbreak{}fdf} (a per-run SIESTA default can silently differ between calculations with different atoms/pseudopotentials, which would corrupt the point-by-point subtraction). Default: 400 Ry -- raise it for a finer grid (recommended for a production CDD map) or type a different value here.\optmeta{type: float}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (same convention as \texttt{stb-\allowbreak{}adsorb/\allowbreak{}stb-\allowbreak{}hubbardu}). Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
+\optitem{-{}-mesh-\allowbreak{}cutoff RY}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--mesh-cutoff@\texttt{--mesh-cutoff}}Explicit MeshCutoff (Ry) to force in every fragment folder -- the SAME value on all of them, never auto-detected from \texttt{-{}-calc}/the combined system's own \texttt{calc.\allowbreak{}fdf} (a per-run SIESTA default can silently differ between calculations with different atoms/pseudopotentials, which would corrupt the point-by-point subtraction). Default: 400 Ry -- raise it for a finer grid (recommended for a production CDD map) or type a different value here.\optmeta{default: 400; type: float}}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (same convention as \texttt{stb-\allowbreak{}adsorb}/\texttt{stb-\allowbreak{}her}/\texttt{stb-\allowbreak{}hubbardu}). Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
 \optitem{-{}-force-\allowbreak{}spin}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--force-spin@\texttt{--force-spin}}Force spin-polarized SCF in every fragment folder (default: inherited from the combined system's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, if any).\optmeta{switch, off by default}}
-\optitem{-{}-no-\allowbreak{}force-\allowbreak{}spin}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-spin@\texttt{--no-force-spin}}Force spin-restricted SCF, overriding the combined system's own setting.\optmeta{switch}}
+\optitem{-{}-no-\allowbreak{}force-\allowbreak{}spin}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-spin@\texttt{--no-force-spin}}Force spin-restricted SCF, overriding the combined system's own setting.\optmeta{switch, off by default}}
 \optitem{-{}-force-\allowbreak{}dipole}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--force-dipole@\texttt{--force-dipole}}Force the slab dipole correction (default: inherited from the combined system's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, if any).\optmeta{switch, off by default}}
-\optitem{-{}-no-\allowbreak{}force-\allowbreak{}dipole}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-dipole@\texttt{--no-force-dipole}}Disable the slab dipole correction, overriding the combined system's own setting.\optmeta{switch}}
+\optitem{-{}-no-\allowbreak{}force-\allowbreak{}dipole}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-dipole@\texttt{--no-force-dipole}}Disable the slab dipole correction, overriding the combined system's own setting.\optmeta{switch, off by default}}
 \optitem{-{}-force-\allowbreak{}vdw}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--force-vdw@\texttt{--force-vdw}}Force the DFT-D3 dispersion correction (default: inherited from the combined system's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, if any).\optmeta{switch, off by default}}
-\optitem{-{}-no-\allowbreak{}force-\allowbreak{}vdw}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-vdw@\texttt{--no-force-vdw}}Disable the DFT-D3 dispersion correction, overriding the combined system's own setting.\optmeta{switch}}
-\optitem{-{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--output-dir@\texttt{--output-dir}}Root directory to write the fragment folders into (default: chargediff\_run).}
+\optitem{-{}-no-\allowbreak{}force-\allowbreak{}vdw}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-vdw@\texttt{--no-force-vdw}}Disable the DFT-D3 dispersion correction, overriding the combined system's own setting.\optmeta{switch, off by default}}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--output-dir@\texttt{--output-dir}}Root directory to write the fragment folders into (default: chargediff\_run).}
 \optitem{-{}-view}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--view@\texttt{--view}}After writing them, open ONE ASE interactive 3D viewer window with the combined structure followed by every fragment as navigable movie frames -- ghost atoms render as mostly-hollow circles (see structure\_to\_view\_atoms's docstring). Needs a display. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-show}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--show@\texttt{--show}}Open a matplotlib figure on screen: the combined system projected on the xy/xz/yz planes, atoms coloured by fragment. Needs a display. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-png}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--png@\texttt{--png}}Save that figure as \textless{}output-dir\textgreater{}/\texttt{chargediff\_\allowbreak{}fragments.\allowbreak{}png}. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--save-report@\texttt{--save-report}}Also persist the full run report to \texttt{chargediff\_\allowbreak{}prep\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
 \paragraph{From the built-in help}
 \begin{helpblock}
-Usage examples:
-  stb-chargediffPrep --fragment-sizes "12,12"
-  stb-chargediffPrep --structure bilayer/structure.fdf --fragment-species "C;B,N" -p dojo
-  stb-chargediffPrep --structure adsorption_run/sites/site_1/structure.fdf --fragment-manifest adsorption_run/sites/site_1/fragment_manifest.json
+Example usage:
+  stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 --png
+  stb-chargediffPrep -s bilayer.fdf --fragment-species "C;B,N" -p dojo -o bilayer_cdd
+  stb-chargediffPrep -s li_graphene.fdf --fragment-sizes 18,1 --force-spin --force-dipole -p dojo
+  stb-chargediffPrep -s adsorption_run/sites/site_1/structure.fdf --fragment-manifest adsorption_run/sites/site_1/fragment_manifest.json
 \end{helpblock}
 
 \subsubsection{\texorpdfstring{\texttt{stb-chargediffAnalysis}}{stb-chargediffAnalysis}}
 \label{cmd-stb-chargediffAnalysis}\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}|textbf}
-Stage 2 of the Charge Density Difference workflow: given just \texttt{-{}-dir} (the same folder \texttt{stb-\allowbreak{}chargediffPrep} wrote into), auto-discovers the combined system and every fragment from \texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}, reads each one's own .RHO (once SIESTA has been run in every folder), and computes Delta rho = rho\_combined - sum(rho\_fragment\_i) -- the standard way to visualize charge accumulation/depletion regions. Produces the same 2D slice / 3D point cloud / planar-averaged 1D profile / Gaussian cube output as \texttt{stb-\allowbreak{}density}, so the visualization conventions match the rest of the suite. \texttt{-{}-spin} computes the spin-density difference instead (only available if the combined system and every fragment are spin-polarized).
+Stage 2 of the Charge Density Difference workflow: given just \texttt{-{}-dir} (the same folder \texttt{stb-\allowbreak{}chargediffPrep} wrote into), auto-discovers the combined system and every fragment from \texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}, reads each one's own .RHO (once SIESTA has been run in every folder), and computes Delta rho = rho\_combined - sum(rho\_fragment\_i) -- the standard way to visualize charge accumulation/depletion regions. Besides the map (2D slice / planar profile / 3D point cloud / Gaussian cube in e/bohr\textasciicircum{}3) the report checks the consistency of the folders (grid, cell, mesh cutoff, level of theory, SCF, electron count), gives the counterpoise-corrected interaction energy from the same runs, statistics of Delta rho and the charge change of every fragment and atom (nearest-atom partition). \texttt{-{}-show} / \texttt{-{}-png} draw a 4-panel dashboard; \texttt{-{}-save-\allowbreak{}gnuplot} writes the .gplot; \texttt{-{}-save-\allowbreak{}data} a CSV and a JSON. \texttt{-{}-spin} computes the spin-density difference instead (only if the combined system and every fragment are spin-polarized).
 
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-chargediffAnalysis [-h] [--dir DIR] [-o OUTPUT_DIR] [--3d | --profile]
                               [-a {0,1,2}] [-p POS] [--spin] [--iso-min RHO]
                               [--no-cube] [--vmin VMIN] [--vmax VMAX] [--contour]
-                              [--save-report] [--save-gnuplot] [--view] [--no-intro]
-                              [-v]
+                              [--show] [--png] [--save-gnuplot] [--save-data]
+                              [--save-report] [--no-intro] [-v]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
-\optitem{-{}-dir DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--dir@\texttt{--dir}}Directory \texttt{stb-\allowbreak{}chargediffPrep} wrote into -- must contain '\texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}' plus the 'combined/' and fragment subfolders it lists, each already run in SIESTA. Default: chargediff\_run (\texttt{stb-\allowbreak{}chargediffPrep's} own default \texttt{-{}-output-\allowbreak{}dir}).}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and \texttt{references.\allowbreak{}bib} into (default: current directory). Created if it doesn't exist.}
+\optitem{-{}-dir DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--dir@\texttt{--dir}}Directory \texttt{stb-\allowbreak{}chargediffPrep} wrote into -- must contain '\texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}' plus the 'combined/' and fragment subfolders it lists, each already run in SIESTA. Default: chargediff\_run (\texttt{stb-\allowbreak{}chargediffPrep}'s own default \texttt{-{}-output-\allowbreak{}dir}).}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-3d}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--3d@\texttt{--3d}}Export full 3D volume\optmeta{switch, off by default; exclusive group 1}}
 \optitem{-{}-profile}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--profile@\texttt{--profile}}Write the planar average of Delta rho along \texttt{-{}-axis} as a 1D profile (average taken over the other two axes) instead of a 2D/3D map -- useful for bilayers, slabs, and interfaces\optmeta{switch, off by default; exclusive group 1}}
-\optitem{-a, -{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--axis@\texttt{--axis}}For a slice/profile: the axis normal to the cut plane (slice) or the axis the profile varies along (profile) (0=X, 1=Y, 2=Z)\optmeta{default: 2; choices: 0, 1, 2; type: int}}
-\optitem{-p, -{}-pos POS}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--pos@\texttt{--pos}}Position (Angstrom) of the 2D cut (ignored in \texttt{-{}-profile} mode)\optmeta{type: float}}
+\optitem{-a, -{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--axis@\texttt{--axis}}For a slice/profile: the axis normal to the cut plane (slice) or the axis the profile varies along (profile) (0=X, 1=Y, 2=Z). Default: Z for the slice; for the profile (and the dashboard's profile panel) the lattice axis along which the fragments are farthest apart.\optmeta{choices: 0, 1, 2; type: int; default: automatic}}
+\optitem{-p, -{}-pos POS}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--pos@\texttt{--pos}}Position (Angstrom) of the 2D cut along \texttt{-{}-axis} (default: the plane where the planar integral of |Delta rho| is largest; ignored in \texttt{-{}-profile} mode)\optmeta{type: float}}
 \optitem{-{}-spin}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--spin@\texttt{--spin}}Compute the SPIN density difference instead of the charge density difference -- only available if the combined system AND every fragment are spin-polarized.\optmeta{switch, off by default}}
-\optitem{-{}-iso-\allowbreak{}min RHO}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--iso-min@\texttt{--iso-min}}For --3d: only export/preview points with \textbar{}Delta rho\textbar{} \textgreater{}= this threshold (e/Ang\textasciicircum{}3) -- keeps the point cloud a manageable size and visually meaningful instead of dominated by near-zero points\optmeta{type: float}}
-\optitem{-{}-no-\allowbreak{}cube}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--no-cube@\texttt{--no-cube}}Skip writing Delta rho's full 3D grid as a Gaussian .cube file -- written by default (needs a '\texttt{*.\allowbreak{}XV}' or '\texttt{structure.\allowbreak{}fdf}' in the combined folder for the geometry), for real 3D isosurface rendering in VESTA/VMD/Avogadro.\optmeta{switch}}
+\optitem{-{}-iso-\allowbreak{}min RHO}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--iso-min@\texttt{--iso-min}}For --3d: only export/preview points with |Delta rho| \textgreater{}= this threshold (e/Ang\textasciicircum{}3) -- keeps the point cloud a manageable size and visually meaningful instead of dominated by near-zero points\optmeta{type: float}}
+\optitem{-{}-no-\allowbreak{}cube}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--no-cube@\texttt{--no-cube}}Skip writing Delta rho's full 3D grid as a Gaussian .cube file (in e/bohr\textasciicircum{}3) -- written by default (needs a '*.XV' or '\texttt{structure.\allowbreak{}fdf}' in the combined folder for the geometry), for real 3D isosurface rendering in VESTA/VMD/Avogadro.\optmeta{switch, off by default}}
 \optitem{-{}-vmin VMIN}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--vmin@\texttt{--vmin}}Fix the colorbar/palette lower bound manually (e/Ang\textasciicircum{}3), e.g. to compare several slices on the same scale.\optmeta{type: float}}
 \optitem{-{}-vmax VMAX}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--vmax@\texttt{--vmax}}Fix the colorbar/palette upper bound manually (e/Ang\textasciicircum{}3).\optmeta{type: float}}
-\optitem{-{}-contour}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--contour@\texttt{--contour}}Overlay contour lines on a 2D slice map/preview (ignored for --3d/--profile)\optmeta{switch, off by default}}
-\optitem{-{}-save-\allowbreak{}report}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--save-report@\texttt{--save-report}}Also persist the full run report to \texttt{chargediff\_\allowbreak{}analysis\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-contour}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--contour@\texttt{--contour}}Overlay contour lines on a 2D slice map/dashboard (ignored for --3d/\texttt{-{}-profile})\optmeta{switch, off by default}}
+\optitem{-{}-show}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--show@\texttt{--show}}Open the 4-panel dashboard (slice with atoms, planar profile, charge change per atom, summary) on screen with matplotlib. Needs a display. Off by default (\texttt{-{}-view} is the older name of this option).\optmeta{switch, off by default}}
+\optitem{-{}-png}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--png@\texttt{--png}}Save the dashboard as \textless{}output-dir\textgreater{}/\textless{}name\textgreater{}\texttt{\_\allowbreak{}summary.\allowbreak{}png}. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--save-gnuplot@\texttt{--save-gnuplot}}Also write a .gplot script next to each .dat file this run generates. Off by default.\optmeta{switch, off by default}}
-\optitem{-{}-view}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--view@\texttt{--view}}Show an interactive matplotlib preview of Delta rho (slice heatmap / profile line / 3D scatter, matching the mode). Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}data}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--save-data@\texttt{--save-data}}Also write \textless{}name\textgreater{}\texttt{\_\allowbreak{}atoms.\allowbreak{}csv} (charge change per atom) and \textless{}name\textgreater{}\texttt{\_\allowbreak{}results.\allowbreak{}json} (every number of the report). Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}report}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--save-report@\texttt{--save-report}}Also persist the full run report to \texttt{chargediff\_\allowbreak{}analysis\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
 \paragraph{From the built-in help}
 \begin{helpblock}
 Example usage:
-  stb-chargediffAnalysis
-  stb-chargediffAnalysis --dir chargediff_run --profile --axis 2
-  stb-chargediffAnalysis --dir chargediff_run --view
-  stb-chargediffAnalysis --dir chargediff_run --no-cube
+  stb-chargediffAnalysis --dir chargediff_run --png
+  stb-chargediffAnalysis --dir chargediff_run --profile --axis 2 --save-gnuplot
+  stb-chargediffAnalysis --dir chargediff_run --axis 2 --pos 7.1 --contour --show --save-data
+  stb-chargediffAnalysis --dir chargediff_run --3d --iso-min 0.01 --no-cube
 \end{helpblock}
-
 
 \section{Hirshfeld-I Charge Partitioning}
 \label{tool-4.20}

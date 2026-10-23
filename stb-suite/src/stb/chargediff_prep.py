@@ -482,10 +482,11 @@ def main():
         "fragment folder ALWAYS includes every other fragment as ghost atoms (no opt-out) so "
         "every calculation shares the same basis set.", 'bold')}""",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="Usage examples:\n"
-               "  %(prog)s --fragment-sizes \"12,12\"\n"
-               "  %(prog)s --structure bilayer/structure.fdf --fragment-species \"C;B,N\" -p dojo\n"
-               "  %(prog)s --structure adsorption_run/sites/site_1/structure.fdf "
+        epilog="Example usage:\n"
+               "  %(prog)s -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 --png\n"
+               "  %(prog)s -s bilayer.fdf --fragment-species \"C;B,N\" -p dojo -o bilayer_cdd\n"
+               "  %(prog)s -s li_graphene.fdf --fragment-sizes 18,1 --force-spin --force-dipole -p dojo\n"
+               "  %(prog)s -s adsorption_run/sites/site_1/structure.fdf "
                "--fragment-manifest adsorption_run/sites/site_1/fragment_manifest.json\n"
     )
 
@@ -556,7 +557,7 @@ def main():
                          help="Disable the DFT-D3 dispersion correction, overriding the combined "
                               "system's own setting.")
 
-    parser.add_argument("--output-dir", default="chargediff_run",
+    parser.add_argument("-o", "--output-dir", default="chargediff_run",
                          help="Root directory to write the fragment folders into (default: "
                               "chargediff_run).")
     parser.add_argument("--view", action="store_true",

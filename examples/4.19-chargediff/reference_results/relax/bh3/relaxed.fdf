@@ -1,0 +1,26 @@
+# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+
+NumberOfSpecies    2
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   5   B
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 12.00000000   0.00000000   0.00000000
+ 0.00000000   12.00000000   0.00000000
+ 0.00000000   0.00000000   12.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000637   0.49999997   0.41143131   1
+  0.55106783   0.58844413   0.41141265   2
+  0.39786207   0.50000000   0.41140592   2
+  0.55106782   0.41155591   0.41141265   2
+%endblock AtomicCoordinatesAndAtomicSpecies

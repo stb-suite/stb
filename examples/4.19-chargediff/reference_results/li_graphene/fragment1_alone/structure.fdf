@@ -1,0 +1,40 @@
+# the fragment WITHOUT ghost atoms (its own basis only), from /home/carlos/run/cdd_ref/li_graphene/fragment1
+# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+
+NumberOfSpecies    1
+NumberofAtoms      18
+
+%block ChemicalSpeciesLabel
+ 1   6   C_frag1
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 7.40100000   0.00000000   0.00000000
+ 3.70050000   6.40945401   0.00000000
+ 0.00000000   0.00000000   20.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.11058274   0.11058274   0.50008684   1
+  0.22164761   0.22164761   0.50002657   1
+  0.10996148   0.44501887   0.50002696   1
+  0.22164780   0.55670518   0.50002696   1
+  0.11058287   0.77883373   0.50008702   1
+  0.22221723   0.88889161   0.49993709   1
+  0.44501887   0.10996148   0.50002696   1
+  0.55670518   0.22164780   0.50002696   1
+  0.44501906   0.44501905   0.50002657   1
+  0.55608393   0.55608393   0.50008684   1
+  0.44444943   0.77777506   0.49993709   1
+  0.55608380   0.88783294   0.50008702   1
+  0.77883373   0.11058287   0.50008702   1
+  0.88889161   0.22221723   0.49993709   1
+  0.77777506   0.44444943   0.49993709   1
+  0.88783294   0.55608380   0.50008702   1
+  0.77777506   0.77777506   0.49993707   1
+  0.88889161   0.88889161   0.49993707   1
+%endblock AtomicCoordinatesAndAtomicSpecies

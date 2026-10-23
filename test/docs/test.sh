@@ -156,6 +156,15 @@ check_success "$SITE_DIR/guides/4-workflows/4.16-optical/figures/graphene_dashbo
 check_contains 'src="figures/si_dashboard.png"' "$opt16"
 check_contains 'href="../../../reference/stb-opticalAnalysis/"' "$opt16"
 
+echo "Testing: 4.19-chargediff shows its four figures -- copied next to the page and linked"
+cdd19="$SITE_DIR/guides/4-workflows/4.19-chargediff/index.html"
+check_success "$cdd19"
+for fig in water_dashboard water_studies nh3bh3_dashboard li_graphene_dashboard; do
+    check_success "$SITE_DIR/guides/4-workflows/4.19-chargediff/figures/$fig.png"
+    check_contains "src=\"figures/$fig.png\"" "$cdd19"
+done
+check_contains 'href="../../../reference/stb-chargediffAnalysis/"' "$cdd19"
+
 
 # --- 3. Sidebar: menu categories, numeric (not alphabetical) order, short labels ---
 echo -e "\n--- Testing the generated sidebar ---"

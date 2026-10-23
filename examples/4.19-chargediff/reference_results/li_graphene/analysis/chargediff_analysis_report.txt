@@ -1,0 +1,119 @@
+===== STB-CHARGEDIFFANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Tool           : stb-chargediffAnalysis 1.9.289
+Date/time      : 2026-10-23 13:27:30
+Prep dir       : .  (3 folders from chargediff_manifest.json)
+Quantity       : Delta charge density
+Mode           : slice
+Output dir     : analysis
+
+[1] SYSTEM
+------------------------------------------------------------
+Cell (Ang)     : a=7.4010  b=7.4010  c=20.0000; volume 948.727 Ang^3
+Real-space grid: 72 x 72 x 216 = 1,119,744 points, spacing 0.1028 0.1028 0.0926 Ang, voxel 8.473e-04 Ang^3
+SIESTA version : 5.4.2
+Folder     | Atoms | Basis             | ∫rho (e) | SIESTA electrons | E_KS (eV)   
+-----------------------------------------------------------------------------------
+combined/  | 19    | all atoms real    | 75.0000  | 75.0000          | -3138.723846
+fragment1/ | 18    | 18 real + 1 ghost | 72.0000  | 72.0000          | -2943.802870
+fragment2/ | 1     | 1 real + 18 ghost | 3.0000   | 3.0000           | -194.176898 
+
+[2] CONSISTENCY CHECKS
+------------------------------------------------------------
+Check                                                                         | Status | Detail              
+-------------------------------------------------------------------------------------------------------------
+Same real-space grid in every folder                                          | OK     | 72x72x216           
+Same cell in every folder                                                     | OK     | within 1e-3 Ang     
+Same level of theory (functional, basis, smearing, k-grid, D3...)             | OK     | identical           
+Same pseudopotential files (by content) in every folder                       | OK     | identical           
+Same mesh actually used by SIESTA                                             | OK     | 322.4 Ry            
+SCF converged in every run                                                    | OK     | yes                 
+Electron count of the combined .RHO equals the sum over fragments (< 0.001 e) | OK     | 75.0000 vs 75.0000 e
+Net Delta rho vanishes (|integral| < 0.001 e)                                 | OK     | -6.46e-08 e         
+Induced dipole from Delta rho equals SIESTA's own dipoles (along z)           | OK     | +2.146 vs +2.146 D  
+
+[3] COUNTERPOISE INTERACTION ENERGY
+------------------------------------------------------------
+E_int = E(combined) - sum_i E(fragment_i with the other fragments as ghost atoms): every term has the same basis, so the basis-set superposition error cancels.
+E(combined)    : -3138.723846 eV
+E(fragment1   ): -2943.802870 eV
+E(fragment2   ): -194.176898 eV
+E_int (CP)     : -0.7441 eV = -17.16 kcal/mol = -71.79 kJ/mol
+[NOTE] At the geometry given: it includes no deformation energy of the fragments (the fragments are not relaxed apart), so it is the interaction energy, not a binding energy.
+
+[4] DELTA CHARGE DENSITY: STATISTICS
+------------------------------------------------------------
+Integral       : -0.000000 e
+Charge moved   : 0.4582 e gained = 0.4582 e lost (half of the integral of |Delta rho|)
+RMS            : 0.00321 e/Ang^3;  |Delta rho| > 1e-3 e/Ang^3 on 17.67 % of the cell
+Extreme        | Value (e/Ang^3) | Position (Ang)  | Nearest atom             
+------------------------------------------------------------------------------
+maximum (gain) | +0.04410        | 2.57 2.85 9.72  | C3 (C_frag1), 0.30 Ang   
+minimum (loss) | -0.09948        | 3.70 2.14 11.67 | Li19 (Li_frag2), 0.08 Ang
+Isosurface hint: +/-0.0015 e/bohr^3 (10 % of the largest |Delta rho|, in the unit of the cube file) is a good first level in VESTA/VMD.
+
+[5] CHARGE CHANGE BY FRAGMENT AND ATOM (nearest-atom partition)
+------------------------------------------------------------
+#  | Element | Label    | Fragment  | Net Delta charge (e)
+----------------------------------------------------------
+1  | C       | C_frag1  | fragment1 | +0.00874            
+2  | C       | C_frag1  | fragment1 | +0.01427            
+3  | C       | C_frag1  | fragment1 | +0.01471            
+4  | C       | C_frag1  | fragment1 | +0.01541            
+5  | C       | C_frag1  | fragment1 | +0.00874            
+6  | C       | C_frag1  | fragment1 | +0.01045            
+7  | C       | C_frag1  | fragment1 | +0.01471            
+8  | C       | C_frag1  | fragment1 | +0.01540            
+9  | C       | C_frag1  | fragment1 | +0.01422            
+10 | C       | C_frag1  | fragment1 | +0.00874            
+11 | C       | C_frag1  | fragment1 | +0.01047            
+12 | C       | C_frag1  | fragment1 | +0.00874            
+13 | C       | C_frag1  | fragment1 | +0.00874            
+14 | C       | C_frag1  | fragment1 | +0.01045            
+15 | C       | C_frag1  | fragment1 | +0.01047            
+16 | C       | C_frag1  | fragment1 | +0.00874            
+17 | C       | C_frag1  | fragment1 | +0.01049            
+18 | C       | C_frag1  | fragment1 | +0.01043            
+19 | Li      | Li_frag2 | fragment2 | -0.20395            
+fragment1     : +0.20395 e (gains electrons)
+fragment2     : -0.20395 e (loses electrons)
+[NOTE] The grid is split among the atoms by distance (a geometric, Voronoi-like partition, not a Bader analysis): the numbers depend on that choice and are for comparing systems, not absolute charges. Positive = the region gains electrons.
+Planar view    : Delta rho averaged over the planes normal to z (no partition of space needed)
+Separating plane: z = 10.873 Ang, halfway across the 1.74 Ang between the two fragments' closest atoms along z
+Charge across  : fragment1 side +0.11618 e; fragment2 side -0.11618 e
+                 (nearest-atom partition above: fragment1 +0.20395 e; fragment2 -0.20395 e)
+Induced dipole : +0.4467 e Ang = +2.146 D along +z (electrons pushed toward -z); SIESTA's dipoles give +2.146 D
+Work function  : the dipole layer shifts the vacuum level by -1.704 eV on the +z side relative to the -z side (Delta Phi = -e mu / (eps0 A), A = 47.44 Ang^2)
+
+[6] MAP AND FILES
+------------------------------------------------------------
+Slice          : plane normal to z at 10.741 Ang (grid index 116; plane of the largest planar integral of |Delta rho|)
+[WARNING] the cut plane is skewed (60.0 deg between its in-plane lattice vectors): gnuplot's map may look distorted although the data coordinates are correct.
+[OK] Data written to 'analysis/li_graphene_chargediff_slice.dat'.
+[OK] Cube file saved to 'analysis/li_graphene_chargediff.cube' (values in e/bohr^3, the cube convention; open in VESTA/VMD/Avogadro for real 3D isosurfaces).
+[OK] Data files: 'analysis/li_graphene_chargediff_atoms.csv', 'analysis/li_graphene_chargediff_results.json'.
+
+[7] REFERENCES
+------------------------------------------------------------
+[OK] Citations for the methods used in this run written to 'analysis/references.bib' (2 entries).
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status         : 1 warning(s); checks 9 ok, 0 warn
+E_int (CP)     : -0.7441 eV (-17.16 kcal/mol)
+Charge moved   : 0.4582 e
+Fragments      : fragment1 +0.2039 e; fragment2 -0.2039 e
+Across plane   : fragment1 +0.1162 e; fragment2 -0.1162 e
+Induced dipole : +2.146 D; work-function shift -1.704 eV
+File           : analysis/li_graphene_chargediff_slice.dat
+File           : analysis/li_graphene_chargediff.cube
+File           : analysis/li_graphene_chargediff_atoms.csv
+File           : analysis/li_graphene_chargediff_results.json
+File           : analysis/references.bib
+Report         : analysis/chargediff_analysis_report.txt
+
+[9] WARNINGS
+------------------------------------------------------------
+ 1. the cut plane is skewed (60.0 deg between its in-plane lattice vectors): gnuplot's map may look distorted although the data coordinates are correct.

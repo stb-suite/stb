@@ -1,0 +1,109 @@
+{
+ "tool": "stb-chargediffAnalysis 1.9.289",
+ "date": "2026-10-23T13:27:46",
+ "directory": ".",
+ "quantity": "Delta charge density",
+ "grid": [
+  160,
+  160,
+  160
+ ],
+ "integral_e": -3.3988803625106774e-07,
+ "charge_moved_e": 0.08167437444627276,
+ "rms_e_per_ang3": 0.0010273497318848968,
+ "maximum": {
+  "value": 0.2155313491821289,
+  "position_ang": [
+   5.512499999999999,
+   6.999999999999999,
+   7.174999999999998
+  ]
+ },
+ "minimum": {
+  "value": -0.07120418548583984,
+  "position_ang": [
+   5.249999999999999,
+   6.737499999999999,
+   7.262499999999999
+  ]
+ },
+ "energies_ev": {
+  "combined": -962.89935,
+  "fragment1": -481.416765,
+  "fragment2": -481.291263
+ },
+ "e_int_cp_ev": -0.19132200000001376,
+ "per_fragment_e": {
+  "fragment1": -0.03184774651904375,
+  "fragment2": 0.03184740581398464
+ },
+ "per_atom_e": [
+  0.009521361157908087,
+  -0.020820774571040195,
+  -0.02054833310591164,
+  0.02787058512452239,
+  -0.016784712625406165,
+  0.020761533314868418
+ ],
+ "planar": {
+  "axis": "x",
+  "dipole_e_ang": 0.16837059661778084,
+  "dipole_debye": 0.808717649674525,
+  "dipole_siesta_e_ang": 0.16836831319300752,
+  "vacuum_gap_ang": 10.298683079999998,
+  "plane_ang": 7.139520709999999,
+  "charge_across_plane_e": {
+   "fragment1": -0.0318289428022647,
+   "fragment2": 0.0318289428022647
+  },
+  "work_function_shift_ev": null
+ },
+ "checks": [
+  {
+   "name": "Same real-space grid in every folder",
+   "ok": true,
+   "detail": "160x160x160"
+  },
+  {
+   "name": "Same cell in every folder",
+   "ok": true,
+   "detail": "within 1e-3 Ang"
+  },
+  {
+   "name": "Same level of theory (functional, basis, smearing, k-grid, D3...)",
+   "ok": true,
+   "detail": "identical"
+  },
+  {
+   "name": "Same pseudopotential files (by content) in every folder",
+   "ok": true,
+   "detail": "identical"
+  },
+  {
+   "name": "Same mesh actually used by SIESTA",
+   "ok": true,
+   "detail": "361.0 Ry"
+  },
+  {
+   "name": "SCF converged in every run",
+   "ok": true,
+   "detail": "yes"
+  },
+  {
+   "name": "Electron count of the combined .RHO equals the sum over fragments (< 0.001 e)",
+   "ok": true,
+   "detail": "16.0000 vs 16.0000 e"
+  },
+  {
+   "name": "Net Delta rho vanishes (|integral| < 0.001 e)",
+   "ok": true,
+   "detail": "-3.40e-07 e"
+  },
+  {
+   "name": "Induced dipole from Delta rho equals SIESTA's own dipoles (along x)",
+   "ok": true,
+   "detail": "+0.809 vs +0.809 D"
+  }
+ ],
+ "warnings": []
+}

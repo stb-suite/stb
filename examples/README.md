@@ -191,6 +191,7 @@ through.
 | 4.16 | `stb-optical` / `stb-opticalAnalysis` | [`4.16-optical/`](4.16-optical/) |
 | 4.17 | `stb-mlff` / `stb-mlffAnalysis` / `stb-mlffValidate` / `stb-mlffActiveLearning` | [`4.17-mlff/`](4.17-mlff/) |
 | 4.18 | `stb-eosInputs` / `stb-eosAnalysis` | [`4.18-eos/`](4.18-eos/) |
+| 4.19 | `stb-chargediffPrep` / `stb-chargediffAnalysis` | [`4.19-chargediff/`](4.19-chargediff/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -257,6 +258,14 @@ against `-dE/dV`, a second bulk modulus from the stress, a checks table, a dashb
 files). It ships real finished SIESTA runs of bulk silicon -- 14 setups changing k-points, mesh
 and basis one at a time -- and compares them with the all-electron Delta-test reference, which
 shows why `B0` alone is a poor figure of merit for a basis set.
+`4.19-chargediff/` covers the 2-stage Charge Density Difference workflow: `stb-chargediffPrep`
+(`4.19.1`, one SIESTA folder for the combined system and one per fragment, every fragment with the
+others as ghost atoms, the same mesh forced in `config_extra.fdf`) and `stb-chargediffAnalysis`
+(`4.19.2`, `Δρ` with consistency checks, the counterpoise interaction energy, charge per fragment and
+atom, the charge across the plane between fragments, the induced dipole checked against SIESTA's own,
+a dashboard and a cube). It ships real SIESTA runs of a hydrogen bond (water dimer), a dative bond
+(ammonia borane) and Li on graphene, with the basis-set superposition error measured and the
+water dimer's basis, mesh and distance studies.
 
 ## Adding another example
 

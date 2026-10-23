@@ -6425,8 +6425,21 @@ def run_chargediff_prep() -> None:
     output_dir = get_input("Output directory [default: chargediff_run]: ").strip() or "chargediff_run"
     args.extend(["--output-dir", output_dir, "--no-intro"])
 
+    # Spin / dipole / D3: inherited from the combined folder's config_extra.fdf unless forced here
+    for flag, question in (("spin", "Spin polarization"), ("dipole", "Slab dipole correction"),
+                           ("vdw", "DFT-D3 dispersion")):
+        answer = get_input(f"{question} in every folder: [Enter] inherit, y = force on, n = force off: ").strip().lower()
+        if answer == 'y':
+            args.append(f"--force-{flag}")
+        elif answer == 'n':
+            args.append(f"--no-force-{flag}")
+
+    if get_input("\nShow the fragments figure on screen (matplotlib, needs a display)? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("Save the fragments figure as PNG? (y/N): ").strip().lower() == 'y':
+        args.append("--png")
     view_fragments = get_input(
-        "\nView combined structure + fragments in ASE (needs a display)? (y/N): "
+        "View combined structure + fragments in ASE (needs a display)? (y/N): "
         ).strip().lower() == 'y'
     if view_fragments:
         args.append("--view")
@@ -6460,11 +6473,29 @@ def run_chargediff_analysis() -> None:
     elif mode_choice == "3":
         args.append("--3d")
 
+    axis = get_input("Axis of the slice normal / profile (0=x, 1=y, 2=z) [default: automatic]: ").strip()
+    if axis in ("0", "1", "2"):
+        args.extend(["--axis", axis])
+    if mode_choice not in ("2", "3"):
+        pos = get_input("Position of the slice along that axis, Ang [default: plane of largest |Delta rho|]: ").strip()
+        if pos:
+            args.extend(["--pos", pos])
+    if get_input("Spin-density difference instead of charge (spin-polarized runs only)? (y/N): ").strip().lower() == 'y':
+        args.append("--spin")
+
     skip_cube = get_input(
         "Skip writing the Gaussian .cube file (written by default)? (y/N): ").strip().lower() == 'y'
     if skip_cube:
         args.append("--no-cube")
 
+    if get_input("\nShow the dashboard on screen (matplotlib, needs a display)? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("Save the dashboard as PNG? (y/N): ").strip().lower() == 'y':
+        args.append("--png")
+    if get_input("Write gnuplot scripts (.gplot) next to the .dat? (y/N): ").strip().lower() == 'y':
+        args.append("--save-gnuplot")
+    if get_input("Save per-atom CSV and results JSON? (y/N): ").strip().lower() == 'y':
+        args.append("--save-data")
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     if save_report:
         args.append("--save-report")
@@ -6591,6 +6622,15 @@ def run_hirshfeld_analysis() -> None:
     save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     if save_report:
         args.append("--save-report")
+
+    print(f"\n{color_text('Optional outputs:', 'cyan')}")
+    if get_input("Save data files (per-atom charges .dat, per-iteration charges, .xyz with "
+                 "charges)? (y/N): ").strip().lower() == 'y':
+        args.append("--save-data")
+    if get_input("Save the analysis dashboard as hirshfeld_analysis.png? (y/N): ").strip().lower() == 'y':
+        args.append("--png")
+    if get_input("Show the dashboard on screen (needs a display)? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
 
     run_tool("stb-hirshfeldAnalysis", args)
 

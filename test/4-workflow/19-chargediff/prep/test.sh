@@ -205,7 +205,7 @@ check_contains "\-\-structure" log_help.txt
 # --- 8. Interactive path (stb-suite, shortcut 4.19.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.19.1) ---"
 rm -rf cdd_interactive
-printf '4.19.1\ncombined/structure.fdf\n1\n2,2,2\ncalc_template.fdf\n\n\ncdd_interactive\nn\nn\n\n0\n' \
+printf '4.19.1\ncombined/structure.fdf\n1\n2,2,2\ncalc_template.fdf\n\n\ncdd_interactive\n\n\n\nn\nn\nn\nn\n\n0\n' \
     | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success cdd_interactive/fragment1/structure.fdf

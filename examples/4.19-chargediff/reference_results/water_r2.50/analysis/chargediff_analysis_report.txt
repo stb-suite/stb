@@ -1,0 +1,104 @@
+===== STB-CHARGEDIFFANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Tool           : stb-chargediffAnalysis 1.9.289
+Date/time      : 2026-10-23 13:28:41
+Prep dir       : .  (3 folders from chargediff_manifest.json)
+Quantity       : Delta charge density
+Mode           : slice
+Output dir     : analysis
+
+[1] SYSTEM
+------------------------------------------------------------
+Cell (Ang)     : a=14.0000  b=14.0000  c=14.0000; volume 2744.000 Ang^3
+Real-space grid: 160 x 160 x 160 = 4,096,000 points, spacing 0.0875 0.0875 0.0875 Ang, voxel 6.699e-04 Ang^3
+SIESTA version : 5.4.2
+Folder     | Atoms | Basis            | ∫rho (e) | SIESTA electrons | E_KS (eV)  
+---------------------------------------------------------------------------------
+combined/  | 6     | all atoms real   | 16.0000  | 16.0000          | -962.364965
+fragment1/ | 3     | 3 real + 3 ghost | 8.0000   | 8.0000           | -481.288400
+fragment2/ | 3     | 3 real + 3 ghost | 8.0000   | 8.0000           | -481.048895
+
+[2] CONSISTENCY CHECKS
+------------------------------------------------------------
+Check                                                                         | Status | Detail              
+-------------------------------------------------------------------------------------------------------------
+Same real-space grid in every folder                                          | OK     | 160x160x160         
+Same cell in every folder                                                     | OK     | within 1e-3 Ang     
+Same level of theory (functional, basis, smearing, k-grid, D3...)             | OK     | identical           
+Same pseudopotential files (by content) in every folder                       | OK     | identical           
+Same mesh actually used by SIESTA                                             | OK     | 361.0 Ry            
+SCF converged in every run                                                    | OK     | yes                 
+Electron count of the combined .RHO equals the sum over fragments (< 0.001 e) | OK     | 16.0000 vs 16.0000 e
+Net Delta rho vanishes (|integral| < 0.001 e)                                 | OK     | +1.48e-06 e         
+Induced dipole from Delta rho equals SIESTA's own dipoles (along x)           | OK     | +1.135 vs +1.135 D  
+
+[3] COUNTERPOISE INTERACTION ENERGY
+------------------------------------------------------------
+E_int = E(combined) - sum_i E(fragment_i with the other fragments as ghost atoms): every term has the same basis, so the basis-set superposition error cancels.
+E(combined)    : -962.364965 eV
+E(fragment1   ): -481.288400 eV
+E(fragment2   ): -481.048895 eV
+E_int (CP)     : -0.0277 eV = -0.64 kcal/mol = -2.67 kJ/mol
+[NOTE] At the geometry given: it includes no deformation energy of the fragments (the fragments are not relaxed apart), so it is the interaction energy, not a binding energy.
+
+[4] DELTA CHARGE DENSITY: STATISTICS
+------------------------------------------------------------
+Integral       : +0.000001 e
+Charge moved   : 0.1288 e gained = 0.1288 e lost (half of the integral of |Delta rho|)
+RMS            : 0.00175 e/Ang^3;  |Delta rho| > 1e-3 e/Ang^3 on 1.37 % of the cell
+Extreme        | Value (e/Ang^3) | Position (Ang) | Nearest atom          
+--------------------------------------------------------------------------
+maximum (gain) | +0.38406        | 5.77 7.00 7.17 | O4 (O_frag2), 0.24 Ang
+minimum (loss) | -0.12550        | 5.51 6.74 7.17 | O4 (O_frag2), 0.25 Ang
+Isosurface hint: +/-0.0057 e/bohr^3 (10 % of the largest |Delta rho|, in the unit of the cube file) is a good first level in VESTA/VMD.
+
+[5] CHARGE CHANGE BY FRAGMENT AND ATOM (nearest-atom partition)
+------------------------------------------------------------
+# | Element | Label   | Fragment  | Net Delta charge (e)
+--------------------------------------------------------
+1 | O       | O_frag1 | fragment1 | +0.00820            
+2 | H       | H_frag1 | fragment1 | -0.02869            
+3 | H       | H_frag1 | fragment1 | -0.02856            
+4 | O       | O_frag2 | fragment2 | +0.04684            
+5 | H       | H_frag2 | fragment2 | -0.03086            
+6 | H       | H_frag2 | fragment2 | +0.03307            
+fragment1     : -0.04906 e (loses electrons)
+fragment2     : +0.04906 e (gains electrons)
+[NOTE] The grid is split among the atoms by distance (a geometric, Voronoi-like partition, not a Bader analysis): the numbers depend on that choice and are for comparing systems, not absolute charges. Positive = the region gains electrons.
+Planar view    : Delta rho averaged over the planes normal to x (no partition of space needed)
+Separating plane: x = 7.278 Ang, halfway across the 1.51 Ang between the two fragments' closest atoms along x
+Charge across  : fragment1 side -0.04857 e; fragment2 side +0.04857 e
+                 (nearest-atom partition above: fragment1 -0.04906 e; fragment2 +0.04906 e)
+Induced dipole : +0.2362 e Ang = +1.135 D along +x (electrons pushed toward -x); SIESTA's dipoles give +1.135 D
+
+[6] MAP AND FILES
+------------------------------------------------------------
+Slice          : plane normal to z at 7.175 Ang (grid index 82; plane of the largest planar integral of |Delta rho|)
+[OK] Data written to 'analysis/water_r2.50_chargediff_slice.dat'.
+[OK] Cube file saved to 'analysis/water_r2.50_chargediff.cube' (values in e/bohr^3, the cube convention; open in VESTA/VMD/Avogadro for real 3D isosurfaces).
+[OK] Data files: 'analysis/water_r2.50_chargediff_atoms.csv', 'analysis/water_r2.50_chargediff_results.json'.
+
+[7] REFERENCES
+------------------------------------------------------------
+[OK] Citations for the methods used in this run written to 'analysis/references.bib' (2 entries).
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status         : OK; checks 9 ok, 0 warn
+E_int (CP)     : -0.0277 eV (-0.64 kcal/mol)
+Charge moved   : 0.1288 e
+Fragments      : fragment1 -0.0491 e; fragment2 +0.0491 e
+Across plane   : fragment1 -0.0486 e; fragment2 +0.0486 e
+Induced dipole : +1.135 D
+File           : analysis/water_r2.50_chargediff_slice.dat
+File           : analysis/water_r2.50_chargediff.cube
+File           : analysis/water_r2.50_chargediff_atoms.csv
+File           : analysis/water_r2.50_chargediff_results.json
+File           : analysis/references.bib
+Report         : analysis/chargediff_analysis_report.txt
+
+[9] WARNINGS
+------------------------------------------------------------
+None.

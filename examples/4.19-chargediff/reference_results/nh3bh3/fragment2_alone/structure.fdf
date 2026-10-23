@@ -1,0 +1,27 @@
+# the fragment WITHOUT ghost atoms (its own basis only), from /home/carlos/run/cdd_ref/nh3bh3/fragment2
+# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+
+NumberOfSpecies    2
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   5   B_frag2
+ 2   1   H_frag2
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 12.00000000   0.00000000   0.00000000
+ 0.00000000   12.00000000   0.00000000
+ 0.00000000   0.00000000   12.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.49999452   0.50000000   0.43154235   1
+  0.54980528   0.58625713   0.40470139   2
+  0.40038803   0.50000000   0.40469383   2
+  0.54980528   0.41374288   0.40470139   2
+%endblock AtomicCoordinatesAndAtomicSpecies

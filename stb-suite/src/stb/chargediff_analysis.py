@@ -39,7 +39,7 @@ import numpy as np
 from stb.core.deps import require_sisl
 sisl = require_sisl()
 
-from stb.core import citations, structure_io, siesta_log, fdf_directives
+from stb.core import citations, structure_io, siesta_log, fdf_directives, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.rho_io import read_total, try_read_net_spin, find_one_rho, compute_colorbar_range
 from stb.core.grid_export import (write_data_file, write_profile_data_file, write_gnuplot_script,
@@ -51,7 +51,11 @@ BIB_FILE = "references.bib"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
 EV_TO_KCAL = 23.0605
 EV_TO_KJ = 96.4853
-ELECTRON_TOL = 1e-3          # e: conservation of the electron count
+ELECTRON_TOL = 1e-3
+E_ANG_TO_DEBYE = 4.80320            # 1 e Ang in Debye
+E_OVER_EPS0 = 180.951               # e / eps0 in V Ang: Delta V (V) = 180.951 * mu (e Ang) / A (Ang^2)
+VACUUM_GAP_ANG = 5.0                # an empty span this wide along the axis counts as vacuum
+DIPOLE_TOL_E_ANG = 0.005            # agreement asked of the induced dipole vs SIESTA's (or 5 %)          # e: conservation of the electron count
 SETTINGS_KEYS = ["xcfunctional", "xcauthors", "paobasistype", "paobasissize", "paoenergyshift", "meshcutoff",
                  "spin", "electronictemperature", "dmtolerance", "dftd3"]
 SETTINGS_LABELS = {"xcfunctional": "XC functional", "xcauthors": "XC authors", "paobasistype": "Basis type",
@@ -208,6 +212,46 @@ def plane_basis(lattice, axis):
 
 # ---- dashboard --------------------------------------------------------------------------
 
+def planar_analysis(diff, lattice, axis, atoms, n_fragments, dv):
+    """Partition-free numbers from the planar average of Delta rho along lattice `axis` (charge per plane, in e):
+    the plane that separates two fragments and the net charge on each side of it, and the dipole Delta rho induces
+    along the plane normal, -integral(z Delta rho) (e Ang; electrons counted positive, so a positive value means
+    electrons moved toward -z). Positions are measured from the middle of the largest empty gap between the atoms
+    along that axis (the vacuum of a slab or a molecule in a box), so a slab that wraps around the cell is not cut."""
+    n = diff.shape[axis]
+    others = [i for i in range(3) if i != axis]
+    q_plane = diff.sum(axis=tuple(others)) * dv
+    normal = np.cross(lattice[others[0]], lattice[others[1]])
+    area = float(np.linalg.norm(normal))
+    normal = normal / area
+    height = float(abs(np.dot(lattice[axis], normal)))
+    sign = 1.0 if np.dot(lattice[axis], normal) > 0 else -1.0
+    inv = np.linalg.inv(lattice)
+    s_atoms = np.array([(np.asarray(a[3]) @ inv)[axis] % 1.0 for a in atoms])
+    srt = np.sort(s_atoms)
+    gaps = np.append(np.diff(srt), 1.0 - srt[-1] + srt[0])
+    k = int(np.argmax(gaps))
+    cut = (srt[k] + gaps[k] / 2) % 1.0                  # middle of the vacuum
+    gap_ang = float(gaps[k] * height)
+    t_grid = ((np.arange(n) / n - cut) % 1.0)
+    z_grid = t_grid * height
+    out = {"axis": axis, "area": area, "height": height, "vacuum_gap": gap_ang,
+           "dipole": float(-sign * np.sum(q_plane * z_grid)), "cut": cut}
+    if n_fragments == 2:
+        t = (s_atoms - cut) % 1.0
+        ta = [t[i] for i, a in enumerate(atoms) if a[2] == 0]
+        tb = [t[i] for i, a in enumerate(atoms) if a[2] == 1]
+        if ta and tb and (max(ta) < min(tb) or max(tb) < min(ta)):
+            lower, upper = (0, 1) if max(ta) < min(tb) else (1, 0)
+            lo, hi = (max(ta), min(tb)) if lower == 0 else (max(tb), min(ta))
+            mid = (lo + hi) / 2
+            q_upper = float(q_plane[t_grid >= mid].sum())
+            out.update({"plane_s": float((mid + cut) % 1.0), "plane": float(((mid + cut) % 1.0) * height),
+                        "plane_gap": float((hi - lo) * height),
+                        "q": {upper: q_upper, lower: -q_upper}})
+    return out
+
+
 def make_dashboard(ctx, png_path, show, fallback_png=None):
     """4-panel matplotlib figure: slice map with atoms, planar profile with the cumulative charge, charge change per
     atom (coloured by fragment) and a text summary. Saved to `png_path` and/or shown. Returns (produced, shown)."""
@@ -280,11 +324,14 @@ def make_dashboard(ctx, png_path, show, fallback_png=None):
     planar = prof * area                                   # e/Å: integral of Delta rho over the plane
     cum = np.cumsum(planar) * (length / n[pax])
     a.plot(x, planar, color="#0072B2", lw=1.8, label="planar integral (e/Å)")
-    a.plot(x, cum, color="#D55E00", lw=1.8, label="charge below x (e)")
+    a.plot(x, cum, color="#D55E00", lw=1.8, label=f"charge below {'xyz'[pax]} (e)")
     a.axhline(0, color="k", lw=0.7)
     for (lab, el, frag, p) in ctx["atoms"]:
         a.axvline(float(np.dot(p - np.asarray(origin), lat[pax] / length)) % length,
                   color=palette[frag % len(palette)] if frag >= 0 else "grey", lw=0.6, ls="--" if el != "H" else ":")
+    pl = ctx.get("planar")
+    if pl is not None and "plane_s" in pl and pl["axis"] == pax:
+        a.axvline(pl["plane_s"] * length, color="k", lw=1.6, ls="-.", label="plane between the fragments")
     a.set_xlabel(f"position along {'xyz'[pax]} (Å)")
     a.set_title("Planar integral and cumulative charge (dashed: heavy atoms)", fontsize=10)
     a.legend(fontsize=8)
@@ -323,6 +370,14 @@ def make_dashboard(ctx, png_path, show, fallback_png=None):
     if ctx["per_fragment"] is not None:
         lines += ["", "Net charge change by fragment:"]
         lines += [f"  {nm:<10s}: {q:+.4f} e" for nm, q in zip(ctx["fragment_names"], ctx["per_fragment"])]
+    pl = ctx.get("planar")
+    if pl is not None and "q" in pl:
+        lines += ["", f"Across the plane {'xyz'[pl['axis']]} = {pl['plane']:.2f} Å:"]
+        lines += [f"  {ctx['fragment_names'][k]:<10s}: {pl['q'][k]:+.4f} e" for k in sorted(pl["q"])]
+    if pl is not None and pl["vacuum_gap"] >= VACUUM_GAP_ANG:
+        lines += [f"Induced dipole    : {pl['dipole'] * E_ANG_TO_DEBYE:+.3f} D"]
+        if "dphi_plus" in pl:
+            lines += [f"Work-function shift: {pl['dphi_plus']:+.3f} eV (+{'xyz'[pl['axis']]} side)"]
     lines += ["", f"checks: {ctx['n_ok']} ok / {ctx['n_warn']} warn"]
     a.text(0.02, 0.98, "\n".join(lines), va="top", ha="left", family="monospace", fontsize=10)
 
@@ -504,7 +559,7 @@ combined system and every fragment are spin-polarized).""",
     quantity = "Delta spin density" if args.spin else "Delta charge density"
     prof_axis = 2
     mode = 'profile' if args.profile else ('3d' if args.full_3d else 'slice')
-    stem = f"{os.path.basename(os.path.normpath(args.dir)) or 'chargediff'}_chargediff"
+    stem = f"{os.path.basename(os.path.abspath(args.dir)) or 'chargediff'}_chargediff"
     base = os.path.join(args.output_dir, stem)
 
     report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
@@ -546,7 +601,12 @@ combined system and every fragment are spin-polarized).""",
                  if any(a[2] == k for a in atoms)]
         units = [lattice[i] / np.linalg.norm(lattice[i]) for i in range(3)]
         sep = [max(abs(np.dot(c1 - c2, units[i])) for c1 in cents for c2 in cents) for i in range(3)]
-        prof_axis = int(np.argmax(sep))
+        # an offset along a periodic axis is not a separation (Li above a hollow site of a sheet is "beside" the
+        # sheet's centroid in-plane): when the cell has vacuum axes, choose among them only
+        frac = np.array([np.asarray(a[3]) @ np.linalg.inv(lattice) for a in atoms])
+        vac = kspace.detect_vacuum_axes(frac, lattice, VACUUM_GAP_ANG)
+        candidates = [i for i in range(3) if vac[i]] or [0, 1, 2]
+        prof_axis = max(candidates, key=lambda i: sep[i])
     lengths = [float(np.linalg.norm(v)) for v in lattice]
     spacing = [lengths[i] / combined_shape[i] for i in range(3)]
     print_dual(f"Cell (Ang)     : a={lengths[0]:.4f}  b={lengths[1]:.4f}  c={lengths[2]:.4f}; volume {abs(np.linalg.det(lattice)):.3f} Ang^3", f_out)
@@ -569,6 +629,14 @@ combined system and every fragment are spin-polarized).""",
                       f"{runs[name]['n_electrons']:.4f}" if runs[name]['n_electrons'] is not None else "-",
                       f"{runs[name]['energy']:.6f}" if runs[name]['energy'] is not None else "-"], None))
     print_table(["Folder", "Atoms", "Basis", "∫rho (e)", "SIESTA electrons", "E_KS (eV)"], rows, f_out)
+
+    planar = None
+    if atoms and not args.spin:
+        try:
+            planar = planar_analysis(diff, lattice, prof_axis, atoms, len(fragment_folders),
+                                     abs(np.linalg.det(lattice)) / diff.size)
+        except Exception:
+            planar = None
 
     # ------------------------------------------------------------------ [2]
     print_section("[2] CONSISTENCY CHECKS", f_out)
@@ -611,6 +679,20 @@ combined system and every fragment are spin-polarized).""",
     total = float(diff.sum() * dv)
     if not args.spin:
         check(f"Net Delta rho vanishes (|integral| < {ELECTRON_TOL:g} e)", abs(total) < ELECTRON_TOL, f"{total:+.2e} e")
+    # the dipole Delta rho induces must equal SIESTA's own dipoles: mu(combined) - sum mu(fragment) (the nuclei cancel)
+    dip_siesta = None
+    if planar is not None and planar["vacuum_gap"] >= VACUUM_GAP_ANG:
+        dips = {n: siesta_log.get_electric_dipole(r["out"]) if r["out"] else None for n, r in runs.items()}
+        if all(d is not None and len(d) == 3 for d in dips.values()):
+            others = [i for i in range(3) if i != prof_axis]
+            nrm = np.cross(lattice[others[0]], lattice[others[1]])
+            nrm = nrm / np.linalg.norm(nrm)
+            d_au = dips["combined"] - sum(dips[n] for n in fragment_folders)
+            dip_siesta = float(np.dot(d_au, nrm) * BOHR_TO_ANG)        # e Ang along the plane normal
+            tol = max(DIPOLE_TOL_E_ANG, 0.05 * abs(dip_siesta))
+            check(f"Induced dipole from Delta rho equals SIESTA's own dipoles (along {'xyz'[prof_axis]})",
+                  abs(planar["dipole"] - dip_siesta) <= tol,
+                  f"{planar['dipole'] * E_ANG_TO_DEBYE:+.3f} vs {dip_siesta * E_ANG_TO_DEBYE:+.3f} D")
     rows = [([nm, "OK" if ok else "WARN", detail], None if ok else 'yellow') for nm, ok, detail in checks]
     print_table(["Check", "Status", "Detail"], rows, f_out)
     for key, vals in differing:
@@ -660,8 +742,12 @@ combined system and every fragment are spin-polarized).""",
             near = f"{atoms[k][1]}{k + 1} ({atoms[k][0]}), {dist:.2f} Ang"
         rows.append(([tag, f"{val:+.5f}", f"{p[0]:.2f} {p[1]:.2f} {p[2]:.2f}", near], None))
         stats[tag] = (val, p)
-    print_dual(f"Integral       : {total:+.6f} e", f_out)
-    print_dual(f"Charge moved   : {moved:.4f} e gained = {-lost:.4f} e lost (half of the integral of |Delta rho|)", f_out)
+    if args.spin:
+        print_dual(f"Integral       : {total:+.6f} mu_B (change of the total spin moment: M(combined) - sum M(fragments))", f_out)
+        print_dual(f"Moment         : {moved:.4f} mu_B appears where Delta m > 0, {-lost:.4f} mu_B disappears where Delta m < 0", f_out)
+    else:
+        print_dual(f"Integral       : {total:+.6f} e", f_out)
+        print_dual(f"Charge moved   : {moved:.4f} e gained = {-lost:.4f} e lost (half of the integral of |Delta rho|)", f_out)
     print_dual(f"RMS            : {rms:.5f} e/Ang^3;  |Delta rho| > 1e-3 e/Ang^3 on {100 * np.mean(np.abs(diff) > 1e-3):.2f} % of the cell", f_out)
     print_table(["Extreme", "Value (e/Ang^3)", "Position (Ang)", "Nearest atom"], rows, f_out)
     print_dual(f"Isosurface hint: +/-{0.1 * max(abs(stats['maximum (gain)'][0]), abs(stats['minimum (loss)'][0])) * BOHR_TO_ANG ** 3:.4f} e/bohr^3 "
@@ -688,6 +774,37 @@ combined system and every fragment are spin-polarized).""",
             print_dual(warn(f"the partition does not conserve charge ({sum(per_atom):+.4f} e)."), f_out)
     else:
         print_dual("Skipped (atoms unavailable or the grid is too large for the partition).", f_out)
+    if planar is not None:
+        ax = "xyz"[prof_axis] if np.allclose(lattice[prof_axis] / np.linalg.norm(lattice[prof_axis]),
+                                            np.eye(3)[prof_axis], atol=1e-3) else f"lattice vector {prof_axis + 1}"
+        print_dual(f"Planar view    : Delta rho averaged over the planes normal to {ax} (no partition of space needed)", f_out)
+        if "q" in planar:
+            print_dual(f"Separating plane: {ax} = {planar['plane']:.3f} Ang, halfway across the {planar['plane_gap']:.2f} Ang "
+                       f"between the two fragments' closest atoms along {ax}", f_out)
+            print_dual("Charge across  : " + "; ".join(f"{fragment_folders[k]} side {planar['q'][k]:+.5f} e"
+                                                       for k in sorted(planar["q"])), f_out)
+            if per_fragment is not None:
+                print_dual("                 (nearest-atom partition above: " + "; ".join(
+                    f"{nm} {q:+.5f} e" for nm, q in zip(fragment_folders, per_fragment)) + ")", f_out)
+        elif len(fragment_folders) == 2:
+            print_dual(f"Separating plane: none -- the fragments overlap along {ax}, so no plane splits them.", f_out)
+        if planar["vacuum_gap"] >= VACUUM_GAP_ANG:
+            mu = planar["dipole"]
+            print_dual(f"Induced dipole : {mu:+.4f} e Ang = {mu * E_ANG_TO_DEBYE:+.3f} D along +{ax} "
+                       f"({'electrons pushed toward -' + ax if mu > 0 else 'electrons pushed toward +' + ax})"
+                       + (f"; SIESTA's dipoles give {dip_siesta * E_ANG_TO_DEBYE:+.3f} D" if dip_siesta is not None else ""), f_out)
+            periodic_others = [i for i in range(3) if i != prof_axis]
+            in_plane_periodic = all(
+                kspace._largest_circular_gap([(np.asarray(a[3]) @ np.linalg.inv(lattice))[i] for a in atoms])
+                * np.linalg.norm(lattice[i]) < VACUUM_GAP_ANG for i in periodic_others)
+            if in_plane_periodic:
+                dphi = -E_OVER_EPS0 * mu / planar["area"]
+                planar["dphi_plus"] = dphi
+                print_dual(f"Work function  : the dipole layer shifts the vacuum level by {dphi:+.3f} eV on the +{ax} side "
+                           f"relative to the -{ax} side (Delta Phi = -e mu / (eps0 A), A = {planar['area']:.2f} Ang^2)", f_out)
+        else:
+            print_dual(f"Induced dipole : not reported -- no vacuum along {ax} (the dipole of a periodic direction is not "
+                       "defined from the density alone).", f_out)
 
     # ------------------------------------------------------------------ [6]
     print_section("[6] MAP AND FILES", f_out)
@@ -747,7 +864,7 @@ combined system and every fragment are spin-polarized).""",
 
     n_ok = sum(1 for _, ok, _ in checks if ok)
     n_warn = len(checks) - n_ok
-    title = f"{manifest.get('title') or os.path.basename(os.path.normpath(args.dir))}"
+    title = f"{manifest.get('title') or os.path.basename(os.path.abspath(args.dir))}"
     if atoms:
         els = [a[1] for a in atoms]
         title = "".join(f"{e}{els.count(e) if els.count(e) > 1 else ''}" for e in sorted(set(els)))
@@ -755,7 +872,7 @@ combined system and every fragment are spin-polarized).""",
            "cb": cb, "prof_axis": prof_axis, "contour": args.contour, "atoms": atoms, "per_atom": per_atom, "per_fragment": per_fragment,
            "fragment_names": fragment_folders, "quantity": quantity, "title": title, "total": total, "moved": moved,
            "max": (stats["maximum (gain)"][0],), "min": (stats["minimum (loss)"][0],), "rms": rms, "e_int": e_int,
-           "n_ok": n_ok, "n_warn": n_warn}
+           "n_ok": n_ok, "n_warn": n_warn, "planar": planar}
     if args.png or args.show:
         png_path = f"{base}_summary.png" if args.png else None
         produced, shown = make_dashboard(ctx, png_path, args.show, fallback_png=f"{base}_summary.png")
@@ -782,6 +899,13 @@ combined system and every fragment are spin-polarized).""",
                    "energies_ev": energies, "e_int_cp_ev": e_int,
                    "per_fragment_e": (dict(zip(fragment_folders, per_fragment)) if per_fragment else None),
                    "per_atom_e": (per_atom.tolist() if per_atom is not None else None),
+                   "planar": (None if planar is None else {
+                       "axis": "xyz"[planar["axis"]], "dipole_e_ang": planar["dipole"],
+                       "dipole_debye": planar["dipole"] * E_ANG_TO_DEBYE, "dipole_siesta_e_ang": dip_siesta,
+                       "vacuum_gap_ang": planar["vacuum_gap"], "plane_ang": planar.get("plane"),
+                       "charge_across_plane_e": ({fragment_folders[k]: v for k, v in planar["q"].items()}
+                                                 if "q" in planar else None),
+                       "work_function_shift_ev": planar.get("dphi_plus")}),
                    "checks": [{"name": nm, "ok": ok, "detail": dt} for nm, ok, dt in checks], "warnings": warnings}
         with open(json_path, "w") as f:
             json.dump(results, f, indent=1, default=float)
@@ -804,6 +928,11 @@ combined system and every fragment are spin-polarized).""",
     print_dual(f"Charge moved   : {moved:.4f} e", f_out)
     if per_fragment:
         print_dual("Fragments      : " + "; ".join(f"{nm} {q:+.4f} e" for nm, q in zip(fragment_folders, per_fragment)), f_out)
+    if planar is not None and "q" in planar:
+        print_dual("Across plane   : " + "; ".join(f"{fragment_folders[k]} {planar['q'][k]:+.4f} e" for k in sorted(planar["q"])), f_out)
+    if planar is not None and planar["vacuum_gap"] >= VACUUM_GAP_ANG:
+        print_dual(f"Induced dipole : {planar['dipole'] * E_ANG_TO_DEBYE:+.3f} D"
+                   + (f"; work-function shift {planar['dphi_plus']:+.3f} eV" if "dphi_plus" in planar else ""), f_out)
     for p in files + [os.path.join(args.output_dir, BIB_FILE)]:
         print_dual(f"File           : {p}", f_out)
     if report_path:

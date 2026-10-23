@@ -1,0 +1,30 @@
+# Ammonia borane H3N-BH3, staggered C3v starting geometry (make_reference.sh relaxes it). Atom order: N H H H (donor NH3), then B H H H (acceptor BH3) -- --fragment-sizes 4,4.
+
+NumberOfSpecies 3
+NumberOfAtoms 8
+
+%block ChemicalSpeciesLabel
+ 1 7 N
+ 2 5 B
+ 3 1 H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 12.00000000 0.00000000 0.00000000
+ 0.00000000 12.00000000 0.00000000
+ 0.00000000 0.00000000 12.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.5000000000 0.5000000000 0.5691666667 1
+  0.5798738728 0.5000000000 0.5982383788 3
+  0.4600630636 0.5691728029 0.5982383788 3
+  0.4600630636 0.4308271971 0.5982383788 3
+  0.5000000000 0.5000000000 0.4308333333 2
+  0.5489190762 0.5847303254 0.4064395422 3
+  0.4021618476 0.5000000000 0.4064395422 3
+  0.5489190762 0.4152696746 0.4064395422 3
+%endblock AtomicCoordinatesAndAtomicSpecies

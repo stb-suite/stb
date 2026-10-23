@@ -1,0 +1,44 @@
+{
+  "schema": "chargediff_manifest_v2",
+  "combined_folder": "combined",
+  "fragment_folders": [
+    "fragment1",
+    "fragment2"
+  ],
+  "fragments": [
+    {
+      "folder": "fragment1",
+      "label_suffix": "_frag1",
+      "species_labels": {
+        "O_frag1": {
+          "id": "3",
+          "Z": 8,
+          "count": 1
+        },
+        "H_frag1": {
+          "id": "4",
+          "Z": 1,
+          "count": 2
+        }
+      },
+      "n_atoms": 3
+    },
+    {
+      "folder": "fragment2",
+      "label_suffix": "_frag2",
+      "species_labels": {
+        "O_frag2": {
+          "id": "5",
+          "Z": 8,
+          "count": 1
+        },
+        "H_frag2": {
+          "id": "6",
+          "Z": 1,
+          "count": 2
+        }
+      },
+      "n_atoms": 3
+    }
+  ]
+}

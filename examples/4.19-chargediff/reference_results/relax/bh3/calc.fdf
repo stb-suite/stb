@@ -1,0 +1,5 @@
+MD.TypeOfRun        CG
+MD.Steps            300
+MD.MaxForceTol      0.01 eV/Ang
+MD.VariableCell     false
+%include template.fdf

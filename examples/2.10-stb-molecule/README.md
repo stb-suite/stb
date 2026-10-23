@@ -177,7 +177,7 @@ stb-molecule --list
 stb-molecule --name H2
 
 # Pre-relax with your own fine-tuned MACE model before a real SIESTA calculation
-stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model
+stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 ```
 
 ## Flag reference
@@ -190,6 +190,7 @@ stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model
 | `--ml-relax`         | Pre-relax the molecule's geometry with a MACE potential (positions only) |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `molecule.fdf`)                       |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the as-built and final molecule in ASE's interactive viewer       |

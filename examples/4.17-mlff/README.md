@@ -537,6 +537,8 @@ next steps · `[9]` **all** warnings.
 6. Runs an **MD stability test** per model (NVT then NVE in an auto supercell of the
    reference, blow-up criteria, NVE drift, ms/step and ns/day).
 7. Records the round in the JSON.
+8. Writes the **model card** of every member, `round_NN/m_s<seed>/mlff_model_card.json`
+   (Section 5.3), next to the model file.
 
 ### 5.2 The report
 
@@ -550,6 +552,43 @@ comparison with earlier rounds · `[7]` model checks: MD stability and speed · 
 summary and files · `[9]` next steps · `[10]` **all** warnings. Figure
 `round_NN/mlff_training.png` (6 panels); `--view-worst N` writes and opens the worst
 configs with the per-atom force error as colour.
+
+### 5.3 The model card: a model is always used with its JSON
+
+A `.model` file holds weights and nothing else. So each member gets a card next to it
+that records where those weights come from and where they can be trusted:
+
+| Section | What it holds |
+|---|---|
+| `model` | file names + **SHA-256** of the plain and the compiled `.model`, seed, architecture (cutoff, parameters, layers), foundation model and starting weights |
+| `committee` | size, round, the sibling models and cards, the member with the lowest validation force error, committee spread |
+| `elements`, `energy` | the elements trained on; the per-element `E0` (eV) and the statement that energies are SIESTA absolute energies — only differences are physical |
+| `level_of_theory` | SIESTA version, XC, basis, `Mesh.Cutoff`, k-sampling, spin, smearing, `PAO.Basis`/pseudopotential md5, **whether the labels include DFT-D3** |
+| `reference_structure`, `training_data` | the reference cell and dimensionality; configs per kind, atoms per element, which labels (stress) were used, SCF failures, every config folder |
+| `domain` | the **trained range**: elements, area/volume per atom of the periodic axes, shortest distance, largest SIESTA force, energy and pressure ranges |
+| `recipe`, `metrics`, `checks` | epochs/kept epoch/lr/loss/stress weight/device and the exact `mace_run_train` command; train, validation, out-of-sample and foundation errors; MD stability and speed |
+| `validation` | filled by `stb-mlffValidate`: test-set errors, E(V), phonons, calibration, verdict |
+| `usage`, `provenance` | recommended dtype, notes ("trained without stress", "PBE+D3 already", "failed the stability check"), the workflow file, round, command line, software versions |
+
+Every tool that takes `--custom-model` now **also requires** `--custom-model-card`
+(`--ml-custom-model-card` in `stb-adsorb`/`stb-stackingfault`, `--mace-custom-model-card`
+in `stb-xrdsearch`, `--custom-model-cards` in `stb-mlconvergence`):
+
+```bash
+stb-mlmd --file si.fdf --custom-model round_03/m_s124/mlff_model_compiled.model \
+         --custom-model-card round_03/m_s124/mlff_model_card.json
+```
+
+The pair is checked before anything runs: a card of another model — or of the same
+model retrained — is refused (SHA-256). Then the card is used while the model runs:
+it prints the summary above the report, never adds a second D3 correction to a model
+whose labels already include it, stops with a clear message for an element the model
+was not trained on, and warns (once) when the cell size or the shortest bond is outside
+the trained range or the predicted forces exceed 1.5 times the largest training force.
+Models trained before the cards existed get theirs with
+`stb-mlffAnalysis --make-cards [ROUND]` (no training; the numbers come from the workflow
+file, the ranges from the SIESTA folders), and `stb-mlffValidate` refreshes the
+`validation` section of every card of the rounds it scores.
 
 ## 6. Stage 3: validation on the held-out test set (`stb-mlffValidate`, code `4.17.3`)
 
@@ -569,6 +608,17 @@ configs far above the test set in energy). Optionally:
 | `--compare A B` | two rounds config by config and per kind |
 | `--md-check` | NVT frames with the best model → SIESTA folders in `md_check/` (the only option that writes folders) |
 | `--target-force F` | the STOP criterion |
+
+**The best model.** Every run also picks the one model to use and copies it, with its
+card, to `<run folder>/best_model/` (`mlff_model_compiled.model`, `mlff_model.model`,
+`mlff_model_card.json`), replacing what the previous run left there. *Best* is the
+round with the lowest committee-mean test force RMSE among the rounds scored in that run
+and, inside it, the single member with the lowest test force RMSE (a member that failed
+Stage 2's MD stability check only wins if all did). The card there carries a `selection`
+section (round, seed, why, the rounds compared, test scores, the verdict of the latest
+round) and the JSON state file a `best` entry, so `--custom-model best_model/mlff_model_compiled.model
+--custom-model-card best_model/mlff_model_card.json` is always the current answer. Run
+without `--rounds` to compare every round (a restricted run says so in `[13]`).
 
 ### 6.2 The report
 
@@ -1296,7 +1346,7 @@ models are not shipped (~160 MB per round); the reports of every stage are.
    *Far from the test* line.
 10. **Final checks**: `stb-mlffValidate --md-check` (an MD run with the model,
     labelled by SIESTA) at your use temperature; then use the model:
-    `--custom-model round_NN/m_s<seed>/mlff_model_compiled.model` in `stb-mlmd`,
+    `--custom-model round_NN/m_s<seed>/mlff_model_compiled.model --custom-model-card round_NN/m_s<seed>/mlff_model_card.json` in `stb-mlmd`,
     `stb-mlphonons`, `stb-mlelastic`, `stb-mleos`, ...
 
 ## 13. Files in this folder
@@ -1359,7 +1409,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 `--show` · `--view` · `--save-report` · `--no-intro` · `-v`.
 
 **`stb-mlffAnalysis`** (Stage 2) — `--workflow JSON` · `--path GLOB` · `--skip-unlabelled`
-· `--committee M` (3) · `--cv K` · `--foundation-model {small,medium,large}` (medium) ·
+· `--committee M` (3) · `--make-cards [ROUND]` (cards only, no training) · `--cv K` · `--foundation-model {small,medium,large}` (medium) ·
 `--init-from foundation|previous|PATH` · `--epochs N` (100) · `--batch-size N` · `--lr X`
 (0.001) · `--e0s {foundation-residual,average}` · `--stress-weight W` (1e4) ·
 `--no-stress-training` · `--valid-fraction F` · `--device {cpu,cuda}` (auto) · `--name` ·
@@ -1392,7 +1442,7 @@ cd ../run && stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault -o
 
 - Use the model: `5.1 stb-mlmd` (MD at the temperatures it was trained for),
   `5.2 stb-mlphonons` (phonons in large supercells, thermal properties),
-  `5.3 stb-mlelastic`, `5.11 stb-mleos` — each with `--custom-model`, and with the
+  `5.3 stb-mlelastic`, `5.11 stb-mleos` — each with `--custom-model` and its `--custom-model-card`, and with the
   comparison against the raw foundation model built in.
 - `4.4-phonons` is the SIESTA phonon workflow used here as the reference; `4.5-convergence`
   the discipline of Section 8.1 for the ground state.

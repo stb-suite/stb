@@ -77,6 +77,7 @@ from scipy.constants import h, k as BOLTZMANN_K, atomic_mass, eV
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mace_relax
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 
@@ -282,6 +283,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--ensemble", choices=["canonical", "grand-canonical"], default="grand-canonical",
                         help="Monte Carlo ensemble (default: grand-canonical).")
     parser.add_argument("--n-initial", type=int, default=0,
@@ -325,6 +327,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlgcmc {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.ensemble == "grand-canonical" and args.mu is None and args.mu_scan is None:
         parser.error("--ensemble grand-canonical needs --mu or --mu-scan.")

@@ -291,7 +291,7 @@ it's actually resolved, not just relaxed into a different problem.
 ```bash
 stb-mlrelax -f your_structure.fdf --view
 stb-mlrelax -f your_slab.fdf --relax-cell   # vacuum axis stays exactly fixed
-stb-mlrelax -f your_structure.fdf --custom-model my_finetuned.model
+stb-mlrelax -f your_structure.fdf --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 stb-mlrelax -f your_structure.fdf --model large   # slower, usually more accurate
 stb-mlrelax -f your_structure.fdf --optimizer BFGS   # fewer steps once already close
 ```
@@ -300,7 +300,7 @@ stb-mlrelax -f your_structure.fdf --optimizer BFGS   # fewer steps once already 
 
 ```
 stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
-            [--model small|medium|large | --custom-model <path>]
+            [--model small|medium|large | --custom-model <path> --custom-model-card <json>]
             [--fmax <eV/Ang>] [--max-steps <N>] [--optimizer FIRE|BFGS|LBFGS]
             [--device cpu|cuda] [-o/--output <file>]
             [--save-report] [--save-data] [--view]
@@ -311,7 +311,9 @@ stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
   vacuum-padded axis, e.g. a slab, is held exactly fixed; a fully isolated
   structure, e.g. a molecule, has nothing to relax and the flag is a no-op).
 - `--model`/`--custom-model` — MACE-MP-0 foundation size, or your own
-  fine-tuned model file.
+  fine-tuned model file. A fine-tuned model is always given together with its
+  model card, `--custom-model-card` (the `mlff_model_card.json` that
+  `stb-mlffAnalysis` writes next to it).
 - `--fmax`/`--max-steps`/`--optimizer`/`--device` — relaxation controls.
 - `-o/--output` — output `.fdf` name (default `relaxed.fdf`).
 - `--save-report`/`--save-data`/`--view` — all optional, off by default.

@@ -187,7 +187,7 @@ stb-defect -f si_bulk.fdf --type vacancy --index 1 --view
 stb-defect -f magnetite.fdf --type vacancy --all-inequivalent-sites --filter-species O
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-defect -f si_bulk.fdf --type vacancy --index 1 --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-defect -f si_bulk.fdf --type vacancy --index 1 --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # Dilute the defect first: a bigger cell, then a vacancy in it
 stb-supercell -f si_bulk.fdf -d 2 2 2 -o si64.fdf --no-intro
@@ -215,6 +215,7 @@ stb-defect -f si64.fdf --type vacancy --index 1
 | `--ml-relax-cell`          | With `--ml-relax`, also relax the cell (vacuum axes stay fixed)       |
 | `--model`                  | MACE-MP-0 size for `--ml-relax`/`--ml-rank`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`           | Path to a custom fine-tuned `.model` file                             |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`               | Output `.fdf` file name (default `defect.fdf`)                        |
 | `--save-report`            | Persist the full report (incl. symmetry table) to disk                |
 | `--view`                    | Open the input and output structure(s) in ASE's interactive viewer    |

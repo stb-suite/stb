@@ -58,6 +58,7 @@ import matplotlib.pyplot as plt
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, kspace, mace_relax
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.core.eos_fit import normalize_eos_string, fit_eos
@@ -165,6 +166,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--skip-foundation-comparison", action="store_true",
                         help="If --custom-model is given, also fit the EOS with the raw "
                              "(non-fine-tuned) foundation model (--model) and overlay both curves "
@@ -212,6 +214,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mleos {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
     args.eos = normalize_eos_string(args.eos)
 
     if args.n_volumes < 5:

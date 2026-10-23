@@ -25,7 +25,7 @@ except ImportError:
 
 from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
 from stb.core.pseudopotentials import BANKS
-from stb.core.menu import run_tool, prompt_pseudo_source
+from stb.core.menu import run_tool, prompt_pseudo_source, prompt_model_card
 from stb.core import structure_io, kspace, symmetry
 from stb import strain
 
@@ -847,6 +847,7 @@ def run_adsorb_setup() -> None:
             args.extend(["--ml-steps", str(ml_steps)])
         if ml_custom_model:
             args.extend(["--ml-custom-model", ml_custom_model])
+            args.extend(["--ml-custom-model-card", prompt_model_card(ml_custom_model)])
         elif ml_model != "medium":
             args.extend(["--ml-model", ml_model])
 
@@ -1452,6 +1453,7 @@ def run_stackingfault_setup() -> None:
         args.extend(["--ml-device", ml_device])
         if ml_custom_model:
             args.extend(["--ml-custom-model", ml_custom_model])
+            args.extend(["--ml-custom-model-card", prompt_model_card(ml_custom_model)])
         else:
             args.extend(["--ml-model", ml_model])
     if save_report:
@@ -1654,6 +1656,7 @@ def run_2d_stacker() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -3390,6 +3393,7 @@ def run_supercell_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -3517,6 +3521,7 @@ def run_slab_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -3639,6 +3644,7 @@ def run_nanotube_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -3768,6 +3774,7 @@ def run_defect_generator() -> None:
                     print(color_text("File not found!", 'red'))
                     custom_model = get_input("Custom model path: ").strip()
                 args.extend(["--custom-model", custom_model])
+                args.extend(["--custom-model-card", prompt_model_card(custom_model)])
             else:
                 model = get_input("Model size, small/medium/large [default: medium]: ").strip()
                 if not model:
@@ -3862,6 +3869,7 @@ def run_sqs_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -3945,6 +3953,7 @@ def run_unitcell_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -4053,6 +4062,7 @@ def run_crystalbuilder_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -4280,6 +4290,7 @@ def run_crystalcast_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -4458,6 +4469,7 @@ def run_passivate_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -4524,6 +4536,7 @@ def run_molecule_generator() -> None:
                 print(color_text("File not found!", 'red'))
                 custom_model = get_input("Custom model path: ").strip()
             args.extend(["--custom-model", custom_model])
+            args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         else:
             model = get_input("Model size, small/medium/large [default: medium]: ").strip()
             if not model:
@@ -4588,6 +4601,7 @@ def run_mlrelax_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         if not model:
@@ -4694,6 +4708,7 @@ def run_amorphize_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         if not model:
@@ -6544,6 +6559,7 @@ def run_mlmd_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -6632,6 +6648,7 @@ def run_mlphonons_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -6760,6 +6777,7 @@ def run_mlelastic_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -6855,6 +6873,7 @@ def run_mlsearch_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -6951,6 +6970,7 @@ def run_mlmelting_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -7036,6 +7056,7 @@ def run_mlconvergence_generator() -> None:
         "Also include custom model file(s)? Space-separated paths, or Enter to skip: ").strip()
     if custom_str:
         args.extend(["--custom-models", *custom_str.split()])
+        args.extend(["--custom-model-cards", *[prompt_model_card(p_) for p_ in custom_str.split()]])
 
     device_choice = get_input("Device [cpu/cuda, default: cpu]: ").strip().lower()
     device = device_choice if device_choice in ("cpu", "cuda") else "cpu"
@@ -7103,6 +7124,7 @@ def run_mlneb_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -7175,6 +7197,7 @@ def run_mldiffusion_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
     else:
         model = get_input("Model size, small/medium/large [default: medium]: ").strip()
         args.extend(["--model", model or "medium"])
@@ -7325,6 +7348,7 @@ def run_mladsorb_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         skip_compare = get_input(
             "Also compare against the MACE-MP-0 foundation model on the same sites? "
             "(Y/n): ").strip().lower()
@@ -7411,6 +7435,7 @@ def run_mleos_generator() -> None:
             print(color_text("File not found!", 'red'))
             custom_model = get_input("Custom model path: ").strip()
         args.extend(["--custom-model", custom_model])
+        args.extend(["--custom-model-card", prompt_model_card(custom_model)])
         skip_compare = get_input(
             "Also fit with the MACE-MP-0 foundation model for comparison? (Y/n): ").strip().lower()
         if skip_compare == 'n':
@@ -8399,6 +8424,7 @@ def run_xrdsearch_generator() -> None:
         args.append("--mace-relax")
         if mace_custom_model:
             args.extend(["--mace-custom-model", mace_custom_model])
+            args.extend(["--mace-custom-model-card", prompt_model_card(mace_custom_model)])
         elif mace_model:
             args.extend(["--mace-model", mace_model])
         args.extend(["--mace-device", mace_device])

@@ -19,6 +19,7 @@ from pymatgen.core import Structure, Lattice
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from stb.core import structure_io, kspace
+from stb.core import model_card
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                            capture_library_noise, print_progress_line, finish_progress_line)
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
@@ -322,6 +323,7 @@ def main():
                          help="Use a custom MACE model file for --ml-prerelax/--ml-rank instead of "
                               "the MACE-MP-0 foundation potential -- e.g. one fine-tuned on your own "
                               "SIESTA data via stb-mlffAnalysis. Overrides --ml-model.")
+    model_card.add_card_argument(parser, "--ml-custom-model")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--ml-fmax", type=float, default=0.05)
     parser.add_argument("--ml-steps", type=int, default=200,
@@ -387,6 +389,7 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.ml_custom_model, args.ml_custom_model_card, "--ml-custom-model", error=parser.error)
 
     if args.intro:
         show_intro([

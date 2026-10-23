@@ -26,6 +26,7 @@ import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                           capture_library_noise)
+from stb.core import model_card
 from stb.core.deps import require_pyxtal, require_mace
 from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core import structure_io, kspace, mace_relax
@@ -175,6 +176,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
                         help="Path to a custom fine-tuned .model file for --mace-relax, "
                              "instead of a MACE-MP-0 foundation size. Only valid together "
                              "with --mace-relax.")
+    model_card.add_card_argument(parser, "--mace-custom-model")
     parser.add_argument("--mace-device", choices=["cpu", "cuda"], default="cpu",
                         help="Device to run the MACE model on (default: cpu) -- used for both "
                              "--mace-relax (here) and --ml-rank (passed through to the "
@@ -220,6 +222,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.mace_custom_model, args.mace_custom_model_card, "--mace-custom-model", error=parser.error)
     library_warnings = []
 
     if args.calc and (args.d3 or args.spin_polarized):

@@ -365,5 +365,5 @@ try it yourself:
 As a next step, try on your own:
   stb-nanotube -f your_monolayer.fdf --chirality 10 5   # your own 2D material
   stb-nanotube -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 6 --passivate
-  stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax --custom-model my_finetuned.model
+  stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 EOF

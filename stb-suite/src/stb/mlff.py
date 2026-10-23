@@ -401,7 +401,7 @@ def ml_screen(frames, model, device):
     from stb.core.deps import require_mace
     require_mace()
     from stb.core.mace_relax import get_calculator
-    calc = get_calculator(model, device)
+    calc = get_calculator(model, device, allow_uncarded=True)
     out = []
     for a in frames:
         b = a.copy()

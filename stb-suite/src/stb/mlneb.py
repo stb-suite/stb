@@ -53,6 +53,7 @@ from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mace_relax
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.neb import (
@@ -190,6 +191,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--n-images", type=int, default=7,
                         help="Total images including both endpoints (default: 7).")
     parser.add_argument("--autosort-tol", type=float, default=0.5,
@@ -235,6 +237,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlneb {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.intro:
         show_intro([

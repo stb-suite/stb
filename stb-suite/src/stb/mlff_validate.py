@@ -19,12 +19,12 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
-from stb.core import mlff_workflow
+from stb.core import mlff_workflow, model_card
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                           print_progress_line, finish_progress_line, capture_library_noise,
                           run_with_spinner)
 from stb.mlff_analysis import (collect_training_configs, _EV_A3_TO_GPA, predict_all, metrics,
-                               dataset_table, check_theory, dispersion_check, _versions, _fmt)
+                               dataset_table, check_theory, dispersion_check, _versions, _fmt, refresh_card_validation, rebuild_round_cards)
 from stb.mlff import write_config_folder
 
 REPORT_FILE = "stb_mlffValidate_report.txt"
@@ -756,6 +756,88 @@ def _n_train(entry):
 
 def _round_label(k):
     return f"round {k}" if k != "models" else "--model"
+
+
+BEST_DIR = "best_model"   # next to the workflow file; rewritten by every Stage 3 run
+
+
+def export_best_model(state, rounds, best_k, wf_base, workflow_path, verdict_code, n_test, warn):
+    """Copies the best model of this run, with its card, to <run folder>/best_model/ -- replacing
+    whatever the previous run left there -- and records it as state['best'].
+
+    Best = the round (among `rounds`, the (number, scores) pairs scored now) with the lowest
+    committee-mean test force RMSE, and within it the single member with the lowest test force
+    RMSE; a member that failed Stage 2's MD stability check only wins if every member did. The
+    card in the folder is the member's own, plus a 'selection' section saying why it was chosen.
+    Returns the info dict (also state['best']), or None when nothing could be exported."""
+    v = dict(rounds)[best_k]
+    entry = mlff_workflow.get_round(state, best_k)
+    by_seed = {m["seed"]: m for m in entry.get("committee", []) if m.get("model")}
+    stab = {r.get("seed"): r.get("status") for r in (entry.get("model_checks") or {}).get("stability", [])}
+    cands = [(stab.get(sd) not in (None, "OK"), met["F_rmse_meV"], sd)
+             for sd, met in zip(v["seeds"], v["members"]) if met and sd in by_seed]
+    if not cands:
+        warn(f"Best model: round {best_k} has no scored member with a model file -- {BEST_DIR}/ not written.")
+        return None
+    _, member_f, seed = min(cands)
+    member = by_seed[seed]
+    src_model = mlff_workflow.resolve(member["model"], wf_base)
+    card_rel = member.get("card")
+    card_src = mlff_workflow.resolve(card_rel, wf_base) if card_rel else None
+    if not card_src or not os.path.isfile(card_src):
+        try:
+            rebuild_round_cards(state, entry, wf_base, workflow_path)
+            card_src = mlff_workflow.resolve(member["card"], wf_base)
+        except Exception as e:
+            warn(f"Best model: round {best_k} seed {seed} has no model card and it could not be written "
+                 f"({e}) -- {BEST_DIR}/ not written; run stb-mlffAnalysis --make-cards {best_k}.")
+            return None
+    try:
+        card = model_card.load_card(card_src)
+    except model_card.ModelCardError as e:
+        warn(f"Best model: {e} -- {BEST_DIR}/ not written.")
+        return None
+    src_dir = os.path.dirname(src_model)
+    dest = os.path.join(wf_base, BEST_DIR)
+    os.makedirs(dest, exist_ok=True)
+    for old in glob.glob(os.path.join(dest, "*.model")) + [os.path.join(dest, model_card.CARD_FILE)]:
+        if os.path.isfile(old):
+            os.remove(old)
+    for f in card["model"]["files"]:
+        src = os.path.join(src_dir, f["file"])
+        if not os.path.isfile(src):
+            continue
+        shutil.copy2(src, os.path.join(dest, f["file"]))
+        if model_card.sha256_file(os.path.join(dest, f["file"])) != f["sha256"]:
+            warn(f"Best model: {f['file']} of round {best_k} seed {seed} is not the file its card describes "
+                 "(retrained or replaced since the card was written?) -- run stb-mlffAnalysis --make-cards "
+                 f"{best_k}.")
+    others = sorted(r["round"] for r in state["rounds"] if r["round"] not in {k for k, _ in rounds})
+    if others:
+        warn(f"Best model: {BEST_DIR}/ was chosen among the rounds scored in this run only; round(s) "
+             f"{', '.join(map(str, others))} were not scored -- run stb-mlffValidate without --rounds to compare all.")
+    when = datetime.now().isoformat(timespec="seconds")
+    card["selection"] = {
+        "selected_by": "stb-mlffValidate", "time": when,
+        "criterion": "round with the lowest committee-mean test-set force RMSE among the rounds scored in that "
+                     "run; within it the member with the lowest test-set force RMSE (a member that failed the "
+                     "MD stability check only if all did)",
+        "round": best_k, "seed": seed, "source_model": mlff_workflow.rel(src_model, wf_base),
+        "source_card": mlff_workflow.rel(card_src, wf_base), "n_test": n_test,
+        "member_test": next(m for sd, m in zip(v["seeds"], v["members"]) if sd == seed),
+        "committee_mean_test": v["overall"],
+        "rounds_compared": [{"round": k, "F_rmse_meV": r["overall"]["F_rmse_meV"]} for k, r in rounds],
+        "latest_round": rounds[-1][0], "latest_round_verdict": verdict_code,
+        "note": "paths in 'committee' are relative to the workflow file, not to this folder"}
+    model_card.write_card(card, os.path.join(dest, model_card.CARD_FILE))
+    info = {"time": when, "round": best_k, "seed": seed, "folder": BEST_DIR,
+            "model": f"{BEST_DIR}/{card['model']['file']}", "card": f"{BEST_DIR}/{model_card.CARD_FILE}",
+            "source_model": mlff_workflow.rel(src_model, wf_base),
+            "test_F_rmse_meV": round(float(member_f), 3),
+            "committee_test_F_rmse_meV": round(float(v["overall"]["F_rmse_meV"]), 3),
+            "verdict": verdict_code}
+    state["best"] = info
+    return info
 
 
 def main():
@@ -1672,6 +1754,7 @@ def main():
     print_section("[10] ROUND HISTORY, LEARNING CURVE & VERDICT", f_out)
     rounds_only = [(k, v) for k, v in scored if k != "models"]
     code, lc = None, None
+    best_info = None
     if rounds_only:
         rows = []
         best_f = None
@@ -1811,6 +1894,17 @@ def main():
                     entry["validation"]["learning_curve"] = {kk: vv for kk, vv in lc.items()}
                 if cmp_store:
                     entry["validation"]["compare"] = cmp_store
+        for k, v in rounds_only:
+            try:
+                refresh_card_validation(state, k, wf_base, mlff_workflow.get_round(state, k)["validation"])
+            except Exception as e:
+                warn(f"Model card: validation not attached to round {k}'s cards ({e}).")
+        try:
+            best_info = export_best_model(state, rounds_only, min(
+                rounds_only, key=lambda kv: kv[1]["overall"]["F_rmse_meV"])[0], wf_base, args.workflow,
+                code, len(test_atoms), warn)
+        except Exception as e:
+            warn(f"Best model: not exported ({type(e).__name__}: {e}).")
         mlff_workflow.record(state, "validate", "stb-mlffValidate", sys.argv[1:])
         mlff_workflow.save(state, args.workflow)
 
@@ -1821,7 +1915,13 @@ def main():
                f_out)
     if code:
         print_dual(f"Verdict           : {code.upper()}", f_out)
-    if best_models:
+    if best_info:
+        print_dual(f"Best model        : round {best_info['round']}, seed {best_info['seed']} (test F RMSE "
+                   f"{best_info['test_F_rmse_meV']:.1f} meV/Ang; its committee mean {best_info['committee_test_F_rmse_meV']:.1f})"
+                   f" -> {mlff_workflow.resolve(best_info['model'], wf_base)}", f_out)
+        print_dual(f"                    + {mlff_workflow.resolve(best_info['card'], wf_base)}  ({mlff_workflow.resolve(BEST_DIR, wf_base)}/ "
+                   "is rewritten by every Stage 3 run)", f_out)
+    elif best_models:
         print_dual(f"Best model(s)     : {_round_label(best_k)}: {best_models[0]}"
                    + (f" (+{len(best_models) - 1} more)" if len(best_models) > 1 else ""), f_out)
     if png:
@@ -1837,7 +1937,13 @@ def main():
 
     # ---- [9] next steps
     print_section("[12] NEXT STEPS", f_out)
-    use = (f"--custom-model {best_models[0]} in stb-mlmd, stb-mlphonons, stb-mlelastic, ..." if best_models else "")
+    if best_info:
+        use = (f"--custom-model {mlff_workflow.resolve(best_info['model'], wf_base)} "
+               f"--custom-model-card {mlff_workflow.resolve(best_info['card'], wf_base)} in stb-mlmd, stb-mlphonons, stb-mlelastic, ...")
+    else:
+        use = (f"--custom-model {best_models[0]} --custom-model-card "
+               f"{os.path.join(os.path.dirname(best_models[0]), 'mlff_model_card.json')} in stb-mlmd, stb-mlphonons, stb-mlelastic, ..."
+               if best_models else "")
     steps = {
         "stop": [f"Use the model: {use}"],
         "regressed": [f"Use {_round_label(best_k)} ({use})",

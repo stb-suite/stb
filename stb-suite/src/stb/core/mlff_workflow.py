@@ -68,6 +68,11 @@ Schema (version 1)::
                     "active_learning": [{sampling, settings, score, selection,
                                          pool, skipped, picked, another_round,
                                          auto_sampling, ...}]}],        (Stage 4)
+     "best":      {"time", "round", "seed", "folder": "best_model", "model", "card",
+                   "source_model", "test_F_rmse_meV", "committee_test_F_rmse_meV", "verdict"},
+                  -- written by every Stage 3 run: the model with the lowest test force RMSE
+                  (best round by committee mean, then its best member) copied with its card
+                  to <run folder>/best_model/, which each run rewrites.
      "history":   [{"time", "stage", "tool", "argv"}]}
 """
 

@@ -256,6 +256,7 @@ stb-2Dstacking -l1 graphene.fdf -l2 graphene.fdf -id 70 -a 50 -t 21.8
 | `--ml-relax-cell`             | With `--ml-relax`, also relax `a`/`b` (vacuum axis `c` stays fixed) |
 | `--model`                     | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`)|
 | `--custom-model`              | Path to a custom fine-tuned `.model` file for `--ml-relax`         |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 
 ## What's next
 

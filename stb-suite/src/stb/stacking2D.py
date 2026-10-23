@@ -23,6 +23,7 @@ import textwrap
 import numpy as np
 from time import sleep
 from stb.core import citations, kspace, mace_relax, structure_checks, structure_io
+from stb.core import model_card
 from stb.core import symmetry as core_symmetry
 from stb.core.ase_view import view_structure_interactive
 from stb.core.deps import require_mace
@@ -196,6 +197,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, instead of "
                              "a MACE-MP-0 foundation size.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
                         help="Device to run the MACE model on (default: cpu).")
 
@@ -203,6 +205,7 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.ml_relax_cell and not args.ml_relax:
         parser.error("--ml-relax-cell is only valid together with --ml-relax.")

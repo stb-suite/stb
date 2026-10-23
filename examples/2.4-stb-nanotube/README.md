@@ -212,7 +212,7 @@ stb-nanotube -f graphene.fdf --chirality 6 0 --view
 stb-nanotube -f graphene.fdf --chirality 20 0
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # A passivated nanoribbon, ready for a SIESTA edge-state calculation
 stb-nanotube -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 6 --passivate
@@ -240,6 +240,7 @@ stb-nanotube -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 6 --passiva
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the axial period (vacuum axes stay fixed) |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input monolayer and final tube/ribbon in ASE's interactive viewer |
 

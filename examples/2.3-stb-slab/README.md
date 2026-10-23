@@ -192,7 +192,7 @@ stb-slab -f si_bulk.fdf --hkl 1 1 1 -i
 stb-slab -f si_bulk.fdf --hkl 1 0 0 --view
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-slab -f si_bulk.fdf --hkl 1 1 1 --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-slab -f si_bulk.fdf --hkl 1 1 1 --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # A thicker slab, symmetrized, every termination
 stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
@@ -223,6 +223,7 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the in-plane cell (vacuum axis stays fixed) |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the bulk structure and every written slab in ASE's interactive viewer |
 

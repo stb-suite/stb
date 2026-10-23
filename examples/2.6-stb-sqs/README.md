@@ -244,7 +244,7 @@ stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --view
 stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.25,Fe:0.75
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # A larger, more dilute SQS: build a bigger cell first
 stb-supercell -f fcc_ni.fdf -d 2 2 2 -o ni32.fdf --no-intro
@@ -269,6 +269,7 @@ stb-sqs -f ni32.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the cell (vacuum axes stay fixed)        |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `sqs.fdf`)                            |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and final SQS structure in ASE's interactive viewer     |

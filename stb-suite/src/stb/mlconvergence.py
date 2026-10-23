@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, kspace, mace_relax
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 
@@ -135,7 +136,11 @@ def main():
     parser.add_argument("--custom-models", nargs='+', default=None, metavar="PATH",
                         help="Also include one or more custom MACE model files (e.g. fine-"
                              "tuned via stb-mlffAnalysis) in the comparison, labeled by "
-                             "filename.")
+                             "filename. Each needs its model card, in the same order (--custom-model-cards).")
+    parser.add_argument("--custom-model-cards", nargs='+', default=None, metavar="JSON",
+                        help="Model cards (mlff_model_card.json, written by stb-mlffAnalysis next to each "
+                             "model) of the --custom-models, one per model in the same order. Required "
+                             "with --custom-models.")
     parser.add_argument("--no-relax", dest="relax", action="store_false",
                         help="Skip the full relax (cell + positions) -- just a single-point "
                              "energy/force evaluation on the structure as given, for each "
@@ -166,6 +171,12 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlconvergence {VERSION}")
 
     args = parser.parse_args()
+    if bool(args.custom_models) != bool(args.custom_model_cards) or \
+            len(args.custom_models or []) != len(args.custom_model_cards or []):
+        parser.error("--custom-models and --custom-model-cards must be given together, one model card per "
+                     "model in the same order.")
+    for _m, _c in zip(args.custom_models or [], args.custom_model_cards or []):
+        model_card.setup_from_args(_m, _c, "--custom-models", error=parser.error)
 
     if args.intro:
         show_intro([

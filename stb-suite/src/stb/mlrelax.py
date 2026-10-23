@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
+from stb.core import model_card
 from stb.core import kspace
 from stb.core import mace_relax
 from stb.core import citations
@@ -93,6 +94,7 @@ that distribution.""",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned on your own SIESTA data via "
                              "stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--fmax", type=float, default=0.05,
                         help="Force convergence threshold, eV/Ang (default: 0.05).")
     parser.add_argument("--max-steps", type=int, default=200,
@@ -116,6 +118,7 @@ that distribution.""",
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.intro:
         show_intro([

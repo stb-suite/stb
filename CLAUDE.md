@@ -229,6 +229,22 @@ needs it).
   atomic-environment fingerprints (sorted distances to the 16 nearest neighbours), novelty in
   units of a set's typical spacing; stb-mlffActiveLearning's novelty filter and stb-mlff's
   near-duplicate check.
+- `model_card.py` — the **model card**: `mlff_model_card.json`, written by `stb-mlffAnalysis` next to every
+  member model of a round (`write_round_cards` in `mlff_analysis.py`; `--make-cards [ROUND]` rewrites them for an
+  already trained round without training; `stb-mlffValidate` refreshes each card's `validation` section and, on every run, rewrites `<run>/best_model/` -- best round by committee-mean test F RMSE, then its best member, model files + card with a `selection` section, recorded as `best` in the workflow JSON; the folder is overwritten each time, `export_best_model` in `mlff_validate.py`). It holds
+  the model's SHA-256, level of theory (incl. whether the labels include DFT-D3), E0s/energy scale, training
+  domain (elements, area/volume per atom of the periodic axes, shortest distance, force/energy/pressure ranges),
+  recipe, metrics, stability/speed, usage notes and provenance. **A fine-tuned model is always handed over with
+  its card**: every tool with `--custom-model` also has `--custom-model-card` (`--ml-custom-model-card`,
+  `--mace-custom-model-card`, `--custom-model-cards` for stb-mlconvergence), added by
+  `model_card.add_card_argument` and checked right after `parse_args()` by `model_card.setup_from_args`
+  (flag missing, unreadable card, or SHA-256 mismatch -> clean error). `setup_from_args` registers the pair;
+  `mace_relax.get_calculator` refuses a custom model file with no registered card (`allow_uncarded=True` only
+  for the mlff stages themselves, which work from `mlff_workflow.json`), skips `dispersion=True` for a D3
+  model, and returns a calculator that raises for an element outside the model's table and warns once per
+  message when the cell size / shortest bond / predicted forces leave the trained range. Menu wrappers ask
+  for the card with `core.menu.prompt_model_card`. A new tool that adds `--custom-model` must follow the same
+  three calls (import, `add_card_argument`, `setup_from_args`).
 - `ase_view.py` — `view_structure_interactive`: shared, graceful (no-display-safe)
   wrapper around ASE's interactive 3D viewer, used by every tool's `--view` flag.
 

@@ -59,6 +59,7 @@ from ase.io import write as ase_write
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, kspace, mace_relax, md_traj
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.mlmd import build_dynamics
@@ -168,6 +169,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--temp-min", type=float, default=300.0,
                         help="Lowest scanned temperature, K (default: 300).")
     parser.add_argument("--temp-max", type=float, default=3000.0,
@@ -216,6 +218,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlmelting {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.temperatures is not None:
         temps = sorted(args.temperatures)

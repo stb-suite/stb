@@ -333,5 +333,5 @@ try it yourself:
 As a next step, try on your own:
   stb-unitcell -f your_structure.fdf --mode primitive           # smallest cell for a cheap DFT calc
   stb-unitcell -f your_relaxed_structure.fdf --mode refined      # clean up post-relaxation noise
-  stb-unitcell -f fcc_ni.fdf --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+  stb-unitcell -f fcc_ni.fdf --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 EOF

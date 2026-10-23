@@ -80,7 +80,7 @@ def resolve_device(device):
     return device
 
 
-def get_calculator(model="medium", device="cpu", dtype="float64", dispersion=False):
+def get_calculator(model="medium", device="cpu", dtype="float64", dispersion=False, allow_uncarded=False):
     """Loads a MACE potential as an ASE calculator: the MACE-MP-0 foundation
     model (`model` = "small"/"medium"/"large", downloaded/cached on first
     use) by default, or a custom model file (`model` = a path to a `.model`
@@ -118,13 +118,39 @@ def get_calculator(model="medium", device="cpu", dtype="float64", dispersion=Fal
     `mace_mp` accepts a local model file path in `model` the same as a
     foundation-model name, so this routes both cases through it rather than
     the raw `MACECalculator` class (which has no dispersion support).
+
+    A custom model file must come with its model card (core/model_card.py: the
+    JSON stb-mlffAnalysis writes next to each model): the tool registers the pair
+    with `model_card.setup_from_args()` right after parsing its arguments, and a
+    file without a registered card is refused here -- the one place every tool
+    loads a model -- with a ValueError. The card is then used: a model whose
+    labels already include DFT-D3 is never given `dispersion=True` on top (it
+    would count dispersion twice), and the calculator warns when a structure is
+    outside the range the model was trained on. `allow_uncarded=True` is for the
+    mlff workflow's own stages, which work from mlff_workflow.json instead.
     """
     device = resolve_device(device)
     import os
     from mace.calculators import mace_mp
+    card = None
+    if os.path.isfile(model):
+        from stb.core import model_card
+        card = model_card.registered_card(model)
+        if card is None and not allow_uncarded:
+            raise ValueError(
+                f"custom model '{model}' has no model card: pass it together with the {model_card.CARD_FILE} "
+                "that stb-mlffAnalysis wrote next to it (--custom-model ... --custom-model-card ...).")
+        if card is not None and dispersion and (card.get("level_of_theory") or {}).get("dftd3", {}).get("on"):
+            print("[INFO] the model's SIESTA labels already include DFT-D3: no second dispersion "
+                  "correction is added on top of it.", file=__import__("sys").stderr)
+            dispersion = False
+        if card is not None:
+            model_card.announce(model)
     if dispersion:
         return mace_mp(model=model, device=device, default_dtype=dtype, dispersion=True)
     if os.path.isfile(model):
+        if card is not None:
+            return model_card.checked_mace_calculator(model, card, device, dtype)
         from mace.calculators import MACECalculator
         return MACECalculator(model_paths=[model], device=device, default_dtype=dtype)
     return mace_mp(model=model, device=device, default_dtype=dtype)

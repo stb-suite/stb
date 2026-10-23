@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io, adsorption_sites
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section, capture_library_noise
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 from stb.core.heterostructure import find_zsl_match, build_stacked_structure
@@ -414,6 +415,7 @@ def main():
                          help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                               "potential -- e.g. one fine-tuned on your own SIESTA data via "
                               "stb-mlffAnalysis. Overrides --ml-model.")
+    model_card.add_card_argument(parser, "--ml-custom-model")
     parser.add_argument("--ml-device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--ml-fmax", type=float, default=0.05,
                          help="Force convergence for --ml-prerelax-layers and --mode 2's "
@@ -435,6 +437,7 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.ml_custom_model, args.ml_custom_model_card, "--ml-custom-model", error=parser.error)
 
     if args.intro:
         show_intro([

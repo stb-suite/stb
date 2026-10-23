@@ -397,5 +397,5 @@ As a next step, try on your own (with a real, bigger supercell -- not
 this walkthrough's tiny 8-atom toy cell):
   stb-amorphize -f your_supercell.fdf --melt-temp 4000 --quench-steps 2000 \\
       --save-data --save-traj
-  stb-amorphize -f your_supercell.fdf --custom-model my_finetuned.model
+  stb-amorphize -f your_supercell.fdf --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 EOF

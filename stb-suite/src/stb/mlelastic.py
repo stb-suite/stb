@@ -64,6 +64,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from scipy.constants import hbar, k as BOLTZMANN_K, atomic_mass
 
 from stb.core import structure_io, kspace, mace_relax
+from stb.core import model_card
 from stb.core import symmetry as core_symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
@@ -457,6 +458,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--skip-foundation-comparison", action="store_true",
                         help="If --custom-model is given, also evaluate the same "
                              "elastic-constants pipeline with the raw (non-fine-tuned) "
@@ -525,6 +527,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlelastic {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.check_convergence and args.convergence_strains is not None \
             and len(args.convergence_strains) < 2:

@@ -65,6 +65,7 @@ from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mace_relax
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.adsorb import (
@@ -310,6 +311,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--skip-foundation-comparison", action="store_true",
                         help="If --custom-model is given, also screen every site with the raw "
                              "(non-fine-tuned) foundation model (--model) and overlay both on "
@@ -363,6 +365,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mladsorb {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.intro:
         show_intro([

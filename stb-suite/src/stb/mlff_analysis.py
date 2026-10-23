@@ -29,7 +29,7 @@ from stb.core import structure_io, siesta_log
 from stb.core.deps import require_sisl
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                           run_with_spinner, capture_library_noise)
-from stb.core import mlff_workflow
+from stb.core import mlff_workflow, model_card
 
 REPORT_FILE = "stb_mlffAnalysis_report.txt"
 
@@ -732,6 +732,250 @@ def _versions():
     return out
 
 
+# ---- model card (one JSON per trained model, see core/model_card.py) ------------
+
+def _siesta_version(folder):
+    """SIESTA's version string from the folder's log ('Version : 5.4.2'), or None."""
+    label = structure_io.find_fdf_system_label(folder)
+    out_file = siesta_log.find_out_file(folder, label) if label else None
+    if not out_file:
+        return None
+    try:
+        with open(out_file, errors="replace") as fh:
+            for _, line in zip(range(200), fh):
+                m = re.match(r"\s*Version\s*:\s*(\S+)", line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
+def _model_architecture(model_path):
+    """What can be read from the model file itself: cutoff, element table, parameters,
+    layers, per-element E0s (eV) and the energy scale/shift. Best effort -- {} on failure."""
+    info = {}
+    try:
+        import torch
+        import warnings
+        from ase.data import chemical_symbols
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            m = torch.load(model_path, map_location="cpu", weights_only=False)
+        info["class"] = type(m).__name__
+        info["r_max"] = float(m.r_max)
+        zs = [int(z) for z in m.atomic_numbers]
+        info["atomic_numbers"] = zs
+        info["n_params"] = int(sum(p_.numel() for p_ in m.parameters()))
+        info["num_interactions"] = int(m.num_interactions)
+        try:
+            e0 = m.atomic_energies_fn.atomic_energies.detach().cpu().numpy().ravel()
+            if len(e0) == len(zs):
+                info["e0_eV"] = {chemical_symbols[z]: float(v) for z, v in zip(zs, e0)}
+        except Exception:
+            pass
+        try:
+            info["scale_shift"] = {"scale": float(m.scale_shift.scale), "shift": float(m.scale_shift.shift)}
+        except Exception:
+            pass
+        try:
+            info["hidden_irreps"] = str(m.interactions[0].hidden_irreps)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return info
+
+
+def _model_files(member_dir):
+    """Every '*.model' of a member (the plain checkpoint and the compiled one), with its
+    SHA-256: the card describes the pair and verify_model() accepts either."""
+    files = []
+    for path in sorted(glob.glob(os.path.join(member_dir, "*.model"))):
+        files.append({"file": os.path.basename(path),
+                      "kind": "compiled (TorchScript)" if path.endswith("_compiled.model") else "plain (torch.save)",
+                      "sha256": model_card.sha256_file(path), "size_bytes": os.path.getsize(path)})
+    return files
+
+
+def _count_by(values):
+    out = {}
+    for v in values:
+        out[v] = out.get(v, 0) + 1
+    return dict(sorted(out.items()))
+
+
+def write_round_cards(state, entry, wf_base, atoms_list, kinds, theory_common, labels_d3, workflow_path,
+                      argv, device=None, train_warnings=None, generated_by="stb-mlffAnalysis"):
+    """Writes <member dir>/mlff_model_card.json for every member of `entry` (a round of the
+    workflow state, already holding its committee models and metrics) and stores each card's
+    path in the committee entry as 'card'. Returns {seed: card path}."""
+    from collections import Counter
+    from ase.data import chemical_symbols
+    vers = _versions()
+    elements = sorted({s_ for a in atoms_list for s_ in a.get_chemical_symbols()}, key=model_card._z)
+    domain = model_card.training_domain(atoms_list)
+    ds_press = domain.get("pressure_GPa")
+    settings = entry.get("settings") or {}
+    ref = (state or {}).get("reference") or {}
+    ref_info = {}
+    if ref.get("file"):
+        try:
+            rs = structure_io.read_fdf(mlff_workflow.resolve(ref["file"], wf_base))
+            from pymatgen.io.ase import AseAtomsAdaptor
+            ra = AseAtomsAdaptor.get_atoms(structure_io.to_pymatgen(rs))
+            name, _, vac = model_card.periodic_measure(ra)
+            ref_info = {"file": ref["file"], "calc": ref.get("calc"), "formula": ra.get_chemical_formula(mode="hill"),
+                        "n_atoms": len(ra), "cell_lengths_ang": [round(float(x), 5) for x in ra.cell.lengths()],
+                        "cell_angles_deg": [round(float(x), 3) for x in ra.cell.angles()],
+                        "volume_ang3": round(float(ra.get_volume()), 5),
+                        "n_vacuum_axes": int(sum(vac)), "vacuum_axes": [bool(v) for v in vac],
+                        "dimensionality": {0: "3D", 1: "2D", 2: "1D", 3: "0D"}[int(sum(vac))]}
+        except Exception:
+            ref_info = {"file": ref.get("file"), "calc": ref.get("calc")}
+    theory = {k: v for k, v in (theory_common or {}).items() if not k.startswith("pseudo")}
+    pseudos = {k[7:]: v for k, v in (theory_common or {}).items() if k.startswith("pseudo")}
+    dftd3 = dict(mlff_workflow.dftd3_info(state))
+    dftd3["on"] = bool(labels_d3)
+    folder0 = atoms_list[0].info["folder"] if atoms_list else None
+    lt = {"code": "SIESTA", "siesta_version": _siesta_version(folder0) if folder0 else None,
+          "settings": theory, "dftd3": dftd3, "pseudopotentials_md5": pseudos,
+          "basis_block_md5": theory.get("PAO.Basis block"),
+          "label_source": "total energy, forces (.FA) and stress from each SIESTA single point"}
+    cfg_entries = []
+    for a, k in zip(atoms_list, kinds):
+        cfg_entries.append({"folder": mlff_workflow.rel(a.info["folder"], wf_base), "kind": k,
+                            "n_atoms": len(a), "E_per_atom_eV": round(a.info["REF_energy"] / len(a), 6)})
+    has_stress = all("REF_stress" in a.info for a in atoms_list)
+    td = {"n_configs": len(atoms_list), "kinds": _count_by(kinds),
+          "atoms_per_config": domain["n_atoms"], "elements_count": dict(Counter(
+              s_ for a in atoms_list for s_ in a.get_chemical_symbols())),
+          "labels": {"energy": True, "forces": True, "stress": bool(has_stress),
+                     "stress_used_in_training": bool(settings.get("stress_trained"))},
+          "scf_not_converged": [os.path.basename(a.info["folder"]) for a in atoms_list
+                                if a.info.get("scf_converged") is False],
+          "configs": cfg_entries}
+    te = entry.get("training_errors") or {}
+    seeds = [m["seed"] for m in entry["committee"]]
+    best_seed = None
+    scored = [(m.get("valid", {}).get("F_rmse_meV"), m["seed"]) for m in entry["committee"]
+              if m.get("model") and m.get("valid", {}).get("F_rmse_meV") is not None]
+    if scored:
+        best_seed = min(scored)[1]
+    checks = entry.get("model_checks") or {}
+    cards = {}
+    for idx, m in enumerate(entry["committee"]):
+        if not m.get("model"):
+            continue
+        model_path = mlff_workflow.resolve(m["model"], wf_base)
+        member_dir = os.path.dirname(model_path)
+        files = _model_files(member_dir)
+        arch = _model_architecture(model_path)
+        e0 = arch.pop("e0_eV", None)
+        cmd_file = os.path.join(member_dir, "mace_run_train.cmd")
+        cmd = open(cmd_file).read().strip() if os.path.isfile(cmd_file) else None
+        stab = next((r for r in checks.get("stability", []) if r.get("seed") == m["seed"]), None)
+        unstable = bool(stab and stab.get("status") != "OK")
+        notes = [
+            "Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy "
+            "differences between structures of the same elements -- never mix them with another model's absolute energies.",
+            f"Valid for {', '.join(elements)} only; any other element is outside the training data.",
+        ]
+        if len(elements) == 1:
+            notes.append("Single-element training set: E0 and the mean interaction energy cannot be separated; "
+                         "only energy differences between configurations of this element are meaningful.")
+        if lt["dftd3"].get("on"):
+            notes.append("The labels include DFT-D3: this model is PBE+D3 already -- never add a dispersion "
+                         "correction (mace dispersion=True / torch-dftd) on top of it.")
+        if not has_stress or not settings.get("stress_trained"):
+            notes.append("Trained WITHOUT stress: pressure, cell relaxation and E(V) are not fitted.")
+        if domain.get("measure") and domain["measure"]["max"] - domain["measure"]["min"] < 0.01 * domain["measure"]["max"]:
+            notes.append("All training configs have the same cell size: the volume response (E(V), B0, "
+                         "pressure) was never sampled -- keep cells at the reference size.")
+        if unstable:
+            notes.append(f"This member FAILED the MD stability check ({stab.get('reason')}): prefer another member.")
+        if m["seed"] == best_seed and len(seeds) > 1:
+            notes.append("Lowest validation force error of its committee.")
+        notes.append("Run geometry optimisation in float64 and MD in float32 (the suite's convention).")
+        card = {
+            "format": model_card.FORMAT, "version": model_card.VERSION, "created": mlff_workflow._now(),
+            "stb_version": VERSION,
+            "model": {"name": f"round_{entry['round']:02d}_seed_{m['seed']}",
+                      "file": os.path.basename(model_path), "files": files, "seed": m["seed"], "member": idx + 1,
+                      "directory": mlff_workflow.rel(member_dir, wf_base),
+                      "architecture": arch, "foundation": {"name": "mace-mp-0", "size": settings.get("foundation_model")},
+                      "init_from": entry.get("init_from", "foundation")},
+            "committee": {"size": len(seeds), "round": entry["round"], "best_by_valid_force_seed": best_seed,
+                          "members": [{"seed": mm["seed"], "model": mm.get("model"),
+                                       "card": (os.path.join(os.path.dirname(mm["model"]), model_card.CARD_FILE)
+                                                if mm.get("model") else None)} for mm in entry["committee"]],
+                          "spread": te.get("committee"), "cross_validation_folds": te.get("cv_folds")},
+            "elements": elements,
+            "energy": {"scale": "SIESTA absolute total energy, eV", "e0_eV": e0,
+                       "e0_source": settings.get("e0s"),
+                       "note": "E0 is the per-element reference energy added by the model; fitted to SIESTA's scale."},
+            "level_of_theory": lt,
+            "reference_structure": ref_info,
+            "training_data": dict(td, n_train=m.get("n_train"), n_valid=m.get("n_valid"),
+                                  validation_split="random per member (seed)" if not te.get("cv_folds")
+                                  else f"{te['cv_folds']}-fold cross-validation"),
+            "domain": domain,
+            "recipe": {"epochs_max": settings.get("epochs"), "kept_epoch": m.get("best_epoch"),
+                       "batch_size": settings.get("batch_size"), "lr": settings.get("lr"),
+                       "e0s": settings.get("e0s"), "stress_trained": settings.get("stress_trained"),
+                       "stress_weight": settings.get("stress_weight"), "valid_fraction": settings.get("valid_fraction"),
+                       "loss": ("energy 1 + forces 100 + stress %g" % settings["stress_weight"]
+                                if settings.get("stress_trained") else "energy 1 + forces 100"),
+                       "seed": m["seed"], "device": device, "training_seconds": m.get("seconds"),
+                       "mace_run_train": cmd},
+            "metrics": {"train": m.get("train"), "valid": m.get("valid"),
+                        "out_of_sample_committee": te.get("out_of_sample"), "foundation_model": te.get("foundation"),
+                        "fine_tuning_gain_pct": te.get("gain_pct"),
+                        "units": {"E": "meV/atom", "F": "meV/Ang", "S": "GPa"},
+                        "note": "valid = this member's own held-out configs; out_of_sample_committee pools every "
+                                "config scored by the members that did not train on it. The foundation model's "
+                                "absolute E is on another energy scale: compare E_rmse_rel_meV."},
+            "checks": {"stability": stab, "speed": checks.get("speed")},
+            "validation": {},
+            "usage": {"recommended_dtype": {"geometry_optimization": "float64", "molecular_dynamics": "float32"},
+                      "how_to_use": f"--custom-model {os.path.basename(model_path)} "
+                                    f"--custom-model-card {model_card.CARD_FILE}  (always both)",
+                      "stable_in_md": None if stab is None else not unstable,
+                      "notes": notes},
+            "provenance": {"workflow": mlff_workflow.rel(workflow_path, wf_base) if workflow_path else None,
+                           "round": entry["round"], "stage": "stb-mlffAnalysis", "generated_by": generated_by,
+                           "trained_at": entry.get("created"), "argv": list(argv),
+                           "training_warnings": list(train_warnings or []),
+                           "software": {"stb": VERSION, "mace-torch": vers["mace"], "torch": vers["torch"],
+                                        "ase": vers["ase"], "python": sys.version.split()[0],
+                                        "siesta": lt["siesta_version"]}},
+        }
+        path = os.path.join(member_dir, model_card.CARD_FILE)
+        model_card.write_card(card, path)
+        m["card"] = mlff_workflow.rel(path, wf_base)
+        cards[m["seed"]] = path
+    return cards
+
+
+def refresh_card_validation(state, round_no, wf_base, validation):
+    """stb-mlffValidate calls this after scoring a round: copies the test-set results (not the
+    per-config table) into 'validation' of every member card of that round."""
+    entry = mlff_workflow.get_round(state, round_no)
+    n = 0
+    for m in (entry or {}).get("committee", []):
+        path = m.get("card") and mlff_workflow.resolve(m["card"], wf_base)
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            card = model_card.load_card(path)
+        except model_card.ModelCardError:
+            continue
+        card["validation"] = {k: v for k, v in validation.items() if k != "per_config"}
+        model_card.write_card(card, path)
+        n += 1
+    return n
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stage 2 (Train) of the Custom ML Force Field workflow: aggregates "
@@ -830,6 +1074,11 @@ def main():
                         help="Write the N worst-predicted configs to <round>/worst_configs.xyz (per-atom "
                              "force error as 'F_error' and as the initial charge, so ASE's viewer can "
                              "color by it: View > Colors > By initial charge) and open them. Default: 0.")
+    parser.add_argument("--make-cards", nargs="?", const=0, type=int, default=None, metavar="ROUND",
+                        help="Do not train: (re)write the model card (mlff_model_card.json) of every member of "
+                             "ROUND (default: the latest) from the workflow file and its SIESTA folders -- for "
+                             "rounds trained before the cards existed, or after a folder moved. Existing "
+                             "cards are overwritten, validation results are re-attached from the workflow file.")
     parser.add_argument("--show", action="store_true",
                         help="Also display the round summary figure on screen (it is always saved).")
     parser.add_argument("--save-data", action="store_true",
@@ -892,6 +1141,9 @@ def main():
     except ValueError as e:
         fail(str(e))
     wf_base = mlff_workflow.base_dir(args.workflow)
+    if args.make_cards is not None:
+        make_cards(args, state, wf_base, fail)
+        return
     if args.path:
         config_dirs = sorted(d for d in glob.glob(args.path) if os.path.isdir(d))
         source = f"--path '{args.path}'"
@@ -1418,7 +1670,7 @@ def main():
         mlff_workflow.add_configs(state, [{"folder": d, "set": "train", "kind": "unknown",
                                            "origin": "unknown", "stage": "unknown", "round": 0}
                                           for d in config_dirs], wf_base)
-    mlff_workflow.add_round(state, {
+    round_entry = {
         "round": round_no,
         "dir": mlff_workflow.rel(work_dir, wf_base),
         "created": datetime.now().isoformat(timespec="seconds"),
@@ -1441,7 +1693,15 @@ def main():
                                        for r in stab], "speed": speed},
         "init_from": args.init_from,
         "validation": {}, "active_learning": [],
-    })
+    }
+    cards = {}
+    try:
+        cards = write_round_cards(state, round_entry, wf_base, atoms_list, kinds, theory_common, labels_d3,
+                                  args.workflow, sys.argv[1:], device=device, train_warnings=warns)
+    except Exception as e:
+        warn(f"Model card: not written ({type(e).__name__}: {e}) -- without it the model cannot be used by the "
+             "other tools; rerun with --make-cards to write it.")
+    mlff_workflow.add_round(state, round_entry)
     mlff_workflow.record(state, "train", "stb-mlffAnalysis", sys.argv[1:])
     mlff_workflow.save(state, args.workflow)
 
@@ -1453,6 +1713,8 @@ def main():
     print_dual(f"Round             : {round_no} ({work_dir}), {time.monotonic() - t_start:.0f} s in total", f_out)
     for m in members:
         print_dual(f"Model seed {m['seed']:<6} : {m['model'] or '(not found)'}", f_out)
+        if cards.get(m["seed"]):
+            print_dual(f"  model card        : {cards[m['seed']]}", f_out)
         extra = [x for x in (m.get("parity"), m.get("lammps"), m["log"]) if x]
         print_dual(f"                    {', '.join(extra)}", f_out)
     if summary_png:
@@ -1468,7 +1730,9 @@ def main():
     print_section("[9] NEXT STEPS", f_out)
     print_dual("1. Score the round on the held-out test set: stb-mlffValidate (4.17.3).", f_out)
     print_dual("2. Look for configs the committee is unsure of: stb-mlffActiveLearning (4.17.4).", f_out)
-    print_dual(f"3. Use a model now: --custom-model {usable[0]['model']} in stb-mlmd, stb-mlphonons, "
+    card0 = cards.get(usable[0]["seed"])
+    print_dual(f"3. Use a model now, always with its card: --custom-model {usable[0]['model']} "
+               f"--custom-model-card {card0 or '<mlff_model_card.json>'} in stb-mlmd, stb-mlphonons, "
                "stb-mlelastic, ...", f_out)
     if labels_d3:
         print_dual("   It is PBE+D3 already (the labels include DFT-D3): use it without any extra D3 "
@@ -1506,6 +1770,72 @@ def main():
         view_structure_interactive(ase_read(worst_path, ":"))
 
 
+def rebuild_round_cards(state, entry, wf_base, workflow_path):
+    """Writes the model cards of an already trained round without training it: the numbers come
+    from the workflow entry, the ranges and the level of theory from the round's SIESTA folders.
+    Returns (cards {seed: path}, n usable configs, n skipped, warnings); raises ValueError when
+    the round's folders are gone."""
+    import contextlib
+    import io
+    folders = [mlff_workflow.resolve(c, wf_base) for c in entry.get("configs", [])]
+    folders = [d for d in folders if os.path.isdir(d)]
+    if not folders:
+        raise ValueError(f"none of round {entry['round']}'s config folders exists any more -- the card needs "
+                         "them (level of theory, training ranges).")
+    issues, warns_ = [], []
+    with contextlib.redirect_stdout(io.StringIO()):
+        atoms_list, n_skipped, _ = collect_training_configs(folders, None, issues=issues)
+        theory_common, theory_odd = check_theory(atoms_list, None, warns_.append) if atoms_list else ({}, {})
+        labels_d3 = dispersion_check(theory_common, theory_odd, state, None, warns_.append) if atoms_list else False
+    if not atoms_list:
+        raise ValueError("no usable SIESTA config in that round's folders.")
+    kinds = []
+    for a in atoms_list:
+        e_ = mlff_workflow.config_entry(state, a.info["folder"], wf_base)
+        kinds.append((e_ or {}).get("kind", "unknown") or "unknown")
+    trains = [h["argv"] for h in state.get("history", []) if h.get("stage") == "train"]
+    train_argv = trains[entry["round"] - 1] if 0 < entry["round"] <= len(trains) else []
+    cards = write_round_cards(state, entry, wf_base, atoms_list, kinds, theory_common, labels_d3,
+                              workflow_path, train_argv, device=None,
+                              train_warnings=list(warns_) + [f"Data: {i}" for i in issues],
+                              generated_by="stb-mlffAnalysis --make-cards (after the training; same data, "
+                                           "numbers from the workflow file)")
+    if entry.get("validation"):
+        refresh_card_validation(state, entry["round"], wf_base, entry["validation"])
+    return cards, len(atoms_list), n_skipped, warns_
+
+
+def make_cards(args, state, wf_base, fail):
+    """--make-cards: writes the model cards of an already trained round, without training."""
+    if not state or not state["rounds"]:
+        fail(f"--make-cards needs a workflow file with at least one trained round ('{args.workflow}').")
+    entry = mlff_workflow.get_round(state, args.make_cards or None)
+    if entry is None:
+        fail(f"round {args.make_cards} not found in '{args.workflow}'.")
+    try:
+        cards, n_ok, n_skipped, warns_ = rebuild_round_cards(state, entry, wf_base, args.workflow)
+    except ValueError as e:
+        fail(str(e))
+    mlff_workflow.record(state, "make-cards", "stb-mlffAnalysis", sys.argv[1:])
+    mlff_workflow.save(state, args.workflow)
+    print(color_text(f"MODEL CARDS -- round {entry['round']}", 'bold'))
+    print("-" * 60)
+    print(f"Configs read      : {n_ok} usable ({n_skipped} skipped)")
+    for m in entry["committee"]:
+        if m["seed"] in cards:
+            print(f"Seed {m['seed']:<6}       : {mlff_workflow.resolve(m['model'], wf_base)}")
+            print(f"  card            : {os.path.relpath(cards[m['seed']])}")
+        else:
+            print(color_text(f"Seed {m['seed']:<6}       : no model file in the workflow entry -- no card", 'yellow'))
+    for w in warns_:
+        print(color_text(f"[WARNING] {w}", 'yellow'))
+    print("\nHand each model to the other tools together with its card:")
+    first = next(iter(cards), None)
+    if first is not None:
+        mm = next(m for m in entry["committee"] if m["seed"] == first)
+        print(f"  --custom-model {mlff_workflow.resolve(mm['model'], wf_base)} "
+              f"--custom-model-card {os.path.relpath(cards[first])}")
+
 def _valid_entry(m):
     """Metrics dict as stored in the workflow file (rounded); None stays None."""
     if not m:
@@ -1542,7 +1872,7 @@ def train_member(args, atoms_list, seed, member_dir, device, train_stress, tag, 
         from stb.core import mace_relax
         from ase.data import chemical_symbols
         with capture_library_noise(library_noise, "starting model (E0s)"):
-            found_calc = mace_relax.get_calculator(model=start_from, device=device)
+            found_calc = mace_relax.get_calculator(model=start_from, device=device, allow_uncarded=True)
         e0s, rank_ok, start_rmse, avg_e0s = foundation_residual_e0s(train_atoms, found_calc)
         if e0s is None:
             warn(f"Training: seed {seed}: an element is outside the foundation model -- E0s fell back to 'average'.")

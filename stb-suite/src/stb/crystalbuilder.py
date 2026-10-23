@@ -21,6 +21,7 @@ from pymatgen.symmetry.groups import SpaceGroup
 from pymatgen.io.ase import AseAtomsAdaptor
 import argparse
 from stb.core import structure_io
+from stb.core import model_card
 from stb.core import kspace
 from stb.core import mace_relax
 from stb.core import citations
@@ -144,6 +145,7 @@ monolayer.""",
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Path to a custom fine-tuned .model file for --ml-relax, "
                              "instead of a MACE-MP-0 foundation size.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu",
                         help="Device to run the MACE model on (default: cpu).")
 
@@ -162,6 +164,7 @@ monolayer.""",
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.ml_relax_cell and not args.ml_relax:
         parser.error("--ml-relax-cell is only valid together with --ml-relax.")

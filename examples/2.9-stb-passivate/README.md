@@ -200,6 +200,7 @@ stb-passivate -f slab.fdf --ml-relax --ml-relax-cell
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the cell (vacuum axis stays fixed)        |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `passivated.fdf`)                     |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and passivated structures in ASE's interactive viewer   |

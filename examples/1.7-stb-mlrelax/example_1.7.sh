@@ -398,7 +398,7 @@ can page between --  try it yourself:
   stb-mlrelax -f si_defect.fdf --view
 
 As a next step, try on your own:
-  stb-mlrelax -f your_structure.fdf --custom-model my_finetuned.model
+  stb-mlrelax -f your_structure.fdf --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
   stb-mlrelax -f your_slab.fdf --relax-cell   # vacuum axis stays fixed
 
 This is a heuristic, not a substitute for a real SIESTA relaxation --

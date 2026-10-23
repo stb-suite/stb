@@ -201,7 +201,7 @@ stb-crystalcast --list-molecules
 
 # Screen candidates with your own fine-tuned MACE model
 stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --count 10 \
-    --ml-rank --custom-model my_finetuned.model
+    --ml-rank --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 ```
 
 ## Flag reference

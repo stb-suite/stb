@@ -44,6 +44,22 @@ def prompt_pseudo_source(optional: bool = True) -> str:
         print(color_text("Invalid choice.", 'red'))
 
 
+def prompt_model_card(model_path: str) -> str:
+    """Asks for the model card (the mlff_model_card.json stb-mlffAnalysis writes next to
+    each fine-tuned model) that must accompany a custom model file. Offers the one sitting
+    next to the model as the default when it exists; asks again until a file is given."""
+    from stb.core.model_card import CARD_FILE
+    default = os.path.join(os.path.dirname(os.path.abspath(model_path)), CARD_FILE)
+    default = default if os.path.isfile(default) else ""
+    while True:
+        suffix = f" [default: {default}]" if default else ""
+        path = os.path.expanduser(get_input(f"  Model card (JSON) of this model{suffix}: ").strip()) or default
+        if path and os.path.isfile(path):
+            return path
+        print(color_text("  Model card not found -- a custom model is always used with its card "
+                         f"({CARD_FILE}, written by stb-mlffAnalysis).", 'red'))
+
+
 def run_tool(tool_name: str, args: List[str], pause: bool = True) -> None:
     """Executes a suite tool as a subprocess.
 

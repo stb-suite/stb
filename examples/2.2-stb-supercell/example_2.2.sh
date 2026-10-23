@@ -285,6 +285,6 @@ window -- try it yourself:
 
 As a next step, try on your own:
   stb-supercell -f your_structure.fdf -d 3 3 1        # e.g. a slab supercell
-  stb-supercell -f si_bulk.fdf -d 2 2 2 --ml-relax --custom-model my_finetuned.model
+  stb-supercell -f si_bulk.fdf -d 2 2 2 --ml-relax --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
   stb-supercell -f si_bulk.fdf -d 2 2 2 -sp 0.1       # looser symmetry tolerance
 EOF

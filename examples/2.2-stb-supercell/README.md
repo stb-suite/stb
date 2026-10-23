@@ -201,7 +201,7 @@ stb-supercell -f graphene.fdf -d 2 0 0 0 2 0 0 0 1
 stb-supercell -f si_bulk.fdf -d 2 2 2 --view
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-supercell -f si_bulk.fdf -d 2 2 2 --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-supercell -f si_bulk.fdf -d 2 2 2 --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # A tighter symmetry tolerance for a noisier input structure
 stb-supercell -f si_bulk.fdf -d 2 2 2 -sp 0.1
@@ -219,6 +219,7 @@ stb-supercell -f si_bulk.fdf -d 2 2 2 -sp 0.1
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the cell (vacuum-padded axes stay fixed) |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input structure and final supercell in ASE's interactive viewer |
 

@@ -244,5 +244,5 @@ and final molecule in an interactive ase-gui window -- try it yourself:
 As a next step, try on your own:
   stb-molecule --list
   stb-molecule --name <any of the 162 names>
-  stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model
+  stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 EOF

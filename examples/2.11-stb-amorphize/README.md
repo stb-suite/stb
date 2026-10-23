@@ -243,7 +243,7 @@ stb-amorphize -f si8.fdf --melt-steps 2000 --quench-steps 4000 \
 stb-amorphize -f si8.fdf --save-traj --traj-format pdb
 
 # Pre-relax with your own fine-tuned MACE model, keeping the full trace
-stb-amorphize -f si8.fdf --custom-model my_finetuned.model --save-data
+stb-amorphize -f si8.fdf --custom-model my_finetuned.model --custom-model-card mlff_model_card.json --save-data
 ```
 
 ## Flag reference
@@ -265,6 +265,7 @@ stb-amorphize -f si8.fdf --custom-model my_finetuned.model --save-data
 | `--no-final-relax`    | Skip the final static (position+cell) relax                            |
 | `--model`             | MACE-MP-0 size: `small`/`medium`/`large` (default `small`)              |
 | `--custom-model`      | Path to a custom fine-tuned `.model` file                              |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-sp/--symprec`       | Symmetry tolerance, Ang, for the before/after table (default `0.01`)    |
 | `-o/--output`         | Output `.fdf` file name (default `amorphous.fdf`)                       |
 | `--save-report`       | Persist the full report (incl. symmetry table) to disk                 |

@@ -209,7 +209,7 @@ stb-unitcell -f fcc_ni.fdf --mode primitive --view
 stb-unitcell -f nacl_rocksalt.fdf --mode conventional
 
 # Pre-relax with MACE, cell included, with your own fine-tuned model
-stb-unitcell -f fcc_ni.fdf --ml-relax --ml-relax-cell --custom-model my_finetuned.model
+stb-unitcell -f fcc_ni.fdf --ml-relax --ml-relax-cell --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 
 # Clean up a relaxed structure's numerical noise before a symmetry-sensitive analysis
 stb-unitcell -f your_relaxed_structure.fdf --mode refined
@@ -227,6 +227,7 @@ stb-unitcell -f your_relaxed_structure.fdf --mode refined
 | `--ml-relax-cell`    | With `--ml-relax`, also relax the cell (vacuum axes stay fixed)        |
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
+| `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `unitcell.fdf`)                       |
 | `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and reduced-cell structure in ASE's interactive viewer  |

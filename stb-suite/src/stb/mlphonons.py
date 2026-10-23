@@ -20,6 +20,7 @@ from ase.io import write as ase_write
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, kspace, mace_relax, mace_phonons
+from stb.core import model_card
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.deps import require_mace
 from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ
@@ -549,6 +550,7 @@ def main():
     parser.add_argument("--custom-model", default=None, metavar="PATH",
                         help="Use a custom MACE model file instead of the MACE-MP-0 foundation "
                              "potential -- e.g. one fine-tuned via stb-mlffAnalysis. Overrides --model.")
+    model_card.add_card_argument(parser, "--custom-model")
     parser.add_argument("--skip-foundation-comparison", action="store_true",
                         help="If --custom-model is given, also evaluate the same phonon "
                              "pipeline with the raw (non-fine-tuned) foundation model "
@@ -644,6 +646,7 @@ def main():
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlphonons {VERSION}")
 
     args = parser.parse_args()
+    model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
     if args.qha and args.n_volumes < 4:
         parser.error("--n-volumes must be at least 4 -- vinet/murnaghan/birch_murnaghan all "

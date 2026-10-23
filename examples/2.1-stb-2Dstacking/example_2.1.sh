@@ -393,5 +393,5 @@ separate, pageable frames -- try it yourself:
 As a next step, try on your own:
   stb-2Dstacking -l1 your_layer1.fdf -l2 your_layer2.fdf -i   # pick a match by hand
   stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --batch_sym --gap_range 3.0 4.0 6
-  stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --ml-relax --custom-model my_finetuned.model
+  stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --ml-relax --custom-model my_finetuned.model --custom-model-card mlff_model_card.json
 EOF

@@ -629,10 +629,10 @@ def write_fdf(structure: FdfStructure, path: str, header_comment: str | list[str
         lines.append(f" {vec[0]:.8f}   {vec[1]:.8f}   {vec[2]:.8f}\n")
     lines.append("%endblock LatticeVectors\n\n")
     lines.append("%block AtomicCoordinatesAndAtomicSpecies\n")
-    for symbol in species_with_atoms:
-        species_id = fresh_ids[symbol]
-        for pos in atoms_by_species[symbol]:
-            lines.append(f"  {pos[0]:.8f}   {pos[1]:.8f}   {pos[2]:.8f}   {species_id}\n")
+    # in structure.atoms order (not grouped by species): atom indices, fragment sizes and
+    # per-atom data of the caller stay valid for the file it writes
+    for symbol, pos in structure.atoms:
+        lines.append(f"  {pos[0]:.8f}   {pos[1]:.8f}   {pos[2]:.8f}   {fresh_ids[symbol]}\n")
     lines.append("%endblock AtomicCoordinatesAndAtomicSpecies\n")
 
     with open(path, "w") as f:

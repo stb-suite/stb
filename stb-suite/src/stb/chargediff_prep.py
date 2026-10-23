@@ -53,11 +53,11 @@ import numpy as np
 import ase.io as ase_io
 from pymatgen.io.ase import AseAtomsAdaptor
 
-from stb.core import structure_io
+from stb.core import structure_io, fdf_directives, kspace
 from stb.core import adsorption_sites
 from stb.core.bsse import make_ghost_variant
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, BANKS
+from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, pseudo_valence, BANKS
 from stb.core import citations
 
 DEFAULT_MESH_CUTOFF_RY = 400.0
@@ -565,6 +565,11 @@ def main():
                               "movie frames -- ghost atoms render as mostly-hollow circles (see "
                               "structure_to_view_atoms's docstring). Needs a display. Off by "
                               "default.")
+    parser.add_argument("--show", action="store_true",
+                         help="Open a matplotlib figure on screen: the combined system projected on the xy/xz/yz planes, "
+                              "atoms coloured by fragment. Needs a display. Off by default.")
+    parser.add_argument("--png", action="store_true",
+                         help="Save that figure as <output-dir>/chargediff_fragments.png. Off by default.")
     parser.add_argument("--save-report", action="store_true",
                          help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -587,6 +592,8 @@ def main():
     print_dual(color_text("===== CHARGE DENSITY DIFFERENCE -- STAGE 1: PREP =====", 'magenta'), f_out)
 
     print_section("[0] RUN METADATA", f_out)
+    print_dual(f"  Tool            : stb-chargediffPrep {VERSION}", f_out)
+    print_dual(f"  Date            : {datetime.now():%Y-%m-%d %H:%M}", f_out)
     print_dual(f"  Structure file  : {args.structure}", f_out)
     print_dual(f"  Calc template   : {args.calc}", f_out)
     print_dual(f"  Output dir      : {args.output_dir}", f_out)
@@ -628,16 +635,34 @@ def main():
             f_out.close()
         sys.exit(1)
 
+    warnings = []
+
+    def warn(text):
+        warnings.append(text)
+        return color_text(f"[WARNING] {text}", 'yellow')
+
+    template_values = fdf_directives.parse_directives(calc_text)
+    template_kgrid = fdf_directives.parse_kgrid(calc_text)
+
     # --- [1] COMBINED STRUCTURE. ---
     print_section("[1] COMBINED STRUCTURE", f_out)
-    cell_volume = abs(float(np.linalg.det(structure.lattice)))
+    lattice = np.asarray(structure.lattice)
+    cell_volume = abs(float(np.linalg.det(lattice)))
+    lengths = [float(np.linalg.norm(v)) for v in lattice]
+    angles = [float(np.degrees(np.arccos(np.dot(lattice[(i + 1) % 3], lattice[(i + 2) % 3])
+                                          / (lengths[(i + 1) % 3] * lengths[(i + 2) % 3])))) for i in range(3)]
     print_dual(f"  Formula         : {formula_string(structure)}", f_out)
-    print_dual(f"  Total atoms     : {len(structure.atoms)}", f_out)
-    print_dual(f"  Species         : {', '.join(structure.species)}", f_out)
+    print_dual(f"  Total atoms     : {len(structure.atoms)}   Species: {', '.join(structure.species)}", f_out)
+    print_dual(f"  Lattice (Ang)   : a={lengths[0]:.4f}  b={lengths[1]:.4f}  c={lengths[2]:.4f}", f_out)
+    print_dual(f"  Angles (deg)    : alpha={angles[0]:.2f}  beta={angles[1]:.2f}  gamma={angles[2]:.2f}", f_out)
     print_dual(f"  Cell volume     : {cell_volume:.4f} Ang^3", f_out)
-    print_dual("  Lattice vectors (Ang):", f_out)
-    for vec in structure.lattice:
-        print_dual(f"    {vec[0]:14.8f} {vec[1]:14.8f} {vec[2]:14.8f}", f_out)
+    try:
+        frac = kspace.to_fractional(np.array([p for _, p in structure.atoms]), structure.lattice,
+                                    structure.coord_format == 'cartesian')
+        vac_axes = kspace.detect_vacuum_axes(frac, structure.lattice, 10.0)
+        print_dual(f"  Detected        : {kspace.dimensionality_label(vac_axes)}", f_out)
+    except Exception:
+        vac_axes = [False, False, False]
 
     # --- [2] FRAGMENT DEFINITION. ---
     print_section("[2] FRAGMENT DEFINITION", f_out)
@@ -654,11 +679,14 @@ def main():
             label_sets = [slab_labels, ads_labels]
             folder_names = ["slab", "adsorbate"]
             suffixes = [manifest["slab_suffix"], manifest["adsorbate_suffix"]]
+            split_desc = f"stb-adsorb fragment manifest ({manifest_path})"
         else:
             if args.fragment_sizes:
                 groups = parse_fragment_sizes(args.fragment_sizes, len(structure.atoms))
+                split_desc = f"atom counts {args.fragment_sizes} (in file order)"
             else:
                 groups = parse_fragment_species(args.fragment_species, structure)
+                split_desc = f"chemical species '{args.fragment_species}'"
             suffixes = [f"_frag{i + 1}" for i in range(len(groups))]
             labeled_structure = label_fragments_n(structure, groups, suffixes)
             label_sets = [
@@ -688,45 +716,131 @@ def main():
     pp_path = pseudo_source or combined_dir
 
     n_fragments = len(label_sets)
+    atom_fragment = []                      # fragment index of every atom, in file order
+    for label, _pos in labeled_structure.atoms:
+        owner = [k for k, ls in enumerate(label_sets) if label in ls]
+        atom_fragment.append(owner[0] if owner else -1)
+    print_dual(f"  Split by        : {split_desc}", f_out)
     print_dual(f"  Fragments       : {n_fragments}", f_out)
-    for name, labels in zip(folder_names, label_sets):
-        real_rows = species_breakdown(labeled_structure, labels)
-        print_dual(f"  {name}: {sum(structure_io.atom_counts(labeled_structure).get(l, 0) for l in labels)} "
-                   f"real atom(s) -- {', '.join(real_rows) if real_rows else '(none)'}", f_out)
+    rows = []
+    total_valence = 0.0
+    for k, (name, labels) in enumerate(zip(folder_names, label_sets)):
+        idx = [i for i, a in enumerate(atom_fragment) if a == k]
+        elements = [structure_io.real_element(labeled_structure.atoms[i][0], labeled_structure.species_meta) for i in idx]
+        formula = "".join(f"{el}{elements.count(el) if elements.count(el) > 1 else ''}" for el in sorted(set(elements)))
+        valence = 0.0
+        for el in set(elements):
+            zval, _src = pseudo_valence(el, pseudo_source or combined_dir)
+            if zval is not None:
+                valence += zval * elements.count(el)
+        total_valence += valence
+        rows.append(([name + "/", formula, str(len(idx)), f"{idx[0] + 1}-{idx[-1] + 1}" if idx == list(range(idx[0], idx[-1] + 1)) else "non-contiguous",
+                      ", ".join(sorted(labels)), f"{valence:g}"], None))
+    print_table(["Folder", "Formula", "Atoms", "Atom indices", "Species labels (real)", "Valence e-"], rows, f_out)
+    print_dual(f"  Valence electrons: {total_valence:g} in total (the combined system's SCF must find this number; "
+               "each fragment folder finds only its own, ghost atoms carry no electrons).", f_out)
+    if any(a < 0 for a in atom_fragment):
+        print_dual(warn("some atoms belong to no fragment of the split."), f_out)
+
+    # inter-fragment geometry
+    try:
+        from ase import Atoms
+        from ase.geometry import get_distances
+        pos_cart = np.array([p for _, p in structure.atoms], float)
+        if structure.coord_format != 'cartesian':
+            pos_cart = pos_cart @ lattice
+        ase_atoms = Atoms(["X"] * len(pos_cart), positions=pos_cart, cell=lattice, pbc=True)
+        _vec, dmat = get_distances(ase_atoms.positions, cell=lattice, pbc=True)
+        best = None
+        for i in range(len(pos_cart)):
+            for j in range(i + 1, len(pos_cart)):
+                if atom_fragment[i] != atom_fragment[j] and (best is None or dmat[i, j] < best[0]):
+                    best = (float(dmat[i, j]), i, j)
+        if best:
+            el_i = structure_io.real_element(labeled_structure.atoms[best[1]][0], labeled_structure.species_meta)
+            el_j = structure_io.real_element(labeled_structure.atoms[best[2]][0], labeled_structure.species_meta)
+            print_dual(f"  Closest contact between fragments: {best[0]:.3f} Ang ({el_i}{best[1] + 1} - {el_j}{best[2] + 1})", f_out)
+            if best[0] < 0.9:
+                print_dual(warn(f"two atoms of different fragments are only {best[0]:.2f} Ang apart: check the split."), f_out)
+            elif best[0] > 6.0:
+                print_dual(warn(f"the fragments are {best[0]:.1f} Ang apart: the density difference will be tiny."), f_out)
+    except Exception:
+        pass
 
     # --- [3] MESH CUTOFF / LEVEL OF THEORY. ---
-    print_section("[3] MESH CUTOFF / LEVEL OF THEORY", f_out)
+    print_section("[3] LEVEL OF THEORY AND FORCED SETTINGS", f_out)
     mesh_cutoff_value = f"{args.mesh_cutoff:g} Ry"
-    print_dual(f"  MeshCutoff (forced identically on every fragment): {mesh_cutoff_value}"
-               + (" (default)" if args.mesh_cutoff == DEFAULT_MESH_CUTOFF_RY else " (user-specified)"),
-               f_out)
-
+    theory_keys = [("xcfunctional", "XC functional"), ("xcauthors", "XC authors"), ("paobasistype", "Basis type"),
+                   ("paobasissize", "Basis size"), ("paoenergyshift", "PAO energy shift"),
+                   ("electronictemperature", "Electronic temperature"), ("dmtolerance", "DM tolerance"),
+                   ("maxscfiterations", "Max SCF iterations")]
+    theory_rows = [([lab, template_values[k]], None) for k, lab in theory_keys if k in template_values]
+    if template_kgrid:
+        theory_rows.append((["SCF k-grid", "x".join(str(v) for v in template_kgrid)], None))
+    print_dual("  Read from the template (identical in every folder):", f_out)
+    print_table(["Setting", "Value in " + args.calc], theory_rows or [(["(none recognized)", "-"], None)], f_out)
     spin0, dipole0, vdw0 = read_combined_theory_flags(combined_dir)
     spin_polarized = args.force_spin if args.force_spin is not None else spin0
     dipole_corrected = args.force_dipole if args.force_dipole is not None else dipole0
     vdw_corrected = args.force_vdw if args.force_vdw is not None else vdw0
-    print_dual(f"  Spin polarized  : {'yes' if spin_polarized else 'no'}"
-               + ("" if args.force_spin is not None else " (inherited)"), f_out)
-    print_dual(f"  Dipole correction: {'yes' if dipole_corrected else 'no'}"
-               + ("" if args.force_dipole is not None else " (inherited)"), f_out)
-    print_dual(f"  DFT-D3 vdW      : {'yes' if vdw_corrected else 'no'}"
-               + ("" if args.force_vdw is not None else " (inherited)"), f_out)
+    tmpl_mesh = template_values.get("meshcutoff")
+    forced_rows = [
+        (["MD.VariableCell", "false", template_values.get("mdvariablecell", "(absent)"), "the cell is shared by all folders"], None),
+        (["MD.TypeOfRun / MD.Steps", "CG / 0", f"{template_values.get('mdtypeofrun', '(absent)')} / {template_values.get('mdsteps', '(absent)')}",
+          "single point: the geometry is the one you gave"], None),
+        (["MeshCutoff", mesh_cutoff_value, tmpl_mesh or "(absent)",
+          "the SAME real-space grid in every folder, or the densities cannot be subtracted"], None),
+        (["SaveRho", "true", template_values.get("saverho", "(absent)"), "SIESTA must write the .RHO that Stage 2 reads"], None),
+        (["Spin polarized", "yes" if spin_polarized else "no", template_values.get("spin", "(absent)"),
+          "forced by --force-spin" if args.force_spin is not None else "inherited from the combined folder's config_extra.fdf"], None),
+        (["Dipole correction", "yes" if dipole_corrected else "no", "-",
+          "forced" if args.force_dipole is not None else "inherited"], None),
+        (["DFT-D3", "yes" if vdw_corrected else "no", template_values.get("dftd3", "(absent)"),
+          "forced" if args.force_vdw is not None else "inherited"], None),
+    ]
+    print_dual(f"  Every folder's {CONFIG_EXTRA_FILE} (%include'd on top of calc.fdf, which is the template untouched):", f_out)
+    print_table(["Directive", "Forced value", "Template had", "Why"], forced_rows, f_out)
+    if tmpl_mesh and tmpl_mesh.split()[0].replace('.', '', 1).isdigit() and abs(float(tmpl_mesh.split()[0]) - args.mesh_cutoff) > 1e-9:
+        print_dual(color_text(f"[NOTE] the template asks for Mesh.Cutoff {tmpl_mesh} but every folder runs at "
+                              f"{mesh_cutoff_value} (--mesh-cutoff): the forced value wins.", 'cyan'), f_out)
+    if args.mesh_cutoff < 200:
+        print_dual(warn(f"MeshCutoff {mesh_cutoff_value} is coarse for a density map: bonding features of a few "
+                        "hundredths of e/Ang^3 are resolved on the real-space grid; 300-400 Ry or more is usual."), f_out)
+    if not template_kgrid and "kgridcutoff" not in template_values and not all(vac_axes):
+        print_dual(warn("the template defines no k-grid: SIESTA will sample Gamma only. Add kgrid.MonkhorstPack to the "
+                        "template for a periodic system."), f_out)
+    if spin_polarized:
+        print_dual(color_text("[NOTE] Spin polarized: Stage 2 can also map the spin-density difference (--spin).", 'cyan'), f_out)
+    print_dual(color_text("[NOTE] Every fragment keeps ALL the atoms as basis functions (the others as ghosts), so every "
+                          "calculation has the same basis: the difference then isolates the electronic reorganization from "
+                          "the basis-set superposition artefact.", 'cyan'), f_out)
 
     # --- [4] WRITING COMBINED + FRAGMENT FOLDERS. ---
-    print_section("[4] WRITING COMBINED + FRAGMENT FOLDERS", f_out)
+    print_section("[4] FOLDERS WRITTEN", f_out)
     written = []
-
+    folder_rows = []
     combined_out_dir = os.path.join(args.output_dir, "combined")
     combined_files = write_fragment_folder(
         combined_out_dir, structure, calc_text, pp_path, mesh_cutoff_value,
         spin_polarized, dipole_corrected, vdw_corrected, strip_ghost_only)
     written.append(combined_out_dir)
-    print_dual(f"  {color_text('[OK]', 'green')} {combined_out_dir}/ "
-               f"(full system, {len(structure.atoms)} real atom(s), no ghosting)", f_out)
-    print_dual(f"       structure.fdf, config_extra.fdf, calc.fdf written", f_out)
-    print_dual(f"       Pseudopotentials attempted for: {', '.join(combined_files['pseudo_labels'])}", f_out)
+    pseudo_missing = []
 
+    def files_of(out_dir, labels):
+        names = ["structure.fdf", "calc.fdf", CONFIG_EXTRA_FILE]
+        for lab in labels:
+            for ext in ("psml", "psf"):
+                if os.path.exists(os.path.join(out_dir, f"{lab}.{ext}")):
+                    names.append(f"{lab}.{ext}")
+                    break
+            else:
+                pseudo_missing.append(f"{os.path.basename(out_dir)}: {lab}")
+        return names
+
+    folder_rows.append((["combined/", f"all {len(structure.atoms)} real", "none", ", ".join(structure.species),
+                         str(len(files_of(combined_out_dir, combined_files['pseudo_labels'])))], None))
     fragment_structures = []
+    ghost_summary = {}
     for i, (name, own_labels) in enumerate(zip(folder_names, label_sets)):
         other_labels = set().union(*(label_sets[k] for k in range(n_fragments) if k != i))
         fragment_structure = make_ghost_variant(labeled_structure, other_labels)
@@ -735,26 +849,38 @@ def main():
         files = write_fragment_folder(out_dir, fragment_structure, calc_text, pp_path, mesh_cutoff_value,
                                       spin_polarized, dipole_corrected, vdw_corrected, strip_ghost_only)
         written.append(out_dir)
-        ghost_rows = species_breakdown(labeled_structure, other_labels)
-        print_dual(f"  {color_text('[OK]', 'green')} {out_dir}/ "
-                   f"({len(own_labels)} real species label(s), "
-                   f"{n_fragments - 1} other fragment(s) ghosted)", f_out)
-        print_dual(f"       structure.fdf, config_extra.fdf, calc.fdf written", f_out)
-        print_dual(f"       Ghosted: {', '.join(ghost_rows) if ghost_rows else '(none)'}", f_out)
-        print_dual(f"       Pseudopotentials attempted for: {', '.join(files['pseudo_labels'])}", f_out)
+        n_real = sum(structure_io.atom_counts(labeled_structure).get(l, 0) for l in own_labels)
+        n_ghost = len(structure.atoms) - n_real
+        ghost_summary[name] = n_ghost
+        folder_rows.append(([name + "/", f"{n_real} real", f"{n_ghost} ghost", ", ".join(files['pseudo_labels']),
+                             str(len(files_of(out_dir, files['pseudo_labels'])))], None))
+    print_table(["Folder", "Real atoms", "Ghost atoms", "Species labels (SystemLabel entries)", "Files"], folder_rows, f_out)
+    print_dual("  Each folder holds: structure.fdf, calc.fdf, config_extra.fdf and one pseudopotential per species label "
+               "(a ghost label reuses its element's pseudopotential, with the electrons switched off).", f_out)
+    for problem in pseudo_missing:
+        print_dual(warn(f"no pseudopotential file for {problem}: add it (or rerun with -p) before running SIESTA."), f_out)
+    print_dual(f"  Fragment manifest: {os.path.join(args.output_dir, CHARGEDIFF_MANIFEST_FILE)} (read by stb-chargediffAnalysis)", f_out)
 
-    # --- [5] STRUCTURE VIEWER. ---
-    if args.view:
-        print_section("[5] STRUCTURE VIEWER (ASE)", f_out)
-        frame_names = ["combined"] + folder_names
-        print_dual(f"  Opening one ASE viewer window with {len(frame_names)} frame(s) -- "
-                   f"{', '.join(frame_names)}, in that order (use the GUI's frame slider/keys "
-                   "to step through them). Ghost atoms render as mostly-hollow circles (ase-gui's "
-                   "own partial-occupancy convention) -- real atoms are unaffected.", f_out)
-        view_frames = [structure_to_view_atoms(structure)]
-        view_frames += [structure_to_view_atoms(fragment_structure)
-                        for _, fragment_structure in fragment_structures]
-        view_fragments_animated(view_frames)
+    # --- [5] FIGURE / VIEWER. ---
+    fig_files = []
+    if args.view or args.show or args.png:
+        print_section("[5] STRUCTURE VIEWS", f_out)
+        if args.show or args.png:
+            png_path = os.path.join(args.output_dir, "chargediff_fragments.png") if args.png else None
+            if draw_fragments(structure, labeled_structure, atom_fragment, folder_names, png_path, args.show, f_out):
+                if png_path:
+                    fig_files.append(png_path)
+                    print_dual(f"  [OK] Figure: {png_path}", f_out)
+        if args.view:
+            frame_names = ["combined"] + folder_names
+            print_dual(f"  Opening one ASE viewer window with {len(frame_names)} frame(s) -- "
+                       f"{', '.join(frame_names)}, in that order (use the GUI's frame slider/keys "
+                       "to step through them). Ghost atoms render as mostly-hollow circles (ase-gui's "
+                       "own partial-occupancy convention) -- real atoms are unaffected.", f_out)
+            view_frames = [structure_to_view_atoms(structure)]
+            view_frames += [structure_to_view_atoms(fragment_structure)
+                            for _, fragment_structure in fragment_structures]
+            view_fragments_animated(view_frames)
 
     # --- [6] REFERENCES. ---
     print_section("[6] REFERENCES", f_out)
@@ -765,14 +891,25 @@ def main():
 
     # --- [7] SUMMARY & NEXT STEPS. ---
     print_section("[7] SUMMARY & NEXT STEPS", f_out)
-    print_dual(f"  Folder(s) written: {len(written)} (1 combined + {n_fragments} fragment(s))", f_out)
-    for out_dir in written:
-        print_dual(f"    {out_dir}/", f_out)
-    print_dual(f"  All {len(written)} folders share the identical cell, MeshCutoff "
-               f"({mesh_cutoff_value}), and level of theory -- run SIESTA in every one of them, "
-               "then run stb-chargediffAnalysis to compute and plot Delta rho.", f_out)
+    print_dual(f"  Folder(s) written: {len(written)} (1 combined + {n_fragments} fragment(s)) under '{args.output_dir}'", f_out)
+    print_dual(f"  Cost             : {len(written)} independent single-point SCF runs; the combined one is the slowest "
+               "(the fragments have the same basis, so about the same cost).", f_out)
+    print_dual(f"  Settings         : identical cell, MeshCutoff ({mesh_cutoff_value}) and level of theory in all of them.", f_out)
+    if fig_files:
+        print_dual(f"  Figure           : {', '.join(fig_files)}", f_out)
     if report_path:
-        print_dual(f"  Report: {report_path}", f_out)
+        print_dual(f"  Report           : {report_path}", f_out)
+    print_dual(color_text("\n  Next steps:", 'yellow'), f_out)
+    print_dual("    1. Run SIESTA in every folder, e.g.:", f_out)
+    print_dual(f"         for d in {args.output_dir}/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done", f_out)
+    print_dual("    2. Check that each run converged, then:", f_out)
+    print_dual(f"         stb-chargediffAnalysis --dir {args.output_dir} --png --save-data", f_out)
+    print_dual("       (add --profile --axis N for a planar average, --3d --iso-min X for a point cloud, --show to open "
+               "the dashboard; the report also gives the counterpoise interaction energy.)", f_out)
+    if warnings:
+        print_dual(color_text(f"\n{len(warnings)} warning(s) above -- read them before running SIESTA:", 'yellow'), f_out)
+        for w in warnings:
+            print_dual(f"  - {w}", f_out)
 
     if f_out:
         f_out.close()
@@ -781,6 +918,53 @@ def main():
           f"'{args.output_dir}' (1 combined + {n_fragments} fragment(s)).")
     if report_path:
         print(f"Full report: {report_path}")
+
+
+def draw_fragments(structure, labeled_structure, atom_fragment, folder_names, png_path, show, f_out):
+    """matplotlib figure: the combined system projected on its xy, xz and yz planes, atoms coloured by
+    fragment (and the element's symbol), plus a bar of the atoms per fragment. Returns True when drawn."""
+    try:
+        import matplotlib
+        if not show:
+            matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print_dual(color_text("[WARNING] matplotlib is not installed -- skipping the figure.", 'yellow'), f_out)
+        return False
+    if show and (matplotlib.get_backend().lower() == "agg"
+                 or (sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")))):
+        print_dual(color_text("[WARNING] --show needs a display; only saving the figure.", 'yellow'), f_out)
+        show = False
+        plt.switch_backend("Agg")
+    lat = np.asarray(structure.lattice)
+    pos = np.array([p for _, p in structure.atoms], float)
+    if structure.coord_format != 'cartesian':
+        pos = pos @ lat
+    pos = pos - pos.mean(axis=0)
+    elements = [structure_io.real_element(l, labeled_structure.species_meta) for l, _ in labeled_structure.atoms]
+    palette = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
+    fig, ax = plt.subplots(1, 3, figsize=(15, 4.8))
+    for a, (i, j, lab) in zip(ax, ((0, 1, "x–y"), (0, 2, "x–z"), (1, 2, "y–z"))):
+        for k in range(len(pos)):
+            c = palette[atom_fragment[k] % len(palette)] if atom_fragment[k] >= 0 else "grey"
+            a.scatter(pos[k, i], pos[k, j], s=420 if elements[k] not in ("H",) else 180, color=c, edgecolor="k", zorder=3, alpha=0.9)
+            a.annotate(elements[k], (pos[k, i], pos[k, j]), ha="center", va="center", fontsize=8, color="white", zorder=4)
+        a.set_aspect("equal")
+        a.set_xlabel("xyz"[i] + " (Å)")
+        a.set_ylabel("xyz"[j] + " (Å)")
+        a.set_title(f"projection {lab}")
+        a.grid(alpha=0.3)
+    handles = [plt.Line2D([0], [0], marker="o", ls="", color=palette[k % len(palette)], label=f"{n} ({atom_fragment.count(k)} atoms)",
+                          markeredgecolor="k", markersize=10) for k, n in enumerate(folder_names)]
+    ax[0].legend(handles=handles, fontsize=8, loc="best")
+    fig.suptitle("Charge-density-difference split: atoms coloured by fragment (each fragment run also holds the others as ghosts)", fontsize=12)
+    fig.tight_layout()
+    if png_path:
+        fig.savefig(png_path, dpi=140)
+    if show:
+        plt.show()
+    plt.close(fig)
+    return True
 
 
 if __name__ == "__main__":

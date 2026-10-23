@@ -1136,6 +1136,7 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[4] WRITING INPUT FILE", f_out)
         # Process the template and replace lines
         output_lines = []
+        cell_fixed_for_vacuum = False
         for line in template_lines:
             line_stripped_lower = line.strip().lower()
 
@@ -1155,6 +1156,13 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             elif line_stripped_lower.startswith('dftd3'):
                 output_lines.append(d3_line_new + '\n')
 
+            # A vacuum-padded axis (molecule, slab, wire) has no cell to relax: a variable cell
+            # would shrink the vacuum toward the stress of an isolated system
+            elif (chosen_mode == 'relax' and any(vacuum_axes)
+                  and line_stripped_lower.split()[:1] == ['md.variablecell']):
+                output_lines.append("MD.VariableCell         false   # vacuum-padded axis: cell kept fixed\n")
+                cell_fixed_for_vacuum = True
+
             # Replace the Spin flag
             elif line_stripped_lower.startswith('spin') and not line_stripped_lower.startswith('spin.'):
                 output_lines.append(spin_line_new + '\n')
@@ -1162,6 +1170,11 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             else:
                 # Keep the original template line
                 output_lines.append(line)
+
+        if cell_fixed_for_vacuum:
+            print_dual(color_text(
+                "[NOTE] Vacuum-padded axis detected: MD.VariableCell set to false (the template's "
+                "true would shrink the vacuum). Set it back by hand for a bulk-like relaxation.", 'yellow'), f_out)
 
         # Write the output file
         with open(output_file, 'w') as f_output:

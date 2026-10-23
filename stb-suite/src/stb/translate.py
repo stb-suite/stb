@@ -500,11 +500,13 @@ def getatomsandvectors_siesta(input_siesta):
                         dicatoms[species_idx][0][1],
                         label_by_species_idx[species_idx],
                         str(len(dicatoms[species_idx]))])
-    atomic_position = {}
+    atomic_position = AtomPositions()
+    atomic_position.order = []
     for position in datasiesta[4:]:
         label = label_by_species_idx[position[0]]
         if label not in atomic_position:
             atomic_position[label] = []
+        atomic_position.order.append((label, len(atomic_position[label])))
         atomic_position[label].append(
             [position[2], position[3], position[4]])
     return typevectors, latticeparameter, vectors, getatoms, atomic_position
@@ -599,9 +601,12 @@ def getatomsandvectors_fdf(input_fdf):
     # line, so the vectors themselves must not be pre-multiplied by it.
     vectors = [[f"{v:.8f}" for v in row] for row in structure_io.raw_lattice_vectors(structure)]
 
-    atomic_position = {}
+    atomic_position = AtomPositions()
+    atomic_position.order = []
     for symbol, pos in structure.atoms:
-        atomic_position.setdefault(symbol, []).append([f"{pos[0]:.8f}", f"{pos[1]:.8f}", f"{pos[2]:.8f}"])
+        group = atomic_position.setdefault(symbol, [])
+        atomic_position.order.append((symbol, len(group)))
+        group.append([f"{pos[0]:.8f}", f"{pos[1]:.8f}", f"{pos[2]:.8f}"])
 
     getatoms = []
     for symbol in structure.species:
@@ -628,10 +633,12 @@ def writefilefdf(typevectors, latticeparameter, vectors, getatoms, atomsposition
 
     species = [elem[2] for elem in getatoms]
     species_meta = {elem[2]: {'id': elem[0], 'Z': elem[1]} for elem in getatoms}
+    order = getattr(final_positions, "order", None)
+    if order is None or sorted(order) != sorted((e[2], i) for e in getatoms for i in range(len(final_positions[e[2]]))):
+        order = [(e[2], i) for e in getatoms for i in range(len(final_positions[e[2]]))]   # grouped by species
     atoms = [
-        (elem[2], np.array([float(p[0]), float(p[1]), float(p[2])]))
-        for elem in getatoms
-        for p in final_positions[elem[2]]
+        (label, np.array([float(c) for c in final_positions[label][i][:3]]))
+        for label, i in order
     ]
     lattice_constant = float(latticeparameter)
     raw_lattice = np.array(vectors, dtype=float)
@@ -895,7 +902,31 @@ def writefilelammps(typevectors, latticeparameter, vectors, getatoms, atomsposit
 
 
 ##### NEW HELPER FUNCTION #####
-def convert_coordinates(typevectors_in: str,
+class AtomPositions(dict):
+    """{label: [[x, y, z], ...]} (every format's grouped-by-species layout) that also remembers the
+    file's own atom order as `order`, a list of (label, index within that label). Formats that
+    group atoms by species (POSCAR, DFTB+...) ignore it; .fdf output uses it so the atom order of
+    an .fdf / STRUCT_OUT input survives (fragment-size and atom-index based tools depend on it)."""
+    order = None
+
+
+def _carry_order(src, dst):
+    """dst (a plain dict from a coordinate conversion) gets src's atom order, if it has one"""
+    order = getattr(src, "order", None)
+    if order is None or dst is src:
+        return dst
+    out = AtomPositions(dst)
+    out.order = order
+    return out
+
+
+def convert_coordinates(typevectors_in, latticeparameter, vectors, atomsposition_in, coord_format_out):
+    final_type, final_positions = _convert_coordinates(
+        typevectors_in, latticeparameter, vectors, atomsposition_in, coord_format_out)
+    return final_type, _carry_order(atomsposition_in, final_positions)
+
+
+def _convert_coordinates(typevectors_in: str,
                         latticeparameter: str, 
                         vectors: List[List[str]], 
                         atomsposition_in: Dict[str, List[List[str]]], 

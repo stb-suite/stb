@@ -13,6 +13,7 @@ import sys
 import argparse
 from datetime import datetime
 import numpy as np
+BOHR_TO_ANG = 0.529177210903   # cube files hold e/bohr^3 next to a Bohr lattice
 
 from stb.core.deps import require_sisl, read_sisl_geometry_xv_or_fdf
 sisl = require_sisl()
@@ -276,9 +277,11 @@ compare several slices on the same scale.""",
         else:
             cube_data = spin_data if args.spin else charge_data
             cube_path = os.path.join(args.output_dir, f"{stem}.cube")
-            grid_obj.grid = cube_data
+            # sisl writes the grid as given next to a Bohr lattice: e/Ang^3 -> e/bohr^3
+            grid_obj.grid = cube_data * BOHR_TO_ANG ** 3
             grid_obj.set_geometry(geometry)
             grid_obj.write(cube_path)
+            grid_obj.grid = cube_data
             print_dual(color_text(f"[OK] Cube file saved to '{cube_path}' (open in VESTA/VMD/"
                                   "Avogadro for real 3D isosurfaces).", 'green'), f_out)
 

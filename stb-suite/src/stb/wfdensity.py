@@ -105,6 +105,7 @@ import sys
 from datetime import datetime
 
 import numpy as np
+BOHR_TO_ANG = 0.529177210903   # cube files hold 1/bohr^3 next to a Bohr lattice
 
 from stb.core import citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
@@ -378,9 +379,10 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     label_tag = f"k{k_index}_b{band_index + 1}"
     cube_path = os.path.join(args.output_dir, f"wfdensity_{label_tag}.cube")
-    grid.grid = density
+    grid.grid = density * BOHR_TO_ANG ** 3   # 1/Ang^3 -> 1/bohr^3, the cube convention
     grid.set_geometry(geometry)
     grid.write(cube_path)
+    grid.grid = density
 
     mode = "profile" if args.profile else "slice"
     lattice = geometry.cell

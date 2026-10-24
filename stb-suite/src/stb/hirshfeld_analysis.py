@@ -69,6 +69,10 @@ N_RADIAL_BINS = None  # None: bin width from the grid spacing (core.hirshfeld)
 DEFAULT_TOL = 0.005
 DEFAULT_MAX_ITER = 20
 ELECTRON_COUNT_TOL = 0.02   # e-: reference / combined electron-count checks
+# The radial profile vs the grid: relative, since the trapezoid of 4 pi r^2 rho over a semicore shell
+# peaked ~0.1 Ang from the nucleus (Mg 2p, Na 2p) overcounts by ~0.2 % although the profile itself
+# reproduces its own grid to 0.07 % (examples/4.20-hirshfeld, MgO).
+PROFILE_REL_TOL = 0.005
 REMAINING_ERROR_FLOOR = 1e-3  # e-: no remaining-error warning below this, whatever --tol
 BOX_FILL_LIMIT = 0.8        # r(99.9 %) above this fraction of the box inradius -> warning
 VACUUM_GAP = 5.0            # Ang: an axis with a gap this large is non-periodic
@@ -509,7 +513,8 @@ def main():
         except Exception as e:
             print_dual(color_text(
                 f"[ERROR] Could not build the {state} profile of species '{sym}' from "
-                f"'{folder}': {e} -- has SIESTA been run there yet?", 'red'), f_out)
+                f"'{folder}': {e}"
+                f"{'' if 'SIESTA been run' in str(e) else ' -- has SIESTA been run there yet?'}", 'red'), f_out)
             sys.exit(1)
         profiles[state][sym] = profile
         ref_info[(sym, state)] = info
@@ -561,7 +566,7 @@ def main():
                      f"{target:g} (Z_val {zv:g}{'' if state == 'neutral' else (' - 1' if state == 'cation' else ' + 1')})"
                      f" -- wrong charge state, or Z_val does not match its pseudopotential "
                      f"('{sources[(sym, state)]}').")
-            if abs(n_prof - n_grid) > ELECTRON_COUNT_TOL:
+            if abs(n_prof - n_grid) > max(ELECTRON_COUNT_TOL, PROFILE_REL_TOL * abs(n_grid)):
                 flag = 'yellow'
                 warn(f"{sym} {state}: the radial profile integrates to {n_prof:.4f} e- but the grid "
                      f"holds {n_grid:.4f} e- -- the spherical average is not resolving this atom "

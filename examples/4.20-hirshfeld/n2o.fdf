@@ -1,0 +1,24 @@
+# N2O from ASE's G2 set (MP2 geometry), centred in a 14 Ang cubic box; make_reference.sh relaxes it with SIESTA
+
+NumberOfSpecies 2
+NumberOfAtoms 3
+
+%block ChemicalSpeciesLabel
+ 1 7 N
+ 2 8 O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 14.00000000 0.00000000 0.00000000
+ 0.00000000 14.00000000 0.00000000
+ 0.00000000 0.00000000 14.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.5000000000 0.5000000000 0.4156004643 1
+  0.5000000000 0.5000000000 0.4992517500 1
+  0.5000000000 0.5000000000 0.5843995357 2
+%endblock AtomicCoordinatesAndAtomicSpecies

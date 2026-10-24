@@ -165,6 +165,19 @@ for fig in water_dashboard water_studies nh3bh3_dashboard li_graphene_dashboard;
 done
 check_contains 'href="../../../reference/stb-chargediffAnalysis/"' "$cdd19"
 
+echo "Testing: 4.20-hirshfeld shows its six figures and links to the three stages' commands"
+hi20="$SITE_DIR/guides/4-workflows/4.20-hirshfeld/index.html"
+check_success "$hi20"
+check_contains "4.20 Hirshfeld-I Charges" "$hi20"
+for fig in h2o_dashboard stockholder_weights h2o_studies n2o_dashboard nacl_dashboard mgo_dashboard; do
+    check_success "$SITE_DIR/guides/4-workflows/4.20-hirshfeld/figures/$fig.png"
+    check_contains "src=\"figures/$fig.png\"" "$hi20"
+done
+for cmd in stb-hirshfeldPrep stb-hirshfeldIons stb-hirshfeldAnalysis; do
+    check_contains "href=\"../../../reference/$cmd/\"" "$hi20"
+done
+check_not_contains "no hands-on guide for this tool yet" "$hi20"
+
 
 # --- 3. Sidebar: menu categories, numeric (not alphabetical) order, short labels ---
 echo -e "\n--- Testing the generated sidebar ---"

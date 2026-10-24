@@ -1,0 +1,187 @@
+===== STB-HIRSHFELDANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time      : 2026-10-23 18:55:17
+Version        : 1.9.292
+Study dir      : ..
+Tolerance      : 1e-06 e-
+Max iterations : 300
+Radial bins    : 0.25 x the grid spacing of each reference atom (empty bins dropped)
+
+[1] COMBINED SYSTEM
+------------------------------------------------------------
+Structure      : ../combined/structure.fdf
+Formula        : Na1Cl1 (2 atoms)
+Cell volume    : 45.6464 Ang^3
+Periodicity    : 3D (bulk material) (non-periodic axes: none; vacuum gap >= 5 Ang)
+Density grid   : 40 x 40 x 40 (spacing 0.1003 Ang), from ../combined/siesta.RHO
+Valence Z_val  : Na 9, Cl 7  (sum 16 e-; detected from ../combined/calc.out)
+Electrons      : 16.0000 e- in the density (sum Z_val - electrons = +0.0000 e-)
+SCF            : converged after 9 iterations (../combined/calc.out)
+
+[2] REFERENCE ATOMS (neutral + cation + anion)
+------------------------------------------------------------
+  Na (neutral) : read from '../neutral/Na'
+  Cl (neutral) : read from '../neutral/Cl'
+  Na (cation)  : read from '../ions/Na/cation'
+  Na (anion)   : read from '../ions/Na/anion'
+  Cl (cation)  : read from '../ions/Cl/cation'
+  Cl (anion)   : read from '../ions/Cl/anion'
+
+Elem | State   | Target N | N on grid | N radial | Radial-target | r99.9%(Ang) | Box inradius(Ang) | Spacing(Ang) | SCF conv.
+-----------------------------------------------------------------------------------------------------------------------------
+Na   | neutral | 9        | 9.0000    | 9.0156   | +0.0156       | 3.81        | 10.00             | 0.0800       | yes (12) 
+Na   | cation  | 8        | 8.0000    | 8.0155   | +0.0155       | 1.45        | 10.00             | 0.0800       | yes (7)  
+Na   | anion   | 10       | 10.0000   | 10.0157  | +0.0157       | 4.02        | 10.00             | 0.0800       | yes (25) 
+Cl   | neutral | 7        | 7.0000    | 7.0013   | +0.0013       | 2.31        | 10.00             | 0.0800       | yes (7)  
+Cl   | cation  | 6        | 6.0000    | 6.0013   | +0.0013       | 2.25        | 10.00             | 0.0800       | yes (10) 
+Cl   | anion   | 8        | 8.0000    | 8.0014   | +0.0014       | 2.35        | 10.00             | 0.0800       | yes (10) 
+N on grid = electrons SIESTA put in the box; N radial = 4 pi int r^2 rho(r) of the spherical average actually used as reference; r99.9% = radius holding 99.9 % of it.
+
+[3] ITERATING HIRSHFELD-I
+------------------------------------------------------------
+  Iteration  1/300: max|Delta q| = 0.100158 e- -- atom #1 (Na), now +0.2458 e- (cation-like, pop. 8.7542 e-),    0.2s elapsed -- not yet converged
+  Iteration  2/300: max|Delta q| = 0.070406 e- -- atom #2 (Cl), now -0.3162 e- (anion-like, pop. 7.3162 e-),    0.4s elapsed -- not yet converged
+  Iteration  3/300: max|Delta q| = 0.050449 e- -- atom #1 (Na), now +0.3667 e- (cation-like, pop. 8.6333 e-),    0.6s elapsed -- not yet converged
+  Iteration  4/300: max|Delta q| = 0.036724 e- -- atom #1 (Na), now +0.4034 e- (cation-like, pop. 8.5966 e-),    0.8s elapsed -- not yet converged
+  Iteration  5/300: max|Delta q| = 0.027075 e- -- atom #2 (Cl), now -0.4305 e- (anion-like, pop. 7.4305 e-),    0.9s elapsed -- not yet converged
+  Iteration  6/300: max|Delta q| = 0.020163 e- -- atom #1 (Na), now +0.4506 e- (cation-like, pop. 8.5494 e-),    1.1s elapsed -- not yet converged
+  Iteration  7/300: max|Delta q| = 0.015135 e- -- atom #2 (Cl), now -0.4658 e- (anion-like, pop. 7.4658 e-),    1.3s elapsed -- not yet converged
+  Iteration  8/300: max|Delta q| = 0.011431 e- -- atom #1 (Na), now +0.4772 e- (cation-like, pop. 8.5228 e-),    1.5s elapsed -- not yet converged
+  Iteration  9/300: max|Delta q| = 0.008675 e- -- atom #1 (Na), now +0.4859 e- (cation-like, pop. 8.5141 e-),    1.7s elapsed -- not yet converged
+  Iteration 10/300: max|Delta q| = 0.006608 e- -- atom #2 (Cl), now -0.4925 e- (anion-like, pop. 7.4925 e-),    1.9s elapsed -- not yet converged
+  Iteration 11/300: max|Delta q| = 0.005048 e- -- atom #1 (Na), now +0.4975 e- (cation-like, pop. 8.5025 e-),    2.1s elapsed -- not yet converged
+  Iteration 12/300: max|Delta q| = 0.003865 e- -- atom #2 (Cl), now -0.5014 e- (anion-like, pop. 7.5014 e-),    2.3s elapsed -- not yet converged
+  Iteration 13/300: max|Delta q| = 0.002964 e- -- atom #1 (Na), now +0.5044 e- (cation-like, pop. 8.4956 e-),    2.4s elapsed -- not yet converged
+  Iteration 14/300: max|Delta q| = 0.002276 e- -- atom #1 (Na), now +0.5066 e- (cation-like, pop. 8.4934 e-),    2.6s elapsed -- not yet converged
+  Iteration 15/300: max|Delta q| = 0.001750 e- -- atom #1 (Na), now +0.5084 e- (cation-like, pop. 8.4916 e-),    2.8s elapsed -- not yet converged
+  Iteration 16/300: max|Delta q| = 0.001346 e- -- atom #2 (Cl), now -0.5097 e- (anion-like, pop. 7.5097 e-),    3.0s elapsed -- not yet converged
+  Iteration 17/300: max|Delta q| = 0.001037 e- -- atom #1 (Na), now +0.5108 e- (cation-like, pop. 8.4892 e-),    3.2s elapsed -- not yet converged
+  Iteration 18/300: max|Delta q| = 0.000798 e- -- atom #1 (Na), now +0.5116 e- (cation-like, pop. 8.4884 e-),    3.4s elapsed -- not yet converged
+  Iteration 19/300: max|Delta q| = 0.000615 e- -- atom #2 (Cl), now -0.5122 e- (anion-like, pop. 7.5122 e-),    3.6s elapsed -- not yet converged
+  Iteration 20/300: max|Delta q| = 0.000474 e- -- atom #1 (Na), now +0.5127 e- (cation-like, pop. 8.4873 e-),    3.8s elapsed -- not yet converged
+  Iteration 21/300: max|Delta q| = 0.000365 e- -- atom #1 (Na), now +0.5130 e- (cation-like, pop. 8.4870 e-),    4.0s elapsed -- not yet converged
+  Iteration 22/300: max|Delta q| = 0.000282 e- -- atom #1 (Na), now +0.5133 e- (cation-like, pop. 8.4867 e-),    4.1s elapsed -- not yet converged
+  Iteration 23/300: max|Delta q| = 0.000217 e- -- atom #1 (Na), now +0.5135 e- (cation-like, pop. 8.4865 e-),    4.3s elapsed -- not yet converged
+  Iteration 24/300: max|Delta q| = 0.000168 e- -- atom #2 (Cl), now -0.5137 e- (anion-like, pop. 7.5137 e-),    4.5s elapsed -- not yet converged
+  Iteration 25/300: max|Delta q| = 0.000129 e- -- atom #1 (Na), now +0.5138 e- (cation-like, pop. 8.4862 e-),    4.7s elapsed -- not yet converged
+  Iteration 26/300: max|Delta q| = 0.000100 e- -- atom #1 (Na), now +0.5139 e- (cation-like, pop. 8.4861 e-),    4.9s elapsed -- not yet converged
+  Iteration 27/300: max|Delta q| = 0.000077 e- -- atom #2 (Cl), now -0.5140 e- (anion-like, pop. 7.5140 e-),    5.1s elapsed -- not yet converged
+  Iteration 28/300: max|Delta q| = 0.000059 e- -- atom #1 (Na), now +0.5141 e- (cation-like, pop. 8.4859 e-),    5.3s elapsed -- not yet converged
+  Iteration 29/300: max|Delta q| = 0.000046 e- -- atom #1 (Na), now +0.5141 e- (cation-like, pop. 8.4859 e-),    5.5s elapsed -- not yet converged
+  Iteration 30/300: max|Delta q| = 0.000035 e- -- atom #1 (Na), now +0.5141 e- (cation-like, pop. 8.4859 e-),    5.6s elapsed -- not yet converged
+  Iteration 31/300: max|Delta q| = 0.000027 e- -- atom #1 (Na), now +0.5142 e- (cation-like, pop. 8.4858 e-),    5.8s elapsed -- not yet converged
+  Iteration 32/300: max|Delta q| = 0.000021 e- -- atom #2 (Cl), now -0.5142 e- (anion-like, pop. 7.5142 e-),    6.0s elapsed -- not yet converged
+  Iteration 33/300: max|Delta q| = 0.000016 e- -- atom #1 (Na), now +0.5142 e- (cation-like, pop. 8.4858 e-),    6.2s elapsed -- not yet converged
+  Iteration 34/300: max|Delta q| = 0.000012 e- -- atom #1 (Na), now +0.5142 e- (cation-like, pop. 8.4858 e-),    6.4s elapsed -- not yet converged
+  Iteration 35/300: max|Delta q| = 0.000010 e- -- atom #2 (Cl), now -0.5142 e- (anion-like, pop. 7.5142 e-),    6.6s elapsed -- not yet converged
+  Iteration 36/300: max|Delta q| = 0.000007 e- -- atom #1 (Na), now +0.5142 e- (cation-like, pop. 8.4858 e-),    6.8s elapsed -- not yet converged
+  Iteration 37/300: max|Delta q| = 0.000006 e- -- atom #2 (Cl), now -0.5142 e- (anion-like, pop. 7.5142 e-),    7.0s elapsed -- not yet converged
+  Iteration 38/300: max|Delta q| = 0.000004 e- -- atom #1 (Na), now +0.5143 e- (cation-like, pop. 8.4857 e-),    7.2s elapsed -- not yet converged
+  Iteration 39/300: max|Delta q| = 0.000003 e- -- atom #1 (Na), now +0.5143 e- (cation-like, pop. 8.4857 e-),    7.3s elapsed -- not yet converged
+  Iteration 40/300: max|Delta q| = 0.000003 e- -- atom #1 (Na), now +0.5143 e- (cation-like, pop. 8.4857 e-),    7.5s elapsed -- not yet converged
+  Iteration 41/300: max|Delta q| = 0.000002 e- -- atom #2 (Cl), now -0.5143 e- (anion-like, pop. 7.5143 e-),    7.7s elapsed -- not yet converged
+  Iteration 42/300: max|Delta q| = 0.000002 e- -- atom #1 (Na), now +0.5143 e- (cation-like, pop. 8.4857 e-),    7.9s elapsed -- not yet converged
+  Iteration 43/300: max|Delta q| = 0.000001 e- -- atom #2 (Cl), now -0.5143 e- (anion-like, pop. 7.5143 e-),    8.1s elapsed -- not yet converged
+  Iteration 44/300: max|Delta q| = 0.000001 e- -- atom #1 (Na), now +0.5143 e- (cation-like, pop. 8.4857 e-),    8.3s elapsed -- CONVERGED
+
+[4] CONVERGENCE HISTORY
+------------------------------------------------------------
+Iteration | max|Delta q| (e-)               | Ratio to previous | Atom that moved most
+--------------------------------------------------------------------------------------
+0         | N/A (pass 0 = simple Hirshfeld) | -                 | -                   
+1         | 0.100158                        | -                 | #1 (Na)             
+2         | 0.070406                        | 0.703             | #2 (Cl)             
+3         | 0.050449                        | 0.717             | #1 (Na)             
+4         | 0.036724                        | 0.728             | #1 (Na)             
+5         | 0.027075                        | 0.737             | #2 (Cl)             
+6         | 0.020163                        | 0.745             | #1 (Na)             
+7         | 0.015135                        | 0.751             | #2 (Cl)             
+8         | 0.011431                        | 0.755             | #1 (Na)             
+9         | 0.008675                        | 0.759             | #1 (Na)             
+10        | 0.006608                        | 0.762             | #2 (Cl)             
+11        | 0.005048                        | 0.764             | #1 (Na)             
+12        | 0.003865                        | 0.766             | #2 (Cl)             
+13        | 0.002964                        | 0.767             | #1 (Na)             
+14        | 0.002276                        | 0.768             | #1 (Na)             
+15        | 0.001750                        | 0.769             | #1 (Na)             
+16        | 0.001346                        | 0.769             | #2 (Cl)             
+17        | 0.001037                        | 0.770             | #1 (Na)             
+18        | 0.000798                        | 0.770             | #1 (Na)             
+19        | 0.000615                        | 0.770             | #2 (Cl)             
+20        | 0.000474                        | 0.771             | #1 (Na)             
+21        | 0.000365                        | 0.771             | #1 (Na)             
+22        | 0.000282                        | 0.771             | #1 (Na)             
+23        | 0.000217                        | 0.771             | #1 (Na)             
+24        | 0.000168                        | 0.771             | #2 (Cl)             
+25        | 0.000129                        | 0.771             | #1 (Na)             
+26        | 0.000100                        | 0.771             | #1 (Na)             
+27        | 0.000077                        | 0.771             | #2 (Cl)             
+28        | 0.000059                        | 0.771             | #1 (Na)             
+29        | 0.000046                        | 0.771             | #1 (Na)             
+30        | 0.000035                        | 0.771             | #1 (Na)             
+31        | 0.000027                        | 0.771             | #1 (Na)             
+32        | 0.000021                        | 0.771             | #2 (Cl)             
+33        | 0.000016                        | 0.771             | #1 (Na)             
+34        | 0.000012                        | 0.771             | #1 (Na)             
+35        | 0.000010                        | 0.771             | #2 (Cl)             
+36        | 0.000007                        | 0.771             | #1 (Na)             
+37        | 0.000006                        | 0.771             | #2 (Cl)             
+38        | 0.000004                        | 0.771             | #1 (Na)             
+39        | 0.000003                        | 0.771             | #1 (Na)             
+40        | 0.000003                        | 0.771             | #1 (Na)             
+41        | 0.000002                        | 0.771             | #2 (Cl)             
+42        | 0.000002                        | 0.771             | #1 (Na)             
+43        | 0.000001                        | 0.771             | #2 (Cl)             
+44        | 0.000001                        | 0.771             | #1 (Na)             
+Converged after 44 iteration(s) (max|Delta q| < 1e-06 e-).
+Contraction ratio      : 0.771 (each step ~77 % of the previous)
+Est. remaining error   : 3.1e-06 e- on the slowest atom, distance to the converged charges (last step x ratio / (1 - ratio))
+
+[5] PER-ATOM CHARGES: VORONOI vs. SIMPLE HIRSHFELD vs. HIRSHFELD-I
+------------------------------------------------------------
+Idx | Elem | X(Ang) | Y(Ang) | Z(Ang) | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | HI - H(e-) | Pop. HI(e-) | Reference (neutral + frac ion)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1   | Na   | 0.0000 | 0.0000 | 0.0000 | +0.1702     | +0.1400           | +0.1457              | +0.5143         | +0.3686    | 8.4857      | 0.51 cation                   
+2   | Cl   | 2.8378 | 2.8378 | 2.8378 | -0.1702     | -0.1400           | -0.1457              | -0.5143         | -0.3686    | 7.5143      | 0.51 anion                    
+Charge = Z_val - population (positive = electrons lost). Reference: the atom's final reference density, (1 - frac) x neutral + frac x ion of its own sign, frac = min(|q|, 1).
+
+[6] PER-SPECIES SUMMARY (HIRSHFELD-I)
+------------------------------------------------------------
+Elem | N | Cation-like | Anion-like | Mean(e-) | Std(e-) | Min(e-) | Max(e-) | Mean Voronoi(e-) | Mean simple H.(e-) | HI / H
+-----------------------------------------------------------------------------------------------------------------------------
+Cl   | 1 | 0           | 1          | -0.5143  | 0.0000  | -0.5143 | -0.5143 | -0.1702          | -0.1457            | 3.53  
+Na   | 1 | 1           | 0          | +0.5143  | 0.0000  | +0.5143 | +0.5143 | +0.1702          | +0.1457            | 3.53  
+HI / H: how much Hirshfeld-I enlarges the simple-Hirshfeld charge (simple Hirshfeld's neutral references are known to understate charge transfer).
+
+[7] CHARGE BALANCE AND CROSS-CHECKS
+------------------------------------------------------------
+Sum Z_val                  : 16.0000 e-
+Electrons in the density   : 16.0000 e-
+Assigned to atoms (HI)     : 16.0000 e-  (unassigned: +0.0000 e-, density no reference atom reaches)
+Total charge, Voronoi (SIESTA)         : +0.0000 e-
+Total charge, Hirshfeld (SIESTA)       : +0.0000 e-
+Total charge, Simple Hirshfeld (pass 0): +0.0000 e-
+Total charge, Hirshfeld-I              : +0.0000 e-
+Simple Hirshfeld here vs SIESTA's own: max |diff| 0.0056 e-, mean 0.0056 e- (SIESTA uses its own free-atom densities from the basis; this tool the SCF isolated atoms of neutral/ -- a small difference is expected).
+Mean |q| per atom           : Voronoi (SIESTA) 0.1702, Hirshfeld (SIESTA) 0.1400, Simple Hirshfeld (pass 0) 0.1457, Hirshfeld-I 0.5143
+
+[8] DIPOLE CHECK (point charges vs SIESTA, non-periodic axes only)
+------------------------------------------------------------
+Skipped: the system is periodic along all three axes, where a point-charge dipole is not defined.
+
+[9] SUMMARY
+------------------------------------------------------------
+Atoms analyzed  : 2
+Iterations run  : 44 (of --max-iter 300)
+Converged       : yes (est. remaining error 3.1e-06 e-)
+Iterating time  : 8.3s
+Total charge    : +0.0000 e- (should be close to 0 for a neutral combined system)
+Largest charge  : atom #1 (Na) +0.5143 e- (simple Hirshfeld +0.1457 e-)
+Per species     : Na +0.514, Cl -0.514 e- (mean Hirshfeld-I)
+Files written   : hirshfeld_charges.dat, hirshfeld_iterations.dat, hirshfeld_charges.xyz, hirshfeld_analysis_report.txt
+
+[10] WARNINGS
+------------------------------------------------------------
+  none

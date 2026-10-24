@@ -1,0 +1,19 @@
+{
+  "schema": "hirshfeld_manifest_v2",
+  "combined_dir": "combined",
+  "combined_structure": "combined/structure.fdf",
+  "mesh_cutoff": 400.0,
+  "vacuum_box": 20.0,
+  "species": [
+    {
+      "symbol": "Na",
+      "z_num": 11,
+      "neutral_folder": "neutral/Na"
+    },
+    {
+      "symbol": "Cl",
+      "z_num": 17,
+      "neutral_folder": "neutral/Cl"
+    }
+  ]
+}

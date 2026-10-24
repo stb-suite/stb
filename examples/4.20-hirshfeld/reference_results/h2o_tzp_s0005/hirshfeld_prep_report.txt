@@ -1,0 +1,52 @@
+===== STB-HIRSHFELDPREP REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time      : 2026-10-23 19:30:37
+Structure      : /home/carlos/run/stb/4.20/reference_run/relax/h2o/relaxed.fdf
+Calc template  : /home/carlos/run/stb/4.20/reference_run/calc_h2o_tzp_s0005.fdf
+Mesh cutoff    : 400 Ry
+Vacuum box     : 20 Ang
+Output dir     : .
+
+[1] COMBINED STRUCTURE
+------------------------------------------------------------
+Formula        : O1H2
+Total atoms    : 3
+Species        : O, H
+Cell volume    : 2744.0000 Ang^3
+Lattice vectors (Ang):
+     14.00000000     0.00000000     0.00000000
+      0.00000000    14.00000000     0.00000000
+      0.00000000     0.00000000    14.00000000
+
+[2] SPECIES
+------------------------------------------------------------
+Species | Z | Atoms in combined/ | Neutral folder
+-------------------------------------------------
+O       | 8 | 1                  | neutral/O     
+H       | 1 | 2                  | neutral/H     
+
+Pseudopotential source: /home/carlos/.anaconda3/envs/stb/lib/python3.12/site-packages/stb/pseudopotentials/dojo
+
+[3] WRITING COMBINED + NEUTRAL-ATOM FOLDERS
+------------------------------------------------------------
+  [OK] ./combined/ (full system, 3 atom(s), single-point + SaveRho)
+       Forced: MD.VariableCell false, MD.TypeOfRun CG / MD.Steps 0, MeshCutoff 400 Ry, SaveRho true, Charge.Hirshfeld end, Charge.Voronoi end
+       Untouched (from --calc): k-grid, Spin, dipole correction, vdW
+       structure.fdf, config_extra.fdf, calc.fdf written; pseudopotentials copied for: O, H
+  [OK] ./neutral/O/ (isolated O, vacuum box 20 Ang)
+       Forced: MD.VariableCell false, MD.TypeOfRun CG / MD.Steps 0, Gamma-only k-grid, MeshCutoff 400 Ry, SaveRho true, Spin polarized (mandatory -- both via config_extra.fdf AND forced directly into calc.fdf)
+       structure.fdf, config_extra.fdf, calc.fdf written; pseudopotential copied for: O
+  [OK] ./neutral/H/ (isolated H, vacuum box 20 Ang)
+       Forced: MD.VariableCell false, MD.TypeOfRun CG / MD.Steps 0, Gamma-only k-grid, MeshCutoff 400 Ry, SaveRho true, Spin polarized (mandatory -- both via config_extra.fdf AND forced directly into calc.fdf)
+       structure.fdf, config_extra.fdf, calc.fdf written; pseudopotential copied for: H
+
+[4] SUMMARY
+------------------------------------------------------------
+Folders written : 3 (combined + 2 neutral-atom folder(s))
+Mesh cutoff     : 400 Ry (every folder)
+Vacuum box      : 20 Ang (every neutral-atom folder)
+Manifest        : ./hirshfeld_manifest.json
+Next: run SIESTA in 'combined/' AND every 'neutral/<species>/' folder, then run stb-hirshfeldIons to decide each species' ion sign and write the ion folders.
+Report          : hirshfeld_prep_report.txt

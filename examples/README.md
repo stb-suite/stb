@@ -192,6 +192,7 @@ through.
 | 4.17 | `stb-mlff` / `stb-mlffAnalysis` / `stb-mlffValidate` / `stb-mlffActiveLearning` | [`4.17-mlff/`](4.17-mlff/) |
 | 4.18 | `stb-eosInputs` / `stb-eosAnalysis` | [`4.18-eos/`](4.18-eos/) |
 | 4.19 | `stb-chargediffPrep` / `stb-chargediffAnalysis` | [`4.19-chargediff/`](4.19-chargediff/) |
+| 4.20 | `stb-hirshfeldPrep` / `stb-hirshfeldIons` / `stb-hirshfeldAnalysis` | [`4.20-hirshfeld/`](4.20-hirshfeld/) |
 
 Workflow items (category `4`) get ONE folder per workflow, covering every
 stage (prep [+ perturbation] + analysis) together, instead of one folder
@@ -266,6 +267,13 @@ atom, the charge across the plane between fragments, the induced dipole checked 
 a dashboard and a cube). It ships real SIESTA runs of a hydrogen bond (water dimer), a dative bond
 (ammonia borane) and Li on graphene, with the basis-set superposition error measured and the
 water dimer's basis, mesh and distance studies.
+`4.20-hirshfeld/` covers the 3-stage Hirshfeld-I workflow: `stb-hirshfeldPrep` (`4.20.1`, the system
+as a single point with SaveRho plus one isolated neutral atom per element), `stb-hirshfeldIons` (`4.20.2`,
+the cation and anion of every element, after the neutral atoms ran) and `stb-hirshfeldAnalysis`
+(`4.20.3`, the iterative stockholder charges next to Voronoi, SIESTA's Hirshfeld and simple Hirshfeld,
+checks of every reference atom, the error still left when the iteration stops, a dipole check and a
+dashboard). It ships real SIESTA runs of H2O, N2O, NaCl and MgO -- two nitrogens of opposite sign, a
+crystal with its periodic images, an oxide past +-1 -- and the water molecule's mesh, box and basis studies.
 
 ## Adding another example
 

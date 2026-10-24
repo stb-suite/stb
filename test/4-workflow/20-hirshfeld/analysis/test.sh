@@ -530,6 +530,7 @@ check_contains "OK no empty bins (fine bins)" log_core.txt
 check_contains "OK profile radius" log_core.txt
 check_contains "OK remaining-error estimate" log_core.txt
 check_contains "OK unwrap across the boundary" log_core.txt
+check_contains "OK periodic images (small cell)" log_core.txt
 
 
 # --- 7. Interactive path (stb-suite, shortcut 4.20.3) ---

@@ -1,0 +1,64 @@
+===== STB-HIRSHFELDIONS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time      : 2026-10-23 18:15:21
+Study dir      : .
+
+[1] STAGE 1 RECAP
+------------------------------------------------------------
+Combined structure : ./combined/structure.fdf
+Formula            : O1H2
+Total atoms        : 3
+Cell volume        : 2744.0000 Ang^3
+Mesh cutoff        : 400 Ry
+Vacuum box         : 20 Ang
+combined/ .RHO     : found (./combined)
+
+Species written by Stage 1:
+Species | Z | Z_val | Z_val source          | Atoms in combined/ | Neutral folder | Neutral .RHO
+------------------------------------------------------------------------------------------------
+O       | 8 | 6     | detected (SIESTA log) | 1                  | neutral/O      | found       
+H       | 1 | 1     | detected (SIESTA log) | 2                  | neutral/H      | found       
+
+[2] NATIVE CHARGES CROSS-CHECK (combined/)
+------------------------------------------------------------
+Idx | Elem | Hirshfeld(e-) | Voronoi(e-)
+----------------------------------------
+1   | O    | -0.2421       | -0.1905    
+2   | H    | +0.1211       | +0.0953    
+3   | H    | +0.1211       | +0.0953    
+
+[3] NEUTRAL PROFILES
+------------------------------------------------------------
+  O: read from './neutral/O'
+  H: read from './neutral/H'
+
+[4] PASS-0 (SIMPLE HIRSHFELD) CHARGES -- PREVIEW ONLY
+------------------------------------------------------------
+Purely informational: shows what Stage 3's iteration will start from and which atoms/species already lean positive vs negative. Does NOT decide which ion folders get written below -- both cation and anion are always written for every species (see module docstring).
+Idx | Elem | Z_val | Population(e-) | Charge(e-) | Native Hirshfeld(e-)
+-----------------------------------------------------------------------
+1   | O    | 6.0   | 6.2555         | -0.2555    | -0.2421             
+2   | H    | 1.0   | 0.8723         | +0.1277    | +0.1211             
+3   | H    | 1.0   | 0.8723         | +0.1277    | +0.1211             
+
+Per-species summary (N+ / N- = how many atoms of this species already lean cation-like / anion-like at pass-0 -- both > 0 means Stage 3 will genuinely use both ion states for this species):
+Elem | N | N+ | N- | Mean(e-) | Std(e-)
+---------------------------------------
+H    | 2 | 2  | 0  | +0.1277  | 0.0000 
+O    | 1 | 0  | 1  | -0.2555  | 0.0000 
+
+[5] WRITING ION REFERENCES (cation + anion per species)
+------------------------------------------------------------
+  [OK] O: ions/O/cation/ (NetCharge +1.0), ions/O/anion/ (NetCharge -1.0)
+  [OK] H: ions/H/anion/ (NetCharge -1.0); cation SKIPPED (Z_val=1 -- NetCharge +1.0 would leave 0 electrons, a bare-nucleus SCF SIESTA cannot converge; using the analytically exact zero-density reference instead)
+
+[6] SUMMARY
+------------------------------------------------------------
+Atoms analyzed (pass-0)    : 3
+Species                    : 2
+Ion folders written        : 3 (1 cation + 2 anion) -- 1 species used the analytical zero-density cation instead (Z_val <= 1, see [5])
+Manifest                   : ./hirshfeld_ions_manifest.json
+Next: run SIESTA in every ions/<species>/cation/ (where written) AND every ions/<species>/anion/ folder, then run stb-hirshfeldAnalysis for the converged Hirshfeld-I charges.
+Report                     : hirshfeld_ions_report.txt

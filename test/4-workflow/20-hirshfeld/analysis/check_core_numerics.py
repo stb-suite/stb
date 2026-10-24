@@ -7,7 +7,8 @@ Prints one 'OK <name>' line per passed check; any failure raises (exit 1).
   near the nucleus and read them as rho = 0 (5.13 of 6 e- on a real O atom);
 - profile_radius: 99.9 % of a 3D Gaussian lies within ~4.03 sigma;
 - estimate_remaining_error on a geometric history (known answer);
-- unwrap_vacuum_axes on a molecule cut by the cell boundary.
+- unwrap_vacuum_axes on a molecule cut by the cell boundary;
+- a small periodic cell (exact answer +-0.3) where every image of each atom must be summed.
 """
 import numpy as np
 
@@ -55,3 +56,38 @@ u = unwrap_vacuum_axes(frac, [False, False, True])
 assert abs(abs(u[1, 2] - u[0, 2]) - 0.08) < 1e-9, u
 assert np.allclose(u[:, :2], 0.5)
 print("OK unwrap across the boundary")
+
+# Periodic images: a CsCl-like cubic cell of 3.2 Ang whose Gaussian atoms reach ~3.7 Ang, so every
+# point sees several images of each atom. The density is built from the references at q = +-0.3
+# (each ion with its neutral's shape), so Hirshfeld-I has the exact answer +-0.3 -- only when every
+# image is summed; the nearest image alone (the code before) gave a wrong partition here.
+a, n = 3.2, 32
+lat = np.eye(3) * a
+pos = np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]])
+sig = {"A": 0.55, "B": 0.50}
+zval = {"A": 3.0, "B": 5.0}
+q_exact = {"A": +0.3, "B": -0.3}
+
+
+def g(r, s):
+    return np.exp(-r**2 / (2 * s**2)) / ((2 * np.pi) ** 1.5 * s**3)
+
+
+f = np.arange(n) / n
+F = np.stack(np.meshgrid(f, f, f, indexing="ij"), axis=-1)
+rho_p = np.zeros((n, n, n))
+for (el, p) in zip("AB", pos):
+    for s in np.ndindex(7, 7, 7):
+        d = (F - p + np.array(s) - 3) @ lat
+        rho_p += (zval[el] - q_exact[el]) * g(np.linalg.norm(d, axis=-1), sig[el])
+rr = np.linspace(0, 6.0, 3001)
+prof = {el: {k: (rr, (zval[el] + dz) * g(rr, sig[el])) for k, dz in (("n", 0), ("c", -1), ("a", +1))}
+        for el in "AB"}
+q, pop, hist = hf.iterate_hirshfeld_i(
+    rho_p, lat, pos, ["A", "B"], [zval["A"], zval["B"]],
+    {el: prof[el]["n"] for el in "AB"}, {el: prof[el]["c"] for el in "AB"},
+    {el: prof[el]["a"] for el in "AB"}, tol=1e-7, max_iter=300)
+print(f"periodic cell 3.2 Ang: q = {q[0]:+.5f} / {q[1]:+.5f} (exact +0.3 / -0.3), {len(hist) - 1} rounds")
+assert abs(q[0] - 0.3) < 5e-4 and abs(q[1] + 0.3) < 5e-4, q
+assert abs(pop.sum() - rho_p.sum() * a**3 / n**3) < 1e-6
+print("OK periodic images (small cell)")

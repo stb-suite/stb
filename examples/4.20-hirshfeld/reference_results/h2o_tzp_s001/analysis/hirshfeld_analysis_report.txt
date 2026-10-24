@@ -1,0 +1,126 @@
+===== STB-HIRSHFELDANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time      : 2026-10-23 19:30:06
+Version        : 1.9.292
+Study dir      : ..
+Tolerance      : 0.005 e-
+Max iterations : 20
+Radial bins    : 0.25 x the grid spacing of each reference atom (empty bins dropped)
+
+[1] COMBINED SYSTEM
+------------------------------------------------------------
+Structure      : ../combined/structure.fdf
+Formula        : O1H2 (3 atoms)
+Cell volume    : 2744.0000 Ang^3
+Periodicity    : 0D (e.g., a molecule) (non-periodic axes: a, b, c; vacuum gap >= 5 Ang)
+Density grid   : 180 x 180 x 180 (spacing 0.0778 Ang), from ../combined/siesta.RHO
+Valence Z_val  : O 6, H 1  (sum 8 e-; detected from ../combined/calc.out)
+Electrons      : 8.0000 e- in the density (sum Z_val - electrons = +0.0000 e-)
+SCF            : converged after 12 iterations (../combined/calc.out)
+
+[2] REFERENCE ATOMS (neutral + cation + anion)
+------------------------------------------------------------
+  O (neutral) : read from '../neutral/O'
+  H (neutral) : read from '../neutral/H'
+  O (cation)  : read from '../ions/O/cation'
+  O (anion)   : read from '../ions/O/anion'
+  H (cation)  : analytical zero density (Z_val <= 1 -- bare nucleus, no SIESTA folder)
+  H (anion)   : read from '../ions/H/anion'
+
+Elem | State   | Target N | N on grid | N radial  | Radial-target | r99.9%(Ang) | Box inradius(Ang) | Spacing(Ang) | SCF conv.
+------------------------------------------------------------------------------------------------------------------------------
+O    | neutral | 6        | 6.0000    | 6.0053    | +0.0053       | 1.91        | 10.00             | 0.0800       | yes (9)  
+O    | cation  | 5        | 5.0000    | 5.0052    | +0.0052       | 1.79        | 10.00             | 0.0800       | yes (9)  
+O    | anion   | 7        | 7.0000    | 7.0054    | +0.0054       | 1.99        | 10.00             | 0.0800       | yes (12) 
+H    | neutral | 1        | 1.0000    | 1.0015    | +0.0015       | 2.39        | 10.00             | 0.0800       | yes (7)  
+H    | cation  | 0        | 0 (exact) | 0 (exact) | -             | -           | -                 | -            | -        
+H    | anion   | 2        | 2.0000    | 2.0025    | +0.0025       | 2.57        | 10.00             | 0.0800       | yes (11) 
+N on grid = electrons SIESTA put in the box; N radial = 4 pi int r^2 rho(r) of the spherical average actually used as reference; r99.9% = radius holding 99.9 % of it.
+
+[3] ITERATING HIRSHFELD-I
+------------------------------------------------------------
+  Iteration  1/20: max|Delta q| = 0.162680 e- -- atom #1 (O), now -0.4224 e- (anion-like, pop. 6.4224 e-),    1.8s elapsed -- not yet converged
+  Iteration  2/20: max|Delta q| = 0.103651 e- -- atom #1 (O), now -0.5261 e- (anion-like, pop. 6.5261 e-),    3.6s elapsed -- not yet converged
+  Iteration  3/20: max|Delta q| = 0.067264 e- -- atom #1 (O), now -0.5933 e- (anion-like, pop. 6.5933 e-),    5.4s elapsed -- not yet converged
+  Iteration  4/20: max|Delta q| = 0.044303 e- -- atom #1 (O), now -0.6376 e- (anion-like, pop. 6.6376 e-),    7.2s elapsed -- not yet converged
+  Iteration  5/20: max|Delta q| = 0.029504 e- -- atom #1 (O), now -0.6671 e- (anion-like, pop. 6.6671 e-),    9.0s elapsed -- not yet converged
+  Iteration  6/20: max|Delta q| = 0.019803 e- -- atom #1 (O), now -0.6869 e- (anion-like, pop. 6.6869 e-),   10.8s elapsed -- not yet converged
+  Iteration  7/20: max|Delta q| = 0.013366 e- -- atom #1 (O), now -0.7003 e- (anion-like, pop. 6.7003 e-),   12.6s elapsed -- not yet converged
+  Iteration  8/20: max|Delta q| = 0.009056 e- -- atom #1 (O), now -0.7094 e- (anion-like, pop. 6.7094 e-),   14.4s elapsed -- not yet converged
+  Iteration  9/20: max|Delta q| = 0.006152 e- -- atom #1 (O), now -0.7155 e- (anion-like, pop. 6.7155 e-),   16.2s elapsed -- not yet converged
+  Iteration 10/20: max|Delta q| = 0.004187 e- -- atom #1 (O), now -0.7197 e- (anion-like, pop. 6.7197 e-),   18.0s elapsed -- CONVERGED
+
+[4] CONVERGENCE HISTORY
+------------------------------------------------------------
+Iteration | max|Delta q| (e-)               | Ratio to previous | Atom that moved most
+--------------------------------------------------------------------------------------
+0         | N/A (pass 0 = simple Hirshfeld) | -                 | -                   
+1         | 0.162680                        | -                 | #1 (O)              
+2         | 0.103651                        | 0.637             | #1 (O)              
+3         | 0.067264                        | 0.649             | #1 (O)              
+4         | 0.044303                        | 0.659             | #1 (O)              
+5         | 0.029504                        | 0.666             | #1 (O)              
+6         | 0.019803                        | 0.671             | #1 (O)              
+7         | 0.013366                        | 0.675             | #1 (O)              
+8         | 0.009056                        | 0.678             | #1 (O)              
+9         | 0.006152                        | 0.679             | #1 (O)              
+10        | 0.004187                        | 0.681             | #1 (O)              
+Converged after 10 iteration(s) (max|Delta q| < 0.005 e-).
+Contraction ratio      : 0.679 (each step ~68 % of the previous)
+Est. remaining error   : 0.0089 e- on the slowest atom, distance to the converged charges (last step x ratio / (1 - ratio))
+
+[5] PER-ATOM CHARGES: VORONOI vs. SIMPLE HIRSHFELD vs. HIRSHFELD-I
+------------------------------------------------------------
+Idx | Elem | X(Ang) | Y(Ang) | Z(Ang) | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | HI - H(e-) | Pop. HI(e-) | Reference (neutral + frac ion)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1   | O    | 7.0000 | 7.0000 | 7.2990 | -0.1903     | -0.2458           | -0.2597              | -0.7197         | -0.4600    | 6.7197      | 0.72 anion                    
+2   | H    | 7.0000 | 7.7697 | 6.7014 | +0.0952     | +0.1229           | +0.1299              | +0.3599         | +0.2300    | 0.6401      | 0.36 cation                   
+3   | H    | 7.0000 | 6.2303 | 6.7014 | +0.0952     | +0.1229           | +0.1299              | +0.3599         | +0.2300    | 0.6401      | 0.36 cation                   
+Charge = Z_val - population (positive = electrons lost). Reference: the atom's final reference density, (1 - frac) x neutral + frac x ion of its own sign, frac = min(|q|, 1).
+
+[6] PER-SPECIES SUMMARY (HIRSHFELD-I)
+------------------------------------------------------------
+Elem | N | Cation-like | Anion-like | Mean(e-) | Std(e-) | Min(e-) | Max(e-) | Mean Voronoi(e-) | Mean simple H.(e-) | HI / H
+-----------------------------------------------------------------------------------------------------------------------------
+H    | 2 | 2           | 0          | +0.3599  | 0.0000  | +0.3599 | +0.3599 | +0.0952          | +0.1299            | 2.77  
+O    | 1 | 0           | 1          | -0.7197  | 0.0000  | -0.7197 | -0.7197 | -0.1903          | -0.2597            | 2.77  
+HI / H: how much Hirshfeld-I enlarges the simple-Hirshfeld charge (simple Hirshfeld's neutral references are known to understate charge transfer).
+
+[7] CHARGE BALANCE AND CROSS-CHECKS
+------------------------------------------------------------
+Sum Z_val                  : 8.0000 e-
+Electrons in the density   : 8.0000 e-
+Assigned to atoms (HI)     : 8.0000 e-  (unassigned: -0.0000 e-, density no reference atom reaches)
+Total charge, Voronoi (SIESTA)         : +0.0000 e-
+Total charge, Hirshfeld (SIESTA)       : -0.0000 e-
+Total charge, Simple Hirshfeld (pass 0): +0.0000 e-
+Total charge, Hirshfeld-I              : +0.0000 e-
+Simple Hirshfeld here vs SIESTA's own: max |diff| 0.0139 e-, mean 0.0093 e- (SIESTA uses its own free-atom densities from the basis; this tool the SCF isolated atoms of neutral/ -- a small difference is expected).
+Mean |q| per atom           : Voronoi (SIESTA) 0.1269, Hirshfeld (SIESTA) 0.1639, Simple Hirshfeld (pass 0) 0.1732, Hirshfeld-I 0.4798
+
+[8] DIPOLE CHECK (point charges vs SIESTA, non-periodic axes only)
+------------------------------------------------------------
+Component (Debye) | Voronoi (SIESTA) | Hirshfeld (SIESTA) | Simple Hirshfeld (pass 0) | Hirshfeld-I | SIESTA (density)
+----------------------------------------------------------------------------------------------------------------------
+along a           | +0.000           | +0.000             | +0.000                    | +0.000      | +0.000          
+along b           | +0.000           | -0.000             | +0.000                    | +0.000      | +0.000          
+along c           | -0.546           | -0.706             | -0.746                    | -2.066      | -1.426          
+|mu|              | 0.546            | 0.706              | 0.746                     | 2.066       | 1.426           
+Point charges alone leave out each atom's own dipole, so they need not match SIESTA's dipole of the full density; the closer one says which charges carry more of the electrostatics. SIESTA's value is read from 'Electric dipole' in combined/'s .out.
+
+[9] SUMMARY
+------------------------------------------------------------
+Atoms analyzed  : 3
+Iterations run  : 10 (of --max-iter 20)
+Converged       : yes (est. remaining error 0.0089 e-)
+Iterating time  : 18.0s
+Total charge    : +0.0000 e- (should be close to 0 for a neutral combined system)
+Largest charge  : atom #1 (O) -0.7197 e- (simple Hirshfeld -0.2597 e-)
+Per species     : O -0.720, H +0.360 e- (mean Hirshfeld-I)
+Files written   : hirshfeld_charges.dat, hirshfeld_iterations.dat, hirshfeld_charges.xyz, hirshfeld_analysis.png, hirshfeld_analysis_report.txt
+
+[10] WARNINGS
+------------------------------------------------------------
+  [WARNING 1] The last step was 0.0042 e-, but at a contraction ratio of 0.68 the charges are still ~0.0089 e- from the converged Hirshfeld-I values (1.8 x --tol). For the error itself to be below 0.005 e-, rerun with --tol 0.0024 (Stage 3 only, no new SIESTA run).

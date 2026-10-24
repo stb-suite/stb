@@ -12,16 +12,13 @@ directly in core/ rather than waiting for an extract-on-second-use move.
 All grid arrays here follow the same convention as core/rho_io.py /
 core/grid_export.py: a plain numpy array from sisl's Grid.grid (already
 totaled via core.rho_io.read_total, never a raw per-spin-channel read),
-paired with the geometry's own 3x3 lattice (Angstrom). Distances use the
-same minimum-image (periodic-aware) fractional-coordinate convention as
-aimd_analysis.py's compute_rdf: `disp -= np.round(disp)` before converting
-to Cartesian, so an atom near a cell edge still gets density contributions
-wrapping around from its own nearest periodic image -- both for an
-isolated atom's own vacuum box (where the atom is always placed at the
-exact fractional center by structure_io.write_isolated_atom_fdf, so this
-reduces to a plain, non-wrapped distance) and for the combined production
-system (where atoms can sit anywhere, including near a cell face, and the
-wrapping genuinely matters).
+paired with the geometry's own 3x3 lattice (Angstrom). The promolecule sums
+EVERY periodic image of each atom within the reach of its reference
+(profile_reach: SIESTA's atom densities vanish beyond the orbital radii,
+a few Angstrom). For a molecule in a large box that is only the nearest
+image; in a small bulk cell a point sees several images of the same atom
+(6 Na around each Cl of rock salt), and keeping only the nearest one, as
+the first version did, gave each atom the wrong share.
 """
 
 from __future__ import annotations
@@ -185,6 +182,20 @@ def estimate_remaining_error(history):
     return ratio, deltas[-1] * ratio / (1.0 - ratio)
 
 
+def profile_reach(r, rho, rel_floor: float = 1e-10):
+    """Radius beyond which a radial profile is zero (below rel_floor x its
+    maximum): the farthest distance at which an atom's reference still
+    contributes. SIESTA's atom densities vanish exactly beyond the orbital
+    radii, so this is a few Angstrom, far less than an isolated atom's box."""
+    r = np.asarray(r, float)
+    rho = np.asarray(rho, float)
+    if rho.size == 0 or not np.any(rho > 0):
+        return 0.0
+    keep = np.nonzero(rho > rel_floor * rho.max())[0]
+    last = keep[-1]
+    return float(r[min(last + 1, r.size - 1)])
+
+
 def interpolate_reference_density(target_r, r_neutral, rho_neutral, r_ion, rho_ion,
                                    charge: float, cap: float = 1.0):
     """rho_ref(target_r) = (1-frac)*rho_neutral(target_r) + frac*rho_ion(target_r),
@@ -212,10 +223,8 @@ def compute_hirshfeld_charges(rho_real: np.ndarray, lattice: np.ndarray, frac_po
     later Hirshfeld-I round).
 
     Promolecule density at each grid voxel = sum of every atom's own
-    reference profile evaluated at its minimum-image distance to that
-    voxel (an atom near a cell edge still gets contributions "wrapping
-    around" from its own nearest periodic image, as it would in the real
-    crystal). weight_A(voxel) = rho_A(voxel) / promolecule(voxel) (0 where
+    reference profile over all of that atom's periodic images within the
+    profile's reach (profile_reach), as in the real crystal. weight_A(voxel) = rho_A(voxel) / promolecule(voxel) (0 where
     promolecule is 0, i.e. no atom's reference reaches that far -- a true
     vacuum region contributes nothing to any atom's population either
     way). charge_A = Z_A - integral(weight_A * rho_real).
@@ -233,7 +242,7 @@ def compute_hirshfeld_charges(rho_real: np.ndarray, lattice: np.ndarray, frac_po
     silent, for callers that don't want stray stderr output (e.g. a unit
     test).
 
-    The per-atom minimum-image GEOMETRY arrays (grid_frac/disp/cart/r --
+    The per-atom GEOMETRY arrays (grid_frac/disp/cart/r --
     the ones whose size is O(grid size), not O(grid size) x 8 bytes worth
     of double precision anyone actually needs for an Angstrom-scale
     distance) are float32, not float64 -- half the memory of the original
@@ -259,15 +268,34 @@ def compute_hirshfeld_charges(rho_real: np.ndarray, lattice: np.ndarray, frac_po
     cell_volume = abs(np.linalg.det(lattice))
     voxel_volume = cell_volume / rho_real.size
 
+    # Interplanar spacing of each lattice direction: an image shifted by n
+    # cells along axis k is at least d_k * (|n| - 1/2) from any point once
+    # the minimum-image displacement is taken.
+    plane_spacing = 1.0 / np.linalg.norm(np.linalg.inv(np.asarray(lattice, float)).T, axis=1)
+
     def atom_density(i):
+        r_arr, rho_arr = species_profiles[i]
+        reach = profile_reach(r_arr, rho_arr)
         disp = grid_frac - np.asarray(frac_positions[i], dtype=np.float32)
         disp -= np.round(disp)
-        cart = disp @ lattice32
+        density = np.zeros(rho_real.shape, dtype=float)
+        if reach <= 0.0:
+            return density
+        n_img = [int(np.floor(reach / d + 0.5)) for d in plane_spacing]
+        # Every periodic image within the reference's reach: in a small cell
+        # a point has several images of the same atom nearby (6 Na around
+        # each Cl in rock salt); the nearest one alone undercounts them.
+        for shift in np.ndindex(*(2 * n + 1 for n in n_img)):
+            s = np.asarray(shift, dtype=np.float32) - np.asarray(n_img, dtype=np.float32)
+            cart = (disp + s) @ lattice32
+            r = np.linalg.norm(cart, axis=-1)
+            del cart
+            near = r < reach
+            if np.any(near):
+                density[near] += np.interp(r[near], r_arr, rho_arr, left=0.0, right=0.0)
+            del r, near
         del disp
-        r = np.linalg.norm(cart, axis=-1)
-        del cart
-        r_arr, rho_arr = species_profiles[i]
-        return np.interp(r, r_arr, rho_arr, left=0.0, right=0.0)
+        return density
 
     start_time = time.monotonic()
     total_steps = 2 * n_atoms

@@ -598,6 +598,14 @@ atom itself and Hirshfeld-I must return +-0.4 (and the density's dipole). Manife
 study folder (`hf.STUDY_LAYOUT`): they used to be absolute, and a `cp -r` of a study silently read the ORIGINAL's
 combined/ (+1.25 instead of +0.4 in one test). `hf.resolve_study_path`/`load_study_manifest` read old manifests
 too: a foreign absolute path yields to the study's own folder ([INFO]); used only when the copy has none ([WARNING]).
+`compute_hirshfeld_charges` sums EVERY periodic image of each atom within its reference's reach (`profile_reach`,
+where the profile vanishes -- SIESTA's atoms end at the orbital radii, 2-4 Ang): the first version kept only the
+nearest image, harmless for a molecule in a box but wrong in a small cell -- NaCl's simple Hirshfeld came out +-0.333
+against SIESTA's own +-0.140 (fixed: +-0.146), Hirshfeld-I 0.555 instead of 0.514; `check_core_numerics.py` has an
+exact small-cell test (+-0.3). The radial-profile-vs-grid check is relative (`PROFILE_REL_TOL` 0.5 %): the trapezoid
+over a semicore shell (Mg/Na 2p) overcounts ~0.2 % though the profile reproduces its grid to 0.07 %. Bader
+(`stb-bader`) on SIESTA's valence pseudo-density gives H nothing in water -- the density has no maximum at the proton.
+`examples/4.20-hirshfeld/` ships real SIESTA runs (H2O, N2O, NaCl, MgO; H2O mesh/box/basis studies).
 
 **4-Workflow item 18, EOS** — `stb-eosInputs`/`stb-eosAnalysis`: real-SIESTA analog
 of `stb-mleos`, same isotropic volume-scan convention (`factor = (1 +

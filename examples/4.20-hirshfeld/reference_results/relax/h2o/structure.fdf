@@ -1,0 +1,24 @@
+# H2O from ASE's G2 set (MP2 geometry), centred in a 14 Ang cubic box; make_reference.sh relaxes it with SIESTA
+
+NumberOfSpecies 2
+NumberOfAtoms 3
+
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 14.00000000 0.00000000 0.00000000
+ 0.00000000 14.00000000 0.00000000
+ 0.00000000 0.00000000 14.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.5000000000 0.5000000000 0.5212967500 1
+  0.5000000000 0.5545170714 0.4787032500 2
+  0.5000000000 0.4454829286 0.4787032500 2
+%endblock AtomicCoordinatesAndAtomicSpecies

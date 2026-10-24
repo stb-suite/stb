@@ -231,7 +231,7 @@ needs it).
   near-duplicate check.
 - `model_card.py` — the **model card**: `mlff_model_card.json`, written by `stb-mlffAnalysis` next to every
   member model of a round (`write_round_cards` in `mlff_analysis.py`; `--make-cards [ROUND]` rewrites them for an
-  already trained round without training; `stb-mlffValidate` refreshes each card's `validation` section and, on every run, rewrites `<run>/best_model/` -- best round by committee-mean test F RMSE, then its best member, model files + card with a `selection` section, recorded as `best` in the workflow JSON; the folder is overwritten each time, `export_best_model` in `mlff_validate.py`). It holds
+  already trained round without training; `stb-mlffValidate` refreshes each card's `validation` section and, on every run, rewrites `<run>/best_model/` -- best round by committee-mean F RMSE -- test set, pooled with the --md-check frames once every round has them (`selection_scores`: on Si the 8-atom test set picked round 1 while 64-atom MD frames showed round 2 4x better) --, then its best member, model files + card with a `selection` section, recorded as `best` in the workflow JSON; the folder is overwritten each time, `export_best_model` in `mlff_validate.py`). It holds
   the model's SHA-256, level of theory (incl. whether the labels include DFT-D3), E0s/energy scale, training
   domain (elements, area/volume per atom of the periodic axes, shortest distance, force/energy/pressure ranges),
   recipe, metrics, stability/speed, usage notes and provenance. **A fine-tuned model is always handed over with
@@ -472,7 +472,7 @@ PseudoDojo S gave a wrong Mo-S bond in one test; graphene uses the `virtual_vaul
 Stage 2's SIESTA-label warning, Stage 4's default `--max-force` and `--auto-sampling` limit (before, 10 / 15 /
 none: an auto-sampled 0.15 Ang graphene round gave 33-45 eV/Ang labels and a REGRESSED round); every report
 is numbered with ALL warnings in a last section and third-party output (prints, `warnings`, and the root
-`logging` logger -- mace's 'No dtype selected' -- via `core.cli.capture_library_noise`) only counted; every
+`logging` logger -- mace's 'No dtype selected' -- via `core.cli.capture_library_noise`) only counted; Stage 2 restarts a member whose `mace_run_train` dies by a signal once (`SIGNAL_RETRIES`, crash log kept as `mace_run_train.crashN.log`: one died with 'free(): invalid pointer' in torch's JIT optimizer and trained fine on the next start); every
 stage has `--show` (Stage 1 adds coverage/mlff_coverage.png next to its gnuplot files) and `--save-report`
 writes into the run folder (Stage 2: the round dir); a volume strain changes only the periodic axes in both
 Stage 1 `--volume-strains` and Stage 4 `--sampling-method strain`; Stage 3's E(V) needs 5+ distinct test
@@ -648,7 +648,7 @@ H3N-BH3, Li on 3x3 graphene; water-dimer basis/mesh/distance studies; fragments 
 monomers for the deformation energy). Li with the PseudoDojo pseudopotential needs `PAO.Polarization.NonPerturbative true`
 (the perturbative polarization orbital fails).
 
-**5-ML Simulations** (category order): `stb-mlmd` (NVE/NVT/NPT; all physical units
+**5-ML Simulations** (category order): `stb-mlmd` (report [0]-[10] in the Stage-2/3 style: structure, the full model card (`print_model_card`: identity + SHA-256, level of theory, trained range, recipe, every error vs SIESTA, stability, notes; the card's own alarms and its run-time domain warnings -- `model_card.collect_warnings` -- go to the final WARNINGS), thermodynamics with block-averaged errors, ensemble checks, g(r)/MSD/Lindemann and a trained-range table along the run; library noise only counted; plots opt-in: `--png`/`--show` dashboard, `--save-data`/`--save-gnuplot`. NVE drift is a linear fit in meV/atom/ps -- the old drift relative to the absolute E_tot was always 0.0000 % on SIESTA's scale (-24826 eV for 216 Si), its 1 % warning unreachable; NVE/NVT/NPT; all physical units
 explicitly converted to ASE's internal unit system before use — `* ase.units.fs`,
 `* ase.units.GPa`, `/ ase.units.bar` for `--compressibility`, given in 1/bar; tracks
 `E_total`, not just `E_pot`, for NVE drift). The compressibility was once passed raw and

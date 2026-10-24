@@ -407,6 +407,31 @@ sys.exit(0 if v[0] == v[1] == v[2] == v[5] and v[3] != v[4] and v[4] != v[0] and
          and v[0].endswith('G') else 1)
 "
 
+# --- 7c. A member killed by a signal is trained again once ---
+echo -e "\n--- Testing: mace_run_train killed by SIGABRT is retried from scratch ---"
+pushd "$TEST_DIR" > /dev/null
+REAL_MRT="$(command -v mace_run_train)"
+mkdir -p fakebin
+cat > fakebin/mace_run_train <<EOF
+#!/bin/bash
+# first call: die like a glibc heap check does; later calls: the real program
+if [ ! -f "\$PWD/crash_once.done" ]; then
+    touch "\$PWD/crash_once.done"; mkdir -p "\$4/checkpoints"; echo "free(): invalid pointer"; kill -ABRT \$\$
+fi
+exec "$REAL_MRT" "\$@"
+EOF
+chmod +x fakebin/mace_run_train
+rm -f crash_once.done
+PATH="$PWD/fakebin:$PATH" stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o retry $FAST --name test_model_retry \
+    --no-intro > log_retry.txt 2>&1
+check_exit_code $? 0
+check_contains "\[RETRY\] killed by SIGABRT" log_retry.txt
+check_contains "was killed by SIGABRT (a crash, not a training error)" log_retry.txt
+check_success retry/mace_run_train.crash1.log
+check_success retry/test_model_retry.model
+rm -rf fakebin crash_once.done
+popd > /dev/null
+
 # --- 8. Summary ---
 echo -e "\n--- Tests Complete ---"
 echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"

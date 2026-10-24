@@ -147,6 +147,26 @@ ok = (c['selection']['round'] == b['round'] == 1 and c['selection']['seed'] == b
       and len(c['selection']['rounds_compared']) == 1 and c['validation'].get('overall'))
 sys.exit(0 if ok else 1)
 "
+check_contains "chosen by: test-set force RMSE" log_val1.txt
+check_python "selection_scores: MD-check frames pooled with the test set can overturn the test-set pick (Si case)" "
+import sys
+from ase import Atoms
+from stb.mlff_validate import selection_scores
+t8 = [Atoms('Si8')] * 2; m64 = [Atoms('Si64')] * 2
+def r(ft, fm, mt, mm):
+    pc = [{'F_rmse_meV': ft}] * 2
+    return {'overall': {'F_rmse_meV': ft}, 'per_config': pc, 'members': [{'F_rmse_meV': x} for x in mt],
+            'md': {'overall': {'F_rmse_meV': fm}, 'per_config': pc, 'members': [{'F_rmse_meV': x} for x in mm]}}
+rounds = [(1, r(23.2, 133.1, [25, 24], [130, 140])), (2, r(28.7, 35.2, [30, 29], [36, 34]))]
+sel, basis = selection_scores(rounds, t8, m64)
+w = 48 / (48 + 384)   # force components: 2 x 8 atoms vs 2 x 64 atoms
+ok = (min(sel, key=lambda k: sel[k]['committee']) == 2 and 'MD-check' in basis
+      and abs(sel[1]['committee'] - ((23.2**2 * w + 133.1**2 * (1 - w)) ** 0.5)) < 1e-9
+      and min(range(2), key=lambda i: sel[2]['members'][i]) == 1)
+sel0, basis0 = selection_scores([(k, dict(v, md=None)) for k, v in rounds], t8, m64)
+ok = ok and min(sel0, key=lambda k: sel0[k]['committee']) == 1 and basis0 == 'test-set force RMSE'
+sys.exit(0 if ok else 1)
+"
 check_contains "Test set from     : mlff_workflow.json (test set)" log_val1.txt
 check_contains "Configs           : 2 finished of 2 folder(s), 4 atoms, rattle 1, strain 1" log_val1.txt
 check_contains "\[OK\] Same level of theory in all 8 folders" log_val1.txt

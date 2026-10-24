@@ -39,6 +39,27 @@ check_contains() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2'"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not in '$2'"
+        PASS=$((PASS+1))
+    fi
+}
+
+check_python() {   # $1 = description, $2 = python code exiting 0 on success
+    python3 -c "$2"
+    if [ $? -eq 0 ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} $1"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} $1"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 check_exit_code() {
     if [ "$1" -eq "$2" ]; then
         echo -e "   -> ${GREEN}Verified:${NC} exit code $1 (expected $2)"
@@ -69,15 +90,66 @@ pushd "$TEST_DIR" > /dev/null
 # --- 1. NVT (default ensemble) ---
 echo -e "\n--- Testing NVT (default), 100 steps, stride 20 ---"
 stb-mlmd --file si_bulk.fdf --ensemble nvt --temperature 300 --n-steps 100 --stride 20 \
-    -o nvt_traj.xsf --output-structure nvt_final.fdf --save-data --no-intro > log_nvt.txt 2>&1
+    -o nvt_traj.xsf --output-structure nvt_final.fdf --png --save-gnuplot --no-intro > log_nvt.txt 2>&1
 check_exit_code $? 0
 check_contains "Ensemble          : NVT" log_nvt.txt
 check_contains "Collected 5 frame(s)" log_nvt.txt
 check_contains "Temperature       : mean" log_nvt.txt
+for sec in "\[0\] RUN METADATA" "\[1\] STRUCTURE" "\[2\] MODEL" "\[3\] MD SETUP" "\[4\] EQUILIBRATION" \
+           "\[5\] PRODUCTION RUN" "\[6\] THERMODYNAMICS" "\[7\] ENSEMBLE CHECKS" \
+           "\[8\] STRUCTURE ALONG THE RUN" "\[9\] SUMMARY & FILES" "\[10\] WARNINGS"; do
+    check_contains "$sec" log_nvt.txt
+done
+check_contains "Speed             :" log_nvt.txt
+check_contains "T fluctuation     :" log_nvt.txt
+check_contains "g(r)              : first peak" log_nvt.txt
+check_contains "Lindemann ratio" log_nvt.txt
+check_contains "Model card        : none" log_nvt.txt
+check_contains "coordination 4.00" log_nvt.txt
+check_contains "Heat capacity     :" log_nvt.txt
+check_contains "density" log_nvt.txt
+echo "Testing: MACE/torch/ASE messages are counted, not printed in the report"
+check_not_contains "UserWarning" log_nvt.txt
+check_not_contains "cuequivariance" log_nvt.txt
+check_not_contains "WARNING:root" log_nvt.txt
+check_contains "Library messages  :" log_nvt.txt
+echo "Testing: the WARNINGS section is the last one"
+check_python "nothing but the library-messages line follows [10] WARNINGS" "
+import re, sys
+t = re.sub(r'\x1b\[[0-9;]*m', '', open('log_nvt.txt').read())
+tail = t.split('[10] WARNINGS', 1)[1]
+sys.exit(0 if not re.search(r'^\[\d+\] ', tail, re.M) else 1)
+"
 check_success nvt_traj.xsf
 check_success nvt_final.fdf
-check_success si_bulk_md_diagnostics.png
-check_success si_bulk_md_diagnostics.dat
+check_success si_bulk_md_dashboard.png
+check_success si_bulk_md_thermo.dat
+check_success si_bulk_md_rdf.dat
+check_success si_bulk_md_msd.dat
+check_success si_bulk_md.gplot
+check_python "thermo .dat: 12 columns, one row per frame (5), temperatures as in the report" "
+import sys, numpy as np
+a = np.loadtxt('si_bulk_md_thermo.dat')
+ok = a.shape == (5, 12) and np.allclose(a[:, 0], [20, 40, 60, 80, 100]) and (a[:, 1] > 0).all() and (a[:, 6] > 15).all()
+r = np.loadtxt('si_bulk_md_rdf.dat'); m = np.loadtxt('si_bulk_md_msd.dat')
+ok = ok and r.shape[1] == 3 and abs(r[np.argmax(r[:, 1]), 0] - 2.37) < 0.15 and m.shape[1] >= 2
+sys.exit(0 if ok else 1)
+"
+if command -v gnuplot &> /dev/null; then
+    gnuplot si_bulk_md.gplot > log_gnuplot.txt 2>&1
+    check_exit_code $? 0
+    check_success si_bulk_md.pdf
+fi
+
+echo "Testing: plots and data files are opt-in"
+rm -f si_bulk_md_dashboard.png si_bulk_md_thermo.dat si_bulk_md.gplot
+stb-mlmd --file si_bulk.fdf --n-steps 20 --stride 10 -o plain.xsf --output-structure plain.fdf --no-intro > log_plain.txt 2>&1
+check_exit_code $? 0
+check_python "no PNG, .dat or .gplot written without --png/--save-data/--save-gnuplot" "
+import os, sys
+sys.exit(0 if not any(os.path.exists(f) for f in ('si_bulk_md_dashboard.png', 'si_bulk_md_thermo.dat', 'si_bulk_md.gplot')) else 1)
+"
+check_contains "Also available    : --png" log_plain.txt
 
 
 # --- 1b. --equilibration-steps discards the initial transient ---
@@ -96,23 +168,23 @@ stb-mlmd --file si_bulk.fdf --ensemble nve --n-steps 200 --stride 20 --seed 1 \
     -o nve_traj.xsf --output-structure nve_final.fdf --no-intro > log_nve.txt 2>&1
 check_exit_code $? 0
 check_contains "Ensemble          : NVE" log_nve.txt
-check_contains "Relative drift" log_nve.txt
+check_contains "Energy drift      :" log_nve.txt
+check_contains "E_tot fluctuation :" log_nve.txt
 check_success nve_traj.xsf
 
-echo "Testing: NVE total-energy drift is small (well-conserved integrator)"
-python3 -c "
+echo "Testing: NVE drift is reported in meV/atom/ps and is small (well-conserved integrator)"
+check_python "NVE drift |d| < 1 meV/atom/ps (the old relative drift divided by the absolute E_tot and could never warn)" "
 import re, sys
-text = open('log_nve.txt').read()
-m = re.search(r'Relative drift    : ([\d.eE+-]+)%', text)
+text = re.sub(r'\x1b\[[0-9;]*m', '', open('log_nve.txt').read())
+m = re.search(r'Energy drift      : ([-+\d.eE]+) meV/atom/ps', text)
 sys.exit(0 if m and abs(float(m.group(1))) < 1.0 else 1)
 "
-if [ $? -eq 0 ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} NVE relative energy drift is well under 1%"
-    PASS=$((PASS+1))
-else
-    echo -e "   -> ${RED}Failed:${NC} NVE relative energy drift missing or too large"
-    FAIL=$((FAIL+1))
-fi
+check_python "slope_per_ps: a linear E(t) gives its slope per ps" "
+import sys, numpy as np
+from stb.mlmd import slope_per_ps, block_se
+t = np.arange(0, 1000, 10.0)
+sys.exit(0 if abs(slope_per_ps(t, 2.5 * t / 1000 + 7) - 2.5) < 1e-9 and block_se(np.ones(50)) == 0 else 1)
+"
 
 
 # --- 3. NPT on bulk (allowed) ---
@@ -121,6 +193,9 @@ stb-mlmd --file si_bulk.fdf --ensemble npt --temperature 300 --pressure 0.0 --n-
     -o npt_traj.xsf --output-structure npt_final.fdf --no-intro > log_npt.txt 2>&1
 check_exit_code $? 0
 check_contains "Ensemble          : NPT" log_npt.txt
+check_contains "Lattice (mean)    :" log_npt.txt
+check_contains "Barostat          :" log_npt.txt
+check_contains "placeholder (water)" log_npt.txt
 check_success npt_traj.xsf
 
 
@@ -155,6 +230,103 @@ EOF
 stb-mlmd --file si_bulk.fdf --custom-model dummy_a.model --custom-model-card dummy_card_b.json --n-steps 10 --no-intro > log_custommodel_sha.txt 2>&1
 check_exit_code $? 2
 check_contains "SHA-256" log_custommodel_sha.txt
+
+echo "Testing: the report prints the model card and turns the card's own alarms into warnings"
+check_python "print_model_card: identity, theory, trained range, accuracy; no validation and another member's note handled" "
+import hashlib, io, sys, contextlib
+from stb.mlmd import print_model_card
+open('card_model.model', 'wb').write(b'weights')
+sha = hashlib.sha256(b'weights').hexdigest()
+card = {'format': 'stb-mlff-model-card', 'version': 1, 'elements': ['Si'],
+        'model': {'name': 'round_02_seed_125', 'seed': 125, 'member': 3, 'files': [{'file': 'card_model.model', 'sha256': sha, 'kind': 'compiled'}],
+                  'architecture': {'r_max': 6.0, 'num_interactions': 2, 'n_params': 1000}, 'foundation': {'name': 'mace-mp-0', 'size': 'medium'}},
+        'committee': {'size': 3, 'round': 2},
+        'level_of_theory': {'siesta_version': '5.4.2', 'settings': {'XC.authors': 'PBE', 'PAO.BasisSize': 'DZP'}, 'dftd3': {'on': False}},
+        'training_data': {'n_configs': 57, 'kinds': {'rattle': 39}, 'labels': {'energy': True, 'forces': True}},
+        'domain': {'elements': ['Si'], 'dimensionality': '3D', 'measure_name': 'volume per atom (Ang^3)', 'measure': {'min': 18.7, 'max': 22.4},
+                   'd_min_ang': {'min': 1.85, 'max': 2.35}},
+        'metrics': {'train': {'n': 51, 'F_rmse_meV': 45.8}, 'out_of_sample_committee': {'n': 16, 'F_rmse_meV': 56.0}},
+        'checks': {'stability': {'status': 'OK', 'n_atoms': 64}},
+        'provenance': {'training_warnings': ['Training: seed 124 kept epoch 98', 'Training: seed 125 overfits']}}
+w = []
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    print_model_card(card, 'card.json', 'card_model.model', None, w.append)
+out = buf.getvalue()
+ok = all(k in out for k in ('Model card -- identity', '[verified]', 'level of theory', 'Trained range', '18.700 .. 22.400',
+                            'Errors vs SIESTA', 'out-of-sample (committee)', 'member 3 of 3'))
+ok = ok and any('no test-set validation' in x for x in w) and any('seed 125 overfits' in x for x in w) \
+        and not any('seed 124' in x for x in w)
+sys.exit(0 if ok else 1)
+"
+
+# --- 5b. A fine-tuned model with its card, end to end ---
+echo -e "\n--- Testing a fine-tuned model with its model card, end to end (tiny O2 model from the 4.17 fixtures) ---"
+MLFF_FIX="$FIXTURE_DIR/../../4-workflow/17-mlff/analysis"
+if command -v mace_run_train &> /dev/null && ls -d "$MLFF_FIX"/mlff_config_* > /dev/null 2>&1; then
+    mkdir -p ft
+    cp -r "$MLFF_FIX"/mlff_config_* ft/
+    (cd ft && stb-mlffAnalysis --path "mlff_config_*" --committee 1 -o model --epochs 2 --batch-size 4 --device cpu \
+        --foundation-model small --no-stability --name ft --no-intro > ../log_ft_train.txt 2>&1)
+    check_exit_code $? 0
+    check_success ft/model/ft_compiled.model
+    check_success ft/model/mlff_model_card.json
+    CM="--custom-model ft/model/ft_compiled.model --custom-model-card ft/model/mlff_model_card.json"
+
+    echo "Testing: the report shows the card section by section and checks the run against the trained range"
+    rm -f stb_mlmd_report.txt
+    stb-mlmd --file ft/mlff_config_001/calc.fdf $CM --n-steps 60 --stride 10 --seed 1 --save-report \
+        -o ft_traj.xsf --output-structure ft_final.fdf --no-intro > log_ft.txt 2>&1
+    check_exit_code $? 0
+    for sec in "Model card -- identity" "\[verified\]" "Model card -- level of theory" \
+               "Model card -- training data and trained domain" "Trained range" "Model card -- recipe and accuracy" \
+               "Errors vs SIESTA" "Model card -- stability, speed and usage" "Model domain along the run"; do
+        check_contains "$sec" log_ft.txt
+    done
+    check_contains "has no test-set validation" log_ft.txt
+    check_not_contains "Model card        : none" log_ft.txt
+    echo "Testing: an O2 molecule in a 10 Ang box is not treated as a bulk crystal (card criterion: gaps >= 5 Ang)"
+    check_contains "Empty space       : gaps >= 5 Ang along 3" log_ft.txt
+    check_contains "(includes vacuum)" log_ft.txt
+    check_not_contains "Lindemann ratio   :" log_ft.txt
+    check_not_contains "Heat capacity     :" log_ft.txt
+    check_not_contains "Pressure (GPa)" log_ft.txt
+    check_python "the report's SHA-256 is the model file's, and the report file holds the card" "
+import hashlib, re, sys
+t = open('stb_mlmd_report.txt').read()
+h = hashlib.sha256(open('ft/model/ft_compiled.model', 'rb').read()).hexdigest()
+m = re.search(r'SHA-256           : ([0-9a-f]{16})\.\.\.', t)
+sys.exit(0 if m and h.startswith(m.group(1)) and 'Model card -- identity' in t else 1)
+"
+
+    echo "Testing: a structure outside the trained range is flagged (O2 bond squeezed to 0.80 Ang)"
+    python3 - <<'PYEOF'
+import numpy as np
+from stb.core import structure_io
+s = structure_io.read_fdf('ft/mlff_config_001/calc.fdf')
+p = structure_io.to_pymatgen(s)
+c = p.cart_coords.mean(axis=0)
+d = p.cart_coords[1] - p.cart_coords[0]
+d /= np.linalg.norm(d)
+for i, sign in ((0, -1), (1, 1)):
+    p.replace(i, p[i].species_string, c + sign * 0.40 * d, coords_are_cartesian=True)
+structure_io.write_fdf(structure_io.from_pymatgen(p, species_meta=s.species_meta), 'ft_short.fdf')
+PYEOF
+    stb-mlmd --file ft_short.fdf $CM --ensemble nve --timestep 0.1 --n-steps 20 --stride 5 --seed 1 \
+        -o ft_short.xsf --output-structure ft_short_final.fdf --no-intro > log_ft_short.txt 2>&1
+    check_exit_code $? 0
+    check_contains "OUTSIDE" log_ft_short.txt
+    check_contains "closer than any pair in the training" log_ft_short.txt
+    check_contains "Model card check: shortest interatomic distance" log_ft_short.txt
+
+    echo "Testing: elements the model never saw are refused with a clear message, not a traceback"
+    stb-mlmd --file si_bulk.fdf $CM --n-steps 10 --no-intro > log_ft_elem.txt 2>&1
+    check_exit_code $? 1
+    check_contains "trained only on O and cannot evaluate Ge, Si" log_ft_elem.txt
+    check_not_contains "Traceback" log_ft_elem.txt
+else
+    echo -e "${YELLOW}Skipped:${NC} needs mace_run_train and the 4.17 fixtures ($MLFF_FIX)."
+fi
 
 
 # --- 6. --out-format xyz embeds per-frame Epot/Temp/Time ---
@@ -199,6 +371,16 @@ echo "Testing: nonexistent input file"
 stb-mlmd --file nope.fdf --no-intro > log_missing_input.txt 2>&1
 check_exit_code $? 1
 check_contains "not found" log_missing_input.txt
+
+echo "Testing: a long timestep and --show without a display end up in the WARNINGS section"
+MPLBACKEND=Agg stb-mlmd --file si_bulk.fdf --n-steps 20 --stride 10 --timestep 3 --show -o warn.xsf \
+    --output-structure warn.fdf --no-intro > log_warn.txt 2>&1
+check_exit_code $? 0
+check_python "both warnings are listed after [10] WARNINGS" "
+import re, sys
+t = re.sub(r'\x1b\[[0-9;]*m', '', open('log_warn.txt').read()).split('[10] WARNINGS', 1)[1]
+sys.exit(0 if 'a 3 fs timestep is long' in t and '--show needs a display' in t else 1)
+"
 
 echo "Testing: --version"
 stb-mlmd --version > log_version.txt 2>&1
@@ -258,10 +440,11 @@ fi
 # --- 9. Interactive path (stb-suite, shortcut 5.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.1) ---"
 rm -f interactive_traj.xsf md_final.fdf
-printf '5.1\nsi_bulk.fdf\n\nsmall\n1\n300\n0\n30\n1.0\nn\ninteractive_traj.xsf\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.1\nsi_bulk.fdf\n\nsmall\n1\n300\n0\n30\n1.0\nn\ninteractive_traj.xsf\ny\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_traj.xsf
 check_success md_final.fdf
+check_success si_bulk_md_dashboard.png
 
 
 popd > /dev/null

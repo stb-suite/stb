@@ -12,6 +12,7 @@ import os
 import sys
 import glob
 import shutil
+import signal
 import subprocess
 import re
 import json
@@ -52,6 +53,8 @@ DEFAULT_LR = 0.001
 DEFAULT_STRESS_WEIGHT = 10000.0
 _EV_A3_TO_GPA = 160.21766208
 DEFAULT_COMMITTEE = 3
+# mace_run_train killed by a signal (a crash, not a training error) is started again this many times
+SIGNAL_RETRIES = 1
 
 
 def _scf_converged(out_file):
@@ -1909,15 +1912,42 @@ def train_member(args, atoms_list, seed, member_dir, device, train_stress, tag, 
     with open(os.path.join(member_dir, "mace_run_train.cmd"), "w") as f:
         f.write(" ".join(cmd) + "\n")
     t0 = time.monotonic()
-    try:
-        with open(log_path, "w") as log_f:
-            result = run_with_spinner(subprocess.run, cmd, stdout=log_f, stderr=subprocess.STDOUT,
-                                      label=f"Training seed {seed} ({args.epochs} epochs max)")
-    except FileNotFoundError:
-        fail("'mace_run_train' could not be executed (not found on PATH at run time).")
+    attempt = 0
+    while True:
+        try:
+            with open(log_path, "w") as log_f:
+                result = run_with_spinner(subprocess.run, cmd, stdout=log_f, stderr=subprocess.STDOUT,
+                                          label=f"Training seed {seed} ({args.epochs} epochs max)")
+        except FileNotFoundError:
+            fail("'mace_run_train' could not be executed (not found on PATH at run time).")
+        # Killed by a signal (negative code: SIGABRT from a glibc heap check, SIGSEGV, ...) is not a
+        # problem of the data or the recipe -- on one machine a member died once with
+        # 'free(): invalid pointer' inside torch's JIT optimizer and trained fine when started again.
+        # Retry such a crash from scratch (its partial folders removed); a normal error exit is not retried.
+        if result.returncode < 0 and attempt < SIGNAL_RETRIES:
+            attempt += 1
+            try:
+                sig = signal.Signals(-result.returncode).name
+            except ValueError:
+                sig = f"signal {-result.returncode}"
+            crash_log = os.path.join(member_dir, f"mace_run_train.crash{attempt}.log")
+            os.replace(log_path, crash_log)
+            for sub in ("checkpoints", "logs", "results"):
+                shutil.rmtree(os.path.join(member_dir, sub), ignore_errors=True)
+            warn(f"Training: seed {seed}: mace_run_train was killed by {sig} (a crash, not a training error) "
+                 f"and was started again from scratch -- log of the crash kept as {crash_log}. Repeated "
+                 "crashes of unrelated programs on one machine point to its memory (run memtest86+).")
+            print_dual(color_text(f"  [RETRY] killed by {sig}; training seed {seed} again "
+                                  f"(attempt {attempt + 1})", 'yellow'), f_out)
+            continue
+        break
     seconds = time.monotonic() - t0
     if result.returncode != 0:
-        fail(f"mace_run_train exited with code {result.returncode} (seed {seed}) -- see {log_path}.")
+        how = (f"was killed by {signal.Signals(-result.returncode).name}"
+               if result.returncode < 0 and -result.returncode in {s.value for s in signal.Signals}
+               else f"exited with code {result.returncode}")
+        fail(f"mace_run_train {how} (seed {seed}"
+             + (f", after {attempt} retry" if attempt else "") + f") -- see {log_path}.")
 
     model_path = find_mace_model(member_dir, args.name)
     history = read_mace_history(member_dir, seed)

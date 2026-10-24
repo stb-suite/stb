@@ -264,10 +264,24 @@ def _dim(n_vacuum):
     return {0: "3D", 1: "2D", 2: "1D", 3: "0D"}.get(n_vacuum, "?")
 
 
+_COLLECTOR = None
+
+
+def collect_warnings(collector):
+    """Send the card's run-time warnings (structure outside the trained range, forces beyond the
+    training forces) to `collector`, a list, instead of stderr -- for a tool that lists every
+    warning in one final section. None restores printing."""
+    global _COLLECTOR
+    _COLLECTOR = collector
+
+
 def _warn_once(message, tag="model card"):
     if message in _WARNED:
         return
     _WARNED.add(message)
+    if _COLLECTOR is not None:
+        _COLLECTOR.append(f"{tag}: {message}")
+        return
     print(f"[WARNING] {tag}: {message}", file=sys.stderr)
 
 
@@ -329,6 +343,11 @@ def announce(model_path):
     _ANNOUNCED.add(key)
     for line in summary_lines(_REGISTRY[key], _CARD_PATHS.get(key)):
         print(line)
+
+
+def mark_announced(model_path):
+    """Skip announce()'s short summary for this model -- for a tool that prints the card in full itself."""
+    _ANNOUNCED.add(os.path.realpath(model_path))
 
 
 def card_flag(model_flag):

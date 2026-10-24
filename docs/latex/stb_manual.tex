@@ -31296,9 +31296,15 @@ Option & Adds \\
 \textbf{The best model.} Every run also picks the one model to use and copies it, with its
 card, to \texttt{\textless{}run\ folder\textgreater{}/\allowbreak{}best\_\allowbreak{}model/} (\texttt{mlff\_\allowbreak{}model\_\allowbreak{}compiled.\allowbreak{}model},
 \texttt{mlff\_\allowbreak{}model.\allowbreak{}model}, \texttt{mlff\_\allowbreak{}model\_\allowbreak{}card.\allowbreak{}json}), replacing what the previous run
-left there. \emph{Best} is the round with the lowest committee-mean test force RMSE among the
-rounds scored in that run and, inside it, the single member with the lowest test force RMSE (a
-member that failed Stage 2's MD stability check only wins if all did). The card there carries a
+left there. \emph{Best} is the round with the lowest committee-mean force RMSE among the
+rounds scored in that run and, inside it, the single member with the lowest such RMSE (a
+member that failed Stage 2's MD stability check only wins if all did). The RMSE is over the test
+set; once \texttt{-\/-md-\allowbreak{}check} frames are labelled and scored for every round, it is pooled over
+the test set and those frames, every SIESTA force component weighted alike --- the test set is
+drawn like the training set (often one small cell) and can miss what an MD visits. On bulk Si the
+8-atom test set preferred round 1 (23 vs 29 meV/\AA) while on 64-atom frames of an 800~K MD round 2
+was four times better (35 vs 133 meV/\AA); the pooled RMSE picks round 2, and \texttt{[13]} says
+when the two choices differ. The card there carries a
 \texttt{selection} section (round, seed, why, the rounds compared, test scores, the verdict of the
 latest round) and the JSON state file a \texttt{best} entry, so
 \texttt{-\/-\allowbreak{}custom-\allowbreak{}model\ best\_\allowbreak{}model/\allowbreak{}mlff\_\allowbreak{}model\_\allowbreak{}compiled.\allowbreak{}model\ -\allowbreak{}\/-\allowbreak{}custom-\allowbreak{}model-\allowbreak{}card\ best\_\allowbreak{}model/\allowbreak{}mlff\_\allowbreak{}model\_\allowbreak{}card.\allowbreak{}json}
@@ -36662,9 +36668,12 @@ before (or instead of) an expensive ab initio MD run, and its trajectory can be 
 
 \subsection{Ensembles}
 \begin{description}[style=nextline,leftmargin=1.5em]
-  \item[\texttt{nve}] velocity Verlet: energy conserving. The report gives the relative drift of the
-    total energy $E_\mathrm{pot}+E_\mathrm{kin}$ and warns above 1~\%, a sign that
-    \opt{--timestep} is too large.
+  \item[\texttt{nve}] velocity Verlet: energy conserving. The report fits the total energy
+    $E_\mathrm{tot}=E_\mathrm{pot}+E_\mathrm{kin}$ against time and gives its drift in
+    meV/atom/ps, warning above 1~meV/atom/ps, and compares the fluctuation of $E_\mathrm{tot}$ with
+    that of $E_\mathrm{pot}$: both grow when \opt{--timestep} is too large. (A drift relative to the
+    absolute total energy would say nothing on SIESTA's energy scale: 216 Si atoms have
+    $E_\mathrm{tot}\approx-24\,826$~eV, so 1~\% would be a 248~eV drift.)
   \item[\texttt{nvt} (default)] Langevin thermostat at \opt{--temperature} with friction
     \opt{--friction} (fs$^{-1}$, default 0.01).
   \item[\texttt{npt}] Berendsen thermostat and barostat \cite{Berendsen1984} at \opt{--temperature}
@@ -36678,14 +36687,49 @@ velocities follow a Maxwell--Boltzmann distribution at the target temperature (\
 reproducibility); \opt{--equilibration-steps} are run and discarded before the \opt{--n-steps}
 production steps, because a freshly seeded structure needs about 100--200 steps to settle.
 
+\subsection{The report}
+The report has numbered sections, with every warning collected in the last one and the messages of
+MACE, torch and ASE only counted:
+\begin{description}[style=nextline,leftmargin=1.5em]
+  \item[{[0]--[1]} Run and structure] software, device (GPU name), ensemble; formula, cell, volume
+    and density, shortest and nearest-neighbour distances, degrees of freedom.
+  \item[{[2]} Model] for a fine-tuned model, its \emph{model card} in full: identity (file, SHA-256
+    checked against the card, committee member and round, how it was selected), architecture,
+    level of theory of the SIESTA labels (every setting, DFT-D3, pseudopotential checksums, energy
+    scale and E0), training set and trained range (cell size, shortest distance, forces, pressure,
+    energy per atom, atoms per cell), recipe, errors against SIESTA (train, validation,
+    out-of-sample, test set, raw foundation model; per kind, phonons, MD check, committee
+    calibration, verdict of \menucode{4.17.3}), stability and speed, usage notes. The card's own
+    alarms (no test-set validation, a verdict other than STOP, a failed stability test, warnings
+    recorded at training) go to the warnings.
+  \item[{[3]--[5]} Setup, equilibration, production] integrator and couplings, lengths, sampling;
+    a progress table (T, $E_\mathrm{pot}$/atom, P, V/atom, largest force) and the speed in ms/step,
+    $\mu$s/atom/step and ns/day.
+  \item[{[6]} Thermodynamics] means with block-averaged standard errors, fluctuations and ranges of
+    T, energies per atom, pressure (virial plus kinetic) and, in NPT, volume, density and lattice
+    parameters; in NVT the heat capacity from the energy fluctuations,
+    $C_V=\langle\delta E^2\rangle/k_BT^2$ (3~$k_B$/atom for a classical harmonic solid).
+  \item[{[7]} Ensemble checks] NVE drift; thermostat (mean T against the target, fluctuation against
+    the canonical $T\sqrt{2/N_\mathrm{dof}}$); barostat (mean P against the target); a stationarity
+    test comparing the first and last third of T, $E_\mathrm{pot}$ and V.
+  \item[{[8]} Structure and model domain] shortest distance along the run, $g(r)$ (first peak,
+    first minimum, coordination), mean-square displacement with every time origin and the diffusion
+    coefficient, a Lindemann ratio (RMS displacement about the mean positions over the
+    nearest-neighbour distance: below 0.1 solid-like); with a card, a table of what the run visited
+    against the trained range.
+\end{description}
+
 \subsection{Outputs}
 \begin{itemize}
   \item the trajectory, one frame every \opt{--stride} steps, in \opt{--out-format} (xsf, pdb or
     xyz; Section~\ref{sec-traj-formats}; extended XYZ carries time, energy and temperature per frame),
     named by \opt{-o} or \file{<stem>\_md\_traj.<ext>};
-  \item \file{<stem>\_md\_diagnostics.png} (energies, temperature and, for NPT, volume against time),
-    and the numbers with \opt{--save-data};
-  \item the last frame as \opt{--output-structure} (default \file{md\_final.fdf}).
+  \item the last frame as \opt{--output-structure} (default \file{md\_final.fdf});
+  \item opt-in: \opt{--png} saves a six-panel dashboard (temperature, energies, pressure, volume or
+    shortest distance, $g(r)$, MSD) as \file{<stem>\_md\_dashboard.png}, \opt{--show} displays it;
+    \opt{--save-data} writes \file{<stem>\_md\_thermo.dat}, \file{<stem>\_md\_rdf.dat} and
+    \file{<stem>\_md\_msd.dat}; \opt{--save-gnuplot} adds \file{<stem>\_md.gplot}, the same six panels
+    for gnuplot; \opt{--save-report} keeps the report.
 \end{itemize}
 
 \begin{codeblock}
@@ -36703,45 +36747,50 @@ model for the system (\menucode{4.17}) and use its MD stability test.
 \label{ref-5.1}
 \subsubsection{\texorpdfstring{\texttt{stb-mlmd}}{stb-mlmd}}
 \label{cmd-stb-mlmd}\index{stb-mlmd@\texttt{stb-mlmd}|textbf}
-Molecular dynamics driven by a MACE potential -- the MACE-MP-0 foundation model, or a custom model fine-tuned on your own SIESTA data via \texttt{stb-\allowbreak{}mlffAnalysis} (\texttt{-{}-custom-\allowbreak{}model}). NVE (microcanonical), NVT (Langevin thermostat), or NPT (Berendsen thermostat+barostat, bulk-only) ensembles. A fast heuristic exploration tool, not a substitute for a real ab initio MD run.
+Molecular dynamics driven by a MACE potential -- the MACE-MP-0 foundation model, or a custom model fine-tuned on your own SIESTA data via \texttt{stb-\allowbreak{}mlffAnalysis} (\texttt{-{}-custom-\allowbreak{}model}, always with its model card). NVE (microcanonical), NVT (Langevin thermostat), or NPT (Berendsen thermostat+barostat, bulk-only) ensembles. The report covers the model and its card, thermodynamic averages with error bars, ensemble checks (NVE drift in meV/atom/ps, temperature fluctuations, pressure), the structure along the run (shortest distance, g(r), MSD and diffusion, Lindemann ratio) and whether the run stayed inside the model's trained range; every warning goes to one final section. A fast heuristic exploration tool, not a substitute for a real ab initio MD run.
 
 \paragraph{Synopsis}
 \begin{helpblock}
-usage: stb-mlmd [-h] --file FILE [--model {small,medium,large}] [--custom-model PATH]
-                [--custom-model-card JSON] [--ensemble {nve,nvt,npt}]
-                [--temperature TEMPERATURE] [--pressure PRESSURE]
-                [--timestep TIMESTEP] [--n-steps N_STEPS]
-                [--equilibration-steps EQUILIBRATION_STEPS] [--friction FRICTION]
-                [--taut TAUT] [--taup TAUP] [--compressibility COMPRESSIBILITY]
-                [--stride STRIDE] [--vacuum-gap VACUUM_GAP] [-of {pdb,xsf,xyz}]
-                [-o OUTPUT] [--output-structure OUTPUT_STRUCTURE]
-                [--device {cpu,cuda}] [--seed SEED] [--save-data] [--save-report]
-                [--no-intro] [-v]
+usage: stb-mlmd [-h] --file FILE [--model {small,medium,large}]
+                [--custom-model PATH] [--custom-model-card JSON]
+                [--ensemble {nve,nvt,npt}] [--temperature TEMPERATURE]
+                [--pressure PRESSURE] [--timestep TIMESTEP]
+                [--n-steps N_STEPS]
+                [--equilibration-steps EQUILIBRATION_STEPS]
+                [--friction FRICTION] [--taut TAUT] [--taup TAUP]
+                [--compressibility COMPRESSIBILITY] [--stride STRIDE]
+                [--vacuum-gap VACUUM_GAP] [-of {pdb,xsf,xyz}] [-o OUTPUT]
+                [--output-structure OUTPUT_STRUCTURE] [--device {cpu,cuda}]
+                [--seed SEED] [--png [FILE]] [--show] [--save-gnuplot]
+                [--save-data] [--save-report] [--no-intro] [-v]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
-\optitem{-{}-file FILE}{\index{stb-mlmd@\texttt{stb-mlmd}!--file@\texttt{--file}}Input structure (.fdf).\optmeta{required}}
+\optitem{-{}-file FILE}{\index{stb-mlmd@\texttt{stb-mlmd}!--file@\texttt{--file}}Input structure (.fdf).}
 \optitem{-{}-model \{small,\allowbreak{}medium,\allowbreak{}large\}}{\index{stb-mlmd@\texttt{stb-mlmd}!--model@\texttt{--model}}MACE-MP-0 model size (default: medium). Ignored if \texttt{-{}-custom-\allowbreak{}model} is given.\optmeta{choices: small, medium, large}}
 \optitem{-{}-custom-\allowbreak{}model PATH}{\index{stb-mlmd@\texttt{stb-mlmd}!--custom-model@\texttt{--custom-model}}Use a custom MACE model file instead of the MACE-MP-0 foundation potential -- e.g. one fine-tuned via \texttt{stb-\allowbreak{}mlffAnalysis}. Overrides \texttt{-{}-model}.}
-\optitem{-{}-custom-\allowbreak{}model-\allowbreak{}card JSON}{\index{stb-mlmd@\texttt{stb-mlmd}!--custom-model-card@\texttt{--custom-model-card}}Model card of the \texttt{-{}-custom-\allowbreak{}model} file: the \texttt{mlff\_\allowbreak{}model\_\allowbreak{}card.\allowbreak{}json} that \texttt{stb-\allowbreak{}mlffAnalysis} wrote next to it (training data, level of theory, accuracy, energy scale). Required with \texttt{-{}-custom-model}: the card is checked against the model file and used to warn when a structure is outside what the model was trained on.}
+\optitem{-{}-custom-\allowbreak{}model-\allowbreak{}card JSON}{\index{stb-mlmd@\texttt{stb-mlmd}!--custom-model-card@\texttt{--custom-model-card}}Model card of the \texttt{-{}-custom-\allowbreak{}model} file: the \texttt{mlff\_\allowbreak{}model\_\allowbreak{}card.\allowbreak{}json} that \texttt{stb-\allowbreak{}mlffAnalysis} wrote next to it (training data, level of theory, accuracy, energy scale). Required with \texttt{-{}-custom-\allowbreak{}model} -- the card is checked against the model file and used to warn when a structure is outside what the model was trained on.}
 \optitem{-{}-ensemble \{nve,\allowbreak{}nvt,\allowbreak{}npt\}}{\index{stb-mlmd@\texttt{stb-mlmd}!--ensemble@\texttt{--ensemble}}MD ensemble (default: nvt). npt requires a bulk (no vacuum-padded axis) structure -- cell dynamics on a slab/wire/molecule would be physically meaningless.\optmeta{choices: nve, nvt, npt}}
-\optitem{-{}-temperature TEMPERATURE}{\index{stb-mlmd@\texttt{stb-mlmd}!--temperature@\texttt{--temperature}}Target temperature, K (default: 300).\optmeta{type: float}}
+\optitem{-{}-temperature TEMPERATURE}{\index{stb-mlmd@\texttt{stb-mlmd}!--temperature@\texttt{--temperature}}Target temperature, K (default: 300). In NVE only the initial velocities.\optmeta{type: float}}
 \optitem{-{}-pressure PRESSURE}{\index{stb-mlmd@\texttt{stb-mlmd}!--pressure@\texttt{--pressure}}Target pressure, GPa (npt only, default: 0.0 -- ambient).\optmeta{type: float}}
 \optitem{-{}-timestep TIMESTEP}{\index{stb-mlmd@\texttt{stb-mlmd}!--timestep@\texttt{--timestep}}MD timestep, fs (default: 1.0).\optmeta{type: float}}
 \optitem{-{}-n-\allowbreak{}steps N\_\allowbreak{}STEPS}{\index{stb-mlmd@\texttt{stb-mlmd}!--n-steps@\texttt{--n-steps}}Number of PRODUCTION MD steps, after \texttt{-{}-equilibration-\allowbreak{}steps} (default: 1000).\optmeta{type: int}}
 \optitem{-{}-equilibration-\allowbreak{}steps EQUILIBRATION\_\allowbreak{}STEPS}{\index{stb-mlmd@\texttt{stb-mlmd}!--equilibration-steps@\texttt{--equilibration-steps}}Steps to run and discard BEFORE production (default: 0). Verified live that a freshly Maxwell-Boltzmann-seeded structure relaxes for \textasciitilde{}100-200 steps before settling -- letting that transient into the saved trajectory/statistics biases them towards the initial condition.\optmeta{type: int}}
 \optitem{-{}-friction FRICTION}{\index{stb-mlmd@\texttt{stb-mlmd}!--friction@\texttt{--friction}}Langevin friction coefficient, fs\textasciicircum{}-1 (nvt only, default: 0.01).\optmeta{type: float}}
-\optitem{-{}-taut TAUT}{\index{stb-mlmd@\texttt{stb-mlmd}!--taut@\texttt{--taut}}Thermostat coupling time, fs (nvt/npt, default: 100).\optmeta{type: float}}
+\optitem{-{}-taut TAUT}{\index{stb-mlmd@\texttt{stb-mlmd}!--taut@\texttt{--taut}}Thermostat coupling time, fs (npt only -- Berendsen, default: 100).\optmeta{type: float}}
 \optitem{-{}-taup TAUP}{\index{stb-mlmd@\texttt{stb-mlmd}!--taup@\texttt{--taup}}Barostat coupling time, fs (npt only, default: 500).\optmeta{type: float}}
 \optitem{-{}-compressibility COMPRESSIBILITY}{\index{stb-mlmd@\texttt{stb-mlmd}!--compressibility@\texttt{--compressibility}}Compressibility, 1/bar (npt only, default: 4.57e-5 -- water's value, a generic placeholder; override with something closer to 1/bulk-modulus for the actual material, 1/(B[GPa] x 1e4) -- e.g. Si, B \textasciitilde{} 98 GPa: 1e-6 -- for a better-calibrated barostat response).\optmeta{type: float}}
-\optitem{-{}-stride STRIDE}{\index{stb-mlmd@\texttt{stb-mlmd}!--stride@\texttt{--stride}}Save one trajectory frame every Nth MD step (default: 10).\optmeta{type: int}}
-\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-mlmd@\texttt{stb-mlmd}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes (default: 10.0, matches \texttt{stb-\allowbreak{}kgrid/\allowbreak{}stb-\allowbreak{}mlrelax}).\optmeta{type: float}}
+\optitem{-{}-stride STRIDE}{\index{stb-mlmd@\texttt{stb-mlmd}!--stride@\texttt{--stride}}Save one trajectory frame (and one sample of every quantity) every Nth MD step (default: 10).\optmeta{type: int}}
+\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-mlmd@\texttt{stb-mlmd}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes (default: 10.0, matches \texttt{stb-\allowbreak{}kgrid}/\texttt{stb-\allowbreak{}mlrelax}).\optmeta{type: float}}
 \optitem{-of, -{}-out-\allowbreak{}format \{pdb,\allowbreak{}xsf,\allowbreak{}xyz\}}{\index{stb-mlmd@\texttt{stb-mlmd}!--out-format@\texttt{--out-format}}Trajectory format (default: xsf). Same 3 choices as \texttt{stb-\allowbreak{}ani2traj}.\optmeta{choices: pdb, xsf, xyz}}
 \optitem{-o, -{}-output OUTPUT}{\index{stb-mlmd@\texttt{stb-mlmd}!--output@\texttt{--output}}Trajectory filename. Default: \textless{}input stem\textgreater{}\_md\_traj.\textless{}ext\textgreater{}}
 \optitem{-{}-output-\allowbreak{}structure OUTPUT\_\allowbreak{}STRUCTURE}{\index{stb-mlmd@\texttt{stb-mlmd}!--output-structure@\texttt{--output-structure}}Final-frame structure output (default: \texttt{md\_\allowbreak{}final.\allowbreak{}fdf}).}
 \optitem{-{}-device \{cpu,\allowbreak{}cuda\}}{\index{stb-mlmd@\texttt{stb-mlmd}!--device@\texttt{--device}}Device to run the model on (default: cpu).\optmeta{choices: cpu, cuda}}
 \optitem{-{}-seed SEED}{\index{stb-mlmd@\texttt{stb-mlmd}!--seed@\texttt{--seed}}Random seed for initial velocities.\optmeta{type: int}}
-\optitem{-{}-save-\allowbreak{}data}{\index{stb-mlmd@\texttt{stb-mlmd}!--save-data@\texttt{--save-data}}Also write the raw energy/temperature-vs-time data (.dat) behind the diagnostics plot. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-png FILE}{\index{stb-mlmd@\texttt{stb-mlmd}!--png@\texttt{--png}}Save the run's dashboard (temperature, energies, pressure, volume or shortest distance, g(r), MSD) as a PNG (default name: \textless{}input \texttt{stem\textgreater{}\_\allowbreak{}md\_\allowbreak{}dashboard.\allowbreak{}png}). Off by default.}
+\optitem{-{}-show}{\index{stb-mlmd@\texttt{stb-mlmd}!--show@\texttt{--show}}Display the dashboard on screen (needs a display). Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-mlmd@\texttt{stb-mlmd}!--save-gnuplot@\texttt{--save-gnuplot}}Write the data files (as \texttt{-{}-save-\allowbreak{}data}) plus \textless{}input stem\textgreater{}\_md.gplot, the same six panels for gnuplot ('gnuplot \textless{}stem\textgreater{}\_md.gplot' -\textgreater{} \textless{}stem\textgreater{}\_md.pdf). Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}data}{\index{stb-mlmd@\texttt{stb-mlmd}!--save-data@\texttt{--save-data}}Write the data behind the report: \texttt{\textless{}stem\textgreater{}\_\allowbreak{}md\_\allowbreak{}thermo.\allowbreak{}dat} (time series: T, energies per atom, P, volume, cell, shortest distance, max force), \texttt{\textless{}stem\textgreater{}\_\allowbreak{}md\_\allowbreak{}rdf.\allowbreak{}dat} and \texttt{\textless{}stem\textgreater{}\_\allowbreak{}md\_\allowbreak{}msd.\allowbreak{}dat}. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-mlmd@\texttt{stb-mlmd}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{stb\_\allowbreak{}mlmd\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
@@ -36749,10 +36798,11 @@ usage: stb-mlmd [-h] --file FILE [--model {small,medium,large}] [--custom-model 
 \begin{helpblock}
 Example usage:
   stb-mlmd --file structure.fdf --ensemble nvt --temperature 300 --n-steps 5000
-  stb-mlmd --file structure.fdf --ensemble nvt --equilibration-steps 200 --n-steps 5000
+  stb-mlmd --file structure.fdf --ensemble nvt --equilibration-steps 200 --n-steps 5000 --png --save-gnuplot
   stb-mlmd --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json --ensemble npt \
-                           --temperature 500 --pressure 0.0 --n-steps 10000
+                           --temperature 500 --pressure 0.0 --compressibility 1e-6 --n-steps 10000 --device cuda
 \end{helpblock}
+
 
 
 \section{ML Phonons}

@@ -6716,9 +6716,17 @@ def run_mlmd_generator() -> None:
     if output:
         args.extend(["--output", output])
 
-    save_data = get_input("Also save the raw energy/temperature diagnostics data (.dat)? (y/N): ").strip().lower()
-    if save_data == 'y':
+    print(f"\n{color_text('Plots and files (all optional):', 'yellow')}")
+    if get_input("Save the run's dashboard as a PNG (T, energies, P, volume, g(r), MSD)? (y/N): ").strip().lower() == 'y':
+        args.append("--png")
+    if get_input("Display the dashboard on screen (needs a display)? (y/N): ").strip().lower() == 'y':
+        args.append("--show")
+    if get_input("Write gnuplot files (.dat + .gplot of the same panels)? (y/N): ").strip().lower() == 'y':
+        args.append("--save-gnuplot")
+    elif get_input("Write the data files only (.dat: time series, g(r), MSD)? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
+    if get_input("Save the report to stb_mlmd_report.txt? (y/N): ").strip().lower() == 'y':
+        args.append("--save-report")
 
     run_tool("stb-mlmd", args)
 

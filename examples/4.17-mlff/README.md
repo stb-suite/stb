@@ -612,9 +612,15 @@ configs far above the test set in energy). Optionally:
 **The best model.** Every run also picks the one model to use and copies it, with its
 card, to `<run folder>/best_model/` (`mlff_model_compiled.model`, `mlff_model.model`,
 `mlff_model_card.json`), replacing what the previous run left there. *Best* is the
-round with the lowest committee-mean test force RMSE among the rounds scored in that run
-and, inside it, the single member with the lowest test force RMSE (a member that failed
-Stage 2's MD stability check only wins if all did). The card there carries a `selection`
+round with the lowest committee-mean force RMSE among the rounds scored in that run
+and, inside it, the single member with the lowest such RMSE (a member that failed
+Stage 2's MD stability check only wins if all did). The RMSE is over the test set; once
+`--md-check` frames are labelled and scored for every round, it is pooled over the test set
+and those frames, every SIESTA force component weighted alike -- the test set is drawn like
+the training set (often one small cell) and can miss what an MD visits. On bulk Si the
+8-atom test set preferred round 1 (23 vs 29 meV/Å) while on 64-atom frames of an 800 K MD
+round 2 was four times better (35 vs 133 meV/Å); the pooled RMSE picks round 2, and `[13]`
+says when the two choices differ. The card there carries a `selection`
 section (round, seed, why, the rounds compared, test scores, the verdict of the latest
 round) and the JSON state file a `best` entry, so `--custom-model best_model/mlff_model_compiled.model
 --custom-model-card best_model/mlff_model_card.json` is always the current answer. Run

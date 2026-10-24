@@ -761,25 +761,70 @@ def _round_label(k):
 BEST_DIR = "best_model"   # next to the workflow file; rewritten by every Stage 3 run
 
 
-def export_best_model(state, rounds, best_k, wf_base, workflow_path, verdict_code, n_test, warn):
+def _n_force_components(atoms_list, per_config):
+    return 3 * sum(len(a) for a, r in zip(atoms_list, per_config or []) if r is not None)
+
+
+def selection_scores(rounds_only, test_atoms, md_atoms):
+    """The numbers best_model/ is chosen by: per round, the committee-mean and per-member force RMSE.
+
+    With MD-check frames scored for EVERY round, the RMSE is pooled over all held-out SIESTA force
+    components -- test set + MD frames, each component weighted alike (a 64-atom frame counts 8x an
+    8-atom test config) -- because the test set is drawn like the training set (often a small cell
+    only) and can miss what an MD visits: on Si, the 8-atom test set picked round 1 (23 vs 29 meV/Ang)
+    while on 64-atom 800 K frames round 2 was 4x better (35 vs 130). Without MD frames (or when a
+    round lacks them) it is the test-set RMSE, as before. Returns {round: {"committee", "members",
+    "test", "md"}} and a one-line description of the basis."""
+    pooled = bool(md_atoms) and all((v.get("md") or {}).get("overall") for _, v in rounds_only)
+    out = {}
+    for k, v in rounds_only:
+        nt = _n_force_components(test_atoms, v["per_config"])
+        f_t = v["overall"]["F_rmse_meV"]
+        mem_t = [m["F_rmse_meV"] if m else None for m in v["members"]]
+        if pooled:
+            md = v["md"]
+            nm = _n_force_components(md_atoms, md["per_config"])
+            f_m = md["overall"]["F_rmse_meV"]
+
+            def comb(a, b):
+                return None if a is None or b is None else float(np.sqrt((a * a * nt + b * b * nm) / (nt + nm)))
+            mem_m = [m["F_rmse_meV"] if m else None for m in md["members"]]
+            out[k] = {"committee": comb(f_t, f_m), "members": [comb(a, b) for a, b in zip(mem_t, mem_m)],
+                      "test": f_t, "md": f_m}
+        else:
+            out[k] = {"committee": f_t, "members": mem_t, "test": f_t, "md": None}
+    basis = ("force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force "
+             "component weighted alike)" if pooled else "test-set force RMSE")
+    return out, basis
+
+
+def export_best_model(state, rounds, best_k, wf_base, workflow_path, verdict_code, n_test, warn,
+                      sel=None, basis="test-set force RMSE", n_md=0):
     """Copies the best model of this run, with its card, to <run folder>/best_model/ -- replacing
     whatever the previous run left there -- and records it as state['best'].
 
     Best = the round (among `rounds`, the (number, scores) pairs scored now) with the lowest
-    committee-mean test force RMSE, and within it the single member with the lowest test force
+    committee-mean force RMSE by `sel` (selection_scores(): test set + MD-check frames when every
+    round has them, else the test set alone), and within it the single member with the lowest such
     RMSE; a member that failed Stage 2's MD stability check only wins if every member did. The
     card in the folder is the member's own, plus a 'selection' section saying why it was chosen.
     Returns the info dict (also state['best']), or None when nothing could be exported."""
     v = dict(rounds)[best_k]
+    if sel is None:
+        sel = {k: {"committee": r["overall"]["F_rmse_meV"],
+                   "members": [m["F_rmse_meV"] if m else None for m in r["members"]],
+                   "test": r["overall"]["F_rmse_meV"], "md": None} for k, r in rounds}
     entry = mlff_workflow.get_round(state, best_k)
     by_seed = {m["seed"]: m for m in entry.get("committee", []) if m.get("model")}
     stab = {r.get("seed"): r.get("status") for r in (entry.get("model_checks") or {}).get("stability", [])}
-    cands = [(stab.get(sd) not in (None, "OK"), met["F_rmse_meV"], sd)
-             for sd, met in zip(v["seeds"], v["members"]) if met and sd in by_seed]
+    cands = [(stab.get(sd) not in (None, "OK"), score, sd)
+             for sd, met, score in zip(v["seeds"], v["members"], sel[best_k]["members"])
+             if met and score is not None and sd in by_seed]
     if not cands:
         warn(f"Best model: round {best_k} has no scored member with a model file -- {BEST_DIR}/ not written.")
         return None
-    _, member_f, seed = min(cands)
+    _, member_score, seed = min(cands)
+    member_f = next(m["F_rmse_meV"] for sd, m in zip(v["seeds"], v["members"]) if sd == seed)
     member = by_seed[seed]
     src_model = mlff_workflow.resolve(member["model"], wf_base)
     card_rel = member.get("card")
@@ -819,14 +864,18 @@ def export_best_model(state, rounds, best_k, wf_base, workflow_path, verdict_cod
     when = datetime.now().isoformat(timespec="seconds")
     card["selection"] = {
         "selected_by": "stb-mlffValidate", "time": when,
-        "criterion": "round with the lowest committee-mean test-set force RMSE among the rounds scored in that "
-                     "run; within it the member with the lowest test-set force RMSE (a member that failed the "
+        "criterion": f"round with the lowest committee-mean {basis} among the rounds scored in that "
+                     f"run; within it the member with the lowest {basis} (a member that failed the "
                      "MD stability check only if all did)",
+        "basis": basis,
         "round": best_k, "seed": seed, "source_model": mlff_workflow.rel(src_model, wf_base),
-        "source_card": mlff_workflow.rel(card_src, wf_base), "n_test": n_test,
+        "source_card": mlff_workflow.rel(card_src, wf_base), "n_test": n_test, "n_md_check_frames": n_md,
         "member_test": next(m for sd, m in zip(v["seeds"], v["members"]) if sd == seed),
+        "member_selection_F_rmse_meV": round(float(member_score), 3),
         "committee_mean_test": v["overall"],
-        "rounds_compared": [{"round": k, "F_rmse_meV": r["overall"]["F_rmse_meV"]} for k, r in rounds],
+        "rounds_compared": [{"round": k, "F_rmse_meV": r["overall"]["F_rmse_meV"],
+                             "md_check_F_rmse_meV": sel[k]["md"], "selection_F_rmse_meV": sel[k]["committee"]}
+                            for k, r in rounds],
         "latest_round": rounds[-1][0], "latest_round_verdict": verdict_code,
         "note": "paths in 'committee' are relative to the workflow file, not to this folder"}
     model_card.write_card(card, os.path.join(dest, model_card.CARD_FILE))
@@ -835,6 +884,10 @@ def export_best_model(state, rounds, best_k, wf_base, workflow_path, verdict_cod
             "source_model": mlff_workflow.rel(src_model, wf_base),
             "test_F_rmse_meV": round(float(member_f), 3),
             "committee_test_F_rmse_meV": round(float(v["overall"]["F_rmse_meV"]), 3),
+            "basis": basis,
+            "selection_F_rmse_meV": round(float(member_score), 3),
+            "committee_md_check_F_rmse_meV": (round(float(sel[best_k]["md"]), 3)
+                                              if sel[best_k]["md"] is not None else None),
             "verdict": verdict_code}
     state["best"] = info
     return info
@@ -1900,9 +1953,18 @@ def main():
             except Exception as e:
                 warn(f"Model card: validation not attached to round {k}'s cards ({e}).")
         try:
-            best_info = export_best_model(state, rounds_only, min(
-                rounds_only, key=lambda kv: kv[1]["overall"]["F_rmse_meV"])[0], wf_base, args.workflow,
-                code, len(test_atoms), warn)
+            sel, basis = selection_scores(rounds_only, test_atoms, md_atoms)
+            pick = min(sel, key=lambda k: sel[k]["committee"])
+            test_pick = min(rounds_only, key=lambda kv: kv[1]["overall"]["F_rmse_meV"])[0]
+            best_info = export_best_model(state, rounds_only, pick, wf_base, args.workflow,
+                                          code, len(test_atoms), warn, sel=sel, basis=basis,
+                                          n_md=len(md_atoms) if sel[pick]["md"] is not None else 0)
+            if best_info and pick != test_pick:
+                warn(f"Best model: the test set alone would pick round {test_pick} "
+                     f"({sel[test_pick]['test']:.1f} vs {sel[pick]['test']:.1f} meV/Ang), but on the MD-check frames "
+                     f"round {pick} is better ({sel[pick]['md']:.1f} vs {sel[test_pick]['md']:.1f}) -- {BEST_DIR}/ "
+                     f"holds round {pick}. The test set misses what an MD visits; add configs like the MD frames "
+                     "to it (e.g. a supercell) if you rely on it.")
         except Exception as e:
             warn(f"Best model: not exported ({type(e).__name__}: {e}).")
         mlff_workflow.record(state, "validate", "stb-mlffValidate", sys.argv[1:])
@@ -1916,9 +1978,12 @@ def main():
     if code:
         print_dual(f"Verdict           : {code.upper()}", f_out)
     if best_info:
+        md_part = (f"; committee on the MD-check frames {best_info['committee_md_check_F_rmse_meV']:.1f}"
+                   if best_info.get("committee_md_check_F_rmse_meV") is not None else "")
         print_dual(f"Best model        : round {best_info['round']}, seed {best_info['seed']} (test F RMSE "
-                   f"{best_info['test_F_rmse_meV']:.1f} meV/Ang; its committee mean {best_info['committee_test_F_rmse_meV']:.1f})"
-                   f" -> {mlff_workflow.resolve(best_info['model'], wf_base)}", f_out)
+                   f"{best_info['test_F_rmse_meV']:.1f} meV/Ang; its committee mean {best_info['committee_test_F_rmse_meV']:.1f}"
+                   f"{md_part}) -> {mlff_workflow.resolve(best_info['model'], wf_base)}", f_out)
+        print_dual(f"                    chosen by: {best_info.get('basis', 'test-set force RMSE')}", f_out)
         print_dual(f"                    + {mlff_workflow.resolve(best_info['card'], wf_base)}  ({mlff_workflow.resolve(BEST_DIR, wf_base)}/ "
                    "is rewritten by every Stage 3 run)", f_out)
     elif best_models:

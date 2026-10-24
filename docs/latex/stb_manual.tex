@@ -495,6 +495,50 @@
   doi     = {10.1063/1.2715563}
 }
 
+@article{Bultinck2007uniqueness,
+  author  = {Bultinck, Patrick and Ayers, Paul W. and Fias, Stijn and Tiels, Koen and Van Alsenoy, Christian},
+  title   = {{Uniqueness and basis set dependence of iterative Hirshfeld charges}},
+  journal = {Chemical Physics Letters},
+  year    = {2007},
+  volume  = {444},
+  number  = {1-3},
+  pages   = {205--208},
+  doi     = {10.1016/j.cplett.2007.07.014}
+}
+
+@article{Nalewajski2000infoAIM,
+  author  = {Nalewajski, Roman F. and Parr, Robert G.},
+  title   = {{Information theory, atoms in molecules, and molecular similarity}},
+  journal = {Proceedings of the National Academy of Sciences},
+  year    = {2000},
+  volume  = {97},
+  number  = {16},
+  pages   = {8879--8882},
+  doi     = {10.1073/pnas.97.16.8879}
+}
+
+@article{HeidarZadeh2018hirshfeld,
+  author  = {Heidar-Zadeh, Farnaz and Ayers, Paul W. and Verstraelen, Toon and Vinogradov, Ivan and V{\"o}hringer-Martinez, Esteban and Bultinck, Patrick},
+  title   = {{Information-theoretic approaches to atoms-in-molecules: Hirshfeld family of partitioning schemes}},
+  journal = {The Journal of Physical Chemistry A},
+  year    = {2018},
+  volume  = {122},
+  number  = {17},
+  pages   = {4219--4245},
+  doi     = {10.1021/acs.jpca.7b08966}
+}
+
+@article{Vanpoucke2013periodicHI,
+  author  = {Vanpoucke, Danny E. P. and Bultinck, Patrick and Van Driessche, Isabel},
+  title   = {{Extending Hirshfeld-I to bulk and periodic materials}},
+  journal = {Journal of Computational Chemistry},
+  year    = {2013},
+  volume  = {34},
+  number  = {5},
+  pages   = {405--417},
+  doi     = {10.1002/jcc.23088}
+}
+
 @article{Tersoff1985stm,
   author  = {Tersoff, J. and Hamann, D. R.},
   title   = {{Theory of the scanning tunneling microscope}},
@@ -1453,6 +1497,8 @@
   \newunicodechar{∞}{\ensuremath{\infty}}
   \newunicodechar{∥}{\ensuremath{\parallel}}
   \newunicodechar{∫}{\ensuremath{\int}}
+  \newunicodechar{⁰}{\textsuperscript{0}}
+  \newunicodechar{∓}{\ensuremath{\mp}}
   \newunicodechar{≈}{\ensuremath{\approx}}
   \newunicodechar{≠}{\ensuremath{\neq}}
   \newunicodechar{≡}{\ensuremath{\equiv}}
@@ -1492,6 +1538,7 @@
 \usepackage{fvextra}
 \usepackage{upquote}
 \usepackage[most]{tcolorbox}
+\usetikzlibrary{arrows.meta,positioning}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 \usepackage{etoc}
@@ -35293,6 +35340,7 @@ Example usage:
 \index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}}
 \index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}}
 \index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}}
+\index{Hirshfeld-I charges}\index{stockholder partition|see{Hirshfeld-I charges}}
 \begin{toolinfo}[At a glance]
 \textbf{Menu code:} \menucode{4.20} (a multi-stage workflow)
 
@@ -35303,85 +35351,1185 @@ Example usage:
 \menucode{4.20.3} & Stage 3 - Analysis & \hyperref[cmd-stb-hirshfeldAnalysis]{\texttt{stb-\allowbreak{}hirshfeldAnalysis}} \\
 \end{tabularx}
 
-\textbf{Guided example:} none yet in the repository; this section is the reference.
+\textbf{Guided example:} \href{https://github.com/stb-suite/stb/tree/main/examples/4.20-hirshfeld}{\texttt{examples/\allowbreak{}4.\allowbreak{}20-\allowbreak{}hirshfeld/}}
 
 \textbf{Summary:} Iteratively refined Hirshfeld atomic charges for an already-computed combined/production system, via isolated neutral/ion atomic references -- corrects simple Hirshfeld's known conservative bias without needing a Bader-style density maximum at every nucleus (see Utils \textgreater{} Native Charges for plain SIESTA-native Hirshfeld/Voronoi output instead).
 \end{toolinfo}
 
 \subsection{Overview}
+\label{overview-4.20}
 
-Hirshfeld partitioning \cite{Hirshfeld1977} shares the density at every point among atoms in
-proportion to the densities of free reference atoms. It is robust and needs no density maximum at
-each nucleus (unlike Bader), but with neutral references it systematically underestimates charge
-transfer. The iterative variant, Hirshfeld-I \cite{Bultinck2007hirshfeldI}, replaces each reference
-by an atom with the charge the atom actually carries, self-consistently. This workflow computes the
-references with SIESTA and iterates in three stages.
+How many electrons does each atom of a molecule or a crystal own? The density $\rho(\mathbf r)$ is an
+observable; the share of it that belongs to one atom is not, and every answer to the question is a
+\emph{rule} for cutting the density into atoms. Hirshfeld's \emph{stockholder} rule \cite{Hirshfeld1977}
+shares the density at every point in proportion to what free reference atoms would put there, and
+Hirshfeld-I \cite{Bultinck2007hirshfeldI} makes those references consistent with the atoms they
+produce. The workflow builds the references with SIESTA itself --- same pseudopotentials, basis and
+functional as the system --- and needs three stages with two rounds of SIESTA runs in between
+(Fig.~\ref{fig-4.20-flow}).
 
-\begin{theorybox}[Hirshfeld and Hirshfeld-I]
-With spherical reference densities $\rho^0_A(r)$ centred on each atom,
-\[
-w_A(\mathbf{r}) = \frac{\rho^0_A(|\mathbf{r}-\mathbf{R}_A|)}{\sum_B\rho^0_B(|\mathbf{r}-\mathbf{R}_B|)},
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\small,
+    stage/.style={draw=stbblue, very thick, rounded corners=3pt, fill=stbblue!5,
+      text width=3.95cm, align=flush left, inner sep=5pt, minimum height=3.3cm, anchor=north},
+    io/.style={draw=stbteal, thick, rounded corners=3pt, fill=stbteal!7,
+      text width=3.95cm, align=flush center, inner sep=4pt},
+    head/.style={font=\sffamily\bfseries\small, text=stbblue},
+    flow/.style={-{Stealth[length=2.6mm]}, very thick, color=black!65},
+    run/.style={font=\sffamily\scriptsize\bfseries, text=stbamber!80!black, fill=white, inner sep=1.5pt}]
+  \node[stage] (s1) at (0,0) {{\color{stbblue}\bfseries Stage 1 \textperiodcentered{} 4.20.1}\\[-1pt]
+      {\ttfamily\footnotesize stb-hirshfeldPrep}\\[3pt]
+      \textbullet~\texttt{combined/}: the system,\\\hspace*{0.8em}single point, \texttt{SaveRho}\\
+      \textbullet~\texttt{neutral/X/}: one isolated\\\hspace*{0.8em}neutral atom per element};
+  \node[stage] (s2) at (5.55,0) {{\color{stbblue}\bfseries Stage 2 \textperiodcentered{} 4.20.2}\\[-1pt]
+      {\ttfamily\footnotesize stb-hirshfeldIons}\\[3pt]
+      \textbullet~simple-Hirshfeld preview\\
+      \textbullet~\texttt{ions/X/cation/} and\\\hspace*{0.8em}\texttt{ions/X/anion/} for every\\\hspace*{0.8em}element (\texttt{NetCharge} $\pm1$)};
+  \node[stage] (s3) at (11.1,0) {{\color{stbblue}\bfseries Stage 3 \textperiodcentered{} 4.20.3}\\[-1pt]
+      {\ttfamily\footnotesize stb-hirshfeldAnalysis}\\[3pt]
+      \textbullet~radial pro-atoms $\rho^0_X(r)$\\
+      \textbullet~iterate until every\\\hspace*{0.8em}pro-atom holds $N_A$\\
+      \textbullet~checks of every reference\\
+      \textbullet~remaining-error estimate};
+  \node[io, above=0.55cm of s1] (in) {relaxed \texttt{structure.fdf} + \texttt{calc.fdf}};
+  \node[io, below=0.55cm of s3] (out) {charges $q_A$ by four methods,\\ report, dashboard, \texttt{.xyz}};
+  \draw[flow] (in) -- (s1);
+  \draw[flow] ([yshift=-1.65cm]s1.north east) -- node[run, above=2pt] {SIESTA} ([yshift=-1.65cm]s2.north west);
+  \draw[flow] ([yshift=-1.65cm]s2.north east) -- node[run, above=2pt] {SIESTA} ([yshift=-1.65cm]s3.north west);
+  \draw[flow] (s3) -- (out);
+  \node[font=\sffamily\scriptsize, text=black!55, below=0.55cm of s1, text width=3.95cm, align=flush center]
+      {nothing to pre-compute\\ besides the relaxed structure};
+  \node[font=\sffamily\scriptsize, text=black!55, below=0.55cm of s2, text width=3.95cm, align=flush center]
+      {H\textsuperscript{+} has no electrons: its\\ reference is exactly zero, no folder};
+\end{tikzpicture}
+\caption{The three stages of the Hirshfeld-I workflow. Every SIESTA run between the stages is a
+single point with the mesh, functional, basis and pseudopotentials of the system; only Stage~3 does
+the partition, and it can be re-run in seconds with another \opt{--tol}.}
+\label{fig-4.20-flow}
+\end{figure}
+
+\begin{theorybox}[Hirshfeld-I in five equations]
+\textbf{Stockholder partition.} Place a spherical pro-atom $\rho^0_A$ on every nucleus (and on every
+periodic image $\mathbf T$ of it, in a crystal \cite{Vanpoucke2013periodicHI}) and give atom $A$ the
+fraction $w_A$ of the density at each point:
+\begin{equation*}
+w_A(\mathbf r)=\frac{\sum_{\mathbf T}\rho^0_A(|\mathbf r-\mathbf R_A-\mathbf T|)}
+                    {\sum_B\sum_{\mathbf T}\rho^0_B(|\mathbf r-\mathbf R_B-\mathbf T|)},
 \qquad
-q_A = Z^\mathrm{val}_A - \int w_A(\mathbf{r})\,\rho(\mathbf{r})\,d\mathbf{r}.
-\]
-In Hirshfeld-I, at iteration $k$ each atom's reference interpolates between the neutral density
-and that of the ion matching the sign of its current charge,
-\[
-\rho^{0,(k)}_A = \left(1-|q^{(k-1)}_A|\right)\rho_A^\mathrm{neutral} + |q^{(k-1)}_A|\,\rho_A^{\pm},
-\]
-(with $|q|$ capped at one electron), until $\max_A|q^{(k)}_A-q^{(k-1)}_A|$ falls below a tolerance.
-Two atoms of the same element can lean towards opposite ions.
+N_A=\int_{\text{cell}} w_A(\mathbf r)\,\rho(\mathbf r)\,d^3r,
+\qquad q_A = Z^{\text{val}}_A-N_A .
+\end{equation*}
+The weights add up to one, so the charges always add up to the charge of the cell. The pieces
+$\rho_A=w_A\rho$ are the ones closest to the pro-atoms in the information-theoretic sense: they minimize
+$\sum_A\int\rho_A\ln(\rho_A/\rho^0_A)$ under $\sum_A\rho_A=\rho$ \cite{Nalewajski2000infoAIM,HeidarZadeh2018hirshfeld}.
+
+\medskip\textbf{Self-consistent pro-atoms.} Neutral pro-atoms pull every charge toward zero. Hirshfeld-I asks
+instead that each pro-atom hold as many electrons as the atom it defines, interpolating between the
+neutral atom and the ion of the same sign:
+\begin{equation*}
+\int\rho^0_A\,d^3r = N_A,
+\qquad
+\rho^0_A(q)=(1-f)\,\rho^{0}_{X}+f\,\rho^{\pm}_{X},\quad f=\min(|q_A|,1),
+\end{equation*}
+solved by iteration from the simple-Hirshfeld charges until $\Delta q_n=\max_A|q_A^{(n)}-q_A^{(n-1)}|<\text{tol}$.
+The solution does not depend on the starting point \cite{Bultinck2007uniqueness}.
+
+\medskip\textbf{How far from the fixed point.} Near the solution each step is a fixed fraction $r$ of the
+previous one, so the charges are still
+\begin{equation*}
+e_n\simeq\Delta q_n\,\frac{r}{1-r}
+\end{equation*}
+away when the loop stops --- about $2\times$tol for water ($r\approx0.67$), $3\times$tol for NaCl
+($r\approx0.76$). Stage~3 measures $r$ and prints $e_n$.
 \end{theorybox}
 
-\subsection{Stage 1: neutral references (\cmd{stb-hirshfeldPrep}, \menucode{4.20.1})}
-
-From the production structure (\opt{-s}) and template (\opt{--calc}) it writes, under \opt{-O}
-(default \file{hirshfeld\_study}):
-\begin{itemize}
-  \item \file{combined/} -- the full system as a single point with fixed cell, the explicit
-    \fdf{Mesh.Cutoff} (\opt{--mesh-cutoff}, default 400~Ry), \fdf{SaveRho true}, and SIESTA's native
-    \fdf{Charge.Hirshfeld end} and \fdf{Charge.Voronoi end}, so the plain Hirshfeld and Voronoi
-    charges of the same density are available for comparison;
-  \item \file{neutral/<species>/} -- one isolated neutral atom per species, centred in a cube of
-    \opt{--vacuum} \AA{} (default 20), single point, $\Gamma$ only, spin-polarized, same mesh cutoff,
-    \fdf{SaveRho true}.
+\begin{warnbox}[Before you quote a Hirshfeld-I charge]
+\begin{itemize}[leftmargin=1.2em, itemsep=1pt, topsep=1pt]
+  \item \textbf{Read the error estimate, not \opt{--tol}.} Tighten \opt{--tol} until the estimated
+    remaining error is small; Stage~3 suggests the value, and re-running it needs no SIESTA.
+  \item \textbf{Fix the basis.} In SIESTA the anion reference is only as diffuse as the orbitals allow:
+    \fdf{PAO.EnergyShift} from 0.02 to 0.005~Ry moved $q(\mathrm O)$ of water from $-0.60$ to $-0.77$.
+    Compare charges computed with one basis.
+  \item \textbf{Past $\pm1$ the reference stops at the ion} (MgO: $\pm1.09$, flagged \emph{capped}): read it as a
+    lower bound.
+  \item \textbf{Quote the method with the number.} On one density Voronoi, Hirshfeld, Hirshfeld-I and Bader differed
+    by factors of 2--4 (Section~\ref{g4.20-59-how-far-to-trust-each-number}).
 \end{itemize}
-The template should define the basis implicitly (e.g. \fdf{PAO.BasisSize DZP}) rather than with a
-\fdf{\%block PAO.Basis} naming species absent from a folder. Run SIESTA in every folder.
+\end{warnbox}
 
-\subsection{Stage 2: ion references (\cmd{stb-hirshfeldIons}, \menucode{4.20.2})}
+\subsection{Guide}
+\label{guide-4.20}{\small\itshape The guide below is the hands-on tutorial of the documentation site. It follows the repository folder \texttt{examples/\allowbreak{}4.\allowbreak{}20-\allowbreak{}hirshfeld/}; file names in it are relative to that folder, and its script \texttt{example\_*.sh} reproduces every step.}
 
-It reads the neutral densities and the combined density, prints a preview of plain Hirshfeld
-charges (iteration 0, comparable with SIESTA's native values), and writes
-\file{ions/<species>/cation/} and \file{ions/<species>/anion/} for every species ($\pm1$ electron
-through \fdf{NetCharge}), since any atom may need either. Hydrogen's cation has no electrons and
-cannot be converged by SIESTA; its reference density is exactly zero, recorded in the manifest
-instead of a folder. $Z^\mathrm{val}$ is read from the combined log or \opt{--ref}. Run SIESTA in the
-ion folders.
-
-\subsection{Stage 3: iteration (\cmd{stb-hirshfeldAnalysis}, \menucode{4.20.3})}
-
-All reference densities are spherically averaged into radial profiles. The iteration starts from
-the plain Hirshfeld charges and stops when the largest change is below \opt{--tol} (default
-0.005~$e$) or after \opt{--max-iter} rounds (default 20). Distances use the minimum-image convention,
-so atoms near cell faces receive density from periodic images. The report lists iteration 0 and the
-converged Hirshfeld-I charges side by side, per atom and per species, with the convergence
-history. The charges of a neutral cell should sum to zero within the grid error -- a useful check.
+This workflow computes \textbf{Hirshfeld-I} (iterative Hirshfeld) atomic charges {[}5{]} from a SIESTA density, in 3 stages.
+\textbf{Stage 1} (\texttt{stb-\allowbreak{}hirshfeldPrep}, code \texttt{4.\allowbreak{}20.\allowbreak{}1}) takes your relaxed structure and template and writes the system as a
+single point that saves its density, plus one isolated \textbf{neutral atom} per element. \textbf{Stage 2}
+(\texttt{stb-\allowbreak{}hirshfeldIons}, code \texttt{4.\allowbreak{}20.\allowbreak{}2}), after SIESTA ran there, writes the \textbf{cation and the anion} of every element.
+\textbf{Stage 3} (\texttt{stb-\allowbreak{}hirshfeldAnalysis}, code \texttt{4.\allowbreak{}20.\allowbreak{}3}) builds a spherical reference from each isolated atom and
+iterates the stockholder partition until every reference holds as many electrons as the atom it defines:
 
 \begin{codeblock}
-stb-hirshfeldPrep -s structure.fdf --calc calc.fdf -p dojo
-# run SIESTA in hirshfeld_study/combined and hirshfeld_study/neutral/*
-stb-hirshfeldIons
-# run SIESTA in hirshfeld_study/ions/*/*
-stb-hirshfeldAnalysis --tol 0.002
+q_A = Z_A − ∫ w_A(r) ρ(r) d³r,     w_A = ρ_A⁰ / Σ_B ρ_B⁰,     ρ_A⁰ = (1 − |q_A|) ρ_neutral + |q_A| ρ_ion
 \end{codeblock}
 
-\paragraph{Notes.}
-The partition is done on SIESTA's valence pseudo-density on the real-space grid; a fine
-\fdf{Mesh.Cutoff} and a box large enough for the isolated atoms are the two convergence parameters.
-Free-atom references with SIESTA's confined orbitals are slightly compressed compared with exact free
-atoms, which shifts all charges a little in the same direction; comparisons between related systems
-are more robust than absolute values.
+It reports the charges next to Voronoi, SIESTA\textquotesingle s own Hirshfeld and simple Hirshfeld (neutral references) of the
+same density, with what you need to trust them: a check of every reference atom (electrons, radius, SCF), the
+history of the iteration and an estimate of \textbf{how far the charges still are from the fixed point} when it stops,
+the charge balance, a dipole check, and an optional dashboard.
+
+It answers a question the rest of section 4 does not: not an energy or a spectrum, but \textbf{how many electrons each
+atom owns} --- the number behind "the oxygen of water carries −0.7 e", oxidation-state arguments, charge transfer at
+an interface, or the point charges of a force field. Section 1 explains why that number needs a definition and what
+this one is; the worked example (Section 5) runs all three stages for real with SIESTA on water, N₂O (two atoms of
+one element with opposite charges), the NaCl crystal and MgO (charges beyond ±1), plus mesh, box and basis studies
+of water that show what the numbers depend on.
+
+The three stages live in this one folder and this one tutorial --- same reasoning as \texttt{4.\allowbreak{}8}, \texttt{4.\allowbreak{}17}: each stage\textquotesingle s
+output exists only to feed the next.
+
+\subsubsection{1. Theory}\label{g4.20-1-theory}
+
+\textbf{Symbols at a glance}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1901}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8099}}@{}}
+\toprule\noalign{}
+Symbol & Meaning \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{ρ(r)} & electron density of the system (the valence pseudo-density SIESTA writes, e/Å³) \\
+\texttt{ρ\_\allowbreak{}A⁰(r)} & the \textbf{pro-atom}: a spherical reference density of atom \texttt{A}, centred on its nucleus \\
+\texttt{ρ⁰(r)\ =\allowbreak{}\ Σ\_\allowbreak{}A\ ρ\_\allowbreak{}A⁰} & the \textbf{promolecule}: all pro-atoms superposed at the atomic positions (every periodic image included) \\
+\texttt{w\_\allowbreak{}A(r)\ =\allowbreak{}\ ρ\_\allowbreak{}A⁰/\allowbreak{}ρ⁰} & Hirshfeld weight of atom \texttt{A} at \texttt{r}, \texttt{0\ ≤\ w\_\allowbreak{}A\ ≤\ 1}, \texttt{Σ\_\allowbreak{}A\ w\_\allowbreak{}A\ =\allowbreak{}\ 1} \\
+\texttt{N\_\allowbreak{}A}, \texttt{q\_\allowbreak{}A} & population of atom \texttt{A} (e) and its charge \texttt{q\_\allowbreak{}A\ =\allowbreak{}\ Z\_\allowbreak{}A\ −\ N\_\allowbreak{}A} (\texttt{\textgreater{}\ 0}: it lost electrons) \\
+\texttt{Z\_\allowbreak{}A} & valence charge of \texttt{A}\textquotesingle s pseudopotential (\texttt{Z\_\allowbreak{}val}: O 6, H 1, Na 9, Mg 10, Cl 7) \\
+\texttt{ρ\_\allowbreak{}X\^{}\{0\},\allowbreak{}\ ρ\_\allowbreak{}X\^{}\{+\},\allowbreak{}\ ρ\_\allowbreak{}X\^{}\{−\}} & spherically averaged density of the isolated neutral atom, cation and anion of element \texttt{X} \\
+\texttt{f\ =\allowbreak{}\ min(abs(q),\allowbreak{}\ 1)} & the fraction of the ion mixed into a pro-atom \\
+\texttt{Δq\_\allowbreak{}n} & \texttt{max\_\allowbreak{}A\ abs(q\_\allowbreak{}A\^{}(n)\ −\ q\_\allowbreak{}A\^{}(n−1))}, the step of iteration \texttt{n} (e) \\
+\texttt{r} & the \textbf{contraction ratio} of the iteration, \texttt{Δq\_\allowbreak{}n\ /\allowbreak{}\ Δq\_\allowbreak{}\{n−1\}} \\
+\texttt{μ} & dipole moment (Debye; 1 e Å = 4.803 D) \\
+\end{longtable}
+\endgroup
+
+\paragraph{1.1 An atomic charge is a partition, not an observable}\label{g4.20-11-an-atomic-charge-is-a-partition-not-an-observable}
+
+The density \texttt{ρ(r)} of a molecule or a crystal is an observable; the charge of one of its atoms is not. To say that
+the oxygen of water carries \texttt{−0.\allowbreak{}7\ e} you must first say \textbf{which electrons belong to the oxygen}, that is, cut the
+density into atomic pieces \texttt{ρ\_\allowbreak{}A(r)} that add up to the whole:
+
+\begin{codeblock}
+ρ(r) = Σ_A ρ_A(r),        N_A = ∫ ρ_A(r) d³r,        q_A = Z_A − N_A                         (1)
+\end{codeblock}
+
+There are many ways of cutting, and each gives its own numbers {[}1, 2{]}:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Space is divided into regions}, one per atom, with sharp boundaries: Voronoi cells (each point goes to the
+  nearest nucleus; SIESTA\textquotesingle s \texttt{Charge.\allowbreak{}Voronoi}), Bader basins (the zero-flux surfaces of \texttt{ρ} {[}3{]}; \texttt{stb-\allowbreak{}bader}, 3.6).
+\item
+  \textbf{The basis set is divided}, not space: Mulliken and Löwdin populations. They need no grid but depend strongly
+  on the basis.
+\item
+  \textbf{Every point is shared} among all atoms with smooth weights \texttt{w\_\allowbreak{}A(r)}, \texttt{ρ\_\allowbreak{}A\ =\allowbreak{}\ w\_\allowbreak{}A\ ρ}: the \textbf{stockholder}
+  family --- Hirshfeld {[}4{]}, Hirshfeld-I {[}5{]}, iterated stockholder (ISA) {[}6{]}, MBIS {[}7{]}, DDEC {[}8{]}.
+\end{itemize}
+
+This workflow computes \textbf{Hirshfeld-I} charges, a member of the last family, and reports next to them the
+simple Hirshfeld, Voronoi and (in the example) Bader charges of the same density, so the numbers can be compared
+partition by partition.
+
+\paragraph{1.2 The Hirshfeld (stockholder) partition}\label{g4.20-12-the-hirshfeld-stockholder-partition}
+
+Hirshfeld\textquotesingle s idea {[}4{]} is to share the density at each point \textbf{in proportion to what the free atoms would have put
+there}. Place a spherical reference atom \texttt{ρ\_\allowbreak{}A⁰} on every nucleus, add them up into the promolecule \texttt{ρ⁰}, and give
+atom \texttt{A} the fraction
+
+\begin{codeblock}
+w_A(r) = ρ_A⁰(|r − R_A|) / ρ⁰(r),          ρ⁰(r) = Σ_B ρ_B⁰(|r − R_B|)                       (2)
+
+N_A = ∫ w_A(r) ρ(r) d³r                                                                       (3)
+\end{codeblock}
+
+of the real density there --- like the shareholders of a company, each gets a share of the profit proportional to
+its investment, hence the name. The weights add up to one at every point, so \texttt{Σ\_\allowbreak{}A\ N\_\allowbreak{}A\ =\allowbreak{}\ ∫ρ} exactly, whatever the
+pro-atoms are: the charges always sum to the total charge.
+
+The partition has a clean justification: the Hirshfeld atoms are the pieces \texttt{ρ\_\allowbreak{}A} that \textbf{stay as close as possible
+to the free atoms}, in the sense that they minimize the information distance (Kullback--Leibler divergence) to the
+pro-atoms,
+
+\begin{codeblock}
+Σ_A ∫ ρ_A(r) ln[ ρ_A(r) / ρ_A⁰(r) ] d³r     subject to   Σ_A ρ_A = ρ                          (4)
+\end{codeblock}
+
+and Eq. 2 is the exact minimizer {[}9{]}. The atoms overlap smoothly (no sharp boundary), are transferable between
+similar environments, and need nothing but the density and the pro-atoms.
+
+What they need \textbf{is a choice of pro-atoms}, and that is the weak point. The usual choice is the \textbf{neutral} free
+atoms. It is known to make charges too small {[}5, 10{]}: the weight function is built from neutral atoms, so a region
+where the oxygen of water has gained density is still shared as if the oxygen were neutral; the partition is
+\emph{biased toward neutrality}. It is also arbitrary (why neutral? why not the ions, or a different neutral state?) and
+breaks for a charged system, where \texttt{∫ρ⁰\ ≠\ ∫ρ}.
+
+\paragraph{1.3 Hirshfeld-I: make the pro-atoms consistent with the atoms they produce}\label{g4.20-13-hirshfeld-i-make-the-pro-atoms-consistent-with-the-atoms-they-produce}
+
+Bultinck \emph{et al.} {[}5{]} removed the arbitrariness with one condition: \textbf{each pro-atom must hold as many electrons as
+the atom it defines},
+
+\begin{codeblock}
+∫ ρ_A⁰ d³r = N_A                                                                               (5)
+\end{codeblock}
+
+A pro-atom with a non-integer population is built by interpolating linearly between the isolated atoms of the
+two integer charge states that bracket it. This workflow keeps the states −1, 0 and +1 of every element and builds,
+for an atom with charge \texttt{q},
+
+\begin{codeblock}
+ρ_A⁰(q) = (1 − f) ρ_X^{0} + f ρ_X^{±},       f = min(abs(q), 1),   ± = sign of q                     (6)
+\end{codeblock}
+
+which integrates to \texttt{Z\_\allowbreak{}A\ −\ q} exactly for \texttt{abs(q)\ ≤\ 1} --- the linear interpolation is what keeps Eq. 5 exact. Eq. 5
+is then solved by iteration:
+
+\begin{codeblock}
+q^(0)     = simple Hirshfeld (neutral pro-atoms, f = 0)
+q^(n+1)   = Hirshfeld partition (Eqs. 2-3) with the pro-atoms ρ_A⁰(q_A^(n)) of Eq. 6                    (7)
+stop when Δq_n = max_A abs(q_A^(n) − q_A^(n−1)) < tol
+\end{codeblock}
+
+Each atom chooses its \textbf{own} ion --- its cation when it is positive, its anion when negative --- so two atoms of the
+same element can lean in opposite directions (the two nitrogens of N₂O do, Section 5.4). That is why Stage 2 writes
+both ions of every element.
+
+The self-consistent charges do not depend on the starting point {[}11{]} (no promolecule to choose), are only slightly
+basis dependent, work for charged systems, are larger in magnitude than the simple Hirshfeld ones, and reproduce
+the molecular electrostatic potential about as well as charges fitted to it {[}12{]}. Whether the solution is always
+unique is not proven in general {[}13{]}; a counterexample with symmetry-equivalent atoms getting different charges
+has been reported for some materials {[}8{]}. The workflow starts every atom from simple Hirshfeld, so
+symmetry-equivalent atoms start equal and stay equal.
+
+\paragraph{1.4 How far from converged: the contraction ratio}\label{g4.20-14-how-far-from-converged-the-contraction-ratio}
+
+Near its solution the iteration of Eq. 7 behaves like a linear map: the error of every round is a fixed fraction
+\texttt{r} of the previous one (the largest eigenvalue of the map\textquotesingle s Jacobian),
+
+\begin{codeblock}
+e_n ≈ r e_{n−1},          Δq_n = e_{n−1} − e_n ≈ e_n (1 − r) / r                                (8)
+
+e_n ≈ Δq_n · r / (1 − r)        (the remaining error after round n)                              (9)
+\end{codeblock}
+
+So the usual stopping rule \texttt{Δq\_\allowbreak{}n\ \textless{}\ tol} does \textbf{not} bound the error of the charges: it bounds the last step, and
+at \texttt{r\ =\allowbreak{}\ 0.\allowbreak{}68} (water) the charges are still \texttt{0.\allowbreak{}68\ /\allowbreak{}\ 0.\allowbreak{}32\ ≈\ 2.\allowbreak{}1\ ×\ tol} away from the fixed point when it fires. Stage 3
+measures \texttt{r} from the last three steps, prints the estimate of Eq. 9, and warns --- with the \texttt{-\/-\allowbreak{}tol} that would make
+the \emph{error} small --- when the estimate exceeds the tolerance (not below 0.001 e). The estimate needs no new SIESTA
+run, and Section 5.3 checks it against the converged answer. \texttt{r} itself says how hard the partition is: it
+approaches 1 when the charge transfer is large and the anion reference is very different from the neutral atom.
+
+\paragraph{1.5 Periodic systems}\label{g4.20-15-periodic-systems}
+
+Nothing in Eqs. 2--7 needs a molecule: in a crystal the promolecule is the sum of the pro-atoms of \textbf{every
+periodic image} of every atom,
+
+\begin{codeblock}
+ρ⁰(r) = Σ_A Σ_T ρ_A⁰(|r − R_A − T|),        w_A(r) = Σ_T ρ_A⁰(|r − R_A − T|) / ρ⁰(r)             (10)
+\end{codeblock}
+
+and \texttt{N\_\allowbreak{}A} is integrated over one cell {[}14{]}. Stage 3 sums every image within the reach of each pro-atom (the radius
+beyond which it vanishes, a few Å for SIESTA\textquotesingle s confined orbitals, Section 1.6). For a molecule in a large box that
+is only the nearest image; in the 2-atom cell of rock salt a point near a Cl sees six Na neighbours at 2.8 Å, each a
+different image of the same atom. (The first version of the workflow kept only the nearest image; Section 5.5
+shows what that did to NaCl.)
+
+\paragraph{1.6 Reference atoms with SIESTA}\label{g4.20-16-reference-atoms-with-siesta}
+
+The pro-atoms are computed, not tabulated: one SIESTA run per element and charge state, a single atom in a cubic
+box (\texttt{-\/-\allowbreak{}vacuum}, default 20 Å), at the level of theory of the system. Several consequences are worth knowing:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Valence pseudo-densities.} SIESTA\textquotesingle s \texttt{.\allowbreak{}RHO} holds only the electrons of the pseudopotential\textquotesingle s valence, so
+  \texttt{Z\_\allowbreak{}A} is \texttt{Z\_\allowbreak{}val} and the core is in neither \texttt{ρ} nor \texttt{ρ⁰}. Semicore states are valence when the pseudopotential
+  includes them: the PseudoDojo Na has 9 electrons (2s² 2p⁶ 3s¹), Mg 10; their cations are then Na⁺ with 8 and
+  Mg⁺ with 9. Using pseudo-valence densities for Hirshfeld-I in solids was shown to reproduce the all-electron
+  charges to good accuracy {[}15{]}.
+\item
+  \textbf{The same mesh, basis and functional} as the system (Stage 1 forces the same \texttt{MeshCutoff} into every folder,
+  the template supplies the rest). The isolated atoms are run \textbf{spin-polarized} with Γ only.
+\item
+  \textbf{Confined orbitals confine the reference.} SIESTA\textquotesingle s numerical atomic orbitals are strictly zero beyond a
+  cutoff radius set by \texttt{PAO.\allowbreak{}EnergyShift} (Section 5.7), so the density of every reference atom vanishes beyond it
+  too --- a few Å, far inside the box. A free anion is a delicate object (the extra electron of O⁻ is weakly bound;
+  O²⁻ is not bound at all in vacuum), and in a plane-wave code its density spreads over the whole box {[}14{]}; here the
+  basis keeps it on the atom. The anion reference is therefore as confined as the basis, and the charges inherit a
+  basis dependence through it.
+\item
+  \textbf{The bare proton.} H has \texttt{Z\_\allowbreak{}val\ =\allowbreak{}\ 1}, so H⁺ has no electrons: its density is exactly zero and no SIESTA run is
+  needed (SIESTA could not converge it anyway). Stage 2 skips the folder; Stage 3 uses \texttt{ρ\_\allowbreak{}H\^{}\{+\}\ =\allowbreak{}\ 0}, so a positive
+  hydrogen\textquotesingle s pro-atom is \texttt{(1\ −\ q)\ ρ\_\allowbreak{}H\^{}\{0\}}.
+\item
+  \textbf{Spherical averages.} An open-shell atom (O, N, Cl) is not spherical in a spin-polarized SCF: Stage 3 averages
+  each reference over angles in shells 0.25 grid spacings wide (empty shells dropped) and checks that the profile
+  still holds \texttt{Z\_\allowbreak{}val}, \texttt{Z\_\allowbreak{}val\ −\ 1} and \texttt{Z\_\allowbreak{}val\ +\ 1} electrons (\texttt{{[}2{]}} of the report).
+\end{itemize}
+
+\paragraph{1.7 Charges beyond ±1}\label{g4.20-17-charges-beyond-1}
+
+Eq. 6 stops at the ions: when \texttt{abs(q)\ \textgreater{}\ 1}, the pro-atom is the ion itself (\texttt{f\ =\allowbreak{}\ 1}). The partition still returns
+whatever charge the density gives, but Eq. 5 no longer holds (\texttt{N\_\allowbreak{}A\ ≠\ ∫ρ\_\allowbreak{}A⁰}), and the true Hirshfeld-I value
+would need the next ion, Mg²⁺ or O²⁻. Mg²⁺ is an ordinary closed shell; O²⁻ is not bound in vacuum and must be
+stabilized artificially, and different stabilizations give different charges --- the main known ambiguity of
+Hirshfeld-I for oxides, which motivated the Hirshfeld-E scheme {[}16{]}. Stage 3 flags every such atom (\texttt{(capped)} in
+\texttt{{[}5{]}} and a warning). MgO in Section 5.6 is the case.
+
+\paragraph{1.8 What point charges can and cannot reproduce}\label{g4.20-18-what-point-charges-can-and-cannot-reproduce}
+
+Atomic charges are often used to build the electrostatics of a model (force fields, the dipole of a molecule).
+The dipole of a molecule is exactly
+
+\begin{codeblock}
+μ = Σ_A q_A R_A  +  Σ_A μ_A,        μ_A = −∫ (r − R_A) ρ_A(r) d³r                                  (11)
+\end{codeblock}
+
+--- the point charges plus the dipole of each atomic piece (the asymmetry of its cloud around its own nucleus). Any
+partition satisfies Eq. 11 with its own \texttt{q\_\allowbreak{}A} and \texttt{μ\_\allowbreak{}A}; the point-charge term alone depends on how much of the
+dipole the partition put into the charges. Stage 3 prints the point-charge dipole of every method next to SIESTA\textquotesingle s
+dipole of the full density, along the axes where a dipole is defined (non-periodic ones). Neither "closer is
+better" nor "larger is better" is a law: Hirshfeld charges are known to be too small to give the dipole by
+themselves, Hirshfeld-I charges are larger and leave a smaller, opposite atomic-dipole term {[}10, 12{]}. The comparison
+says which charges carry the electrostatics in a given molecule (Section 5.2).
+
+\paragraph{1.9 A calculation you can check by hand}\label{g4.20-19-a-calculation-you-can-check-by-hand}
+
+The water molecule of Section 5.2: \texttt{{[}4{]}} of its report (and \texttt{hirshfeld\_\allowbreak{}iterations.\allowbreak{}dat}) lists the step of every round,
+and the last three are
+
+\begin{codeblock}
+Δq_8 = 0.008415    Δq_9 = 0.005665    Δq_10 = 0.003820 e
+r ≈ 0.005665/0.008415 = 0.673,   0.003820/0.005665 = 0.674
+e_10 ≈ 0.003820 × 0.673 / (1 − 0.673) = 0.0079 e              (Eq. 9; the report prints 0.0079)
+\end{codeblock}
+
+so \texttt{q(O)\ =\allowbreak{}\ −0.\allowbreak{}7002\ e} after round 10 should be \texttt{≈\ −0.\allowbreak{}708\ e} at the fixed point --- the run at \texttt{-\/-\allowbreak{}tol\ 1e-\allowbreak{}6} gives
+\texttt{−0.\allowbreak{}7082} (Section 5.3). The charges add up: \texttt{q(O)\ +\ 2\ q(H)\ =\allowbreak{}\ −0.\allowbreak{}7002\ +\ 2\ ×\ 0.\allowbreak{}3501\ =\allowbreak{}\ 0.\allowbreak{}0000\ e}. And the reference of the
+oxygen at the end, \texttt{0.\allowbreak{}70\ anion} in \texttt{{[}5{]}}, is Eq. 6 with \texttt{f\ =\allowbreak{}\ 0.\allowbreak{}70}: \texttt{0.\allowbreak{}30\ ρ\_\allowbreak{}O\^{}0\ +\ 0.\allowbreak{}70\ ρ\_\allowbreak{}O\^{}−}, which holds
+\texttt{0.\allowbreak{}30\ ×\ 6\ +\ 0.\allowbreak{}70\ ×\ 7\ =\allowbreak{}\ 6.\allowbreak{}70} electrons --- its population, as Eq. 5 demands.
+
+\subsubsection{2. Libraries and external dependencies used}\label{g4.20-2-libraries-and-external-dependencies-used}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{SIESTA} {[}18, 19{]} itself is \emph{not} called by the suite. It does the real work: one SCF per folder --- the system, and
+  every element as an isolated neutral atom, cation and anion --- writing the density on its real-space grid
+  (\texttt{\textless{}label\textgreater{}.\allowbreak{}RHO}, because \texttt{SaveRho} is forced) and the log (\texttt{calc.\allowbreak{}out}) with \texttt{Z\_\allowbreak{}val}, the SCF convergence, its own
+  Hirshfeld and Voronoi charges and the dipole. The reference data of Section 5 was produced with SIESTA 5.4.2,
+  GGA-PBE {[}20{]}, PseudoDojo norm-conserving pseudopotentials {[}21{]} and Monkhorst--Pack k-grids {[}22{]}.
+\item
+  \textbf{\href{https://zerothi.github.io/sisl/}{sisl}} {[}23{]} --- reads the \texttt{.\allowbreak{}RHO} grids (spin up + down).
+\item
+  \textbf{numpy} --- the radial profiles, the promolecule on the grid with its periodic images, the weights and the
+  integrals of Eqs. 2--3, the iteration.
+\item
+  \textbf{\href{https://pymatgen.org/}{pymatgen}} {[}24{]} / \textbf{ASE} {[}25{]} --- structure reading and the dimensionality of the cell
+  (which axes have vacuum, for the dipole check).
+\item
+  \textbf{\href{https://matplotlib.org/}{matplotlib}} {[}26{]} --- the 6-panel dashboard of Stage 3 (\texttt{-\/-\allowbreak{}png} / \texttt{-\/-\allowbreak{}show}).
+\end{itemize}
+
+\subsubsection{3. Stages 1 and 2: the folders}\label{g4.20-3-stages-1-and-2-the-folders}
+
+The reference atoms cannot all be written at once: whether an element needs its ions at all, and how each ion
+behaves, is only known after the neutral atoms ran. So there are two writing stages, with SIESTA between them:
+
+\begin{codeblock}
+stb-hirshfeldPrep  ->  SIESTA in combined/, neutral/*  ->  stb-hirshfeldIons  ->  SIESTA in ions/*/*  ->  stb-hirshfeldAnalysis
+   (4.20.1)                                                  (4.20.2)                                       (4.20.3)
+\end{codeblock}
+
+\paragraph{\texorpdfstring{3.1 Stage 1 (\texttt{stb-\allowbreak{}hirshfeldPrep}, code \texttt{4.\allowbreak{}20.\allowbreak{}1})}{3.1 Stage 1 (stb-hirshfeldPrep, code 4.20.1)}}\label{g4.20-31-stage-1-stb-hirshfeldprep-code-4201}
+
+Takes the \textbf{relaxed} structure (\texttt{-s}, default \texttt{structure.\allowbreak{}fdf}) and your template (\texttt{-\/-\allowbreak{}calc}, default \texttt{calc.\allowbreak{}fdf}; it must
+\texttt{\%include\ structure.\allowbreak{}fdf} and use an implicit basis such as \texttt{PAO.\allowbreak{}BasisSize\ DZP}, which works for any subset of the
+elements) and writes
+
+\begin{codeblock}
+<output-dir>/                          (-O, default hirshfeld_study)
+    combined/        structure.fdf, calc.fdf, config_extra.fdf, the pseudopotentials
+    neutral/<El>/    one isolated atom per element, in a cubic box of side --vacuum
+    hirshfeld_manifest.json            what Stage 2 reads (paths RELATIVE to the study: copy or move it freely)
+    hirshfeld_prep_report.txt          with --save-report
+\end{codeblock}
+
+Every \texttt{calc.\allowbreak{}fdf} is \texttt{\%include\ config\_\allowbreak{}extra.\allowbreak{}fdf} above your template, untouched; SIESTA\textquotesingle s fdf reader is
+first-occurrence-wins, so the forced settings beat the template\textquotesingle s:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2869}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1736}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2181}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3214}}@{}}
+\toprule\noalign{}
+Directive & \texttt{combined/\allowbreak{}} & \texttt{neutral/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}} (and the ions) & Why \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{MD.\allowbreak{}VariableCell\ false}, \texttt{MD.\allowbreak{}TypeOfRun\ CG}, \texttt{MD.\allowbreak{}Steps\ 0} & forced & forced & a single point at the geometry given \\
+\texttt{MeshCutoff} & \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} (400 Ry) & the same & every density on a comparably fine grid \\
+\texttt{SaveRho\ true} & forced & forced & Stage 2/3 read the \texttt{.\allowbreak{}RHO} \\
+\texttt{Charge.\allowbreak{}Hirshfeld\ end}, \texttt{Charge.\allowbreak{}Voronoi\ end} & forced & --- & SIESTA\textquotesingle s own charges of the same density, for comparison \\
+\texttt{kgrid.\allowbreak{}MonkhorstPack} & the template\textquotesingle s & \texttt{{[}1\ 1\ 1{]}} & one atom in a box needs Γ only \\
+\texttt{Spin} & the template\textquotesingle s & \texttt{polarized} (also written into \texttt{calc.\allowbreak{}fdf}) & an isolated atom is usually an open shell \\
+\end{longtable}
+\endgroup
+
+The box (\texttt{-\/-\allowbreak{}vacuum}, 20 Å) only has to hold the atom: SIESTA\textquotesingle s atom densities vanish beyond the orbital radii (≈ 2--4 Å
+here), so 10 Å would do (Section 5.7); Stage 3 checks it.
+
+\paragraph{\texorpdfstring{3.2 Stage 2 (\texttt{stb-\allowbreak{}hirshfeldIons}, code \texttt{4.\allowbreak{}20.\allowbreak{}2})}{3.2 Stage 2 (stb-hirshfeldIons, code 4.20.2)}}\label{g4.20-32-stage-2-stb-hirshfeldions-code-4202}
+
+After SIESTA ran in \texttt{combined/\allowbreak{}} and every \texttt{neutral/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}}, Stage 2 (\texttt{-O} the same study) reads \texttt{Z\_\allowbreak{}val} of every element
+from the log of \texttt{combined/\allowbreak{}} (\texttt{-\/-\allowbreak{}ref} for a log not named \texttt{*.\allowbreak{}out}), the neutral densities, and writes
+
+\begin{codeblock}
+ions/<El>/cation/    NetCharge +1  (Z_val - 1 electrons)
+ions/<El>/anion/     NetCharge -1  (Z_val + 1 electrons)
+hirshfeld_ions_manifest.json
+\end{codeblock}
+
+for \textbf{every} element --- both ions, because in Stage 3 each atom chooses its own (Section 1.3). The exception is an element
+with \texttt{Z\_\allowbreak{}val\ ≤\ 1} (H): its cation has no electrons at all, an exactly zero density, so no folder is written and Stage 3
+uses zero. Its report also previews the simple-Hirshfeld charges of \texttt{combined/\allowbreak{}} (pass 0, what Stage 3 starts from) next
+to SIESTA\textquotesingle s own, and counts how many atoms of each element lean positive or negative.
+
+\paragraph{3.3 Running them}\label{g4.20-33-running-them}
+
+\begin{codeblock}
+stb-hirshfeldPrep -s structure.fdf --calc calc.fdf -p dojo --save-report         # Stage 1
+for d in hirshfeld_study/combined hirshfeld_study/neutral/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+stb-hirshfeldIons -O hirshfeld_study -p dojo --save-report                        # Stage 2
+for d in hirshfeld_study/ions/*/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+stb-suite            # or: 4 (Workflow) -> 20 (Hirshfeld-I) -> 1 / 2   (4.20.1, 4.20.2)
+\end{codeblock}
+
+The isolated-atom runs are small (one atom, Γ only): a few seconds to a few minutes each. An anion can need more SCF
+iterations than the neutral atom (Na⁻ took 25); \texttt{{[}2{]}} of Stage 3 reports each one.
+
+\subsubsection{\texorpdfstring{4. Stage 3: the analysis (\texttt{stb-\allowbreak{}hirshfeldAnalysis}, code \texttt{4.\allowbreak{}20.\allowbreak{}3})}{4. Stage 3: the analysis (stb-hirshfeldAnalysis, code 4.20.3)}}\label{g4.20-4-stage-3-the-analysis-stb-hirshfeldanalysis-code-4203}
+
+\paragraph{4.1 What it does}\label{g4.20-41-what-it-does}
+
+Reads every reference folder, builds its radial profile (Section 1.6), reads \texttt{combined/\allowbreak{}}\textquotesingle s density, runs simple
+Hirshfeld (pass 0) and iterates Hirshfeld-I (Eq. 7) until \texttt{max\textbar{}Δq\textbar{}\ \textless{}\ -\/-\allowbreak{}tol} (default 0.005 e) or \texttt{-\/-\allowbreak{}max-\allowbreak{}iter} (20). The
+iteration is cheap --- seconds for the molecules of Section 5 --- and needs no new SIESTA run, so \texttt{-\/-\allowbreak{}tol} can be tightened at
+will (Section 5.3).
+
+\paragraph{4.2 Report structure}\label{g4.20-42-report-structure}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1236}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8764}}@{}}
+\toprule\noalign{}
+Section & Content \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{{[}0{]}} & run metadata \\
+\texttt{{[}1{]}} & the combined system: periodicity, grid, \texttt{Z\_\allowbreak{}val} per element, electrons in the density, SCF \\
+\texttt{{[}2{]}} & every \textbf{reference atom}: target electrons, on the grid, in the radial profile, the radius holding 99.9 \% against the box, grid spacing, SCF \\
+\texttt{{[}3{]}} & the iteration, round by round, with the atom that moved most \\
+\texttt{{[}4{]}} & \textbf{convergence history}: the step and its ratio to the previous one, the contraction ratio, the estimated remaining error (Eq. 9) \\
+\texttt{{[}5{]}} & per atom: Voronoi and Hirshfeld (SIESTA), simple Hirshfeld, Hirshfeld-I, their difference, the population, the reference used (\texttt{0.\allowbreak{}70\ anion} = 30 \% neutral + 70 \% anion; \texttt{(capped)} past ±1) \\
+\texttt{{[}6{]}} & per element: mean, spread, how many atoms are cation- or anion-like, means of the other methods, the Hirshfeld-I / Hirshfeld ratio \\
+\texttt{{[}7{]}} & charge balance: total charge by every method, electrons assigned, simple Hirshfeld here vs SIESTA\textquotesingle s \\
+\texttt{{[}8{]}} & the \textbf{dipole check} along the non-periodic axes (Section 1.8) \\
+\texttt{{[}9{]}} & summary and files written \\
+\texttt{{[}10{]}} & every warning \\
+\end{longtable}
+\endgroup
+
+\paragraph{4.3 The checks}\label{g4.20-43-the-checks}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3711}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1509}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4780}}@{}}
+\toprule\noalign{}
+Check & Warns when & What to do \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+electrons in the combined density vs \texttt{Σ\ Z\_\allowbreak{}val} & they differ by \textgreater{} 0.02 e & a charged run (then the charges add up to it) or a \texttt{Z\_\allowbreak{}val} that does not match \\
+SCF of \texttt{combined/\allowbreak{}} and of every reference & not confirmed in the log & converge it: the charges are only as good as the density \\
+electrons of each reference on its grid vs \texttt{Z\_\allowbreak{}val}, \texttt{Z\_\allowbreak{}val\ ∓\ 1} & \textgreater{} 0.02 e & a wrong charge state or pseudopotential \\
+the radial profile vs the grid & \textgreater{} max(0.02 e, 0.5 \%) & a mesh too coarse to average the atom \\
+the radius holding 99.9 \% vs the box & \textgreater{} 80 \% of the inradius & a larger \texttt{-\/-\allowbreak{}vacuum} \\
+electrons assigned to no atom & \textgreater{} 0.02 e & density where no reference reaches \\
+\texttt{abs(q)\ \textgreater{}\ 1} & always & the reference stops at ±1 (Section 1.7) \\
+the estimated remaining error & \textgreater{} \texttt{-\/-\allowbreak{}tol} (and \textgreater{} 0.001 e) & it prints the \texttt{-\/-\allowbreak{}tol} that would make the error small \\
+not converged within \texttt{-\/-\allowbreak{}max-\allowbreak{}iter} & always & more rounds \\
+\end{longtable}
+\endgroup
+
+A missing reference \texttt{.\allowbreak{}RHO} stops it with an \texttt{{[}ERROR{]}} naming the folder: a reference cannot be guessed.
+
+\paragraph{4.4 Output files (all opt-in)}\label{g4.20-44-output-files-all-opt-in}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2023}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7977}}@{}}
+\toprule\noalign{}
+Option & Writes \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{-\/-\allowbreak{}save-\allowbreak{}data} & \texttt{hirshfeld\_\allowbreak{}charges.\allowbreak{}dat} (per atom: every method, population, reference), \texttt{hirshfeld\_\allowbreak{}iterations.\allowbreak{}dat} (every atom\textquotesingle s charge per round), \texttt{hirshfeld\_\allowbreak{}charges.\allowbreak{}xyz} (extended XYZ with the charges as per-atom columns; \texttt{ase\ gui} colours atoms by them) \\
+\texttt{-\/-\allowbreak{}png} / \texttt{-\/-\allowbreak{}show} & the 6-panel dashboard \texttt{hirshfeld\_\allowbreak{}analysis.\allowbreak{}png}: convergence with the tolerance and the estimated error, each atom\textquotesingle s charge per round, the mean charge per element by method, Hirshfeld-I vs simple Hirshfeld per atom, the reference profiles \texttt{4πr²ρ(r)}, the structure coloured by charge (\texttt{-\/-\allowbreak{}show} without a display saves the PNG) \\
+\texttt{-\/-\allowbreak{}save-\allowbreak{}report} & \texttt{hirshfeld\_\allowbreak{}analysis\_\allowbreak{}report.\allowbreak{}txt} \\
+\end{longtable}
+\endgroup
+
+\paragraph{4.5 Running it both ways}\label{g4.20-45-running-it-both-ways}
+
+\begin{codeblock}
+stb-hirshfeldAnalysis -O hirshfeld_study --save-data --png --save-report
+stb-hirshfeldAnalysis -O hirshfeld_study --tol 1e-4 --max-iter 100          # tighter, seconds more
+stb-suite            # then: 4 -> 20 -> 3  (4.20.3): it asks for the folder, tolerance and outputs
+\end{codeblock}
+
+\subsubsection{5. Worked example: four systems, end to end}\label{g4.20-5-worked-example-four-systems-end-to-end}
+
+\paragraph{5.1 Set-up}\label{g4.20-51-set-up}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.0863}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.4871}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2647}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1619}}@{}}
+\toprule\noalign{}
+System & Why & Cell & Template \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+H₂O & a polar molecule; the base case of every study & 14 Å cube & \texttt{calc.\allowbreak{}fdf} \\
+N₂O & two atoms of one element with opposite charges & 14 Å cube & \texttt{calc.\allowbreak{}fdf} \\
+NaCl & an ionic crystal: periodic images, semicore Na & 2-atom fcc primitive cell & \texttt{calc\_\allowbreak{}bulk.\allowbreak{}fdf} \\
+MgO & an oxide whose charges pass ±1 & 2-atom fcc primitive cell & \texttt{calc\_\allowbreak{}bulk.\allowbreak{}fdf} \\
+\end{longtable}
+\endgroup
+
+All with SIESTA 5.4.2, PBE {[}20{]}, PseudoDojo pseudopotentials {[}21{]} (\texttt{Z\_\allowbreak{}val}: H 1, N 5, O 6, Na 9, Mg 10, Cl 7 --- Na and
+Mg with their 2s 2p semicore), DZP basis with \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}01\ Ry}, \texttt{MeshCutoff\ 400\ Ry}, 300 K smearing; the
+molecules at Γ, the crystals with an 8×8×8 Monkhorst--Pack grid {[}22{]}. Each structure was relaxed first with the same
+template (the molecules at fixed cell, 0.01 eV/Å; the crystals with the cell, 0.05 GPa): O--H 0.975 Å and 104.4°
+(experiment 0.958 Å, 104.5° {[}28{]}), N--N 1.163 and N--O 1.203 Å (1.128 and 1.184 Å {[}28{]}), \texttt{a} = 5.674 Å for NaCl and
+4.250 Å for MgO (5.64 and 4.21 Å measured; PBE overestimates lattice constants by about this much). The isolated
+atoms sit in 20 Å boxes (the default).
+
+\begin{codeblock}
+stb-hirshfeldPrep -s relaxed.fdf --calc calc.fdf -p dojo -O h2o --mesh-cutoff 400 --save-report
+for d in h2o/combined h2o/neutral/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+stb-hirshfeldIons -O h2o -p dojo --save-report
+for d in h2o/ions/*/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+stb-hirshfeldAnalysis -O h2o --save-data --png --save-report
+\end{codeblock}
+
+\paragraph{5.2 Water: the three stages}\label{g4.20-52-water-the-three-stages}
+
+\textbf{Stage 1} writes \texttt{combined/\allowbreak{}}, \texttt{neutral/\allowbreak{}O/\allowbreak{}} and \texttt{neutral/\allowbreak{}H/\allowbreak{}}; the isolated atoms get, in their \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf},
+
+\begin{codeblock}
+MD.VariableCell false        MD.TypeOfRun CG    MD.Steps 0      kgrid.MonkhorstPack [1 1 1]
+MeshCutoff 400 Ry            SaveRho true       Spin polarized
+\end{codeblock}
+
+\textbf{Stage 2}, after SIESTA, reads \texttt{Z\_\allowbreak{}val} from the log, previews pass 0 and writes the ions:
+
+\begin{codeblock}
+Idx | Elem | Z_val | Population(e-) | Charge(e-) | Native Hirshfeld(e-)
+1   | O    | 6.0   | 6.2555         | -0.2555    | -0.2421
+2   | H    | 1.0   | 0.8723         | +0.1277    | +0.1211
+  [OK] O: ions/O/cation/ (NetCharge +1.0), ions/O/anion/ (NetCharge -1.0)
+  [OK] H: ions/H/anion/ (NetCharge -1.0); cation SKIPPED (Z_val=1 -- NetCharge +1.0 would leave 0 electrons ...)
+\end{codeblock}
+
+\textbf{Stage 3} first checks the five references SIESTA computed (and the exact zero of H⁺):
+
+\begin{codeblock}
+Elem | State   | Target N | N on grid | N radial  | Radial-target | r99.9%(Ang) | Box inradius(Ang) | Spacing(Ang) | SCF conv.
+O    | neutral | 6        | 6.0000    | 6.0053    | +0.0053       | 1.91        | 10.00             | 0.0800       | yes (9)
+O    | cation  | 5        | 5.0000    | 5.0052    | +0.0052       | 1.81        | 10.00             | 0.0800       | yes (9)
+O    | anion   | 7        | 7.0000    | 7.0054    | +0.0054       | 1.97        | 10.00             | 0.0800       | yes (13)
+H    | neutral | 1        | 1.0000    | 1.0015    | +0.0015       | 2.39        | 10.00             | 0.0800       | yes (6)
+H    | cation  | 0        | 0 (exact) | 0 (exact) | -             | -           | -                 | -            | -
+H    | anion   | 2        | 2.0000    | 2.0012    | +0.0012       | 2.49        | 10.00             | 0.0800       | yes (12)
+\end{codeblock}
+
+Every reference holds exactly its electrons (\texttt{NetCharge\ −1} gives 7.0000 on O: the sign convention is right), the
+spherical averages hold them to 0.1 \%, and 99.9 \% of each atom lies within 2.5 Å --- a fifth of its box. Then the
+iteration:
+
+\begin{codeblock}
+Iteration | max|Delta q| (e-) | Ratio to previous | Atom that moved most
+1         | 0.159092          | -                 | #1 (O)
+2         | 0.100813          | 0.634             | #1 (O)
+...
+9         | 0.005665          | 0.673             | #1 (O)
+10        | 0.003820          | 0.674             | #1 (O)
+Converged after 10 iteration(s) (max|Delta q| < 0.005 e-).
+Contraction ratio      : 0.673 (each step ~67 % of the previous)
+Est. remaining error   : 0.0079 e- on the slowest atom, distance to the converged charges
+\end{codeblock}
+
+and the charges, with the dipole check:
+
+\begin{codeblock}
+Idx | Elem | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | HI - H(e-) | Pop. HI(e-) | Reference
+1   | O    | -0.1905     | -0.2421           | -0.2555              | -0.7002         | -0.4447    | 6.7002      | 0.70 anion
+2   | H    | +0.0953     | +0.1211           | +0.1277              | +0.3501         | +0.2224    | 0.6499      | 0.35 cation
+3   | H    | +0.0953     | +0.1211           | +0.1277              | +0.3501         | +0.2224    | 0.6499      | 0.35 cation
+
+Component (Debye) | Voronoi (SIESTA) | Hirshfeld (SIESTA) | Simple Hirshfeld (pass 0) | Hirshfeld-I | SIESTA (density)
+|mu|              | 0.547            | 0.695              | 0.733                     | 2.010       | 1.430
+\end{codeblock}
+
+\stbfigure{4.20-hirshfeld/figures/h2o_dashboard.png}{Dashboard of water}
+
+\emph{Fig. 1 --- The dashboard of water (\texttt{-\/-\allowbreak{}png}): the step per round with the tolerance and the estimated remaining error;
+the charge of each atom per round (0 = simple Hirshfeld); the mean charge per element by method; Hirshfeld-I against
+simple Hirshfeld per atom (slope 2.74); the reference atoms \texttt{4πr²ρ(r)} (neutral, cation, anion); the molecule coloured
+by charge.}
+
+Reading it:
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Hirshfeld-I is 2.7× simple Hirshfeld}: O −0.70 against −0.26. The iteration moves the oxygen steadily away from
+  neutral (Fig. 1, second panel) and stops at a reference that is 70 \% O⁻. Fig. 2 shows why the numbers change: with the
+  oxygen\textquotesingle s reference made more negative (more diffuse) and the hydrogens\textquotesingle{} smaller (\texttt{(1\ −\ 0.\allowbreak{}35)\ ρ\_\allowbreak{}H\^{}0}, H⁺ has no
+  density), the point where the hydrogen\textquotesingle s share of the density falls to one half moves from 0.73 to 0.80 Å along the
+  0.975 Å bond --- the oxygen owns more of the bond.
+\item
+  \textbf{Simple Hirshfeld here and SIESTA\textquotesingle s own agree} (−0.256 and −0.242): both use neutral references, SIESTA its own
+  free-atom densities from the basis, this tool the SCF atoms of \texttt{neutral/\allowbreak{}}; the 0.013 e difference is that choice.
+  Voronoi gives less (−0.19), a different partition altogether (the cell of each nucleus, {[}27{]}).
+\item
+  \textbf{The dipole:} SIESTA\textquotesingle s dipole of the density is 1.43 D (the experiment gives 1.855 D {[}28{]}: DZP is short of diffuse
+  functions, Section 5.7). Point charges alone give 0.55--0.73 D with the neutral-reference methods and 2.01 D with
+  Hirshfeld-I: by Eq. 11, the Hirshfeld atoms carry a large atomic-dipole term in the same direction (+0.70 D), the
+  Hirshfeld-I atoms a smaller one in the opposite direction (−0.58 D). Neither set of point charges \emph{is} the dipole;
+  Hirshfeld-I\textquotesingle s are the ones that put most of the electrostatics into the charges {[}12{]}.
+\end{itemize}
+
+\stbfigure{4.20-hirshfeld/figures/stockholder_weights.png}{Hirshfeld weights along the O-H bond}
+
+\emph{Fig. 2 --- Left: the pro-atoms along the O→H bond, neutral (solid) and at the converged charges (dashed); SIESTA\textquotesingle s
+pseudo-density of O has a dip at the nucleus, where the core was removed. Right: the hydrogen\textquotesingle s weight \texttt{w\_\allowbreak{}H} (Eq. 2)
+with neutral pro-atoms and with the converged Hirshfeld-I ones. \texttt{python3\ study\_\allowbreak{}table.\allowbreak{}py\ -\/-\allowbreak{}png}.}
+
+\paragraph{5.3 How converged is "converged"}\label{g4.20-53-how-converged-is-converged}
+
+The report\textquotesingle s warning on water: \emph{"The last step was 0.0038 e-, but at a contraction ratio of 0.67 the charges are still
+\textasciitilde0.0079 e- from the converged Hirshfeld-I values (1.6 x -\/-tol). For the error itself to be below 0.005 e-, rerun with
+-\/-tol 0.0024"}. Each system was also run at \texttt{-\/-\allowbreak{}tol\ 1e-\allowbreak{}6} (\texttt{analysis\_\allowbreak{}tight/\allowbreak{}}), which gives the true error of every round
+(\texttt{study\_\allowbreak{}table.\allowbreak{}py} \texttt{{[}C{]}}):
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}llllllll@{}}
+\toprule\noalign{}
+Round & H₂O step & estimate (Eq. 9) & true error & & NaCl step & estimate & true error \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+8 & 0.00842 & 0.0171 & 0.0174 & & 0.01143 & 0.0348 & 0.0371 \\
+10 & \textbf{0.00382} & \textbf{0.0079} & \textbf{0.0080} & & 0.00661 & 0.0210 & 0.0218 \\
+12 & 0.00174 & 0.0036 & 0.0036 & & \textbf{0.00387} & \textbf{0.0126} & \textbf{0.0129} \\
+14 & 0.00080 & 0.0017 & 0.0017 & & 0.00228 & 0.0075 & 0.0076 \\
+\end{longtable}
+\endgroup
+
+\stbfigure{4.20-hirshfeld/figures/h2o_studies.png}{Water studies}
+
+\emph{Fig. 3 --- Left: the true distance of the charges from the fixed point per round (solid) and the estimate of Eq. 9 (dashed)
+for the four systems. Middle: q(O) of water against the mesh and the isolated-atom box, in 10⁻³ e. Right: q(O) for six
+basis sets, with the radius that holds 99.9 \% of the O⁻ reference. \texttt{python3\ study\_\allowbreak{}table.\allowbreak{}py\ -\/-\allowbreak{}png}.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The stopping rule is not the error.} At the default \texttt{-\/-\allowbreak{}tol\ 0.\allowbreak{}005} the charges of water are 0.008 e from the fixed
+  point, those of NaCl 0.013 e (2.6 × tol): the iteration contracts slowly (ratio 0.67 and 0.76) and the last step is only
+  a fraction \texttt{1\ −\ r} of the error.
+\item
+  \textbf{Eq. 9 predicts it.} For water and N₂O the estimate agrees with the true error to 1 \% from round 3 on. For NaCl it is
+  2--7 \% low, because the ratio itself still creeps up (0.70 → 0.77): the iteration is not yet in its linear regime, and a
+  ratio that grows makes the geometric sum an underestimate. The suggested \texttt{-\/-\allowbreak{}tol} (0.0015 for NaCl) gets the error
+  below 0.005 e anyway.
+\item
+  \textbf{It costs nothing to ask for more.} The iteration needs no SIESTA run: water to 10⁻⁶ e in 32 rounds, N₂O in 24, NaCl
+  in 44 --- seconds each. The converged charges: H₂O O −0.7082, H +0.3541; NaCl ±0.5143.
+\item
+  \textbf{MgO breaks the assumption} (Fig. 3, the steep line): its charges pass ±1 in round 5, the references stop changing
+  (Section 1.7) and the iteration lands on its fixed point in one step. The ratio and the estimate of the earlier rounds
+  meant nothing; the report gives the ratio of the last rounds (0.17) and an estimate of 0.
+\end{itemize}
+
+\paragraph{5.4 N₂O: two nitrogens of opposite sign}\label{g4.20-54-nux2082o-two-nitrogens-of-opposite-sign}
+
+\begin{codeblock}
+Idx | Elem | Z(Ang) | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | Reference
+1   | N    | 5.8200 | -0.0953     | -0.0886           | -0.0886              | -0.2284         | 0.23 anion
+2   | N    | 6.9834 | +0.2037     | +0.1787           | +0.1873              | +0.4452         | 0.45 cation
+3   | O    | 8.1862 | -0.1084     | -0.0902           | -0.0987              | -0.2169         | 0.22 anion
+Species highlighted above converged with atoms genuinely leaning toward BOTH ion states ...
+
+Component (Debye) | Voronoi (SIESTA) | Hirshfeld (SIESTA) | Simple Hirshfeld (pass 0) | Hirshfeld-I | SIESTA (density)
+along c           | -0.094           | -0.026             | -0.075                    | +0.023      | +0.269
+\end{codeblock}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The central N is positive, the terminal N negative}, by every method: the familiar resonance picture N⁻=N⁺=O ↔
+  N≡N⁺--O⁻ puts the positive formal charge on the central atom. Each atom chose its own ion --- the terminal N mixes in N⁻,
+  the central N mixes in N⁺ --- which is exactly what a one-ion-per-element shortcut cannot do and why Stage 2 writes both.
+  \texttt{{[}6{]}} flags such an element. Converged: −0.2323, +0.4523, −0.2200.
+\end{itemize}
+
+\stbfigure{4.20-hirshfeld/figures/n2o_dashboard.png}{Dashboard of N2O}
+
+\emph{Fig. 4 --- N₂O (\texttt{-\/-\allowbreak{}png}): the two nitrogens leave simple Hirshfeld in opposite directions from the first round on (second
+panel), which is why the per-species bar of N carries a large spread; the per-atom panel shows the central N far above
+the diagonal and the terminal N and O below it.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{No point-charge set gives the dipole.} SIESTA\textquotesingle s dipole is 0.27 D (0.161 D measured {[}28{]}); the point charges give
+  between −0.09 and +0.02 D --- not even the sign agrees across methods. In a linear molecule with nearly balanced
+  charges the dipole is a small difference of atomic dipoles (Eq. 11), and charges alone cannot represent it. This is a
+  limit of point charges, not of the partition; use \texttt{{[}8{]}} to see when it applies.
+\end{itemize}
+
+\paragraph{5.5 NaCl: a crystal, and why every periodic image counts}\label{g4.20-55-nacl-a-crystal-and-why-every-periodic-image-counts}
+
+\begin{codeblock}
+Periodicity    : 3D (non-periodic axes: none)
+Na   | neutral | 9  | 9.0000  | 9.0156  | +0.0156 | 3.81 | ...
+Na   | cation  | 8  | 8.0000  | 8.0155  | +0.0155 | 1.45 | ...
+Na   | anion   | 10 | 10.0000 | 10.0157 | +0.0157 | 4.02 | ...
+
+Idx | Elem | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | Reference
+1   | Na   | +0.1702     | +0.1400           | +0.1457              | +0.5014         | 0.50 cation
+2   | Cl   | -0.1702     | -0.1400           | -0.1457              | -0.5014         | 0.50 anion
+\end{codeblock}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The semicore electrons are valence here.} The Na reference holds 9 electrons (2s² 2p⁶ 3s¹), its cation 8; the 3s
+  electron makes the neutral atom large (99.9 \% within 3.81 Å), the cation small (1.45 Å). Hirshfeld-I gives Na +0.51
+  (converged +0.514), 3.5× simple Hirshfeld.
+\end{itemize}
+
+\stbfigure{4.20-hirshfeld/figures/nacl_dashboard.png}{Dashboard of NaCl}
+
+\emph{Fig. 5 --- NaCl (\texttt{-\/-\allowbreak{}png}): a slower iteration (ratio 0.76) whose last step is below \texttt{-\/-\allowbreak{}tol} while the estimated error is
+0.013 e; the reference atoms show the Na 3s tail of the neutral atom (and of Na⁻) that the cation has lost.}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Bader gives ±0.86} on the same density (\texttt{stb-\allowbreak{}bader}, Section 5.8). Different partitions, different numbers (Section
+  1.1): in a crystal the Bader basin of Na⁺ is bounded by the density minimum between the ions, while the Hirshfeld weights
+  share the overlap region smoothly. Neither is "the" ionic charge; compare like with like.
+\item
+  \textbf{Every image matters.} The primitive cell is 4 Å across and each Cl has 6 Na neighbours at 2.84 Å, all images of the
+  same atom. The first version of Stage 3 counted only the nearest image of each atom at every grid point. On this density it
+  gave simple Hirshfeld ±0.333 --- more than twice SIESTA\textquotesingle s own ±0.140 --- and Hirshfeld-I ±0.555. Summing every image within
+  the reach of each reference (Eq. 10) gives ±0.146, next to SIESTA\textquotesingle s, and ±0.514. For a molecule in a box the two are the
+  same; \texttt{test/\allowbreak{}4-\allowbreak{}workflow/\allowbreak{}20-\allowbreak{}hirshfeld/\allowbreak{}analysis/\allowbreak{}check\_\allowbreak{}core\_\allowbreak{}numerics.\allowbreak{}py} now checks a small periodic cell with an exact answer.
+\end{itemize}
+
+\paragraph{5.6 MgO: beyond ±1}\label{g4.20-56-mgo-beyond-1}
+
+\begin{codeblock}
+Idx | Elem | Voronoi(e-) | Hirsh. SIESTA(e-) | Simple Hirshfeld(e-) | Hirshfeld-I(e-) | Pop. HI(e-) | Reference
+1   | Mg   | +0.3990     | +0.3139           | +0.3082              | +1.0880         | 8.9120      | 1.00 cation (capped)
+2   | O    | -0.3990     | -0.3139           | -0.3082              | -1.0880         | 7.0880      | 1.00 anion (capped)
+[WARNING 1] 2 atom(s) ended with |q| > 1 e- (#1 Mg +1.088, #2 O -1.088): the reference is capped at the +-1 ion, so these
+charges are not fully self-consistent -- a +-2 ion reference would be needed for them.
+\end{codeblock}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The charge passes 1 and the reference stops.} With Mg⁺ and O⁻ as references the partition still gives ±1.088, but
+  the oxygen\textquotesingle s reference holds 7 electrons and the oxygen 7.088: Eq. 5 is not satisfied. A Mg²⁺ / O²⁻ reference would
+  move the charge further; how far depends on how O²⁻ --- unbound in vacuum --- is stabilized, the known ambiguity of
+  Hirshfeld-I for oxides {[}14, 16{]}. Read ±1.09 as a lower bound of the Hirshfeld-I value, and compare oxides with each other
+  at the same setting.
+\end{itemize}
+
+\stbfigure{4.20-hirshfeld/figures/mgo_dashboard.png}{Dashboard of MgO}
+
+\emph{Fig. 6 --- MgO (\texttt{-\/-\allowbreak{}png}): the step shrinks slowly until round 5, then drops to zero once both charges pass 1 and the
+references are capped (first panel); the Mg reference atoms show the semicore 2p peak at 0.3 Å and the 3s shell beyond
+1 Å that the cation loses.}
+
+\begin{itemize}
+\tightlist
+\item
+  Bader gives ±1.74 on the same density, Voronoi ±0.40: the spread between partitions is larger than in NaCl, and the
+  ordering (Voronoi \textless{} Hirshfeld \textless{} Hirshfeld-I \textless{} Bader) is the same in both crystals.
+\end{itemize}
+
+\paragraph{5.7 What the charges depend on: mesh, box, basis}\label{g4.20-57-what-the-charges-depend-on-mesh-box-basis}
+
+Eleven more complete studies of water (every folder recomputed, \texttt{study\_\allowbreak{}table.\allowbreak{}py} \texttt{{[}D{]}}--\texttt{{[}F{]}}, Fig. 3):
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}lllllll@{}}
+\toprule\noalign{}
+\texttt{MeshCutoff} (Ry, used) & grid spacing (Å) & simple Hirshfeld & Hirshfeld-I & & box (Å) & Hirshfeld-I \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+200 (203) & 0.117 & −0.2557 & −0.7006 & & 10 & −0.6996 \\
+300 (317) & 0.093 & −0.2556 & −0.7005 & & 14 & −0.7000 \\
+\textbf{400 (457)} & 0.078 & −0.2555 & \textbf{−0.7002} & & \textbf{20} & \textbf{−0.7002} \\
+600 (658) & 0.065 & −0.2554 & −0.7001 & & 28 & −0.7003 \\
+\end{longtable}
+\endgroup
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1876}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0672}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1364}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1364}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.0971}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1450}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1279}}>{\raggedright\arraybackslash}p{(\linewidth - 16\tabcolsep) * \real{0.1023}}@{}}
+\toprule\noalign{}
+Basis, \texttt{PAO.\allowbreak{}EnergyShift} & Voronoi & SIESTA Hirshfeld & simple Hirshfeld & Hirshfeld-I & r99.9 \% of O⁻ (Å) & μ HI points (D) & μ SIESTA (D) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+SZP, 0.01 Ry & −0.197 & −0.250 & −0.250 & −0.515 & 1.91 & 1.48 & 1.26 \\
+DZP, 0.02 Ry & −0.146 & −0.210 & −0.234 & −0.603 & 1.81 & 1.73 & 1.30 \\
+\textbf{DZP, 0.01 Ry} & −0.191 & −0.242 & −0.255 & \textbf{−0.700} & 1.97 & 2.01 & 1.43 \\
+DZP, 0.005 Ry & −0.220 & −0.262 & −0.268 & −0.765 & 2.13 & 2.20 & 1.51 \\
+TZP, 0.01 Ry & −0.190 & −0.246 & −0.260 & −0.720 & 1.99 & 2.07 & 1.43 \\
+TZP, 0.005 Ry & −0.219 & −0.266 & −0.272 & −0.783 & 2.15 & 2.25 & 1.51 \\
+\end{longtable}
+\endgroup
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{The mesh and the box do not matter.} From 200 to 600 Ry the charge moves by 5 × 10⁻⁴ e; from a 10 to a 28 Å box by
+  7 × 10⁻⁴ e (the box only shifts the grid points relative to the atom). SIESTA\textquotesingle s atoms vanish beyond their orbital radii,
+  ≈ 2.5 Å, so any box that holds them is the same box. The defaults (400 Ry, 20 Å) are generous; 300 Ry and 14 Å would do.
+\item
+  \textbf{The basis does --- through the reference atoms.} Hirshfeld-I goes from −0.52 (SZP) to −0.78 (TZP, 0.005 Ry), simple
+  Hirshfeld only from −0.23 to −0.27. What moves it most is \texttt{PAO.\allowbreak{}EnergyShift}, the confinement of the orbitals: from 0.02 to
+  0.005 Ry the O⁻ reference grows from 1.81 to 2.13 Å and q(O) from −0.60 to −0.77; at the same shift DZP → TZP changes it by
+  only 0.02. In SIESTA the anion reference is exactly as diffuse as the basis allows (Section 1.6), so the iterative
+  scheme inherits a basis dependence that is small for Hirshfeld-I in Gaussian-basis codes {[}11{]}. The density itself
+  improves along the same path (SIESTA\textquotesingle s dipole 1.26 → 1.51 D, toward the 1.855 D measured): the charges of the longer
+  orbitals are the better ones, and they are not converged at the default \texttt{0.\allowbreak{}01\ Ry}.
+\item
+  \textbf{Compare charges only at one basis.} A trend across molecules or sites computed with the same basis is robust; an
+  absolute Hirshfeld-I charge carries an uncertainty of ±0.1 e from the basis alone.
+\end{itemize}
+
+\paragraph{5.8 Why not Bader on SIESTA\textquotesingle s density?}\label{g4.20-58-why-not-bader-on-siestas-density}
+
+\texttt{stb-\allowbreak{}bader} on the \texttt{combined/\allowbreak{}} densities gives NaCl ±0.86 and MgO ±1.74, but for water \textbf{O −2.000, H +1.000}: the
+hydrogens get no electrons at all. That is not a bug of the partition, it is the density. Along the O--H bond SIESTA\textquotesingle s
+valence pseudo-density rises to 5.5 e/Å³ in the oxygen\textquotesingle s shell, 0.3 Å from O, and then \emph{decreases monotonically} through the
+proton (1.77 e/Å³ at the H nucleus) --- the pseudo-hydrogen has no density maximum of its own once it sits in the tail of
+the oxygen. Bader needs one maximum per atom; without it the hydrogen\textquotesingle s basin is empty. (Plane-wave codes add the core
+charge back for the same reason before running Bader {[}29{]}.) The stockholder partition needs no maximum: it shares
+every point by the reference atoms, and the hydrogens get 0.65 electrons each. For light atoms next to heavy ones on a
+pseudo-density, Hirshfeld-I is the real-space partition that works.
+
+\paragraph{5.9 How far to trust each number}\label{g4.20-59-how-far-to-trust-each-number}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3357}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3636}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3007}}@{}}
+\toprule\noalign{}
+Quantity & What moves it (this example) & Verdict \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+electrons of every reference, the charge balance & nothing (to 10⁻⁴ e) & a check, not a result \\
+Hirshfeld-I at the default \texttt{-\/-\allowbreak{}tol} & 0.008 (water) -- 0.013 e (NaCl) from the fixed point & read the estimate, tighten \texttt{-\/-\allowbreak{}tol} (seconds) \\
+Hirshfeld-I vs mesh, box & \textless{} 10⁻³ e & converged at the defaults \\
+Hirshfeld-I vs basis & ±0.1 e (EnergyShift 0.02--0.005 Ry) & compare at one basis \\
+Hirshfeld-I past ±1 & the reference stops at the ion & a lower bound (MgO) \\
+simple Hirshfeld vs SIESTA\textquotesingle s own & 0.006--0.013 e (another neutral reference) & consistent \\
+point-charge dipole & atomic dipoles: −0.6 D (water), all of it (N₂O) & not the molecule\textquotesingle s dipole \\
+Bader on the pseudo-density & no basin for H next to O & ionic solids only \\
+\end{longtable}
+\endgroup
+
+\paragraph{5.10 What to take from the example}\label{g4.20-510-what-to-take-from-the-example}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Hirshfeld-I charges are 2.2--3.5× the simple Hirshfeld ones in these four systems: the neutral reference really does pull
+  the stockholder charges toward zero, and the iteration removes the arbitrariness.
+\item
+  \texttt{max\textbar{}Δq\textbar{}\ \textless{}\ tol} is not the error. Read \texttt{{[}4{]}}: the contraction ratio and the estimated remaining error tell how far the
+  charges still are, and tightening \texttt{-\/-\allowbreak{}tol} costs seconds.
+\item
+  Read \texttt{{[}2{]}} before the charges: every reference must hold its electrons and fit in its box.
+\item
+  In SIESTA the references are confined by the basis, so the basis --- mostly \texttt{PAO.\allowbreak{}EnergyShift} --- moves Hirshfeld-I charges
+  by ±0.1 e. Compare charges at one basis.
+\item
+  Two atoms of one element can have opposite charges (N₂O): each atom chooses its own ion, which is why every element gets
+  both. Past ±1 (MgO) the reference stops: a lower bound.
+\item
+  A charge is a definition: Voronoi, Hirshfeld, Hirshfeld-I and Bader differ by factors of 2--4 on the same density. Quote
+  the method with the number.
+\end{enumerate}
+
+\subsubsection{6. Reproducing the reference data}\label{g4.20-6-reproducing-the-reference-data}
+
+\texttt{reference\_\allowbreak{}results/\allowbreak{}} holds every finished SIESTA run of Section 5, so Stage 3 works out of the box without a SIESTA
+installation.
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1939}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1575}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.6486}}@{}}
+\toprule\noalign{}
+Folder & What & Contents \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{relax/\allowbreak{}h2o}, \texttt{relax/\allowbreak{}n2o}, \texttt{relax/\allowbreak{}nacl}, \texttt{relax/\allowbreak{}mgo} & the relaxations & \texttt{calc.\allowbreak{}fdf}, \texttt{template.\allowbreak{}fdf}, start \texttt{structure.\allowbreak{}fdf}, \texttt{relaxed.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out} \\
+\texttt{h2o/\allowbreak{}}, \texttt{n2o/\allowbreak{}}, \texttt{nacl/\allowbreak{}}, \texttt{mgo/\allowbreak{}} & the four studies & both manifests and the Stage 1/2 reports; per folder (\texttt{combined/\allowbreak{}}, \texttt{neutral/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}}, \texttt{ions/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}\textless{}cation\textbar{}anion\textgreater{}/\allowbreak{}}) \texttt{structure.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}fdf}, \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, \texttt{calc.\allowbreak{}out}, \textbf{\texttt{siesta.\allowbreak{}RHO.\allowbreak{}xz}}; \texttt{analysis/\allowbreak{}} (report, \texttt{.\allowbreak{}dat}, \texttt{.\allowbreak{}xyz}, dashboard), \texttt{analysis\_\allowbreak{}tight/\allowbreak{}} (\texttt{-\/-\allowbreak{}tol\ 1e-\allowbreak{}6}), \texttt{bader/\allowbreak{}} \\
+\texttt{h2o\_\allowbreak{}mesh200}, \texttt{h2o\_\allowbreak{}mesh300}, \texttt{h2o\_\allowbreak{}mesh600} & water at \texttt{MeshCutoff} 200, 300, 600 Ry & as above, without the \texttt{.\allowbreak{}RHO} \\
+\texttt{h2o\_\allowbreak{}box10}, \texttt{h2o\_\allowbreak{}box14}, \texttt{h2o\_\allowbreak{}box28} & the isolated atoms in 10, 14, 28 Å boxes & same \\
+\texttt{h2o\_\allowbreak{}szp\_\allowbreak{}s001}, \texttt{h2o\_\allowbreak{}dzp\_\allowbreak{}s002}, \texttt{h2o\_\allowbreak{}dzp\_\allowbreak{}s0005}, \texttt{h2o\_\allowbreak{}tzp\_\allowbreak{}s001}, \texttt{h2o\_\allowbreak{}tzp\_\allowbreak{}s0005} & five other basis sets & same \\
+\end{longtable}
+\endgroup
+
+The density grids of the four studies are stored compressed (\texttt{xz}): SIESTA\textquotesingle s density is exactly zero beyond the orbital
+radii, so a 20 Å box compresses to \textasciitilde100--600 kB. \texttt{example\_\allowbreak{}4.\allowbreak{}20.\allowbreak{}sh} unpacks them into \texttt{output/\allowbreak{}} (\texttt{xz\ -\allowbreak{}d\ siesta.\allowbreak{}RHO.\allowbreak{}xz} by
+hand). The studies keep their inputs, logs and analysis results but not the grids; \texttt{make\_\allowbreak{}reference.\allowbreak{}sh} regenerates
+everything:
+
+\begin{codeblock}
+bash make_reference.sh ~/scratch/hi_run      # ~1.5 h on 12 cores; then trims into reference_results/
+NP=4 JOBS=3 bash make_reference.sh           # MPI ranks per SIESTA run, runs at a time
+\end{codeblock}
+
+It relaxes the four structures, runs the three stages for each study (the commands of Section 5.1), \texttt{stb-\allowbreak{}bader} on the four
+\texttt{combined/\allowbreak{}} densities and Stage 3 again at \texttt{-\/-\allowbreak{}tol\ 1e-\allowbreak{}6}. Computed with SIESTA 5.4.2 (conda-forge build, MPI), 3 runs of
+\texttt{mpirun\ -\allowbreak{}np\ 4} at a time. One run (the H atom at 600 Ry) aborted with \texttt{double\ free} after a converged SCF on 4 ranks and
+finished on 2; the script retries a failed run once on 2 ranks.
+
+\subsubsection{7. Known, deliberate limitations}\label{g4.20-7-known-deliberate-limitations}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{References up to ±1.} Charges past ±1 are flagged and are a lower bound (Section 1.7); there is no ±2 reference.
+\item
+  \textbf{Linear interpolation between neutral and ion.} The pro-atom of Eq. 6, as in the original method {[}5{]}; other choices
+  (fractional-occupation atoms {[}12{]}, Hirshfeld-E {[}16{]}, ISA/MBIS {[}6, 7{]}) give other charges.
+\item
+  \textbf{Spherical references, spin-summed.} Each reference is the angular average of a spin-polarized atom; spin
+  populations are not partitioned {[}17{]}.
+\item
+  \textbf{Valence pseudo-densities.} Charges are relative to \texttt{Z\_\allowbreak{}val}; the core is in neither density (Section 1.6).
+\item
+  \textbf{Basis-confined references} (Section 5.7): the charges inherit the orbital range.
+\item
+  \textbf{Point-charge dipoles} leave out the atomic dipoles (Section 1.8); the check is along non-periodic axes only.
+\item
+  \textbf{Uniqueness} of the fixed point is not proven in general {[}13{]}; every run starts from simple Hirshfeld.
+\end{itemize}
+
+\subsubsection{8. Step-by-step: running this workflow on your own system}\label{g4.20-8-step-by-step-running-this-workflow-on-your-own-system}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Relax the structure} with the template you will use; Stage 1 does not relax.
+\item
+  \textbf{Write a \texttt{calc.\allowbreak{}fdf} with the physics only}, \texttt{\%include\ structure.\allowbreak{}fdf}, an implicit basis (\texttt{PAO.\allowbreak{}BasisSize}), your
+  functional, k-grid, spin.
+\item
+  \textbf{Run Stage 1} with \texttt{-p\ \textless{}bank\textgreater{}} (\texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} 300--400 Ry is plenty, Section 5.7); run SIESTA in \texttt{combined/\allowbreak{}} and every
+  \texttt{neutral/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}}.
+\item
+  \textbf{Run Stage 2}; run SIESTA in every \texttt{ions/\allowbreak{}\textless{}El\textgreater{}/\allowbreak{}\textless{}cation\textbar{}anion\textgreater{}/\allowbreak{}} (anions may need more SCF iterations).
+\item
+  \textbf{Run Stage 3} with \texttt{-\/-\allowbreak{}save-\allowbreak{}data\ -\/-\allowbreak{}png}. Read \texttt{{[}2{]}} (every reference OK?), \texttt{{[}4{]}} (the estimated remaining error;
+  rerun with the suggested \texttt{-\/-\allowbreak{}tol} if asked), \texttt{{[}5{]}}--\texttt{{[}7{]}}, then \texttt{{[}10{]}}.
+\item
+  \textbf{Test the basis} if absolute charges matter (Section 5.7): \texttt{PAO.\allowbreak{}EnergyShift} first.
+\item
+  \textbf{Quote the method} with the number, and compare charges computed the same way.
+\end{enumerate}
+
+\subsubsection{9. Files in this folder}\label{g4.20-9-files-in-this-folder}
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2749}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7251}}@{}}
+\toprule\noalign{}
+File & What it is \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{README.\allowbreak{}md} & this tutorial \\
+\texttt{example\_\allowbreak{}4.\allowbreak{}20.\allowbreak{}sh} & guided, runnable walk-through (10 cases) \\
+\texttt{study\_\allowbreak{}table.\allowbreak{}py} & collects the reference runs into the tables of Section 5 (\texttt{{[}A{]}}--\texttt{{[}F{]}}) and draws \texttt{figures/\allowbreak{}h2o\_\allowbreak{}studies.\allowbreak{}png} and \texttt{figures/\allowbreak{}stockholder\_\allowbreak{}weights.\allowbreak{}png} \\
+\texttt{build\_\allowbreak{}inputs.\allowbreak{}py} & helper of \texttt{make\_\allowbreak{}reference.\allowbreak{}sh}: the start structures (a G2 molecule in a box, a rock-salt primitive cell) \\
+\texttt{make\_\allowbreak{}reference.\allowbreak{}sh} & regenerates \texttt{reference\_\allowbreak{}results/\allowbreak{}} with SIESTA (Section 6) \\
+\texttt{h2o.\allowbreak{}fdf}, \texttt{n2o.\allowbreak{}fdf}, \texttt{nacl.\allowbreak{}fdf}, \texttt{mgo.\allowbreak{}fdf} & the start structures (\texttt{reference\_\allowbreak{}results/\allowbreak{}relax/\allowbreak{}*/\allowbreak{}relaxed.\allowbreak{}fdf} are the relaxed ones) \\
+\texttt{calc.\allowbreak{}fdf}, \texttt{calc\_\allowbreak{}bulk.\allowbreak{}fdf} & the templates: PBE, DZP, \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}01\ Ry}; the second with an 8×8×8 k-grid \\
+\texttt{reference\_\allowbreak{}results/\allowbreak{}} & real finished SIESTA runs (Section 6) \\
+\texttt{figures/\allowbreak{}} & the dashboards of the four systems and the two figures of \texttt{study\_\allowbreak{}table.\allowbreak{}py} \\
+\texttt{output/\allowbreak{}} & created by the script (git-ignored) \\
+\end{longtable}
+\endgroup
+
+\subsubsection{10. Running the script}\label{g4.20-10-running-the-script}
+
+\begin{codeblock}
+bash example_4.20.sh
+\end{codeblock}
+
+It pauses between cases (\texttt{{[}Press\ Enter\ to\ continue{]}}); \texttt{yes\ \textquotesingle{}\textquotesingle{}\ \textbar{}\ bash\ example\_\allowbreak{}4.\allowbreak{}20.\allowbreak{}sh} runs it straight through. It starts by
+wiping its own \texttt{output/\allowbreak{}}. Cases 1--2 run Stages 1 and 2 (no SIESTA needed); Cases 3--10 run Stage 3 on \texttt{reference\_\allowbreak{}results/\allowbreak{}}. It
+sets \texttt{MPLBACKEND=\allowbreak{}Agg}, so \texttt{-\/-\allowbreak{}show} is replaced by \texttt{-\/-\allowbreak{}png} in the script; try it on a desktop:
+
+\begin{codeblock}
+cp -r reference_results/h2o /tmp/h2o && find /tmp/h2o -name '*.xz' -exec xz -d {} \; && stb-hirshfeldAnalysis -O /tmp/h2o --show
+\end{codeblock}
+
+\subsubsection{11. Flag reference}\label{g4.20-11-flag-reference}
+
+\textbf{\texttt{stb-\allowbreak{}hirshfeldPrep}} --- \texttt{-s/\allowbreak{}-\/-\allowbreak{}structure} (default \texttt{structure.\allowbreak{}fdf}) · \texttt{-\/-\allowbreak{}calc} (default \texttt{calc.\allowbreak{}fdf}) · \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff\ RY}
+(default 400) · \texttt{-\/-\allowbreak{}vacuum\ ANG} (isolated-atom box, default 20) · \texttt{-p/\allowbreak{}-\/-\allowbreak{}pseudo-\allowbreak{}dir} (bank or folder; default: the structure\textquotesingle s
+folder) · \texttt{-O/\allowbreak{}-\/-\allowbreak{}output-\allowbreak{}dir} (default \texttt{hirshfeld\_\allowbreak{}study}) · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\textbf{\texttt{stb-\allowbreak{}hirshfeldIons}} --- \texttt{-O/\allowbreak{}-\/-\allowbreak{}output-\allowbreak{}dir} (the study, default \texttt{hirshfeld\_\allowbreak{}study}) · \texttt{-p/\allowbreak{}-\/-\allowbreak{}pseudo-\allowbreak{}dir} · \texttt{-\/-\allowbreak{}ref\ OUT} (the log
+to read \texttt{Z\_\allowbreak{}val} from) · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\textbf{\texttt{stb-\allowbreak{}hirshfeldAnalysis}} --- \texttt{-O/\allowbreak{}-\/-\allowbreak{}output-\allowbreak{}dir} (the study) · \texttt{-\/-\allowbreak{}tol\ E} (default 0.005 e) · \texttt{-\/-\allowbreak{}max-\allowbreak{}iter\ N} (default 20) ·
+\texttt{-\/-\allowbreak{}ref\ OUT} · \texttt{-\/-\allowbreak{}save-\allowbreak{}data} · \texttt{-\/-\allowbreak{}png} · \texttt{-\/-\allowbreak{}show} · \texttt{-\/-\allowbreak{}save-\allowbreak{}report} · \texttt{-\/-\allowbreak{}no-\allowbreak{}intro} · \texttt{-v}.
+
+\subsubsection{12. What\textquotesingle s next}\label{g4.20-12-whats-next}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{stb-\allowbreak{}bader} (3.6) partitions the same density by zero-flux surfaces --- fine for ionic solids, not for H on a pseudo-density
+  (Section 5.8); \texttt{stb-\allowbreak{}nativecharges} reads SIESTA\textquotesingle s own Hirshfeld, Voronoi and Mulliken charges.
+\item
+  \texttt{4.\allowbreak{}19-\allowbreak{}chargediff} shows \emph{where} the electrons moved between two fragments, partition-free in the planar view --- a
+  complement to atomic charges at an interface.
+\item
+  \texttt{4.\allowbreak{}8-\allowbreak{}adsorption}: run this workflow on an adsorption site to quantify the charge transfer to the adsorbate.
+\end{itemize}
+
+\subsubsection{13. References}\label{g4.20-13-references}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  K. B. Wiberg, P. R. Rablen, \emph{Comparison of atomic charges derived via different procedures}, J. Comput. Chem. \textbf{14},
+  1504 (1993). doi:10.1002/jcc.540141213
+\item
+  F. Heidar-Zadeh \emph{et al.}, \emph{Information-theoretic approaches to atoms-in-molecules: Hirshfeld family of partitioning
+  schemes}, J. Phys. Chem. A (2017). doi:10.1021/acs.jpca.7b08966
+\item
+  R. F. W. Bader, \emph{Atoms in Molecules: A Quantum Theory}, Oxford University Press (1990).
+\item
+  F. L. Hirshfeld, \emph{Bonded-atom fragments for describing molecular charge densities}, Theor. Chim. Acta \textbf{44}, 129 (1977).
+\item
+  P. Bultinck, C. Van Alsenoy, P. W. Ayers, R. Carbó-Dorca, \emph{Critical analysis and extension of the Hirshfeld atoms in
+  molecules}, J. Chem. Phys. \textbf{126}, 144111 (2007). doi:10.1063/1.2715563
+\item
+  T. C. Lillestolen, R. J. Wheatley, \emph{Redefining the atom: atomic charge densities produced by an iterative stockholder
+  approach}, Chem. Commun. 5909 (2008). doi:10.1039/b812691g
+\item
+  T. Verstraelen \emph{et al.}, \emph{Minimal basis iterative stockholder: atoms in molecules for force-field development}, J. Chem.
+  Theory Comput. \textbf{12}, 3894 (2016). doi:10.1021/acs.jctc.6b00456
+\item
+  T. A. Manz, N. Gabaldon Limas, \emph{Introducing DDEC6 atomic population analysis: part 1}, RSC Adv. \textbf{6}, 47771 (2016).
+  doi:10.1039/c6ra04656h
+\item
+  R. F. Nalewajski, R. G. Parr, \emph{Information theory, atoms in molecules, and molecular similarity}, Proc. Natl. Acad. Sci.
+  USA \textbf{97}, 8879 (2000). doi:10.1073/pnas.97.16.8879
+\item
+  E. R. Davidson, S. Chakravorty, \emph{A test of the Hirshfeld definition of atomic charges and moments}, Theor. Chim. Acta
+  \textbf{83}, 319 (1992). doi:10.1007/bf01113058
+\item
+  P. Bultinck, P. W. Ayers, S. Fias, K. Tiels, C. Van Alsenoy, \emph{Uniqueness and basis set dependence of iterative
+  Hirshfeld charges}, Chem. Phys. Lett. \textbf{444}, 205 (2007). doi:10.1016/j.cplett.2007.07.014
+\item
+  S. Van Damme, P. Bultinck, S. Fias, \emph{Electrostatic potentials from self-consistent Hirshfeld atomic charges}, J. Chem.
+  Theory Comput. \textbf{5}, 334 (2009). doi:10.1021/ct800394q
+\item
+  L. Pujal \emph{et al.}, \emph{Constrained iterative Hirshfeld charges: a variational approach}, J. Chem. Phys. (2022).
+  doi:10.1063/5.0089466
+\item
+  D. E. P. Vanpoucke, P. Bultinck, I. Van Driessche, \emph{Extending Hirshfeld-I to bulk and periodic materials}, J. Comput.
+  Chem. \textbf{34}, 405 (2013). doi:10.1002/jcc.23088
+\item
+  D. E. P. Vanpoucke, I. Van Driessche, P. Bultinck, \emph{Reply to "Comment on \textquotesingle Extending Hirshfeld-I to bulk and periodic
+  materials\textquotesingle"}, J. Comput. Chem. (2013). doi:10.1002/jcc.23193 --- pseudo-valence densities reproduce the
+  all-electron Hirshfeld-I charges; NaF, NaCl, MgO, SrTiO₃.
+\item
+  T. Verstraelen \emph{et al.}, \emph{Hirshfeld-E partitioning: AIM charges with an improved trade-off between robustness and
+  accurate electrostatics}, J. Chem. Theory Comput. (2013). doi:10.1021/ct4000923
+\item
+  D. Geldof \emph{et al.}, \emph{An extension of the Hirshfeld method to open shell systems using fractional occupations}, J. Chem.
+  Theory Comput. (2011). doi:10.1021/ct100743h
+\item
+  J. M. Soler \emph{et al.}, \emph{The SIESTA method for ab initio order-N materials simulation}, J. Phys.: Condens. Matter \textbf{14},
+  2745 (2002).
+\item
+  A. García \emph{et al.}, \emph{Siesta: Recent developments and applications}, J. Chem. Phys. \textbf{152}, 204108 (2020).
+\item
+  J. P. Perdew, K. Burke, M. Ernzerhof, \emph{Generalized gradient approximation made simple}, Phys. Rev. Lett. \textbf{77}, 3865
+  (1996).
+\item
+  M. J. van Setten \emph{et al.}, \emph{The PseudoDojo: Training and grading a 85 element optimized norm-conserving pseudopotential
+  table}, Comput. Phys. Commun. \textbf{226}, 39 (2018). doi:10.1016/j.cpc.2018.01.012
+\item
+  H. J. Monkhorst, J. D. Pack, \emph{Special points for Brillouin-zone integrations}, Phys. Rev. B \textbf{13}, 5188 (1976).
+\item
+  sisl --- \url{https://zerothi.github.io/sisl/} (N. Papior).
+\item
+  S. P. Ong \emph{et al.}, \emph{Python Materials Genomics (pymatgen)}, Comput. Mater. Sci. \textbf{68}, 314 (2013).
+\item
+  A. H. Larsen \emph{et al.}, \emph{The atomic simulation environment}, J. Phys.: Condens. Matter \textbf{29}, 273002 (2017).
+\item
+  J. D. Hunter, \emph{Matplotlib: A 2D graphics environment}, Comput. Sci. Eng. \textbf{9}, 90 (2007).
+\item
+  C. Fonseca Guerra, J.-W. Handgraaf, E. J. Baerends, F. M. Bickelhaupt, \emph{Voronoi deformation density (VDD) charges:
+  assessment of the Mulliken, Bader, Hirshfeld, Weinhold, and VDD methods for charge analysis}, J. Comput. Chem. \textbf{25},
+  189 (2004). doi:10.1002/jcc.10351
+\item
+  NIST Computational Chemistry Comparison and Benchmark Database (CCCBDB), experimental geometries and dipole moments
+  (H₂O: 1.855 D, r(OH) 0.958 Å, 104.5°; N₂O: 0.161 D, r(NN) 1.128 Å, r(NO) 1.184 Å). \url{https://cccbdb.nist.gov}
+\item
+  W. Tang, E. Sanville, G. Henkelman, \emph{A grid-based Bader analysis algorithm without lattice bias}, J. Phys.: Condens.
+  Matter \textbf{21}, 084204 (2009).
+\end{enumerate}
 
 \subsection{Command-line reference}
 \label{ref-4.20}
@@ -35425,7 +36573,7 @@ usage: stb-hirshfeldIons [-h] [-O OUTPUT_DIR] [-p PSEUDO_DIR] [--ref REF]
 \begin{optlist}
 \optitem{-O, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}!--output-dir@\texttt{--output-dir}}Same root directory \texttt{stb-\allowbreak{}hirshfeldPrep} wrote into (default: hirshfeld\_study) -- reads \texttt{hirshfeld\_\allowbreak{}manifest.\allowbreak{}json} from here.}
 \optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source for the ion folders. Default: reuse the combined system's own directory (recorded in the manifest).}
-\optitem{-{}-ref REF}{\index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}!--ref@\texttt{--ref}}Path to a specific SIESTA output file to read each species' Z\_val (valence charge) and native Hirshfeld/Voronoi cross-check from -- same convention as \texttt{stb-\allowbreak{}bader's} own \texttt{-{}-ref}. Overrides auto-detection of combined/'s own '\texttt{*.\allowbreak{}out}' (which assumes that log was left with a .out extension; use \texttt{-{}-ref} if yours wasn't).}
+\optitem{-{}-ref REF}{\index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}!--ref@\texttt{--ref}}Path to a specific SIESTA output file to read each species' Z\_val (valence charge) and native Hirshfeld/Voronoi cross-check from -- same convention as \texttt{stb-\allowbreak{}bader}'s own \texttt{-{}-ref}. Overrides auto-detection of combined/'s own '\texttt{*.\allowbreak{}out}' (which assumes that log was left with a .out extension; use \texttt{-{}-ref} if yours wasn't).}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-hirshfeldIons@\texttt{stb-hirshfeldIons}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{hirshfeld\_\allowbreak{}ions\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
@@ -35437,17 +36585,22 @@ Stage 3 of the Hirshfeld-I workflow: reads back every neutral+ion isolated-atom 
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-hirshfeldAnalysis [-h] [-O OUTPUT_DIR] [--tol E-] [--max-iter N]
-                             [--ref REF] [--save-report] [--no-intro] [-v]
+                             [--ref REF] [--save-report] [--save-data] [--png]
+                             [--show] [--no-intro] [-v]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
-\optitem{-O, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--output-dir@\texttt{--output-dir}}Same root directory \texttt{stb-\allowbreak{}hirshfeldPrep/\allowbreak{}Ions} wrote into (default: hirshfeld\_study).}
-\optitem{-{}-tol E-}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--tol@\texttt{--tol}}Convergence tolerance on max\textbar{}Delta q\textbar{} between rounds, in electrons (default: 0.005 e-, matching the method's own prototype).\optmeta{type: float}}
+\optitem{-O, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--output-dir@\texttt{--output-dir}}Same root directory \texttt{stb-\allowbreak{}hirshfeldPrep}/Ions wrote into (default: hirshfeld\_study).}
+\optitem{-{}-tol E-}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--tol@\texttt{--tol}}Convergence tolerance on max\textbar{}Delta q\textbar{} between rounds, in electrons (default: 0.005 e-, matching the method's own prototype). The report also estimates how far the charges still are from the fixed point, which can be 2-3 x this value when the iteration converges slowly.\optmeta{type: float}}
 \optitem{-{}-max-\allowbreak{}iter N}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--max-iter@\texttt{--max-iter}}Maximum number of refinement rounds (default: 20; the method's own prototype converged in 8).\optmeta{type: int}}
-\optitem{-{}-ref REF}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--ref@\texttt{--ref}}Path to a specific SIESTA output file to read each species' Z\_val (valence charge) from -- same convention as \texttt{stb-\allowbreak{}bader's} own \texttt{-{}-ref}. Overrides auto-detection of combined/'s own '\texttt{*.\allowbreak{}out}' (which assumes that log was left with a .out extension; use \texttt{-{}-ref} if yours wasn't).}
+\optitem{-{}-ref REF}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--ref@\texttt{--ref}}Path to a specific SIESTA output file to read each species' Z\_val (valence charge) from -- same convention as \texttt{stb-\allowbreak{}bader}'s own \texttt{-{}-ref}. Overrides auto-detection of combined/'s own '\texttt{*.\allowbreak{}out}' (which assumes that log was left with a .out extension; use \texttt{-{}-ref} if yours wasn't).}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{hirshfeld\_\allowbreak{}analysis\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-save-\allowbreak{}data}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--save-data@\texttt{--save-data}}Write \texttt{hirshfeld\_\allowbreak{}charges.\allowbreak{}dat} (per-atom charges by every method, populations, reference used), \texttt{hirshfeld\_\allowbreak{}iterations.\allowbreak{}dat} (every atom's charge per iteration) and \texttt{hirshfeld\_\allowbreak{}charges.\allowbreak{}xyz} (extended XYZ with the charges as per-atom columns; 'ase gui' colours atoms by the Hirshfeld-I charge). Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-png}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--png@\texttt{--png}}Save the 6-panel dashboard (convergence, charge per iteration, methods per species, Hirshfeld-I vs Hirshfeld per atom, reference profiles, structure coloured by charge) as \texttt{hirshfeld\_\allowbreak{}analysis.\allowbreak{}png}. Off by default.\optmeta{switch, off by default}}
+\optitem{-{}-show}{\index{stb-hirshfeldAnalysis@\texttt{stb-hirshfeldAnalysis}!--show@\texttt{--show}}Open the dashboard on screen (matplotlib). Needs a display. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
+
 
 
 %% ============================================================== Category 5

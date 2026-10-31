@@ -8,7 +8,7 @@
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
 [![Documentation](https://img.shields.io/badge/docs-stb--suite.github.io%2Fstb-informational.svg)](https://stb-suite.github.io/stb/)
 
-**Author:** Dr. Carlos M. O. Bastos — University of Brasília (UnB), 2025
+**Author:** Dr. Carlos M. O. Bastos — University of Brasília (UnB), 2026
 🔗 [bastoscmo.github.io](https://bastoscmo.github.io)
 
 📚 **Documentation: <https://stb-suite.github.io/stb/>** — a guide for every tool and a reference page for every command.
@@ -103,4 +103,4 @@ Every tool prints its options with `--help` (for example `stb-kgrid --help`).
 ## 🧾 License
 
 Distributed under the **MIT License**.
-© 2025 Dr. Carlos M. O. Bastos – University of Brasília (UnB)
+© 2026 Dr. Carlos M. O. Bastos – University of Brasília (UnB)- Brazil

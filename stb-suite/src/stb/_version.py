@@ -30,8 +30,8 @@ import subprocess
 from importlib import metadata
 from pathlib import Path
 
-RELEASE = "2.0.0"
-DEV = False
+RELEASE = "2.1.0"
+DEV = True
 BASE_TAG = "v2.0.0"
 
 _HERE = Path(__file__).resolve()

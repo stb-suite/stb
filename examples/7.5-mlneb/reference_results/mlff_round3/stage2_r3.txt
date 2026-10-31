@@ -1,0 +1,535 @@
+
+CUSTOM ML FORCE FIELD -- TRAIN:
+------------------------------------------------------------
+===== STB-MLFFANALYSIS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-29 09:37:29
+Software          : stb 1.9.303, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Configs from      : mlff_runs/mlff_workflow.json (training configs)
+Workflow file     : mlff_runs/mlff_workflow.json (round 3)
+Round directory   : mlff_runs/round_03
+Committee         : 3 model(s), seed(s) 123, 124, 125
+Foundation model  : mace-mp-0 (medium)
+Starting weights  : mlff_runs/round_02/m_s123/mlff_model.model, mlff_runs/round_02/m_s124/mlff_model.model, mlff_runs/round_02/m_s125/mlff_model.model
+Report file       : mlff_runs/round_03/stb_mlffAnalysis_report.txt
+
+[1] TRAINING DATA
+------------------------------------------------------------
+Folders           : 71 listed, 71 usable, 0 skipped
+By folder         : configs_round_01 45/45 labelled, configs_round_02 12/12 labelled, neb_neb_r2 14/14 labelled
+Composition       : Si63, Si64, Si8 (8, 63, 64 atoms/config; species Si)
+Labels            : 71 energies, 6030 force components, 426 stress components
+Kind       | N  | E - E_min (meV/atom) | F_rms (eV/Ang) | F_max (eV/Ang) | P (GPa)         | V/atom (Ang^3)  
+-------------------------------------------------------------------------------------------------------------
+al-md      | 12 | 171.9 .. 260.3       | 1.98 .. 2.30   | 3.38 .. 5.70   | -0.80 .. +1.01  | 20.574 .. 20.574
+neb        | 7  | 48.0 .. 52.0         | 0.09 .. 0.13   | 0.17 .. 0.44   | -1.63 .. -0.80  | 20.900 .. 20.900
+neb-rattle | 7  | 80.1 .. 92.7         | 1.10 .. 1.32   | 1.87 .. 2.87   | -1.00 .. -0.24  | 20.900 .. 20.900
+rattle     | 39 | 0.0 .. 756.5         | 0.63 .. 7.91   | 0.98 .. 14.70  | +0.09 .. +9.13  | 20.574 .. 20.574
+strain     | 6  | 19.7 .. 360.0        | 0.65 .. 4.09   | 1.05 .. 6.05   | -5.81 .. +10.48 | 18.722 .. 22.425
+Energy spread     : 756.5 meV/atom (E/atom -115.0069 .. -114.2504 eV)
+Force magnitude   : mean 1.957, max 14.705 eV/Ang
+Pressure range    : -5.81 .. +10.48 GPa (from SIESTA stress)
+Volume/atom range : 18.722 .. 22.425 Ang^3
+Level of theory   : ElectronicTemperature 300 K, Mesh.Cutoff 300 Ry, PAO.Basis block none, PAO.BasisSize DZP
+                    PAO.EnergyShift 0.01 Ry, SCF tolerance 1.0e-5, Spin non-polarized, XC.authors PBE
+                    XC.functional GGA, k x a (Ang) 32 32 32
+                    (SIESTA default for: DFTD3)
+Pseudopotentials  : Si.psml 878e1f00 (md5, first 8)
+[OK] Same level of theory in all 71 folders (settings, k-sampling, basis, pseudopotential files).
+Dispersion        : no DFT-D3 in the labels (workflow: none)
+[OK] SCF converged in every config the log reports on.
+
+[2] TRAINING SETUP
+------------------------------------------------------------
+Epochs / batch    : 100 / 5
+Learning rate     : 0.001
+Loss              : energy 1 + forces 100 + stress 10000 (--loss stress)
+E0s               : foundation-residual
+Validation split  : 0.1 per member (7 config(s), different for each seed)
+Starting weights  : seed 123 <- mlff_runs/round_02/m_s123/mlff_model.model; seed 124 <- mlff_runs/round_02/m_s124/mlff_model.model; seed 125 <- mlff_runs/round_02/m_s125/mlff_model.model
+
+[3] TRAINING
+------------------------------------------------------------
+Member 1/3 -- seed 123: 64 train / 7 valid (valid: mlff_config_011, mlff_config_024, mlff_config_029, mlff_config_041, mlff_config_044, mlff_config_045, mlff_config_049)
+  E0s             : Si -117.3088 eV ('average' -114.8699); start E RMSE 7.9 meV/atom
+  ... Training seed 123 (100 epochs max) (5s elapsed)
+  ... Training seed 123 (100 epochs max) (10s elapsed)
+  ... Training seed 123 (100 epochs max) (15s elapsed)
+  ... Training seed 123 (100 epochs max) (20s elapsed)
+  ... Training seed 123 (100 epochs max) (25s elapsed)
+  ... Training seed 123 (100 epochs max) (30s elapsed)
+  ... Training seed 123 (100 epochs max) (35s elapsed)
+  ... Training seed 123 (100 epochs max) (40s elapsed)
+  ... Training seed 123 (100 epochs max) (45s elapsed)
+  ... Training seed 123 (100 epochs max) (50s elapsed)
+  ... Training seed 123 (100 epochs max) (55s elapsed)
+  ... Training seed 123 (100 epochs max) (60s elapsed)
+  ... Training seed 123 (100 epochs max) (65s elapsed)
+  ... Training seed 123 (100 epochs max) (70s elapsed)
+  ... Training seed 123 (100 epochs max) (75s elapsed)
+  ... Training seed 123 (100 epochs max) (80s elapsed)
+  ... Training seed 123 (100 epochs max) (85s elapsed)
+  ... Training seed 123 (100 epochs max) (90s elapsed)
+  ... Training seed 123 (100 epochs max) (95s elapsed)
+  ... Training seed 123 (100 epochs max) (100s elapsed)
+  ... Training seed 123 (100 epochs max) (105s elapsed)
+  ... Training seed 123 (100 epochs max) (110s elapsed)
+  ... Training seed 123 (100 epochs max) (115s elapsed)
+  ... Training seed 123 (100 epochs max) (120s elapsed)
+  ... Training seed 123 (100 epochs max) (125s elapsed)
+  ... Training seed 123 (100 epochs max) (130s elapsed)
+  ... Training seed 123 (100 epochs max) (135s elapsed)
+  ... Training seed 123 (100 epochs max) (140s elapsed)
+  ... Training seed 123 (100 epochs max) (145s elapsed)
+  ... Training seed 123 (100 epochs max) (150s elapsed)
+  ... Training seed 123 (100 epochs max) (155s elapsed)
+  ... Training seed 123 (100 epochs max) (160s elapsed)
+  ... Training seed 123 (100 epochs max) (165s elapsed)
+  ... Training seed 123 (100 epochs max) (170s elapsed)
+  ... Training seed 123 (100 epochs max) (175s elapsed)
+  ... Training seed 123 (100 epochs max) (180s elapsed)
+  ... Training seed 123 (100 epochs max) (185s elapsed)
+  ... Training seed 123 (100 epochs max) (190s elapsed)
+  ... Training seed 123 (100 epochs max) (195s elapsed)
+  ... Training seed 123 (100 epochs max) (200s elapsed)
+  ... Training seed 123 (100 epochs max) (205s elapsed)
+  ... Training seed 123 (100 epochs max) (210s elapsed)
+  ... Training seed 123 (100 epochs max) (215s elapsed)
+  ... Training seed 123 (100 epochs max) (220s elapsed)
+  ... Training seed 123 (100 epochs max) (225s elapsed)
+  ... Training seed 123 (100 epochs max) (230s elapsed)
+  ... Training seed 123 (100 epochs max) (235s elapsed)
+  ... Training seed 123 (100 epochs max) (240s elapsed)
+  ... Training seed 123 (100 epochs max) (245s elapsed)
+  ... Training seed 123 (100 epochs max) (250s elapsed)
+  ... Training seed 123 (100 epochs max) (255s elapsed)
+  ... Training seed 123 (100 epochs max) (260s elapsed)
+  ... Training seed 123 (100 epochs max) (265s elapsed)
+  ... Training seed 123 (100 epochs max) (270s elapsed)
+  ... Training seed 123 (100 epochs max) (275s elapsed)
+  ... Training seed 123 (100 epochs max) (280s elapsed)
+  ... Training seed 123 (100 epochs max) (285s elapsed)
+  ... Training seed 123 (100 epochs max) (290s elapsed)
+  ... Training seed 123 (100 epochs max) (295s elapsed)
+  ... Training seed 123 (100 epochs max) (300s elapsed)
+  ... Training seed 123 (100 epochs max) (305s elapsed)
+  ... Training seed 123 (100 epochs max) (310s elapsed)
+  ... Training seed 123 (100 epochs max) (315s elapsed)
+  ... Training seed 123 (100 epochs max) (320s elapsed)
+  ... Training seed 123 (100 epochs max) (325s elapsed)
+  ... Training seed 123 (100 epochs max) (330s elapsed)
+  ... Training seed 123 (100 epochs max) (335s elapsed)
+  ... Training seed 123 (100 epochs max) (340s elapsed)
+  ... Training seed 123 (100 epochs max) (345s elapsed)
+  ... Training seed 123 (100 epochs max) (350s elapsed)
+  ... Training seed 123 (100 epochs max) (355s elapsed)
+  ... Training seed 123 (100 epochs max) (360s elapsed)
+  ... Training seed 123 (100 epochs max) (365s elapsed)
+  ... Training seed 123 (100 epochs max) (370s elapsed)
+  ... Training seed 123 (100 epochs max) (375s elapsed)
+  ... Training seed 123 (100 epochs max) (380s elapsed)
+  ... Training seed 123 (100 epochs max) (385s elapsed)
+  ... Training seed 123 (100 epochs max) (390s elapsed)
+  ... Training seed 123 (100 epochs max) (395s elapsed)
+  ... Training seed 123 (100 epochs max) (400s elapsed)
+  ... Training seed 123 (100 epochs max) (405s elapsed)
+  ... Training seed 123 (100 epochs max) (410s elapsed)
+  ... Training seed 123 (100 epochs max) (415s elapsed)
+  ... Training seed 123 (100 epochs max) (420s elapsed)
+  ... Training seed 123 (100 epochs max) (425s elapsed)
+  ... Training seed 123 (100 epochs max) (430s elapsed)
+  ... Training seed 123 (100 epochs max) (435s elapsed)
+  ... Training seed 123 (100 epochs max) (440s elapsed)
+  ... Training seed 123 (100 epochs max) (445s elapsed)
+  ... Training seed 123 (100 epochs max) (450s elapsed)
+  ... Training seed 123 (100 epochs max) (455s elapsed)
+  ... Training seed 123 (100 epochs max) (460s elapsed)
+  ... Training seed 123 (100 epochs max) (465s elapsed)
+  ... Training seed 123 (100 epochs max) (470s elapsed)
+  ... Training seed 123 (100 epochs max) (475s elapsed)
+  ... Training seed 123 (100 epochs max) (480s elapsed)
+  ... Training seed 123 (100 epochs max) (485s elapsed)
+  ... Training seed 123 (100 epochs max) (490s elapsed)
+  ... Training seed 123 (100 epochs max) (495s elapsed)
+  ... Training seed 123 (100 epochs max) (500s elapsed)
+  ... Training seed 123 (100 epochs max) (505s elapsed)
+  ... Training seed 123 (100 epochs max) (510s elapsed)
+  ... Training seed 123 (100 epochs max) (516s elapsed)
+  ... Training seed 123 (100 epochs max) (521s elapsed)
+  ... Training seed 123 (100 epochs max) (526s elapsed)
+  ... Training seed 123 (100 epochs max) (531s elapsed)
+  ... Training seed 123 (100 epochs max) (536s elapsed)
+  ... Training seed 123 (100 epochs max) (541s elapsed)
+  ... Training seed 123 (100 epochs max) (546s elapsed)
+  ... Training seed 123 (100 epochs max) (551s elapsed)
+  ... Training seed 123 (100 epochs max) (556s elapsed)
+  ... Training seed 123 (100 epochs max) (561s elapsed)
+  ... Training seed 123 (100 epochs max) (566s elapsed)
+  ... Training seed 123 (100 epochs max) (571s elapsed)
+  ... Training seed 123 (100 epochs max) (576s elapsed)
+  ... Training seed 123 (100 epochs max) (581s elapsed)
+  ... Training seed 123 (100 epochs max) (586s elapsed)
+  ... Training seed 123 (100 epochs max) (591s elapsed)
+  ... Training seed 123 (100 epochs max) (596s elapsed)
+  ... Training seed 123 (100 epochs max) (601s elapsed)
+  ... Training seed 123 (100 epochs max) (606s elapsed)
+  ... Training seed 123 (100 epochs max) (611s elapsed)
+  done in 613 s, 100 epochs logged, kept epoch 59 -> mlff_runs/round_03/m_s123/mlff_model_compiled.model
+Member 2/3 -- seed 124: 64 train / 7 valid (valid: mlff_config_024, mlff_config_042, mlff_config_045, mlff_config_057, image_02, image_04_rattle_1, image_05)
+  E0s             : Si -117.3018 eV ('average' -114.8591); start E RMSE 7.9 meV/atom
+  ... Training seed 124 (100 epochs max) (5s elapsed)
+  ... Training seed 124 (100 epochs max) (10s elapsed)
+  ... Training seed 124 (100 epochs max) (15s elapsed)
+  ... Training seed 124 (100 epochs max) (20s elapsed)
+  ... Training seed 124 (100 epochs max) (25s elapsed)
+  ... Training seed 124 (100 epochs max) (30s elapsed)
+  ... Training seed 124 (100 epochs max) (35s elapsed)
+  ... Training seed 124 (100 epochs max) (40s elapsed)
+  ... Training seed 124 (100 epochs max) (45s elapsed)
+  ... Training seed 124 (100 epochs max) (50s elapsed)
+  ... Training seed 124 (100 epochs max) (55s elapsed)
+  ... Training seed 124 (100 epochs max) (60s elapsed)
+  ... Training seed 124 (100 epochs max) (65s elapsed)
+  ... Training seed 124 (100 epochs max) (70s elapsed)
+  ... Training seed 124 (100 epochs max) (75s elapsed)
+  ... Training seed 124 (100 epochs max) (80s elapsed)
+  ... Training seed 124 (100 epochs max) (85s elapsed)
+  ... Training seed 124 (100 epochs max) (90s elapsed)
+  ... Training seed 124 (100 epochs max) (95s elapsed)
+  ... Training seed 124 (100 epochs max) (100s elapsed)
+  ... Training seed 124 (100 epochs max) (105s elapsed)
+  ... Training seed 124 (100 epochs max) (110s elapsed)
+  ... Training seed 124 (100 epochs max) (115s elapsed)
+  ... Training seed 124 (100 epochs max) (120s elapsed)
+  ... Training seed 124 (100 epochs max) (125s elapsed)
+  ... Training seed 124 (100 epochs max) (130s elapsed)
+  ... Training seed 124 (100 epochs max) (135s elapsed)
+  ... Training seed 124 (100 epochs max) (140s elapsed)
+  ... Training seed 124 (100 epochs max) (145s elapsed)
+  ... Training seed 124 (100 epochs max) (150s elapsed)
+  ... Training seed 124 (100 epochs max) (155s elapsed)
+  ... Training seed 124 (100 epochs max) (160s elapsed)
+  ... Training seed 124 (100 epochs max) (165s elapsed)
+  ... Training seed 124 (100 epochs max) (170s elapsed)
+  ... Training seed 124 (100 epochs max) (175s elapsed)
+  ... Training seed 124 (100 epochs max) (180s elapsed)
+  ... Training seed 124 (100 epochs max) (185s elapsed)
+  ... Training seed 124 (100 epochs max) (190s elapsed)
+  ... Training seed 124 (100 epochs max) (195s elapsed)
+  ... Training seed 124 (100 epochs max) (200s elapsed)
+  ... Training seed 124 (100 epochs max) (205s elapsed)
+  ... Training seed 124 (100 epochs max) (210s elapsed)
+  ... Training seed 124 (100 epochs max) (215s elapsed)
+  ... Training seed 124 (100 epochs max) (220s elapsed)
+  ... Training seed 124 (100 epochs max) (225s elapsed)
+  ... Training seed 124 (100 epochs max) (230s elapsed)
+  ... Training seed 124 (100 epochs max) (235s elapsed)
+  ... Training seed 124 (100 epochs max) (240s elapsed)
+  ... Training seed 124 (100 epochs max) (245s elapsed)
+  ... Training seed 124 (100 epochs max) (250s elapsed)
+  ... Training seed 124 (100 epochs max) (255s elapsed)
+  ... Training seed 124 (100 epochs max) (260s elapsed)
+  ... Training seed 124 (100 epochs max) (265s elapsed)
+  ... Training seed 124 (100 epochs max) (270s elapsed)
+  ... Training seed 124 (100 epochs max) (275s elapsed)
+  ... Training seed 124 (100 epochs max) (280s elapsed)
+  ... Training seed 124 (100 epochs max) (285s elapsed)
+  ... Training seed 124 (100 epochs max) (290s elapsed)
+  ... Training seed 124 (100 epochs max) (295s elapsed)
+  ... Training seed 124 (100 epochs max) (300s elapsed)
+  ... Training seed 124 (100 epochs max) (305s elapsed)
+  ... Training seed 124 (100 epochs max) (310s elapsed)
+  ... Training seed 124 (100 epochs max) (315s elapsed)
+  ... Training seed 124 (100 epochs max) (320s elapsed)
+  ... Training seed 124 (100 epochs max) (325s elapsed)
+  ... Training seed 124 (100 epochs max) (330s elapsed)
+  ... Training seed 124 (100 epochs max) (335s elapsed)
+  ... Training seed 124 (100 epochs max) (340s elapsed)
+  ... Training seed 124 (100 epochs max) (345s elapsed)
+  ... Training seed 124 (100 epochs max) (350s elapsed)
+  ... Training seed 124 (100 epochs max) (355s elapsed)
+  ... Training seed 124 (100 epochs max) (360s elapsed)
+  ... Training seed 124 (100 epochs max) (365s elapsed)
+  ... Training seed 124 (100 epochs max) (370s elapsed)
+  ... Training seed 124 (100 epochs max) (375s elapsed)
+  ... Training seed 124 (100 epochs max) (380s elapsed)
+  ... Training seed 124 (100 epochs max) (385s elapsed)
+  ... Training seed 124 (100 epochs max) (390s elapsed)
+  ... Training seed 124 (100 epochs max) (395s elapsed)
+  ... Training seed 124 (100 epochs max) (400s elapsed)
+  ... Training seed 124 (100 epochs max) (405s elapsed)
+  ... Training seed 124 (100 epochs max) (410s elapsed)
+  ... Training seed 124 (100 epochs max) (415s elapsed)
+  ... Training seed 124 (100 epochs max) (420s elapsed)
+  ... Training seed 124 (100 epochs max) (425s elapsed)
+  ... Training seed 124 (100 epochs max) (430s elapsed)
+  ... Training seed 124 (100 epochs max) (435s elapsed)
+  ... Training seed 124 (100 epochs max) (440s elapsed)
+  ... Training seed 124 (100 epochs max) (445s elapsed)
+  ... Training seed 124 (100 epochs max) (450s elapsed)
+  ... Training seed 124 (100 epochs max) (455s elapsed)
+  ... Training seed 124 (100 epochs max) (460s elapsed)
+  ... Training seed 124 (100 epochs max) (465s elapsed)
+  ... Training seed 124 (100 epochs max) (470s elapsed)
+  ... Training seed 124 (100 epochs max) (475s elapsed)
+  ... Training seed 124 (100 epochs max) (480s elapsed)
+  ... Training seed 124 (100 epochs max) (485s elapsed)
+  ... Training seed 124 (100 epochs max) (490s elapsed)
+  ... Training seed 124 (100 epochs max) (495s elapsed)
+  ... Training seed 124 (100 epochs max) (500s elapsed)
+  ... Training seed 124 (100 epochs max) (505s elapsed)
+  ... Training seed 124 (100 epochs max) (510s elapsed)
+  ... Training seed 124 (100 epochs max) (515s elapsed)
+  ... Training seed 124 (100 epochs max) (520s elapsed)
+  ... Training seed 124 (100 epochs max) (525s elapsed)
+  ... Training seed 124 (100 epochs max) (530s elapsed)
+  ... Training seed 124 (100 epochs max) (535s elapsed)
+  ... Training seed 124 (100 epochs max) (540s elapsed)
+  ... Training seed 124 (100 epochs max) (545s elapsed)
+  ... Training seed 124 (100 epochs max) (550s elapsed)
+  done in 555 s, 100 epochs logged, kept epoch 93 -> mlff_runs/round_03/m_s124/mlff_model_compiled.model
+Member 3/3 -- seed 125: 64 train / 7 valid (valid: mlff_config_001, mlff_config_008, mlff_config_010, mlff_config_046, image_01_rattle_1, image_03_rattle_1, image_04)
+  E0s             : Si -117.3012 eV ('average' -114.8570); start E RMSE 6.4 meV/atom
+  ... Training seed 125 (100 epochs max) (5s elapsed)
+  ... Training seed 125 (100 epochs max) (10s elapsed)
+  ... Training seed 125 (100 epochs max) (15s elapsed)
+  ... Training seed 125 (100 epochs max) (20s elapsed)
+  ... Training seed 125 (100 epochs max) (25s elapsed)
+  ... Training seed 125 (100 epochs max) (30s elapsed)
+  ... Training seed 125 (100 epochs max) (35s elapsed)
+  ... Training seed 125 (100 epochs max) (40s elapsed)
+  ... Training seed 125 (100 epochs max) (45s elapsed)
+  ... Training seed 125 (100 epochs max) (50s elapsed)
+  ... Training seed 125 (100 epochs max) (55s elapsed)
+  ... Training seed 125 (100 epochs max) (60s elapsed)
+  ... Training seed 125 (100 epochs max) (65s elapsed)
+  ... Training seed 125 (100 epochs max) (70s elapsed)
+  ... Training seed 125 (100 epochs max) (75s elapsed)
+  ... Training seed 125 (100 epochs max) (80s elapsed)
+  ... Training seed 125 (100 epochs max) (85s elapsed)
+  ... Training seed 125 (100 epochs max) (90s elapsed)
+  ... Training seed 125 (100 epochs max) (95s elapsed)
+  ... Training seed 125 (100 epochs max) (100s elapsed)
+  ... Training seed 125 (100 epochs max) (105s elapsed)
+  ... Training seed 125 (100 epochs max) (110s elapsed)
+  ... Training seed 125 (100 epochs max) (115s elapsed)
+  ... Training seed 125 (100 epochs max) (120s elapsed)
+  ... Training seed 125 (100 epochs max) (125s elapsed)
+  ... Training seed 125 (100 epochs max) (130s elapsed)
+  ... Training seed 125 (100 epochs max) (135s elapsed)
+  ... Training seed 125 (100 epochs max) (140s elapsed)
+  ... Training seed 125 (100 epochs max) (145s elapsed)
+  ... Training seed 125 (100 epochs max) (150s elapsed)
+  ... Training seed 125 (100 epochs max) (155s elapsed)
+  ... Training seed 125 (100 epochs max) (160s elapsed)
+  ... Training seed 125 (100 epochs max) (165s elapsed)
+  ... Training seed 125 (100 epochs max) (170s elapsed)
+  ... Training seed 125 (100 epochs max) (175s elapsed)
+  ... Training seed 125 (100 epochs max) (180s elapsed)
+  ... Training seed 125 (100 epochs max) (185s elapsed)
+  ... Training seed 125 (100 epochs max) (190s elapsed)
+  ... Training seed 125 (100 epochs max) (195s elapsed)
+  ... Training seed 125 (100 epochs max) (200s elapsed)
+  ... Training seed 125 (100 epochs max) (205s elapsed)
+  ... Training seed 125 (100 epochs max) (210s elapsed)
+  ... Training seed 125 (100 epochs max) (215s elapsed)
+  ... Training seed 125 (100 epochs max) (220s elapsed)
+  ... Training seed 125 (100 epochs max) (225s elapsed)
+  ... Training seed 125 (100 epochs max) (230s elapsed)
+  ... Training seed 125 (100 epochs max) (235s elapsed)
+  ... Training seed 125 (100 epochs max) (240s elapsed)
+  ... Training seed 125 (100 epochs max) (245s elapsed)
+  ... Training seed 125 (100 epochs max) (250s elapsed)
+  ... Training seed 125 (100 epochs max) (255s elapsed)
+  ... Training seed 125 (100 epochs max) (260s elapsed)
+  ... Training seed 125 (100 epochs max) (265s elapsed)
+  ... Training seed 125 (100 epochs max) (270s elapsed)
+  ... Training seed 125 (100 epochs max) (275s elapsed)
+  ... Training seed 125 (100 epochs max) (280s elapsed)
+  ... Training seed 125 (100 epochs max) (285s elapsed)
+  ... Training seed 125 (100 epochs max) (290s elapsed)
+  ... Training seed 125 (100 epochs max) (295s elapsed)
+  ... Training seed 125 (100 epochs max) (300s elapsed)
+  ... Training seed 125 (100 epochs max) (305s elapsed)
+  ... Training seed 125 (100 epochs max) (310s elapsed)
+  ... Training seed 125 (100 epochs max) (315s elapsed)
+  ... Training seed 125 (100 epochs max) (320s elapsed)
+  ... Training seed 125 (100 epochs max) (325s elapsed)
+  ... Training seed 125 (100 epochs max) (330s elapsed)
+  ... Training seed 125 (100 epochs max) (335s elapsed)
+  ... Training seed 125 (100 epochs max) (340s elapsed)
+  ... Training seed 125 (100 epochs max) (345s elapsed)
+  ... Training seed 125 (100 epochs max) (350s elapsed)
+  ... Training seed 125 (100 epochs max) (355s elapsed)
+  ... Training seed 125 (100 epochs max) (360s elapsed)
+  ... Training seed 125 (100 epochs max) (365s elapsed)
+  ... Training seed 125 (100 epochs max) (370s elapsed)
+  ... Training seed 125 (100 epochs max) (375s elapsed)
+  ... Training seed 125 (100 epochs max) (380s elapsed)
+  ... Training seed 125 (100 epochs max) (385s elapsed)
+  ... Training seed 125 (100 epochs max) (390s elapsed)
+  ... Training seed 125 (100 epochs max) (395s elapsed)
+  ... Training seed 125 (100 epochs max) (400s elapsed)
+  ... Training seed 125 (100 epochs max) (405s elapsed)
+  ... Training seed 125 (100 epochs max) (410s elapsed)
+  ... Training seed 125 (100 epochs max) (415s elapsed)
+  ... Training seed 125 (100 epochs max) (420s elapsed)
+  ... Training seed 125 (100 epochs max) (425s elapsed)
+  ... Training seed 125 (100 epochs max) (430s elapsed)
+  ... Training seed 125 (100 epochs max) (435s elapsed)
+  ... Training seed 125 (100 epochs max) (440s elapsed)
+  ... Training seed 125 (100 epochs max) (445s elapsed)
+  ... Training seed 125 (100 epochs max) (450s elapsed)
+  ... Training seed 125 (100 epochs max) (455s elapsed)
+  ... Training seed 125 (100 epochs max) (460s elapsed)
+  ... Training seed 125 (100 epochs max) (465s elapsed)
+  ... Training seed 125 (100 epochs max) (470s elapsed)
+  ... Training seed 125 (100 epochs max) (475s elapsed)
+  ... Training seed 125 (100 epochs max) (480s elapsed)
+  ... Training seed 125 (100 epochs max) (485s elapsed)
+  ... Training seed 125 (100 epochs max) (490s elapsed)
+  ... Training seed 125 (100 epochs max) (495s elapsed)
+  ... Training seed 125 (100 epochs max) (500s elapsed)
+  ... Training seed 125 (100 epochs max) (505s elapsed)
+  ... Training seed 125 (100 epochs max) (510s elapsed)
+  ... Training seed 125 (100 epochs max) (515s elapsed)
+  ... Training seed 125 (100 epochs max) (520s elapsed)
+  ... Training seed 125 (100 epochs max) (525s elapsed)
+  ... Training seed 125 (100 epochs max) (530s elapsed)
+  ... Training seed 125 (100 epochs max) (535s elapsed)
+  ... Training seed 125 (100 epochs max) (540s elapsed)
+  ... Training seed 125 (100 epochs max) (545s elapsed)
+  ... Training seed 125 (100 epochs max) (550s elapsed)
+  ... Training seed 125 (100 epochs max) (555s elapsed)
+  ... Training seed 125 (100 epochs max) (560s elapsed)
+  done in 561 s, 100 epochs logged, kept epoch 87 -> mlff_runs/round_03/m_s125/mlff_model_compiled.model
+Seed | Train/valid | Start E (meV/at) | Val F start | Val F kept | Kept epoch | Time (s) | Model
+------------------------------------------------------------------------------------------------
+123  | 64/7        | 7.9              | 51          | 52         | 59/99      | 613      | ok   
+124  | 64/7        | 7.9              | 67          | 35         | 93/99      | 555      | ok   
+125  | 64/7        | 6.4              | 66          | 29         | 87/99      | 561      | ok   
+Start E = foundation model with the fitted E0s on the training split, before any epoch; Val F = mace_run_train's validation force RMSE (meV/Ang) before training and at the kept checkpoint.
+
+[4] ERRORS ON THE DATA (independent evaluation, every model on every config)
+------------------------------------------------------------
+  ... Evaluating seed 123 (5s elapsed)
+  ... Evaluating seed 124 (5s elapsed)
+  ... Evaluating seed 125 (5s elapsed)
+  ... Evaluating the foundation model (5s elapsed)
+  ... MD stability, seed 123 (5s elapsed)
+  ... MD stability, seed 123 (10s elapsed)
+  ... MD stability, seed 123 (15s elapsed)
+  ... MD stability, seed 123 (20s elapsed)
+  ... MD stability, seed 124 (5s elapsed)
+  ... MD stability, seed 124 (10s elapsed)
+  ... MD stability, seed 124 (15s elapsed)
+  ... MD stability, seed 124 (20s elapsed)
+  ... MD stability, seed 125 (5s elapsed)
+  ... MD stability, seed 125 (10s elapsed)
+  ... MD stability, seed 125 (15s elapsed)
+  ... MD stability, seed 125 (20s elapsed)
+Model               | Set   | N  | E abs          | E rel | F RMSE | F MAE | F max | S RMSE
+-------------------------------------------------------------------------------------------
+seed 123            | train | 64 | 5.3            | 2.8   | 37.6   | 26.8  | 225   | 0.160 
+seed 123            | valid | 7  | 4.5            | 2.6   | 51.6   | 36.7  | 204   | 0.191 
+seed 124            | train | 64 | 4.3            | 2.5   | 34.8   | 24.8  | 187   | 0.145 
+seed 124            | valid | 7  | 4.4            | 3.7   | 35.0   | 23.2  | 171   | 0.128 
+seed 125            | train | 64 | 6.9            | 2.4   | 35.1   | 25.0  | 205   | 0.153 
+seed 125            | valid | 7  | 6.1            | 2.6   | 28.6   | 20.5  | 145   | 0.135 
+foundation (medium) | all   | 71 | (scale offset) | 47.7  | 360.4  | 254.1 | 2100  | 0.787 
+E in meV/atom (abs = absolute; rel = mean offset removed), F in meV/Ang (max = largest component error), S in GPa. The foundation's absolute E is on another energy scale.
+
+Out-of-sample pool: 19/71 configs were held out by at least one member -- each scored with the members that did not train on it:
+Kind       | N  | F RMSE fine-tuned | E RMSE fine-tuned* | F RMSE foundation | F gain
+-------------------------------------------------------------------------------------
+al-md      | 2  | 62.9              | 3.6                | 415.3             | +85 % 
+neb        | 3  | 15.3              | 4.9                | 62.5              | +75 % 
+neb-rattle | 3  | 32.7              | 3.9                | 260.9             | +87 % 
+rattle     | 6  | 25.9              | 2.2                | 593.1             | +96 % 
+strain     | 5  | 22.8              | 2.2                | 389.5             | +94 % 
+ALL        | 19 | 36.9              | 3.2                | 314.2             | +88 % 
+* each member's mean energy offset on its own training split removed first (meV/atom).
+
+Valid/train F RMSE: 1.37, 1.01, 0.82 (1 = no overfitting; > 2 flagged)
+Fine-tuning gain  : out-of-sample force error +88 % vs the raw foundation model
+Energy differences: 3.2 meV/atom out-of-sample vs 47.7 for the foundation model (offset removed)
+
+Worst-predicted configs:
+Config          | Kind  | F RMSE (meV/Ang) | Prediction    | SIESTA F_max (eV/Ang) | Worst atom (|dF|)
+------------------------------------------------------------------------------------------------------
+mlff_config_049 | al-md | 65               | out-of-sample | 5.70                  | Si44 (218)       
+mlff_config_057 | al-md | 61               | out-of-sample | 4.89                  | Si51 (199)       
+mlff_config_047 | al-md | 54               | in-sample     | 4.42                  | Si14 (209)       
+mlff_config_048 | al-md | 53               | in-sample     | 3.83                  | Si61 (166)       
+mlff_config_055 | al-md | 51               | in-sample     | 4.95                  | Si50 (168)       
+
+[5] COMMITTEE
+------------------------------------------------------------
+Force spread      : mean 16.1, max 185.4 meV/Ang (per-atom RMS deviation from the committee mean)
+Energy spread     : mean 4.60, max 7.34 meV/atom
+Spread vs error   : correlation +0.78 over 19 held-out configs (error / spread ~ 1.0x)
+Most disputed configs (where the committee disagrees most):
+Config          | Kind   | Max spread (meV/Ang) | Held-out F RMSE
+-----------------------------------------------------------------
+mlff_config_012 | rattle | 185                  | -              
+mlff_config_032 | rattle | 174                  | -              
+mlff_config_049 | al-md  | 63                   | 65             
+mlff_config_008 | rattle | 62                   | 48             
+mlff_config_023 | rattle | 55                   | -              
+
+[6] COMPARISON WITH EARLIER ROUNDS
+------------------------------------------------------------
+Round    | Configs | Valid F RMSE | vs prev | Out-of-sample F | Mean spread | Test F RMSE
+-----------------------------------------------------------------------------------------
+1        | 45      | 26.1         |         | 28.0            | 13.3        | 23.2       
+2        | 57      | 56.7         | +117 %  | 56.0            | 19.8        | 28.7       
+3 (this) | 71      | 38.4         | -32 %   | 36.9            | 16.1        | -          
+F in meV/Ang. Valid = mean of the members' own validation splits (different configs each round); the test-set column (stb-mlffValidate) is the like-for-like comparison.
+
+[7] MODEL CHECKS: MD STABILITY & SPEED
+------------------------------------------------------------
+MD cell           : reference structure x 2x2x2 = 64 atoms; NVT 400 fs at 300 K, then NVE 200 fs (1 fs steps)
+Seed | Status | T mean (K) | d_min/start | F_max (eV/Ang) | NVE drift (meV/atom/ps) | ms/step | Note
+----------------------------------------------------------------------------------------------------
+123  | OK     | 263        | 0.93        | 2.35           | -0.01                   | 39.0    | -   
+124  | OK     | 271        | 0.93        | 2.58           | -0.01                   | 36.0    | -   
+125  | OK     | 284        | 0.92        | 2.74           | -0.01                   | 37.4    | -   
+d_min/start = shortest distance seen / at the start (< 0.6 = blow-up); a good NVE drift is |drift| < ~1 meV/atom/ps at 1 fs.
+Speed             : 37.4 ms/step for 64 atoms = 584 us/atom/step on cuda -> ~2.31 ns/day at 1 fs (float32; ~0.15 ns/day for 1000 atoms, linear scaling)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Round             : 3 (mlff_runs/round_03), 1844 s in total
+Model seed 123    : mlff_runs/round_03/m_s123/mlff_model_compiled.model
+  model card        : mlff_runs/round_03/m_s123/mlff_model_card.json
+                    mlff_runs/round_03/m_s123/mlff_model_parity.png, mlff_runs/round_03/m_s123/mace_run_train.log
+Model seed 124    : mlff_runs/round_03/m_s124/mlff_model_compiled.model
+  model card        : mlff_runs/round_03/m_s124/mlff_model_card.json
+                    mlff_runs/round_03/m_s124/mlff_model_parity.png, mlff_runs/round_03/m_s124/mace_run_train.log
+Model seed 125    : mlff_runs/round_03/m_s125/mlff_model_compiled.model
+  model card        : mlff_runs/round_03/m_s125/mlff_model_card.json
+                    mlff_runs/round_03/m_s125/mlff_model_parity.png, mlff_runs/round_03/m_s125/mace_run_train.log
+Summary figure    : mlff_runs/round_03/mlff_training.png
+Per-config errors : mlff_runs/round_03/mlff_training_errors.dat
+Workflow file     : mlff_runs/mlff_workflow.json (round 3 recorded with every number above)
+Report            : mlff_runs/round_03/stb_mlffAnalysis_report.txt
+
+[9] NEXT STEPS
+------------------------------------------------------------
+1. Score the round on the held-out test set: stb-mlffValidate (4.17.3).
+2. Look for configs the committee is unsure of: stb-mlffActiveLearning (4.17.4).
+3. Use a model now, always with its card: --custom-model mlff_runs/round_03/m_s123/mlff_model_compiled.model --custom-model-card mlff_runs/round_03/m_s123/mlff_model_card.json in stb-mlmd, stb-mlphonons, stb-mlelastic, ...
+Also available    : --show (display the summary figure); --view-worst N (worst configs in ASE's viewer); --cv K (every config out-of-sample).
+
+[10] WARNINGS
+------------------------------------------------------------
+None.
+Library messages  : 53 informational message(s) from mace/torch captured (model loading, dtype); the full training output of each member is in its mace_run_train.log.
+
+------------------------------------------------------------
+Custom ML force field ready -- fast, and fit to your own data.
+

@@ -1,0 +1,92 @@
+===== STB-SIESTA2WTB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : calc.fdf (SystemLabel fe)
+Fermi level       : read from calc.out (-o)
+Mode              : write + read-back check
+
+[1] SIESTA RUN
+------------------------------------------------------------
+Hamiltonian       : fe.HSX (349.4 KB, written <date>)
+SaveHS in input   : yes
+Log               : calc.out (SIESTA 5.4.2)
+Finished          : yes
+Electrons         : 16.0000 (valence)
+Spin (log)        : collinear
+Fermi level (log) : -3.404047 eV
+Spin moment (log) : 2.21786 mu_B
+Read              : geometry + H + S in <t> s
+Energy zero of H  : the run's Fermi level -- fe.HSX (version 2) stores E_F = -3.404047 eV and sisl shifts H by -E_F S on reading
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 1 (Fe)
+Cell lengths      : a = 2.4509, b = 2.4509, c = 2.4509 Ang
+Cell angles       : alpha = 109.47, beta = 109.47, gamma = 109.47 deg
+Cell volume       : 11.3326 Ang^3
+Dimensionality    : 3D (bulk material)
+species | Z  | atoms | orbitals | basis shells                       | r_c (Ang)
+--------------------------------------------------------------------------------
+Fe      | 26 | 1     | 19       | 3s(1z) 3p(1z) 3d(2z) 4s(2z) 4p(1z) | -        
+Orbitals          : 19 in the cell
+
+[3] HAMILTONIAN
+------------------------------------------------------------
+Spin (sisl)       : Spin{polarized} -> WanTiBEXOS type SP, 38 x 38 matrices
+Orthogonal basis  : no -- the overlap S goes into the file with H
+Neighbour cells   : nsc = 9 x 9 x 9 = 729 cells (all R with an orbital overlapping one of the cell)
+Stored elements   : 12423 of 263169 (4.7 %) per spin component
+Longest hopping   : 8.004 Ang (orbital centres; the range of the basis)
+On-site energies  : -87.667 to 4.751 eV (from E_F, the zero of H)
+S(Gamma) spectrum : 2.53e-03 to 6.744 (smallest eigenvalue: how close the basis is to linear dependence)
+Layout            : up block (orbitals 1..N), then down block (N+1..2N); no up-down coupling
+
+[4] FERMI LEVEL AND BAND EDGES
+------------------------------------------------------------
+Fermi level       : -3.404047 eV (from calc.out)
+Reference         : H in the file is already referred to E_F (0 eV = -3.4040 eV absolute); the header adds E_F = -3.4040 eV
+SIESTA .EIG       : metallic on the SCF k-mesh (1484 k-points; gap 0.003 eV, below the k-mesh/smearing resolution)
+Occupied states   : 16 of 38 per k (16 electrons, 1 per spin-orbital)
+
+[5] OUTPUT FILES
+------------------------------------------------------------
+Basis             : basis_set-SP.basis (38 orbitals: index, species, x y z (Ang), l, m, spin; 2.4 KB, <t> s)
+Hamiltonian       : tb-SP.ham (83.9 MB, <t> s)
+Header            : type SP, scissor 0.0, E_F -3.404047 eV, 3 lattice vectors (Ang), 38 orbitals, 729 cells
+Body              : 1052676 lines 'R_x R_y R_z i j ReH ImH S' (R in Ang, H in eV), every i, j of every cell, zeros included
+
+[6] READ-BACK CHECK
+------------------------------------------------------------
+File read         : 1052676 lines in <t> s; header as written
+Non-zero lines    : 15054 (1.4 %)
+Eigenvalues       : H(k) c = E S(k) c from the file vs sisl on the SIESTA H, S (k in reduced units)
+k                     | states < E_F | max |dE| within 5 eV of E_F (meV) | max |dE| all (meV) | worst band at E - E_F (eV)
+--------------------------------------------------------------------------------------------------------------------------
+(0.000, 0.000, 0.000) | 18           | 0.007                             | 105.7              | +67.1                     
+(0.500, 0.000, 0.000) | 14           | 0.019                             | 14.0               | +68.7                     
+(0.333, 0.333, 0.000) | 16           | 0.033                             | 832.8              | +99.9                     
+(0.130, 0.270, 0.310) | 16           | 0.016                             | 83.7               | +78.8                     
+Hermiticity       : max |H - H^+|, |S - S^+| from the file = 6.1e-15
+Verdict           : ok -- within 5 eV of E_F the file reproduces the SIESTA bands to 0.033 meV
+                    the largest changes (833 meV) are in high, unphysical bands: the file's 6 decimals perturb S where the basis is nearly linearly dependent
+
+[7] FOR WANTIBEXOS
+------------------------------------------------------------
+PARAMS_FILE       : tb-SP.ham
+SYSDIM            : 3D (from the vacuum axes)
+Valence states    : 16 occupied of 38 -- NBANDSV can be at most 16, NBANDSC at most 22
+Energies          : eV; H referred to E_F (0 eV = -3.4040 eV absolute), header E_F -3.4040 eV
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Written           : tb-SP.ham, basis_set-SP.basis
+System            : Fe, SP, 38 orbitals, 729 cells, E_F -3.4040 eV
+
+[9] WARNINGS
+------------------------------------------------------------
+  1. the matrix elements are already referred to the Fermi level (sisl shifted them by -E_F S, E_F = -3.4040 eV from fe.HSX), and the header also carries E_F = -3.4040 eV: a reader that subtracts the header's E_F from H moves every band by +3.4040 eV (with -f 0 the header would match H).
+
+------------------------------------------------------------

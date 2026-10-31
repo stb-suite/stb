@@ -1,0 +1,190 @@
+===== STB-MLFFVALIDATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-21 20:36:56
+Versions          : stb 1.9.282, mace 0.3.16, torch 2.12.1+cpu, ase 3.29.0
+Device            : cpu
+Workflow file     : mlff_runs/mlff_workflow.json
+Test set from     : mlff_runs/mlff_workflow.json (test set)
+Scoring           : round 1 (3 model(s)), round 2 (3 model(s))
+Detailed round    : round 2 (per kind, per config, members, figure)
+Baseline          : MACE-MP medium, no fine-tuning
+Verdict criteria  : target F RMSE 30 meV/Ang, plateau below 5 % gain per round
+Phonon reference  : phonons/phonon_runs (mesh 8 8 8)
+Report file       : mlff_runs/stb_mlffValidate_report.txt
+
+[1] TEST SET
+------------------------------------------------------------
+Configs           : 9 finished of 9 folder(s), 162 atoms, rattle 4, strain 5
+Elements          : C; 18-18 atoms per config
+Labels            : energy, forces, stress
+Kind   | N | E - E_min (meV/atom) | F_rms (eV/Ang) | F_max (eV/Ang) | P (GPa)        | V/atom (Ang^3)  
+-------------------------------------------------------------------------------------------------------
+rattle | 4 | 0.0 .. 241.8         | 1.74 .. 6.76   | 3.52 .. 16.60  | +0.02 .. +0.92 | 53.411 .. 53.411
+strain | 5 | 11.0 .. 258.4        | 1.10 .. 5.68   | 1.94 .. 10.25  | -2.67 .. +2.17 | 51.809 .. 55.814
+Compared with     : the 27 training config(s) of round 2
+Level of theory   : ElectronicTemperature 300 K, Mesh.Cutoff 320 Ry, PAO.Basis block none, PAO.BasisSize DZP
+                    PAO.EnergyShift 0.005 Ry, SCF tolerance 1.0e-5 eV, Spin non-polarized, XC.authors PBE
+                    XC.functional GGA, k x a (Ang) 73 73 G
+                    (SIESTA default for: DFTD3)
+Pseudopotentials  : C.psf 9422c8ad (md5, first 8)
+[OK] Same level of theory in all 36 folders (settings, k-sampling, basis, pseudopotential files).
+Dispersion        : no DFT-D3 in the labels
+Training range    : V/atom 51.809-55.814 Ang^3, max|F| up to 19.58 eV/Ang, E spread 274.6 meV/atom
+Coverage          : 9 of 9 test configs inside it  (V volume, F max force, E energy)
+MD-check frames   : 6 finished, 0 awaiting SIESTA (r02_600K) -- scored separately in [8]
+
+[2] MODELS SCORED
+------------------------------------------------------------
+Round   | Models | Train cfgs | Epochs | Foundation | Start      | Valid. | Stage-2 OOS F | Trained         
+------------------------------------------------------------------------------------------------------------
+round 1 | 3      | 21         | 100    | medium     | foundation | split  | 40.0          | 2026-10-21 19:45
+round 2 | 3      | 27         | 100    | medium     | previous   | split  | 40.1          | 2026-10-21 20:29
+Stage-2 OOS F = out-of-sample force RMSE on the TRAINING configs (meV/Ang), from 4.17.2.
+
+[3] TEST ERRORS (committee mean, every round)
+------------------------------------------------------------
+Model      | E abs   | E rel | F RMSE | +/- | F MAE | F max | F rel % | S RMSE | vs found.
+------------------------------------------------------------------------------------------
+round 1    | 1.14    | 0.71  | 37.3   | 8.2 | 24.5  | 193   | 1.7     | 0.076  | +92 %    
+round 2    | 2.81    | 0.50  | 26.8   | 6.2 | 17.2  | 173   | 1.2     | 0.058  | +94 %    
+foundation | (scale) | 17.99 | 484.9  | -   | 343.5 | 2061  | 21.7    | 0.622  | -        
+Units: E meV/atom, F meV/Ang, S GPa. E abs includes a constant offset; E rel removes it (what matters for
+energy differences). +/- = bootstrap std over test configs. F rel = F RMSE / RMS SIESTA force. F max = largest
+component error. vs found. = force RMSE gain over the raw foundation model. Best round: 2 (green).
+
+[4] ROUND 2 IN DETAIL
+------------------------------------------------------------
+Per kind:
+Kind   | N | F RMSE | F max | Found. F | Gain  | E rel | S RMSE
+---------------------------------------------------------------
+rattle | 4 | 26.2   | 133   | 529.5    | +95 % | 0.14  | 0.045 
+strain | 5 | 27.3   | 173   | 446.0    | +94 % | 0.65  | 0.067 
+Hardest kind      : strain (F 27.3 meV/Ang)
+
+Per element (forces on the atoms of each element):
+Element | Atoms | F RMSE | F MAE | Worst atom | Ref RMS | F rel % | Found. F | Gain 
+------------------------------------------------------------------------------------
+C       | 162   | 26.8   | 17.2  | 186        | 2235    | 1.2     | 484.9    | +94 %
+
+Per config (worst first):
+Config   | Kind   | Atoms | Fmax ref | F RMSE | Found. F | Worst atom | dE    | Spread | Err/spr | Novelty | Range
+------------------------------------------------------------------------------------------------------------------
+test_008 | strain | 18    | 10.25    | 54.8   | 682.9    | C9 186     | -0.88 | 49.9   | 3.7     | 2.92    | in   
+test_004 | rattle | 18    | 16.60    | 44.9   | 726.3    | C15 179    | +0.19 | 63.9   | 2.8     | 2.59    | in   
+test_003 | rattle | 18    | 9.58     | 21.6   | 607.9    | C15 69     | +0.04 | 41.5   | 1.7     | 2.02    | in   
+test_007 | strain | 18    | 7.53     | 17.8   | 543.0    | C11 46     | -0.41 | 42.1   | 1.1     | 1.81    | in   
+test_006 | strain | 18    | 4.55     | 14.8   | 414.1    | C4 36      | +0.09 | 25.7   | 1.4     | 1.28    | in   
+test_002 | rattle | 18    | 4.29     | 13.2   | 417.6    | C0 43      | -0.16 | 25.1   | 1.7     | 1.09    | in   
+test_009 | strain | 18    | 1.94     | 10.3   | 145.6    | C9 30      | +1.07 | 9.5    | 3.2     | 0.71    | in   
+test_005 | strain | 18    | 2.25     | 9.6    | 202.4    | C1 31      | +0.20 | 14.4   | 2.1     | 0.69    | in   
+test_001 | rattle | 18    | 3.52     | 9.1    | 224.0    | C8 21      | -0.14 | 16.2   | 1.3     | 0.66    | in   
+Fmax ref eV/Ang; F RMSE, worst atom |dF|, spread (max over atoms) meV/Ang; dE meV/atom with the round's offset removed;
+Err/spr = worst-atom error / max spread; Range: in, or outside the training range in V/F/E; novelty from Stage 1 (in typical spacings).
+
+Analysis:
+Error vs force    : corr(config F RMSE, SIESTA max|F|) = +0.83 -- the error grows with how far the config is from equilibrium
+Error vs novelty  : corr(config F RMSE, Stage-1 novelty) = +0.94 -- configs unlike the training set are predicted worse
+Generalization    : test F 26.8 vs Stage-2 out-of-sample 40.1 meV/Ang (0.67x)
+Energy offset     : +2.76 meV/atom (constant; E rel 0.50 is the error on energy differences)
+
+[5] COMMITTEE (round 2)
+------------------------------------------------------------
+Seed | E rel | F RMSE | F MAE | S RMSE |          
+--------------------------------------------------
+123  | 1.06  | 30.5   | 18.8  | 0.080  |          
+124  | 0.84  | 28.7   | 18.9  | 0.069  | best     
+125  | 0.63  | 29.0   | 19.3  | 0.074  |          
+mean | 0.50  | 26.8   | 17.2  | 0.058  | committee
+Averaging         : committee mean 26.8 vs mean member 29.4, best member 28.7 meV/Ang (+9 % from averaging)
+Spread            : mean 32.0, max 63.9 meV/Ang (max over atoms, per config)
+True error/spread : 1.7x (median over configs with spread >= 1 meV/Ang) -- an error bar from the spread is ~1.7 x spread
+Correlation       : per config +0.85; per atom +0.57
+                    (per config: does the spread pick the worst configs -- what 4.17.4 needs; per atom: the worst atom)
+
+[6] PHONONS vs SIESTA
+------------------------------------------------------------
+Residual forces  : subtracted (undisplaced supercell, max 0.0049 eV/Ang per atom) -- SIESTA's and each model's own
+Round   | RMSE | Acoustic | Optical | Shift | Max |dev| | Top (ML/ref)  | Min (ML/ref)  | Imag. q
+-------------------------------------------------------------------------------------------------
+round 1 | 0.48 | 0.33     | 0.60    | -0.22 | 2.15      | 48.33 / 48.31 | +0.37 / +0.93 | 0      
+round 2 | 0.43 | 0.31     | 0.52    | -0.25 | 2.16      | 48.03 / 48.31 | +0.42 / +0.93 | 0      
+THz on a 8x8x8 q-mesh, the SAME displacements as SIESTA; shift = mean ML - ref (systematic softening < 0).
+
+[7] EQUATION OF STATE (test configs spanning a volume range)
+------------------------------------------------------------
+Kind 'strain': 5 configs, V/atom 51.809-55.814 Ang^3 (7.4 %), max|F| up to 10.25 eV/Ang
+Model      | V0 (Ang^3/at) | dV0 % | B0 (GPa) | dB0 % | B0'    | R2    
+-----------------------------------------------------------------------
+SIESTA     | 54.708        | -     | -1626.9  | -     | -39.62 | 0.6706
+round 1    | 54.712        | +0.01 | -1623.5  | -0.2  | -39.51 | 0.6720
+round 2    | 54.710        | +0.00 | -1615.2  | -0.7  | -39.58 | 0.6698
+foundation | 54.784        | +0.14 | -1369.3  | -15.8 | -38.24 | 0.7021
+(SIESTA R2 0.671: these configs are not pure strains -- the rattle adds energy; compare models with each other, the fit is equally noisy for all.)
+Birch-Murnaghan fit of E/atom vs V/atom, the same configs for every model; dV0/dB0 vs SIESTA.
+(Not a bulk cell: V includes the vacuum, so B0 is not the material's bulk modulus -- read the table as model vs SIESTA on the same E(V) curve only.)
+
+[8] MD CHECK (error along a trajectory run with the model)
+------------------------------------------------------------
+Run r02_600K: NVT 600.0 K with round 2's model (round_02/m_s123/mlff_model_compiled.model), 6 frame(s) of 18 atoms
+t (fs) | T (K) | Fmax ref | F round 2 | Found. F | dE    | Spread
+-----------------------------------------------------------------
+333    | 552   | 3.63     | 16.9      | 326.0    | +0.02 | 18.6  
+667    | 422   | 5.07     | 15.7      | 368.7    | -0.26 | 26.4  
+1000   | 477   | 5.06     | 19.3      | 376.3    | -0.36 | 23.4  
+1333   | 710   | 5.02     | 17.4      | 383.7    | +0.17 | 26.2  
+1667   | 604   | 4.43     | 19.0      | 390.8    | +0.06 | 24.3  
+2000   | 468   | 3.96     | 13.3      | 325.4    | +0.37 | 24.9  
+Trend             : first third 16.3 -> last third 16.2 meV/Ang (1.0x), corr(t, F) -0.23; test set 26.8
+
+[9] ROUND COMPARISON
+------------------------------------------------------------
+Overall           : F 37.3 -> 26.8 meV/Ang (-28.2 %), E rel 0.71 -> 0.50 meV/atom, S 0.076 -> 0.058 GPa
+Configs           : 8 better, 0 worse, 1 within +/-10 % (of 9)
+Kind   | N | F round 1 | F round 2 | Change  | Better | Worse
+-------------------------------------------------------------
+rattle | 4 | 37.6      | 26.2      | -30.5 % | 4      | 0    
+strain | 5 | 37.1      | 27.3      | -26.3 % | 4      | 0    
+
+Per config (largest regression first):
+Config   | Kind   | F round 1 | F round 2 | Change 
+---------------------------------------------------
+test_009 | strain | 10.3      | 10.3      | -0.1 % 
+test_005 | strain | 10.9      | 9.6       | -12.2 %
+test_001 | rattle | 10.8      | 9.1       | -15.8 %
+test_004 | rattle | 60.9      | 44.9      | -26.3 %
+test_008 | strain | 74.6      | 54.8      | -26.6 %
+test_006 | strain | 20.4      | 14.8      | -27.3 %
+test_007 | strain | 25.9      | 17.8      | -31.2 %
+test_003 | rattle | 35.8      | 21.6      | -39.6 %
+test_002 | rattle | 23.7      | 13.2      | -44.4 %
+
+[10] ROUND HISTORY, LEARNING CURVE & VERDICT
+------------------------------------------------------------
+Round | Train cfgs | F RMSE | +/- | vs prev | E rel | S RMSE | Phonons | Spread
+-------------------------------------------------------------------------------
+1     | 21         | 37.3   | 8.2 | -       | 0.71  | 0.076  | 0.48    | 27.2  
+2     | 27         | 26.8   | 6.2 | -28.2 % | 0.50  | 0.058  | 0.43    | 32.0  
+[STOP] Target met: test F RMSE 26.8 <= 30 meV/Ang -- stop here and use the model.
+Learning curve    : needs rounds with 3+ different training-set sizes (have 2: 21, 27 configs)
+
+[11] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK, 2 committee(s) on 9 test config(s) in 23 s
+Verdict           : STOP
+Best model(s)     : round 2: mlff_runs/round_02/m_s123/mlff_model_compiled.model (+2 more)
+Figure            : mlff_runs/mlff_validation.png
+Per-config errors : mlff_runs/mlff_validation_errors.dat
+Workflow file     : mlff_runs/mlff_workflow.json (scores stored per round)
+Report            : mlff_runs/stb_mlffValidate_report.txt
+
+[12] NEXT STEPS
+------------------------------------------------------------
+1. Use the model: --custom-model mlff_runs/round_02/m_s123/mlff_model_compiled.model in stb-mlmd, stb-mlphonons, stb-mlelastic, ...
+Also available    : --show (display the figure); --view-worst N (worst test configs in ASE's viewer).
+
+[13] WARNINGS
+------------------------------------------------------------
+None.
+Library messages  : 17 informational message(s) from mace/torch/phonopy captured (model loading, dtype).

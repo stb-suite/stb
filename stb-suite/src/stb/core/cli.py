@@ -1,0 +1,314 @@
+"""Shared terminal UI helpers for the STB-SUITE command-line tools.
+
+Consolidates COLORS/color_text()/show_intro(), which used to be duplicated
+(with minor, purposeless drift) in 26 of the 27 modules under stb/, and
+get_input()/get_float_input()/get_int_input(), which used to live only in
+stb_suite.py.
+
+Banner content (title/subtitle/footer lines) is NOT hardcoded here -- each
+tool keeps its own text and passes it to show_intro(); only the printing
+mechanics (ASCII logo, colors, borders, line-by-line reveal) are shared.
+"""
+
+from __future__ import annotations
+
+import os
+import io
+import re
+import sys
+import time
+import warnings
+import threading
+import contextlib
+from time import sleep
+
+COLORS = {
+    'reset': '\033[0m',
+    'cyan': '\033[96m',
+    'blue': '\033[94m',
+    'green': '\033[92m',
+    'yellow': '\033[93m',
+    'red': '\033[91m',
+    'bold': '\033[1m',
+    'underline': '\033[4m',
+    'magenta': '\033[95m',
+    'bg_red': '\033[41m',
+    'white': '\033[97m',
+}
+
+_LOGO = r"""
+.----------------.  .----------------.  .----------------.
+| .--------------. || .--------------. || .--------------. |
+| |    _______   | || |  _________   | || |   ______     | |
+| |   /  ___  |  | || | |  _   _  |  | || |  |_   _ \    | |
+| |  |  (__ \_|  | || | |_/ | | \_|  | || |    | |_) |   | |
+| |   '.___`-.   | || |     | |      | || |    |  __'.   | |
+| |  |`\____) |  | || |    _| |_     | || |   _| |__) |  | |
+| |  |_______.'  | || |   |_____|    | || |  |_______/   | |
+| |              | || |              | || |              | |
+| '--------------' || '--------------' || '--------------' |
+ '----------------'  '----------------'  '----------------'
+"""
+
+
+def color_text(text: str, color: str) -> str:
+    """Returns text formatted with an ANSI color code, falling back to no color."""
+    return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
+
+
+def show_intro(lines: list[str], delay: float = 0.2) -> None:
+    """Clears the screen and prints the shared STB-SUITE ASCII banner.
+
+    `lines` are centered inside '='*60 borders, one every `delay` seconds
+    (pass delay=0 to disable the reveal animation).
+    """
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(color_text(_LOGO, 'cyan'))
+    print("\n" + "=" * 60)
+    for line in lines:
+        print(line.center(60))
+        if delay:
+            sleep(delay)
+    print("=" * 60 + "\n")
+
+
+def get_input(prompt: str, color: str = 'green') -> str:
+    """Gets user input with a colored prompt (supports Tab-completion via readline)."""
+    return input(color_text(prompt, color))
+
+
+def get_float_input(prompt: str, default: float | None = None) -> float:
+    """Gets a float from the user, retrying on invalid input."""
+    while True:
+        try:
+            value_str = get_input(prompt)
+            if value_str == "" and default is not None:
+                return default
+            return float(value_str)
+        except ValueError:
+            print(color_text("Please enter a valid number", 'red'))
+
+
+def get_int_input(prompt: str, default: int | None = None) -> int:
+    """Gets an integer from the user, retrying on invalid input."""
+    while True:
+        try:
+            value_str = get_input(prompt)
+            if value_str == "" and default is not None:
+                return default
+            return int(value_str)
+        except ValueError:
+            print(color_text("Please enter a valid integer", 'red'))
+
+
+def print_dual(text: str, file_handle=None) -> None:
+    """Prints to stdout with color, writes to file without color."""
+    print(text)
+    if file_handle:
+        clean_text = re.sub(r'\x1b\[[0-9;]*m', '', text)
+        file_handle.write(clean_text + "\n")
+
+
+def print_section(label: str, f_out=None) -> None:
+    """Prints one '[N] SECTION TITLE' header + separator, matching the
+    suite's stage-report style (e.g. stb-ramanAnalysis's numbered sections).
+    Moved here once stb-clean became a second consumer alongside
+    stb-translate.
+    """
+    print_dual(f"\n{color_text(label, 'magenta')}", f_out)
+    print_dual("-" * 60, f_out)
+
+
+def print_table(headers, rows, f_out=None) -> None:
+    """Prints a simple aligned ' | '-separated table via print_dual.
+
+    `headers` is a list of column-name strings. `rows` is a list of
+    (cells, color) tuples, where `cells` is a list of plain (uncolored)
+    strings matching `headers` and `color` is an optional color name (e.g.
+    'yellow') applied to the whole row, or None. Column widths are computed
+    from the actual content, not fixed, so it reads well regardless of how
+    long any one cell's text is (e.g. a full space-group label vs. a short
+    number). Shared by core/structure_checks.py's per-check validation table
+    and stb-mlrelax's before/after comparison table.
+    """
+    widths = [len(h) for h in headers]
+    for cells, _ in rows:
+        for i, cell in enumerate(cells):
+            widths[i] = max(widths[i], len(cell))
+    header_line = " | ".join(f"{h:<{w}}" for h, w in zip(headers, widths))
+    print_dual(color_text(header_line, 'blue'), f_out)
+    print_dual("-" * len(header_line), f_out)
+    for cells, color in rows:
+        line = " | ".join(f"{c:<{w}}" for c, w in zip(cells, widths))
+        print_dual(color_text(line, color) if color else line, f_out)
+
+
+class Sections:
+    """Numbers a report's sections in the order they are printed (the set depends on the mode).
+    Shared by stb-mlphonons, stb-mlelastic and stb-mlneb."""
+
+    def __init__(self, f_out):
+        self.n, self.f_out = 0, f_out
+
+    def __call__(self, title):
+        print_section(f"[{self.n}] {title}", self.f_out)
+        self.n += 1
+
+
+def run_gnuplot(plot_dir, scripts):
+    """Runs gnuplot on each script inside `plot_dir` (one PDF per script). Returns (pdfs written,
+    message or None) -- the message says why some or all were not made, for the caller's warnings.
+    Shared by the --save-gnuplot option of stb-mlphonons, stb-mlelastic and stb-mlneb."""
+    import shutil
+    import subprocess
+    exe = shutil.which("gnuplot")
+    if exe is None:
+        return [], "gnuplot is not installed: the .gplot scripts and .dat files are written, run them later"
+    done, failed = [], []
+    for s_ in scripts:
+        p = subprocess.run([exe, s_], cwd=plot_dir, capture_output=True, text=True)
+        pdf = os.path.join(plot_dir, s_.replace(".gplot", ".pdf"))
+        if p.returncode == 0 and os.path.isfile(pdf):
+            done.append(pdf)
+        else:
+            failed.append(f"{s_}: {((p.stderr or '').strip().splitlines() or ['no output'])[-1]}")
+    return done, ("gnuplot failed on " + "; ".join(failed)) if failed else None
+
+
+def display_available() -> bool:
+    """Whether matplotlib can open a window here (--show): False for a non-interactive backend
+    (Agg, set by MPLBACKEND or a headless default) or, on Linux, without DISPLAY/WAYLAND_DISPLAY.
+    Shared by stb-mlmd and stb-mlphonons, which turn --show without a display into a warning."""
+    import matplotlib
+    if matplotlib.get_backend().lower() in ("agg", "pdf", "ps", "svg", "pgf", "cairo", "template"):
+        return False
+    return not (sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")))
+
+
+def print_progress_line(line: str, step: int, total: int) -> None:
+    """Prints a live single-line progress indicator to stderr: a self-
+    overwriting \\r-updated line on an interactive terminal, or a periodic
+    full line (every ~10%, plus the final step) when stderr is redirected
+    (e.g. to a log file/CI), so a long, uniform per-step loop (an MD melt/
+    quench ramp, a batch of MACE relaxations) neither spams scrollback with
+    one line per step nor silently produces nothing when piped. Pair with
+    finish_progress_line() once the loop ends. Extracted from amorphize.py
+    once adsorb.py's --n-orientations-* orientation screen became a second
+    consumer needing the exact same behavior; amorphize.py's own
+    print_progress() is now a thin wrapper that builds its line and calls
+    this.
+    """
+    if sys.stderr.isatty():
+        sys.stderr.write(f"\r{line}  ")
+        sys.stderr.flush()
+    elif step == total or step % max(1, total // 10) == 0:
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+
+
+def finish_progress_line() -> None:
+    """Clears the line left by print_progress_line() on an interactive
+    terminal; a no-op otherwise (nothing to clear -- print_progress_line
+    already only wrote complete, newline-terminated lines there)."""
+    if sys.stderr.isatty():
+        sys.stderr.write("\r" + " " * 90 + "\r")
+        sys.stderr.flush()
+
+
+@contextlib.contextmanager
+def capture_library_noise(collector, label):
+    """Captures stdout prints and warnings.warn() calls made by external
+    libraries (MACE/torch/phonopy/spglib/pymatgen) during the wrapped block,
+    instead of letting them interleave with a tool's own numbered report --
+    appended to `collector` (a list of strings) and printed together, once,
+    in a final LIBRARY WARNINGS section instead. A caller's own print_dual
+    output never goes through here (only third-party calls are wrapped), so
+    nothing from the report itself is ever captured/delayed. Moved here from
+    phonons_create.py once xrdsearch.py became a second consumer of the
+    exact same "collect noisy third-party output, report it once at the
+    end" need.
+    """
+    import logging
+    buf = io.StringIO()
+    records = []
+
+    class _Grab(logging.Handler):
+        def emit(self, record):
+            records.append(f"{record.levelname}: {record.getMessage()}")
+
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    root.handlers = [_Grab()]   # e.g. mace's 'No dtype selected' goes through the root logger
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with contextlib.redirect_stdout(buf):
+                yield
+    finally:
+        root.handlers = saved
+    for rec in dict.fromkeys(records):
+        collector.append(f"[{label}] {rec}")
+    text = buf.getvalue().strip()
+    if text:
+        collector.append(f"[{label}]\n{text}")
+    # De-duplicated by message text -- torch/mace commonly re-emit the exact
+    # same DeprecationWarning once per call site internally (e.g. one per
+    # torch.jit.load), which would otherwise print a dozen+ identical lines
+    # here for a single underlying issue.
+    seen = {}
+    for w in caught:
+        key = f"{w.category.__name__}: {w.message}"
+        seen[key] = seen.get(key, 0) + 1
+    for key, count in seen.items():
+        suffix = f" (x{count})" if count > 1 else ""
+        collector.append(f"[{label}] {key}{suffix}")
+
+
+def run_with_spinner(func, *args, label: str = "Working", **kwargs):
+    """Runs `func(*args, **kwargs)` in a background thread, showing an indeterminate
+    CLI spinner with elapsed time while it blocks. For a slow call with no step-based
+    progress callback to hook into -- e.g. icet's SQS search via pymatgen's
+    SQSTransformation (stb-sqs), or pyxtal's XRD pattern-similarity calculation
+    (stb-xrd --compare-to) -- this is elapsed-time feedback, not a real progress
+    bar. Falls back to periodic plain-text lines when stderr isn't a terminal
+    (e.g. output redirected to a file/log). Re-raises whatever `func` raised.
+    """
+    sys.stdout.flush()   # report lines printed so far must not land after the spinner's
+    done = threading.Event()
+    outcome = {}
+
+    def worker():
+        try:
+            outcome["result"] = func(*args, **kwargs)
+        except BaseException as exc:
+            outcome["error"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=worker, daemon=True)
+    start = time.monotonic()
+    thread.start()
+
+    is_tty = sys.stderr.isatty()
+    spinner_frames = "|/-\\"
+    frame = 0
+    last_line_at = 0.0
+    try:
+        while not done.wait(timeout=0.2):
+            elapsed = time.monotonic() - start
+            if is_tty:
+                sys.stderr.write(f"\r  {spinner_frames[frame % len(spinner_frames)]} {label}... {elapsed:6.1f}s elapsed  ")
+                sys.stderr.flush()
+                frame += 1
+            elif elapsed - last_line_at >= 5.0:
+                sys.stderr.write(f"  ... {label} ({elapsed:.0f}s elapsed)\n")
+                sys.stderr.flush()
+                last_line_at = elapsed
+    finally:
+        if is_tty:
+            sys.stderr.write("\r" + " " * 60 + "\r")
+            sys.stderr.flush()
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["result"]

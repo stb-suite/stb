@@ -1,0 +1,9 @@
+output/
+effmass.dat
+velocity.dat
+effmass.gplot
+effmass.pdf
+stb_effmass_report.txt
+references.bib
+calc.HSX
+calc.out

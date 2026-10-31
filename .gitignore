@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Build artifacts
+stb-suite/build/
+stb-suite/dist/
+*.egg-info/
+*.egg
+
+# Packaging / env
+.eggs/
+.venv/
+venv/
+env/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Documentation site build output (mkdocs build)
+site/
+
+# Local only: working folders, not part of the package
+bugs_report/
+new_functions/
+test_files/
+
+# LaTeX build files (the manual's PDF is built from docs/latex/stb_manual.tex)
+docs/latex/*.aux
+docs/latex/*.bbl
+docs/latex/*.bib
+docs/latex/*.blg
+docs/latex/*.fdb_latexmk
+docs/latex/*.fls
+docs/latex/*.idx
+docs/latex/*.ilg
+docs/latex/*.ind
+docs/latex/*.log
+docs/latex/*.out
+docs/latex/*.toc
+docs/latex/*.pdf

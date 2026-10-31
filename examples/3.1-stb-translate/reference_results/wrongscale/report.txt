@@ -1,0 +1,61 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:49
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../si_wrongscale.vasp -- poscar (auto, from the name 'si_wrongscale.vasp')
+Output            : none (--dry-run)
+  ... reading ../../si_wrongscale.vasp
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../si_wrongscale.vasp (440 bytes, 16 lines)
+Format            : poscar (auto, from the name 'si_wrongscale.vasp')
+Coordinates       : fractional (Direct); lattice parameter 0.5 Ang
+Coordinate range  : 0.0000 .. 0.7500 (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 2.74012, b = 2.74012, c = 2.74012 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     2.740119     0.000000     0.000000
+    b:     0.000000     2.740119     0.000000
+    c:     0.000000     0.000000     2.740119
+Volume            : 20.5735 Ang^3 (2.5717 Ang^3/atom); density 18.1345 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 1.1865         | Si1 - Si2 | 0.53       | short
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Fd-3m       | 227    | 192       
+0.01          | Fd-3m       | 227    | 192       
+0.1           | Fd-3m       | 227    | 192       
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+Structure         : Si8, 8 atoms, Fd-3m
+
+[5] WARNINGS
+------------------------------------------------------------
+  1. si_wrongscale.vasp: a bond is shorter than 0.75 x the sum of the covalent radii -- check the geometry.
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

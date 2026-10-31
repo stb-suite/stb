@@ -1,0 +1,29 @@
+SystemName Graphene
+SystemLabel Graphene
+
+PAO.BasisSize DZP
+PAO.EnergyShift 0.02 Ry
+
+%include structure.fdf
+
+kgrid_Monkhorst_Pack [ 12 12 1 ]
+
+MeshCutOff 250 Ry
+MaxSCFIterations 200
+XC.Functional GGA
+XC.Authors PBE
+Spin non-polarized
+SCF.Mixer.Weight 0.2
+SCF.DM.Tolerance 1.0d-5 eV
+ElectronicTemperature 25.0 meV
+
+MD.Steps 0
+
+WriteCoorInitial .true.
+SaveRho .false.
+
+# STM simulation: local DOS integrated over [-1.5, 1.5] eV around E_Fermi,
+# written to Graphene.LDOS on the real-space grid (same binary format as .RHO)
+%block LocalDensityOfStates
+ -1.5  1.5  eV
+%endblock LocalDensityOfStates

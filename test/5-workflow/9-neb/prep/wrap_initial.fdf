@@ -1,0 +1,22 @@
+# Regression fixture for the wrap_into_cell() fix: a single H atom whose
+# fractional z is given as 0.95 here...
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 10.0000000000   0.0000000000   0.0000000000
+  0.0000000000  10.0000000000   0.0000000000
+  0.0000000000   0.0000000000  10.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.500000000   0.500000000   0.950000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

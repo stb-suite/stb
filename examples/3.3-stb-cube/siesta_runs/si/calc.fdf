@@ -1,0 +1,40 @@
+# Bulk Si, primitive fcc cell at the PBE/DZP lattice constant: single point that saves every grid SIESTA can write
+SystemLabel      si
+SystemName       Si-bulk-grids
+NumberOfAtoms    2
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant  5.476 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00 0.00 0.00 1
+ 0.25 0.25 0.25 1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         200 Ry
+%block kgrid.MonkhorstPack
+ 6 0 0 0.5
+ 0 6 0 0.5
+ 0 0 6 0.5
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+
+SaveRho                     true    # si.RHO   valence density
+SaveDeltaRho                true    # si.DRHO  density minus the sum of free-atom densities
+SaveBaderCharge             true    # si.BADER valence density + model core charges
+SaveTotalCharge             true    # si.TOCH  valence density + ionic (pseudo-core) charge
+SaveIonicCharge             true    # si.IOCH  ionic (pseudo-core) charge alone
+SaveTotalPotential          true    # si.VT    total effective potential
+SaveElectrostaticPotential  true    # si.VH    electrostatic (Hartree + local pseudopotential) potential
+SaveNeutralAtomPotential    true    # si.VNA   neutral-atom potential

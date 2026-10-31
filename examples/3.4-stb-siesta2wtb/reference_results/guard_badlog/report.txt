@@ -1,0 +1,15 @@
+===== STB-SIESTA2WTB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : calc.fdf (SystemLabel hbn)
+Fermi level       : read from siesta.out (-o)
+Mode              : write + read-back check
+
+[1] SIESTA RUN
+------------------------------------------------------------
+Hamiltonian       : hbn.HSX (210.4 KB, written <date>)
+SaveHS in input   : yes
+[FAIL] SIESTA output 'siesta.out' (-o) not found.

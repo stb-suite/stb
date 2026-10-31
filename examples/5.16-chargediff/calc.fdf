@@ -1,0 +1,18 @@
+# Template of the 5.16 example for the molecules (water dimer, ammonia borane): the physics only.
+# stb-chargediffPrep copies it into every folder below '%include config_extra.fdf', which forces the
+# single point, the fixed cell, SaveRho and the SAME MeshCutoff in all of them.
+SystemName      chargediff_example
+SystemLabel     siesta
+%include structure.fdf
+
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           DZP
+PAO.EnergyShift         0.01 Ry
+Mesh.Cutoff             320 Ry
+ElectronicTemperature   300 K
+Spin                    non-polarized
+kgrid.MonkhorstPack     [1 1 1]
+DM.Tolerance            1.0e-6
+MaxSCFIterations        300

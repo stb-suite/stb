@@ -1,0 +1,30 @@
+/* The "still under development" notice at the top of the home page: much larger
+   than a regular admonition (whose text is deliberately small), so nobody misses it. */
+.md-typeset .admonition.dev-notice {
+  font-size: 1rem;
+  border-width: 0 0 0 .6rem;
+  border-radius: .3rem;
+  padding-bottom: .6rem;
+  margin: 1.5em 0 2em;
+}
+
+.md-typeset .dev-notice > .admonition-title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.25;
+  padding: .8rem .8rem .8rem 3.6rem;
+}
+
+.md-typeset .dev-notice > .admonition-title::before {
+  width: 2.2rem;
+  height: 2.2rem;
+  top: .8rem;
+  left: 1rem;
+}
+
+.md-typeset .dev-notice > p {
+  font-size: 1.2rem;
+  line-height: 1.5;
+  margin: .7rem 0;
+  padding: 0 .4rem;
+}

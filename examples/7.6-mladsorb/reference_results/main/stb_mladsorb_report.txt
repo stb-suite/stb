@@ -1,0 +1,224 @@
+===== STB-MLADSORB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 12:18:15
+Software          : stb 1.9.308, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Slab              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Adsorbate(s)      : Si
+Sites             : ontop, bridge, hollow; start at 2 Ang
+Substrate         : top 4 Ang relaxed, deeper atoms fixed
+Relaxations       : FIRE to max|F| < 0.05 eV/Ang, at most 300 steps
+Also              : bulk reference, foundation comparison (medium)
+Temperature       : 300 K (site populations)
+
+[1] MODEL
+------------------------------------------------------------
+
+Model card -- identity
+Card file         : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-29T10:08:12, updated 2026-10-29T10:09:15, stb 1.9.303)
+Model             : round_03_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model
+SHA-256           : 9766c9cf4228bb87... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
+Committee         : member 3 of 3 (seed 125), round 3; committee force spread mean 16.1 meV/Ang
+Selected as best  : by stb-mlffValidate on 2026-10-29T10:09:15 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
+Architecture      : MACE, r_max 6 Ang, 2 interactions, 509,722 parameters; fine-tuned from mace-mp-0 (medium), start: previous
+
+Model card -- level of theory (what the model reproduces)
+Code              : SIESTA 5.4.2
+Settings          : DFTD3 default; ElectronicTemperature 300 K; Mesh.Cutoff 300 Ry
+                    PAO.Basis block none; PAO.BasisSize DZP; PAO.EnergyShift 0.01 Ry
+                    SCF tolerance 1.0e-5; Spin non-polarized; XC.authors PBE
+                    XC.functional GGA; k x a (Ang) 32 32 32
+DFT-D3            : not in the labels (source: none)
+Pseudopotentials  : Si.psml (md5 878e1f00)
+Energy scale      : SIESTA absolute total energy, eV; E0 Si -117.3061 eV (foundation-residual)
+
+Model card -- training data and trained domain
+Training set      : 71 SIESTA configs (64 train / 7 valid), kinds al-md 12, neb 7, neb-rattle 7, rattle 39, strain 6; 8-64 atoms per config
+Labels            : energy, forces, stress; stress fitted
+Trained range                 | Value                 
+------------------------------------------------------
+elements / dimensionality     | Si / 3D               
+volume per atom (Ang^3)       | 18.722 .. 22.425      
+shortest distance (Ang)       | 1.852 .. 2.372        
+max force per config (eV/Ang) | 0.17 .. 14.70         
+pressure (GPa)                | -5.81 .. 10.48        
+energy per atom (eV)          | -115.0069 .. -114.2504
+atoms per config              | 8 .. 64               
+
+Model card -- recipe and accuracy
+Recipe            : 100 epochs (kept 87), batch 5, lr 0.001, loss energy 1 + forces 100 + stress 10000, E0s foundation-residual, cuda 561 s
+Errors vs SIESTA            | N  | F RMSE (meV/Ang) | E rel (meV/atom) | S RMSE (GPa)
+-------------------------------------------------------------------------------------
+train                       | 64 | 35.1             | 2.44             | 0.153       
+valid (own split)           | 7  | 28.6             | 2.62             | 0.135       
+out-of-sample (committee)   | 19 | 36.9             | 3.17             | 0.149       
+test set (stb-mlffValidate) | 16 | 22.7             | 1.36             | 0.154       
+foundation model, raw       | 71 | 360.4            | 47.67            | 0.787       
+Fine-tuning gain  : 88 % lower force error than the raw foundation model
+  test, rattle    : F 17.2 meV/Ang over 8 configs
+  test, strain    : F 27.1 meV/Ang over 8 configs
+Phonons vs SIESTA : RMSE 1.09 THz (acoustic 1.52, optical 0.31), imaginary q-points: model 0
+MD check r01_800K_2x2x2: F 26.7-34.9 meV/Ang along 8 SIESTA-labelled frames
+Committee spread  : true error ~ 1.7 x spread (per-config correlation +0.80)
+Verdict (4.17.3)  : STOP (validated 2026-10-29T10:09:15, 16 test configs)
+
+Model card -- stability, speed and usage
+Stability (4.17.2): OK -- 64 atoms, T mean 284 K, NVE drift -0.007 meV/atom/ps
+Speed (4.17.2)    : 37.4 ms/step for 64 atoms on cuda
+Recommended dtype : geometry optimization float64, molecular dynamics float32
+  - Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.
+  - Valid for Si only; any other element is outside the training data.
+  - Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.
+  - Lowest validation force error of its committee.
+  - Run geometry optimisation in float64 and MD in float32 (the suite's convention).
+Trained with      : stb 1.9.303, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0, python 3.12.13, siesta 5.4.2
+Loaded in         : 0.4 s
+
+[2] CLEAN SLAB
+------------------------------------------------------------
+File              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Atoms             : 24 (Si24)
+Surface cell      : a = 7.7502, b = 7.7502 Ang, gamma = 60.00 deg, area 52.019 Ang^2 (13.005 Ang^2 per top-layer atom)
+Thickness         : 7.536 Ang in 6 layers; vacuum 14.58 Ang (c along the normal 22.119 Ang)
+layer | height as given (Ang) | height relaxed (Ang) | spacing (Ang) | atoms | elements | in the relaxations
+------------------------------------------------------------------------------------------------------------
+L1    | +0.000                | +0.000               | -             | 4     | Si4      | free              
+L2    | -0.791                | -0.581               | 0.581         | 4     | Si4      | free              
+L3    | -3.164                | -3.288               | 2.707         | 4     | Si4      | free              
+L4    | -3.955                | -4.088               | 0.800         | 4     | Si4      | free              
+L5    | -6.328                | -6.745               | 2.657         | 4     | Si4      | fixed             
+L6    | -7.119                | -7.536               | 0.791         | 4     | Si4      | fixed             
+As given          : E = -2743.310247 eV, largest force 2.2474 eV/Ang (atom 6, L5)
+Relaxed           : --relax-depth 4 Ang -> 16 atom(s) free, 8 fixed; E = -2745.533265 eV (relaxation -2.2230 eV), max|F| on the free atoms 2.2474 -> 0.0443 eV/Ang, 29 steps (converged), largest move 0.626 Ang
+
+[3] REFERENCES
+------------------------------------------------------------
+Isolated adsorbate (alone in a cubic box, relaxed with the model):
+adsorbate | atoms | extent (Ang) | box (Ang) | E (eV)      | steps
+------------------------------------------------------------------
+Si        | 1     | 0.00         | 20.0      | -111.583351 | 0    
+Note              : an atom or molecule in vacuum is far outside a model fine-tuned on condensed SIESTA configurations -- its energy is little more than the model's E0s, so E_ads relative to it carries that error. The energy differences between sites (dE) do not depend on it; --bulk-reference gives a reference inside the training domain.
+Bulk reference (positions and cell relaxed with the model; mu = E/N):
+element | file                                                            | atoms | volume/atom (Ang^3) | mu (eV/atom) | steps
+------------------------------------------------------------------------------------------------------------------------------
+Si      | /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.594    | -115.008421  | 5    
+E_form = E(slab+adsorbate) - E(slab) - sum mu: the energy to take the adsorbate's atoms from their bulk phases (an adatom formation energy).
+
+[4] CANDIDATE SITES
+------------------------------------------------------------
+Found             : 48 site(s) in the cell, 6 symmetry-distinct (--symprec 0.01; 24 symmetry operation(s) keep the surface normal)
+site | type   | what is below         | in the cell | in-plane fractional (a, b)
+--------------------------------------------------------------------------------
+#1   | ontop  | above L1 Si21         | 4           | 1.0000 1.0000             
+#2   | ontop  | above L2 Si17         | 4           | 0.8333 0.3333             
+#3   | bridge | above L4 Si10         | 4           | 0.6667 0.1667             
+#4   | bridge | nothing below (L1-L4) | 12          | 0.9167 0.9167             
+#5   | bridge | nothing below (L1-L4) | 12          | 1.0000 0.7500             
+#6   | bridge | nothing below (L1-L4) | 12          | 0.8333 0.0833             
+Below             : the topmost atom within 0.5 Ang (in-plane) of the site, layers counted from the top (on fcc(111) a hollow above L2 is hcp and one above L3 is fcc; on Si(111) a hollow above L2 is T4 and one above L4 is H3).
+
+[5] RELAXATIONS
+------------------------------------------------------------
+6 relaxation(s) with fine-tuned in 67.3 s:
+run | ads | start     | dist (A) | ended at  | moved (A) | height (A) | CN | d_nn (A) | E_ads (eV) | substrate (A) | steps | max|F|
+-----------------------------------------------------------------------------------------------------------------------------------
+1   | Si  | #1 ontop  | 2.00     | #1 ontop  | 0.00      | 2.574      | 1  | 2.376    | -3.3689    | 0.199         | 44    | 0.039 
+2   | Si  | #2 ontop  | 2.00     | #2 ontop  | 0.00      | 1.541      | 4  | 2.472    | -5.6155    | 1.075         | 51    | 0.042 
+3   | Si  | #3 bridge | 2.00     | #3 bridge | 0.00      | 1.444      | 3  | 2.666    | -4.1393    | 0.248         | 52    | 0.041 
+4   | Si  | #4 bridge | 2.00     | #2 ontop  | 1.05      | 1.536      | 4  | 2.471    | -5.6126    | 1.053         | 68    | 0.050 
+5   | Si  | #5 bridge | 2.00     | #5 bridge | 0.02      | 2.259      | 3  | 2.352    | -4.4483    | 1.123         | 61    | 0.039 
+6   | Si  | #6 bridge | 2.00     | #3 bridge | 0.76      | 1.578      | 5  | 2.615    | -4.1486    | 0.476         | 59    | 0.049 
+Columns           : start = starting site and pymatgen distance; ended at = nearest site of the cell to the adsorbate's lowest atom (within 0.6 Ang, else off-site); moved = in-plane shift of that atom; height = above layer 1; CN = substrate neighbours within 1.25 x the covalent radii; substrate = largest substrate displacement from the clean slab. Cyan rows: the adsorbate left its starting site.
+Moved             : 2 of 6 run(s) ended at another site -- the starting site is not a minimum of the model there.
+
+[6] DISTINCT MINIMA
+------------------------------------------------------------
+rank | ads | site      | what is below         | E_ads (eV) | dE (eV) | E_form (eV) | in cell | pop. 300 K (%) | height (A) | CN | bonds (A)         | from runs
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+1    | Si  | #2 ontop  | above L2 Si17         | -5.6155    | +0.0000 | -2.1904     | 4       | 100.0          | 1.541      | 4  | 2.472 2.472 2.472 | 2,4      
+2    | Si  | #5 bridge | nothing below (L1-L4) | -4.4483    | +1.1671 | -1.0233     | 12      | 0.0            | 2.259      | 3  | 2.352 2.489 2.489 | 5        
+3    | Si  | #3 bridge | above L4 Si10         | -4.1486    | +1.4669 | -0.7235     | 4       | 0.0            | 1.578      | 5  | 2.615 2.708 2.708 | 6,3      
+4    | Si  | #1 ontop  | above L1 Si21         | -3.3689    | +2.2466 | 0.0562      | 4       | 0.0            | 2.574      | 1  | 2.376             | 1        
+Grouping          : runs of one adsorbate that end at symmetry-equivalent sites within 0.02 eV are one minimum; dE is relative to the most stable minimum of the same adsorbate; the population is multiplicity x exp(-dE/kT), normalized (configurational only: no vibrational entropy).
+Si                : most stable #2 ontop (above L2 Si17), 1.1671 eV below the next minimum (#5 bridge)
+                    no run ended at #4 bridge, #6 bridge: not a minimum of the model (or not reached from these starts)
+
+From minimum 1 of Si, #2 ontop, to every other minimum (in-plane distances):
+rank | site      | what is below         | dE (eV) | nearest copy of the site (Ang) | in its .fdf (Ang)
+-------------------------------------------------------------------------------------------------------
+2    | #5 bridge | nothing below (L1-L4) | +1.1671 | 1.119                          | 4.029            
+3    | #3 bridge | above L4 Si10         | +1.4669 | 2.237                          | 2.082            
+4    | #1 ontop  | above L1 Si21         | +2.2466 | 2.237                          | 2.237            
+Diffusion barrier : a climbing-image NEB with stb-mlneb (5.7) between two of these minima -- with its committee, SIESTA check (--siesta-check) and export to training (--to-mlff):
+  stb-mlneb --initial main/rank01_ontop_site2_Si.fdf --final main/rank03_bridge_site3_Si.fdf --autosort-tol 0 --custom-model /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model --custom-model-card /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json
+  (--autosort-tol 0: the .fdf files list the same atoms in the same order, and an adsorbate that hops farther than the default 0.5 Ang cannot be matched by distance. The minimum nearest to minimum 1 as written in its .fdf, 2.08 Ang. A minimum whose nearest site copy is closer than its .fdf sits at another copy; such a short hop is real only if the adsorbate stays there when relaxed next to minimum 1 -- not checked here)
+[NOTE] ML-level energies from a fast surrogate potential: use them to choose which site(s) to compute with SIESTA (stb-adsorb, 4.8), not as the final answer.
+
+[7] COMMITTEE
+------------------------------------------------------------
+Members           : 3 members of round 3 from /home/carlos/run/stb/5.7/mlff_si/mlff_runs
+3 committee members on the main model's geometries -- E_ads against each member's own slab and isolated adsorbate (it carries each member's E0s), dE against each member's own minimum 1, E_form against each member's own bulk:
+rank | ads | site      | main E_ads | members E_ads (eV)   | std   | members dE (eV)      | std   | members E_form (eV)  | std   | F spread (meV/Ang) | est. F error
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1    | Si  | #2 ontop  | -5.6155    | -5.111 -3.544 -5.615 | 0.882 | +0.000 +0.000 +0.000 | 0.000 | -1.685 -0.199 -2.190 | 0.845 | 1141               | 1912        
+2    | Si  | #5 bridge | -4.4483    | -3.592 -2.764 -4.448 | 0.688 | +1.519 +0.780 +1.167 | 0.302 | -0.166 0.581 -1.023  | 0.655 | 1951               | 3269        
+3    | Si  | #3 bridge | -4.1486    | -2.205 -2.332 -4.149 | 0.888 | +2.906 +1.212 +1.467 | 0.746 | 1.220 1.013 -0.723   | 0.872 | 2443               | 4093        
+4    | Si  | #1 ontop  | -3.3689    | -3.256 -3.260 -3.369 | 0.052 | +1.855 +0.284 +2.247 | 0.848 | 0.170 0.085 0.056    | 0.048 | 167                | 280         
+Si                : 3 of 3 members put the same minimum first; gap to the second 1.519, 0.780, 1.167 eV (std 0.302 eV)
+Calibration       : on the card's test set the true force error is ~1.7 x the spread; the mean spread there is 31.2 meV/Ang
+Seeds fine-tuned from the same foundation model are nearly the same model: the spread is a LOWER bound of the error (5.7: a committee agreed within 0.09 eV on a barrier 0.47 eV too high).
+
+[8] FOUNDATION MODEL COMPARISON
+------------------------------------------------------------
+The same runs with MACE-MP-0 medium (its own clean slab, references and relaxations); dE against each model's own most stable run, E_form against each model's own bulk:
+run | ads | start     | fine-tuned: end | dE (eV) | E_form (eV) | MACE-MP-0 medium: end | dE (eV) | E_form (eV) | difference
+----------------------------------------------------------------------------------------------------------------------------
+1   | Si  | #1 ontop  | #1 ontop        | +2.2466 | 0.0562      | #1 ontop              | +1.0962 | 1.5275      | +1.4713   
+2   | Si  | #2 ontop  | #2 ontop        | +0.0000 | -2.1904     | #2 ontop              | +0.0000 | 0.4313      | +2.6217   
+3   | Si  | #3 bridge | #3 bridge       | +1.4761 | -0.7142     | #3 bridge             | +0.0997 | 0.5310      | +1.2453   
+4   | Si  | #4 bridge | #2 ontop        | +0.0028 | -2.1875     | #2 ontop              | +0.0012 | 0.4324      | +2.6200   
+5   | Si  | #5 bridge | #5 bridge       | +1.1671 | -1.0233     | #2 ontop              | +0.0003 | 0.4316      | +1.4548   
+6   | Si  | #6 bridge | #3 bridge       | +1.4669 | -0.7235     | #3 bridge             | +0.1049 | 0.5361      | +1.2596   
+Si                : most stable #2 ontop (fine-tuned) vs #2 ontop (MACE-MP-0 medium) -- same site
+                    gap to the second minimum 1.1671 vs 0.0997 eV
+E_ads of two models are not compared: each is measured from the model's own isolated adsorbate, i.e. its own E0s; compare dE and, with --bulk-reference, E_form.
+
+[9] TRAINED RANGE
+------------------------------------------------------------
+quantity                | trained                | here                           | verdict
+-------------------------------------------------------------------------------------------
+elements                | Si                     | Si                             | inside 
+dimensionality          | 3D                     | 2D slab; 0D isolated adsorbate | OUTSIDE
+shortest distance (Ang) | >= 1.852               | 2.176                          | inside 
+largest force (eV/Ang)  | <= 14.70               | 2.247 (slab as given)          | inside 
+energy per atom (eV)    | -115.0069 .. -114.2504 | -114.5093 .. -114.4194         | inside 
+Training kinds    : al-md 12, neb 7, neb-rattle 7, rattle 39, strain 6 -- a surface, an adsorbate and its bonds to the surface are only as good as the training data near them; the committee spread and a SIESTA check of the best sites are the way to find out
+
+[10] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (3 warning(s), see the last section)
+Si                : most stable #2 ontop (above L2 Si17), E_ads -5.6155 eV, E_form -2.1904 eV; next #5 bridge +1.1671 eV
+Committee         : E_ads std up to 0.8878 eV over the minima
+Figure            : main/mladsorb.png
+Minima (.fdf)     : main/rank01_*.fdf .. rank04_*.fdf
+Data              : main/mladsorb_configs.dat
+Data              : main/mladsorb_minima.dat
+Data              : main/mladsorb_configs_foundation.dat
+Extended XYZ      : main/mladsorb_runs.xyz (6 relaxed runs)
+Extended XYZ      : main/mladsorb_minima.xyz (4 minima)
+Extended XYZ      : main/mladsorb_slab.xyz (clean slab)
+gnuplot folder    : main/plot/ (top_view.gplot, site_energies.gplot)
+gnuplot figure    : main/plot/top_view.pdf
+gnuplot figure    : main/plot/site_energies.pdf
+Report            : main/stb_mladsorb_report.txt
+Also available    : --show
+Wall time         : 190.9 s (fine-tuned screening 67 s, committee 18 s, MACE-MP-0 medium screening 100 s)
+
+[11] WARNINGS
+------------------------------------------------------------
+  1. model card: the structure is 2D (vacuum along 1 axis/axes) but the model was trained on 3D structures. (first of 13 such warnings, one per new cell or structure)
+  2. Committee: the force spread reaches 2443 meV/Ang on minimum 3 (78x the test set's mean): the model is far outside what its training set constrains there -- the site energies and the ranking need a SIESTA check (and the structures belong in the training set).
+  3. Committee: the members' E_ads differ by up to 0.89 eV (std) on one minimum.
+Library messages  : 47 distinct message(s) from mace/torch/ase captured, not shown

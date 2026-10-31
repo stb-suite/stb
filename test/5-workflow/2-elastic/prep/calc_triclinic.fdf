@@ -1,0 +1,16 @@
+SystemLabel siesta
+SystemName siesta
+
+%include triclinic.fdf
+
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+kgrid.MonkhorstPack   [4  4  4]
+Mesh.CutOff           200  Ry
+
+MaxSCFIterations      100
+DM.Tolerance          1.0d-4
+XC.functional         GGA
+XC.authors            PBE

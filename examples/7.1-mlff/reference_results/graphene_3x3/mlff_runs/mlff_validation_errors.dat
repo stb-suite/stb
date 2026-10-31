@@ -1,0 +1,11 @@
+# Per test config errors of round 2, stb-mlffValidate
+# folder kind n_atoms E_ref(eV/atom) Fmax_ref(eV/Ang) F_rmse(meV/Ang) F_rmse_found(meV/Ang) dE(meV/atom) err_max(meV/Ang) spread_max(meV/Ang) novelty range
+test_001 rattle 18 -154.947928 3.5244 9.09 224.04 -0.145 20.75 16.19 0.658 in
+test_002 rattle 18 -154.907250 4.2859 13.18 417.58 -0.160 42.63 25.10 1.092 in
+test_003 rattle 18 -154.829681 9.5834 21.61 607.85 0.041 68.78 41.49 2.015 in
+test_004 rattle 18 -154.706104 16.6008 44.89 726.35 0.190 179.30 63.93 2.591 in
+test_005 strain 18 -154.936898 2.2486 9.61 202.36 0.202 30.89 14.39 0.688 in
+test_006 strain 18 -154.908106 4.5452 14.82 414.08 0.090 35.78 25.71 1.275 in
+test_007 strain 18 -154.853045 7.5260 17.80 542.98 -0.408 46.33 42.13 1.811 in
+test_008 strain 18 -154.689562 10.2545 54.76 682.86 -0.882 185.88 49.89 2.916 in
+test_009 strain 18 -154.923931 1.9389 10.30 145.56 1.072 30.28 9.54 0.709 in

@@ -1,0 +1,47 @@
+# The version is the release in src/stb/_version.py (RELEASE); STB_VERSION overrides it
+# (for a dev build, for example STB_VERSION=2.1.0.dev5).
+{% set version = environ.get("STB_VERSION", "2.0.0") %}
+
+package:
+  name: stb_suite
+  version: "{{ version }}"
+
+source:
+  path: .
+
+build:
+  noarch: python
+  script_env:
+    - STB_VERSION
+  script:
+    - python -m pip install .   # Instala o pacote
+
+channels:
+  - conda-forge
+
+requirements:
+  host:
+    - python>=3.9,<=3.12
+    - pip
+    - build
+  run:
+    - python>=3.9,<=3.12
+    - numpy
+    - matplotlib
+    - pip
+  pip:
+    - ase
+    - pymatgen
+    - spglib>=2.2.0
+    - sisl
+    - pybader
+    - phonopy
+    - setuptools
+    - scipy==1.13.1
+    - pandas
+    - icet
+
+about:
+  home: "https://github.com/bastoscmo"
+  license: MIT
+  summary: "Siesta ToolBox suite with softwares to pre and pos-processing data for Siesta code."

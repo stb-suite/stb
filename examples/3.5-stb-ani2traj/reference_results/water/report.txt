@@ -1,0 +1,94 @@
+
+AIMD TRAJECTORY CONVERTER:
+------------------------------------------------------------
+===== STB-ANI2TRAJ REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.318 / 0.16.4
+Input             : water.ANI
+Output            : water_traj.xsf (xsf)
+Frames kept       : skip 0, then every 1
+Unwrap PBC        : no
+
+[1] INPUTS
+------------------------------------------------------------
+Trajectory        : water.ANI (278.7 KB, 288 frames x 24 atoms)
+Input .fdf        : ./calc.fdf
+SIESTA log        : ./calc.out (SIESTA 5.4.2), 289 MD steps, NOT finished
+Thermodynamics    : water.MDE (288 rows: T, E_KS, E_tot, V, P per step)
+Last geometry     : water.XV
+Dynamics          : Nose thermostat MD run -> NVT (Nose thermostat)
+Time step         : 0.5 fs
+Temperatures      : initial 350.0 K, target 350 K
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 24 (O8H16)
+Cell (frame 1)    : a = 6.2100, b = 6.2100, c = 6.2100 Ang, V = 239.483 Ang^3
+Density           : 0.9993 g/cm^3 (0.1002 atoms/Ang^3)
+Dimensionality    : 3D (bulk material)
+
+[3] FRAMES AND MD STEPS
+------------------------------------------------------------
+Frames in .ANI    : 288
+MD steps in log   : 289 (steps 1-289)
+Rows in .MDE      : 288 (steps 1-288)
+Frame <-> step    : frame k is the geometry AFTER MD step k (= the geometry of step k+1) -- checked against the log's per-step coordinates (WriteCoorStep), largest difference 5.0e-07 Ang
+                    each frame gets the cell, energies and temperature of ITS step
+Time span         : 0.5 to 144 fs (0.1435 ps; t = 0 at the input geometry)
+Last frame vs .XV : 4.9e-07 Ang apart (same geometry)
+Kept              : 288 frames (indices 1..288 of 288, every 1)
+
+[4] LATTICE
+------------------------------------------------------------
+Source            : per frame, from the log's 'outcell' block of each frame's MD step
+Cell              : constant over the frames kept
+
+[5] THERMODYNAMICS
+------------------------------------------------------------
+Per frame kept, from the .MDE at each frame's own MD step (drift = slope of a linear fit, per ps):
+      | unit  | first      | last       | mean       | std    | min        | max        | drift /ps
+---------------------------------------------------------------------------------------------------
+T     | K     | 336.29     | 432.89     | 351.20     | 109.59 | 175.69     | 618.20     | -1.4e+02 
+E_KS  | eV    | -3847.1587 | -3851.6170 | -3850.4712 | 1.2578 | -3851.6505 | -3846.9362 | -27.19   
+E_tot | eV    | -3846.1589 | -3846.1661 | -3846.1636 | 0.0027 | -3846.1666 | -3846.1523 | -0.05202 
+V     | Ang^3 | 239.483    | 239.483    | 239.483    | 0.000  | 239.483    | 239.483    | -9.76e-13
+P     | kBar  | 12.77      | -6.01      | -3.98      | 8.59   | -20.07     | 13.29      | +84      
+T fluctuation     : 0.312 relative; canonical expectation sqrt(2/(3N-3)) = 0.170 for 24 atoms
+T vs target       : mean 351.2 K vs 350 K (+1.2 K)
+                    (stb-aimdAnalysis, menu 3.18, does RDF, MSD and VDOS on the same trajectory)
+
+[6] MOTION
+------------------------------------------------------------
+Largest step      : 0.0396 Ang between consecutive frames (H14, frames 18->19) -> up to 7913 m/s
+Boundary jumps    : 0 coordinate jumps of more than half a cell between consecutive frames
+Outside the cell  : 0 atom-frames with a fractional coordinate outside [0, 1)
+Displacement, first -> last frame kept (unwrapped):
+species | atoms | RMS (Ang) | max (Ang)
+---------------------------------------
+O       | 8     | 0.633     | 0.831    
+H       | 16    | 0.956     | 1.992    
+Closest approach  : 0.914 Ang (O22-H24, frame 4)
+
+[7] OUTPUT
+------------------------------------------------------------
+File              : water_traj.xsf (458.0 KB, 288 frames, xsf)
+Per frame         : cell, positions as in the .ANI; no scalars (only xyz carries them)
+Read-back check   : read again with ASE -- ok
+                    288 frames; positions to 0.0e+00 Ang, cell parameters to 0.0e+00 (the xsf writer's precision)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Run               : O8H16, NVT (Nose thermostat), 288 frames, dt 0.5 fs
+Written           : water_traj.xsf (288 frames)
+Open with         : ovito water_traj.xsf  |  vmd water_traj.xsf  |  xcrysden --axsf water_traj.xsf
+
+[9] WARNINGS
+------------------------------------------------------------
+  1. ./calc.out did not finish: the run may still be going, or it stopped -- the last frames may be missing from the log.
+
+------------------------------------------------------------
+Trajectory converted -- now go make a nice movie of it.
+

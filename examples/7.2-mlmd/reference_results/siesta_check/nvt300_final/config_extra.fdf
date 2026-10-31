@@ -1,0 +1,10 @@
+# Directives forced on every SIESTA frame check (first occurrence wins, so these override siesta_calc.fdf):
+# the 8-atom reference's 6x6x6 k-grid divided by the 3x3x3 supercell, the atom count, and a single point.
+kgrid.MonkhorstPack [2 2 2]
+
+NumberOfAtoms 216
+
+MD.TypeOfRun          CG
+MD.Steps              0
+MD.NumCGsteps         0
+MD.VariableCell       false

@@ -1,0 +1,8 @@
+# A fictional extension, used only by test/docs/test.sh to exercise STB_DOCS_EXTRA_ROOTS
+# (docs/stbdocs/catalog.py). Paths are relative to this file.
+name = "demo-extension"
+repo_url = "https://example.invalid/demo-extension"
+menu = "menu.py"
+pyproject = "pyproject.toml"
+help_snapshot = "reference_help.json"
+examples = "examples"

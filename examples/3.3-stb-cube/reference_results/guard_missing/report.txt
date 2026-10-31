@@ -1,0 +1,17 @@
+
+GRID CONVERTER:
+------------------------------------------------------------
+===== STB-CUBE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : si.LDOS
+Grid type         : LDOS -- local density of states in the LocalDensityOfStates energy window
+Spin channel      : total (requested)
+Output            : si_LDOS.cube
+
+[1] INPUT GRID
+------------------------------------------------------------
+[FAIL] Input file 'si.LDOS' not found. Grid files in .: BADER, DRHO, IOCH, RHO, TOCH, VH, VNA, VT. SIESTA writes it only with %block LocalDensityOfStates.

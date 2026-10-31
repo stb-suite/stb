@@ -1,0 +1,22 @@
+# Bulk Si, 8-atom conventional cell -- the level of theory of the 4.17 MLFF training set
+SystemLabel      siesta
+SystemName       Si-bulk-8
+%include structure.fdf
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         300 Ry
+
+# 6x6x6 in the 5.47 Ang cubic cell: k x a ~ 33 Ang
+kgrid.MonkhorstPack   [6 6 6]
+
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                non-polarized
+
+ElectronicTemperature   300 K
+MaxSCFIterations        200
+SCF.Mixer.Weight        0.2
+SCF.Mixer.History       6
+SCF.DM.Tolerance        1.0d-5
+Diag.ParallelOverK      .true.

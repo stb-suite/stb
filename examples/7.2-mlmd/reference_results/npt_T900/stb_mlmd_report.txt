@@ -1,0 +1,186 @@
+===== STB-MLMD REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-24 17:35:34
+Software          : stb 1.9.295, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/run/stb/5.1/example_ref/si216.fdf
+Ensemble          : NPT
+Temperature       : 900.0 K
+Pressure          : 0.000 GPa
+Timestep / steps  : 1.0 fs / 6000 (+ 2000 equilibration)
+Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_compiled.model)
+Report file       : stb_mlmd_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 216 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si216 (Si 216)
+Cell              : a 16.4407, b 16.4407, c 16.4407 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 4443.877 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3730 Ang (median nearest neighbour 2.3730 Ang)
+Degrees of freedom: 645 (3N - 3: net momentum removed)
+
+[2] MODEL
+------------------------------------------------------------
+
+Model card -- identity
+Card file         : /home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.2-mlmd/model/mlff_model_compiled.model
+SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
+Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
+Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
+Architecture      : MACE, r_max 6 Ang, 2 interactions, 509,722 parameters; fine-tuned from mace-mp-0 (medium), start: previous
+
+Model card -- level of theory (what the model reproduces)
+Code              : SIESTA 5.4.2
+Settings          : DFTD3 default; ElectronicTemperature 300 K; Mesh.Cutoff 300 Ry
+                    PAO.Basis block none; PAO.BasisSize DZP; PAO.EnergyShift 0.01 Ry
+                    SCF tolerance 1.0e-5; Spin non-polarized; XC.authors PBE
+                    XC.functional GGA; k x a (Ang) 32 32 32
+DFT-D3            : not in the labels (source: none)
+Pseudopotentials  : Si.psml (md5 878e1f00)
+Energy scale      : SIESTA absolute total energy, eV; E0 Si -117.3061 eV (foundation-residual)
+
+Model card -- training data and trained domain
+Training set      : 57 SIESTA configs (51 train / 6 valid), kinds al-md 12, rattle 39, strain 6; 8-64 atoms per config
+Labels            : energy, forces, stress; stress fitted
+Trained range                 | Value                 
+------------------------------------------------------
+elements / dimensionality     | Si / 3D               
+volume per atom (Ang^3)       | 18.722 .. 22.425      
+shortest distance (Ang)       | 1.852 .. 2.347        
+max force per config (eV/Ang) | 0.98 .. 14.70         
+pressure (GPa)                | -5.81 .. 10.48        
+energy per atom (eV)          | -115.0069 .. -114.2504
+atoms per config              | 8 .. 64               
+
+Model card -- recipe and accuracy
+Recipe            : 100 epochs (kept 96), batch 5, lr 0.001, loss energy 1 + forces 100 + stress 10000, E0s foundation-residual, cuda 342 s
+Errors vs SIESTA            | N  | F RMSE (meV/Ang) | E rel (meV/atom) | S RMSE (GPa)
+-------------------------------------------------------------------------------------
+train                       | 51 | 45.8             | 2.03             | 0.148       
+valid (own split)           | 6  | 52.8             | 0.85             | 0.123       
+out-of-sample (committee)   | 16 | 56.0             | 1.85             | 0.127       
+test set (stb-mlffValidate) | 16 | 28.7             | 1.07             | 0.181       
+foundation model, raw       | 57 | 448.4            | 51.08            | 0.848       
+Fine-tuning gain  : 87 % lower force error than the raw foundation model
+  test, rattle    : F 15.3 meV/Ang over 8 configs
+  test, strain    : F 37.6 meV/Ang over 8 configs
+Phonons vs SIESTA : RMSE 1.10 THz (acoustic 1.51, optical 0.37), imaginary q-points: model 0
+MD check r01_800K_2x2x2: F 29.8-38.9 meV/Ang along 8 SIESTA-labelled frames
+Committee spread  : true error ~ 1.3 x spread (per-config correlation +0.75)
+Verdict (4.17.3)  : STOP (validated 2026-10-24T11:00:18, 16 test configs)
+
+Model card -- stability, speed and usage
+Stability (4.17.2): OK -- 64 atoms, T mean 285 K, NVE drift 0.003 meV/atom/ps
+Speed (4.17.2)    : 35.2 ms/step for 64 atoms on cuda
+Recommended dtype : geometry optimization float64, molecular dynamics float32
+  - Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.
+  - Valid for Si only; any other element is outside the training data.
+  - Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.
+  - Lowest validation force error of its committee.
+  - Run geometry optimisation in float64 and MD in float32 (the suite's convention).
+Trained with      : stb 1.9.292, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0, python 3.12.13, siesta 5.4.2
+
+Loaded            : in 0.4 s, float32 (MD; the card recommends float32)
+
+[3] MD SETUP
+------------------------------------------------------------
+Integrator        : Berendsen thermostat (tau_T 100 fs) + barostat (tau_P 500 fs)
+Compressibility   : 1.000e-06 1/bar (barostat response of B ~ 100.0 GPa)
+Note              : Berendsen coupling gives the right averages but suppresses fluctuations -- do not read heat capacities or compressibilities from them.
+Initial velocities: Maxwell-Boltzmann at 900 K, net momentum removed, seed 5
+Length            : 2000 + 6000 steps x 1.0 fs = 2.000 + 6.000 ps (8.000 ps in total)
+Sampling          : every 10 steps (10 fs) -> 600 frames
+
+[4] EQUILIBRATION (discarded)
+------------------------------------------------------------
+Running 2000 step(s) before production starts -- a freshly Maxwell-Boltzmann-seeded structure needs to relax before its trajectory/statistics are representative (verified live: ~100-200 steps of E_pot relaxation from the initial condition in a 64-atom test case).
+[OK] Equilibration done. E = -24816.7324 eV, T = 907.8 K (289.2 s)
+
+[5] PRODUCTION RUN
+------------------------------------------------------------
+Initial state     : E = -24816.7324 eV, T = 907.8 K
+Step      | t (ps) | T (K) | E_pot/atom (eV) | P (GPa) | V/atom (Ang^3) | Fmax (eV/Ang)
+---------------------------------------------------------------------------------------
+600/6000  | 0.600  | 893.0 | -114.89381      | +0.023  | 20.8316        | 4.53         
+1200/6000 | 1.200  | 929.2 | -114.89393      | +0.014  | 20.8323        | 3.27         
+1800/6000 | 1.800  | 876.1 | -114.88973      | -0.105  | 20.8368        | 4.14         
+2400/6000 | 2.400  | 893.3 | -114.89026      | -0.000  | 20.8358        | 3.93         
+3000/6000 | 3.000  | 900.7 | -114.89350      | -0.096  | 20.8390        | 3.65         
+3600/6000 | 3.600  | 845.0 | -114.88386      | -0.045  | 20.8373        | 4.27         
+4200/6000 | 4.200  | 957.1 | -114.90044      | -0.006  | 20.8330        | 3.89         
+4800/6000 | 4.800  | 931.1 | -114.89642      | +0.088  | 20.8261        | 3.63         
+5400/6000 | 5.400  | 897.0 | -114.89181      | +0.130  | 20.8205        | 3.71         
+6000/6000 | 6.000  | 899.3 | -114.89154      | +0.011  | 20.8208        | 4.87         
+Final state       : E = -24816.5723 eV, T = 899.3 K
+[OK] Collected 600 frame(s) (stride 10).
+Speed             : 138.9 ms/step = 643 us/atom/step on cuda (NVIDIA GeForce RTX 3060) -> 0.622 ns/day at 1 fs (833 s for the production run)
+
+[6] THERMODYNAMICS (production averages)
+------------------------------------------------------------
+Samples           : 600 frames over 6.000 ps; +/- = standard error from 5 block averages
+Quantity            | Mean                     | Std (fluct.) | Range                   
+----------------------------------------------------------------------------------------
+Temperature (K)     | 900.01 +/- 0.38          | 38.28        | 793.2 .. 1026.4         
+E_pot (eV/atom)     | -114.892276 +/- 0.000053 | 4.992 meV    | -114.90786 .. -114.87785
+E_kin (eV/atom)     | 0.116336 +/- 0.000050    | 4.948 meV    | 0.10253 .. 0.13267      
+E_tot (eV/atom)     | -114.775940 +/- 0.000016 | 0.804 meV    | -114.77838 .. -114.77374
+Pressure (GPa)      | -0.003 +/- 0.006         | 0.090        | -0.24 .. 0.33           
+Volume (Ang^3/atom) | 20.8319 +/- 0.0028       | 0.0060       | 20.8197 .. 20.8438      
+Density (g/cm^3)    | 2.2387 +/- 0.0003        | 0.0006       | 2.2374 .. 2.2400        
+Temperature       : mean = 900.0 K, std = 38.3 K (target 900.0 K)
+Cell volume       : mean = 4499.681 Ang^3, std = 1.295 Ang^3 (+1.256 % vs the input cell)
+Lattice (mean)    : a 16.5092 +/- 0.0007, b 16.5092 +/- 0.0007, c 16.5092 +/- 0.0007 Ang
+                    alpha 90.000, beta 90.000, gamma 90.000 deg; vs input a +0.417 %, b +0.417 %, c +0.417 %
+
+[7] ENSEMBLE CHECKS
+------------------------------------------------------------
+Thermostat        : <T> 900.01 K vs target 900 K (+0.01 K, block SE 0.38 K)
+T fluctuation     : 38.28 K vs canonical T sqrt(2/N_dof) = 50.12 K (ratio 0.76; Berendsen does not sample canonical fluctuations, so this is no check here)
+Barostat          : <P> -0.003 GPa vs target 0 GPa (-0.003, block SE 0.006 GPa)
+Stationarity      : Temperature last third - first third = -0.1012 K (combined SE 1.7621)
+Stationarity      : E_pot last third - first third = +0.0672 meV/atom (combined SE 0.2397)
+Stationarity      : Volume last third - first third = -0.0073 Ang^3/atom (combined SE 0.0026)
+
+[8] STRUCTURE ALONG THE RUN & MODEL DOMAIN
+------------------------------------------------------------
+Shortest distance : min 2.0584 Ang at t = 2.280 ps, mean 2.1431 Ang (start 2.3730)
+g(r)              : first peak 2.350 Ang (g = 4.97), first minimum 2.990 Ang, coordination 4.00 (100 frames, r <= 8.00 Ang)
+MSD all           : 0.0982 Ang^2 at lag 3.000 ps, D = -1.278e-08 cm^2/s (fit over the second half of the lags)
+Displacement      : RMS about the mean positions 0.2247 Ang; start->end RMS 0.3351, max 0.7076 Ang
+Lindemann ratio   : 0.096 (RMS about the mean / nearest-neighbour distance 2.350 Ang) -- solid-like: atoms vibrate about fixed sites
+                    (in a solid the MSD levels off at the vibrational amplitude: the D above is a fit to that plateau, not diffusion)
+(structure analysis: 6.2 s)
+
+Model domain along the run (model card's trained range):
+Quantity                | Trained                | This run               | Status                                        
+--------------------------------------------------------------------------------------------------------------------------
+volume per atom (Ang^3) | 18.722 .. 22.425       | 20.820 .. 20.844       | inside                                        
+shortest distance (Ang) | >= 1.852               | min 2.058              | inside                                        
+max force (eV/Ang)      | <= 14.70               | max 6.21               | inside                                        
+E_pot per atom (eV)     | -115.0069 .. -114.2504 | -114.9079 .. -114.8778 | inside                                        
+pressure (GPa)          | -5.81 .. 10.48         | mean -0.00             | inside                                        
+atoms per cell          | 8 .. 64                | 216                    | larger (fine: the model is local, r_max 6 Ang)
+
+[9] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Results           : <T> 900.0 K, <P> -0.003 GPa, <V> 20.8319 Ang^3/atom (+1.256 %), Lindemann 0.096
+Time              : 1133 s in total, 138.9 ms/step
+Trajectory        : traj.xsf (600 frame(s), xsf format)
+Final structure   : md_final.fdf
+Dashboard         : si216_md_dashboard.png
+Data              : si216_md_thermo.dat
+Data              : si216_md_rdf.dat
+Data              : si216_md_msd.dat
+Gnuplot           : si216_md.gplot  (gnuplot si216_md.gplot -> si216_md.pdf)
+Report            : stb_mlmd_report.txt
+Also available    : --show
+
+[10] WARNINGS
+------------------------------------------------------------
+None.
+Library messages  : 19 distinct informational message(s) from mace/torch/ase captured (model loading, dtype, deprecations) -- not part of the results.

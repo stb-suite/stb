@@ -1,0 +1,60 @@
+# 8 water molecules at 1 g/cm^3, Nose thermostat at 350 K, 0.5 fs steps: a small liquid-water AIMD
+SystemLabel      water
+SystemName       8-H2O-NVT
+NumberOfAtoms    24
+NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+LatticeConstant  6.21 Ang
+%block LatticeVectors
+ 1.0 0.0 0.0
+ 0.0 1.0 0.0
+ 0.0 0.0 1.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+    1.52122    1.47212    1.62691  1
+    0.58391    1.24720    1.53218  2
+    1.54418    2.06211    2.39470  2
+    1.52325    1.55028    4.61989  1
+    2.42178    1.28617    4.37290  2
+    0.97564    0.79797    4.35105  2
+    1.56733    4.87284    1.64222  1
+    1.31956    4.29284    0.90715  2
+    1.83683    4.26091    2.34296  2
+    1.40604    4.70453    4.47278  1
+    2.34804    4.50306    4.37204  2
+    1.25980    4.66884    5.42958  2
+    4.79172    1.60449    1.49196  1
+    4.56936    0.75558    1.90187  2
+    4.85202    2.21711    2.23974  2
+    4.49879    1.60386    4.56664  1
+    5.16385    0.89979    4.57618  2
+    5.02096    2.41957    4.57571  2
+    4.51059    4.56520    1.62107  1
+    4.44705    4.50441    2.58564  2
+    5.34713    5.02947    1.47015  2
+    4.69832    4.49034    4.63166  1
+    4.37099    5.34603    4.94593  2
+    5.59233    4.43193    4.99972  2
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+Mesh.Cutoff         150 Ry
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-4
+
+MD.TypeOfRun        Nose
+MD.InitialTimeStep  1
+MD.FinalTimeStep    300
+MD.LengthTimeStep   0.5 fs
+MD.InitialTemperature  350 K
+MD.TargetTemperature   350 K
+MD.NoseMass         10 Ry*fs**2
+WriteCoorStep       true          # the geometry of every step in the log: checks which step each .ANI frame is
+WriteMDXmol         true          # <label>.ANI: the trajectory stb-ani2traj converts
+WriteMDHistory      true          # <label>.MDE: T, E_KS, E_tot, V, P per step (and <label>.MD)

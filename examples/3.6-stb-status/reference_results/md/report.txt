@@ -1,0 +1,88 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project/md
+
+[1] RUN
+------------------------------------------------------------
+Folder            : project/md
+SystemLabel       : si
+Input .fdf        : project/md/calc.fdf
+Log               : project/md/calc.out (SIESTA 5.4.2)
+State             : FINISHED
+Processes         : 4 MPI
+Started           : 30-OCT-2026  20:43:10
+Ended             : 30-OCT-2026  20:43:44
+Wall time         : 34.4 s (CLOCK)
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 8 (Si8)
+Cell (last)       : a = 5.4760, b = 5.4760, c = 5.4760 Ang, V = 164.2065 Ang^3
+Electrons         : 32
+Spin              : none
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+k-points          : 4
+Mesh cutoff       : 150 Ry required, 212.4 Ry used
+
+[3] PROGRESS
+------------------------------------------------------------
+Run type          : MD (Verlet MD run)
+MD steps          : 20 of 20
+Temperature       : 600.0 -> 44.8 K (mean 313.5 K, .MDE)
+E_tot             : -918.5661 -> -918.5653 eV (+0.100 meV/atom)
+step | SCF its | E_KS (eV) | max F (eV/Ang) | P (kBar) | net F 
+---------------------------------------------------------------
+1    | 4       | -919.1090 | 0.0000         | -5.76    | 0.0000
+2    | 5       | -919.1056 | 0.1723         | -5.70    | 0.0003
+3    | 5       | -919.0953 | 0.3488         | -5.57    | 0.0008
+...  |         |           |                |          |       
+17   | 4       | -918.6229 | 2.2651         | 2.16     | 0.0016
+18   | 4       | -918.6099 | 2.2925         | 2.33     | 0.0017
+19   | 4       | -918.6042 | 2.3004         | 2.36     | 0.0015
+20   | 4       | -918.6058 | 2.2891         | 2.27     | 0.0014
+
+[4] SCF
+------------------------------------------------------------
+Iterations        : 86 in 20 step(s); per step min 4, mean 4.3, max 5
+Converged steps   : 20 of 20
+Tolerance         : dDmax < 0.0001, at most 1000 iterations (failure aborts the run)
+
+[5] RESULTS
+------------------------------------------------------------
+Total energy      : -918.565342 eV
+Band structure    : -280.378750 eV
+Fermi level       : -3.188969 eV
+Energy per atom   : -114.820668 eV
+Band gap (.EIG)   : 1.8004 eV (indirect; VBM -4.3197, CBM -2.5194 eV; 4 k-points)
+Max force         : 2.289059 eV/Ang (net 0.001395)
+Pressure          : 2.2683 kBar (0.2268 GPa)
+Log warnings      : 4 line(s), 4 distinct -- e.g. # WARNING: This information might be incomplete!
+
+[6] FILES & NEXT STEPS
+------------------------------------------------------------
+Folder size       : 108.6 KB in 11 files
+output                   | files                | read by                                    
+---------------------------------------------------------------------------------------------
+eigenvalues              | si.EIG               | band gap here; stb-dos (3.2)               
+MD/relaxation trajectory | si.ANI               | stb-ani2traj (6.5), stb-aimdAnalysis (3.18)
+final geometry           | si.STRUCT_OUT, si.XV | stb-translate (6.1)                        
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Verdict           : FINISHED -- result usable
+Folders inspected : 1
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Status check complete.
+

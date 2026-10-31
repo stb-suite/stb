@@ -1,0 +1,68 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project/scf_fail
+
+[1] RUN
+------------------------------------------------------------
+Folder            : project/scf_fail
+SystemLabel       : si
+Input .fdf        : project/scf_fail/calc.fdf
+Log               : project/scf_fail/calc.out (SIESTA 5.4.2)
+State             : FAILED
+                    SCF_NOT_CONV: SCF did not converge in maximum number of steps (required).
+Processes         : 4 MPI
+Started           : 30-OCT-2026  20:42:24
+Ended             : -
+Wall time         : -
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 2 (Si2)
+Cell (last)       : a = 3.8721, b = 3.8721, c = 3.8721 Ang, V = 41.0516 Ang^3
+Electrons         : 8
+Spin              : none
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+k-points          : 108
+Mesh cutoff       : 200 Ry required, 248.9 Ry used
+
+[3] PROGRESS
+------------------------------------------------------------
+Run type          : single point (Single-point calculation)
+
+[4] SCF
+------------------------------------------------------------
+Iterations        : 3 in 1 step(s); per step min 3, mean 3.0, max 3
+Converged steps   : 0 of 1
+Tolerance         : dDmax < 1e-05, at most 3 iterations (failure aborts the run)
+
+[5] RESULTS
+------------------------------------------------------------
+Log warnings      : 3 line(s), 3 distinct -- e.g. # WARNING: This information might be incomplete!
+
+[6] FILES & NEXT STEPS
+------------------------------------------------------------
+Folder size       : 25.9 KB in 7 files
+output         | files                | read by            
+-----------------------------------------------------------
+final geometry | si.STRUCT_OUT, si.XV | stb-translate (6.1)
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Verdict           : FAILED
+Folders inspected : 1
+
+[8] WARNINGS
+------------------------------------------------------------
+  1. SIESTA stopped with an error: SCF_NOT_CONV: SCF did not converge in maximum number of steps (required).
+  2. SCF not converged in 1 step(s) (step 1).
+
+------------------------------------------------------------
+Status check complete.
+

@@ -1,0 +1,8 @@
+/* The --help text on the command pages. Many tools print a whole paragraph as one
+   very long line, which would otherwise need scrolling sideways; wrap it instead.
+   Only these pages load this file (template: reference.html), so the report
+   output shown in the guides keeps its alignment. */
+.md-typeset pre > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

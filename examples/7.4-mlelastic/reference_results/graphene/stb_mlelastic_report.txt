@@ -1,0 +1,115 @@
+===== STB-MLELASTIC REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 18:02:31
+Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/graphene.fdf
+Mode              : single fit
+Strains           : 7 points in +-0.5 % per direction (-0.5, -0.333, -0.167, +0, +0.167, +0.333, +0.5 %)
+Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200
+Model             : MACE-MP-0 (medium)
+Report file       : ./stb_mlelastic_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 2 atom(s), dimensionality: 2D (e.g., a slab or surface)
+Formula           : C2
+Cell              : a 2.46000, b 2.46000, c 20.00000 Ang; alpha 90.00, beta 90.00, gamma 120.00 deg
+Volume            : 104.817 Ang^3 (52.4084 Ang^3/atom) (includes vacuum)
+Shortest distance : 1.4203 Ang
+Symmetry          : P6/mmm (191), point group 6/mmm (hexagonal)
+Constants         : 2D, in N/m (stress x cell height: per-area stiffness)
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 medium (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Loaded in         : 0.2 s; float64 (stresses are compared at the 0.01 GPa level)
+
+[3] REFERENCE STATE
+------------------------------------------------------------
+Each model's cell is relaxed (cell + atoms) to its own stress-free minimum before straining.
+--- MACE-MP-0 medium
+Pre-relax         : cell + atoms, max |F| 0.0000 -> 0.0000 eV/Ang in 17 step(s) (converged, --fmax)
+Lattice a, b, c   : 2.46000 2.46000 20.00000 -> 2.47072 2.47072 20.00000 Ang (volume +0.873 %)
+Stress            : pressure +0.600 -> +0.001 GPa; largest component after 0.002 GPa
+Normalization     : cell height Lz = 20.0000 Ang (stress x Lz: per-area stiffness)
+
+[4] STRESS-STRAIN FITS
+------------------------------------------------------------
+Per direction: the fitted diagonal constant, R^2 and intercept (stress at zero strain, which should be ~0) of the linear fit, the largest stress reached, and how far the atoms relaxed inside the cell (largest shift from the homogeneous strain; ~0 for atoms at inversion centres).
+--- MACE-MP-0 medium: 3 directions x 7 strains, 42 relaxed cells, 6.4 s
+dir. | column | diagonal (N/m) | R^2      | intercept | max|σ| GPa | max shift Ang | Ang per % | relax steps | fit
+------------------------------------------------------------------------------------------------------------------
+xx   | C11    | 303.42         | 0.999983 | -0.009    | 0.77       | 0.0004        | 0.0009    | 60          | ok 
+yy   | C22    | 303.49         | 0.999980 | -0.009    | 0.77       | 0.0005        | 0.0009    | 59          | ok 
+xy   | C66    | 99.13          | 1.000000 | -0.000    | 0.50       | 0.0008        | 0.0017    | 76          | ok 
+Skipped           : zz, yz, xz -- touch a vacuum axis (no physical deformation)
+
+[5] TRAINED RANGE
+------------------------------------------------------------
+Strained cells (all directions, relaxed atoms):
+model            | V/atom min | V/atom max | pressure min GPa | pressure max GPa | shortest dist. Ang
+-----------------------------------------------------------------------------------------------------
+MACE-MP-0 medium | 52.6017    | 53.1303    | -0.336           | +0.345           | 1.4203            
+No model card (foundation model): no trained range to compare with.
+
+[6] STIFFNESS TENSOR & CRYSTAL SYMMETRY
+------------------------------------------------------------
+Stiffness C, MACE-MP-0 medium (N/m), Voigt order 1=xx 2=yy 3=zz 4=yz 5=xz 6=xy:
+               j=1       j=2       j=3       j=4       j=5       j=6
+  i=1 |    303.42    105.15      0.00     -0.00      0.00      0.00
+  i=2 |    105.15    303.49      0.00      0.00      0.00     -0.00
+  i=3 |      0.00      0.00      0.00      0.00      0.00      0.00
+  i=4 |     -0.00      0.00      0.00      0.00      0.00      0.00
+  i=5 |      0.00      0.00      0.00      0.00      0.00     -0.00
+  i=6 |      0.00     -0.00      0.00      0.00     -0.00     99.13
+
+C vs C^T          : max |C_ij - C_ji| = 0.047 N/m (C12) [OK] -- reported C is (C + C^T)/2
+Crystal symmetry  : P6/mmm (191), point group 6/mmm (hexagonal, 24 rotations, spglib on the pre-relaxed cell)
+Projection        : C averaged over the point group; max |C - C_sym| = 0.044 N/m (0.01 % of the largest constant)
+Independent       : 2 non-zero independent constant(s) under 6/mmm:
+  C11 = C22                               303.44 N/m
+  C12                                     105.16 N/m
+  C66                                      99.14 N/m  = (C11 - C12)/2, not independent
+
+No data for       : zz, yz, xz (vacuum axes) -- those columns are zero
+
+[7] MECHANICAL STABILITY
+------------------------------------------------------------
+--- MACE-MP-0 medium (Born criteria; Mouhat & Coudert 2014)
+criterion           | value (N/m) | verdict
+-------------------------------------------
+C11 > 0             | 303.42      | PASS   
+C66 > 0             | 99.13       | PASS   
+C11 C22 - C12^2 > 0 | 81029.29    | PASS   
+VERDICT           : STABLE
+
+[8] IN-PLANE MODULI
+------------------------------------------------------------
+quantity                                    | value     
+--------------------------------------------------------
+Young's modulus E_x = (C11 C22 - C12^2)/C22 | 266.99 N/m
+Young's modulus E_y = (C11 C22 - C12^2)/C11 | 267.05 N/m
+Poisson ratio ν_xy = C12/C22                | 0.346     
+Poisson ratio ν_yx = C12/C11                | 0.347     
+shear modulus G_xy = C66                    | 99.13 N/m 
+layer modulus γ = (C11 + C22 + 2 C12)/4     | 204.30 N/m
+In-plane E(θ)     : 266.97 .. 267.05 N/m (ratio 1.000; 1 = in-plane isotropic, as for a hexagonal sheet)
+
+[9] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Stress-strain plot: ./stress_strain.png
+In-plane E(θ) plot: ./inplane_youngs.png
+Data              : ./stress_strain.dat
+Data              : ./elastic_tensor.dat
+Report            : ./stb_mlelastic_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 10.5 s
+
+[10] WARNINGS
+------------------------------------------------------------
+  none
+Library messages  : 49 distinct message(s) from mace/torch/ase captured, not shown

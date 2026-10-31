@@ -1,0 +1,108 @@
+
+GRID CONVERTER:
+------------------------------------------------------------
+===== STB-CUBE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : o2.RHO
+Grid type         : RHO -- valence electron density
+Spin channel      : up (requested)
+Output            : o2_RHO_up.cube
+
+[1] INPUT GRID
+------------------------------------------------------------
+File              : o2.RHO (1.2 MB, written <date>)
+Quantity          : valence electron density
+Written by        : SaveRho in the .fdf
+Stored as         : e/Bohr^3 on a Bohr cell, single precision, 2 component(s)
+Mesh              : 54 x 54 x 54 = 157464 points
+Plane spacing     : 0.1481 / 0.1481 / 0.1481 Ang along a / b / c
+Voxel volume      : 0.00325 Ang^3 (0.02194 Bohr^3)
+Effective cutoff  : 125.924 Ry (min over a/b/c of 125.9 / 125.9 / 125.9 Ry)
+Cell lengths      : a = 8.0000, b = 8.0000, c = 8.0000 Ang
+Cell angles       : alpha = 90.00, beta = 90.00, gamma = 90.00 deg
+Cell volume       : 512.0000 Ang^3
+Cell vectors (Ang):
+   a      8.00000     0.00000     0.00000
+   b      0.00000     8.00000     0.00000
+   c      0.00000     0.00000     8.00000
+
+[2] SIESTA RUN
+------------------------------------------------------------
+Log               : ./calc.out (SIESTA 5.4.2)
+Finished          : yes
+Electrons         : 12.000000 (valence)
+Spin (log)        : collinear
+Mesh (log)        : 54 x 54 x 54 -- same as the grid
+Mesh cutoff (log) : required 120.000 Ry, used 125.924 Ry -- from the grid 125.924 Ry (agrees)
+
+[3] SPIN
+------------------------------------------------------------
+Spin configuration (from calc.out): polarized
+Components        : 2
+channel           | integral (e) | SIESTA  |           
+-------------------------------------------------------
+total (up + down) | 12.0000      | 12.0000 |           
+up                | 7.0000       | 7.0000  | <- written
+down              | 5.0000       | 5.0000  |           
+up - down         | 2.0000       | 2.0000  |           
+Absolute moment   : 2.0328 e (integral of |up - down|; above the net moment where some region is polarized the other way)
+Spin moment (log) : 2.00000 -- grid 2.00000 (agrees)
+Converting        : the 'up' channel
+
+[4] GEOMETRY
+------------------------------------------------------------
+Source            : o2.XV (2 atoms, O2)
+Cell vs grid      : identical (largest difference 3.3e-12 Ang)
+Dimensionality    : 0D (e.g., a molecule) -- vacuum along a, b, c (gap >= 4 Ang)
+# | el | Z | Z_val | x (Ang) | y (Ang) | z (Ang) | fractional          
+-----------------------------------------------------------------------
+1 | O  | 8 | 6     | 4.0000  | 4.0000  | 3.3950  | 0.5000 0.5000 0.4244
+2 | O  | 8 | 6     | 4.0000  | 4.0000  | 4.6050  | 0.5000 0.5000 0.5756
+
+[5] VALUES
+------------------------------------------------------------
+               | value (e/Bohr^3) | where                                       
+--------------------------------------------------------------------------------
+minimum        | 0.00000          | (0.000, 0.000, 0.000) Ang, 6.597 Ang from O1
+maximum        | 0.62495          | (3.704, 4.000, 3.407) Ang, 0.297 Ang from O1
+mean           | 0.0020260        | over the cell                               
+std. deviation | 0.022424         |                                             
+In e/Ang^3        : min 0.00000, max 4.2174, mean 0.013672
+Integral          : 6.999992 e  (positive part 7.0000, negative part 0.0000)
+Negative values   : none
+Isosurface levels : 0.214 (50 %), 0.0208 (90 %), 0.00141 (99 %) e/Bohr^3
+                    each level encloses that fraction of the integral -- a starting point in VESTA/VMD
+Vacuum planes (the plane farthest from the atoms along each vacuum axis):
+axis | frac  | gap (Ang) | plane mean (e/Bohr^3) | variation +-1 Ang | max |value| in plane
+-------------------------------------------------------------------------------------------
+a    | 0.000 | 8.00      | 0.00000               | 0.000             | 0.000               
+b    | 0.000 | 8.00      | 0.00000               | 0.000             | 0.000               
+c    | 0.000 | 6.79      | 0.00000               | 0.000             | 0.000               
+
+[6] OUTPUT
+------------------------------------------------------------
+File              : o2_RHO_up.cube (2.1 MB)
+Units             : lengths Bohr, values e/Bohr^3 -- the integral over the cube's own voxels gives electrons
+Header            : 2 comment lines, origin (0, 0, 0), 54 x 54 x 54 voxels, 2 atoms
+Values            : 157464 numbers, 6 significant digits (%13.5e), x slowest, z fastest
+Read-back check   : read again with ASE's cube reader -- ok
+                    values agree to 7.7e-07 of the largest; cell, 2 atoms and atomic numbers as written
+Integral (cube)   : 6.999993 e  (values x voxel volume in Bohr^3)
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Converted         : o2.RHO [RHO, up] -> o2_RHO_up.cube
+Integral          : 7.0000 e
+Open with         : VESTA o2_RHO_up.cube  |  vmd o2_RHO_up.cube  |  xcrysden --cube o2_RHO_up.cube
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Conversion complete. It's hip to be square (cube).
+

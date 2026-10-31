@@ -1,0 +1,7 @@
+# isolated Si atom, 4.17 level of theory, Gamma only, single point (orthorhombic box: no spurious degeneracy from a cubic box)
+Spin polarized
+kgrid.MonkhorstPack [1 1 1]
+MD.TypeOfRun CG
+MD.NumCGsteps 0
+MaxSCFIterations 500
+SCF.Mixer.Weight 0.05

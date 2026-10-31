@@ -1,0 +1,62 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:46
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../si_noisy_0.02.fdf -- fdf (auto, from the name 'si_noisy_0.02.fdf')
+Output            : none (--dry-run)
+  ... reading ../../si_noisy_0.02.fdf
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../si_noisy_0.02.fdf (761 bytes, 23 lines)
+Format            : fdf (auto, from the name 'si_noisy_0.02.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0001 .. 1.0000 (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3468         | Si4 - Si5 | 1.06       |      
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P1          | 1      | 1         
+0.01          | P1          | 1      | 1         
+0.1           | Fd-3m       | 227    | 192       
+Tolerance         : the space group depends on the tolerance -- the structure is close to a higher symmetry (or slightly distorted from it)
+Crystal system    : triclinic; point group 1
+Primitive cell    : 8 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Structure         : Si8, 8 atoms, P1
+
+[5] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

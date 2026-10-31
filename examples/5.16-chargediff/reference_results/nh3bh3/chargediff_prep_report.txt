@@ -1,0 +1,85 @@
+===== CHARGE DENSITY DIFFERENCE -- STAGE 1: PREP =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+  Tool            : stb-chargediffPrep 1.9.289
+  Date            : 2026-10-23 12:39
+  Structure file  : /home/carlos/run/cdd_ref/relax/nh3bh3/relaxed.fdf
+  Calc template   : calc.fdf
+  Output dir      : /home/carlos/run/cdd_ref/nh3bh3
+  View fragments  : no
+  Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
+
+[1] COMBINED STRUCTURE
+------------------------------------------------------------
+  Formula         : BH6N
+  Total atoms     : 8   Species: N, B, H
+  Lattice (Ang)   : a=12.0000  b=12.0000  c=12.0000
+  Angles (deg)    : alpha=90.00  beta=90.00  gamma=90.00
+  Cell volume     : 1728.0000 Ang^3
+  Detected        : 3D (bulk material)
+
+[2] FRAGMENT DEFINITION
+------------------------------------------------------------
+  Split by        : atom counts 4,4 (in file order)
+  Fragments       : 2
+Folder     | Formula | Atoms | Atom indices | Species labels (real) | Valence e-
+--------------------------------------------------------------------------------
+fragment1/ | H3N     | 4     | 1-4          | H_frag1, N_frag1      | 8         
+fragment2/ | BH3     | 4     | 5-8          | B_frag2, H_frag2      | 6         
+  Valence electrons: 14 in total (the combined system's SCF must find this number; each fragment folder finds only its own, ghost atoms carry no electrons).
+  Closest contact between fragments: 1.642 Ang (N1 - B5)
+
+[3] LEVEL OF THEORY AND FORCED SETTINGS
+------------------------------------------------------------
+  Read from the template (identical in every folder):
+Setting                | Value in calc.fdf
+------------------------------------------
+XC functional          | GGA              
+XC authors             | PBE              
+Basis type             | split            
+Basis size             | DZP              
+PAO energy shift       | 0.01 Ry          
+Electronic temperature | 300 K            
+DM tolerance           | 1.0e-6           
+Max SCF iterations     | 300              
+SCF k-grid             | 1x1x1            
+  Every folder's config_extra.fdf (%include'd on top of calc.fdf, which is the template untouched):
+Directive               | Forced value | Template had        | Why                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+MD.VariableCell         | false        | (absent)            | the cell is shared by all folders                                              
+MD.TypeOfRun / MD.Steps | CG / 0       | (absent) / (absent) | single point: the geometry is the one you gave                                 
+MeshCutoff              | 320 Ry       | 320 Ry              | the SAME real-space grid in every folder, or the densities cannot be subtracted
+SaveRho                 | true         | (absent)            | SIESTA must write the .RHO that Stage 2 reads                                  
+Spin polarized          | no           | non-polarized       | inherited from the combined folder's config_extra.fdf                          
+Dipole correction       | no           | -                   | inherited                                                                      
+DFT-D3                  | no           | (absent)            | inherited                                                                      
+[NOTE] Every fragment keeps ALL the atoms as basis functions (the others as ghosts), so every calculation has the same basis: the difference then isolates the electronic reorganization from the basis-set superposition artefact.
+
+[4] FOLDERS WRITTEN
+------------------------------------------------------------
+Folder     | Real atoms | Ghost atoms | Species labels (SystemLabel entries)           | Files
+----------------------------------------------------------------------------------------------
+combined/  | all 8 real | none        | N, B, H                                        | 6    
+fragment1/ | 4 real     | 4 ghost     | N_frag1, H_frag1, B_frag2_ghost, H_frag2_ghost | 7    
+fragment2/ | 4 real     | 4 ghost     | N_frag1_ghost, H_frag1_ghost, B_frag2, H_frag2 | 7    
+  Each folder holds: structure.fdf, calc.fdf, config_extra.fdf and one pseudopotential per species label (a ghost label reuses its element's pseudopotential, with the electrons switched off).
+  Fragment manifest: /home/carlos/run/cdd_ref/nh3bh3/chargediff_manifest.json (read by stb-chargediffAnalysis)
+
+[6] REFERENCES
+------------------------------------------------------------
+[OK] Citations written to '/home/carlos/run/cdd_ref/nh3bh3/references.bib'.
+
+[7] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/home/carlos/run/cdd_ref/nh3bh3'
+  Cost             : 3 independent single-point SCF runs; the combined one is the slowest (the fragments have the same basis, so about the same cost).
+  Settings         : identical cell, MeshCutoff (320 Ry) and level of theory in all of them.
+  Report           : /home/carlos/run/cdd_ref/nh3bh3/chargediff_prep_report.txt
+
+  Next steps:
+    1. Run SIESTA in every folder, e.g.:
+         for d in /home/carlos/run/cdd_ref/nh3bh3/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+    2. Check that each run converged, then:
+         stb-chargediffAnalysis --dir /home/carlos/run/cdd_ref/nh3bh3 --png --save-data
+       (add --profile --axis N for a planar average, --3d --iso-min X for a point cloud, --show to open the dashboard; the report also gives the counterpoise interaction energy.)

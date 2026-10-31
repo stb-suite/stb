@@ -1,0 +1,110 @@
+===== STB-MLMD REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-24 14:38:31
+Software          : stb 1.9.294, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/run/stb/5.1/example_ref/si216.fdf
+Ensemble          : NVT
+Temperature       : 300.0 K
+Timestep / steps  : 1.0 fs / 10000 (+ 1000 equilibration)
+Model             : MACE-MP-0 (medium)
+Report file       : stb_mlmd_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 216 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si216 (Si 216)
+Cell              : a 16.4407, b 16.4407, c 16.4407 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 4443.877 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3730 Ang (median nearest neighbour 2.3730 Ang)
+Degrees of freedom: 645 (3N - 3: net momentum removed)
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 foundation model, size medium (trained on the Materials Project's PBE/PBE+U relaxations)
+Energy scale      : MACE-MP-0's own (fitted to Materials Project energies) -- not SIESTA's; use energy differences only
+Model card        : none (a foundation model; a fine-tuned model always comes with one)
+Loaded            : in 0.3 s, float32
+
+[3] MD SETUP
+------------------------------------------------------------
+Integrator        : Langevin, friction 0.01 fs^-1 (~ 100 fs relaxation), canonical
+Initial velocities: Maxwell-Boltzmann at 300 K, net momentum removed, seed 1
+Length            : 1000 + 10000 steps x 1.0 fs = 1.000 + 10.000 ps (11.000 ps in total)
+Sampling          : every 10 steps (10 fs) -> 1000 frames
+
+[4] EQUILIBRATION (discarded)
+------------------------------------------------------------
+Running 1000 step(s) before production starts -- a freshly Maxwell-Boltzmann-seeded structure needs to relax before its trajectory/statistics are representative (verified live: ~100-200 steps of E_pot relaxation from the initial condition in a 64-atom test case).
+[OK] Equilibration done. E = -1145.7244 eV, T = 290.4 K (148.1 s)
+
+[5] PRODUCTION RUN
+------------------------------------------------------------
+Initial state     : E = -1145.7244 eV, T = 290.4 K
+Step        | t (ps) | T (K) | E_pot/atom (eV) | P (GPa) | V/atom (Ang^3) | Fmax (eV/Ang)
+-----------------------------------------------------------------------------------------
+1000/10000  | 1.000  | 307.7 | -5.30251        | -0.532  | 20.5735        | 1.86         
+2000/10000  | 2.000  | 283.5 | -5.29931        | -0.413  | 20.5735        | 1.89         
+3000/10000  | 3.000  | 285.3 | -5.30586        | -0.484  | 20.5735        | 2.05         
+4000/10000  | 4.000  | 285.6 | -5.30280        | -0.511  | 20.5735        | 1.62         
+5000/10000  | 5.000  | 300.0 | -5.30467        | -0.446  | 20.5735        | 2.70         
+6000/10000  | 6.000  | 302.0 | -5.30194        | -0.389  | 20.5735        | 2.16         
+7000/10000  | 7.000  | 300.8 | -5.30149        | -0.460  | 20.5735        | 1.61         
+8000/10000  | 8.000  | 298.6 | -5.29960        | -0.478  | 20.5735        | 1.95         
+9000/10000  | 9.000  | 291.2 | -5.30243        | -0.501  | 20.5735        | 1.62         
+10000/10000 | 10.000 | 283.5 | -5.30522        | -0.485  | 20.5735        | 1.68         
+Final state       : E = -1145.9274 eV, T = 283.5 K
+[OK] Collected 1000 frame(s) (stride 10).
+Speed             : 149.5 ms/step = 692 us/atom/step on cuda (NVIDIA GeForce RTX 3060) -> 0.578 ns/day at 1 fs (1495 s for the production run)
+
+[6] THERMODYNAMICS (production averages)
+------------------------------------------------------------
+Samples           : 1000 frames over 10.000 ps; +/- = standard error from 5 block averages
+Quantity        | Mean                   | Std (fluct.) | Range               
+------------------------------------------------------------------------------
+Temperature (K) | 298.40 +/- 1.68        | 15.93        | 247.1 .. 355.4      
+E_pot (eV/atom) | -5.302886 +/- 0.000256 | 2.151 meV    | -5.30836 .. -5.29633
+E_kin (eV/atom) | 0.038571 +/- 0.000218  | 2.060 meV    | 0.03193 .. 0.04594  
+E_tot (eV/atom) | -5.264315 +/- 0.000470 | 2.994 meV    | -5.27207 .. -5.25712
+Pressure (GPa)  | -0.462 +/- 0.004       | 0.045        | -0.59 .. -0.32      
+Temperature       : mean = 298.4 K, std = 15.9 K (target 300.0 K)
+Heat capacity     : 2.93 kB/atom from the total-energy fluctuations (classical harmonic solid: 3, Dulong-Petit; noisy unless the run is long)
+
+[7] ENSEMBLE CHECKS
+------------------------------------------------------------
+Thermostat        : <T> 298.40 K vs target 300 K (-1.60 K, block SE 1.68 K)
+T fluctuation     : 15.93 K vs canonical T sqrt(2/N_dof) = 16.71 K (ratio 0.95)
+Stationarity      : Temperature last third - first third = -2.0990 K (combined SE 2.7641)
+Stationarity      : E_pot last third - first third = -0.3583 meV/atom (combined SE 0.4023)
+
+[8] STRUCTURE ALONG THE RUN & MODEL DOMAIN
+------------------------------------------------------------
+Shortest distance : min 2.1177 Ang at t = 5.960 ps, mean 2.1969 Ang (start 2.3730)
+g(r)              : first peak 2.370 Ang (g = 6.78), first minimum 2.850 Ang, coordination 4.00 (100 frames, r <= 8.00 Ang)
+MSD all           : 0.0478 Ang^2 at lag 5.000 ps, D = -2.039e-09 cm^2/s (fit over the second half of the lags)
+Displacement      : RMS about the mean positions 0.1553 Ang; start->end RMS 0.2021, max 0.4331 Ang
+Lindemann ratio   : 0.066 (RMS about the mean / nearest-neighbour distance 2.370 Ang) -- solid-like: atoms vibrate about fixed sites
+                    (in a solid the MSD levels off at the vibrational amplitude: the D above is a fit to that plateau, not diffusion)
+(structure analysis: 7.9 s)
+
+[9] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Results           : <T> 298.4 K, <P> -0.462 GPa, Lindemann 0.066
+Time              : 1655 s in total, 149.5 ms/step
+Trajectory        : traj.xsf (1000 frame(s), xsf format)
+Final structure   : md_final.fdf
+Dashboard         : si216_md_dashboard.png
+Data              : si216_md_thermo.dat
+Data              : si216_md_rdf.dat
+Data              : si216_md_msd.dat
+Gnuplot           : si216_md.gplot  (gnuplot si216_md.gplot -> si216_md.pdf)
+Report            : stb_mlmd_report.txt
+Also available    : --show
+
+[10] WARNINGS
+------------------------------------------------------------
+None.
+Library messages  : 11 distinct informational message(s) from mace/torch/ase captured (model loading, dtype, deprecations) -- not part of the results.

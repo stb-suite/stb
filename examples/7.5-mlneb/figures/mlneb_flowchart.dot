@@ -1,0 +1,48 @@
+// Flowchart of stb-mlneb (7.5) and the loop it closes with SIESTA and the MLFF workflow (7.1). Render with:
+//   dot -Tpng -Gdpi=150 mlneb_flowchart.dot -o mlneb_flowchart.png
+digraph mlneb {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.36,
+           bgcolor="white", pad=0.3];
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10,
+           fillcolor="#eef3fb", color="#4a6fa5", penwidth=1.2, margin="0.15,0.07"];
+    edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.7];
+
+    ends    [label="Two endpoint structures (.fdf)\n--initial / --final: same atoms, same cell,\nsame atom order (or matched by --autosort-tol)",
+             fillcolor="#fff7e0", color="#b8860b"];
+    model   [label="Model\nMACE-MP-0 (--model)  or  fine-tuned model + card\n(--custom-model + --custom-model-card)",
+             fillcolor="#fff7e0", color="#b8860b"];
+    relax   [label="1. Relax the endpoints with the model\n(positions only, --fmax; --no-pre-relax-endpoints)"];
+    guess   [label="2. Starting band: --n-images images\nlinear interpolation + IDPP (--no-idpp)\n--freeze-substrate fixes atoms that do not move"];
+    neb     [label="3. NEB, two stages (FIRE, spring --k, improved tangent)\nshaping to max(2 fmax, 0.1) eV/Ang, then the\nclimbing image to --fmax  (--max-steps in total)"];
+    barrier [label="4. Barrier: force-consistent spline (ASE fit_images)\nforward, backward, reaction energy, saddle geometry\nband vs the card's trained range"];
+    found   [label="5. Same NEB with the foundation model\n(custom model only; --skip-foundation-comparison)"];
+    comm    [label="6. Committee on the band (custom model)\nforce spread per image, estimated error\n(card calibration), barrier of each member"];
+    report  [label="Report (sections, warnings last) + figure\nneb_path.xyz, --save-data/-gnuplot/-images/-report, --show",
+             fillcolor="#e6f4e6", color="#2e7d32"];
+    q       [label="Trust the barrier?", shape=diamond, style="filled", fillcolor="#f2f2f2", color="#666666"];
+    check1  [label="7a. --siesta-check (1st run)\nsingle-point folders siesta_check/image_NN/\n(ends + saddle, or all; workflow level of theory,\nk-grid scaled to keep k x a)"];
+    siesta  [label="SIESTA single points", shape=box3d, fillcolor="#fde8e8", color="#b22222"];
+    check2  [label="7b. --siesta-check (same command again)\nreads the finished folders whose geometry matches:\nmodel vs SIESTA on the same path"];
+    q2      [label="model - SIESTA?", shape=diamond, style="filled", fillcolor="#f2f2f2", color="#666666"];
+    use     [label="Use the barrier\n(or SIESTA's number on the path)", fillcolor="#e6f4e6", color="#2e7d32"];
+    tomlff  [label="8. --to-mlff (--to-mlff-rattle K)\nimages -> configs_round_NN+1/neb_<out>/\nchecked images copied with their SIESTA output"];
+    siesta2 [label="SIESTA on the new folders", shape=box3d, fillcolor="#fde8e8", color="#b22222"];
+    train   [label="7.1.2 stb-mlffAnalysis --init-from previous\n4.17.3 stb-mlffValidate (new best_model/)"];
+    dft     [label="The DFT barrier itself:\nstb-neb (5.9) from --save-images", fillcolor="#fff0e0", color="#d2691e"];
+    json    [label="mlff_workflow.json\n(--mlff-workflow)", shape=cylinder, fillcolor="#f3eefb", color="#6a4fa5"];
+
+    ends -> relax; model -> relax;
+    relax -> guess -> neb -> barrier -> found -> comm -> report;
+    report -> q;
+    q -> use    [label=" foundation model: no;\n fine-tuned, checked: yes"];
+    q -> check1 [label=" not checked yet"];
+    check1 -> siesta -> check2 -> q2;
+    q2 -> use    [label=" within ~20 %"];
+    q2 -> tomlff [label=" larger: the model\n extrapolates here"];
+    tomlff -> siesta2 -> train;
+    train -> model [label="  new model + card", constraint=false, style=dashed];
+    use -> dft [style=dotted, label=" a number to publish"];
+    json -> check1 [style=dotted, arrowhead=none, color="#6a4fa5"];
+    json -> tomlff [style=dotted, arrowhead=none, color="#6a4fa5"];
+    json -> train  [style=dotted, arrowhead=none, color="#6a4fa5"];
+}

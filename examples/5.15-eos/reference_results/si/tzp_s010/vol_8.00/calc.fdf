@@ -1,0 +1,26 @@
+%include config_extra.fdf
+
+# SIESTA input template for the 4.18 equation-of-state example (bulk Si, 2-atom primitive cell).
+# Physics only: stb-eosInputs adds everything the scan needs (fixed cell, single point) through
+# config_extra.fdf, and copies this file untouched into every volume folder.
+
+SystemName      Si2_eos
+SystemLabel     siesta
+
+# The structure (its LatticeVectors are what the scan rescales)
+%include structure.fdf
+
+# Level of theory
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           TZP
+PAO.EnergyShift         0.01 Ry
+Mesh.Cutoff             320 Ry
+ElectronicTemperature   300 K
+Spin                    non-polarized
+
+# SCF and k-sampling (the same in every volume)
+kgrid.MonkhorstPack     [10  10  10]
+DM.Tolerance            1.0e-5
+MaxSCFIterations        300

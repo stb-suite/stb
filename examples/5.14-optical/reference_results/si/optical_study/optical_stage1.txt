@@ -1,0 +1,122 @@
+===== OPTICAL STAGE 1 REPORT (DIRECTION FOLDERS) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Tool            : stb-optical 1.9.277
+Date            : 2026-10-16 10:29
+Structure       : relaxed.fdf
+Formula         : Si2  (2 atom(s), 1 species: Si)
+Cell volume     : 41.3921 Ang^3
+Calc template   : calc.fdf  (default)
+Directions      : xx yy zz xy xz yz
+Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+Output root     : optical_study
+
+[1] INPUT STRUCTURE
+------------------------------------------------------------
+Lattice (Ang)   : a=3.8828  b=3.8828  c=3.8828
+Angles (deg)    : alpha=60.00  beta=60.00  gamma=60.00
+Atoms per Ang^3 : 0.0483
+Species | Z  | Atoms | Valence e- | Total e- | Valence from
+-----------------------------------------------------------
+Si      | 14 | 2     | 4          | 8        | Si.psml     
+Valence electrons : 8  ->  4 occupied band(s) in a spin-unpolarized calculation
+Detected : 3D (bulk material)
+
+[2] GROUND STATE READ FROM YOUR calc.fdf (the optical response sits on top of it)
+------------------------------------------------------------
+Setting                | Value in the template
+----------------------------------------------
+XC functional          | GGA                  
+XC authors             | PBE                  
+Basis type             | split                
+Basis size             | TZP                  
+PAO energy shift       | 0.005 Ry             
+Mesh cutoff            | 300 Ry               
+Spin                   | non-polarized        
+Electronic temperature | 25 meV               
+DM tolerance           | 1.0e-6               
+SCF k-grid forced     : 11x11x11  (spacing 0.180 0.180 0.180 1/Ang) -- explicit --kgrid; written into config_extra.fdf
+
+[3] OPTICAL PARAMETERS (applied identically to every direction)
+------------------------------------------------------------
+Optical.Mesh | Divisions | Spacing (1/Ang) | Assessment
+-------------------------------------------------------
+axis a       | 32        | 0.0619          | fine      
+axis b       | 32        | 0.0619          | fine      
+axis c       | 32        | 0.0619          | fine      
+Optical k-points  : 32768 total (independent of the SCF k-grid; the optical integral is evaluated on this mesh)
+
+Parameter                | Value     | Meaning                                                                               
+-----------------------------------------------------------------------------------------------------------------------------
+Optical.Broaden          | 0.1 eV    | Gaussian width applied to every interband transition before summing into eps2(E)      
+Optical.NumberOfBands    | 16        | bands entering the transition sum; must include conduction bands                      
+Optical.PolarizationType | polarized | makes SIESTA honour Optical.Vector (the default would silently average all directions)
+Bands included    : 16 = 4 occupied + 12 unoccupied
+
+[4] DIRECTIVES FORCED THROUGH config_extra.fdf (your template is not edited)
+------------------------------------------------------------
+Every direction folder gets its own config_extra.fdf, and calc.fdf starts with '%include config_extra.fdf' followed by your template untouched. SIESTA's fdf reader is first-occurrence-wins for a duplicate label, so the forced values win over anything the template says.
+Directive                | Forced value           | Template had | Effect                                                
+-------------------------------------------------------------------------------------------------------------------------
+kgrid.MonkhorstPack      | 11x11x11               | (absent)     | explicit --kgrid                                      
+MD.TypeOfRun             | CG                     | (absent)     | single-point run                                      
+MD.Steps                 | 0                      | (absent)     | no relaxation step                                    
+MD.NumCGsteps            | 0                      | (absent)     | belt and braces: no CG step whatever the template says
+MD.VariableCell          | false                  | (absent)     | the input cell is evaluated as given                  
+OpticalCalculation       | T                      | (absent)     | switches the optical module on                        
+Optical.PolarizationType | polarized              | (absent)     | required for Optical.Vector to be used                
+Optical.Broaden          | 0.1 eV                 | (absent)     | from --optical-broaden                                
+Optical.Mesh             | 32 32 32               | (absent)     | from --optical-mesh                                   
+Optical.Vector           | per direction, see [5] | (absent)     | one polarization direction per folder                 
+Optical.NumberOfBands    | 16                     | (absent)     | from --optical-nbands                                 
+The rest of the ground-state SCF (structure, basis, mesh cutoff, ...) is whatever your template says: every folder repeats the same SCF and only the polarization differs.
+
+[5] DIRECTIONS & DIELECTRIC-TENSOR MAPPING
+------------------------------------------------------------
+Direction  Kind         Optical.Vector           Gives access to              Needs also  
+------------------------------------------------------------
+xx         diagonal     1.0000 0.0000 0.0000     eps_xx (direct)              --          
+yy         diagonal     0.0000 1.0000 0.0000     eps_yy (direct)              --          
+zz         diagonal     0.0000 0.0000 1.0000     eps_zz (direct)              --          
+xy         biaxial      0.7071 0.7071 0.0000     eps_xy (needs reconstruction) xx+yy
+xz         biaxial      0.7071 0.0000 0.7071     eps_xz (needs reconstruction) xx+zz
+yz         biaxial      0.0000 0.7071 0.7071     eps_yz (needs reconstruction) yy+zz
+
+Reconstruction formula for any biaxial direction above: eps_ij = eps_(bisector ij) - (eps_ii + eps_jj) / 2 -- stb-opticalAnalysis applies this automatically once all 3 folders involved (ii, jj, ij) are present and done; no extra flag needed.
+
+What crystal symmetry says about the tensor (in the Cartesian frame of your cell):
+  Space group           : Fd-3m (No. 227), cubic -- 48 operations at symprec 0.01 Ang
+  Independent components: 1 of 6
+  Non-zero components   : eps_xx=eps_yy=eps_zz
+  Zero by symmetry      : eps_xy, eps_xz, eps_yz
+  Minimal direction set : xx
+[NOTE] yy zz xy xz yz follow from symmetry, so they are redundant; computing them is a consistency check (identical results expected), not new information. --directions xx would save 5 of 6 runs.
+
+[6] FOLDERS WRITTEN
+------------------------------------------------------------
+Under optical_study/:
+Folder  | Dir | Kind     | Optical.Vector       | Files                                             
+----------------------------------------------------------------------------------------------------
+dir_xx/ | xx  | diagonal | 1.0000 0.0000 0.0000 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+dir_yy/ | yy  | diagonal | 0.0000 1.0000 0.0000 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+dir_zz/ | zz  | diagonal | 0.0000 0.0000 1.0000 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+dir_xy/ | xy  | biaxial  | 0.7071 0.7071 0.0000 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+dir_xz/ | xz  | biaxial  | 0.7071 0.0000 0.7071 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+dir_yz/ | yz  | biaxial  | 0.0000 0.7071 0.7071 | structure.fdf, calc.fdf, config_extra.fdf, Si.psml
+
+[7] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+6 direction folder(s) written under 'optical_study' (3 diagonal, 3 biaxial).
+Cost                 : 6 independent SCF + optical runs (optical mesh 32768 k-points each).
+Report               : optical_study/optical_stage1.txt
+
+Next steps:
+  1. Run SIESTA in every folder, e.g.:
+       for d in optical_study/dir_*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+  2. Check that each folder finished and wrote <SystemLabel>.EPSIMG, then run:
+       stb-opticalAnalysis --directory optical_study --energy-max 20
+     (--plot-quantity all writes eps, n/k, alpha, R, loss and sigma plots; --energy-max trims the energy range of the reports and plots)
+  3. stb-opticalAnalysis reconstructs eps_ij(E) automatically for any biaxial direction whose matching diagonal pair is also present -- see Section [5] above.
+
+Convergence checklist (what changes the spectrum): Optical.Mesh (peak positions/heights), PAO.EnergyShift and basis size (conduction bands), SCF k-grid, Optical.NumberOfBands (energy range). Re-run Stage 1 with a different value and compare the Stage 2 results.

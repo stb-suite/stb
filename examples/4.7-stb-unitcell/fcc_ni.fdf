@@ -1,0 +1,29 @@
+# Example fixture: FCC nickel, conventional cubic cell (4-atom basis, a =
+# 3.52 Ang, space group Fm-3m No. 225). The classic textbook case: a single
+# -species metal whose literal conventional cell has 4 atoms, but whose true
+# primitive (smallest repeating) cell has only 1 -- the FCC primitive cell,
+# a rhombohedral 60-degree cell despite the crystal still being cubic.
+
+NumberOfSpecies    1
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   28   Ni
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.5200000000   0.0000000000   0.0000000000
+ 0.0000000000   3.5200000000   0.0000000000
+ 0.0000000000   0.0000000000   3.5200000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.500000000   0.500000000   0.000000000   1
+ 0.500000000   0.000000000   0.500000000   1
+ 0.000000000   0.500000000   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

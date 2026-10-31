@@ -1,0 +1,131 @@
+===== STB-MLELASTIC REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 15:02:37
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/si8.fdf
+Mode              : single fit
+Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/../7.2-mlmd/model/mlff_model_compiled.model)
+Strain range      : +/-1.0% (4 points/direction)
+Comparison        : also evaluating with foundation model (medium)
+Report file       : ./stb_mlelastic_report.txt
+
+[1] READING STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Mode              : 3D (units: GPa)
+
+[2] REFERENCE RELAXATION & STRESS-STRAIN DATA (MACE)
+------------------------------------------------------------
+[fine-tuned] Pre-relax (cell+ions): max|F| 0.0000 -> 0.0000 eV/Ang (converged, 0 steps)
+[fine-tuned] [INFO] Direction 'xx': 4 strain point(s)
+[fine-tuned] [INFO] Direction 'yy': 4 strain point(s)
+[fine-tuned] [INFO] Direction 'zz': 4 strain point(s)
+[fine-tuned] [INFO] Direction 'yz': 4 strain point(s)
+[fine-tuned] [INFO] Direction 'xz': 4 strain point(s)
+[fine-tuned] [INFO] Direction 'xy': 4 strain point(s)
+
+[INFO] Also running the raw foundation model (medium) for comparison...
+[foundation (medium)] Pre-relax (cell+ions): max|F| 0.0000 -> 0.0000 eV/Ang (converged, 8 steps)
+[foundation (medium)] [INFO] Direction 'xx': 4 strain point(s)
+[foundation (medium)] [INFO] Direction 'yy': 4 strain point(s)
+[foundation (medium)] [INFO] Direction 'zz': 4 strain point(s)
+[foundation (medium)] [INFO] Direction 'yz': 4 strain point(s)
+[foundation (medium)] [INFO] Direction 'xz': 4 strain point(s)
+[foundation (medium)] [INFO] Direction 'xy': 4 strain point(s)
+[OK] Saved ./stress_strain.png
+
+[1] 3D STIFFNESS MATRIX (GPa)
+------------------------------------------------------------
+      j=1      j=2      j=3      j=4      j=5      j=6      
+i=1 |    144.76    68.04    68.04     0.00    -0.00    -0.00
+i=2 |     68.04   144.76    68.04    -0.00    -0.00    -0.00
+i=3 |     68.04    68.04   144.76    -0.00    -0.00    -0.00
+i=4 |      0.00    -0.00    -0.00    65.05    -0.00     0.00
+i=5 |     -0.00    -0.00    -0.00    -0.00    65.05     0.00
+i=6 |     -0.00    -0.00    -0.00     0.00     0.00    65.05
+
+[1b] 3D COMPLIANCE MATRIX (1/GPa)
+------------------------------------------------------------
+      j=1        j=2        j=3        j=4        j=5        j=6        
+i=1 |  9.877e-03 -3.158e-03 -3.158e-03 -2.777e-17  1.674e-17  2.566e-17 
+i=2 | -3.158e-03  9.877e-03 -3.158e-03 -3.650e-18 -1.373e-17  8.645e-18 
+i=3 | -3.158e-03 -3.158e-03  9.877e-03  3.568e-17  2.739e-17 -8.615e-19 
+i=4 | -2.777e-17 -3.650e-18  3.568e-17  1.537e-02  4.271e-18 -2.749e-17 
+i=5 |  1.674e-17 -1.373e-17  2.739e-17  4.271e-18  1.537e-02 -1.201e-17 
+i=6 |  2.566e-17  8.645e-18 -8.615e-19 -2.749e-17 -1.201e-17  1.537e-02 
+
+[2] MAIN CONSTANTS
+------------------------------------------------------------
+C11:   144.8 GPa  C22:   144.8 GPa  C33:   144.8 GPa  
+C44:    65.0 GPa  C55:    65.0 GPa  C66:    65.0 GPa  
+C12:    68.0 GPa  C13:    68.0 GPa  C23:    68.0 GPa  
+
+[3] NUMERICAL QUALITY DIAGNOSTICS
+------------------------------------------------------------
+Tensor symmetry (C vs C^T): max |C_ij - C_ji| = 0.000 GPa (i=2, j=5)  [OK]
+Direction fit quality (stress vs. strain):
+  xx: R^2 = 0.999961 | residual stress =    0.03 GPa  [OK]
+  yy: R^2 = 0.999961 | residual stress =    0.03 GPa  [OK]
+  zz: R^2 = 0.999961 | residual stress =    0.03 GPa  [OK]
+  yz: R^2 = 0.997758 | residual stress =   -0.00 GPa  [OK]
+  xz: R^2 = 0.997758 | residual stress =    0.00 GPa  [OK]
+  xy: R^2 = 0.997758 | residual stress =    0.00 GPa  [OK]
+
+[4] STABILITY AND PROPERTIES
+------------------------------------------------------------
+Young's Modulus (E)  : 132.97 GPa
+Bulk Modulus    (B)  : 93.61 GPa
+Poisson's Ratio (v)  : 0.263
+Universal Anisotropy Index (A^U): 0.343 (0 = isotropic; larger = more anisotropic)
+
+
+VERDICT: STABLE
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Quantity                   | Value     
+---------------------------------------
+C11                        | 144.8 GPa 
+C22                        | 144.8 GPa 
+C33                        | 144.8 GPa 
+C44                        | 65.0 GPa  
+C55                        | 65.0 GPa  
+C66                        | 65.0 GPa  
+C12                        | 68.0 GPa  
+C13                        | 68.0 GPa  
+C23                        | 68.0 GPa  
+E (Young's modulus)        | 132.97 GPa
+B (Bulk modulus)           | 93.61 GPa 
+v (Poisson's ratio)        | 0.263     
+A^U (anisotropy index)     | 0.343     
+Quality warnings (see [3]) | 0         
+VERDICT                    | STABLE    
+
+Full report : ./stb_mlelastic_report.txt
+Plot              : ./stress_strain.png
+
+[6] FOUNDATION MODEL COMPARISON
+------------------------------------------------------------
+                 C_xx       C_yy       C_zz       C_yz       C_xz       C_xy
+Fine-tuned     144.76     144.76     144.76      65.05      65.05      65.05
+Foundation (medium)     103.05     103.05     103.05      28.89      28.89      28.89
+
+[7] SOUND VELOCITIES & DEBYE TEMPERATURE
+------------------------------------------------------------
+Density (rho)     : 2266.81 kg/m^3
+Longitudinal (Vp) : 8500.28 m/s
+Shear (Vs)        : 4818.48 m/s
+Average (Vm)      : 5357.83 m/s
+Debye temperature : 582.1 K
+
+[8] DIRECTIONAL ANISOTROPY
+------------------------------------------------------------
+Young's modulus range: 101.25 - 158.44 GPa
+Anisotropy ratio (E_max/E_min): 1.565 (1.0 = perfectly isotropic)
+[OK] Saved ./anisotropy_surface.png
+
+[9] SUMMARY & FILES (ML-SPECIFIC)
+------------------------------------------------------------
+Vp=8500 m/s  Vs=4818 m/s  theta_D=582.1 K
+Anisotropy surface: ./anisotropy_surface.png

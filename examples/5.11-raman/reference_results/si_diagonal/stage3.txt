@@ -1,0 +1,54 @@
+
+RAMAN SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS
+------------------------------------------------------------
+===== RAMAN STAGE 3 REPORT (ANALYSIS) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+Directory         : raman_study
+SystemLabel       : siesta
+Modes in table    : 3
+Displacement      : 0.02 Ang (from Stage 2)
+
+[1] READING RUNS
+------------------------------------------------------------
+  Mode 1 (15.3574 THz / 512.27 cm^-1):
+    -> Rxx=0.001430  Ryy=0.003210  Rzz=0.001681  (1/Ang)  activity~0.000219  rho~0.0396 (polarized)
+    [WARNING] The diagonal of eps changes by only 1.3e-04 (eps ~ 13.50) across +/-delta: numerically zero. This mode is either Raman-inactive or its tensor is purely OFF-diagonal in this frame (e.g. the T2g mode of a cubic crystal) -- a diagonal-only run cannot tell. Check its irrep in Stage 2's [1] and, if it is Raman-active, rerun stb-ramanModes with --full-tensor.
+  Mode 2 (15.3574 THz / 512.27 cm^-1):
+    [Degenerate partner] Reusing mode 1's Raman tensor by symmetry (stb-ramanModes --skip-degenerate) -- activity and rho are rotational invariants, identical for every partner in a degenerate group.
+    -> Rxx=0.001430  Ryy=0.003210  Rzz=0.001681  (1/Ang)  activity~0.000219  rho~0.0396 (polarized)  [derived]
+  Mode 3 (15.3574 THz / 512.27 cm^-1):
+    [Degenerate partner] Reusing mode 1's Raman tensor by symmetry (stb-ramanModes --skip-degenerate) -- activity and rho are rotational invariants, identical for every partner in a degenerate group.
+    -> Rxx=0.001430  Ryy=0.003210  Rzz=0.001681  (1/Ang)  activity~0.000219  rho~0.0396 (polarized)  [derived]
+
+[2] RAMAN-ACTIVE MODES SUMMARY
+------------------------------------------------------------
+  Mode  THz         cm^-1       Rxx           Ryy           Rzz           Activity (approx)   rho       Polarization
+  1     15.3574     512.27      0.001430      0.003210      0.001681      0.000219            0.0396    polarized
+  2     15.3574     512.27      0.001430      0.003210      0.001681      0.000219            0.0396    polarized
+  3     15.3574     512.27      0.001430      0.003210      0.001681      0.000219            0.0396    polarized
+
+[NOTE] Activity is APPROXIMATE: computed from the diagonal Raman tensor (Rxx, Ryy, Rzz) only. The full literature invariant (45a^2+7gamma^2) also needs the off-diagonal tensor components (Rxy, Rxz, Ryz) -- re-run stb-ramanModes with --full-tensor to get those.
+[NOTE] rho (depolarization ratio) uses the same diagonal-only/full-tensor scope as activity above, per mode.
+[WARNING] Mode(s) 1: zero diagonal response within numerical noise (see [1]). Their activity and rho above say nothing about an off-diagonal tensor -- rerun stb-ramanModes with --full-tensor before reading them as Raman-silent.
+
+[3] SPECTRUM
+------------------------------------------------------------
+Grid              : 412.3 - 612.3 cm^-1, 2000 points, 10.00 cm^-1 linewidth
+Peaks detected    : 1 (prominence >= 1.0% of max intensity)
+  Position (cm^-1)    Rel. intensity (%)
+  512.22              100.0
+Gnuplot data+script : not written (off by default -- pass --save-gnuplot to write it, under '<directory>/plot/').
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Modes analyzed      : 3/3
+Files               : none (pass --save-gnuplot to write the spectrum data/script under '<directory>/plot/').
+
+[INFO] Complete job!
+
+------------------------------------------------------------
+Raman analysis complete.
+

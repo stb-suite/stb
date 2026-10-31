@@ -1,0 +1,6 @@
+{
+ "stb-demoext": {
+  "help": "usage: stb-demoext [-h]\n\nThe demo command of the fictional test extension.\n\noptions:\n  -h, --help  show this help message and exit\n",
+  "module": "demo_extension.cli"
+ }
+}

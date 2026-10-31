@@ -1,0 +1,27 @@
+# Example fixture: hexagonal boron nitride (h-BN) monolayer, primitive
+# 2-atom hexagonal cell (a = 2.504 Ang), paired with graphene.fdf (a = 2.46
+# Ang) to exercise the ZSL commensurate-supercell search on a realistic,
+# lattice-mismatched (~1.8%) van der Waals heterostructure.
+
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   5   B
+ 2   7   N
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  2.5040000000   0.0000000000   0.0000000000
+ -1.2520000000   2.1685276111   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

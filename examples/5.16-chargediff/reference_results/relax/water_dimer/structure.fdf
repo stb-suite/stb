@@ -1,0 +1,28 @@
+# Water dimer (H2O)2, a PBE/DZP-relaxed starting geometry (make_reference.sh relaxes it again).
+# Atom order: acceptor O H H, then donor O H H -- the order --fragment-sizes 3,3 splits on.
+
+NumberOfSpecies 2
+NumberOfAtoms 6
+
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 14.00000000 0.00000000 0.00000000
+ 0.00000000 14.00000000 0.00000000
+ 0.00000000 0.00000000 14.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.5745350580 0.5057823030 0.5067077450 1
+  0.6150328860 0.5624640040 0.5066886540 2
+  0.6182739950 0.4523683530 0.5158196510 2
+  0.3750050790 0.5030572260 0.5125011220 1
+  0.4452621630 0.5026273680 0.5082519880 2
+  0.3535079940 0.4730391890 0.4535572180 2
+%endblock AtomicCoordinatesAndAtomicSpecies

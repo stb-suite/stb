@@ -1,0 +1,90 @@
+===== GQCA STAGE 1 REPORT (CLUSTER STRUCTURE GENERATION) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Tool            : stb-gqca 1.9.272
+Date            : 2026-10-15 20:33
+Structure       : structure.fdf
+Sublattice      : Ga (4 site(s))
+Species B       : In
+Calc template   : calc.fdf  (default)
+Pseudopotentials: dojo -> /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+k-point density : 0.2 (stb-kgrid convention, recomputed per folder)
+Vacuum gap      : 10.0 Ang (vacuum-axis detection threshold)
+Output root     : ingaas
+
+[1] INPUT STRUCTURE
+------------------------------------------------------------
+Formula         : Ga4 As4  (8 atoms)
+Lattice (Ang)   : a=5.6533  b=5.6533  c=5.6533
+Angles (deg)    : alpha=90.00  beta=90.00  gamma=90.00
+Cell volume     : 180.6783 Ang^3
+Species | Z  | Atoms | Role                
+-------------------------------------------
+Ga      | 31 | 4     | alloy sublattice (A)
+As      | 33 | 4     | host (kept fixed)   
+Detected (input) : 3D (bulk material)
+Cell treatment   : MD.VariableCell T (full cell relaxes)
+
+[2] PAIR ORBIT
+------------------------------------------------------------
+Shortest sublattice-sublattice distance : 3.9975 Ang
+Cluster-space cutoff                    : 4.1974 Ang (1.05 x shortest distance)
+Orbit radius    : 1.9987 Ang
+Multiplicity    : 6 (icet-derived, informational -- degeneracy g_j=[1,2,1] used by the solver is the trivial pair-cluster combinatorics, not this multiplicity)
+Pair states      : n_j=0 (AA), n_j=1 (AB), n_j=2 (BB), A=Ga, B=In
+
+[3] CONFIG_EXTRA.FDF -> FORCED DIRECTIVES
+------------------------------------------------------------
+Template        : calc.fdf (24 lines) -- copied UNTOUCHED into each folder's calc.fdf
+Mechanism       : each folder gets a config_extra.fdf, and calc.fdf starts with '%include config_extra.fdf' (SIESTA's fdf reader is first-occurrence-wins, so these override the template)
+Directive in config_extra.fdf | Value                | Template had | Effect                  
+----------------------------------------------------------------------------------------------
+MD.TypeOfRun                  | CG                   | (absent)     | added                   
+MD.NumCGsteps                 | 150                  | 150          | kept                    
+MD.VariableCell               | T                    | (absent)     | added                   
+kgrid.MonkhorstPack           | per folder (see [4]) | (absent)     | added, density 0.2 1/Ang
+Why: the 3 clusters have different equilibrium lattice constants (A/B size mismatch); a fixed-cell single point would put spurious strain into the mixing energy.
+
+[4] CLUSTER STRUCTURES
+------------------------------------------------------------
+cluster_n1 (AB) is always built at the fixed cluster-internal 50:50 composition (the pair's only interior point) -- your real target alloy composition x is swept entirely in Stage 2, not chosen here. See stb-gqca --help for why these 3 fixed references are sufficient.
+  [OK] ingaas/cluster_n0 (8 atoms, k-grid [6, 6, 6], 3D full-cell relaxation)
+  [OK] ingaas/cluster_n2 (8 atoms, k-grid [6, 6, 6], 3D full-cell relaxation)
+  [NOTE] The best achievable AB-ordered pair correlation at cell size 2x primitive deviates by 0.6667 from the ideal -1.0 (every-pair-unlike) extreme -- expected on a geometrically frustrated sublattice (e.g. FCC/HCP/triangular; see build_ab_structure's own docstring), not necessarily a bug. Evaluated 2 candidate(s).
+  [NOTE] Delta_1 sensitivity check: a 4x-primitive cell does not meaningfully improve the AB ordering (deviation 0.6667 vs. 0.6667 at the size actually used, from 5 probed candidate(s)) -- the deviation at the smallest cell already appears representative, not an artifact of under-sizing.
+  [OK] ingaas/cluster_n1 (4 atoms, k-grid [8, 8, 6], 3D full-cell relaxation, AB-ordered)
+
+Written structures:
+Folder     | Pair       | Formula   | Atoms | A/B sites | x_B(sub) | a b c (Ang)       | V (Ang^3) | V/site | k-grid
+--------------------------------------------------------------------------------------------------------------------
+cluster_n0 | AA (Ga-Ga) | Ga4As4    | 8     | 4/0       | 0.00     | 5.653 5.653 5.653 | 180.68    | 45.17  | 6x6x6 
+cluster_n1 | AB (Ga-In) | In1Ga1As2 | 4     | 1/1       | 0.50     | 3.997 3.997 5.653 | 90.34     | 45.17  | 8x8x6 
+cluster_n2 | BB (In-In) | In4As4    | 8     | 0/4       | 1.00     | 5.653 5.653 5.653 | 180.68    | 45.17  | 6x6x6 
+
+AB ordering (cluster_n1):
+  Cell size searched     : 2x primitive (primitive cell = 2 atom(s); smallest size reaching exactly 50% B)
+  Candidates evaluated   : 2 symmetrically distinct
+  Pair correlation       : -0.3333  (ideal AB = -1.0000)
+  Deviation from ideal   : 0.6667  (geometrically frustrated sublattice -- Delta_1 less clean)
+
+Folder contents:
+  ingaas/cluster_n0/ : structure.fdf, calc.fdf, config_extra.fdf, As.psml, Ga.psml
+  ingaas/cluster_n1/ : structure.fdf, calc.fdf, config_extra.fdf, As.psml, Ga.psml, In.psml
+  ingaas/cluster_n2/ : structure.fdf, calc.fdf, config_extra.fdf, As.psml, In.psml
+
+[5] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+3 cluster folder(s) written under 'ingaas'.
+Report               : ingaas/gqca_stage1.txt
+
+Next steps:
+  1. Run SIESTA in every 'ingaas/cluster_n*/' folder (a full relaxation), e.g.:
+       for c in n0 n2 n1; do (cd ingaas/cluster_$c && mpirun -np 4 siesta calc.fdf > calc.out); done
+  2. Check each calc.out converged (forces/stress below the MD tolerances).
+  3. Once they're done, run: stb-gqcaAnalysis --directory ingaas --temp 800   (or --temp-min/--temp-max for a sweep)
+Note: the 3 cells differ in size; Stage 2 normalizes each FreeEng to a per-sublattice-site energy, so keep the default calc.out name (or pass --file).
+
+Sublattice     : Ga
+Species B      : In
+AB deviation   : 0.666667

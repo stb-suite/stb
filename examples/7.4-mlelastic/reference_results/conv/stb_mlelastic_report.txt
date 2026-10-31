@@ -1,0 +1,114 @@
+===== STB-MLELASTIC REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 17:46:26
+Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/si8.fdf
+Mode              : strain-amplitude convergence check
+Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200
+Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_compiled.model)
+Report file       : ./stb_mlelastic_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si8
+Cell              : a 5.48024, b 5.48024, c 5.48024 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 164.588 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3730 Ang
+Symmetry          : Fd-3m (227), point group m-3m (cubic)
+Constants         : 3D, in GPa
+
+[2] MODEL
+------------------------------------------------------------
+
+Model card -- identity
+Card file         : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_compiled.model
+SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
+Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
+Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
+Architecture      : MACE, r_max 6 Ang, 2 interactions, 509,722 parameters; fine-tuned from mace-mp-0 (medium), start: previous
+
+Model card -- level of theory (what the model reproduces)
+Code              : SIESTA 5.4.2
+Settings          : DFTD3 default; ElectronicTemperature 300 K; Mesh.Cutoff 300 Ry
+                    PAO.Basis block none; PAO.BasisSize DZP; PAO.EnergyShift 0.01 Ry
+                    SCF tolerance 1.0e-5; Spin non-polarized; XC.authors PBE
+                    XC.functional GGA; k x a (Ang) 32 32 32
+DFT-D3            : not in the labels (source: none)
+Pseudopotentials  : Si.psml (md5 878e1f00)
+Energy scale      : SIESTA absolute total energy, eV; E0 Si -117.3061 eV (foundation-residual)
+
+Model card -- training data and trained domain
+Training set      : 57 SIESTA configs (51 train / 6 valid), kinds al-md 12, rattle 39, strain 6; 8-64 atoms per config
+Labels            : energy, forces, stress; stress fitted
+Trained range                 | Value                 
+------------------------------------------------------
+elements / dimensionality     | Si / 3D               
+volume per atom (Ang^3)       | 18.722 .. 22.425      
+shortest distance (Ang)       | 1.852 .. 2.347        
+max force per config (eV/Ang) | 0.98 .. 14.70         
+pressure (GPa)                | -5.81 .. 10.48        
+energy per atom (eV)          | -115.0069 .. -114.2504
+atoms per config              | 8 .. 64               
+
+Model card -- recipe and accuracy
+Recipe            : 100 epochs (kept 96), batch 5, lr 0.001, loss energy 1 + forces 100 + stress 10000, E0s foundation-residual, cuda 342 s
+Errors vs SIESTA            | N  | F RMSE (meV/Ang) | E rel (meV/atom) | S RMSE (GPa)
+-------------------------------------------------------------------------------------
+train                       | 51 | 45.8             | 2.03             | 0.148       
+valid (own split)           | 6  | 52.8             | 0.85             | 0.123       
+out-of-sample (committee)   | 16 | 56.0             | 1.85             | 0.127       
+test set (stb-mlffValidate) | 16 | 28.7             | 1.07             | 0.181       
+foundation model, raw       | 57 | 448.4            | 51.08            | 0.848       
+Fine-tuning gain  : 87 % lower force error than the raw foundation model
+  test, rattle    : F 15.3 meV/Ang over 8 configs
+  test, strain    : F 37.6 meV/Ang over 8 configs
+Phonons vs SIESTA : RMSE 1.10 THz (acoustic 1.51, optical 0.37), imaginary q-points: model 0
+MD check r01_800K_2x2x2: F 29.8-38.9 meV/Ang along 8 SIESTA-labelled frames
+Committee spread  : true error ~ 1.3 x spread (per-config correlation +0.75)
+Verdict (4.17.3)  : STOP (validated 2026-10-24T11:00:18, 16 test configs)
+
+Model card -- stability, speed and usage
+Stability (4.17.2): OK -- 64 atoms, T mean 285 K, NVE drift 0.003 meV/atom/ps
+Speed (4.17.2)    : 35.2 ms/step for 64 atoms on cuda
+Recommended dtype : geometry optimization float64, molecular dynamics float32
+  - Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.
+  - Valid for Si only; any other element is outside the training data.
+  - Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.
+  - Lowest validation force error of its committee.
+  - Run geometry optimisation in float64 and MD in float32 (the suite's convention).
+Trained with      : stb 1.9.292, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0, python 3.12.13, siesta 5.4.2
+Loaded in         : 0.4 s; float64 (stresses are compared at the 0.01 GPa level)
+
+[3] STRAIN-AMPLITUDE CONVERGENCE CHECK
+------------------------------------------------------------
+Strain amplitudes : 0.25, 0.5, 1, 2, 3 %, 7 points per direction, GPa
+max strain % | C11 = C22 ... | C12 = C13 ... | C44 = C55 ... | min R^2 | B Hill | G Hill
+----------------------------------------------------------------------------------------
+0.25         | 144.99        | 68.16         | 66.02         | 0.99994 | 93.77  | 53.13 
+0.5          | 144.97        | 68.16         | 65.80         | 0.99999 | 93.76  | 53.01 
+1            | 144.88        | 68.15         | 65.47         | 0.99996 | 93.73  | 52.84 
+2            | 144.52        | 68.12         | 64.90         | 0.99985 | 93.59  | 52.47 
+3            | 143.95        | 68.08         | 64.12         | 0.99968 | 93.37  | 51.95 
+
+Largest change    : C44 varies by 2.91 % over the scan
+Reading           : a constant that drifts with the amplitude is non-linear there; one that scatters at the SMALLEST amplitude is limited by the precision of the stress.
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+Results           : largest change C44 2.91 % over 0.25-3 %
+Convergence plot  : ./strain_convergence.png
+Data              : ./strain_convergence.dat
+Report            : ./stb_mlelastic_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 55.2 s
+
+[5] WARNINGS
+------------------------------------------------------------
+  1. Convergence: C44 changes by 2.9 % between 0.25 and 3 % strain; use an amplitude where the constants are flat.
+Library messages  : 222 distinct message(s) from mace/torch/ase captured, not shown

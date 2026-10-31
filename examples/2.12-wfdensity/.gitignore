@@ -1,0 +1,7 @@
+output/
+wfdensity_*.cube
+wfdensity_*.dat
+wfdensity_*.gplot
+wfdensity_*.pdf
+stb_wfdensity_report.txt
+references.bib

@@ -1,0 +1,9 @@
+SystemName          Strain test (hexagonal 2D)
+SystemLabel         siesta
+
+%include structure.fdf
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+DM.MixingWeight     0.1
+MaxSCFIterations    200

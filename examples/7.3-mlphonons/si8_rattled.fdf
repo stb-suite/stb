@@ -1,0 +1,25 @@
+# Bulk silicon, 8-atom conventional cell (si8.fdf) with every atom moved at random by a Gaussian of 0.03 Ang per
+# Cartesian component (seed 7): a structure that is NOT at a minimum. Used in README section 5.8 to show what
+# --no-relax does to a phonon calculation and why the pre-relax is on by default.
+NumberOfSpecies 1
+NumberOfAtoms 8
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+ 5.48023800 0.00000000 0.00000000
+ 0.00000000 5.48023800 0.00000000
+ 0.00000000 0.00000000 5.48023800
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00000673 0.00163540 0.99849931 1
+ 0.24512471 0.24751103 0.24457151 1
+ 0.00032924 0.50733663 0.49730556 1
+ 0.24660339 0.75268150 0.75195368 1
+ 0.50057706 0.99490642 0.49983987 1
+ 0.75380624 0.24264148 0.74749491 1
+ 0.48959230 0.49294079 0.98991795 1
+ 0.74871306 0.74306173 0.25148496 1
+%endblock AtomicCoordinatesAndAtomicSpecies

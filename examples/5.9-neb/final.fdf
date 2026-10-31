@@ -1,0 +1,45 @@
+# NEB example fixture -- "final" endpoint: same lattice/composition as
+# initial.fdf, H now ontop of the NEAREST-NEIGHBOR carbon (one C-C bond
+# length away in-plane, same height above the sheet) -- the other end of
+# the small surface-diffusion hop this example walks through. See
+# initial.fdf's header for how both were built.
+
+NumberOfSpecies    2
+NumberofAtoms      19
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  7.3800000000   0.0000000000   0.0000000000
+ -3.6900000000   6.3912673200   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.000000000   0.333333333   0.500000000   1
+ 0.000000000   0.666666667   0.500000000   1
+ 0.333333333   0.000000000   0.500000000   1
+ 0.333333333   0.333333333   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+ 0.666666667   0.000000000   0.500000000   1
+ 0.666666667   0.333333333   0.500000000   1
+ 0.666666667   0.666666667   0.500000000   1
+ 0.111111111   0.222222222   0.500000000   1
+ 0.111111111   0.555555556   0.500000000   1
+ 0.111111111   0.888888889   0.500000000   1
+ 0.444444444   0.222222222   0.500000000   1
+ 0.444444444   0.555555556   0.500000000   1
+ 0.444444444   0.888888889   0.500000000   1
+ 0.777777778   0.222222222   0.500000000   1
+ 0.777777778   0.555555556   0.500000000   1
+ 0.777777778   0.888888889   0.500000000   1
+ 0.111111111   0.222222222   0.600000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

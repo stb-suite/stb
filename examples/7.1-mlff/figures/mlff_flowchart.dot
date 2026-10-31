@@ -1,0 +1,44 @@
+// Flowchart of workflow 7.1 (Custom ML Force Field). Render with:
+//   dot -Tpng -Gdpi=150 mlff_flowchart.dot -o mlff_flowchart.png
+digraph mlff {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.38,
+           bgcolor="white", pad=0.3];
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10,
+           fillcolor="#eef3fb", color="#4a6fa5", penwidth=1.2, margin="0.15,0.07"];
+    edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.7];
+
+    ref     [label="Relaxed reference structure + calc.fdf\n(the level of theory of every label)",
+             fillcolor="#fff7e0", color="#b8860b"];
+    s1      [label="STAGE 1 -- stb-mlff (7.1.1)  Prep\nrattles (--stdev) + area/volume strains (--volume-strains)\nheld-out test set (--n-test), --ml-screen\nconfigs_round_01/  mlff_test/  mlff_workflow.json"];
+    siesta1 [label="SIESTA single points\n(config_extra.fdf forces MD.Steps 0)\nsiesta.out / .FA / .XV", shape=box3d,
+             fillcolor="#fde8e8", color="#b22222"];
+    s2      [label="STAGE 2 -- stb-mlffAnalysis (7.1.2)  Train\nfine-tune MACE-MP: committee (--committee M) or --cv K\nE0s foundation-residual, energy+forces+stress loss\nreport: data, recipe, out-of-sample errors, MD stability\nround_NN/m_s<seed>/*.model"];
+    s3      [label="STAGE 3 -- stb-mlffValidate (7.1.3)  Validate\ntest-set errors (bootstrap +/-), per kind / element / config\ncalibration (error/spread), phonons (--phonon-ref), E(V)\nlearning curve, --md-check, verdict"];
+    verdict [label="Verdict?", shape=diamond, style="filled", fillcolor="#f2f2f2", color="#666666"];
+    use     [label="USE THE MODEL\n(--custom-model in stb-mlmd, stb-mlphonons,\nstb-mlelastic, stb-mleos, ...)",
+             fillcolor="#e6f4e6", color="#2e7d32"];
+    best    [label="Use the BEST earlier round\n(and check the far-from-test configs)",
+             fillcolor="#fff0e0", color="#d2691e"];
+    s4      [label="STAGE 4 -- stb-mlffActiveLearning (7.1.4)  Active learning\ncandidates: rattle | md | strain (--supercell, --auto-sampling)\nscore = committee spread; filters: --max-force, energy cap,\nnovelty; diverse selection of --top-k\nconfigs_round_NN+1/"];
+    siesta2 [label="SIESTA single points\non the picks", shape=box3d, fillcolor="#fde8e8", color="#b22222"];
+    json    [label="mlff_workflow.json\n(configs, rounds, committees,\nscores, picks, history)", shape=cylinder,
+             fillcolor="#f3eefb", color="#6a4fa5"];
+
+    ref -> s1;
+    s1 -> siesta1 [label="  every folder"];
+    siesta1 -> s2;
+    s2 -> s3;
+    s3 -> verdict;
+    verdict -> use  [label=" STOP\n (target met)"];
+    verdict -> best [label=" REGRESSED"];
+    verdict -> s4   [label=" CONTINUE /\n PLATEAU (change sampling)"];
+    best -> s4      [style=dashed, label=" new sampling"];
+    s4 -> siesta2;
+    siesta2 -> s2   [label="  retrain: round N+1\n  (--init-from previous)", constraint=false];
+
+    {rank=same; s2; json}
+    s1 -> json [style=dotted, arrowhead=none, color="#6a4fa5"];
+    s2 -> json [style=dotted, arrowhead=none, color="#6a4fa5"];
+    s3 -> json [style=dotted, arrowhead=none, color="#6a4fa5"];
+    s4 -> json [style=dotted, arrowhead=none, color="#6a4fa5"];
+}

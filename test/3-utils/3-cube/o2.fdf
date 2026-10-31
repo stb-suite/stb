@@ -1,0 +1,36 @@
+SystemName          O2_triplet
+SystemLabel         o2
+
+NumberOfAtoms       2
+NumberOfSpecies     1
+
+%block ChemicalSpeciesLabel
+ 1  8  O
+%endblock ChemicalSpeciesLabel
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+
+LatticeConstant     1.0 Ang
+%block LatticeVectors
+ 10.0  0.0  0.0
+  0.0 10.0  0.0
+  0.0  0.0 10.0
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 5.0000  5.0000  4.3950   1
+ 5.0000  5.0000  5.6050   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+Spin                polarized
+DM.MixingWeight     0.1
+DM.NumberPulay      4
+MaxSCFIterations    200
+DM.Tolerance        1.0d-4
+SCF.Mixer.Weight    0.1
+
+SaveRho             true
+SaveTotalPotential  true
+WriteCoorXmol       true

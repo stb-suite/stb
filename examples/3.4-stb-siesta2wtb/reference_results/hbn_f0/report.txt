@@ -1,0 +1,81 @@
+===== STB-SIESTA2WTB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : calc.fdf (SystemLabel hbn)
+Fermi level       : 0.0 eV, given with -f
+Mode              : write (no read-back check)
+
+[1] SIESTA RUN
+------------------------------------------------------------
+Hamiltonian       : hbn.HSX (210.4 KB, written <date>)
+SaveHS in input   : yes
+Log               : <work>/hbn_f0/calc.out (SIESTA 5.4.2)  (found, not given with -o: used for the report only)
+Finished          : yes
+Electrons         : 8.0000 (valence)
+Spin (log)        : none
+Fermi level (log) : -4.022238 eV
+Read              : geometry + H + S in <t> s
+Energy zero of H  : the run's Fermi level -- hbn.HSX (version 2) stores E_F = -4.022238 eV and sisl shifts H by -E_F S on reading
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 2 (BN)
+Cell lengths      : a = 2.5100, b = 2.5100, c = 20.0000 Ang
+Cell angles       : alpha = 90.00, beta = 90.00, gamma = 120.00 deg
+Cell volume       : 109.1209 Ang^3
+Dimensionality    : 2D (e.g., a slab or surface) -- vacuum along c
+species | Z | atoms | orbitals | basis shells         | r_c (Ang)
+-----------------------------------------------------------------
+B       | 5 | 1     | 13       | 2s(2z) 2p(2z) 3d(1z) | -        
+N       | 7 | 1     | 13       | 2s(2z) 2p(2z) 3d(1z) | -        
+Orbitals          : 26 in the cell
+
+[3] HAMILTONIAN
+------------------------------------------------------------
+Spin (sisl)       : Spin{unpolarized} -> WanTiBEXOS type NP, 26 x 26 matrices
+Orthogonal basis  : no -- the overlap S goes into the file with H
+Neighbour cells   : nsc = 5 x 5 x 1 = 25 cells (all R with an orbital overlapping one of the cell)
+Stored elements   : 10688 of 16900 (63.2 %) per spin component
+Longest hopping   : 5.225 Ang (orbital centres; the range of the basis)
+On-site energies  : -15.379 to 26.911 eV (from E_F, the zero of H)
+S(Gamma) spectrum : 6.56e-04 to 4.881 (smallest eigenvalue: how close the basis is to linear dependence)
+
+[4] FERMI LEVEL AND BAND EDGES
+------------------------------------------------------------
+Fermi level       : 0.000000 eV (given with -f)
+                    the log says -4.022238 eV (+4.0222 eV difference)
+Reference         : header E_F = 0.0 matches H, which is already referred to E_F
+SIESTA .EIG       : VBM -5.5166, CBM -0.9475 eV -> gap 4.5691 eV (direct; smallest direct 4.5691 eV; 113 k-points)
+Occupied states   : 4 of 26 per k (8 electrons, 2 per state)
+
+[5] OUTPUT FILES
+------------------------------------------------------------
+Basis             : basis_set-NP.basis (26 orbitals: index, species, x y z (Ang), l, m, spin; 1.6 KB, <t> s)
+Hamiltonian       : tb-NP.ham (1.3 MB, <t> s)
+Header            : type NP, scissor 0.0, E_F 0.000000 eV, 3 lattice vectors (Ang), 26 orbitals, 25 cells
+Body              : 16900 lines 'R_x R_y R_z i j ReH ImH S' (R in Ang, H in eV), every i, j of every cell, zeros included
+
+[6] READ-BACK CHECK
+------------------------------------------------------------
+Skipped           : --no-check
+
+[7] FOR WANTIBEXOS
+------------------------------------------------------------
+PARAMS_FILE       : tb-NP.ham
+SYSDIM            : 2D (from the vacuum axes)
+Valence states    : 4 occupied of 26 -- NBANDSV can be at most 4, NBANDSC at most 22
+Energies          : eV; H referred to E_F (0 eV = -4.0222 eV absolute), header E_F 0.0000 eV
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Written           : tb-NP.ham, basis_set-NP.basis
+System            : BN, NP, 26 orbitals, 25 cells, E_F 0.0000 eV
+
+[9] WARNINGS
+------------------------------------------------------------
+  1. the overlap S(Gamma) has an eigenvalue of 6.6e-04: the basis is nearly linearly dependent, and the 6 decimals of the file perturb the highest bands (the read-back check measures by how much).
+
+------------------------------------------------------------

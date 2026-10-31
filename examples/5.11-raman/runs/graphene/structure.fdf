@@ -1,0 +1,23 @@
+# Graphene monolayer (2 atoms, 20 Ang along c), the structure of the user's Raman test study.
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 1.25092526   -2.16666296   0.00000000
+ 1.25092526   2.16666296   0.00000000
+ 0.00000000   0.00000000   19.99666127
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.33330841   0.66669159   0.50000000   1
+  0.66669159   0.33330841   0.50000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

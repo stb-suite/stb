@@ -1,0 +1,9 @@
+SIESTA single points (PBE/DZP, 300 Ry, k 3x3x3) on the stb-mlneb images, Si63 (2x2x2 cell, one vacancy)
+image | s (Ang) | fine-tuned model E-E0 (eV) | SIESTA E-E0 on the same geometry (eV) | SIESTA max|F| (eV/Ang)
+0 | 0.0000 | +0.0000 | +0.0000 | 0.226
+1 | 0.4113 | +0.0875 | +0.0439 | 0.219
+2 | 0.7890 | +0.3786 | +0.1697 | 0.253
+3 | 1.1754 | +0.7193 | +0.2512 | 0.114
+foundation band: model barrier 0.3006 eV; SIESTA on its endpoint/saddle 0.1845 eV (max|F| 0.161 / 0.115)
+SIESTA: foundation endpoint vs fine-tuned endpoint +0.0470 eV; foundation saddle vs fine-tuned saddle -0.0197 eV
+lowest SIESTA saddle - lowest SIESTA endpoint: 0.2315 eV

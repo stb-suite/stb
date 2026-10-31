@@ -1,0 +1,8 @@
+# stb-mladsorb, fine-tuned: every relaxation
+# id adsorbate start_slot start_type start_dist(A) end_slot end_type shift(A) height(A) CN d_nearest(A) E_ads(eV) E_form(eV) steps converged max|F|(eV/A)
+1 Si 1 ontop 2.000 1 ontop 0.0000 2.4139 1 2.4139 -3.987159 -0.562089 13 1 0.04703
+2 Si 2 ontop 2.000 2 ontop 0.0000 1.7126 1 2.5036 -4.679590 -1.254520 22 1 0.04124
+3 Si 3 bridge 2.000 3 bridge 0.0000 1.7557 0 2.8439 -3.648561 -0.223491 6 1 0.01776
+4 Si 4 bridge 2.000 2 ontop 1.1218 1.7123 1 2.5034 -4.679551 -1.254481 49 1 0.04806
+5 Si 5 bridge 2.000 2 ontop 1.1227 1.7190 1 2.5100 -4.679535 -1.254465 38 1 0.04892
+6 Si 6 bridge 2.000 3 bridge 1.1637 1.7573 0 2.8275 -3.647749 -0.222679 39 1 0.03620

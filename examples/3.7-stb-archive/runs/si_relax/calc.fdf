@@ -1,0 +1,28 @@
+# Bulk Si: variable-cell CG relaxation, then bands, DOS/PDOS, the density and H/S
+SystemLabel      si
+SystemName       Si-bulk
+%include structure.fdf
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         200 Ry
+%block kgrid.MonkhorstPack
+ 6 0 0 0.5
+ 0 6 0 0.5
+ 0 0 6 0.5
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+MD.TypeOfRun        CG
+MD.VariableCell     true
+MD.NumCGsteps       30
+MD.MaxForceTol      0.01 eV/Ang
+MD.MaxStressTol     0.1 GPa
+BandLinesScale      ReciprocalLatticeVectors
+%block BandLines < bandlines.txt
+%block ProjectedDensityOfStates
+ -15.0 5.0 0.05 400 eV
+%endblock ProjectedDensityOfStates
+SaveRho             true
+SaveHS              true
+WriteMDXmol         true

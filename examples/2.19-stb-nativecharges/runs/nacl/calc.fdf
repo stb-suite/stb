@@ -1,0 +1,34 @@
+# Rock-salt NaCl, primitive fcc cell, a = 5.64 Ang (experiment)
+SystemLabel      nacl
+SystemName       NaCl
+NumberOfAtoms    2
+NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 11 Na
+ 2 17 Cl
+%endblock ChemicalSpeciesLabel
+LatticeConstant  5.64 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         300 Ry
+%block kgrid.MonkhorstPack
+ 6 0 0 0.5
+ 0 6 0 0.5
+ 0 0 6 0.5
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+Charge.Hirshfeld    end           # SIESTA's own Hirshfeld charges, at the end of the run
+Charge.Voronoi      end           # ... and Voronoi
+WriteMullikenPop    1             # ... and Mulliken (atomic populations)

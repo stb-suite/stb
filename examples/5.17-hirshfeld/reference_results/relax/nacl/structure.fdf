@@ -1,0 +1,23 @@
+# NaCl rock salt, primitive fcc cell, a = 5.64 Ang (start; make_reference.sh relaxes the cell)
+
+NumberOfSpecies 2
+NumberOfAtoms 2
+
+%block ChemicalSpeciesLabel
+ 1 11 Na
+ 2 17 Cl
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 0.00000000 2.82000000 2.82000000
+ 2.82000000 0.00000000 2.82000000
+ 2.82000000 2.82000000 0.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.0000000000 0.0000000000 0.0000000000 1
+  0.5000000000 0.5000000000 0.5000000000 2
+%endblock AtomicCoordinatesAndAtomicSpecies

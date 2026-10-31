@@ -1,0 +1,8 @@
+# stb-mladsorb, MACE-MP-0 medium: every relaxation
+# id adsorbate start_slot start_type start_dist(A) end_slot end_type shift(A) height(A) CN d_nearest(A) E_ads(eV) E_form(eV) steps converged max|F|(eV/A)
+1 Si 1 ontop 2.000 1 ontop 0.0000 2.0809 1 2.2813 -2.528304 1.526104 48 1 0.03328
+2 Si 2 ontop 2.000 2 ontop 0.0000 1.3425 4 2.4755 -3.624069 0.430338 43 1 0.04945
+3 Si 3 bridge 2.000 3 bridge 0.0000 1.3811 3 2.4919 -3.523104 0.531304 30 1 0.04890
+4 Si 4 bridge 2.000 2 ontop 1.0237 1.3278 4 2.4714 -3.622051 0.432357 49 1 0.04954
+5 Si 5 bridge 2.000 2 ontop 1.0203 1.2918 4 2.4631 -3.621220 0.433188 49 1 0.03189
+6 Si 6 bridge 2.000 3 bridge 1.0066 1.3513 3 2.4830 -3.521631 0.532777 49 1 0.03402

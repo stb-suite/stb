@@ -1,0 +1,69 @@
+# Same as calc.fdf, EXCEPT the relaxation block is misconfigured on
+# purpose: no MD.VariableCell at all, and MD.Steps set to 0. Used to show
+# stb-strain's [4] report catching this live -- see "The gotcha" in the
+# README. Never use this as a real template; it's here only to trigger
+# the 2 warnings.
+
+## ===================================================================
+## SYSTEM DEFINITION
+## ===================================================================
+SystemLabel      siesta
+SystemName       siesta
+
+## Include the structure file generated with STB-SUITE
+%include structure.fdf
+
+## ===================================================================
+## BASIS SET DEFINITION
+## ===================================================================
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+
+## ===================================================================
+## K-POINT SAMPLING (BRILLOUIN ZONE)
+## ===================================================================
+kgrid.MonkhorstPack   [8  8  8]
+Mesh.CutOff           250  Ry
+FilterCutoff          150  Ry
+
+## ===================================================================
+## EXCHANGE-CORRELATION (XC) FUNCTIONAL
+## ===================================================================
+XC.Functional       GGA
+XC.Authors          PBE
+
+## ===================================================================
+## SPIN POLARIZATION
+## ===================================================================
+Spin                non-polarized
+
+## ===================================================================
+## SELF-CONSISTENT-FIELD (SCF)
+## ===================================================================
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.DM.Tolerance        1.0d-5  eV
+SCF.Mixer.History       6
+ElectronicTemperature   300 K
+
+## ===================================================================
+## STRUCTURE RELAXATION (MOLECULAR DYNAMICS - MD)
+## ===================================================================
+## MISCONFIGURED ON PURPOSE for this example: no MD.VariableCell, and
+## MD.Steps 0 -- exactly the 2 conditions stb-strain's [4] report warns
+## about (see calc.fdf's own comment for what these should actually be).
+MD.TypeOfRun            CG
+MD.MaxForceTol          0.01 eV/Ang
+MD.Steps                0
+
+## ===================================================================
+## STARTING THE CALCULATION (Using previous results)
+## ===================================================================
+DM.UseSaveDM            .true.
+
+## ===================================================================
+## OUTPUT FILES
+## ===================================================================
+WriteCoorInitial        .true.
+WriteForces             .true.

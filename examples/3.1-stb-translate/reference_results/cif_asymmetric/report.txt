@@ -1,0 +1,80 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:47
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../nacl_asym.cif -- cif (auto, from the name 'nacl_asym.cif')
+Output            : nacl.fdf -- fdf (auto, from the name 'nacl.fdf')
+  ... reading ../../nacl_asym.cif
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../nacl_asym.cif (5340 bytes, 219 lines)
+Format            : cif (auto, from the name 'nacl_asym.cif')
+Coordinates       : fractional (CIF always); lattice parameter 1.00 Ang
+Coordinate range  : 0.0000 .. 2.8200 Ang (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : Cl4Na4 -- reduced NaCl, Z = 4 formula units
+Atoms             : 8 (2 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Na    | Na      | 11 | 4     | 50.0         | 22.990  
+Cl    | Cl      | 17 | 4     | 50.0         | 35.450  
+Cell              : a = 5.64000, b = 5.64000, c = 5.64000 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.640000     0.000000     0.000000
+    b:     0.000000     5.640000     0.000000
+    c:     0.000000     0.000000     5.640000
+Volume            : 179.4061 Ang^3 (22.4258 Ang^3/atom); density 2.1636 g/cm^3 (mass 233.759 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Cl-Na | 2.8200         | Cl1 - Na5 | 1.05       |      
+Na-Na | 3.9881         | Na1 - Na2 | 1.20       |      
+Cl-Cl | 3.9881         | Cl5 - Cl6 | 1.95       |      
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Fm-3m       | 225    | 192       
+0.01          | Fm-3m       | 225    | 192       
+0.1           | Fm-3m       | 225    | 192       
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[4] OUTPUT
+------------------------------------------------------------
+File              : nacl.fdf (856 bytes, 30 lines)
+Format            : fdf (auto, from the name 'nacl.fdf')
+Coordinates       : Cartesian (AtomicCoordinatesFormat Ang) (as the input; -cf to choose)
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | NaCl    | NaCl     | same   
+atoms                           | 8       | 8        | same   
+volume / formula unit (Ang^3)   | 44.8515 | 44.8515  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 0.00e+00 | ok     
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Structure         : Cl4Na4, 8 atoms, Fm-3m
+Written           : nacl.fdf
+Also available    : --save-report --view --view-image -cf
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

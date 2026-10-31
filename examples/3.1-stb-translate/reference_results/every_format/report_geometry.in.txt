@@ -1,0 +1,77 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:42
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../si_bulk.fdf -- fdf (auto, from the name 'si_bulk.fdf')
+Output            : geometry.in -- fhi (auto, from the name 'geometry.in')
+  ... reading ../../si_bulk.fdf
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../si_bulk.fdf (683 bytes, 22 lines)
+Format            : fdf (auto, from the name 'si_bulk.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0000 .. 0.7500 (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3730         | Si1 - Si2 | 1.07       |      
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Fd-3m       | 227    | 192       
+0.01          | Fd-3m       | 227    | 192       
+0.1           | Fd-3m       | 227    | 192       
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[4] OUTPUT
+------------------------------------------------------------
+File              : geometry.in (676 bytes, 13 lines)
+Format            : fhi (auto, from the name 'geometry.in')
+Coordinates       : fractional (atom_frac) (as the input; -cf to choose)
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | Si      | Si       | same   
+atoms                           | 8       | 8        | same   
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 0.00e+00 | ok     
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Structure         : Si8, 8 atoms, Fd-3m
+Written           : geometry.in
+Also available    : --save-report --view --view-image -cf
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

@@ -1,0 +1,19 @@
+digraph ani2traj {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7];
+  ani   [label="<label>.ANI\n(frames, no cell, no time)"];
+  inp   [label="[1] inputs: log (MD settings, per-step cell, E_KS, T),\n<label>.MDE (T, E_KS, E_tot, V, P), .XV, input .fdf"];
+  sys   [label="[2] system: atoms, cell, density"];
+  align [label="[3] which MD step is each frame?\nWriteCoorStep coordinates, else the input geometry;\nlast frame vs .XV; appended runs"];
+  latt  [label="[4] lattice per frame (variable cell)"];
+  thermo[label="[5] thermodynamics per frame, from ITS step:\nT vs target, E_tot drift (NVE), V, P"];
+  mot   [label="[6] motion: largest step, boundary jumps,\ndisplacement per species, closest approach"];
+  dry   [label="--dry-run?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  write [label="[7] write xsf / pdb / extended xyz\n(--skip, --stride, --unwrap), read it back"];
+  end   [label="[8] summary   [9] warnings", fillcolor="#f4f4f4", color="#777777"];
+  ani -> inp -> sys -> align -> latt -> thermo -> mot -> dry;
+  dry -> write [label=" no", fontsize=9];
+  dry -> end [label=" yes", fontsize=9];
+  write -> end;
+}

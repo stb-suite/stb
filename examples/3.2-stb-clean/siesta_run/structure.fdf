@@ -1,0 +1,17 @@
+# Si, 2-atom primitive (fcc) cell, a = 5.55 Ang (1.3 % larger than the PBE/DZP minimum, so the relaxation has work)
+NumberOfSpecies 1
+NumberOfAtoms 2
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant 5.55 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000 0.000 0.000 1
+ 0.255 0.250 0.250 1
+%endblock AtomicCoordinatesAndAtomicSpecies

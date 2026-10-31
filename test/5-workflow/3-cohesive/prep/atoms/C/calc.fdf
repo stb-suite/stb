@@ -1,0 +1,54 @@
+
+## ===================================================================
+## SYSTEM DEFINITION
+## ===================================================================
+SystemLabel      siesta
+SystemName       siesta
+
+%include structure.fdf
+
+## ===================================================================
+## BASIS SET DEFINITION
+## ===================================================================
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+
+## ===================================================================
+## K-POINT SAMPLING (BRILLOUIN ZONE)
+## ===================================================================
+kgrid.MonkhorstPack   [1  1  1]
+Mesh.CutOff           320  Ry   
+FilterCutoff          150  Ry
+
+## ===================================================================
+## EXCHANGE-CORRELATION (XC) FUNCTIONAL
+## ===================================================================
+XC.Functional       GGA
+XC.Authors          PBE
+
+## ===================================================================
+## VAN DER WAALS CORRECTION (GRIMME DFT-D3) -- same convention as
+## stb-inputfile's own CALC_*_TEMPLATE blocks
+## ===================================================================
+DFTD3                   .false.
+
+## ===================================================================
+## SPIN POLARIZATION
+## ===================================================================
+Spin                polarized
+
+## ===================================================================
+## SELF-CONSISTENT-FIELD (SCF)
+## ===================================================================
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.DM.Tolerance        1.0d-5  eV
+SCF.Mixer.History       6
+ElectronicTemperature   300 K
+Diag.ParallelOverK      .true.
+
+## ===================================================================
+## STARTING THE CALCULATION
+## ===================================================================
+DM.UseSaveDM            .true.

@@ -1,0 +1,7 @@
+index,element,label,fragment,net_delta_charge_e
+1,O,O_frag1,fragment1,0.009688
+2,H,H_frag1,fragment1,-0.020832
+3,H,H_frag1,fragment1,-0.020557
+4,O,O_frag2,fragment2,0.028365
+5,H,H_frag2,fragment2,-0.017757
+6,H,H_frag2,fragment2,0.021092

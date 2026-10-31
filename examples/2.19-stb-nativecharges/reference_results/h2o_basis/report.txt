@@ -1,0 +1,41 @@
+
+NATIVE CHARGES:
+------------------------------------------------------------
+===== STB-NATIVECHARGES REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.325
+Target            : h2o_basis/* (4 folders)
+Methods           : Mulliken (WriteMullikenPop 1), Hirshfeld (Charge.Hirshfeld end), Voronoi (Charge.Voronoi end) -- as SIESTA printed them
+
+[1] CHARGES PER SPECIES
+------------------------------------------------------------
+folder        | basis | species | atoms | mean q Mulliken | mean q Hirshfeld | mean q Voronoi
+---------------------------------------------------------------------------------------------
+h2o_basis/DZ  | DZ    | O       | 1     | -0.3868         | -0.2870          | -0.3260       
+h2o_basis/DZ  | DZ    | H       | 2     | +0.1934         | +0.1435          | +0.1630       
+h2o_basis/DZP | DZP   | O       | 1     | +0.1183         | -0.2433          | -0.1934       
+h2o_basis/DZP | DZP   | H       | 2     | -0.0592         | +0.1216          | +0.0967       
+h2o_basis/SZ  | SZ    | O       | 1     | -0.6458         | -0.2850          | -0.3486       
+h2o_basis/SZ  | SZ    | H       | 2     | +0.3229         | +0.1425          | +0.1743       
+h2o_basis/TZP | TZP   | O       | 1     | +0.1831         | -0.2469          | -0.1931       
+h2o_basis/TZP | TZP   | H       | 2     | -0.0915         | +0.1235          | +0.0966       
+mean q in e per atom of the species; '-' = the method is not in that log
+
+[2] SUMMARY & FILES
+------------------------------------------------------------
+Mulliken          : in 4 of 4 folder(s)
+Hirshfeld         : in 4 of 4 folder(s)
+Voronoi           : in 4 of 4 folder(s)
+CSV               : h2o_basis_charges.csv
+
+[3] WARNINGS
+------------------------------------------------------------
+  1. h2o_basis/DZP: Mulliken and Hirshfeld disagree in SIGN on O1, H2, H3 -- a basis-set artefact of Mulliken (diffuse/polarization orbitals); prefer Hirshfeld/Voronoi (or Bader, Hirshfeld-I).
+  2. h2o_basis/TZP: Mulliken and Hirshfeld disagree in SIGN on O1, H2, H3 -- a basis-set artefact of Mulliken (diffuse/polarization orbitals); prefer Hirshfeld/Voronoi (or Bader, Hirshfeld-I).
+
+------------------------------------------------------------
+Native charges report complete.
+

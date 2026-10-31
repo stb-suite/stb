@@ -1,0 +1,27 @@
+# Synthetic 2-atom (C + H) fixture for stb-hirshfeldIons/stb-hirshfeldAnalysis'
+# hydrogen (Z_val=1) test: H's cation is a bare proton (NetCharge +1.0 would
+# leave 0 electrons), so no ions/H/cation/ SIESTA folder can exist -- Stage 2
+# must skip it and Stage 3 must substitute an analytical zero-density
+# reference. No physical/DFT meaning -- geometry/species only.
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 15.00000000   0.00000000   0.00000000
+  0.00000000  15.00000000   0.00000000
+  0.00000000   0.00000000  15.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.50000000   0.45000000   1
+  0.50000000   0.50000000   0.55000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

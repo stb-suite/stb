@@ -1,0 +1,4 @@
+files unpacked from the inputs-only archive: MANIFEST.txt, SHA256SUMS, Si.psml, bandlines.txt, calc.fdf, structure.fdf, submit.slurm
+original: E_total -230.035507 eV, 8 CG moves, relaxed: True, Fermi -4.180341 eV
+rerun   : E_total -230.035507 eV, 8 CG moves, relaxed: True, Fermi -4.180341 eV
+difference: +0.000 meV

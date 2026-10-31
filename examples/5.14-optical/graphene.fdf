@@ -1,0 +1,28 @@
+# Graphene monolayer, a = 2.48 Ang (the in-plane equilibrium lattice constant of this level of
+# theory: GGA-PBE, TZP, virtual_vault Troullier-Martins carbon; an energy-vs-a scan puts the minimum
+# at 2.4815 Ang, reference_results/graphene/a0_scan.csv), 20 Ang cell along c => ~16.6 Ang of
+# vacuum. The two C atoms are fixed by symmetry, so no position relaxation is needed: this IS the
+# already-relaxed structure stb-optical takes. 2D (one vacuum axis); hexagonal P6/mmm => two
+# independent tensor components, eps_xx = eps_yy (in-plane) and eps_zz (out-of-plane):
+# --directions xx zz is enough.
+SystemName graphene
+SystemLabel siesta
+
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+ 1  6  C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+  2.480000   0.000000   0.000000
+ -1.240000   2.147741   0.000000
+  0.000000   0.000000  20.000000
+%endblock LatticeVectors
+
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.333333333  0.666666667  0.5  1
+ 0.666666667  0.333333333  0.5  1
+%endblock AtomicCoordinatesAndAtomicSpecies

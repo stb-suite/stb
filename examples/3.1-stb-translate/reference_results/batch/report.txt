@@ -1,0 +1,349 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:49
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : '../../si*.fdf' -- 6 files, format fdf (auto, per file name)
+Output            : cif/ as cif (given (-of))
+CIF symmetry      : 0.01 Ang (--cif-symprec)
+  ... reading ../../si111_2x2.fdf
+
+[1] INPUT -- si111_2x2.fdf
+------------------------------------------------------------
+File              : ../../si111_2x2.fdf (1540 bytes, 45 lines)
+Format            : fdf (auto, from the name 'si111_2x2.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0000 .. 0.8333 (as read)
+
+[2] STRUCTURE -- si111_2x2.fdf
+------------------------------------------------------------
+Formula           : Si24 -- reduced Si, Z = 24 formula units
+Atoms             : 24 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 24    | 100.0        | 28.085  
+Cell              : a = 7.75023, b = 7.75023, c = 22.11904 Ang; alpha = 90.000, beta = 90.000, gamma = 60.000 deg
+Lattice vectors (Ang):
+    a:     7.750227     0.000000     0.000000
+    b:     3.875113     6.711893     0.000000
+    c:     0.000000     0.000000    22.119038
+Volume            : 1150.6035 Ang^3 (47.9418 Ang^3/atom); density 0.9728 g/cm^3 (mass 674.040 u)
+Periodicity       : 2D slab/layer -- vacuum (>= 10 Ang gap) along c
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms      | / covalent | check
+--------------------------------------------------------
+Si-Si | 2.3730         | Si9 - Si14 | 1.07       |      
+
+[3] SYMMETRY -- si111_2x2.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P-3m1       | 164    | 48        
+0.01          | P-3m1       | 164    | 48        
+0.1           | P-3m1       | 164    | 48        
+Crystal system    : trigonal; point group -3m
+Primitive cell    : 6 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[4] OUTPUT -- si111_2x2.fdf
+------------------------------------------------------------
+File              : cif/si111_2x2.cif (1005 bytes, 40 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output  | verdict          
+-----------------------------------------------------------------------
+composition                     | Si      | Si      | same             
+atoms                           | 24      | 6       | re-expressed cell
+volume / formula unit (Ang^3)   | 47.9418 | 47.9418 | same             
+same crystal (StructureMatcher) |         | yes     | rms 2.9e-08 Ang  
+Note              : the writer re-expressed the cell (the standard setting of a symmetrized CIF): compared as the same crystal up to a change of cell/origin (pymatgen StructureMatcher)
+  ... reading ../../si_bohr.fdf
+
+[5] INPUT -- si_bohr.fdf
+------------------------------------------------------------
+File              : ../../si_bohr.fdf (496 bytes, 17 lines)
+Format            : fdf (auto, from the name 'si_bohr.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 0.529177210903 Ang
+Coordinate range  : 0.0000 .. 0.2500 (as read)
+
+[6] STRUCTURE -- si_bohr.fdf
+------------------------------------------------------------
+Formula           : Si2 -- reduced Si, Z = 2 formula units
+Atoms             : 2 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 2     | 100.0        | 28.085  
+Cell              : a = 3.87511, b = 3.87511, c = 3.87511 Ang; alpha = 60.000, beta = 60.000, gamma = 60.000 deg
+Lattice vectors (Ang):
+    a:     0.000000     2.740119     2.740119
+    b:     2.740119     0.000000     2.740119
+    c:     2.740119     2.740119     0.000000
+Volume            : 41.1470 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 56.170 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3730         | Si1 - Si2 | 1.07       |      
+
+[7] SYMMETRY -- si_bohr.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Fd-3m       | 227    | 48        
+0.01          | Fd-3m       | 227    | 48        
+0.1           | Fd-3m       | 227    | 48        
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[8] OUTPUT -- si_bohr.fdf
+------------------------------------------------------------
+File              : cif/si_bohr.cif (5854 bytes, 218 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output  | verdict          
+-----------------------------------------------------------------------
+composition                     | Si      | Si      | same             
+atoms                           | 2       | 8       | re-expressed cell
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735 | same             
+same crystal (StructureMatcher) |         | yes     | rms 3.4e-09 Ang  
+Note              : the writer re-expressed the cell (the standard setting of a symmetrized CIF): compared as the same crystal up to a change of cell/origin (pymatgen StructureMatcher)
+  ... reading ../../si_bulk.fdf
+
+[9] INPUT -- si_bulk.fdf
+------------------------------------------------------------
+File              : ../../si_bulk.fdf (683 bytes, 22 lines)
+Format            : fdf (auto, from the name 'si_bulk.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0000 .. 0.7500 (as read)
+
+[10] STRUCTURE -- si_bulk.fdf
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3730         | Si1 - Si2 | 1.07       |      
+
+[11] SYMMETRY -- si_bulk.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Fd-3m       | 227    | 192       
+0.01          | Fd-3m       | 227    | 192       
+0.1           | Fd-3m       | 227    | 192       
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[12] OUTPUT -- si_bulk.fdf
+------------------------------------------------------------
+File              : cif/si_bulk.cif (5854 bytes, 218 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | Si      | Si       | same   
+atoms                           | 8       | 8        | same   
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 0.00e+00 | ok     
+  ... reading ../../si_noisy_0.002.fdf
+
+[13] INPUT -- si_noisy_0.002.fdf
+------------------------------------------------------------
+File              : ../../si_noisy_0.002.fdf (762 bytes, 23 lines)
+Format            : fdf (auto, from the name 'si_noisy_0.002.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0001 .. 1.0000 (as read)
+
+[14] STRUCTURE -- si_noisy_0.002.fdf
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3707         | Si7 - Si8 | 1.07       |      
+
+[15] SYMMETRY -- si_noisy_0.002.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P1          | 1      | 1         
+0.01          | Fd-3m       | 227    | 192       
+0.1           | Fd-3m       | 227    | 192       
+Tolerance         : the space group depends on the tolerance -- the structure is close to a higher symmetry (or slightly distorted from it)
+Crystal system    : cubic; point group m-3m
+Primitive cell    : 2 atoms (symprec 0.01 Ang) -- the input cell is 4x larger
+
+[16] OUTPUT -- si_noisy_0.002.fdf
+------------------------------------------------------------
+File              : cif/si_noisy_0.002.cif (5854 bytes, 218 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output   | verdict    
+------------------------------------------------------------------
+composition                     | Si      | Si       | same       
+atoms                           | 8       | 8        | same       
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735  | same       
+largest cell difference (Ang)   |         | 0.00e+00 | ok         
+largest atom displacement (Ang) |         | 2.64e-03 | symmetrized
+Symmetrized       : the CIF writer moved atoms by up to 0.0026 Ang onto their exact symmetric positions (--cif-symprec 0.01); --cif-symprec 0 keeps them as read
+  ... reading ../../si_noisy_0.02.fdf
+
+[17] INPUT -- si_noisy_0.02.fdf
+------------------------------------------------------------
+File              : ../../si_noisy_0.02.fdf (761 bytes, 23 lines)
+Format            : fdf (auto, from the name 'si_noisy_0.02.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0001 .. 1.0000 (as read)
+
+[18] STRUCTURE -- si_noisy_0.02.fdf
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.3468         | Si4 - Si5 | 1.06       |      
+
+[19] SYMMETRY -- si_noisy_0.02.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P1          | 1      | 1         
+0.01          | P1          | 1      | 1         
+0.1           | Fd-3m       | 227    | 192       
+Tolerance         : the space group depends on the tolerance -- the structure is close to a higher symmetry (or slightly distorted from it)
+Crystal system    : triclinic; point group 1
+Primitive cell    : 8 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[20] OUTPUT -- si_noisy_0.02.fdf
+------------------------------------------------------------
+File              : cif/si_noisy_0.02.cif (1056 bytes, 34 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | Si      | Si       | same   
+atoms                           | 8       | 8        | same   
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 0.00e+00 | ok     
+  ... reading ../../si_noisy_0.2.fdf
+
+[21] INPUT -- si_noisy_0.2.fdf
+------------------------------------------------------------
+File              : ../../si_noisy_0.2.fdf (760 bytes, 23 lines)
+Format            : fdf (auto, from the name 'si_noisy_0.2.fdf')
+Coordinates       : fractional (AtomicCoordinatesFormat Fractional); lattice parameter 1.0 Ang
+Coordinate range  : 0.0006 .. 0.9899 (as read)
+
+[22] STRUCTURE -- si_noisy_0.2.fdf
+------------------------------------------------------------
+Formula           : Si8 -- reduced Si, Z = 8 formula units
+Atoms             : 8 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 8     | 100.0        | 28.085  
+Cell              : a = 5.48024, b = 5.48024, c = 5.48024 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:     5.480238     0.000000     0.000000
+    b:     0.000000     5.480238     0.000000
+    c:     0.000000     0.000000     5.480238
+Volume            : 164.5880 Ang^3 (20.5735 Ang^3/atom); density 2.2668 g/cm^3 (mass 224.680 u)
+Periodicity       : 3D bulk (no vacuum gap)
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms     | / covalent | check
+-------------------------------------------------------
+Si-Si | 2.1231         | Si5 - Si6 | 0.96       |      
+
+[23] SYMMETRY -- si_noisy_0.2.fdf
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P1          | 1      | 1         
+0.01          | P1          | 1      | 1         
+0.1           | P1          | 1      | 1         
+Crystal system    : triclinic; point group 1
+Primitive cell    : 8 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[24] OUTPUT -- si_noisy_0.2.fdf
+------------------------------------------------------------
+File              : cif/si_noisy_0.2.cif (1056 bytes, 34 lines)
+Format            : cif (given (-of))
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : found at 0.01 Ang and written as the asymmetric unit in the standard setting -- atoms moved onto their exact symmetric positions; --cif-symprec 0 writes P1 exactly as read
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | Si      | Si       | same   
+atoms                           | 8       | 8        | same   
+volume / formula unit (Ang^3)   | 20.5735 | 20.5735  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 0.00e+00 | ok     
+
+[25] SUMMARY & FILES
+------------------------------------------------------------
+input              | formula | atoms | space group (0.01) | output             | status
+---------------------------------------------------------------------------------------
+si111_2x2.fdf      | Si24    | 24    | P-3m1              | si111_2x2.cif      | ok    
+si_bohr.fdf        | Si2     | 2     | Fd-3m              | si_bohr.cif        | ok    
+si_bulk.fdf        | Si8     | 8     | Fd-3m              | si_bulk.cif        | ok    
+si_noisy_0.002.fdf | Si8     | 8     | Fd-3m              | si_noisy_0.002.cif | ok    
+si_noisy_0.02.fdf  | Si8     | 8     | P1                 | si_noisy_0.02.cif  | ok    
+si_noisy_0.2.fdf   | Si8     | 8     | P1                 | si_noisy_0.2.cif   | ok    
+Status            : OK
+Written           : cif/si111_2x2.cif, cif/si_bohr.cif, cif/si_bulk.cif, cif/si_noisy_0.002.cif, cif/si_noisy_0.02.cif, cif/si_noisy_0.2.cif
+Also available    : --save-report --view --view-image -cf
+
+[26] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

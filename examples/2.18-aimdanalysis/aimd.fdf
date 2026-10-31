@@ -1,0 +1,36 @@
+SystemName          O2_aimd
+SystemLabel         aimd
+
+NumberOfAtoms       2
+NumberOfSpecies     1
+
+%block ChemicalSpeciesLabel
+ 1  8  O
+%endblock ChemicalSpeciesLabel
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+
+LatticeConstant     1.0 Ang
+%block LatticeVectors
+ 10.0  0.0  0.0
+  0.0 10.0  0.0
+  0.0  0.0 10.0
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 5.0000  5.0000  4.3950   1
+ 5.0000  5.0000  5.6050   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+DM.MixingWeight     0.1
+DM.NumberPulay      4
+MaxSCFIterations    200
+DM.Tolerance        1.0d-3
+
+MD.TypeOfRun        Verlet
+MD.InitialTimeStep  1
+MD.FinalTimeStep    5
+MD.LengthTimeStep   1.0 fs
+MD.InitialTemperature 300 K

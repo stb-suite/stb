@@ -1,0 +1,30 @@
+# Water, experimental geometry (O-H 0.9572 Ang, H-O-H 104.52 deg), 10 Ang box, basis SZ
+SystemLabel      h2o
+SystemName       H2O-SZ
+NumberOfAtoms    3
+NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+LatticeConstant  1.0 Ang
+%block LatticeVectors
+ 10.0  0.0  0.0
+  0.0 10.0  0.0
+  0.0  0.0 10.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 5.000000  5.000000  5.000000  1
+ 5.000000  5.756950  5.585882  2
+ 5.000000  4.243050  5.585882  2
+%endblock AtomicCoordinatesAndAtomicSpecies
+PAO.BasisSize       SZ
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         250 Ry
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+Charge.Hirshfeld    end           # SIESTA's own Hirshfeld charges, at the end of the run
+Charge.Voronoi      end           # ... and Voronoi
+WriteMullikenPop    1             # ... and Mulliken (atomic populations)

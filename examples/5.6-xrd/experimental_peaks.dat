@@ -1,0 +1,29 @@
+# ============================================================
+# Powder XRD pattern -- SPARSE PEAK LIST variant (2 columns, same model).
+# ============================================================
+# Same 2-column (2theta, intensity) model as experimental.dat -- but only
+# the peak maxima are listed, e.g. as you'd copy out of a published table
+# or an indexed reference pattern, instead of a full continuous scan.
+#
+# core/xrd.py::looks_like_peak_list() auto-detects this shape (highly
+# UNEVEN spacing between points -- some peaks close together, big empty
+# gaps elsewhere) and Gaussian-broadens it (FWHM=0.1 deg, same convention
+# the simulated pattern itself uses) before comparing, so it's on equal
+# footing with a real continuous scan instead of being cubic-interpolated
+# straight through the gaps (README section 3.4/1.4). Pass
+# --raw-experimental to compare it exactly as-is instead.
+#
+# Same real peaks as experimental.dat's own 9 strongest reflections
+# (extracted with scipy.signal.find_peaks) -- (111), (220), (311), (422),
+# (331), (400), plus 3 higher-angle reflections beyond this workflow's
+# default 0-90 deg --two-theta-range.
+# ============================================================
+  28.330    100.000
+  47.110     47.434
+  55.890     24.408
+  68.830      5.224
+  76.040      7.023
+  87.610      8.218
+  94.480      4.289
+ 106.130      2.366
+ 113.430      4.133

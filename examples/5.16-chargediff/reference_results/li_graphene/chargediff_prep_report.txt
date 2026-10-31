@@ -1,0 +1,86 @@
+===== CHARGE DENSITY DIFFERENCE -- STAGE 1: PREP =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+  Tool            : stb-chargediffPrep 1.9.289
+  Date            : 2026-10-23 12:40
+  Structure file  : /home/carlos/run/cdd_ref/relax/li_graphene/relaxed.fdf
+  Calc template   : calc_graphene.fdf
+  Output dir      : /home/carlos/run/cdd_ref/li_graphene
+  View fragments  : no
+  Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
+
+[1] COMBINED STRUCTURE
+------------------------------------------------------------
+  Formula         : C18Li
+  Total atoms     : 19   Species: C, Li
+  Lattice (Ang)   : a=7.4010  b=7.4010  c=20.0000
+  Angles (deg)    : alpha=90.00  beta=90.00  gamma=60.00
+  Cell volume     : 948.7274 Ang^3
+  Detected        : 2D (e.g., a slab or surface)
+
+[2] FRAGMENT DEFINITION
+------------------------------------------------------------
+  Split by        : atom counts 18,1 (in file order)
+  Fragments       : 2
+Folder     | Formula | Atoms | Atom indices | Species labels (real) | Valence e-
+--------------------------------------------------------------------------------
+fragment1/ | C18     | 18    | 1-18         | C_frag1               | 72        
+fragment2/ | Li      | 1     | 19-19        | Li_frag2              | 3         
+  Valence electrons: 75 in total (the combined system's SCF must find this number; each fragment folder finds only its own, ghost atoms carry no electrons).
+  Closest contact between fragments: 2.256 Ang (C7 - Li19)
+
+[3] LEVEL OF THEORY AND FORCED SETTINGS
+------------------------------------------------------------
+  Read from the template (identical in every folder):
+Setting                | Value in calc_graphene.fdf
+---------------------------------------------------
+XC functional          | GGA                       
+XC authors             | PBE                       
+Basis type             | split                     
+Basis size             | DZP                       
+PAO energy shift       | 0.01 Ry                   
+Electronic temperature | 300 K                     
+DM tolerance           | 1.0e-5                    
+Max SCF iterations     | 300                       
+SCF k-grid             | 6x6x1                     
+  Every folder's config_extra.fdf (%include'd on top of calc.fdf, which is the template untouched):
+Directive               | Forced value | Template had        | Why                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+MD.VariableCell         | false        | (absent)            | the cell is shared by all folders                                              
+MD.TypeOfRun / MD.Steps | CG / 0       | (absent) / (absent) | single point: the geometry is the one you gave                                 
+MeshCutoff              | 300 Ry       | 300 Ry              | the SAME real-space grid in every folder, or the densities cannot be subtracted
+SaveRho                 | true         | (absent)            | SIESTA must write the .RHO that Stage 2 reads                                  
+Spin polarized          | yes          | polarized           | forced by --force-spin                                                         
+Dipole correction       | yes          | -                   | forced                                                                         
+DFT-D3                  | no           | (absent)            | inherited                                                                      
+[NOTE] Spin polarized: Stage 2 can also map the spin-density difference (--spin).
+[NOTE] Every fragment keeps ALL the atoms as basis functions (the others as ghosts), so every calculation has the same basis: the difference then isolates the electronic reorganization from the basis-set superposition artefact.
+
+[4] FOLDERS WRITTEN
+------------------------------------------------------------
+Folder     | Real atoms  | Ghost atoms | Species labels (SystemLabel entries) | Files
+-------------------------------------------------------------------------------------
+combined/  | all 19 real | none        | C, Li                                | 5    
+fragment1/ | 18 real     | 1 ghost     | C_frag1, Li_frag2_ghost              | 5    
+fragment2/ | 1 real      | 18 ghost    | C_frag1_ghost, Li_frag2              | 5    
+  Each folder holds: structure.fdf, calc.fdf, config_extra.fdf and one pseudopotential per species label (a ghost label reuses its element's pseudopotential, with the electrons switched off).
+  Fragment manifest: /home/carlos/run/cdd_ref/li_graphene/chargediff_manifest.json (read by stb-chargediffAnalysis)
+
+[6] REFERENCES
+------------------------------------------------------------
+[OK] Citations written to '/home/carlos/run/cdd_ref/li_graphene/references.bib'.
+
+[7] SUMMARY & NEXT STEPS
+------------------------------------------------------------
+  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/home/carlos/run/cdd_ref/li_graphene'
+  Cost             : 3 independent single-point SCF runs; the combined one is the slowest (the fragments have the same basis, so about the same cost).
+  Settings         : identical cell, MeshCutoff (300 Ry) and level of theory in all of them.
+  Report           : /home/carlos/run/cdd_ref/li_graphene/chargediff_prep_report.txt
+
+  Next steps:
+    1. Run SIESTA in every folder, e.g.:
+         for d in /home/carlos/run/cdd_ref/li_graphene/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+    2. Check that each run converged, then:
+         stb-chargediffAnalysis --dir /home/carlos/run/cdd_ref/li_graphene --png --save-data
+       (add --profile --axis N for a planar average, --3d --iso-min X for a point cloud, --show to open the dashboard; the report also gives the counterpoise interaction energy.)

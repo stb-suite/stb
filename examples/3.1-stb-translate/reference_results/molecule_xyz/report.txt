@@ -1,0 +1,80 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:48
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../water.xyz -- xyz (auto, from the name 'water.xyz')
+Output            : water.fdf -- fdf (auto, from the name 'water.fdf')
+Lattice vectors   : from --lattice-vectors (XYZ input)
+  ... reading ../../water.xyz
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../water.xyz (172 bytes, 5 lines)
+Format            : xyz (auto, from the name 'water.xyz')
+Coordinates       : Cartesian, Ang (XYZ always); lattice parameter 1.0 Ang
+Coordinate range  : 6.7368 .. 8.2632 Ang (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : H2O -- reduced H2O, Z = 1 formula units
+Atoms             : 3 (2 species)
+label | element | Z | count | fraction (%) | mass (u)
+-----------------------------------------------------
+O     | O       | 8 | 1     | 33.3         | 15.999  
+H     | H       | 1 | 2     | 66.7         | 1.008   
+Cell              : a = 15.00000, b = 15.00000, c = 15.00000 Ang; alpha = 90.000, beta = 90.000, gamma = 90.000 deg
+Lattice vectors (Ang):
+    a:    15.000000     0.000000     0.000000
+    b:     0.000000    15.000000     0.000000
+    c:     0.000000     0.000000    15.000000
+Volume            : 3375.0000 Ang^3 (1125.0000 Ang^3/atom); density 0.0089 g/cm^3 (mass 18.015 u)
+Periodicity       : 0D molecule/cluster in a box -- vacuum (>= 10 Ang gap) along a, b, c
+Shortest distance per element pair (minimum image):
+pair | distance (Ang) | atoms   | / covalent | check
+----------------------------------------------------
+H-O  | 0.9686         | H1 - O3 | 1.00       |      
+H-H  | 1.5265         | H2 - H3 | 2.46       |      
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | Pmm2        | 25     | 4         
+0.01          | Pmm2        | 25     | 4         
+0.1           | Pmm2        | 25     | 4         
+Crystal system    : orthorhombic; point group mm2
+Primitive cell    : 3 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[4] OUTPUT
+------------------------------------------------------------
+File              : water.fdf (640 bytes, 25 lines)
+Format            : fdf (auto, from the name 'water.fdf')
+Coordinates       : Cartesian (AtomicCoordinatesFormat Ang) (as the input; -cf to choose)
+Verification (the written file read back):
+quantity                        | input     | output    | verdict
+-----------------------------------------------------------------
+composition                     | H2O       | H2O       | same   
+atoms                           | 3         | 3         | same   
+volume / formula unit (Ang^3)   | 3375.0000 | 3375.0000 | same   
+largest cell difference (Ang)   |           | 0.00e+00  | ok     
+largest atom displacement (Ang) |           | 0.00e+00  | ok     
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Structure         : H2O, 3 atoms, Pmm2
+Written           : water.fdf
+Also available    : --save-report --view --view-image -cf
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

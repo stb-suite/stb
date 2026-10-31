@@ -1,0 +1,26 @@
+# H2O molecule in a 12 Ang cubic box (0D: vacuum along all 3 axes). Only a Stage 1 fixture here:
+# it shows how stb-optical reports an isolated system (no real DFT is run on it). In Stage 2
+# --dimensionality-correction would extract the molecular polarizability from such a run.
+SystemName H2O molecule
+SystemLabel siesta
+
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1   8  O
+ 2   1  H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 12.0 Ang
+%block LatticeVectors
+  1.0  0.0  0.0
+  0.0  1.0  0.0
+  0.0  0.0  1.0
+%endblock LatticeVectors
+
+NumberOfAtoms 3
+AtomicCoordinatesFormat NotScaledCartesianAng
+%block AtomicCoordinatesAndAtomicSpecies
+  6.0000  6.0000  6.1173  1
+  6.0000  6.7572  5.5307  2
+  6.0000  5.2428  5.5307  2
+%endblock AtomicCoordinatesAndAtomicSpecies

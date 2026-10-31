@@ -1,0 +1,115 @@
+===== STB-MLADSORB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 11:29:10
+Software          : stb 1.9.308, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Slab              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Adsorbate(s)      : Si
+Sites             : ontop, bridge, hollow; start at 2 Ang
+Substrate         : top 4 Ang relaxed, deeper atoms fixed
+Relaxations       : FIRE to max|F| < 0.05 eV/Ang, at most 300 steps
+Also              : bulk reference
+Temperature       : 300 K (site populations)
+
+[1] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 small (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Loaded in         : 0.2 s
+
+[2] CLEAN SLAB
+------------------------------------------------------------
+File              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Atoms             : 24 (Si24)
+Surface cell      : a = 7.7502, b = 7.7502 Ang, gamma = 60.00 deg, area 52.019 Ang^2 (13.005 Ang^2 per top-layer atom)
+Thickness         : 7.110 Ang in 6 layers; vacuum 15.01 Ang (c along the normal 22.119 Ang)
+layer | height as given (Ang) | height relaxed (Ang) | spacing (Ang) | atoms | elements | in the relaxations
+------------------------------------------------------------------------------------------------------------
+L1    | +0.000                | +0.000               | -             | 4     | Si4      | free              
+L2    | -0.791                | -0.773               | 0.773         | 4     | Si4      | free              
+L3    | -3.164                | -3.165               | 2.393         | 4     | Si4      | free              
+L4    | -3.955                | -3.934               | 0.769         | 4     | Si4      | free              
+L5    | -6.328                | -6.319               | 2.384         | 4     | Si4      | fixed             
+L6    | -7.119                | -7.110               | 0.791         | 4     | Si4      | fixed             
+As given          : E = -124.044279 eV, largest force 0.1385 eV/Ang (atom 14, L3)
+Relaxed           : --relax-depth 4 Ang -> 16 atom(s) free, 8 fixed; E = -124.053867 eV (relaxation -0.0096 eV), max|F| on the free atoms 0.1385 -> 0.0396 eV/Ang, 4 steps (converged), largest move 0.011 Ang
+
+[3] REFERENCES
+------------------------------------------------------------
+Isolated adsorbate (alone in a cubic box, relaxed with the model):
+adsorbate | atoms | extent (Ang) | box (Ang) | E (eV)    | steps
+----------------------------------------------------------------
+Si        | 1     | 0.00         | 20.0      | -1.014780 | 0    
+Bulk reference (positions and cell relaxed with the model; mu = E/N):
+element | file                                                            | atoms | volume/atom (Ang^3) | mu (eV/atom) | steps
+------------------------------------------------------------------------------------------------------------------------------
+Si      | /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.398    | -5.370896    | 8    
+E_form = E(slab+adsorbate) - E(slab) - sum mu: the energy to take the adsorbate's atoms from their bulk phases (an adatom formation energy).
+
+[4] CANDIDATE SITES
+------------------------------------------------------------
+Found             : 48 site(s) in the cell, 6 symmetry-distinct (--symprec 0.01; 24 symmetry operation(s) keep the surface normal)
+site | type   | what is below         | in the cell | in-plane fractional (a, b)
+--------------------------------------------------------------------------------
+#1   | ontop  | above L1 Si21         | 4           | 1.0000 1.0000             
+#2   | ontop  | above L2 Si17         | 4           | 0.8333 0.3333             
+#3   | bridge | above L4 Si12         | 4           | 0.6667 0.6667             
+#4   | bridge | nothing below (L1-L4) | 12          | 0.1667 0.9167             
+#5   | bridge | nothing below (L1-L4) | 12          | 0.5833 0.5833             
+#6   | bridge | nothing below (L1-L4) | 12          | 0.7500 0.2500             
+Below             : the topmost atom within 0.5 Ang (in-plane) of the site, layers counted from the top (on fcc(111) a hollow above L2 is hcp and one above L3 is fcc; on Si(111) a hollow above L2 is T4 and one above L4 is H3).
+
+[5] RELAXATIONS
+------------------------------------------------------------
+6 relaxation(s) with MACE-MP-0 small in 29.9 s:
+run | ads | start     | dist (A) | ended at  | moved (A) | height (A) | CN | d_nn (A) | E_ads (eV) | substrate (A) | steps | max|F|
+-----------------------------------------------------------------------------------------------------------------------------------
+1   | Si  | #1 ontop  | 2.00     | #1 ontop  | 0.00      | 2.160      | 1  | 2.327    | -2.2808    | 0.167         | 22    | 0.035 
+2   | Si  | #2 ontop  | 2.00     | #2 ontop  | 0.00      | 1.336      | 4  | 2.489    | -3.5904    | 0.397         | 43    | 0.042 
+3   | Si  | #3 bridge | 2.00     | #3 bridge | 0.00      | 1.402      | 3  | 2.510    | -3.6090    | 0.271         | 30    | 0.047 
+4   | Si  | #4 bridge | 2.00     | #2 ontop  | 1.06      | 1.320      | 4  | 2.478    | -3.5855    | 0.436         | 45    | 0.049 
+5   | Si  | #5 bridge | 2.00     | #3 bridge | 1.01      | 1.385      | 3  | 2.496    | -3.6059    | 0.286         | 46    | 0.049 
+6   | Si  | #6 bridge | 2.00     | #6 bridge | 0.02      | 1.536      | 3  | 2.425    | -3.2945    | 0.176         | 38    | 0.041 
+Columns           : start = starting site and pymatgen distance; ended at = nearest site of the cell to the adsorbate's lowest atom (within 0.6 Ang, else off-site); moved = in-plane shift of that atom; height = above layer 1; CN = substrate neighbours within 1.25 x the covalent radii; substrate = largest substrate displacement from the clean slab. Cyan rows: the adsorbate left its starting site.
+Moved             : 2 of 6 run(s) ended at another site -- the starting site is not a minimum of the model there.
+
+[6] DISTINCT MINIMA
+------------------------------------------------------------
+rank | ads | site      | what is below         | E_ads (eV) | dE (eV) | E_form (eV) | in cell | pop. 300 K (%) | height (A) | CN | bonds (A)         | from runs
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+1    | Si  | #3 bridge | above L4 Si12         | -3.6090    | +0.0000 | 0.7471      | 4       | 67.3           | 1.402      | 3  | 2.510 2.510 2.510 | 3,5      
+2    | Si  | #2 ontop  | above L2 Si17         | -3.5904    | +0.0186 | 0.7657      | 4       | 32.7           | 1.336      | 4  | 2.489 2.489 2.489 | 2,4      
+3    | Si  | #6 bridge | nothing below (L1-L4) | -3.2945    | +0.3146 | 1.0617      | 12      | 0.0            | 1.536      | 3  | 2.425 2.425 2.733 | 6        
+4    | Si  | #1 ontop  | above L1 Si21         | -2.2808    | +1.3282 | 2.0753      | 4       | 0.0            | 2.160      | 1  | 2.327             | 1        
+Grouping          : runs of one adsorbate that end at symmetry-equivalent sites within 0.02 eV are one minimum; dE is relative to the most stable minimum of the same adsorbate; the population is multiplicity x exp(-dE/kT), normalized (configurational only: no vibrational entropy).
+Si                : most stable #3 bridge (above L4 Si12), 0.0186 eV below the next minimum (#2 ontop)
+                    no run ended at #4 bridge, #5 bridge: not a minimum of the model (or not reached from these starts)
+
+From minimum 1 of Si, #3 bridge, to every other minimum (in-plane distances):
+rank | site      | what is below         | dE (eV) | nearest copy of the site (Ang) | in its .fdf (Ang)
+-------------------------------------------------------------------------------------------------------
+2    | #2 ontop  | above L2 Si17         | +0.0186 | 2.237                          | 2.237            
+3    | #6 bridge | nothing below (L1-L4) | +0.3146 | 1.119                          | 2.945            
+4    | #1 ontop  | above L1 Si21         | +1.3282 | 2.237                          | 4.475            
+Diffusion barrier : a climbing-image NEB with stb-mlneb (5.7) between two of these minima -- with its committee, SIESTA check (--siesta-check) and export to training (--to-mlff):
+  stb-mlneb --initial foundation_small/rank01_bridge_site3_Si.fdf --final foundation_small/rank02_ontop_site2_Si.fdf --autosort-tol 0 --model small
+  (--autosort-tol 0: the .fdf files list the same atoms in the same order, and an adsorbate that hops farther than the default 0.5 Ang cannot be matched by distance. The minimum nearest to minimum 1 as written in its .fdf, 2.24 Ang. A minimum whose nearest site copy is closer than its .fdf sits at another copy; such a short hop is real only if the adsorbate stays there when relaxed next to minimum 1 -- not checked here)
+[NOTE] ML-level energies from a fast surrogate potential: use them to choose which site(s) to compute with SIESTA (stb-adsorb, 4.8), not as the final answer.
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+Si                : most stable #3 bridge (above L4 Si12), E_ads -3.6090 eV, E_form 0.7471 eV; next #2 ontop +0.0186 eV
+Figure            : foundation_small/mladsorb.png
+Minima (.fdf)     : foundation_small/rank01_*.fdf .. rank04_*.fdf
+Data              : foundation_small/mladsorb_configs.dat
+Data              : foundation_small/mladsorb_minima.dat
+Report            : foundation_small/stb_mladsorb_report.txt
+Also available    : --show --save-gnuplot --save-xyz
+Wall time         : 34.2 s (MACE-MP-0 small screening 30 s)
+
+[8] WARNINGS
+------------------------------------------------------------
+  1. Minima: for Si the two most stable minima are only 19 meV apart -- below what an ML potential resolves reliably; check both with SIESTA.
+Library messages  : 19 distinct message(s) from mace/torch/ase captured, not shown

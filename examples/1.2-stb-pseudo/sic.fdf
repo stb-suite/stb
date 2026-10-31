@@ -1,0 +1,19 @@
+SystemName sic-test
+SystemLabel sic
+LatticeConstant 4.36 Ang
+%block LatticeVectors
+0.0 0.5 0.5
+0.5 0.0 0.5
+0.5 0.5 0.0
+%endblock LatticeVectors
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+1 14 Si
+2  6 C
+%endblock ChemicalSpeciesLabel
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+0.00 0.00 0.00 1
+0.25 0.25 0.25 2
+%endblock AtomicCoordinatesAndAtomicSpecies

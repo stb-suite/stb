@@ -1,0 +1,34 @@
+# O2 molecule (triplet ground state) in an 8 Ang cubic box: spin-polarized density
+SystemLabel      o2
+SystemName       O2-triplet
+NumberOfAtoms    2
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 8 O
+%endblock ChemicalSpeciesLabel
+LatticeConstant  1.0 Ang
+%block LatticeVectors
+ 8.0 0.0 0.0
+ 0.0 8.0 0.0
+ 0.0 0.0 8.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 4.0000  4.0000  3.3950  1
+ 4.0000  4.0000  4.6050  1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         120 Ry
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                polarized
+DM.InitSpin.AF      false
+SCF.DM.Tolerance    1.0d-5
+SCF.Mixer.Weight    0.1
+MaxSCFIterations    300
+
+SaveRho                     true
+SaveTotalPotential          true
+SaveHS                      true    # o2.HSX: lets stb-cube identify the spin configuration

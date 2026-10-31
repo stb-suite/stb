@@ -1,0 +1,26 @@
+# the fragment WITHOUT ghost atoms (its own basis only), from /home/carlos/run/cdd_ref/water_r3.00/fragment2
+# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+
+NumberOfSpecies    2
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   8   O_frag2
+ 2   1   H_frag2
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 14.00000000   0.00000000   0.00000000
+ 0.00000000   14.00000000   0.00000000
+ 0.00000000   0.00000000   14.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.35998526   0.49756990   0.51517294   1
+  0.43009628   0.49999874   0.51012987   2
+  0.33820954   0.47769299   0.45230636   2
+%endblock AtomicCoordinatesAndAtomicSpecies

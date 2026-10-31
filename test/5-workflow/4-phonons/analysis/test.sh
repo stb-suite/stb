@@ -1,0 +1,308 @@
+#!/bin/bash
+
+# --- Setup ---
+# Smoke test for stb-phononsPos (Phonons Analysis, item 5.4.2), covering both
+# ways it can be fed: real SIESTA .FA forces (fabricated here -- same 14-atom
+# Sn3O4 system and format as test/3-utils/2-clean/Sn3O4.FA, physically
+# meaningless but format-correct, enough to exercise FORCE_SETS extraction),
+# and an ML-computed phonopy_disp.yaml (stb-mlphonons, ML Simulations, no
+# SIESTA needed).
+FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREP_DIR="$(cd "$FIXTURE_DIR/../prep" && pwd)"
+TEST_DIR="$FIXTURE_DIR/test_files"
+
+# Output colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+PASS=0
+FAIL=0
+
+# --- Check helpers ---
+
+# Checks that file $1 exists and is not empty
+check_success() {
+    if [ -s "$1" ]; then
+        echo -e " ... ${GREEN}OK${NC} (file '$1' created)"
+        PASS=$((PASS+1))
+    else
+        echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that file $2 contains (grep -q) pattern $1
+check_contains() {
+    if grep -q "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} '$1' NOT found in '$2'"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+# Checks that file $2 does NOT contain (grep -q) pattern $1
+check_not_contains() {
+    if grep -q "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' unexpectedly found in '$2'"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' NOT found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
+# Checks that $1 (actual exit code) equals $2 (expected exit code)
+check_exit_code() {
+    if [ "$1" -eq "$2" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} exit code $1 (expected $2)"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} exit code $1 (expected $2)"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+
+check_python() {   # $1 = description, $2 = python code exiting 0 on success
+    python3 -c "$2"
+    if [ $? -eq 0 ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} $1"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} $1"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+
+# --- 1. Preparation ---
+echo "--- Starting tester for STB-PhononsPos analysis (item 5.4.2) ---"
+rm -rf "$TEST_DIR"
+mkdir -p "$TEST_DIR"
+cp "$PREP_DIR/structure.fdf" "$TEST_DIR/"
+cp "$PREP_DIR/calc.fdf" "$TEST_DIR/"
+cp "$PREP_DIR/Sn.psf" "$TEST_DIR/"
+cp "$PREP_DIR/O.psf" "$TEST_DIR/"
+cp "$FIXTURE_DIR/Sn3O4.FA" "$TEST_DIR/"
+echo "Test directory '$TEST_DIR' prepared."
+
+pushd "$TEST_DIR" > /dev/null
+
+
+# --- 2. Real-SIESTA-forces path: build displacement folders, drop a
+#     fabricated Sn3O4.FA into every disp-*/ (format-correct, not physically
+#     meaningful -- fine for a wiring smoke test). Each folder gets a
+#     slightly different scale factor rather than the exact same forces
+#     everywhere -- identical forces on every displacement make the
+#     resulting dynamical matrix perfectly degenerate, which crashes
+#     phonopy's thermal-displacement-matrix code with an unrelated assertion
+#     error (reproduced once while writing this test; not a stb bug, just an
+#     unrealistic fixture) ---
+echo -e "\n--- Testing the real-SIESTA-forces path (--bands --dos --pdos --thermal-displacements --freeze-unstable-mode --save-gnuplot) ---"
+rm -rf phonon_runs
+stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-intro > log_create.txt 2>&1
+python3 - <<'PYEOF'
+import glob
+
+with open("Sn3O4.FA") as f:
+    lines = f.readlines()
+header, rows = lines[0], lines[1:]
+
+for i, d in enumerate(sorted(glob.glob("phonon_runs/disp-*")), start=1):
+    scale = 1.0 + 0.01 * (i % 17)
+    with open(f"{d}/Sn3O4.FA", "w") as out:
+        out.write(header)
+        for row in rows:
+            parts = row.split()
+            idx = parts[0]
+            vals = [float(v) * scale for v in parts[1:]]
+            out.write(f"{idx:>6}  {vals[0]: .9E}  {vals[1]: .9E}  {vals[2]: .9E}\n")
+PYEOF
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos --thermal-displacements \
+    --freeze-unstable-mode --save-gnuplot --save-report --no-intro > log_pos_siesta.txt 2>&1
+check_contains "Force files found : 42" log_pos_siesta.txt
+check_contains "FORCE_SETS       : generated successfully" log_pos_siesta.txt
+check_contains "Symmetry precision: 0.01 Ang" log_pos_siesta.txt
+check_contains "THERMAL PROPERTIES SUMMARY" log_pos_siesta.txt
+check_contains "BAND STRUCTURE" log_pos_siesta.txt
+check_contains "Bravais lattice" log_pos_siesta.txt
+check_contains "DENSITY OF STATES" log_pos_siesta.txt
+check_contains "MODE FREEZE" log_pos_siesta.txt
+check_success phonon_runs/phonon_properties.txt
+check_success phonon_runs/phonon_bands.png
+check_success phonon_runs/band.yaml
+check_success phonon_runs/thermal_properties.dat
+check_success phonon_runs/phonon_plots/bands.dat
+check_success phonon_runs/phonon_plots/bands.gplot
+check_success phonon_runs/phonon_plots/dos.dat
+
+echo -e "\n--- Testing --save-gnuplot is off by default ---"
+rm -rf phonon_runs/phonon_plots
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_no_gnuplot.txt 2>&1
+check_contains "save-gnuplot not requested" log_pos_no_gnuplot.txt
+if [ ! -d phonon_runs/phonon_plots ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} 'phonon_plots/' NOT created (as expected)"
+    PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} 'phonon_plots/' unexpectedly created without --save-gnuplot"
+    FAIL=$((FAIL+1))
+fi
+
+echo -e "\n--- Testing --symprec (looser than default doesn't crash, changes the report) ---"
+stb-phononsPos -dir phonon_runs -m 4 4 4 --symprec 0.1 --no-intro > log_pos_symprec.txt 2>&1
+check_exit_code $? 0
+check_contains "Symmetry precision: 0.1 Ang" log_pos_symprec.txt
+
+echo -e "\n--- Testing --view completes headlessly without hanging (matplotlib Agg backend) ---"
+MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos \
+    --view --no-intro > log_pos_view.txt 2>&1
+check_exit_code $? 0
+check_contains "SUMMARY & FILES" log_pos_view.txt
+
+
+# --- 2b. Residual forces of the undisplaced supercell (perfect_supercell/) ---
+echo -e "\n--- Testing the subtraction of the undisplaced supercell's (residual) forces ---"
+check_contains "perfect_supercell/ has no finished SIESTA run" log_pos_siesta.txt
+cp phonon_runs/band.yaml band_ref.yaml
+python3 - <<'PYEOF'
+import glob
+import numpy as np
+rows = [l.split() for l in open("Sn3O4.FA").readlines()[1:]]
+n = len(rows)
+resid = np.random.default_rng(3).normal(scale=0.02, size=(n, 3))   # a fixed residual pattern
+def write(path, f):
+    with open(path, "w") as out:
+        out.write(f"{n}\n" + "".join(f"{i + 1:>6}  {a: .9E}  {b: .9E}  {c: .9E}\n" for i, (a, b, c) in enumerate(f)))
+write("phonon_runs/perfect_supercell/Sn3O4.FA", resid)
+for d in sorted(glob.glob("phonon_runs/disp-*")):
+    f = np.array([[float(x) for x in l.split()[1:4]] for l in open(f"{d}/Sn3O4.FA").readlines()[1:]])
+    write(f"{d}/Sn3O4.FA", f + resid)
+PYEOF
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_residual.txt 2>&1
+check_exit_code $? 0
+check_contains "Residual forces  : subtracted (undisplaced supercell, max" log_pos_residual.txt
+check_success phonon_runs/FORCE_SETS.raw
+check_python "residual added to every displacement and subtracted again: the same frequencies as without it" "
+import sys, yaml, numpy as np
+f = lambda p: np.array([[b['frequency'] for b in q['band']] for q in yaml.safe_load(open(p))['phonon']])
+sys.exit(0 if np.abs(f('band_ref.yaml') - f('phonon_runs/band.yaml')).max() < 1e-3 else 1)
+"
+check_python "without the subtraction, the same residual changes the frequencies by far more (> 0.01 THz)" "
+import sys, numpy as np, phonopy, warnings
+warnings.filterwarnings('ignore')
+ph = phonopy.load('phonon_runs/phonopy_disp.yaml', force_sets_filename='phonon_runs/FORCE_SETS.raw', symprec=0.01, log_level=0)
+ph2 = phonopy.load('phonon_runs/phonopy_disp.yaml', force_sets_filename='phonon_runs/FORCE_SETS', symprec=0.01, log_level=0)
+q = [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0.5]]
+ph.run_qpoints(q); ph2.run_qpoints(q)
+d = np.abs(ph.get_qpoints_dict()['frequencies'] - ph2.get_qpoints_dict()['frequencies']).max()
+sys.exit(0 if d > 0.01 else 1)
+"
+stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --no-intro > log_pos_residual2.txt 2>&1
+check_python "a second analysis does not subtract twice (FORCE_SETS is rebuilt from the .FA files)" "
+import sys, yaml, numpy as np
+f = lambda p: np.array([[b['frequency'] for b in q['band']] for q in yaml.safe_load(open(p))['phonon']])
+sys.exit(0 if np.abs(f('band_ref.yaml') - f('phonon_runs/band.yaml')).max() < 1e-3 else 1)
+"
+check_python "the undisplaced supercell (phonopy's 'LatticeConstant 1.0 Bohr') is read back in Angstrom" "
+import sys, numpy as np
+from stb.core import structure_io as s
+a = s.read_fdf('phonon_runs/perfect_supercell/structure.fdf').lattice
+b = s.read_fdf('structure.fdf').lattice
+sys.exit(0 if 'Bohr' in open('phonon_runs/perfect_supercell/structure.fdf').read() and np.allclose(a, b, atol=1e-5) else 1)
+"
+
+
+# --- 3. ML-computed force constants path (no SIESTA .FA needed) -- this is
+#     the exact pipeline that surfaced the "bands didn't do anything" menu
+#     bug (typing "y" at the old free-text prompt silently dropped --bands);
+#     covered again in the interactive section below ---
+echo -e "\n--- Testing the ML-computed (stb-mlphonons) path with --bands ---"
+rm -rf phonon_ml_runs
+stb-mlphonons --file structure.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
+    --output-dir phonon_ml_runs --no-relax --no-intro > log_ml.txt 2>&1
+check_success phonon_ml_runs/phonopy_disp.yaml
+
+stb-phononsPos -dir phonon_ml_runs -m 4 4 4 --bands --no-intro > log_pos_ml.txt 2>&1
+check_contains "Force constants already embedded" log_pos_ml.txt
+check_contains "BAND STRUCTURE" log_pos_ml.txt
+check_success phonon_ml_runs/phonon_bands.png
+check_success phonon_ml_runs/band.yaml
+
+
+# --- 4. Error and robustness cases ---
+echo -e "\n--- Testing error cases ---"
+
+echo "Testing: missing directory"
+stb-phononsPos -dir does_not_exist --no-intro > log_missing_dir.txt 2>&1
+check_exit_code $? 1
+check_contains "not found" log_missing_dir.txt
+
+echo "Testing: directory without phonopy_disp.yaml"
+mkdir -p empty_phonon_dir
+stb-phononsPos -dir empty_phonon_dir --no-intro > log_no_yaml.txt 2>&1
+check_exit_code $? 1
+check_contains "Did you run the displacement generator" log_no_yaml.txt
+
+echo "Testing: --version"
+stb-phononsPos --version > log_version.txt 2>&1
+check_contains "stb-phononsPos" log_version.txt
+
+echo "Testing: --help documents --bands/--dos/--symprec/--save-gnuplot/--view"
+stb-phononsPos --help > log_help.txt 2>&1
+check_contains "bands" log_help.txt
+check_contains "dos" log_help.txt
+check_contains "symprec" log_help.txt
+check_contains "save-gnuplot" log_help.txt
+check_contains "view" log_help.txt
+
+
+# --- 5. Interactive path (stb-suite, shortcut 5.4.2) -- exercises the
+#     numbered "Additional analyses" list added to fix the silent-no-op bug,
+#     plus the newer 'all' shortcut and --save-report/--save-gnuplot/--view
+#     prompts ---
+echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.4.2) ---"
+
+echo "Testing: select '1' from the numbered list -> bands actually runs"
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
+check_contains "Selected: bands" log_menu_bands.txt
+check_contains "BAND STRUCTURE" log_menu_bands.txt
+check_success phonon_ml_runs/phonon_bands.png
+
+echo "Testing: an unrecognized token (old y/n habit) is now flagged instead of silently ignored"
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
+check_contains "Ignored unrecognized option(s): y" log_menu_typo.txt
+check_not_contains "BAND STRUCTURE" log_menu_typo.txt
+
+echo "Testing: 'all' shortcut selects bands+dos+pdos+thermal but not freeze, and --save-report writes the report"
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml phonon_ml_runs/phonon_properties.txt
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+check_contains "Selected: bands, dos, pdos, thermal" log_menu_all.txt
+check_contains "BAND STRUCTURE" log_menu_all.txt
+check_contains "DENSITY OF STATES" log_menu_all.txt
+check_not_contains "MODE FREEZE" log_menu_all.txt
+check_success phonon_ml_runs/phonon_properties.txt
+
+
+popd > /dev/null
+
+# --- 6. Summary ---
+echo -e "\n--- Tests Complete ---"
+echo -e "${GREEN}Passed: $PASS${NC}   ${RED}Failed: $FAIL${NC}"
+
+read -p "Remove the '$TEST_DIR' directory and all test files? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Cleaning up test files..."
+    rm -rf "$TEST_DIR"
+    echo -e "${GREEN}Cleanup complete.${NC}"
+else
+    echo "Test files were kept in '$TEST_DIR/' for inspection."
+fi
+
+[ "$FAIL" -eq 0 ]

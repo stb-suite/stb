@@ -1,0 +1,923 @@
+{
+ "format": "stb-mlff-model-card",
+ "version": 1,
+ "created": "2026-10-24T08:46:42",
+ "stb_version": "1.9.292",
+ "model": {
+  "name": "round_02_seed_125",
+  "file": "mlff_model_compiled.model",
+  "files": [
+   {
+    "file": "mlff_model.model",
+    "kind": "plain (torch.save)",
+    "sha256": "159402ba8b38b026ed3da27f08e92dee5da419502b09dcf9fd424740ad5a4dd3",
+    "size_bytes": 11023221
+   },
+   {
+    "file": "mlff_model_compiled.model",
+    "kind": "compiled (TorchScript)",
+    "sha256": "d7b4819cda6d9dce936293c928620c3df206a102b64ba1930502ce32c76304d5",
+    "size_bytes": 11114603
+   }
+  ],
+  "seed": 125,
+  "member": 3,
+  "directory": "round_02/m_s125",
+  "architecture": {
+   "class": "RecursiveScriptModule",
+   "r_max": 6.0,
+   "atomic_numbers": [
+    14
+   ],
+   "n_params": 509722,
+   "num_interactions": 2,
+   "scale_shift": {
+    "scale": 0.8041538754478097,
+    "shift": 0.16409696359187365
+   }
+  },
+  "foundation": {
+   "name": "mace-mp-0",
+   "size": "medium"
+  },
+  "init_from": "previous"
+ },
+ "committee": {
+  "size": 3,
+  "round": 2,
+  "best_by_valid_force_seed": 125,
+  "members": [
+   {
+    "seed": 123,
+    "model": "round_02/m_s123/mlff_model_compiled.model",
+    "card": "round_02/m_s123/mlff_model_card.json"
+   },
+   {
+    "seed": 124,
+    "model": "round_02/m_s124/mlff_model_compiled.model",
+    "card": "round_02/m_s124/mlff_model_card.json"
+   },
+   {
+    "seed": 125,
+    "model": "round_02/m_s125/mlff_model_compiled.model",
+    "card": "round_02/m_s125/mlff_model_card.json"
+   }
+  ],
+  "spread": {
+   "F_spread_mean_meV": 19.81288845215239,
+   "F_spread_max_meV": 84.13968518617197,
+   "spread_error_corr": 0.8718026706765858
+  },
+  "cross_validation_folds": null
+ },
+ "elements": [
+  "Si"
+ ],
+ "energy": {
+  "scale": "SIESTA absolute total energy, eV",
+  "e0_eV": {
+   "Si": -117.30606029800337
+  },
+  "e0_source": "foundation-residual",
+  "note": "E0 is the per-element reference energy added by the model; fitted to SIESTA's scale."
+ },
+ "level_of_theory": {
+  "code": "SIESTA",
+  "siesta_version": "5.4.2",
+  "settings": {
+   "DFTD3": "default",
+   "ElectronicTemperature": "300 K",
+   "Mesh.Cutoff": "300 Ry",
+   "PAO.Basis block": "none",
+   "PAO.BasisSize": "DZP",
+   "PAO.EnergyShift": "0.01 Ry",
+   "SCF tolerance": "1.0e-5",
+   "Spin": "non-polarized",
+   "XC.authors": "PBE",
+   "XC.functional": "GGA",
+   "k x a (Ang)": "32 32 32"
+  },
+  "dftd3": {
+   "on": false,
+   "forced": false,
+   "source": "none"
+  },
+  "pseudopotentials_md5": {
+   "Si.psml": "878e1f00"
+  },
+  "basis_block_md5": "none",
+  "label_source": "total energy, forces (.FA) and stress from each SIESTA single point"
+ },
+ "reference_structure": {
+  "file": "../structure.fdf",
+  "calc": "../calc.fdf",
+  "formula": "Si8",
+  "n_atoms": 8,
+  "cell_lengths_ang": [
+   5.48024,
+   5.48024,
+   5.48024
+  ],
+  "cell_angles_deg": [
+   90.0,
+   90.0,
+   90.0
+  ],
+  "volume_ang3": 164.58803,
+  "n_vacuum_axes": 0,
+  "vacuum_axes": [
+   false,
+   false,
+   false
+  ],
+  "dimensionality": "3D"
+ },
+ "training_data": {
+  "n_configs": 57,
+  "kinds": {
+   "al-md": 12,
+   "rattle": 39,
+   "strain": 6
+  },
+  "atoms_per_config": {
+   "min": 8,
+   "max": 64
+  },
+  "elements_count": {
+   "Si": 1128
+  },
+  "labels": {
+   "energy": true,
+   "forces": true,
+   "stress": true,
+   "stress_used_in_training": true
+  },
+  "scf_not_converged": [],
+  "configs": [
+   {
+    "folder": "configs_round_01/mlff_config_001",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.001069
+   },
+   {
+    "folder": "configs_round_01/mlff_config_002",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.945919
+   },
+   {
+    "folder": "configs_round_01/mlff_config_003",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.745246
+   },
+   {
+    "folder": "configs_round_01/mlff_config_004",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.704122
+   },
+   {
+    "folder": "configs_round_01/mlff_config_005",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.00569
+   },
+   {
+    "folder": "configs_round_01/mlff_config_006",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.948353
+   },
+   {
+    "folder": "configs_round_01/mlff_config_007",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.608347
+   },
+   {
+    "folder": "configs_round_01/mlff_config_008",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.438335
+   },
+   {
+    "folder": "configs_round_01/mlff_config_009",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.995601
+   },
+   {
+    "folder": "configs_round_01/mlff_config_010",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.945046
+   },
+   {
+    "folder": "configs_round_01/mlff_config_011",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.885948
+   },
+   {
+    "folder": "configs_round_01/mlff_config_012",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.250417
+   },
+   {
+    "folder": "configs_round_01/mlff_config_013",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.002406
+   },
+   {
+    "folder": "configs_round_01/mlff_config_014",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.925733
+   },
+   {
+    "folder": "configs_round_01/mlff_config_015",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.842726
+   },
+   {
+    "folder": "configs_round_01/mlff_config_016",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.642934
+   },
+   {
+    "folder": "configs_round_01/mlff_config_017",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.994605
+   },
+   {
+    "folder": "configs_round_01/mlff_config_018",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.931381
+   },
+   {
+    "folder": "configs_round_01/mlff_config_019",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.785984
+   },
+   {
+    "folder": "configs_round_01/mlff_config_020",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.602763
+   },
+   {
+    "folder": "configs_round_01/mlff_config_021",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.999666
+   },
+   {
+    "folder": "configs_round_01/mlff_config_022",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.960903
+   },
+   {
+    "folder": "configs_round_01/mlff_config_023",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.728992
+   },
+   {
+    "folder": "configs_round_01/mlff_config_024",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.513056
+   },
+   {
+    "folder": "configs_round_01/mlff_config_025",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.993837
+   },
+   {
+    "folder": "configs_round_01/mlff_config_026",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.927011
+   },
+   {
+    "folder": "configs_round_01/mlff_config_027",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.894125
+   },
+   {
+    "folder": "configs_round_01/mlff_config_028",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.470564
+   },
+   {
+    "folder": "configs_round_01/mlff_config_029",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.00081
+   },
+   {
+    "folder": "configs_round_01/mlff_config_030",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.972083
+   },
+   {
+    "folder": "configs_round_01/mlff_config_031",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.751863
+   },
+   {
+    "folder": "configs_round_01/mlff_config_032",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.321918
+   },
+   {
+    "folder": "configs_round_01/mlff_config_033",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.00693
+   },
+   {
+    "folder": "configs_round_01/mlff_config_034",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.969385
+   },
+   {
+    "folder": "configs_round_01/mlff_config_035",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.921052
+   },
+   {
+    "folder": "configs_round_01/mlff_config_036",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.597669
+   },
+   {
+    "folder": "configs_round_01/mlff_config_037",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -115.006878
+   },
+   {
+    "folder": "configs_round_01/mlff_config_038",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.912365
+   },
+   {
+    "folder": "configs_round_01/mlff_config_039",
+    "kind": "rattle",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.814606
+   },
+   {
+    "folder": "configs_round_01/mlff_config_041",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.946947
+   },
+   {
+    "folder": "configs_round_01/mlff_config_042",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.839326
+   },
+   {
+    "folder": "configs_round_01/mlff_config_043",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.702075
+   },
+   {
+    "folder": "configs_round_01/mlff_config_044",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.646912
+   },
+   {
+    "folder": "configs_round_01/mlff_config_045",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.987255
+   },
+   {
+    "folder": "configs_round_01/mlff_config_046",
+    "kind": "strain",
+    "n_atoms": 8,
+    "E_per_atom_eV": -114.926709
+   },
+   {
+    "folder": "configs_round_02/mlff_config_047",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.753716
+   },
+   {
+    "folder": "configs_round_02/mlff_config_048",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.763958
+   },
+   {
+    "folder": "configs_round_02/mlff_config_049",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.746619
+   },
+   {
+    "folder": "configs_round_02/mlff_config_050",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.787741
+   },
+   {
+    "folder": "configs_round_02/mlff_config_051",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.784349
+   },
+   {
+    "folder": "configs_round_02/mlff_config_052",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.755494
+   },
+   {
+    "folder": "configs_round_02/mlff_config_053",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.835057
+   },
+   {
+    "folder": "configs_round_02/mlff_config_054",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.800629
+   },
+   {
+    "folder": "configs_round_02/mlff_config_055",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.783818
+   },
+   {
+    "folder": "configs_round_02/mlff_config_056",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.808708
+   },
+   {
+    "folder": "configs_round_02/mlff_config_057",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.772051
+   },
+   {
+    "folder": "configs_round_02/mlff_config_058",
+    "kind": "al-md",
+    "n_atoms": 64,
+    "E_per_atom_eV": -114.829849
+   }
+  ],
+  "n_train": 51,
+  "n_valid": 6,
+  "validation_split": "random per member (seed)"
+ },
+ "domain": {
+  "elements": [
+   "Si"
+  ],
+  "measure_name": "volume per atom (Ang^3)",
+  "measure": {
+   "min": 18.72188893949459,
+   "max": 22.425119716666106
+  },
+  "n_vacuum_axes": 0,
+  "dimensionality": "3D",
+  "d_min_ang": {
+   "min": 1.8519436603841217,
+   "max": 2.3472683893725623
+  },
+  "n_atoms": {
+   "min": 8,
+   "max": 64
+  },
+  "energy_per_atom_eV": {
+   "min": -115.006929625,
+   "max": -114.250417
+  },
+  "force_max_eV_per_ang": {
+   "min": 0.976162832083618,
+   "max": 14.704801414717277
+  },
+  "pressure_GPa": {
+   "min": -5.806928944427519,
+   "max": 10.48368250054272
+  }
+ },
+ "recipe": {
+  "epochs_max": 100,
+  "kept_epoch": 96,
+  "batch_size": 5,
+  "lr": 0.001,
+  "e0s": "foundation-residual",
+  "stress_trained": true,
+  "stress_weight": 10000.0,
+  "valid_fraction": 0.1,
+  "loss": "energy 1 + forces 100 + stress 10000",
+  "seed": 125,
+  "device": "cuda",
+  "training_seconds": 341.9,
+  "mace_run_train": "mace_run_train --name mlff_model --work_dir mlff_runs/round_02/m_s125 --train_file mlff_runs/round_02/m_s125/train_set.xyz --valid_file mlff_runs/round_02/m_s125/valid_set.xyz --energy_key REF_energy --forces_key REF_forces --foundation_model mlff_runs/round_01/m_s125/mlff_model.model --E0s {14: -117.28345185451026} --multiheads_finetuning False --max_num_epochs 100 --batch_size 5 --lr 0.001 --seed 125 --device cuda --stress_key REF_stress --compute_stress True --loss stress --stress_weight 10000.0"
+ },
+ "metrics": {
+  "train": {
+   "n": 51,
+   "E_rmse_meV": 2.1033,
+   "E_rmse_rel_meV": 2.0265,
+   "E_offset_meV": 0.5632,
+   "F_rmse_meV": 45.7897,
+   "F_mae_meV": 33.9973,
+   "F_maxerr_meV": 196.7506,
+   "S_rmse_GPa": 0.1485
+  },
+  "valid": {
+   "n": 6,
+   "E_rmse_meV": 2.1949,
+   "E_rmse_rel_meV": 0.8534,
+   "E_offset_meV": 2.0222,
+   "F_rmse_meV": 52.8077,
+   "F_mae_meV": 35.8093,
+   "F_maxerr_meV": 231.5222,
+   "S_rmse_GPa": 0.1235
+  },
+  "out_of_sample_committee": {
+   "n": 16,
+   "E_rmse_meV": 2.1666,
+   "E_rmse_rel_meV": 1.8524,
+   "E_offset_meV": 1.1238,
+   "F_rmse_meV": 55.9932,
+   "F_mae_meV": 41.6716,
+   "F_maxerr_meV": 235.0928,
+   "S_rmse_GPa": 0.1266
+  },
+  "foundation_model": {
+   "n": 57,
+   "E_rmse_meV": 109609.5892,
+   "E_rmse_rel_meV": 51.0833,
+   "E_offset_meV": 109609.5773,
+   "F_rmse_meV": 448.3934,
+   "F_mae_meV": 349.6408,
+   "F_maxerr_meV": 2100.1626,
+   "S_rmse_GPa": 0.8481
+  },
+  "fine_tuning_gain_pct": 87.00039534883153,
+  "units": {
+   "E": "meV/atom",
+   "F": "meV/Ang",
+   "S": "GPa"
+  },
+  "note": "valid = this member's own held-out configs; out_of_sample_committee pools every config scored by the members that did not train on it. The foundation model's absolute E is on another energy scale: compare E_rmse_rel_meV."
+ },
+ "checks": {
+  "stability": {
+   "n_atoms": 64,
+   "status": "OK",
+   "reason": "",
+   "T_mean": 285.05,
+   "dmin_ratio": 0.923,
+   "fmax": 2.718,
+   "drift_meV_atom_ps": 0.003,
+   "ms_per_step": 35.054,
+   "seed": 125
+  },
+  "speed": {
+   "n_atoms": 64,
+   "ms_per_step": 35.20997885749239,
+   "us_per_atom_step": 550.1559196483186,
+   "ns_per_day_1fs": 2.4538498120005205,
+   "device": "cuda"
+  }
+ },
+ "validation": {
+  "time": "2026-10-24T11:00:18",
+  "n_test": 16,
+  "overall": {
+   "n": 16,
+   "E_rmse_meV": 2.4960195004862187,
+   "E_rmse_rel_meV": 1.067515642891909,
+   "E_offset_meV": 2.2562188942982786,
+   "F_rmse_meV": 28.69426815156674,
+   "F_mae_meV": 15.859141297521681,
+   "F_maxerr_meV": 190.0819162915637,
+   "S_rmse_GPa": 0.18105243745140887,
+   "F_rel_pct": 1.5341262660300112,
+   "F_rmse_sigma_meV": 6.763493238615094
+  },
+  "groups": {
+   "rattle": {
+    "n": 8,
+    "E_rmse_meV": 2.1399965585360015,
+    "E_rmse_rel_meV": 0.6874173465845981,
+    "E_offset_meV": 2.0265839884299197,
+    "F_rmse_meV": 15.315619299727535,
+    "F_mae_meV": 9.788286857365796,
+    "F_maxerr_meV": 54.95254359713897,
+    "S_rmse_GPa": 0.15258960598189264
+   },
+   "strain": {
+    "n": 8,
+    "E_rmse_meV": 2.8072480159524584,
+    "E_rmse_rel_meV": 1.3042899628786928,
+    "E_offset_meV": 2.4858538001666375,
+    "F_rmse_meV": 37.57863561884396,
+    "F_mae_meV": 21.92999573767757,
+    "F_maxerr_meV": 190.0819162915637,
+    "S_rmse_GPa": 0.205612213548912
+   }
+  },
+  "members": [
+   {
+    "n": 16,
+    "E_rmse_meV": 4.6516636801941385,
+    "E_rmse_rel_meV": 1.4098764111654487,
+    "E_offset_meV": 4.432857261279288,
+    "F_rmse_meV": 34.71264094209253,
+    "F_mae_meV": 20.37769355653676,
+    "F_maxerr_meV": 214.67410430794232,
+    "S_rmse_GPa": 0.18844741473945975
+   },
+   {
+    "n": 16,
+    "E_rmse_meV": 1.8330012082062275,
+    "E_rmse_rel_meV": 1.2585532033264637,
+    "E_offset_meV": 1.332642961817676,
+    "F_rmse_meV": 30.60209904036249,
+    "F_mae_meV": 17.013165626206945,
+    "F_maxerr_meV": 207.76028502950794,
+    "S_rmse_GPa": 0.20640804828814907
+   },
+   {
+    "n": 16,
+    "E_rmse_meV": 1.9037944535159297,
+    "E_rmse_rel_meV": 1.6180576128175075,
+    "E_offset_meV": 1.0031564598014242,
+    "F_rmse_meV": 28.83842856801158,
+    "F_mae_meV": 19.170440881213374,
+    "F_maxerr_meV": 150.97797748565432,
+    "S_rmse_GPa": 0.18595481208142256
+   }
+  ],
+  "calibration": {
+   "n_configs": 16,
+   "n_atoms": 128,
+   "config_corr": 0.7484620704020584,
+   "atom_corr": 0.5872299871192694,
+   "error_over_spread": 1.2981290981050064,
+   "spread_mean_meV": 28.47798558009573,
+   "spread_max_meV": 64.88901438466183
+  },
+  "phonons": {
+   "mesh": [
+    8,
+    8,
+    8
+   ],
+   "n_q": 256,
+   "rmse_THz": 1.1010029984572738,
+   "acoustic_rmse_THz": 1.5135808318014299,
+   "optical_rmse_THz": 0.3653604669735178,
+   "mean_shift_THz": 0.31665761304829226,
+   "max_abs_THz": 5.985279329579573,
+   "ref_max_THz": 15.38460920230912,
+   "model_max_THz": 15.236483225569186,
+   "ref_min_THz": -2.8564795637406086,
+   "model_min_THz": 0.8997713152122013,
+   "model_imaginary_q": 0,
+   "ref_imaginary_q": 47
+  },
+  "elements": {
+   "Si": {
+    "n_atoms": 128,
+    "F_rmse_meV": 28.69426815156674,
+    "F_mae_meV": 15.859141297521681,
+    "F_maxatom_meV": 234.710646283799,
+    "F_ref_rms_meV": 1870.3980752393563
+   }
+  },
+  "eos": {
+   "strain": {
+    "v0": 20.4976,
+    "b0_gpa": -310.14,
+    "bprime": -23.639,
+    "dV0_pct": -0.016,
+    "dB0_pct": -0.14,
+    "siesta_v0": 20.501,
+    "siesta_b0_gpa": -310.57
+   }
+  },
+  "md_check": {
+   "r01_800K_2x2x2": [
+    [
+     250,
+     38.14
+    ],
+    [
+     500,
+     37.2
+    ],
+    [
+     750,
+     37.1
+    ],
+    [
+     1000,
+     29.78
+    ],
+    [
+     1250,
+     30.16
+    ],
+    [
+     1500,
+     38.93
+    ],
+    [
+     1750,
+     38.33
+    ],
+    [
+     2000,
+     29.85
+    ]
+   ]
+  },
+  "foundation": {
+   "model": "medium",
+   "overall": {
+    "n": 16,
+    "E_rmse_meV": 109613.22154162721,
+    "E_rmse_rel_meV": 47.525997832597625,
+    "E_offset_meV": 109613.21123848793,
+    "F_rmse_meV": 516.9520613459281,
+    "F_mae_meV": 391.32663086107476,
+    "F_maxerr_meV": 1753.2721143896622,
+    "S_rmse_GPa": 0.9684710361828084
+   },
+   "groups": {
+    "rattle": {
+     "n": 8,
+     "E_rmse_meV": 109624.84594710443,
+     "E_rmse_rel_meV": 38.57702637050837,
+     "E_offset_meV": 109624.83915946884,
+     "F_rmse_meV": 466.2913465040268,
+     "F_mae_meV": 356.0776183805268,
+     "F_maxerr_meV": 1753.2721143896622,
+     "S_rmse_GPa": 0.7545842019166263
+    },
+    "strain": {
+     "n": 8,
+     "E_rmse_meV": 109601.59590325916,
+     "E_rmse_rel_meV": 52.52463120956332,
+     "E_offset_meV": 109601.58331750701,
+     "F_rmse_meV": 563.0730393430946,
+     "F_mae_meV": 426.57564334162277,
+     "F_maxerr_meV": 1719.1861109284216,
+     "S_rmse_GPa": 1.1430113639276964
+    }
+   }
+  },
+  "verdict": "stop",
+  "learning_curve": {
+   "points": [
+    [
+     45,
+     23.194046491253495
+    ],
+    [
+     57,
+     28.69426815156674
+    ]
+   ]
+  }
+ },
+ "usage": {
+  "recommended_dtype": {
+   "geometry_optimization": "float64",
+   "molecular_dynamics": "float32"
+  },
+  "how_to_use": "--custom-model mlff_model_compiled.model --custom-model-card mlff_model_card.json  (always both)",
+  "stable_in_md": true,
+  "notes": [
+   "Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.",
+   "Valid for Si only; any other element is outside the training data.",
+   "Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.",
+   "Lowest validation force error of its committee.",
+   "Run geometry optimisation in float64 and MD in float32 (the suite's convention)."
+  ]
+ },
+ "provenance": {
+  "workflow": "mlff_workflow.json",
+  "round": 2,
+  "stage": "stb-mlffAnalysis",
+  "generated_by": "stb-mlffAnalysis",
+  "trained_at": "2026-10-24T08:46:40",
+  "argv": [
+   "--workflow",
+   "mlff_runs/mlff_workflow.json",
+   "--committee",
+   "3",
+   "--foundation-model",
+   "medium",
+   "--init-from",
+   "previous",
+   "--device",
+   "cuda",
+   "--save-data",
+   "--save-report",
+   "--no-intro"
+  ],
+  "training_warnings": [
+   "Training: seed 124 kept epoch 98 of 0-99 (at the end): the validation error was still falling -- more --epochs would likely help."
+  ],
+  "software": {
+   "stb": "1.9.292",
+   "mace-torch": "0.3.16",
+   "torch": "2.13.0+cu130",
+   "ase": "3.29.0",
+   "python": "3.12.13",
+   "siesta": "5.4.2"
+  }
+ },
+ "updated": "2026-10-24T11:00:18",
+ "selection": {
+  "selected_by": "stb-mlffValidate",
+  "time": "2026-10-24T11:00:18",
+  "criterion": "round with the lowest committee-mean force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike) among the rounds scored in that run; within it the member with the lowest force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike) (a member that failed the MD stability check only if all did)",
+  "basis": "force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)",
+  "round": 2,
+  "seed": 125,
+  "source_model": "round_02/m_s125/mlff_model_compiled.model",
+  "source_card": "round_02/m_s125/mlff_model_card.json",
+  "n_test": 16,
+  "n_md_check_frames": 8,
+  "member_test": {
+   "n": 16,
+   "E_rmse_meV": 1.9037944535159297,
+   "E_rmse_rel_meV": 1.6180576128175075,
+   "E_offset_meV": 1.0031564598014242,
+   "F_rmse_meV": 28.83842856801158,
+   "F_mae_meV": 19.170440881213374,
+   "F_maxerr_meV": 150.97797748565432,
+   "S_rmse_GPa": 0.18595481208142256
+  },
+  "member_selection_F_rmse_meV": 33.219,
+  "committee_mean_test": {
+   "n": 16,
+   "E_rmse_meV": 2.4960195004862187,
+   "E_rmse_rel_meV": 1.067515642891909,
+   "E_offset_meV": 2.2562188942982786,
+   "F_rmse_meV": 28.69426815156674,
+   "F_mae_meV": 15.859141297521681,
+   "F_maxerr_meV": 190.0819162915637,
+   "S_rmse_GPa": 0.18105243745140887,
+   "F_rel_pct": 1.5341262660300112,
+   "F_rmse_sigma_meV": 6.763493238615094
+  },
+  "rounds_compared": [
+   {
+    "round": 1,
+    "F_rmse_meV": 23.194046491253495,
+    "md_check_F_rmse_meV": 133.0797751409439,
+    "selection_F_rmse_meV": 119.48127049784429
+   },
+   {
+    "round": 2,
+    "F_rmse_meV": 28.69426815156674,
+    "md_check_F_rmse_meV": 35.15561641913405,
+    "selection_F_rmse_meV": 33.96183295404171
+   }
+  ],
+  "latest_round": 2,
+  "latest_round_verdict": "stop",
+  "note": "paths in 'committee' are relative to the workflow file, not to this folder"
+ }
+}

@@ -1,0 +1,30 @@
+# Bulk silicon, diamond structure, PRIMITIVE 2-atom FCC cell, ALREADY RELAXED with SIESTA
+# (GGA-PBE, TZP, PAO.EnergyShift 0.005 Ry, variable-cell CG): a0 = 5.4911 Ang
+# (experiment 5.431 Ang; PBE overestimates). This is the structure the Raman workflow takes:
+# the phonons and the Raman tensor are evaluated at the geometry as given, never relaxed.
+# Cubic Fd-3m => the dielectric tensor is a scalar (eps_xx = eps_yy = eps_zz, eps_ij = 0):
+# the example uses that as a built-in consistency check of the whole workflow.
+# The ~1e-5 Ang noise in the lattice vectors and positions is the relaxation's own.
+# automatic create using stb-translate (https://github.com/bastoscmo/stb-suite)
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 0.00000000   2.74554800   2.74554800
+ 2.74554800   0.00000000   2.74554800
+ 2.74554800   2.74554800   0.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  -0.00000110   -0.00000110   -0.00000110   1
+  0.25000113   0.25000113   0.25000113   1
+%endblock AtomicCoordinatesAndAtomicSpecies

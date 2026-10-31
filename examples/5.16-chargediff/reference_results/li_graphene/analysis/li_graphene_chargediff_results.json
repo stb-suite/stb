@@ -1,0 +1,124 @@
+{
+ "tool": "stb-chargediffAnalysis 1.9.289",
+ "date": "2026-10-23T13:27:31",
+ "directory": ".",
+ "quantity": "Delta charge density",
+ "grid": [
+  72,
+  72,
+  216
+ ],
+ "integral_e": -6.464169938978831e-08,
+ "charge_moved_e": 0.45822240823610266,
+ "rms_e_per_ang3": 0.0032133120112121105,
+ "maximum": {
+  "value": 0.04409507289528847,
+  "position_ang": [
+   2.5697916666666663,
+   2.848646226666667,
+   9.722222222222221
+  ]
+ },
+ "minimum": {
+  "value": -0.09947967529296875,
+  "position_ang": [
+   3.7004999999999995,
+   2.1364846699999998,
+   11.666666666666668
+  ]
+ },
+ "energies_ev": {
+  "combined": -3138.723846,
+  "fragment1": -2943.80287,
+  "fragment2": -194.176898
+ },
+ "e_int_cp_ev": -0.7440779999997176,
+ "per_fragment_e": {
+  "fragment1": 0.203949092674855,
+  "fragment2": -0.20394915985495532
+ },
+ "per_atom_e": [
+  0.00874086575326696,
+  0.014268824419533916,
+  0.014710359417454527,
+  0.015405163510628886,
+  0.008738381331450804,
+  0.010453930322425883,
+  0.014710364236921857,
+  0.015403970170898782,
+  0.014220413640553303,
+  0.008740868514323723,
+  0.010474858568939597,
+  0.008743516192193771,
+  0.008738583205534084,
+  0.010453939551890942,
+  0.0104748629330109,
+  0.008743716671996575,
+  0.010492498154584485,
+  0.010433976079245998,
+  -0.20394915985495532
+ ],
+ "planar": {
+  "axis": "z",
+  "dipole_e_ang": 0.44669044493246957,
+  "dipole_debye": 2.145543545099638,
+  "dipole_siesta_e_ang": 0.446690654799073,
+  "vacuum_gap_ang": 18.254956,
+  "plane_ang": 10.872762900000001,
+  "charge_across_plane_e": {
+   "fragment2": -0.1161813727485203,
+   "fragment1": 0.1161813727485203
+  },
+  "work_function_shift_ev": -1.7039475024501343
+ },
+ "checks": [
+  {
+   "name": "Same real-space grid in every folder",
+   "ok": true,
+   "detail": "72x72x216"
+  },
+  {
+   "name": "Same cell in every folder",
+   "ok": true,
+   "detail": "within 1e-3 Ang"
+  },
+  {
+   "name": "Same level of theory (functional, basis, smearing, k-grid, D3...)",
+   "ok": true,
+   "detail": "identical"
+  },
+  {
+   "name": "Same pseudopotential files (by content) in every folder",
+   "ok": true,
+   "detail": "identical"
+  },
+  {
+   "name": "Same mesh actually used by SIESTA",
+   "ok": true,
+   "detail": "322.4 Ry"
+  },
+  {
+   "name": "SCF converged in every run",
+   "ok": true,
+   "detail": "yes"
+  },
+  {
+   "name": "Electron count of the combined .RHO equals the sum over fragments (< 0.001 e)",
+   "ok": true,
+   "detail": "75.0000 vs 75.0000 e"
+  },
+  {
+   "name": "Net Delta rho vanishes (|integral| < 0.001 e)",
+   "ok": true,
+   "detail": "-6.46e-08 e"
+  },
+  {
+   "name": "Induced dipole from Delta rho equals SIESTA's own dipoles (along z)",
+   "ok": true,
+   "detail": "+2.146 vs +2.146 D"
+  }
+ ],
+ "warnings": [
+  "the cut plane is skewed (60.0 deg between its in-plane lattice vectors): gnuplot's map may look distorted although the data coordinates are correct."
+ ]
+}

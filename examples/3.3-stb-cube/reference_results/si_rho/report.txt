@@ -1,0 +1,94 @@
+
+GRID CONVERTER:
+------------------------------------------------------------
+===== STB-CUBE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : si.RHO
+Grid type         : RHO -- valence electron density
+Spin channel      : total (requested)
+Output            : si_RHO.cube
+
+[1] INPUT GRID
+------------------------------------------------------------
+File              : si.RHO (112.6 KB, written <date>)
+Quantity          : valence electron density
+Written by        : SaveRho in the .fdf
+Stored as         : e/Bohr^3 on a Bohr cell, single precision, 1 component(s)
+Mesh              : 30 x 30 x 30 = 27000 points
+Plane spacing     : 0.1054 / 0.1054 / 0.1054 Ang along a / b / c
+Voxel volume      : 0.00152 Ang^3 (0.01026 Bohr^3)
+Effective cutoff  : 248.851 Ry (min over a/b/c of 248.9 / 248.9 / 248.9 Ry)
+Cell lengths      : a = 3.8721, b = 3.8721, c = 3.8721 Ang
+Cell angles       : alpha = 60.00, beta = 60.00, gamma = 60.00 deg
+Cell volume       : 41.0516 Ang^3
+Cell vectors (Ang):
+   a      0.00000     2.73800     2.73800
+   b      2.73800     0.00000     2.73800
+   c      2.73800     2.73800     0.00000
+
+[2] SIESTA RUN
+------------------------------------------------------------
+Log               : ./calc.out (SIESTA 5.4.2)
+Finished          : yes
+Electrons         : 8.000000 (valence)
+Spin (log)        : none
+Mesh (log)        : 30 x 30 x 30 -- same as the grid
+Mesh cutoff (log) : required 200.000 Ry, used 248.851 Ry -- from the grid 248.851 Ry (agrees)
+
+[3] SPIN
+------------------------------------------------------------
+Spin configuration (from calc.out): unpolarized
+Components        : 1
+
+[4] GEOMETRY
+------------------------------------------------------------
+Source            : si.XV (2 atoms, Si2)
+Cell vs grid      : identical (largest difference 1.2e-10 Ang)
+Dimensionality    : 3D (bulk material)
+# | el | Z  | Z_val | x (Ang) | y (Ang) | z (Ang) | fractional          
+------------------------------------------------------------------------
+1 | Si | 14 | 4     | 0.0000  | 0.0000  | 0.0000  | 0.0000 0.0000 0.0000
+2 | Si | 14 | 4     | 1.3690  | 1.3690  | 1.3690  | 0.2500 0.2500 0.2500
+
+[5] VALUES
+------------------------------------------------------------
+               | value (e/Bohr^3) | where                                        
+---------------------------------------------------------------------------------
+minimum        | 0.0022457        | (0.000, 0.000, 0.000) Ang, 0.000 Ang from Si1
+maximum        | 0.080880         | (2.190, 2.190, 0.548) Ang, 0.948 Ang from Si1
+mean           | 0.028878         | over the cell                                
+std. deviation | 0.020214         |                                              
+In e/Ang^3        : min 0.015154, max 0.54581, mean 0.19488
+Integral          : 7.999999 e  (positive part 8.0000, negative part 0.0000)
+Expected          : 8.000000 e (valence electrons (log)) -- difference -1.21e-06 e (agrees)
+Negative values   : none
+Isosurface levels : 0.0456 (50 %), 0.0146 (90 %), 0.00525 (99 %) e/Bohr^3
+                    each level encloses that fraction of the integral -- a starting point in VESTA/VMD
+
+[6] OUTPUT
+------------------------------------------------------------
+File              : si_RHO.cube (369.6 KB)
+Units             : lengths Bohr, values e/Bohr^3 -- the integral over the cube's own voxels gives electrons
+Header            : 2 comment lines, origin (0, 0, 0), 30 x 30 x 30 voxels, 2 atoms
+Values            : 27000 numbers, 6 significant digits (%13.5e), x slowest, z fastest
+Read-back check   : read again with ASE's cube reader -- ok
+                    values agree to 6.2e-07 of the largest; cell, 2 atoms and atomic numbers as written
+Integral (cube)   : 7.999999 e  (values x voxel volume in Bohr^3)
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Converted         : si.RHO [RHO] -> si_RHO.cube
+Integral          : 8.0000 e
+Open with         : VESTA si_RHO.cube  |  vmd si_RHO.cube  |  xcrysden --cube si_RHO.cube
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Conversion complete. It's hip to be square (cube).
+

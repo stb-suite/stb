@@ -1,0 +1,91 @@
+===== STB-ANI2TRAJ REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.318 / 0.16.4
+Input             : si.ANI  (the only *.ANI here)
+Output            : si_traj.xyz (xyz)
+Frames kept       : skip 0, then every 1
+Unwrap PBC        : no
+
+[1] INPUTS
+------------------------------------------------------------
+Trajectory        : si.ANI (36.3 KB, 111 frames x 8 atoms)
+Input .fdf        : ./calc.fdf
+SIESTA log        : ./calc.out (SIESTA 5.4.2), 112 MD steps, NOT finished
+Thermodynamics    : si.MDE (111 rows: T, E_KS, E_tot, V, P per step)
+Last geometry     : si.XV
+Dynamics          : Nose-Parrinello-Rahman MD run -> NPT (Nose + Parrinello-Rahman)
+Time step         : 1 fs
+Temperatures      : initial 900.0 K, target 900 K
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 8 (Si8)
+Cell (frame 1)    : a = 5.4760, b = 5.4760, c = 5.4760 Ang, V = 164.206 Ang^3
+Density           : 2.2721 g/cm^3 (0.0487 atoms/Ang^3)
+Dimensionality    : 3D (bulk material)
+
+[3] FRAMES AND MD STEPS
+------------------------------------------------------------
+Frames in .ANI    : 111
+MD steps in log   : 112 (steps 1-112)
+Rows in .MDE      : 111 (steps 1-111)
+Frame <-> step    : frame k is the geometry AFTER MD step k (= the geometry of step k+1) -- checked against the log's per-step coordinates (WriteCoorStep), largest difference 9.7e-07 Ang
+                    each frame gets the cell, energies and temperature of ITS step
+Time span         : 1 to 111 fs (0.1100 ps; t = 0 at the input geometry)
+Last frame vs .XV : 5.0e-07 Ang apart (same geometry)
+Kept              : 111 frames (indices 1..111 of 111, every 1)
+
+[4] LATTICE
+------------------------------------------------------------
+Source            : per frame, from the log's 'outcell' block of each frame's MD step
+          | first    | last     | mean     | std    | min      | max     
+-------------------------------------------------------------------------
+a (Ang)   | 5.4760   | 5.5186   | 5.4954   | 0.0136 | 5.4751   | 5.5186  
+b (Ang)   | 5.4760   | 5.5126   | 5.4927   | 0.0112 | 5.4760   | 5.5126  
+c (Ang)   | 5.4760   | 5.5043   | 5.4892   | 0.0082 | 5.4760   | 5.5043  
+V (Ang^3) | 164.2062 | 167.4343 | 165.6733 | 0.9865 | 164.2037 | 167.4343
+Volume change     : +1.97 % first -> last, 0.60 % fluctuation
+
+[5] THERMODYNAMICS
+------------------------------------------------------------
+Per frame kept, from the .MDE at each frame's own MD step (drift = slope of a linear fit, per ps):
+      | unit  | first     | last      | mean      | std    | min       | max       | drift /ps
+----------------------------------------------------------------------------------------------
+T     | K     | 894.28    | 1474.96   | 948.16    | 673.47 | 76.36     | 2637.87   | +1.2e+04 
+E_KS  | eV    | -919.1039 | -917.4595 | -918.1365 | 0.6601 | -919.1039 | -916.7744 | +16.25   
+E_tot | eV    | -918.2948 | -918.2929 | -918.2933 | 0.0011 | -918.2957 | -918.2911 | +0.01252 
+V     | Ang^3 | 164.206   | 167.390   | 165.657   | 0.977  | 164.204   | 167.390   | +30.7    
+P     | kBar  | -0.38     | 7.54      | 5.81      | 7.15   | -3.35     | 22.79     | +1.4e+02 
+T fluctuation     : 0.710 relative; canonical expectation sqrt(2/(3N-3)) = 0.309 for 8 atoms
+T vs target       : mean 948.2 K vs 900 K (+48.2 K)
+                    (stb-aimdAnalysis, menu 3.18, does RDF, MSD and VDOS on the same trajectory)
+
+[6] MOTION
+------------------------------------------------------------
+Largest step      : 0.0219 Ang between consecutive frames (Si6, frames 81->82) -> up to 2192 m/s
+Boundary jumps    : 0 coordinate jumps of more than half a cell between consecutive frames
+Outside the cell  : 276 atom-frames with a fractional coordinate outside [0, 1)
+                    positions are not wrapped into the cell, so atoms move continuously already: --unwrap changes nothing here
+Displacement, first -> last frame kept (unwrapped):
+species | atoms | RMS (Ang) | max (Ang)
+---------------------------------------
+Si      | 8     | 0.154     | 0.193    
+Closest approach  : 2.055 Ang (Si1-Si6, frame 94)
+
+[7] OUTPUT
+------------------------------------------------------------
+File              : si_traj.xyz (73.0 KB, 111 frames, xyz)
+Per frame         : cell, positions as in the .ANI; E_KS, E_tot, MD_step, Pressure_kBar, Temp_ion, Time, Volume
+Read-back check   : read again with ASE -- ok
+                    111 frames; positions to 0.0e+00 Ang, cell parameters to 0.0e+00 (the xyz writer's precision)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Run               : Si8, NPT (Nose + Parrinello-Rahman), 111 frames, dt 1 fs
+Written           : si_traj.xyz (111 frames)
+Open with         : ovito si_traj.xyz  (VMD reads it without the cell)
+
+[9] WARNINGS

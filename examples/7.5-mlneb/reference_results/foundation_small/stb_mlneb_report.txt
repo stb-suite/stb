@@ -1,0 +1,106 @@
+===== STB-MLNEB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-29 14:06:40
+Software          : stb 1.9.304, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Endpoints         : /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_initial.fdf -> /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_final.fdf
+Band              : 7 images (endpoints included), linear interpolation + IDPP, atoms matched within --autosort-tol 0.5 Ang
+NEB               : improved tangent, spring k 0.1 eV/Ang^2, FIRE; shaping to 0.1 then climbing image to --fmax 0.05 eV/Ang, --max-steps 200 in total
+Endpoints relaxed : yes, positions only, to --fmax
+Model             : MACE-MP-0 (small)
+Report file       : foundation_small/stb_mlneb_report.txt
+
+[1] STRUCTURES
+------------------------------------------------------------
+[OK] Same composition: 63 atom(s), Si63
+Cell              : a 10.96048, b 10.96048, c 10.96048 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg; 1316.704 Ang^3 (20.9001 Ang^3/atom)
+Shortest distance : initial 2.3730, final 2.3730 Ang
+Atoms that move   : 1 by more than 0.1 Ang between the endpoints (as read; sum of all displacements 2.373 Ang)
+atom (fdf order) | species | displacement (Ang)
+-----------------------------------------------
+1                | Si      | 2.3730            
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 small (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Loaded in         : 0.3 s
+
+[3] ENDPOINTS
+------------------------------------------------------------
+--- MACE-MP-0 small
+endpoint | max|F| before | max|F| after | steps | relaxation | largest move Ang | energy gained eV | E (eV)    
+---------------------------------------------------------------------------------------------------------------
+initial  | 0.1431        | 0.0442       | 10    | converged  | 0.0301           | 0.0261           | -336.22917
+final    | 0.1431        | 0.0442       | 10    | converged  | 0.0301           | 0.0261           | -336.22917
+Endpoint energies : E(final) - E(initial) = +0.0000 eV
+
+[4] STARTING PATH
+------------------------------------------------------------
+--- MACE-MP-0 small: 7 images, linear interpolation + IDPP (--idpp-fmax 0.1, --idpp-steps 100)
+image | step from previous (Ang) | shortest distance (Ang) | check
+------------------------------------------------------------------
+0     | -                        | 2.3580                  | ok   
+1     | 0.3865                   | 2.3612                  | ok   
+2     | 0.3865                   | 2.3643                  | ok   
+3     | 0.3865                   | 2.3675                  | ok   
+4     | 0.3865                   | 2.3643                  | ok   
+5     | 0.3865                   | 2.3612                  | ok   
+6     | 0.3865                   | 2.3580                  | ok   
+
+[5] NEB BAND
+------------------------------------------------------------
+--- MACE-MP-0 small: converged; 17 shaping + 11 climbing step(s) of --max-steps 200; residual force 0.0200 eV/Ang (target --fmax 0.05); 43.6 s
+image | s (Ang) | E - E0 (eV) | max|F| (eV/Ang) | d_min (Ang) | max shift from initial | role             
+----------------------------------------------------------------------------------------------------------
+0     | 0.0000  | +0.0000     | 0.0442          | 2.3580      | 0.0000                 | initial          
+1     | 0.5087  | +0.0277     | 0.1538          | 2.3698      | 0.3476                 |                  
+2     | 0.9970  | +0.1150     | 0.1763          | 2.3627      | 0.7209                 |                  
+3     | 1.4707  | +0.1505     | 0.0368          | 2.3585      | 1.1564                 | climbing (saddle)
+4     | 1.9445  | +0.1150     | 0.1763          | 2.3627      | 1.5920                 |                  
+5     | 2.4328  | +0.0277     | 0.1538          | 2.3698      | 1.9653                 |                  
+6     | 2.9415  | +0.0000     | 0.0442          | 2.3580      | 2.3129                 | final            
+max|F| is the raw force of the model; the NEB converges the force perpendicular to the band (and, on the climbing image, the full force), so a raw force above --fmax on an interior image is normal.
+
+[6] BARRIER
+------------------------------------------------------------
+--- MACE-MP-0 small
+eV                                    | spline (reported) | highest image
+-------------------------------------------------------------------------
+forward  (initial -> final)           | 0.1505            | 0.1505       
+backward (final -> initial)           | 0.1505            | 0.1505       
+reaction energy E(final) - E(initial) | +0.0000           | +0.0000      
+Saddle            : s = 1.4707 of 2.9415 Ang (50.0 % of the path); climbing image 3
+The spline is fitted to the image energies AND the forces along the band (ASE fit_images), so it can peak between two images; the highest image is a lower bound.
+
+[7] SADDLE POINT
+------------------------------------------------------------
+Atom 1 (Si, the largest mover, 2.313 Ang between the endpoints): four nearest neighbours along the band
+state   | image | nearest distances (Ang)
+-----------------------------------------
+initial | 0     | 2.358 2.358 2.358 3.826
+saddle  | 3     | 2.682 2.682 2.682 2.682
+final   | 6     | 2.358 2.358 2.358 3.826
+Saddle image      : max|F| 0.0368 eV/Ang, shortest distance 2.3585 Ang, largest shift from the initial image 1.156 Ang
+
+[8] TRAINED RANGE
+------------------------------------------------------------
+No model card (foundation model): no trained range to compare with.
+
+[9] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+MACE-MP-0 small   : barrier 0.1505 eV forward, 0.1505 eV backward, reaction energy +0.0000 eV
+Figure            : foundation_small/neb_profile.png
+Relaxed band      : foundation_small/neb_path.xyz
+Data              : foundation_small/neb_band.dat
+Report            : foundation_small/stb_mlneb_report.txt
+Also available    : --show --save-gnuplot --save-images --siesta-check --to-mlff
+Wall time         : 48.4 s
+Reading           : an ML-level barrier, as good as the training data near the saddle; confirm a number you will use with a SIESTA NEB (stb-neb, 4.9) or SIESTA single points on these images.
+
+[10] WARNINGS
+------------------------------------------------------------
+  none
+Library messages  : 12 distinct message(s) from mace/torch/ase captured, not shown

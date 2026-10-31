@@ -1,0 +1,79 @@
+
+CLEAN:
+------------------------------------------------------------
+===== STB-CLEAN REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 16:35:23
+stb               : 1.9.314
+Target            : <work>/protected
+Keep extensions   : .fdf .psf .psml .sh (default)
+Always kept       : hidden files, earlier stb-clean backups, files a kept .fdf reads
+Recursive         : no
+Mode              : dry run (nothing touched)
+
+[1] FOLDER
+------------------------------------------------------------
+Directory         : <work>/protected
+Files             : 49 (3.8 MB)
+Keep / remove     : 6 kept (86.3 KB), 43 to remove (3.7 MB)
+SIESTA input      : calc.fdf, structure.fdf; SystemLabel si
+Previous run      : calc.out -- finished normally, 13 geometry steps (last written 2.2 h ago)
+Exit marker       : 0_NORMAL_EXIT present (SIESTA ended normally)
+
+[2] KEPT
+------------------------------------------------------------
+file          | size    | why it stays               
+-----------------------------------------------------
+.notes        | 17 B    | hidden file (never removed)
+Si.psml       | 84.7 KB | pseudopotential            
+bandlines.txt | 80 B    | read by calc.fdf           
+calc.fdf      | 950 B   | SIESTA input (.fdf)        
+run.sh        | 137 B   | job script                 
+structure.fdf | 491 B   | SIESTA input (.fdf)        
+Protected         : 1 file(s) read by a kept .fdf, kept although their extension is not in --keep
+Species           : Si -- pseudopotential kept for Si
+
+[3] REMOVED
+------------------------------------------------------------
+kind                           | files | size     | e.g.                                                     
+-------------------------------------------------------------------------------------------------------------
+restart (SIESTA reads it back) | 4     | 377.2 KB | si.CG, si.DM, si.STRUCT_NEXT_ITER, +1                    
+SIESTA log / status            | 16    | 172.9 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+job-scheduler output           | 1     | 14 B     | siesta.err                                               
+geometry / forces / dynamics   | 5     | 2.9 KB   | si.ANI, si.BONDS, si.BONDS_FINAL, +2                     
+electronic structure           | 9     | 2.0 MB   | si.DOS, si.EIG, si.HSX, +6                               
+real-space grids               | 4     | 436.8 KB | Rho.grid.nc, TotalPotential.grid.nc, si.RHO, +1          
+basis by-products              | 3     | 762.3 KB | Si.ion, Si.ion.nc, Si.ion.xml                            
+job script (not in --keep)     | 1     | 119 B    | submit.slurm                                             
+total                          | 43    | 3.7 MB   |                                                          
+
+Largest           : si.HSX (628.3 KB), si.PDOS.xml (538.2 KB), si.PDOS (483.6 KB), si.DM (375.9 KB), Si.ion (366.3 KB)
+
+[4] RESTART
+------------------------------------------------------------
+file  | holds                  | after cleaning | fdf flag                     | next run                                       
+--------------------------------------------------------------------------------------------------------------------------------
+si.DM | density matrix         | removed        | DM.UseSaveDM true            | starts from a superposition of atomic densities
+si.XV | positions + velocities | removed        | MD.UseSaveXV true            | starts from the geometry in the .fdf           
+si.CG | CG optimizer history   | removed        | MD.UseSaveCG false (default) | starts from a new CG history (flag off anyway) 
+Note              : the previous run moved the geometry (13 steps); its final geometry is in si.XV and si.STRUCT_OUT, which go -- the next run starts again from the .fdf geometry. Keep .XV, or convert si.STRUCT_OUT to an .fdf first (stb-translate, 6.1).
+To continue from the previous run instead of starting fresh, keep its restart files, e.g. --keep .fdf .psf .psml .sh .DM .XV
+
+[5] ARCHIVE & REMOVAL
+------------------------------------------------------------
+Dry run -- nothing archived, nothing removed (43 file(s), 3.7 MB would go).
+
+[6] SUMMARY & FILES
+------------------------------------------------------------
+Would remove      : 43 file(s), 3.7 MB -- rerun without --dry-run
+
+[7] WARNINGS
+------------------------------------------------------------
+  1. protected: a kept .fdf reads 'missing_options.fdf', which is not in the folder.
+  2. protected: 'submit.slurm' looks like a job script and will be removed -- add its extension to --keep (--keep .fdf .psf .psml .sh .slurm).
+
+------------------------------------------------------------
+Nothing removed.
+

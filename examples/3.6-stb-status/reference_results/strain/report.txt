@@ -1,0 +1,33 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project/strain/a_* -- 3 folder(s)
+
+[1] FOLDERS
+------------------------------------------------------------
+folder  | state    | type         | steps | SCF | E (eV)    | dE (meV/atom) | max F | P (kBar) | gap (eV) | wall 
+-----------------------------------------------------------------------------------------------------------------
+a_5.40  | FINISHED | single point | 1     | ok  | -230.0124 | 11.5          | 0.007 | 43.4     | 0.864    | 2.0 s
+a_5.476 | FINISHED | single point | 1     | ok  | -230.0353 | 0.0           | 0.007 | 2.1      | 0.935    | 2.0 s
+a_5.55  | FINISHED | single point | 1     | ok  | -230.0192 | 8.1           | 0.007 | -31.5    | 1.002    | 1.8 s
+dE: energy per atom above the lowest folder with the same composition and level of theory (XC, spin, mesh cutoff, basis); not for MD
+steps: SCF steps, relaxation moves or MD steps; max F in eV/Ang; P = last pressure
+States            : 3 FINISHED
+
+[2] SUMMARY & FILES
+------------------------------------------------------------
+Folders inspected : 3
+
+[3] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Status check complete.
+

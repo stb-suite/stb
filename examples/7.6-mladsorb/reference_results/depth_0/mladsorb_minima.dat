@@ -1,0 +1,5 @@
+# stb-mladsorb, fine-tuned: distinct minima, most stable first
+# rank adsorbate end_slot end_type E_ads(eV) dE(eV) E_form(eV) multiplicity population height(A) CN n_starts committee_std(eV) below(layer of the atom right below the site, 0 = none in L1-L4)
+1 Si 2 ontop -4.679590 0.000000 -1.254520 4 1.000000 1.7126 1 3 nan 2
+2 Si 1 ontop -3.987159 0.692431 -0.562089 4 0.000000 2.4139 1 1 nan 1
+3 Si 3 bridge -3.648561 1.031029 -0.223491 4 0.000000 1.7557 0 2 nan 4

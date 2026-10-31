@@ -1,0 +1,28 @@
+# Fixture: simple-cubic single-atom lattice (a = 3.0 Ang), 3D bulk, no
+# vacuum axis. Simple-cubic connectivity is bipartite (2-colorable), so
+# the pair cluster's AB-ordered representative reaches the ideal -1.0
+# pair correlation exactly at the smallest cell -- a clean contrast
+# against the frustrated (FCC/triangular) case exercised by mos2.fdf in
+# this same directory. --sublattice Na --species-b K substitutes this
+# lattice into a Na(1-x)Kx alloy.
+
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   11   Na
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.0000000000   0.0000000000   0.0000000000
+ 0.0000000000   3.0000000000   0.0000000000
+ 0.0000000000   0.0000000000   3.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

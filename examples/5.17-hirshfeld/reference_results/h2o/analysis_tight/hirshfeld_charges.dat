@@ -1,0 +1,5 @@
+# stb-hirshfeldAnalysis per-atom charges (e-; charge = Z_val - population)
+# idx elem x(Ang) y(Ang) z(Ang) Z_val voronoi_siesta hirshfeld_siesta hirshfeld_pass0 hirshfeld_i pop_hirshfeld_i reference_frac reference_ion
+    1   O     7.000000     7.000000     7.299018   6.00   -0.19051   -0.24214   -0.25549   -0.70818    6.70818  0.708 anion
+    2   H     7.000000     7.769694     6.701381   1.00   +0.09526   +0.12107   +0.12775   +0.35409    0.64591  0.354 cation
+    3   H     7.000000     6.230306     6.701381   1.00   +0.09526   +0.12107   +0.12775   +0.35409    0.64591  0.354 cation

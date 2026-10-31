@@ -1,0 +1,7 @@
+# single point; 2x2x2 supercell of the 8-atom training cell: k-grid divided by 2 (k x a ~ 33 Ang as in training)
+kgrid.MonkhorstPack   [3 3 3]
+MD.TypeOfRun   CG
+MD.Steps       0
+MD.NumCGsteps  0
+MD.VariableCell false
+WriteForces    true

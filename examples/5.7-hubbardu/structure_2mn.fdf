@@ -1,0 +1,18 @@
+SystemName bcc-Mn, conventional 2-atom cell (Hubbard U tutorial fixture)
+SystemLabel siesta
+LatticeConstant 2.89 Ang
+%block LatticeVectors
+1.0 0.0 0.0
+0.0 1.0 0.0
+0.0 0.0 1.0
+%endblock LatticeVectors
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+1 25 Mn
+%endblock ChemicalSpeciesLabel
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+0.00 0.00 0.00 1
+0.50 0.50 0.50 1
+%endblock AtomicCoordinatesAndAtomicSpecies

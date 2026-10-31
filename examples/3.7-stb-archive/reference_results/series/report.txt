@@ -1,0 +1,135 @@
+
+ARCHIVE:
+------------------------------------------------------------
+===== STB-ARCHIVE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.322
+Target            : strain/a_* (3 folders, one archive each)
+Mode              : results -- inputs + logs + geometry/trajectory + small electronic outputs (bands, DOS, PDOS, eigenvalues) + post-processing; no grids, restart files, basis tables or H/S/wavefunction binaries
+Always in         : .fdf files, every file they read, pseudopotentials, job scripts
+Never in          : hidden files, earlier archives/backups
+
+[1] FOLDER strain/a_5.40
+------------------------------------------------------------
+Files             : 27 (221.4 KB)
+Going in          : 27 files (221.4 KB); left out 0 (0 B)
+The run           : FINISHED, single point, SIESTA 5.4.2, E = -230.0124 eV
+
+[2] GOING IN
+------------------------------------------------------------
+input         | size    | why            
+-----------------------------------------
+Si.psml       | 84.7 KB | pseudopotential
+calc.fdf      | 360 B   | SIESTA input   
+structure.fdf | 375 B   | SIESTA input   
+kind                           | files | size    | e.g.                                                     
+------------------------------------------------------------------------------------------------------------
+SIESTA log / status            | 16    | 71.5 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+electronic structure           | 2     | 60.3 KB | si.EIG, si.KP                                            
+geometry / forces / dynamics   | 4     | 1.8 KB  | si.BONDS, si.BONDS_FINAL, si.FA, +1                      
+job-scheduler output           | 1     | 1.8 KB  | siesta.err                                               
+restart (SIESTA reads it back) | 1     | 600 B   | si.XV                                                    
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+
+[3] LEFT OUT
+------------------------------------------------------------
+Nothing -- every file goes in
+
+[4] ARCHIVE
+------------------------------------------------------------
+Archive           : <work>/strain/a_5.40_archive.tar.gz
+                    29 members (27 files + MANIFEST.txt + SHA256SUMS), 60.6 KB (27 % of 221.4 KB)
+SHA-256 (archive) : <sha>
+Verification      : read back, every file's size and SHA-256 compared -- ok
+Restore with      : tar -xzf a_5.40_archive.tar.gz && cd a_5.40 && sha256sum -c SHA256SUMS
+
+[5] FOLDER strain/a_5.476
+------------------------------------------------------------
+Files             : 27 (221.4 KB)
+Going in          : 27 files (221.4 KB); left out 0 (0 B)
+The run           : FINISHED, single point, SIESTA 5.4.2, E = -230.0353 eV
+
+[6] GOING IN
+------------------------------------------------------------
+input         | size    | why            
+-----------------------------------------
+Si.psml       | 84.7 KB | pseudopotential
+calc.fdf      | 360 B   | SIESTA input   
+structure.fdf | 376 B   | SIESTA input   
+kind                           | files | size    | e.g.                                                     
+------------------------------------------------------------------------------------------------------------
+SIESTA log / status            | 16    | 71.5 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+electronic structure           | 2     | 60.3 KB | si.EIG, si.KP                                            
+geometry / forces / dynamics   | 4     | 1.8 KB  | si.BONDS, si.BONDS_FINAL, si.FA, +1                      
+job-scheduler output           | 1     | 1.8 KB  | siesta.err                                               
+restart (SIESTA reads it back) | 1     | 600 B   | si.XV                                                    
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+
+[7] LEFT OUT
+------------------------------------------------------------
+Nothing -- every file goes in
+
+[8] ARCHIVE
+------------------------------------------------------------
+Archive           : <work>/strain/a_5.476_archive.tar.gz
+                    29 members (27 files + MANIFEST.txt + SHA256SUMS), 60.6 KB (27 % of 221.4 KB)
+SHA-256 (archive) : <sha>
+Verification      : read back, every file's size and SHA-256 compared -- ok
+Restore with      : tar -xzf a_5.476_archive.tar.gz && cd a_5.476 && sha256sum -c SHA256SUMS
+
+[9] FOLDER strain/a_5.55
+------------------------------------------------------------
+Files             : 27 (221.4 KB)
+Going in          : 27 files (221.4 KB); left out 0 (0 B)
+The run           : FINISHED, single point, SIESTA 5.4.2, E = -230.0192 eV
+
+[10] GOING IN
+------------------------------------------------------------
+input         | size    | why            
+-----------------------------------------
+Si.psml       | 84.7 KB | pseudopotential
+calc.fdf      | 360 B   | SIESTA input   
+structure.fdf | 375 B   | SIESTA input   
+kind                           | files | size    | e.g.                                                     
+------------------------------------------------------------------------------------------------------------
+SIESTA log / status            | 16    | 71.5 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+electronic structure           | 2     | 60.3 KB | si.EIG, si.KP                                            
+geometry / forces / dynamics   | 4     | 1.8 KB  | si.BONDS, si.BONDS_FINAL, si.FA, +1                      
+job-scheduler output           | 1     | 1.8 KB  | siesta.err                                               
+restart (SIESTA reads it back) | 1     | 600 B   | si.XV                                                    
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+
+[11] LEFT OUT
+------------------------------------------------------------
+Nothing -- every file goes in
+
+[12] ARCHIVE
+------------------------------------------------------------
+Archive           : <work>/strain/a_5.55_archive.tar.gz
+                    29 members (27 files + MANIFEST.txt + SHA256SUMS), 60.7 KB (27 % of 221.4 KB)
+SHA-256 (archive) : <sha>
+Verification      : read back, every file's size and SHA-256 compared -- ok
+Restore with      : tar -xzf a_5.55_archive.tar.gz && cd a_5.55 && sha256sum -c SHA256SUMS
+
+[13] SUMMARY & FILES
+------------------------------------------------------------
+folder         | run      | files | size     | archive                | archive size | check
+--------------------------------------------------------------------------------------------
+strain/a_5.40  | FINISHED | 27    | 221.4 KB | a_5.40_archive.tar.gz  | 60.6 KB      | ok   
+strain/a_5.476 | FINISHED | 27    | 221.4 KB | a_5.476_archive.tar.gz | 60.6 KB      | ok   
+strain/a_5.55  | FINISHED | 27    | 221.4 KB | a_5.55_archive.tar.gz  | 60.7 KB      | ok   
+Archived          : 3 of 3 folder(s)
+  - <work>/strain/a_5.40_archive.tar.gz
+  - <work>/strain/a_5.476_archive.tar.gz
+  - <work>/strain/a_5.55_archive.tar.gz
+
+[14] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Archived -- science preserved, not deleted.
+

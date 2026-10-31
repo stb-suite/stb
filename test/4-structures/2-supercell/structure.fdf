@@ -1,0 +1,27 @@
+# Example fixture: simple cubic Si, 2-atom cell (a = 5.43 Ang).
+# Note: this is NOT true diamond-cubic silicon (that needs 8 atoms/cell with
+# FCC centering) -- it's a simpler 2-atom motif, actual symmetry is
+# rhombohedral (R-3m), same fixture convention used elsewhere in test/.
+# Good enough here since only lattice/atom-count arithmetic is being tested.
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.4300000000   0.0000000000   0.0000000000
+ 0.0000000000   5.4300000000   0.0000000000
+ 0.0000000000   0.0000000000   5.4300000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.000000000   1
+ 0.250000000   0.250000000   0.250000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

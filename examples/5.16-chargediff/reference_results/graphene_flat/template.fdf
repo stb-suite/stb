@@ -1,0 +1,23 @@
+# Template of the 4.19 example for Li on graphene: the physics only. Spin-polarized because the
+# isolated Li fragment has one unpaired electron; the combined and graphene runs then use the same
+# setting, as stb-chargediffAnalysis requires. A metallic system: smearing and a 6x6 in-plane k-grid.
+SystemName      li_graphene
+SystemLabel     siesta
+%include structure.fdf
+
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           DZP
+PAO.EnergyShift         0.01 Ry
+# the perturbative polarization orbital of Li (PseudoDojo, 1s in the valence) cannot be generated: use the
+# non-perturbative scheme, for every species, in every folder
+PAO.Polarization.NonPerturbative  true
+Mesh.Cutoff             300 Ry
+ElectronicTemperature   300 K
+Spin                    polarized
+kgrid.MonkhorstPack     [6 6 1]
+DM.Tolerance            1.0e-5
+DM.MixingWeight         0.10
+DM.NumberPulay          6
+MaxSCFIterations        300

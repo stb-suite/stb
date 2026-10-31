@@ -1,0 +1,57 @@
+# Example fixture: magnetite (Fe3O4), rhombohedral primitive cell (14 atoms),
+# built from its space group (Fd-3m, No. 227) via pymatgen's
+# Structure.from_spacegroup, with Fe at 8a/16d (no free parameter) and O at
+# 32e with oxygen positional parameter u=0.379 (origin choice 2; a = 8.396
+# Ang). Verified physically sensible after generation: min Fe-O = 1.76 Ang,
+# min O-O = 2.87 Ang, min Fe-Fe = 2.97 Ang -- all in the expected range for
+# an oxide spinel. Approximate/illustrative values (not re-verified against
+# a primary crystallographic reference) -- fine for exercising code paths,
+# don't use for production DFT without checking a proper source first.
+#
+# An earlier version of this fixture used u=0.2548, which put two O atoms
+# only 0.11 Ang apart (unphysical) -- caught by stb-crystalbuilder's
+# overlap sanity check when regenerating this same structure from scratch.
+#
+# Chosen specifically because Fe sits on *two* symmetrically distinct sites
+# (tetrahedral 8a-type and octahedral 16d-type in the conventional cell,
+# labeled 'a'/'d' in this primitive setting) while O is a single site -- the
+# textbook example of "same element, different Wyckoff class". Used to
+# exercise stb-defect's --all-inequivalent-sites (expect 2 Fe sites found,
+# multiplicities 2 and 4; 1 O site, multiplicity 8). Fe positions/order are
+# unchanged from the earlier version, so site indices in stb-defect's
+# test.sh (site #1 and #5) still refer to the same two Fe sites.
+
+NumberOfSpecies    2
+NumberofAtoms      14
+
+%block ChemicalSpeciesLabel
+ 1   26   Fe
+ 2   8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 0.00000000   4.19800000   4.19800000
+ 4.19800000   0.00000000   4.19800000
+ 4.19800000   4.19800000   0.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.12500000   0.62500000   0.12500000   1
+  0.62500000   0.12500000   0.12500000   1
+  0.12500000   0.12500000   0.62500000   1
+  0.12500000   0.12500000   0.12500000   1
+  0.50000000   0.50000000   0.50000000   1
+  0.75000000   0.75000000   0.75000000   1
+  0.37900000   0.86300000   0.37900000   2
+  0.38700000   0.87100000   0.87100000   2
+  0.37900000   0.37900000   0.86300000   2
+  0.87100000   0.38700000   0.87100000   2
+  0.37900000   0.37900000   0.37900000   2
+  0.87100000   0.87100000   0.87100000   2
+  0.86300000   0.37900000   0.37900000   2
+  0.87100000   0.87100000   0.38700000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

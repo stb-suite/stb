@@ -1,0 +1,72 @@
+
+NATIVE CHARGES:
+------------------------------------------------------------
+===== STB-NATIVECHARGES REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.325
+Target            : o2
+Methods           : Mulliken (WriteMullikenPop 1), Hirshfeld (Charge.Hirshfeld end), Voronoi (Charge.Voronoi end) -- as SIESTA printed them
+
+[1] RUN
+------------------------------------------------------------
+Folder            : o2
+Log               : o2/calc.out (SIESTA 5.4.2)
+State             : FINISHED, single point
+Atoms             : 2 (O2)
+Basis             : DZP
+Spin              : collinear
+Mulliken          : found
+Hirshfeld         : found
+Voronoi           : found
+
+[2] CHARGES PER ATOM
+------------------------------------------------------------
+# | el | Z_val | q Mulliken | q Hirshfeld | q Voronoi | spread | Sz Mulliken | Sz Hirshfeld | Sz Voronoi
+--------------------------------------------------------------------------------------------------------
+1 | O  | 6     | +0.0000    | +0.0000     | +0.0000   | 0.0000 | +1.0000     | +1.0000      | +1.0000   
+2 | O  | 6     | +0.0000    | +0.0000     | +0.0000   | 0.0000 | +1.0000     | +1.0000      | +1.0000   
+q in e (positive = electrons lost); spread = largest minus smallest q over the methods
+
+[3] PER SPECIES
+------------------------------------------------------------
+species | atoms | mean q Mulliken  | mean q Hirshfeld | mean q Voronoi  
+------------------------------------------------------------------------
+O       | 2     | +0.0000 ++0.0000 | +0.0000 ++0.0000 | +0.0000 ++0.0000
++-: spread over the atoms of one species (equivalent atoms should agree)
+
+[4] CHECKS
+------------------------------------------------------------
+method    | sum of q (e) | max |pop + q - Z_val| | sum of Sz
+------------------------------------------------------------
+Mulliken  | +0.000000    | 0.0e+00               | 2.00000  
+Hirshfeld | +0.000006    | 0.0e+00               | 2.00000  
+Voronoi   | +0.000006    | 0.0e+00               | 2.00000  
+Expected          : sum of q = +0 e; sum of Sz = spin moment 2.00000
+Method dependence : up to 0.000 e (O1) -- a partial charge is a convention, not an observable
+
+[5] DIPOLE
+------------------------------------------------------------
+source           | along a (D) | along b (D) | along c (D) | |p| (D) | of SIESTA's
+----------------------------------------------------------------------------------
+Mulliken         | +0.0000     | +0.0000     | +0.0000     | 0.0000  | -          
+Hirshfeld        | +0.0000     | +0.0000     | +0.0000     | 0.0000  | -          
+Voronoi          | +0.0000     | +0.0000     | +0.0000     | 0.0000  | -          
+SIESTA (density) | +0.0000     | +0.0000     | +0.0000     | 0.0000  | 100 %      
+point charges at the nuclei miss the atoms' own dipoles (lone pairs, polarization): their dipole is not the molecule's
+
+[6] SUMMARY & FILES
+------------------------------------------------------------
+Mulliken          : in 1 of 1 folder(s)
+Hirshfeld         : in 1 of 1 folder(s)
+Voronoi           : in 1 of 1 folder(s)
+
+[7] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Native charges report complete.
+

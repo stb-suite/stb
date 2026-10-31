@@ -1,0 +1,1090 @@
+# 5.8 — Workflow: Adsorption (`stb-adsorb` / `stb-adsorbBsse` / `stb-adsorbAnalysis` / `stb-adsorbGibbs`)
+
+Computing a real DFT adsorption energy means comparing three numbers —
+the combined slab+adsorbate system, the bare slab, and the isolated
+adsorbate — each from its own SIESTA calculation:
+
+```
+E_ads = E_site - E_clean_slab - E_adsorbate
+```
+
+Getting an honest number out of that comparison depends on a handful of
+details that are easy to get subtly wrong by hand: whether the cell is
+allowed to relax, whether the slab's own periodic images interact with the
+adsorbate, and whether the basis-set mismatch between the three separate
+calculations is corrected for. This item has **four** stages:
+
+- **Stage 1 (`stb-adsorb`, code `5.8.1`)** generates every folder the
+  uncorrected `E_ads` needs (`clean_slab/`, `adsorbate*/`, one folder per
+  candidate `sites/site_*/`), with the fixed-cell/self-interaction details
+  below already handled correctly.
+- **Stage 2 (`stb-adsorbBsse`, code `5.8.2`)** generates the
+  Boys-Bernardi counterpoise (BSSE) correction — but only once Stage 1's
+  own sites have actually finished relaxing in SIESTA, since the
+  correction is only meaningful at the real, relaxed geometry (Section 2).
+- **Stage 3 (`stb-adsorbAnalysis`, code `5.8.3`)** reads everything Stage
+  1/2 produced and reports `E_ads`, with and without the BSSE correction,
+  ranked most stable first — plus a per-site physical-diagnostics table
+  (dipole, magnetic moment, bond-length change), a "what to run next"
+  pointer at other tools in the suite, and an opt-in `--compute-gibbs`
+  step that preps the vibrational-Hessian folders Stage 4 needs
+  (Section 13).
+- **Stage 4 (`stb-adsorbGibbs`, code `5.8.4`)** turns those Hessian
+  folders, once you've run SIESTA in them, into an actual Gibbs free
+  energy of adsorption, `DG(T) = E_ads + DZPE - T*DS` (Section 13).
+
+`example_5.8.sh` is a guided, runnable walkthrough of all four stages —
+**including a worked numeric example (Section 8) where the BSSE
+correction changes which site you'd conclude is the most stable one, a
+second one (Section 13.4) where accounting for entropy turns a favorable
+adsorption unfavorable above room temperature, and a third one (Section
+13.6/13.7) that turns that same `DG(T)` sweep into a rough desorption
+*timescale* — and shows the degenerate case where that timescale estimate
+stops being informative at all.** Those are the three most important things
+to take from this page: an uncorrected adsorption-energy ranking is not just
+"a little too negative," it can point at the wrong site outright; even a
+BSSE-corrected `E_ads` is only the electronic part of the story, not the
+full thermodynamic answer; and even `DG(T)` itself only tells you *whether*
+something desorbs, not *how fast* — a question Stage 4's `[3c]` section
+answers only very roughly, and sometimes (Section 13.7) not usefully at all.
+
+## 1. Why the cell stays fixed
+
+Every folder `stb-adsorb`/`stb-adsorbBsse` write (`clean_slab/`,
+`adsorbate*/`, every `sites/site_*/`, and the BSSE ghost-fragment folders)
+gets a `config_extra.fdf` sidecar forcing `MD.VariableCell false`, `%include`-d
+ahead of your own `--calc` template (same sidecar-override convention
+`stb-hubbardu`/`stb-elasticInputs`/`stb-phononsCreate` already use, since
+SIESTA's fdf reader is first-occurrence-wins for a duplicate directive —
+the override has to physically precede anything your own template
+already sets).
+
+Two independent reasons this has to be fixed, not left to whatever your
+`--calc` template happens to say:
+
+- **The lattice constant is a bulk property.** The slab's in-plane lattice
+  vectors come from the underlying bulk crystal's own equilibrium
+  geometry — a single adsorbed atom or molecule has no physical business
+  changing it. If the cell were allowed to relax, the "adsorption energy"
+  you'd compute would be contaminated by a spurious change in the
+  substrate's own lattice constant, not just the adsorbate's binding.
+- **The vacuum gap is a numerical parameter, not a physical one.** The
+  gap along `c` exists purely so the slab doesn't interact with its own
+  image above/below it (Section 3.2 below is the in-plane analogue of
+  this same idea). Letting `MD.VariableCell` touch that axis would change
+  a number that was never meant to have a physical value in the first
+  place.
+
+Atomic positions are a different story: whether the slab, adsorbate, and
+site should relax their **positions** is entirely up to your own `--calc`
+template's `MD.TypeOfRun`/`MD.NumCGsteps` (a real adsorption study
+normally does want that) — `stb-adsorb` never touches those. The one
+exception is the BSSE ghost-fragment folders, next section.
+
+## 2. BSSE — the counterpoise correction, and why it needs a stage of its own
+
+### 2.1 The problem
+
+SIESTA is a localized-basis (LCAO) code. A fragment computed **alone**
+only has its own atoms' basis functions available to describe its
+electrons. In the **combined** slab+adsorbate calculation, each fragment
+additionally has the *other* fragment's basis functions sitting nearby,
+even though those orbitals belong to atoms that, from that fragment's own
+point of view, aren't really part of it. This extra, unearned
+variational freedom systematically **lowers** the combined system's
+energy relative to either fragment's own smaller-basis calculation —
+Basis Set Superposition Error (BSSE) — making every LCAO adsorption
+energy look more strongly bound than it really is, purely as a basis-set
+artifact, not a physical effect. Section 4 below shows exactly how
+misleading that artifact can be: not just "a bit too strong," but capable
+of flipping which candidate site looks best.
+
+### 2.2 The fix: Boys-Bernardi counterpoise, both directions
+
+The standard correction (Boys & Bernardi, 1970) re-evaluates each
+fragment's energy **in the full combined basis**, by adding "ghost"
+atoms standing in for the atoms that are physically absent from that
+fragment — same real basis functions and pseudopotential, but zero
+nuclear/valence charge, so they add basis freedom without adding any real
+physics. `stb-adsorbBsse` (Stage 2) writes both directions, at the exact
+RELAXED geometry of the site they belong to:
+
+- `bsse_slab/` — the real **substrate**, with the adsorbate replaced by
+  ghosts → the substrate's own energy, evaluated in the full dimer basis.
+- `bsse_adsorbate/` — the real **adsorbate**, with the substrate replaced
+  by ghosts → the adsorbate's own energy, evaluated in the full dimer
+  basis.
+
+`stb-adsorbAnalysis` (Stage 3) then applies:
+
+```
+E_ads(BSSE-corrected) = E_site - E_bsse_slab - E_bsse_adsorbate
+```
+
+Ghost species use SIESTA's own ghost-atom convention: a new species label
+(`<element>_ghost`) with a **negative** atomic number in `%block
+ChemicalSpeciesLabel`, resolving to the *same* pseudopotential file as the
+real element (`core/pseudopotentials.py::copy_pseudo`'s `dest_label`
+parameter) but contributing zero charge to the calculation.
+
+Because both fragments here — a finite slab, a finite adsorbate — are
+already complete, self-contained systems, this counterpoise is **exact**:
+there's no truncation choice to make in either direction. Contrast this
+with `stb-cohesive`'s own BSSE correction for a *periodic bulk* crystal,
+which has no natural "edge" to stop at and needs an arbitrary
+neighbor-shell cutoff (`--bsse-cutoff`) instead.
+
+### 2.3 Why BSSE needs its own stage, AFTER the sites relax
+
+A counterpoise correction only means what it's supposed to mean if every
+fragment is evaluated at the **same geometry** — the geometry of the
+actual, combined, relaxed site. That geometry doesn't exist yet at Stage
+1 (`stb-adsorb`) time: `sites/site_*/` is a real relaxation (whatever
+`MD.TypeOfRun` your `--calc` template requests), and its atoms only
+settle into their true adsorption geometry once SIESTA has actually
+finished running there. An earlier version of this workflow wrote the
+BSSE ghost-fragment folders directly from `stb-adsorb`'s own pre-
+relaxation initial guess — which, for a real chemisorption bond, can be
+substantially wrong: a live test case saw an O-Si bond shrink from a
+2.0 Ang initial guess to ~1.62 Ang after real relaxation (plus ~0.46 Ang
+of substrate reconstruction), and BSSE grows quickly as atoms get closer
+together, so evaluating it at the wrong (too-separated) geometry
+under-estimates the true correction.
+
+`stb-adsorbBsse` (Stage 2) fixes this by running strictly AFTER Stage 1's
+sites have finished relaxing: for each `sites/site_*/` with a finished
+`siesta.XV`, it reads that RELAXED geometry directly (skipping, with a
+clear report, any site that hasn't finished yet) and writes
+`bsse/site_*/bsse_slab/`+`bsse/site_*/bsse_adsorbate/` at that exact
+geometry — with `config_extra.fdf` additionally forcing single-point SCF
+on top of the fixed cell (`MD.TypeOfRun CG`, `MD.Steps 0`,
+`MD.NumCGsteps 0` — the same single-point-enforcement idea `stb-hubbardu`
+uses for its own perturbation probes, for the analogous reason: a
+counterpoise correction, like a linear-response slope, is only meaningful
+when every point being compared shares the exact same geometry). If
+`bsse_slab/`/`bsse_adsorbate/` were instead allowed to relax further,
+each ghost-fragment calculation would drift to its *own* locally-optimal
+geometry instead of staying at the site's, and the three energies being
+subtracted would no longer refer to the same physical configuration.
+
+## 3. Is the slab big enough? Two separate self-interaction checks
+
+A periodic slab calculation has *two* independent directions in which a
+badly-sized supercell can make the adsorbate spuriously interact with a
+copy of itself, and `stb-adsorb` checks both. `example_5.8.sh` exercises
+both live.
+
+### 3.1 Out-of-plane: the isolated-adsorbate reference box
+
+The isolated-adsorbate reference (`adsorbate/`) sits in a cubic
+`--vacuum-box` (default 20 Ang). If the molecule's own extent exceeds
+half that box, it can reach its own periodic image in *that* separate,
+throwaway cell — `stb-adsorb` already warns about this
+(`molecule_extent` vs. `--vacuum-box`).
+
+### 3.2 In-plane: the slab's own lateral supercell
+
+This is a different, easy-to-miss failure mode: the **site** folders use
+the slab's *own* in-plane periodicity (vectors `a`/`b`), which is fixed by
+whatever structure you gave `stb-adsorb` — not something this tool
+controls. If that in-plane supercell is small (a bare primitive cell, for
+instance), the adsorbate's periodic images in neighboring cells can sit
+right next to each other, turning what was meant to be an isolated
+adsorption event into an artificial 2D "monolayer" of adsorbates at full
+coverage instead.
+
+`stb-adsorb` checks this directly: `min_adsorbate_image_distance`
+computes the minimum distance between the adsorbate and the nearest copy
+of itself across the slab's `a`/`b` lattice vectors (translation-
+invariant — it only depends on the lattice and the adsorbate's own
+internal geometry, not which site it ends up on, so it's checked once per
+adsorbate, in `[1] REFERENCE FOLDERS`, before any site is even placed).
+Below **8 Ang** (a common rule-of-thumb separation for avoiding lateral
+adsorbate-adsorbate interaction — dipole coupling, steric contact — in
+the literature), it prints a `[WARNING]` recommending a larger in-plane
+supercell (`stb-supercell`).
+
+This is exactly the failure mode `structure.fdf`'s bare 2-atom graphene
+primitive cell (lattice constant 2.46 Ang) demonstrates on purpose in
+`example_5.8.sh`'s `output/stage1_lateral_warning/` section — *far* below
+the 8 Ang recommendation, since it's only meant to exercise `stb-adsorb`'s
+mechanics quickly, not to be a physically meaningful adsorption
+calculation on its own. `output/stage1_fixed/` immediately follows it up
+by tiling the same cell 4x4 in-plane with `stb-supercell` and re-running
+`stb-adsorb`, confirmed live to make the warning disappear — that bigger
+cell is what the rest of the walkthrough (Section 4) actually uses.
+
+## 4. Libraries and external dependencies used
+
+- **`pymatgen`** (`pymatgen.analysis.adsorption.AdsorbateSiteFinder`) —
+  finds candidate ontop/bridge/hollow sites and reduces them by symmetry
+  (`--symprec`). Note: for `structure.fdf`'s graphene basis, pymatgen's
+  finder never returns a `hollow` candidate at any cell size tried —
+  ontop and bridge are what the worked example below compares; this is a
+  property of the site-finding algorithm on this exact basis, not a
+  limitation `stb-adsorb` itself imposes.
+- **`sisl`** — reads each site's relaxed `siesta.XV` in Stage 2
+  (`stb-adsorbBsse`).
+- **`matplotlib`** — the site-layout plot (`adsorption_sites.png`,
+  Stage 1) and the adsorption-energy ranking plot (`adsorption_ranking.png`,
+  Stage 3, `--view-plots` to preview live).
+- **`gnuplot`** (optional, always written by Stage 3) — `adsorption_curve.dat`/
+  `.gplot`, a portable per-site `E_ads`/`E_ads_BSSE` scatter.
+- **MACE** (optional, `pip install stb_suite[ml]`) — only touched by
+  `--ml-prerelax` (Stage 1, pre-relax the isolated adsorbate) and
+  `--ml-rank` (Stage 1, pre-screen candidate sites before committing to
+  real SIESTA folders). Neither is used in this walkthrough.
+
+## 5. Stage 1 mechanics, live (`stb-adsorb`, code `5.8.1`)
+
+```
+$ stb-adsorb --adsorbate O -O output/stage1 --no-intro
+```
+
+writes `clean_slab/`, `adsorbate/` (forced spin-polarized — many single
+atoms/molecules, like O, N, or NO, have a non-zero ground-state spin), and
+one `sites/site_1_ontop/` (the default site type/index). By default
+(`--force-spin`, ON unless you pass `--no-force-spin`), every
+`sites/site_*/` folder is ALSO forced spin-polarized — the physically
+relevant quantity, `E_ads`, comes from the **combined** slab+adsorbate
+calculation, and a single adsorbate atom bonded to a slab commonly leaves
+that combined system with a net magnetic moment too (most simply, an odd
+total valence-electron count, which a spin-restricted calculation cannot
+represent at all). `clean_slab/` itself is left alone (no adsorbate
+present, no clear universal reason to force it). Every folder also gets
+`Slab.DipoleCorrection T` forced on `clean_slab/` and every `sites/site_*/`
+(never the isolated `adsorbate/` reference, which is a molecule in an
+all-around vacuum box, not a slab) — adsorbing on only one face breaks the
+slab's inversion/mirror symmetry along the vacuum axis, giving the cell a
+net dipole along a PERIODIC direction that would otherwise contaminate the
+total energy with a spurious periodic-image field (same reasoning, and the
+same fdf tag, `stb-her`/`stb-oer` already force unconditionally for their
+own one-sided-adsorbate site folders). `clean_slab/`'s `config_extra.fdf`
+is exactly:
+
+```
+# Auto-generated by stb-adsorb -- keeps the cell fixed (see the example's
+# README.md for why).
+MD.VariableCell false
+```
+
+while a `sites/site_*/`'s `config_extra.fdf` additionally has:
+
+```
+# Auto-generated -- forces spin-polarized SCF (see write_reference_folder's
+# force_spin docstring for why).
+Spin                polarized
+```
+
+Report structure (`[0]`–`[6]`, `--save-report` persists it to
+`adsorption_prep_report.txt`):
+
+```
+[0] RUN METADATA
+[1] REFERENCE FOLDERS
+[2] ADSORPTION SITES: FINDING & COUNT
+[3] ML PRE-SCREENING
+[4] WRITING SITE FOLDERS
+[5] SUMMARY & NEXT STEPS
+[6] LIBRARY WARNINGS
+```
+
+`--site-type all --all-sites` writes one folder per symmetrically-distinct
+site of every type instead of just one; `--both-sides` additionally mirrors
+each selected site onto the bottom face for a free-standing 2D material
+like this graphene fixture (verified: `site_1_ontop_bothsides/structure.fdf`
+has `NumberofAtoms 4` — 2 substrate + 1 adsorbate per face); `--height-sweep
+<min> <max> <step>` writes an approach curve instead of one fixed height.
+
+**A caution worth knowing before you script this yourself:** calling
+`stb-adsorb` twice into the *same* `-O` output directory with two
+different single `--site-type` values (e.g. once for `ontop`, once for
+`bridge`) overwrites `sites/adsorption_sites.txt` — the machine-readable
+site table `stb-adsorbAnalysis` reads for each site's adsorbate/height —
+silently dropping the first call's row. Use a single `--site-type all
+--all-sites` call instead (as Section 4 below does) if you want more than
+one site type in the same study.
+
+Interactive path: `stb-suite`, type `5.8.1` at the main prompt — same
+flags, same order, as the CLI above. `example_5.8.sh` proves the two agree.
+
+## 6. Stage 2 mechanics, live (`stb-adsorbBsse`, code `5.8.2`)
+
+```
+$ stb-adsorbBsse --dir adsorption_run --save-report
+```
+
+Report structure (`[0]`–`[4]`, `--save-report` persists it to
+`adsorption_bsse_report.txt`):
+
+```
+[0] RUN METADATA
+[1] SITE SCAN
+[2] WRITING BSSE FOLDERS
+[3] SUMMARY & NEXT STEPS
+[4] LIBRARY WARNINGS
+```
+
+`[1]` prints a table with one row per `sites/site_*/`: `ready` (has a
+`siesta.XV`, gets a BSSE folder pair written), `SKIP (no .XV yet -- not
+relaxed)` (not fatal — re-run this stage later once it's finished), or a
+mismatched/stale-folder warning if a site's atom count no longer matches
+its own `structure.fdf`. `[2]` writes `bsse/site_*/bsse_slab/` and
+`bsse/site_*/bsse_adsorbate/` only for the `ready` sites, reusing that
+site's own already-copied pseudopotentials directly (no `-p` flag on this
+stage). Interactive path: `stb-suite`, type `5.8.2`.
+
+## 7. Stage 3 mechanics, live (`stb-adsorbAnalysis`, code `5.8.3`)
+
+```
+$ stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
+```
+
+Report structure (`[0]`–`[5]`, `--save-report` persists it to
+`adsorption_report.txt`):
+
+```
+[0] RUN METADATA
+[1] REFERENCE ENERGIES
+[2] SITE RESULTS: CONFIGURATION COUNT & TABLE
+[3] SUMMARY & PLOT
+[4] APPLY
+[5] LIBRARY WARNINGS
+```
+
+`[2]` prints one row per site (`E_ads`, and `E_ads_BSSE` once Stage 2 has
+run there, plus an SCF-convergence/residual-force quality flag — a folder
+missing `calc.out` entirely is `SKIP`ped, not fatal to the rest of the
+batch) and a `BSSE coverage: complete N, incomplete N, absent N` summary.
+`[3]` reports the most stable site **twice** — once by the uncorrected
+ranking, once by the BSSE-corrected ranking — plus the BSSE correction's
+exact magnitude at the corrected winner. `[4]` (`--apply <path>`) copies
+the most stable site's `structure.fdf` to `<path>`, preferring the
+BSSE-corrected ranking whenever it's available. Interactive path:
+`stb-suite`, type `5.8.3`.
+
+## 8. Worked example: watching the BSSE correction flip the ranking
+
+This is the section `example_5.8.sh`'s `output/workflow/` walks through
+line by line, and the reason this whole workflow needs a Stage 2. No real
+SIESTA binary is available inside this walkthrough, so — same convention
+`5.7-hubbardu`'s own worked example uses for its linear-response fit —
+every `calc.out` below is a **hand-chosen, exact** number, picked in
+advance to make one very concrete point.
+
+Two candidate sites on the 4x4-supercell-fixed structure (Section 3.2),
+`site_1_ontop` and `site_2_bridge`:
+
+| Quantity | Value (eV) |
+|---|---|
+| `E_clean_slab` | `-200.000000` |
+| `E_adsorbate` (isolated O) | `-13.500000` |
+| `E_site` (ontop) | `-214.100000` |
+| `E_site` (bridge) | `-214.150000` |
+| `E_bsse_slab` (ontop) | `-200.050000` |
+| `E_bsse_adsorbate` (ontop) | `-13.520000` |
+| `E_bsse_slab` (bridge) | `-200.090000` |
+| `E_bsse_adsorbate` (bridge) | `-13.560000` |
+
+Uncorrected `E_ads = E_site - E_clean_slab - E_adsorbate`:
+
+```
+E_ads(ontop)  = -214.100000 - (-200.000000) - (-13.500000) = -0.600000 eV
+E_ads(bridge) = -214.150000 - (-200.000000) - (-13.500000) = -0.650000 eV   <- more negative, "wins"
+```
+
+**Bridge looks more stable by 0.050 eV.** Now the BSSE-corrected
+`E_ads(BSSE) = E_site - E_bsse_slab - E_bsse_adsorbate`:
+
+```
+E_ads_BSSE(ontop)  = -214.100000 - (-200.050000) - (-13.520000) = -0.530000 eV
+E_ads_BSSE(bridge) = -214.150000 - (-200.090000) - (-13.560000) = -0.500000 eV   <- now LESS negative than ontop
+```
+
+**Ontop is now more stable by 0.030 eV — the ranking flips.** Both
+corrections make the binding weaker (less negative), exactly the
+direction Section 2.1 predicts (BSSE always over-binds); the bridge site
+simply happened to have the larger correction (`+0.150` eV vs. ontop's
+`+0.070` eV — plausible physically, since a bridge adsorbate typically
+sits closer to more substrate atoms at once, borrowing more basis
+functions). `stb-adsorbAnalysis`'s own report says it directly:
+
+```
+Most stable site (uncorrected):   site_2_bridge  (E_ads = -0.650000 eV, exothermic (favorable))
+Most stable site (BSSE-corrected): site_1_ontop  (E_ads = -0.530000 eV, exothermic (favorable))
+BSSE correction at that site: +0.070000 eV (uncorrected LCAO adsorption energies
+systematically over-bind -- expect this to make the energy less negative)
+```
+
+`--apply best_production.fdf` in this same run copies **`site_1_ontop`**
+(the BSSE-corrected winner) forward — proof the tool itself treats the
+correction as authoritative once it's available, not just an FYI number
+next to the "real" one.
+
+The remaining two candidate sites from Stage 1 (`site_3_bridge`,
+`site_4_bridge`) are deliberately left without a `siesta.XV`/`calc.out` in
+this walkthrough, at no extra scripting cost demonstrating that neither
+Stage 2 nor Stage 3 treats an unfinished site as fatal — both simply skip
+it and report exactly which one, and why (`SKIP (no .XV yet -- not
+relaxed)` / `SKIP (missing calc.out)`).
+
+## 9. Known, deliberate limitations
+
+- **No SIESTA run is ever performed by this suite.** All four stages
+  generate/read input and output files; you run SIESTA yourself in
+  `clean_slab/`, every `adsorbate*/`, every `sites/site_*/`, every
+  `bsse/site_*/bsse_slab/`+`bsse_adsorbate/`, and every
+  `gibbs/*/disp_*/`, in between stages.
+- **`--no-force-spin` leaves the combined slab+adsorbate calculation's
+  `Spin` setting up to you.** By default (Section 5) both the isolated
+  reference AND every `sites/site_*/` folder are forced spin-polarized; if
+  you disable that, verify by hand whether `Spin polarized` is still needed
+  for an open-shell adsorbate — adsorption often (not always) quenches the
+  adsorbate's own spin.
+- **The BSSE correction assumes each finished `sites/site_*/`'s
+  `siesta.XV` really is the converged, relaxed geometry** — Stage 2 has no
+  way to distinguish a genuinely converged run from one that stopped early
+  for other reasons; check your own SIESTA convergence before trusting the
+  correction.
+- **`stb-adsorb`'s own site-finder is pymatgen's `AdsorbateSiteFinder`, not
+  a physically-informed search** — as Section 4/8 notes, it can miss a
+  real candidate site type entirely (no `hollow` site found for this
+  graphene basis at any tested cell size); always sanity-check
+  `adsorption_sites.png` against what you'd expect chemically.
+- **Calling `stb-adsorb` more than once into the same `-O` directory with
+  different single `--site-type` values silently drops the earlier call's
+  site-table row** (Section 5) — use one `--site-type all --all-sites`
+  call, or separate output directories, instead.
+- **Stage 4's Gibbs free energy is a harmonic-approximation treatment, not
+  an anharmonic one** (Section 13) — `ZPE`/entropy come from a harmonic
+  Hessian (site) and `ase.thermochemistry.IdealGasThermo` (isolated
+  reference, full translational+rotational+vibrational
+  — no longer vibrational-only), both standard, but neither captures real
+  anharmonic effects (thermal expansion of the well, mode coupling). The
+  isolated reference's standard-state pressure is also fixed at 1 bar, not
+  user-configurable.
+- **`--zpe-mode local`'s site-side treatment is a decoupled-oscillator
+  approximation** — only the adsorbate's own atoms are displaced (substrate
+  frozen), ignoring any coupling between the adsorbate's vibrations and the
+  substrate's own phonons. `--zpe-mode full` removes this approximation (a
+  real phonon calculation of the whole structure) at the cost of far more
+  SIESTA jobs.
+- **Orientation deduplication (Section 14.2) doesn't correct for periodic
+  wraparound** — RMSD is a direct Cartesian comparison, no minimum-image
+  convention. Not expected to matter in practice (every orientation for one
+  candidate starts at the same site coordinate and relaxes independently),
+  but a documented simplification, not a rigorous guarantee.
+- **`[3c]`'s desorption kinetics (`tau_desorb`) is a *lower bound*, not a
+  kinetic prediction** (Section 13.6) — it assumes desorption has literally
+  no barrier beyond `-DG_ads(T)` and a bare, uncorrected TST prefactor. A
+  real barrier only makes the true residence time longer than the number
+  printed here, sometimes by many orders of magnitude. **Never quote
+  `tau_desorb` on its own as "the desorption time"** — it is only ever a
+  floor on that time.
+- **When `DG_ads(T)` is already positive at `--tmin` itself, `[3c]`
+  degenerates into "instant" at every scanned temperature** (Section 13.7)
+  — a real, observed failure mode (not a hypothetical one), not a bug. It
+  means the barrierless-TST assumption has nothing left to bound: there is
+  no thermodynamic well anywhere in the scanned range for it to measure a
+  lifetime against. Treat this pattern as a screening signal ("this site
+  does not bind at any temperature you scanned"), not as literal
+  femtosecond/nanosecond kinetics.
+
+## 10. Step-by-step: running this workflow on your own structure
+
+1. Have a slab/2D structure (`.fdf`, vacuum along `c`) and a working
+   `calc.fdf` template.
+2. Run Stage 1: `stb-adsorb -s <structure.fdf> -c <calc.fdf> --adsorbate
+   <El-or-G2-molecule> --site-type all --all-sites`. Read `[1]`'s
+   self-interaction checks (Section 3) before proceeding — tile with
+   `stb-supercell` first if either warns.
+3. Run SIESTA yourself in `adsorption_run/clean_slab/`, every
+   `adsorption_run/adsorbate*/`, and every `adsorption_run/sites/site_*/`.
+4. Run Stage 2: `stb-adsorbBsse --dir adsorption_run`. Re-run it later for
+   any site reported `SKIP (no .XV yet -- not relaxed)` once that site
+   finishes.
+5. Run SIESTA yourself in every generated `bsse/site_*/bsse_slab/` and
+   `bsse/site_*/bsse_adsorbate/`.
+6. Run Stage 3: `stb-adsorbAnalysis --dir adsorption_run --save-report
+   --apply production.fdf`. Read `[3]` for **both** rankings before
+   trusting a number — if they disagree, trust the BSSE-corrected one
+   (Section 8). Add `--compute-gibbs` if you also want a Gibbs free
+   energy (Section 13) — it needs both the winning site AND its isolated
+   -adsorbate reference to already be relaxed.
+7. If you passed `--compute-gibbs`: run SIESTA yourself in every
+   `adsorption_run/gibbs/*/disp_*/` folder, then run Stage 4:
+   `stb-adsorbGibbs --dir adsorption_run --save-report --tmin <T1> --tmax <T2>`
+   covering whatever temperature range you actually care about. Read `D0`
+   (the electronic+ZPE part) alongside `DG(T)` (the full answer, including
+   entropy) — don't assume they agree (Section 13.4); check the estimated
+   desorption temperature (`[3b]`) against your own operating conditions.
+
+## 11. Files in this folder
+
+| File | Purpose |
+|---|---|
+| `structure.fdf` | Bare 2-atom graphene primitive cell, free-standing (10 Ang vacuum along `c`) — small and fast, deliberately laterally too small to exercise Section 3.2's self-interaction check. |
+| `calc.fdf` | Shared `calc.fdf` template (non-polarized, Gamma-only, modest basis/mesh — mechanics only, not physically converged). |
+| `example_5.8.sh` | The guided walkthrough (**not** an automated test — see `test/5-workflow/8-adsorption/{prep,bsse,analysis,gibbs}/test.sh` for that). Pauses between sections so you can read before moving on; safe to re-run. |
+| `output/` | Created by `example_5.8.sh` when you run it (git-ignored, not checked in). See below. |
+
+## 12. Running the script
+
+```bash
+./example_5.8.sh
+```
+
+| Case | Command(s) | What it shows |
+|---|---|---|
+| `output/stage1/` | `stb-adsorb --adsorbate O -O output/stage1` | Stage 1 mechanics: fixed cell, spin-polarization note |
+| `output/stage1_lateral_warning/` | same command | Section 3.2's lateral self-interaction `[WARNING]`, live |
+| `output/stage1_fixed/` | `stb-supercell -d 4 4 1` then `stb-adsorb --site-type all --all-sites` | the warning fixed by tiling; the `[2]` candidate-count table |
+| `output/stage1_bothsides/` | `stb-adsorb --adsorbate H --both-sides` | 2D free-standing material, both faces |
+| `output/workflow/` | Stage 1 → (fabricated `.XV`/`calc.out`) → Stage 2 → (fabricated BSSE `calc.out`) → Stage 3 → Stage 3b (`--compute-gibbs`) → (fabricated Hessian `.FA`) → Stage 4 | **the worked examples (Section 8: BSSE flips the ranking; Section 13.4: entropy flips DG unfavorable above ~331 K; Section 13.6: the same crossing, in a rough desorption timescale)** |
+| *(no folder — a diff only)* | Stage 1 via `printf … \| stb-suite` | proof the interactive menu (`5.8.1`) agrees with the CLI |
+
+## 13. Stage 3 diagnostics/suggestions, and Stage 4 — Gibbs free energy (`stb-adsorbGibbs`, code `5.8.4`)
+
+Stage 3 does more than just rank `E_ads` values now:
+
+- **`[2b] PHYSICAL DIAGNOSTICS`** — per site, the electric dipole magnitude and net
+  magnetic moment SIESTA printed (both come free from `Slab.DipoleCorrection`/`Spin
+  polarized` already being forced by Stage 1), plus how much the closest
+  adsorbate-slab distance changed between the pre-relaxation guess and the relaxed
+  geometry — a quick sanity check that the adsorbate actually moved toward the
+  surface during relaxation, not away from it.
+- **`[2c] BSSE BREAKDOWN`** — once Stage 2 has run, the raw ghost-fragment energies
+  (`E_bsse_slab`/`E_bsse_adsorbate`) behind every site's `E_ads_BSSE`, plus the
+  correction's shift in both eV and as a percentage of the uncorrected `E_ads` — for
+  *every* site with BSSE data, not just the winner Section 8's summary line already
+  reports. Useful for spotting a site where BSSE is a disproportionately large
+  fraction of the whole binding energy (a sign the LCAO basis may be too small for
+  that particular geometry).
+- **`[5] SUGGESTED NEXT ANALYSES`** — points you at other tools in the suite worth
+  running on the winning site (`stb-bader`, `stb-dos`, `stb-workfunction`,
+  `stb-coop`), each conditional on a SIESTA output file Stage 1 doesn't force on its
+  own (e.g. `.RHO`, `.PDOS.xml`).
+
+### 13.1 The DG formula, and what it physically means
+
+A plain `E_ads` is an electronic-energy-only number — it ignores that the adsorbate
+actually vibrates in its adsorption well (zero-point energy) and that vibrating
+degrees of freedom carry entropy. The full correction:
+
+```
+DG(T) = E_ads (BSSE-corrected if available, else raw)
+        + [ZPE(site) - ZPE(isolated reference)]
+        - T * [S(site) - S(isolated reference)]
+      = D0 - T * DS
+```
+
+`ZPE(site)`/`S(site)` come from a vibrational Hessian of the adsorbate's own atoms at
+the winning site (substrate frozen — a decoupled-oscillator approximation, `--zpe-mode
+local`, the default; `--zpe-mode full` instead runs a real Phonopy phonon calculation
+of the entire site structure minus the clean slab's own phonons, far more SIESTA jobs
+but no decoupling approximation). These are standard harmonic-oscillator ZPE/entropy
+sums over whichever normal modes come out with a genuinely positive frequency — a
+substrate-frozen adsorbate has no exact zero modes to worry about, so any negative
+eigenvalue found here is a real red flag (an unconverged geometry), not a symmetry
+artifact.
+
+`ZPE(isolated reference)`/`S(isolated reference)` always come from a full-molecule
+Hessian of the isolated-adsorbate reference alone — there's no periodic substrate to
+freeze/subtract for a molecule in a vacuum box, so `--zpe-mode` only ever changes the
+SITE side. **This is where a real, quantitatively significant bug was fixed this
+session.** A free molecule/atom has 3 translational + (3 for nonlinear, 2 for linear,
+0 for monatomic) rotational rigid-body zero modes that carry no vibrational ZPE/entropy
+of their own — but the finite-difference Hessian construction has no way to make these
+land at exactly zero; roughly half typically come out numerically negative
+("imaginary") and half numerically positive, purely from floating-point noise. The
+isolated reference now selects exactly the `3N-6`/`3N-5`/`0` **highest-frequency**
+modes as genuine vibrations (`ase.thermochemistry.IdealGasThermo`'s own count-based
+selection, mirrored here explicitly so the split is visible in the report) — not by
+sign. Treating the isolated reference as a genuine ideal gas this way also means it now
+gets its **real translational (and, for a polyatomic adsorbate, rotational) entropy**
+(Sackur-Tetrode + rigid-rotor formulas, at a fixed 1 bar standard-state pressure,
+symmetry-number-aware via `core/symmetry.py::point_group_details`) — previously it
+contributed vibrational entropy only, silently missing the dominant entropy term for
+any small, weakly-bound adsorbate. Verified directly against gas-phase water's known
+experimental standard entropy (188.8 J/(mol·K) at 298.15 K, matched to <0.1%) before
+being trusted for a real calculation.
+
+Physically, this matters because a free gas-phase species carries a lot of entropy
+(freedom to translate and rotate in 3D) that it mostly loses upon binding to a surface
+(it can now only vibrate in place). `DTS = T*[S(site) - S(isolated reference)]` is
+therefore usually strongly negative and grows in magnitude with `T` — meaning `DG`
+becomes progressively **less** favorable than the raw electronic `E_ads` as temperature
+rises, exactly the trend Section 13.4's worked example below shows numerically.
+
+### 13.2 Input parameters
+
+`stb-adsorbAnalysis --compute-gibbs` (Stage 3's opt-in Gibbs-prep step):
+
+| Flag | Meaning |
+|---|---|
+| `--compute-gibbs` | Writes the Hessian/phonon displacement folders for the BSSE-corrected (or, if unavailable, uncorrected) winning site. Off by default; needs the winning site AND its isolated-adsorbate reference to already have a finished `siesta.XV` — a clean `[ERROR]`, not a silent fallback to the pre-relaxation guess, if either isn't relaxed yet. |
+| `--zpe-mode {local,full}` | `local` (default): a partial-Hessian, decoupled-oscillator approximation — only the SITE's adsorbate atoms are displaced, substrate frozen, 6 folders per atom. `full`: a real Phonopy phonon calculation of the ENTIRE site structure and the clean slab (so Stage 4 can subtract the clean slab's own phonon ZPE/entropy) — physically more rigorous, far more SIESTA jobs (`6*3*N_atoms` displacements for an `N`-atom structure, vs. `6*N_adsorbate_atoms` for `local`). The isolated reference always uses `local` regardless — a molecule in vacuum has no periodic substrate phonon to subtract, so `full`'s extra machinery buys nothing there. |
+| `--displacement` | Finite-difference displacement, in Ang (default 0.015) — same physical role as `stb-phononsCreate`'s own displacement, smaller values are more harmonic but noisier, larger values sample more anharmonicity. |
+| `--gibbs-supercell` | `--zpe-mode full` only: supercell dimensions for the site+clean-slab phonon calculations (default `1 1 1`, appropriate once the slab's own in-plane supercell — Section 3.2 — is already large enough). |
+
+`stb-adsorbGibbs` (Stage 4 itself):
+
+| Flag | Meaning |
+|---|---|
+| `--dir` | Root directory containing `gibbs/`/`sites/`/`clean_slab/` (default `adsorption_run`). |
+| `--file` | SIESTA output filename inside each folder (default `calc.out`). |
+| `--tmin`/`--tmax`/`--tstep` | Temperature sweep, in K (defaults 200/400/25) — `DG`/`DS` are recomputed at every step (vibrational entropy is temperature-dependent even though `ZPE` itself isn't); the sweep's first point (`--tmin`) is also what `[FINAL RESULT]`/`D0` report. |
+| `--force-tolerance` | Residual atomic force, eV/Ang (default 0.05), above which a folder is flagged as possibly not fully converged/relaxed. Advisory only. |
+| `--save-report` | Persists the full report to `adsorption_gibbs_report.txt`. Off by default. |
+| `--view-plots` | Also shows the `DG`/`D0`/`DS` plot on screen instead of only saving it as a PNG. |
+
+### 13.3 Interpreting the output
+
+- **`D0`** — the ZPE-corrected binding energy, `E_ads + DZPE`. Temperature-independent
+  (unlike `DG`); the electronic+ZPE part of the story, before any entropy is
+  considered. Printed once, alongside `E_ads (raw)`/`E_ads (BSSE)`.
+- **`DZPE`** — `ZPE(site) - ZPE(isolated reference)`. Usually positive: binding to a
+  surface generally adds real, nonzero-frequency vibrational modes that didn't exist
+  (or existed as free rigid-body motion, contributing no ZPE) before adsorption.
+- **`DTS`**/**`DS`** — `DS` is `DTS / T`, reported in both eV/K and J/(mol·K) (the
+  conventional surface-science unit) — the actual entropy change of adsorption.
+  Typically strongly negative (Section 13.1) — literature values for losing most of a
+  small molecule's translational/rotational freedom upon adsorption are commonly in
+  the 100-150 J/(mol·K) range, a useful sanity-check scale for your own result.
+- **`DG(T)`** — the actual Gibbs free energy of adsorption at each scanned
+  temperature; the physically meaningful "is adsorption favorable" answer, not `E_ads`
+  alone.
+- **Estimated desorption temperature (`[3b]`)** — linear interpolation (or, flagged
+  `[EXTRAPOLATED]`, extrapolation) of the `DG(T)` sweep to its `DG = 0` crossing. A
+  rough estimate from a harmonic model, not a kinetic prediction (real desorption also
+  depends on a barrier/attempt-frequency, not just the sign of `DG`) — but a useful
+  single number for "is this still bound at the temperature I actually care about."
+- **Desorption kinetics (`[3c]`)** — a rough Eyring-TST estimate of the desorption
+  rate `k_desorb(T)` and timescale `tau_desorb(T)` at every temperature already
+  swept in `[3]`. Always printed (console **and** `--save-report` file) directly
+  under an explicit `[APPROXIMATION]` warning — see Section 13.6 for the full
+  derivation, the barrierless assumption behind it, and why `tau_desorb` is a
+  **lower bound**, not a prediction. If every row reads `~0 (instant)`, see
+  Section 13.7 — that's the degenerate case where `DG_ads(T)` is already
+  positive at `--tmin`, and `[3c]` stops being informative at all.
+- **`adsorption_gibbs.png`** — a 2-panel plot: top, `DG(T)` against two
+  temperature-independent reference lines (`E_ads` and `D0`); bottom, `DS(T)`.
+- **`adsorption_mode_spectrum.png`** — a stick-spectrum comparison of the site's and
+  isolated reference's vibrational frequencies (site above the axis, isolated
+  reference below), genuine vibrational modes as full-height solid stems, excluded
+  rigid-body/imaginary modes as short red stems — the isolated reference's excluded
+  modes cluster near 0 THz, well separated from any genuine vibration. This is exactly
+  the kind of plot that would have visually surfaced the mode-counting bug
+  (Section 13.1) on sight, rather than requiring a manual literature cross-check to
+  notice.
+- **`adsorption_desorption_kinetics.png`** / **`plot/desorption_kinetics.{dat,gplot}`**
+  — `tau_desorb(T)`, log-scale, from the same `[3c]` sweep. Both are written every
+  run, not either/or: the PNG (matplotlib) is for immediately looking at the result;
+  the `.dat`/`.gplot` pair (gnuplot, `WORKFLOW_TOOLS` convention — see the manual)
+  lives in its own `plot/` subfolder rather than next to the two PNGs above, since
+  it's the only gnuplot-convention output this stage produces (`cd plot && gnuplot
+  desorption_kinetics.gplot` renders `desorption_kinetics.pdf` there).
+
+### 13.4 Worked example: watching entropy turn a favorable adsorption unfavorable
+
+`example_5.8.sh`'s `output/workflow/` chain continues past Stage 3 (Section 8) into a
+Stage 4 example on the exact same `site_1_ontop` (the BSSE-corrected winner,
+`E_ads_BSSE = -0.530000 eV`) — a single adsorbed O atom, so a particularly clean case:
+a monatomic species has **zero** possible vibrational modes by definition (there's
+nothing to vibrate against), so its isolated reference's `ZPE` must come out **exactly
+zero** regardless of any Hessian data fed to it, while its entropy is **purely
+translational** (no rotation for a point particle either) — the simplest possible
+demonstration of that fix.
+
+Two fabricated `.FA` (force) datasets, hand-chosen the same "no real SIESTA available"
+way Section 8's `calc.out` values are:
+
+- **Site** (`site_1_ontop`'s adsorbed O, substrate frozen): an isotropic harmonic
+  restoring force, `k = 10 eV/Ang^2` in all 3 directions — a plausible
+  ~400 cm⁻¹ adatom-surface vibration.
+- **Isolated reference** (`O_isolated`): **exactly zero** force at every displacement
+  — nothing restores a truly free atom, so its local Hessian is identically zero.
+
+Running it (`stb-adsorbAnalysis --dir . --compute-gibbs --zpe-mode local`, then
+`stb-adsorbGibbs --dir . --tmin 200 --tmax 400 --tstep 100`) gives, verbatim:
+
+```
+Isolated reference (1-atom, monatomic) -- ideal-gas treatment (translation + rotation + vibration):
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+    -0.00 THz (imaginary) -- excluded as a rigid-body translation/rotation mode
+Site (1-atom local Hessian) vibrational modes:
+    412.27 cm^-1  ( 12.36 THz)  E = 0.0511 eV   (x3, isotropic)
+ZPE(site)  = 0.0767 eV   ZPE(isolated ref) = 0.0000 eV   DZPE = +0.0767 eV
+D0 (ZPE-corrected binding energy) = E_ads + DZPE = -0.4533 eV
+
+T =  200.00 K   DZPE = +0.0767 eV   DTS = -0.2690 eV   DS = -1.3452 meV/K (-129.80 J/(mol*K))   DG = -0.1843 eV
+T =  300.00 K   DZPE = +0.0767 eV   DTS = -0.4102 eV   DS = -1.3672 meV/K (-131.92 J/(mol*K))   DG = -0.0432 eV
+T =  400.00 K   DZPE = +0.0767 eV   DTS = -0.5483 eV   DS = -1.3708 meV/K (-132.26 J/(mol*K))   DG = +0.0950 eV
+
+[FINAL RESULT] DG(adsorption) = -0.1843 eV at T = 200.0 K (D0 = -0.4533 eV)
+T_desorption ~= 331.2 K (interpolated within the scanned range)
+```
+
+`ZPE(isolated ref) = 0.0000 eV` exactly, as expected — but note `DTS` is very much
+**not** zero: the isolated O atom's real translational entropy (~130 J/(mol·K), right
+in the literature ballpark quoted in Section 13.3) dominates the whole calculation.
+The electronic+BSSE picture alone (`E_ads_BSSE = -0.530000 eV`) says this adsorption is
+comfortably favorable at any reasonable temperature; **`DG` tells a different story**
+— favorable at 200 K, only barely favorable at 300 K, and outright unfavorable by
+400 K, crossing zero at an estimated **331 K**, just above room temperature. This is
+the whole reason Stage 4 exists: a purely electronic `E_ads` (even BSSE-corrected)
+cannot tell you this on its own.
+
+The Gibbs-prep folders also demonstrate the `config_extra.fdf` mechanism —
+`gibbs/site_1_ontop/disp_001/calc.fdf` is now just `%include config_extra.fdf` plus
+your original `--calc` template, unmodified:
+
+```
+%include config_extra.fdf
+
+SystemLabel gibbs_site
+...
+```
+
+with the single-point-SCF/level-of-theory overrides collected in
+`config_extra.fdf` itself — the same `%include`-based split `stb-adsorb`/
+`stb-adsorbBsse` already use (Sections 1/2), instead of editing `calc.fdf`'s own text
+in place as earlier versions of this tool did:
+
+```
+# Auto-generated -- keeps the cell fixed and forces a single-point SCF
+# (0 CG steps) so this displaced geometry isn't relaxed away.
+MD.VariableCell false
+MD.TypeOfRun       CG
+MD.Steps           0
+MD.NumCGsteps      0
+# Auto-generated -- forces spin-polarized SCF (see write_reference_folder's
+# force_spin docstring for why).
+Spin                polarized
+# Auto-generated -- forces the slab dipole correction (see write_reference_folder's
+# force_dipole docstring for why).
+Slab.DipoleCorrection      .true.
+# Auto-generated -- forces the Grimme DFT-D3 dispersion correction (see
+# write_reference_folder's force_vdw docstring for why).
+DFTD3                   .true.
+```
+
+(A handful of `[WARNING] Pseudopotential 'O.psml' or 'O.psf' not found` lines also
+appear in this walkthrough's own Stage 4 output — expected and harmless: this example
+never had real pseudopotential files to copy in the first place, same "mechanics only,
+not physically converged" caveat the whole walkthrough already carries.)
+
+### 13.5 Running it
+
+```bash
+stb-adsorbAnalysis --dir adsorption_run --compute-gibbs --zpe-mode local
+# run SIESTA in every adsorption_run/gibbs/*/disp_*/ folder, then:
+stb-adsorbGibbs --dir adsorption_run --save-report --tmin 200 --tmax 400 --tstep 25
+```
+
+`stb-adsorbAnalysis --compute-gibbs` needs the winning site AND its isolated-adsorbate
+reference to already be relaxed (a finished `siesta.XV` in both) — it refuses with a
+clear `[ERROR]`, not a silent fallback to the pre-relaxation guess, if either isn't.
+`stb-adsorbGibbs` auto-detects which single site's folder set exists under `gibbs/` —
+you never need to pass a site label explicitly, since `--compute-gibbs` only ever
+preps one site's worth of folders per run.
+
+### 13.6 Rough desorption kinetics (`[3c]`) — how fast, not just whether
+
+Section 13.4 stopped at *whether* `site_1_ontop` desorbs — `DG(T)` crosses zero
+around 331 K, so it's bound below that and unbound above it. That's a
+thermodynamic answer, not a kinetic one: it says nothing about **how fast**
+desorption actually happens at a given temperature, which is what you'd need to
+compare against, say, an experiment's dwell time or a device's operating
+lifetime. `[3c]` gives a genuinely rough answer to that question, computed
+directly from the same `DG(T)` sweep `[3]` already produced — no new SIESTA
+calculation, no transition-state search:
+
+```
+k_desorb(T)   = (kB*T/h) * exp(DG_ads(T) / (kB*T))
+tau_desorb(T) = 1 / k_desorb(T)
+```
+
+This is the Eyring/transition-state-theory rate law under the **barrierless
+-desorption approximation**: it assumes the desorption activation free energy
+`DG_double_dagger` equals `-DG_ads(T)` exactly — i.e. that there is *no* extra
+kinetic barrier beyond the thermodynamic well depth this workflow already
+computes. A real desorption pathway almost always has *some* additional
+barrier (the adsorbate has to pass through an actual transition state on its
+way out, not just teleport from the bound minimum to a free particle) — this
+tool has no way to compute that barrier, since it would require a genuine
+transition-state search (e.g. `stb-neb`, Section 9), not just the endpoint
+energies this workflow already has. The prefactor `kB*T/h` is also the bare TST
+value, not corrected by a Vineyard prefactor (the ratio of the bound state's
+and the transition state's own vibrational frequencies) — that correction
+needs the transition state's vibrational spectrum too, equally unavailable
+here. Both approximations point the same direction: **`tau_desorb` printed
+here is a lower bound on the true desorption time, not a prediction of it** —
+a real barrier can only make desorption slower/`tau` longer than shown.
+
+This caveat is not a footnote — it is printed as an explicit
+`[APPROXIMATION]` warning immediately above the `[3c]` table on **every**
+run, in the live console output and in `--save-report`'s persisted file
+alike (same `print_dual` mechanism that keeps every other section of this
+report identical between the two), precisely so the rough numbers below are
+never read in isolation from what they assume.
+
+Continuing the exact same `site_1_ontop` scenario as Section 13.4 (same
+`E_ads_BSSE = -0.530000 eV`, same isotropic ~400 cm⁻¹ site Hessian, same
+free monatomic-O isolated reference) — `stb-adsorbGibbs --dir . --tmin 200
+--tmax 400 --tstep 100`, output continuing directly after `[3b]`, verbatim:
+
+```
+[3c] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)
+------------------------------------------------------------
+  [APPROXIMATION] Assumes desorption has NO kinetic barrier beyond the thermodynamic
+  well depth already computed above (DG_double_dagger = -DG_ads(T)) and a bare TST
+  prefactor kB*T/h (no Vineyard correction from a transition-state vibrational
+  spectrum -- this workflow does not run a NEB/transition-state search). tau_desorb
+  below is therefore a LOWER BOUND on the real desorption time, not a kinetic
+  prediction -- a real barrier can only make desorption SLOWER. See Section 13.6 of
+  examples/5.8-adsorption/README.md for the full derivation and caveats.
+  T =  200.00 K   DG = -0.1843 eV   k_desorb =  9.467e+07 1/s   tau_desorb = 10.6 ns
+  T =  300.00 K   DG = -0.0432 eV   k_desorb =  1.178e+12 1/s   tau_desorb = 849 fs
+  T =  400.00 K   DG = +0.0950 eV   k_desorb =  1.311e+14 1/s   tau_desorb = 7.63 fs
+
+  At T = 200.0 K (rough estimate, lower bound): tau_desorb ~= 10.6 ns
+[Saved] ./adsorption_gibbs.png
+[Saved] ./adsorption_mode_spectrum.png
+[Saved] ./adsorption_desorption_kinetics.png (APPROXIMATION -- see [3c] above)
+[Saved] ./plot/desorption_kinetics.dat / ./plot/desorption_kinetics.gplot (run
+'gnuplot desorption_kinetics.gplot' inside './plot' -- APPROXIMATION, see [3c] above)
+```
+
+`tau_desorb` collapses from `10.6 ns` at 200 K (where `DG` is still negative — the
+adsorbate is thermodynamically bound, and this rough model already predicts it
+sits there for a while) down to `7.63 fs` at 400 K (where `DG` has gone
+positive — essentially instantaneous on this model, once desorption is even
+thermodynamically favorable). That eight-order-of-magnitude collapse across a
+200 K window, driven entirely by the `exp(DG/(kB*T))` factor, is the actual
+qualitative payoff of `[3c]`: `[3b]`'s single crossing temperature tells you
+*where* the sign flips; `[3c]` tells you the timescale falls off a cliff right
+around it, not gradually — useful context even though every number in it is a
+lower bound. **Read literally, `9.467e+07`/`1.178e+12`/`1.311e+14 1/s` and their
+corresponding `tau` values are not measured rates** — they are what the
+barrierless-TST approximation gives from `DG(T)` alone; a real experimental
+`k_desorb` at any of these temperatures could be many orders of magnitude
+smaller once an actual barrier is included.
+
+`desorption_kinetics.dat` (the gnuplot pair's data file, `plot/` subfolder):
+
+```
+# Desorption kinetics for site_1_ontop -- ROUGH Eyring-TST estimate
+# (barrierless-desorption assumption: DG_double_dagger = -DG_ads(T),
+# bare kB*T/h prefactor, no Vineyard correction) -- see 'examples/
+# 5.8-adsorption/README.md' Section 13.6 or the report's [3c] section
+# for the full caveat. tau_desorb is a LOWER BOUND, not a prediction.
+# 1:T(K) 2:DG_ads(eV) 3:k_desorb(1/s) 4:tau_desorb(s)
+200.0000  -0.184300  9.467271e+07  1.056304e-08
+300.0000  -0.043200  1.177914e+12  8.489499e-13
+400.0000  0.095000  1.311132e+14  7.627628e-15
+```
+
+`cd plot && gnuplot desorption_kinetics.gplot` renders `desorption_kinetics.pdf`
+in the same folder — a log-scale `tau_desorb(T)` line plot, same
+`pdfcairo`/`linespoints` styling as every other gnuplot-convention plot in this
+suite (e.g. `stb-nebAnalysis`'s energy profile). `adsorption_desorption_kinetics.png`
+is the same data as a matplotlib figure, for viewing directly without needing
+gnuplot installed at all.
+
+### 13.7 The degenerate case: `DG_ads(T)` already positive at `--tmin` — a real example
+
+Section 13.6's worked example is the "nice" case: `DG(T)` starts negative
+(bound) and crosses to positive (unbound) *inside* the scanned window, so
+`tau_desorb` has something to measure — it falls from a genuinely long time
+to a genuinely short one as `T` sweeps across that crossing. That is not the
+only shape this can take. **When `DG_ads(T)` is already positive at
+`--tmin` itself — i.e. the system is thermodynamically unbound at *every*
+temperature you scanned — `[3c]` degenerates into `tau_desorb ~= ~0
+(instant)` at every single row, not just near the crossing.** This is not a
+hypothetical corner case; it is what an actual finished SIESTA calculation
+in this suite produced (weakly-bound CO2 physisorption, run outside this
+example folder — the numbers below are a real, code-verified
+`stb-adsorbGibbs` run, not a hand-fabricated illustration like Sections 8/13.4):
+
+```
+[1] ELECTRONIC ENERGIES
+------------------------------------------------------------
+  E_ads (raw)  =    -0.532653 eV
+  E_ads (BSSE) =    -0.096923 eV
+  E_ads used for DG below: BSSE-corrected = -0.096923 eV
+
+[2] VIBRATIONAL/THERMAL TERMS
+------------------------------------------------------------
+  ZPE(site)  = 0.3218 eV   ZPE(isolated ref) = 0.3043 eV   DZPE = +0.0175 eV
+  D0 (ZPE-corrected binding energy) = E_ads + DZPE = -0.0794 eV
+
+[3] GIBBS FREE ENERGY vs. TEMPERATURE
+------------------------------------------------------------
+  T =  200.00 K   DZPE = +0.0175 eV   DTS = -0.2907 eV   DS = -1.4534 meV/K (-140.24 J/(mol*K))   DG = +0.2113 eV
+  T =  300.00 K   ...                                                                             DG = +0.3520 eV
+  T =  400.00 K   ...                                                                             DG = +0.4911 eV
+
+[FINAL RESULT] DG(adsorption) = +0.2113 eV at T = 200.0 K (E_ads BSSE-corrected, D0 = -0.0794 eV)
+
+[3b] ESTIMATED DESORPTION TEMPERATURE
+------------------------------------------------------------
+  [EXTRAPOLATED] T_desorption ~= 49.0 K -- DG stays positive throughout the scanned
+  [200.0, 400.0] K range; this is a linear extrapolation beyond it, not an
+  interpolation -- widen --tmin/--tmax for a direct estimate.
+
+[3c] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)
+------------------------------------------------------------
+  T =  200.00 K   DG = +0.2113 eV   k_desorb =  8.790e+17 1/s   tau_desorb = ~0 (instant)
+  T =  300.00 K   DG = +0.3520 eV   k_desorb =  5.129e+18 1/s   tau_desorb = ~0 (instant)
+  T =  400.00 K   DG = +0.4911 eV   k_desorb =  1.285e+19 1/s   tau_desorb = ~0 (instant)
+```
+
+**Why this happens (theory):** `D0` — the electronic+ZPE binding energy,
+`E_ads + DZPE`, the `T = 0` limit of the whole calculation — is still
+favorable here (`-0.0794 eV`, a genuine although weak minimum). What flips
+`DG` positive already at 200 K is `DTS`: `DS = -140.24 J/(mol*K)`, i.e. this
+adsorbate loses almost its *entire* gas-phase translational+rotational
+entropy on binding (squarely in, in fact toward the high end of, the
+100-150 J/(mol·K) literature range quoted in Section 13.3), while the
+electronic well is only `~0.08 eV` deep — nowhere near enough to outweigh a
+`-T*DS` penalty of that size even at 200 K, let alone 300-400 K. Physically:
+**a shallow physisorption well can lose the fight to gas-phase entropy
+before you ever reach a temperature worth running SIESTA at.**
+
+> **⚠ READ THIS BEFORE TRUSTING `tau_desorb` IN THIS REGIME.** Once
+> `DG_ads(T) > 0` at every scanned `T`, `k_desorb(T) = (kB*T/h) *
+> exp(DG_ads(T)/(kB*T))` (Section 13.6) has a positive exponent at every
+> row — it is mathematically *guaranteed* to sit above the bare attempt
+> frequency `kB*T/h` (~1e13 1/s), which is exactly why `tau_desorb` floors
+> out at "instant" (femtoseconds or less) everywhere. **This does not mean
+> the real adsorbate desorbs in femtoseconds.** It means the barrierless
+> -TST model (Section 13.6: `DG_double_dagger = -DG_ads(T)`, no real
+> transition-state search) has run out of anything to measure — there is no
+> thermodynamic well left in this window for "how long does it sit in the
+> well" to even be a meaningful question. Section 13.6's own "lower bound"
+> framing is technically still true here (a real barrier can only make
+> desorption slower), but it is **not useful** in this regime: "at least
+> instant" carries no information. **Do not report a `tau_desorb` value
+> from this regime as a kinetic result.**
+>
+> What to do instead:
+> - **Trust `[3b]`'s extrapolated crossing (`T_desorption ~= 49.0 K` above),
+>   not `[3c]`, as the actionable number** — and note it is flagged
+>   `[EXTRAPOLATED]`, a linear extrapolation *below* `--tmin`, not an
+>   interpolation. Re-run with a lower `--tmin` (e.g. `--tmin 50`) to turn
+>   that extrapolation into a direct interpolation instead — cheap to do,
+>   since it reuses the same finished Hessian folders, no new SIESTA runs.
+> - **Treat "`DG` positive throughout the whole scan" as a screening
+>   result, not a kinetics result**: this site/adsorbate pair is not going
+>   to stay bound at any temperature you actually scanned, full stop — the
+>   femtosecond `tau_desorb` numbers add nothing beyond confirming that.
+> - **If you actually need a real kinetic answer** (a genuine desorption
+>   rate, not a thermodynamic screening result), this workflow cannot give
+>   you one in *any* regime, degenerate or not — that requires an actual
+>   transition-state search (`stb-neb`, Section 9) with the adsorbate's real
+>   escape pathway and its own vibrational spectrum for a proper Vineyard
+>   prefactor, neither of which Stage 4 computes.
+> - Before concluding the *site* is simply weakly bound, double check the
+>   basics the diagnostics above depend on: was `DFTD3` actually
+>   applied (`config_extra.fdf`, Section 14.1) — van der Waals is often the
+>   dominant term for a weak physisorption well, and a missing/misconfigured
+>   dispersion correction can produce exactly this "too-shallow-to-matter"
+>   `D0`.
+
+## 14. Van der Waals correction (always on), and systematic orientation sampling
+
+### 14.1 DFT-D3, forced on every folder
+
+`stb-adsorb` forces the Grimme DFT-D3 dispersion correction (`DFTD3 .true.`, SIESTA's
+own default parameters — PBE-parametrized, BJ damping) on `clean_slab/`, the isolated
+-adsorbate reference, and every `sites/site_*/` — unconditionally, no flag to turn it
+off. Standard GGA functionals miss dispersion forces entirely, which matters for a
+physisorption-like or weakly-bound site; without it, a comparison across candidate
+sites can be systematically biased toward whichever one happens to be least
+dispersion-dependent. Stage 2 (`stb-adsorbBsse`) and Stage 3's `--compute-gibbs`
+Hessian folders both inherit this the same way they already inherit `Spin polarized`/
+`Slab.DipoleCorrection` — every fragment being compared against `E_site` needs to be
+at the *same level of theory*, not just the same geometry, or the correction being
+computed stops meaning what it's supposed to.
+
+### 14.2 Systematic orientation sampling for a molecular adsorbate
+
+For a single-atom adsorbate, there's only one way to place it. For a molecule (H2O,
+CO2, ...), the molecule's own default orientation (from ASE's G2 database) picks
+*which atom touches the surface* — for water, whether it's the O or an H isn't something
+you control by default; it's just whatever pymatgen's `AdsorbateSiteFinder` happens to
+do with the molecule's as-loaded geometry.
+
+`--ml-rank` can now sample this systematically:
+
+```bash
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type all --all-sites \
+    --ml-rank --n-orientations-polar 4 --n-orientations-azimuthal 2 \
+    --orientation-top-k 3
+```
+
+For every candidate `(site, height)`, this relaxes `n_polar * n_azimuthal` (here 4×2=8)
+systematically-generated starting orientations with MACE-MP-0 (substrate fixed, same as
+`--ml-rank` already does for a single orientation), deduplicates the relaxed results
+(two orientations that converge to the same geometry AND the same energy collapse to
+one), and keeps up to `--orientation-top-k` unique survivors — each written as its own
+real SIESTA folder, `site_<N>_<type>_orient<k>/`, exactly the way `--ml-rank` already
+writes one folder per site.
+
+**This is systematic, not random or exhaustive**: `--n-orientations-polar` picks that
+many directions (in the molecule's own frame) to point at the surface, evenly spread
+over a sphere; `--n-orientations-azimuthal` spins each of those about the surface
+normal. The same flags always produce the exact same orientation set — no `--seed`
+needed, unlike `stb-mladsorb --n-orientations`'s fully random sampling (a different
+tool, doing a cheaper single-point-only pre-screen instead of a full relax of each
+orientation).
+
+Cost scales linearly with `n_polar * n_azimuthal` — one full MACE relax per orientation
+per candidate. A modest `4 2` (8 orientations) is a reasonable starting point;
+`--orientation-rmsd-tol` (default 0.3 Ang) controls how aggressively near-duplicate
+orientations get merged before `--orientation-top-k` is applied.
+
+### 14.3 A single site instead of `--all-sites`
+
+Orientation sampling also works on one chosen site (`--site-index N`, no `--all-sites`)
+— useful when you already know which site you care about and just want to explore how
+the molecule sits there:
+
+```bash
+stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site-index 0 \
+    --ml-rank --n-orientations-polar 4 --n-orientations-azimuthal 2 \
+    --orientation-top-k 3
+```
+
+Without orientation sampling, `--ml-rank` needs `--all-sites` (ranking one site against
+itself is meaningless); with it, the single chosen site's own sampled orientations are
+what gets ranked, and every generated configuration lands on that same site instead of
+spreading across the other symmetric sites.
+
+### 14.4 Progress feedback and the full-exploration `.xyz` trajectory
+
+Each orientation's MACE relax prints a one-line progress update as it runs (a
+self-overwriting counter on an interactive terminal, or a periodic line every ~10% of
+the total when output is redirected to a file) instead of staying silent until the
+whole batch finishes — useful once `n_polar * n_azimuthal` gets into the dozens.
+
+Every relaxed orientation actually generated — not just the unique/`--orientation-top-k`
+survivors written as SIESTA folders — is also saved to
+`sites/orientation_trajectory<_adsorbate>.xyz`, a multi-frame extended-XYZ file openable
+directly as a trajectory/video in VMD or OVITO. Each frame records its site, site type,
+height, orientation index, MACE energy, and convergence status as per-frame metadata, so
+the whole exploration (including near-duplicates and higher-energy attempts that got
+discarded) can be reviewed visually, not just read off the ranking table/plot.
+
+## What's next
+
+- **`stb-supercell`** — tile a small cell (like the graphene primitive
+  cell here) into a laterally larger one before running `stb-adsorb`, if
+  Section 3.2's check warns you.
+- **`stb-cohesive`** — the sibling BSSE correction for a periodic bulk
+  crystal (needs a neighbor-shell cutoff, unlike this exact one).
+- **`stb-mladsorb`** — a pure-MACE, no-SIESTA extraction of the same
+  site-screening idea, for a fast pre-DFT ranking of candidate sites
+  before committing to the real workflow above.

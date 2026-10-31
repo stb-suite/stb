@@ -1,0 +1,36 @@
+# Bulk Si (diamond cubic, conventional 8-atom cell), CORRECT lattice
+# constant (5.43 Ang) but one atom nudged off its ideal site by ~0.16 Ang
+# (fractional +0.02, +0.01, -0.015 on atom index 1) -- simulates a freshly
+# -added/perturbed atom (e.g. after editing a defect by hand) that still
+# needs its local geometry cleaned up. Used with the tool's default
+# positions-only mode: the cell should NOT change, only that one atom (and
+# its neighbors, slightly) should relax back towards the ideal tetrahedral
+# geometry.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   0.00000000
+ 0.00000000   5.43000000   0.00000000
+ 0.00000000   0.00000000   5.43000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.27000000   0.26000000   0.23500000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

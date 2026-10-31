@@ -1,0 +1,96 @@
+===== STB-CUBE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.315 / 0.16.4
+Input             : h2o.VH
+Grid type         : VH -- electrostatic potential (Hartree + local part of the pseudopotentials)
+Spin channel      : total (requested)
+Potential unit    : Ha in the cube
+Output            : h2o_VH.cube
+
+[1] INPUT GRID
+------------------------------------------------------------
+File              : h2o.VH (872.0 KB, written <date>)
+Quantity          : electrostatic potential (Hartree + local part of the pseudopotentials)
+Written by        : SaveElectrostaticPotential in the .fdf
+Stored as         : Ry on a Bohr cell, single precision, 1 component(s)
+Mesh              : 60 x 60 x 60 = 216000 points
+Plane spacing     : 0.1500 / 0.1500 / 0.1500 Ang along a / b / c
+Voxel volume      : 0.00338 Ang^3 (0.02278 Bohr^3)
+Effective cutoff  : 122.834 Ry (min over a/b/c of 122.8 / 122.8 / 122.8 Ry)
+Cell lengths      : a = 9.0000, b = 9.0000, c = 9.0000 Ang
+Cell angles       : alpha = 90.00, beta = 90.00, gamma = 90.00 deg
+Cell volume       : 729.0000 Ang^3
+Cell vectors (Ang):
+   a      9.00000     0.00000     0.00000
+   b      0.00000     9.00000     0.00000
+   c      0.00000     0.00000     9.00000
+
+[2] SIESTA RUN
+------------------------------------------------------------
+Log               : ./calc.out (SIESTA 5.4.2)
+Finished          : yes
+Electrons         : 8.000000 (valence)
+Spin (log)        : none
+Mesh (log)        : 60 x 60 x 60 -- same as the grid
+Mesh cutoff (log) : required 100.000 Ry, used 122.834 Ry -- from the grid 122.834 Ry (agrees)
+
+[3] SPIN
+------------------------------------------------------------
+Spin configuration (from calc.out): unpolarized
+Components        : 1
+
+[4] GEOMETRY
+------------------------------------------------------------
+Source            : h2o.XV (3 atoms, OH2)
+Cell vs grid      : identical (largest difference 1.9e-10 Ang)
+Dimensionality    : 0D (e.g., a molecule) -- vacuum along a, b, c (gap >= 4 Ang)
+# | el | Z | Z_val | x (Ang) | y (Ang) | z (Ang) | fractional          
+-----------------------------------------------------------------------
+1 | O  | 8 | 6     | 4.5000  | 4.5000  | 4.5932  | 0.5000 0.5000 0.5104
+2 | H  | 1 | 1     | 4.5000  | 5.2712  | 3.9972  | 0.5000 0.5857 0.4441
+3 | H  | 1 | 1     | 4.5000  | 3.7288  | 3.9972  | 0.5000 0.4143 0.4441
+
+[5] VALUES
+------------------------------------------------------------
+               | value (Ha) | where                                       
+--------------------------------------------------------------------------
+minimum        | -3.6202    | (4.500, 4.500, 4.500) Ang, 0.093 Ang from O1
+maximum        | 0.063598   | (3.450, 4.500, 5.250) Ang, 1.238 Ang from O1
+mean           | -0.0055374 | over the cell                               
+std. deviation | 0.071278   |                                             
+max - min      | 3.6838     |                                             
+Percentiles       : 1 % -0.076601, median -0.0012252, 99 % 0.031259 Ha
+Reference         : SIESTA's potentials are defined up to a constant; a periodic cell's average is not a vacuum level
+Vacuum planes (the plane farthest from the atoms along each vacuum axis):
+axis | frac  | gap (Ang) | plane mean (Ha) | variation +-1 Ang | max |value| in plane
+-------------------------------------------------------------------------------------
+a    | 0.000 | 9.00      | -9.0832e-05     | 1.87e-07          | 0.00461             
+b    | 0.000 | 7.46      | -0.0027989      | 1.98e-07          | 0.00884             
+c    | 0.977 | 8.40      | -9.1786e-04     | 0.00572           | 0.00253             
+                    the plane mean is the vacuum level only where the potential is flat (compare stb-workfunction)
+Not flat along c  : the plane mean changes by 0.00572 Ha within +-1 Ang -- a dipole across a periodic box (a slab needs Slab.DipoleCorrection); no single vacuum level
+
+[6] OUTPUT
+------------------------------------------------------------
+File              : h2o_VH.cube (2.9 MB)
+Units             : lengths Bohr, values Ha
+Header            : 2 comment lines, origin (0, 0, 0), 60 x 60 x 60 voxels, 3 atoms
+Values            : 216000 numbers, 6 significant digits (%13.5e), x slowest, z fastest
+Read-back check   : read again with ASE's cube reader -- ok
+                    values agree to 1.4e-06 of the largest; cell, 3 atoms and atomic numbers as written
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Converted         : h2o.VH [VH] -> h2o_VH.cube
+Range             : -3.6202 to 0.063598 Ha
+Open with         : VESTA h2o_VH.cube  |  vmd h2o_VH.cube  |  xcrysden --cube h2o_VH.cube
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Conversion complete. It's hip to be square (cube).

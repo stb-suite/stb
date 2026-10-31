@@ -1,0 +1,5 @@
+MD.TypeOfRun CG
+MD.Steps 0
+MD.NumCGsteps 0
+MD.VariableCell false
+kgrid.MonkhorstPack [30 30 1]

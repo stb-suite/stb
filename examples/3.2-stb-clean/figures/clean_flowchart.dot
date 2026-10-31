@@ -1,0 +1,25 @@
+// Flowchart of stb-clean (3.2). Render with:
+//   dot -Tpng -Gdpi=150 clean_flowchart.dot -o clean_flowchart.png
+digraph clean {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.32, bgcolor="white", pad=0.3];
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10,
+           fillcolor="#eef3fb", color="#4a6fa5", penwidth=1.2, margin="0.15,0.07"];
+    edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.7];
+
+    in      [label="--path: a folder, or a glob of folders (one after another)\n--recursive: subfolders too (hidden ones skipped)", fillcolor="#fff7e0", color="#b8860b"];
+    sort    [label="1. Sort every file: keep (extension in --keep) or remove\nalways kept: hidden files, earlier stb-clean backups"];
+    prot    [label="2. Read the kept .fdf files: every file they read\n(%include F, %block X < F, Label < F) is kept too;\nSystemLabel, UseSave flags, species"];
+    run     [label="3. The previous run: SIESTA .out finished or not,\ngeometry steps, how recently it was written"];
+    rep     [label="4. Report: KEPT (why), REMOVED (by kind, sizes),\nRESTART (.DM/.XV/.CG vs DM.UseSaveDM, MD.UseSaveXV,\nMD.UseSaveCG: what the next run starts from)"];
+    dry     [label="--dry-run: stop here", style="rounded,dashed", fillcolor="white"];
+    ask     [label="5. Confirm (one question for the folder; -n skips it)"];
+    arch    [label="6. tar.gz next to the folder, read back:\nevery file present with its size -- else nothing is removed\n(--no-archive skips both)"];
+    del     [label="7. Remove"];
+    out     [label="Summary (a table for a glob) + WARNINGS\n--save-report", fillcolor="#e6f4e6", color="#2e7d32"];
+
+    in -> sort -> prot -> run -> rep;
+    rep -> dry [style=dashed];
+    rep -> ask -> arch -> del -> out;
+    ask -> out [style=dashed, label=" no"];
+    dry -> out [style=dashed];
+}

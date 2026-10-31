@@ -1,0 +1,25 @@
+%include config_extra.fdf
+
+%include config_extra.fdf
+
+# Template of the 4.20 example for the molecules (H2O, N2O): the physics only.
+# stb-hirshfeldPrep copies it into combined/ and every isolated-atom folder below
+# '%include config_extra.fdf', which forces the single point, the fixed cell,
+# SaveRho and the SAME MeshCutoff everywhere (and Gamma + spin for the atoms).
+SystemName      hirshfeld_example
+SystemLabel     siesta
+%include structure.fdf
+
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           TZP
+PAO.EnergyShift         0.01 Ry
+Mesh.Cutoff             400 Ry
+ElectronicTemperature   300 K
+Spin                polarized
+kgrid.MonkhorstPack     [1 1 1]
+DM.Tolerance            1.0e-6
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.Mixer.History       6

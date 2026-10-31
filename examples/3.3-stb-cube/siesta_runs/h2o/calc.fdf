@@ -1,0 +1,37 @@
+# Water molecule in a 9 Ang cubic box (Gamma only): density, deformation density, total charge, electrostatic potential
+SystemLabel      h2o
+SystemName       H2O-in-a-box
+NumberOfAtoms    3
+NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 8 O
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+LatticeConstant  1.0 Ang
+%block LatticeVectors
+ 9.0 0.0 0.0
+ 0.0 9.0 0.0
+ 0.0 0.0 9.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 4.5000  4.5000  4.6200  1
+ 4.5000  5.2667  4.0261  2
+ 4.5000  3.7333  4.0261  2
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         100 Ry
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+
+MD.TypeOfRun        CG
+MD.NumCGsteps       30
+MD.MaxForceTol      0.02 eV/Ang
+
+SaveRho                     true
+SaveDeltaRho                true
+SaveTotalCharge             true
+SaveElectrostaticPotential  true

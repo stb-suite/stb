@@ -1,0 +1,32 @@
+SystemLabel      fe
+SystemName       Fe-bcc-FM
+NumberOfAtoms    1
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 26 Fe
+%endblock ChemicalSpeciesLabel
+LatticeConstant  2.83 Ang
+%block LatticeVectors
+ -0.5  0.5  0.5
+  0.5 -0.5  0.5
+  0.5  0.5 -0.5
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.0 0.0 0.0 1
+%endblock AtomicCoordinatesAndAtomicSpecies
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+Mesh.Cutoff         300 Ry
+%block kgrid.MonkhorstPack
+ 10 0 0 0.0
+ 0 10 0 0.0
+ 0 0 10 0.0
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                polarized
+OccupationFunction  MP
+ElectronicTemperature  0.01 Ry
+SCF.Mixer.Weight    0.1
+MaxSCFIterations    300

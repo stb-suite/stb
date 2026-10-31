@@ -1,0 +1,16 @@
+# Bulk Si single point
+SystemLabel      si
+SystemName       Si-bulk
+%include structure.fdf
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         200 Ry
+%block kgrid.MonkhorstPack
+ 6 0 0 0.5
+ 0 6 0 0.5
+ 0 0 6 0.5
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+SaveRho             true

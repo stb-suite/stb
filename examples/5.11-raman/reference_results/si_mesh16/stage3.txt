@@ -1,0 +1,52 @@
+
+RAMAN SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS
+------------------------------------------------------------
+===== RAMAN STAGE 3 REPORT (ANALYSIS) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+Directory         : raman_study
+SystemLabel       : siesta
+Modes in table    : 3
+Displacement      : 0.02 Ang (from Stage 2)
+
+[1] READING RUNS
+------------------------------------------------------------
+  Mode 1 (15.3574 THz / 512.27 cm^-1):
+    -> Rxx=0.001456  Ryy=0.003231  Rzz=0.001700  Rxy=1.666513  Rxz=11.786552  Ryz=0.001548  (1/Ang)  activity~2975.701799  rho~0.7500 (depolarized)
+  Mode 2 (15.3574 THz / 512.27 cm^-1):
+    [Degenerate partner] Reusing mode 1's Raman tensor by symmetry (stb-ramanModes --skip-degenerate) -- activity and rho are rotational invariants, identical for every partner in a degenerate group.
+    -> Rxx=0.001456  Ryy=0.003231  Rzz=0.001700  Rxy=1.666513  Rxz=11.786552  Ryz=0.001548  (1/Ang)  activity~2975.701799  rho~0.7500 (depolarized)  [derived]
+  Mode 3 (15.3574 THz / 512.27 cm^-1):
+    [Degenerate partner] Reusing mode 1's Raman tensor by symmetry (stb-ramanModes --skip-degenerate) -- activity and rho are rotational invariants, identical for every partner in a degenerate group.
+    -> Rxx=0.001456  Ryy=0.003231  Rzz=0.001700  Rxy=1.666513  Rxz=11.786552  Ryz=0.001548  (1/Ang)  activity~2975.701799  rho~0.7500 (depolarized)  [derived]
+
+[2] RAMAN-ACTIVE MODES SUMMARY
+------------------------------------------------------------
+  Mode  THz       cm^-1     Rxx         Ryy         Rzz         Rxy         Rxz         Ryz         Activity     rho       Polarization
+  1     15.3574   512.27    0.001456    0.003231    0.001700    1.666513    11.786552   0.001548    2975.701799  0.7500    depolarized
+  2     15.3574   512.27    0.001456    0.003231    0.001700    1.666513    11.786552   0.001548    2975.701799  0.7500    depolarized
+  3     15.3574   512.27    0.001456    0.003231    0.001700    1.666513    11.786552   0.001548    2975.701799  0.7500    depolarized
+
+[NOTE] Activity computed from the FULL Raman tensor (diagonal + off-diagonal Rxy/Rxz/Ryz), the exact literature invariant (45a^2+7gamma^2).
+[NOTE] rho (depolarization ratio) uses the same diagonal-only/full-tensor scope as activity above, per mode.
+
+[3] SPECTRUM
+------------------------------------------------------------
+Grid              : 412.3 - 612.3 cm^-1, 2000 points, 10.00 cm^-1 linewidth
+Peaks detected    : 1 (prominence >= 1.0% of max intensity)
+  Position (cm^-1)    Rel. intensity (%)
+  512.22              100.0
+Gnuplot data+script : not written (off by default -- pass --save-gnuplot to write it, under '<directory>/plot/').
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Modes analyzed      : 3/3
+Files               : none (pass --save-gnuplot to write the spectrum data/script under '<directory>/plot/').
+
+[INFO] Complete job!
+
+------------------------------------------------------------
+Raman analysis complete.
+

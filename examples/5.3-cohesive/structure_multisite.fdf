@@ -1,0 +1,39 @@
+# AB (Bernal)-stacked bilayer graphene, 4 C atoms/cell, vacuum along z --
+# purpose-built for this example's multi-site BSSE demo case only (see
+# README section 2.5). Real, well-known physics, not a toy: Bernal stacking
+# shifts the top layer by the A->B sublattice vector, so 2 of the 4 atoms
+# end up sitting directly above/below an atom in the other layer ("eclipsed"
+# / dimer sites) while the other 2 sit above/below a hollow hexagon center
+# ("non-eclipsed" sites) -- two genuinely different local coordination
+# environments for the SAME element, carbon, related within each pair by
+# the cell's own inversion symmetry (multiplicity 2 each). This is exactly
+# the situation --bsse-multi-site exists for: a single flat BSSE reference
+# for "carbon" would silently average over 2 physically different
+# environments, so stb-cohesive builds one ghost cluster per site instead.
+#
+# a = 2.46 Ang (graphene's real in-plane lattice constant), interlayer
+# spacing 3.35 Ang (real graphite/bilayer-graphene value), c = 20 Ang vacuum.
+
+NumberOfSpecies    1
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  2.460000000   0.000000000   0.000000000
+ -1.230000000   2.130423000   0.000000000
+  0.000000000   0.000000000  20.000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.000000000   0.000000000   0.416250000   1
+  0.333333333   0.666666667   0.416250000   1
+  0.333333333   0.666666667   0.583750000   1
+  0.666666667   0.333333333   0.583750000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

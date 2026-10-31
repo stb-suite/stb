@@ -1,0 +1,26 @@
+# Structure fetched by stb-fetch from OPTIMADE provider 'twodmatpedia' (id: 2dm-2686).
+# Formula: SiC (2 atoms).
+# Reduced to the primitive unit cell after fetching.
+
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+ 2   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 1.55001459   -2.68470403   0.00000000
+ 1.55001459   2.68470403   0.00000000
+ 0.00000000   0.00000000   20.76974700
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.00000000   0.29539227   1
+  0.66666667   0.33333333   0.29544673   2
+%endblock AtomicCoordinatesAndAtomicSpecies

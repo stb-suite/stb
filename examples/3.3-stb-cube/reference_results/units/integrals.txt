@@ -1,0 +1,2 @@
+naive.cube    max  0.54581   sum x voxel (Bohr^3) =  53.9867 e
+si_RHO.cube   max  0.08088   sum x voxel (Bohr^3) =   8.0000 e

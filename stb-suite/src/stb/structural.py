@@ -1,0 +1,718 @@
+#!/usr/bin/env python
+
+#################################################
+#     Siesta Tool Box - Suite                   #
+# Developed by Dr. Carlos M. O. Bastos          #
+#      bastoscmo.github.io                      #
+#################################################
+
+from stb import __version__ as VERSION
+
+import os
+import sys
+import argparse
+import warnings
+from datetime import datetime
+import numpy as np
+from scipy.spatial import ConvexHull, QhullError
+from pymatgen.analysis.local_env import (
+    MinimumDistanceNN, CrystalNN, BrunnerNNRelative, EconNN)
+from stb.core import structure_io, citations
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
+
+REPORT_FILE = "stb_structural_report.txt"
+BIB_FILE = "references.bib"
+
+def warn_handler(message, category, filename, lineno, file=None, line=None):
+    """Prints any warning that reaches here directly to the console -- no
+    warnings.log; the two expected, non-actionable CrystalNN oxidation-state
+    warnings are filtered out before this ever runs (see compute_ecn), so
+    anything that does reach here is unexpected and worth surfacing."""
+    print(color_text(f"[WARNING] {category.__name__}: {message}", 'yellow'))
+
+def _safe_mean(values):
+    values = [v for v in values if v is not None]
+    return float(np.mean(values)) if values else None
+
+def _bond_length_distortion(distances):
+    """Baur's bond-length distortion index (%): mean absolute deviation of
+    each bond length from this site's own mean bond length. Needs at least
+    2 bonds; returns None otherwise (distortion is undefined for a single
+    bond)."""
+    if len(distances) < 2:
+        return None
+    d_avg = np.mean(distances)
+    if d_avg == 0:
+        return None
+    return float(100.0 * np.mean([abs(d - d_avg) / d_avg for d in distances]))
+
+def _bond_angle_variance(angles):
+    """Bond-angle variance (deg²): variance of this site's L-center-L
+    angles around their own mean. Two deliberate departures from Robinson
+    et al.'s original (octahedron/tetrahedron) formula, both because the
+    coordination number here can be any -- often fractional, "effective"
+    -- value, not just 6 or 4:
+      1. Uses the site's own observed mean angle as the reference instead
+         of a theoretical ideal polyhedral angle (not well-defined for an
+         arbitrary/fractional CN).
+      2. Includes ALL pairwise ligand-center-ligand angles, not just the
+         12 "cis" (~90°) angles Robinson's octahedral formula uses --
+         there's no general way to separate "cis" from "trans" pairs
+         outside an assumed octahedral topology. For a real 6-coordinate
+         site this pulls in the ~180° "trans" angles too, inflating the
+         variance well above textbook octahedral BAV values.
+    Not directly comparable to literature BAV numbers as a result; still
+    a valid, self-consistent distortion metric for comparing sites/species
+    within one report. Needs at least 2 angles (3 neighbors); returns None
+    otherwise."""
+    if len(angles) < 2:
+        return None
+    theta_avg = np.mean(angles)
+    n = len(angles)
+    return float(sum((theta - theta_avg) ** 2 for theta in angles) / (n - 1))
+
+def _polyhedron_volume(neighbor_coords):
+    """Volume (Å³) of the convex hull of a site's neighbor positions --
+    needs at least 4 non-coplanar neighbors to bound a 3D volume; returns
+    None otherwise (too few neighbors, or they're coplanar/collinear)."""
+    if len(neighbor_coords) < 4:
+        return None
+    try:
+        return float(ConvexHull(np.array(neighbor_coords)).volume)
+    except QhullError:
+        return None
+
+def _classify_connectivity(shared_ligand_count):
+    """How two same-species coordination polyhedra are linked, by how many
+    ligand atoms they have in common: 0 = not connected (not reported),
+    1 = corner-sharing, 2 = edge-sharing, 3+ = face-sharing."""
+    if shared_ligand_count <= 0:
+        return None
+    if shared_ligand_count == 1:
+        return "corner-sharing"
+    if shared_ligand_count == 2:
+        return "edge-sharing"
+    return "face-sharing"
+
+def compute_rdf(structure, r_max=10.0, dr=0.05):
+    """Partial (per species pair, canonical order spA <= spB) and total
+    radial distribution functions g(r) out to r_max, via a periodic-aware
+    neighbor search (Structure.get_all_neighbors -- correctly includes
+    contributions from periodic images beyond the first unit cell).
+
+    Standard number-density normalization:
+        g_AB(r) = <n_AB(r, r+dr)> / (4*pi*r^2*dr*rho_B)
+    averaged over all A-type reference atoms; for a heteronuclear pair
+    (A != B) only A-as-reference is accumulated (B-as-reference for the
+    same physical pair is skipped) to avoid double counting the same
+    proximity event with mismatched normalization -- by construction
+    g_AB(r) computed from A's side and g_BA(r) computed from B's side
+    describe the same physical distribution, so only one is needed. For a
+    homonuclear pair (A == A), both (i,j) and (j,i) orderings legitimately
+    contribute (each A atom's own neighbor count), which this naturally
+    includes. Total g(r) uses every atom as both reference and target.
+
+    Returns (r_centers, g_total, g_by_pair) where g_by_pair is
+    {(spA, spB): array} for spA <= spB.
+    """
+    n_bins = max(1, int(np.ceil(r_max / dr)))
+    bin_edges = np.linspace(0, n_bins * dr, n_bins + 1)
+    r_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    volume = structure.lattice.volume
+
+    species_of = [str(site.specie.symbol) for site in structure]
+    species_list = sorted(set(species_of))
+    species_count = {sp: species_of.count(sp) for sp in species_list}
+
+    all_neighbors = structure.get_all_neighbors(r_max)
+
+    total_hist = np.zeros(n_bins)
+    directional_hist = {}
+
+    for i in range(len(structure)):
+        sp_i = species_of[i]
+        for nbr in all_neighbors[i]:
+            d = nbr.nn_distance
+            if d <= 0 or d >= r_max:
+                continue
+            b = min(int(d / dr), n_bins - 1)
+            total_hist[b] += 1
+            sp_j = str(nbr.specie.symbol)
+            ref_species = sp_i if sp_i <= sp_j else sp_j
+            if sp_i != ref_species:
+                continue
+            key = (sp_i, sp_j) if sp_i <= sp_j else (sp_j, sp_i)
+            directional_hist.setdefault(key, np.zeros(n_bins))
+            directional_hist[key][b] += 1
+
+    shell_volumes = 4.0 * np.pi * r_centers ** 2 * dr
+    n_total = len(structure)
+    rho_total = n_total / volume
+    g_total = total_hist / (shell_volumes * rho_total * n_total)
+
+    g_by_pair = {}
+    for (sp_a, sp_b), hist in directional_hist.items():
+        n_a = species_count[sp_a]
+        rho_b = species_count[sp_b] / volume
+        g_by_pair[(sp_a, sp_b)] = hist / (shell_volumes * rho_b * n_a)
+
+    return r_centers, g_total, g_by_pair
+
+def write_rdf_file(path, r_centers, g_total, g_by_pair):
+    """Writes the full g(r) curve (total + every species pair) as columns,
+    for external plotting -- the main report only quotes each curve's
+    first peak."""
+    pairs = sorted(g_by_pair)
+    header_cols = ["r(Ang)", "g_total(r)"] + [f"g_{a}-{b}(r)" for a, b in pairs]
+    header = "  ".join(f"{c:>14}" for c in header_cols)
+    with open(path, "w") as f:
+        f.write("# " + header + "\n")
+        for k, r in enumerate(r_centers):
+            row = [r, g_total[k]] + [g_by_pair[pair][k] for pair in pairs]
+            f.write("  ".join(f"{v:14.6f}" for v in row) + "\n")
+
+def _first_peak(r_centers, g):
+    """(r, g(r)) at the highest point of the curve, or (None, None) if it's
+    all zero (no pair found within r_max)."""
+    if len(g) == 0 or not np.any(g):
+        return None, None
+    idx = int(np.argmax(g))
+    return float(r_centers[idx]), float(g[idx])
+
+def compute_ecn(structure, mode, atoms_position=None):
+    """Pure computation -- no printing, no file I/O. Returns a results dict
+    that format_report() turns into the console/file report."""
+    with warnings.catch_warnings():
+        # CrystalNN (used throughout this function) unconditionally warns
+        # twice per neighbor pair that "no oxidation states specified",
+        # then again that it's falling back to covalent/atomic radii --
+        # pure noise here: SIESTA structures never carry oxidation states
+        # (guessing them reliably isn't possible for the covalent/metallic/
+        # mixed systems this suite supports -- the same reasoning behind
+        # not implementing bond-valence-sum-based metrics), and the
+        # covalent/atomic-radius fallback CrystalNN uses instead is exactly
+        # the radius data every other coordination-number method here
+        # already uses. So this is an expected, permanent, non-actionable
+        # warning, not a defect -- filtered by exact message so it's scoped
+        # to only these two, and restored on return via catch_warnings().
+        # CrystalNN's separate distance_cutoffs refinement (which also
+        # consults this same radius lookup) is deliberately left fully
+        # enabled: disabling it outright to dodge the warning changes
+        # computed coordination numbers by up to ~0.9, a real accuracy
+        # loss, not a cosmetic one -- verified by hand before choosing this
+        # approach over passing distance_cutoffs=None.
+        warnings.filterwarnings("ignore", message="No oxidation states specified.*")
+        warnings.filterwarnings("ignore", message="CrystalNN: cannot locate.*")
+        return _compute_ecn_impl(structure, mode, atoms_position)
+
+def _compute_ecn_impl(structure, mode, atoms_position=None):
+    lattice = structure.lattice
+    results = {
+        "mode": mode,
+        "lattice": {
+            "a": lattice.a, "b": lattice.b, "c": lattice.c,
+            "alpha": lattice.alpha, "beta": lattice.beta, "gamma": lattice.gamma,
+            "volume": lattice.volume,
+            "density": float(structure.density),
+            "vectors": lattice.matrix,
+        },
+    }
+
+    # Coordination-number methods. use_weights=True makes every one of
+    # them -- EconNN included, its get_cn() respects the flag exactly
+    # like the rest even though its formula (Hoppe's ECoN) is defined
+    # as a continuous quantity: verified this atom-by-atom, e.g.
+    # use_weights=False gives a plain integer count (6) where
+    # use_weights=True gives the real ECoN value (5.98) -- return a
+    # genuinely "effective" (continuous, neighbor-weighted) coordination
+    # number. pymatgen's NearNeighbors.get_cn() defaults to
+    # use_weights=False (a plain integer neighbor count) for all four.
+    #
+    # JmolNN was dropped: its reference distance is a fixed Jmol
+    # bonding-radius lookup table, not this atom's own closest-neighbor
+    # distance, so its weight isn't on the same scale as the other four
+    # and it was consistently the outlier of the five -- worst agreement
+    # with the actual local geometry, not just "different."
+    methods = {
+        "MinDistNN": MinimumDistanceNN(),
+        # weighted_cn=True must match the use_weights=True passed to
+        # get_cn() below -- CrystalNN raises ValueError otherwise,
+        # unlike the other methods (which don't require a matching
+        # constructor flag).
+        "CrystalNN": CrystalNN(weighted_cn=True),
+        "BrunnerNN": BrunnerNNRelative(),
+        "EconNN": EconNN()
+    }
+    ecn_results = {method: [] for method in methods}
+
+    pos_atomics = [(i+1, str(site.specie.symbol), site.coords) for i, site in enumerate(structure)]
+    results["atomic_positions"] = pos_atomics
+    species_of_all = [p[1] for p in pos_atomics]
+    all_species_list = sorted(set(species_of_all))
+
+    # Whole-structure, --mode-independent analysis: minimum same-species
+    # distance and coordination-polyhedron connectivity both describe the
+    # extended network, not just whichever atoms --list happens to name,
+    # so they always use every atom regardless of --mode/--list. This
+    # means a second, separate CrystalNN pass over all atoms even in
+    # "list" mode's small subset -- deliberately not fused with the
+    # --mode-scoped neighbor loop further down, to avoid changing what
+    # that loop's pooled distance/angle statistics mean per mode.
+    same_species_min_distance = {}
+    for sp in all_species_list:
+        idx = [i for i, s in enumerate(species_of_all) if s == sp]
+        if len(idx) < 2:
+            continue
+        min_d = min(structure.get_distance(idx[a], idx[b])
+                     for a in range(len(idx)) for b in range(a + 1, len(idx)))
+        same_species_min_distance[sp] = float(min_d)
+    results["same_species_min_distance"] = same_species_min_distance
+
+    connectivity_cnn = CrystalNN()
+    connectivity_by_species = {}
+    try:
+        full_neighbor_ids = {}
+        for i in range(len(structure)):
+            nbrs = connectivity_cnn.get_nn_info(structure, i)
+            full_neighbor_ids[i] = {
+                (n["site_index"], tuple(round(x) for x in n.get("image", (0, 0, 0))))
+                for n in nbrs
+            }
+        for sp in all_species_list:
+            idx = [i for i, s in enumerate(species_of_all) if s == sp]
+            counts = {"corner-sharing": 0, "edge-sharing": 0, "face-sharing": 0}
+            for a in range(len(idx)):
+                for b in range(a + 1, len(idx)):
+                    shared = len(full_neighbor_ids[idx[a]] & full_neighbor_ids[idx[b]])
+                    label = _classify_connectivity(shared)
+                    if label is not None:
+                        counts[label] += 1
+            connectivity_by_species[sp] = counts
+    except Exception as e:
+        print(f"[WARNING] Failed to compute polyhedron connectivity: {e}")
+    results["connectivity_by_species"] = connectivity_by_species
+
+    if mode == "mean":
+        for i in range(len(structure)):
+            for method_name, method in methods.items():
+                try:
+                    ecn_results[method_name].append(method.get_cn(structure, i, use_weights=True))
+                except Exception as e:
+                    ecn_results[method_name].append(None)
+                    print(f"[WARNING] {method_name} failed for atom {i+1}: {e}")
+
+        # Per-species averages -- a single structure-wide average mixes
+        # chemically distinct sites (e.g. a cation's coordination with
+        # an anion's) into one physically meaningless number. Reported
+        # per species, plus an overall figure for reference.
+        species_by_index = [pos_atomics[i][1] for i in range(len(structure))]
+        species_list = sorted(set(species_by_index))
+
+        cn_per_species = {}
+        for sp in species_list:
+            sp_idx = [i for i, s in enumerate(species_by_index) if s == sp]
+            cn_per_species[sp] = {
+                "n_atoms": len(sp_idx),
+                "values": {
+                    method_name: _safe_mean([values[i] for i in sp_idx])
+                    for method_name, values in ecn_results.items()
+                },
+            }
+        results["cn_per_species"] = cn_per_species
+        results["cn_overall"] = {
+            method_name: _safe_mean(values) for method_name, values in ecn_results.items()
+        }
+
+    elif mode == "list" and atoms_position:
+        for i in atoms_position:
+            for method_name, method in methods.items():
+                try:
+                    ecn_results[method_name].append(method.get_cn(structure, i-1, use_weights=True))
+                except Exception as e:
+                    ecn_results[method_name].append(None)
+                    print(f"[WARNING] {method_name} failed for atom {i}: {e}")
+
+        cn_per_atom = []
+        for k, atom_index in enumerate(atoms_position):
+            atom_id, species, position = pos_atomics[atom_index - 1]
+            cn_per_atom.append({
+                "atom_id": atom_id,
+                "species": species,
+                "position": position,
+                "values": {method: values[k] for method, values in ecn_results.items()},
+            })
+        results["cn_per_atom"] = cn_per_atom
+
+    # Bond distances/angles/polyhedron shape, all from one CrystalNN
+    # neighbor list per atom -- reused for everything below instead of
+    # adding yet another per-method comparison (the 5-method table above
+    # is specifically about comparing coordination-number *algorithms*;
+    # this geometric analysis just needs one consistent neighbor set, the
+    # common choice in the literature).
+    #
+    # Distances/angles are pooled by species pair/triplet across the
+    # structure (a single average lumping e.g. Sn-O with any Sn-Sn/O-O
+    # found isn't meaningful on its own); a bond or angle can be counted
+    # from more than one of its atoms' neighbor lists in "mean" mode (n=
+    # makes that visible) -- this only skews the pooled average if the
+    # neighbor relationship isn't symmetric between the atoms involved.
+    #
+    # Bond-length distortion (BLD), bond-angle variance (BAV), and
+    # polyhedron volume are inherently per-atom (they characterize one
+    # coordination polyhedron), then averaged per species like ECN.
+    cnn = CrystalNN()
+    distances_by_pair = {}
+    all_distances = []
+    angles_by_triplet = {}
+    all_angles = []
+    bld_by_atom = {}
+    bav_by_atom = {}
+    volume_by_atom = {}
+
+    indices = range(len(structure)) if mode == "mean" else [i - 1 for i in atoms_position]
+
+    for i in indices:
+        try:
+            neighbors = cnn.get_nn_info(structure, i)
+            center_coords = structure[i].coords
+
+            site_distances = []
+            for neighbor in neighbors:
+                dist = neighbor["site"].distance(structure[i])
+                site_distances.append(dist)
+                all_distances.append(dist)
+                pair = tuple(sorted((pos_atomics[i][1], str(neighbor["site"].specie.symbol))))
+                distances_by_pair.setdefault(pair, []).append(dist)
+            bld = _bond_length_distortion(site_distances)
+            if bld is not None:
+                bld_by_atom[i] = bld
+            volume = _polyhedron_volume([n["site"].coords for n in neighbors])
+            if volume is not None:
+                volume_by_atom[i] = volume
+
+            site_angles = []
+            for a in range(len(neighbors)):
+                for b in range(a + 1, len(neighbors)):
+                    v1 = neighbors[a]["site"].coords - center_coords
+                    v2 = neighbors[b]["site"].coords - center_coords
+                    cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                    angle_deg = float(np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0))))
+                    site_angles.append(angle_deg)
+                    all_angles.append(angle_deg)
+                    ligand_pair = tuple(sorted((str(neighbors[a]["site"].specie.symbol),
+                                                 str(neighbors[b]["site"].specie.symbol))))
+                    triplet = (ligand_pair[0], pos_atomics[i][1], ligand_pair[1])
+                    angles_by_triplet.setdefault(triplet, []).append(angle_deg)
+            bav = _bond_angle_variance(site_angles)
+            if bav is not None:
+                bav_by_atom[i] = bav
+        except Exception as e:
+            print(f"[WARNING] Failed to compute distances/angles for atom {i+1}: {e}")
+
+    results["bond_distances_by_pair"] = {
+        pair: (float(np.mean(d)), len(d)) for pair, d in distances_by_pair.items()
+    }
+    results["bond_distances_overall"] = (
+        (float(np.mean(all_distances)), len(all_distances)) if all_distances else None
+    )
+    results["bond_angles_by_triplet"] = {
+        triplet: (float(np.mean(a)), len(a)) for triplet, a in angles_by_triplet.items()
+    }
+    results["bond_angles_overall"] = (
+        (float(np.mean(all_angles)), len(all_angles)) if all_angles else None
+    )
+
+    if mode == "mean":
+        distortion_per_species = {}
+        for sp in species_list:
+            sp_idx = [i for i, s in enumerate(species_by_index) if s == sp]
+            distortion_per_species[sp] = {
+                "n_atoms": len(sp_idx),
+                "bld": _safe_mean([bld_by_atom.get(i) for i in sp_idx]),
+                "bav": _safe_mean([bav_by_atom.get(i) for i in sp_idx]),
+                "volume": _safe_mean([volume_by_atom.get(i) for i in sp_idx]),
+            }
+        results["distortion_per_species"] = distortion_per_species
+    else:
+        distortion_per_atom = []
+        for atom_index in atoms_position:
+            i = atom_index - 1
+            distortion_per_atom.append({
+                "atom_id": pos_atomics[i][0],
+                "species": pos_atomics[i][1],
+                "bld": bld_by_atom.get(i),
+                "bav": bav_by_atom.get(i),
+                "volume": volume_by_atom.get(i),
+            })
+        results["distortion_per_atom"] = distortion_per_atom
+
+    return results
+
+# --- Report formatting --------------------------------------------------
+# Same numbered-section report style as the rest of the suite's newer
+# tools ([0] RUN METADATA ... [N] SUMMARY & FILES via print_section/
+# print_dual/print_table) -- replaces the old ad hoc plain-text layout.
+# The underlying numbers/physics (compute_ecn/compute_rdf and friends,
+# above) are unchanged; only how they're printed.
+
+def _fmt(value, prec=3):
+    return f"{value:.{prec}f}" if value is not None else "N/A"
+
+
+def _cn_rows(values_dict):
+    return [([method, _fmt(val)], None) for method, val in values_dict.items()]
+
+
+def print_report(results, source_file, fmt, args, rdf_summary, report_path, f_out):
+    lat = results["lattice"]
+
+    print_dual(color_text("===== STB-STRUCTURAL REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Input file     : {source_file} (format: {fmt})", f_out)
+    mode_desc = results["mode"]
+    if results["mode"] == "list":
+        atom_ids = ", ".join(str(a["atom_id"]) for a in results["cn_per_atom"])
+        mode_desc += f" (atoms: {atom_ids})"
+    print_dual(f"Analysis mode  : {mode_desc}", f_out)
+    if rdf_summary is not None:
+        print_dual(f"RDF            : enabled (r_max = {rdf_summary['r_max']:.1f} Å, "
+                   f"bin width = {rdf_summary['dr']:.2f} Å)", f_out)
+    else:
+        print_dual("RDF            : disabled (--no-rdf)", f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+
+    print_section("[1] LATTICE", f_out)
+    print_table(["Quantity", "Value"], [
+        (["a", f"{lat['a']:.3f} Å"], None),
+        (["b", f"{lat['b']:.3f} Å"], None),
+        (["c", f"{lat['c']:.3f} Å"], None),
+        (["alpha", f"{lat['alpha']:.2f}°"], None),
+        (["beta", f"{lat['beta']:.2f}°"], None),
+        (["gamma", f"{lat['gamma']:.2f}°"], None),
+        (["Volume", f"{lat['volume']:.3f} Å³"], None),
+        (["Density", f"{lat['density']:.3f} g/cm³"], None),
+    ], f_out)
+    print_dual("Lattice vectors (Å):", f_out)
+    for i, vec in enumerate(lat["vectors"]):
+        print_dual(f"  a_{i+1}: {vec[0]:12.6f}  {vec[1]:12.6f}  {vec[2]:12.6f}", f_out)
+
+    print_section("[2] EFFECTIVE COORDINATION NUMBER (weighted)", f_out)
+    if results["mode"] == "mean":
+        for sp, data in results["cn_per_species"].items():
+            print_dual(f"{sp} ({data['n_atoms']} atoms):", f_out)
+            print_table(["Method", "CN"], _cn_rows(data["values"]), f_out)
+        print_dual("Overall average:", f_out)
+        print_table(["Method", "CN"], _cn_rows(results["cn_overall"]), f_out)
+    else:
+        for atom in results["cn_per_atom"]:
+            pos = atom["position"]
+            print_dual(f"Atom {atom['atom_id']} ({atom['species']}), position: "
+                       f"{pos[0]:.6f}  {pos[1]:.6f}  {pos[2]:.6f}", f_out)
+            print_table(["Method", "CN"], _cn_rows(atom["values"]), f_out)
+
+    print_section("[3] BOND DISTANCES, PER SPECIES PAIR", f_out)
+    if results["bond_distances_overall"] is not None:
+        rows = [([f"{pair[0]}-{pair[1]}", f"{avg:.4f}", str(n)], None)
+                for pair, (avg, n) in sorted(results["bond_distances_by_pair"].items())]
+        overall_avg, overall_n = results["bond_distances_overall"]
+        rows.append((["Overall", f"{overall_avg:.4f}", str(overall_n)], 'yellow'))
+        print_table(["Pair", "Avg distance (Å)", "N"], rows, f_out)
+    else:
+        print_dual("No distances could be computed.", f_out)
+
+    print_section("[4] BOND ANGLES, PER LIGAND-CENTER-LIGAND TRIPLET", f_out)
+    if results["bond_angles_overall"] is not None:
+        rows = [([f"{t[0]}-{t[1]}-{t[2]}", f"{avg:.3f}", str(n)], None)
+                for t, (avg, n) in sorted(results["bond_angles_by_triplet"].items())]
+        overall_avg, overall_n = results["bond_angles_overall"]
+        rows.append((["Overall", f"{overall_avg:.3f}", str(overall_n)], 'yellow'))
+        print_table(["Triplet", "Avg angle (°)", "N"], rows, f_out)
+    else:
+        print_dual("No angles could be computed (fewer than 2 neighbors per site).", f_out)
+
+    print_section("[5] COORDINATION POLYHEDRON DISTORTION", f_out)
+    print_dual("BLD: bond-length distortion (%, Baur). BAV: bond-angle variance (deg²),", f_out)
+    print_dual("from ALL ligand-center-ligand angles (not just Robinson's 12 'cis' angles", f_out)
+    print_dual("for an ideal octahedron -- there's no general cis/trans split for an", f_out)
+    print_dual("arbitrary/fractional CN), around the site's own mean angle (not a", f_out)
+    print_dual("theoretical ideal) -- not directly comparable to textbook BAV values, but", f_out)
+    print_dual("self-consistent for comparing sites/species within this report. Volume:", f_out)
+    print_dual("convex hull of the neighbor positions (Å³, needs >= 4 non-coplanar neighbors).", f_out)
+    if results["mode"] == "mean":
+        rows = [([sp, str(data["n_atoms"]), _fmt(data["bld"]), _fmt(data["bav"]), _fmt(data["volume"])], None)
+                for sp, data in results["distortion_per_species"].items()]
+        print_table(["Species", "N atoms", "BLD (%)", "BAV (deg²)", "Volume (Å³)"], rows, f_out)
+    else:
+        rows = [([str(a["atom_id"]), a["species"], _fmt(a["bld"]), _fmt(a["bav"]), _fmt(a["volume"])], None)
+                for a in results["distortion_per_atom"]]
+        print_table(["Atom", "Species", "BLD (%)", "BAV (deg²)", "Volume (Å³)"], rows, f_out)
+
+    print_section("[6] SAME-SPECIES MINIMUM DISTANCE (whole structure, independent of --mode)", f_out)
+    if results["same_species_min_distance"]:
+        rows = [([f"{sp}-{sp}", f"{d:.4f}"], None)
+                for sp, d in sorted(results["same_species_min_distance"].items())]
+        print_table(["Pair", "Min distance (Å)"], rows, f_out)
+    else:
+        print_dual("Fewer than 2 atoms of any single species -- nothing to compare.", f_out)
+
+    print_section("[7] COORDINATION POLYHEDRON CONNECTIVITY (shared ligands, whole structure)", f_out)
+    if results["connectivity_by_species"]:
+        rows = [([f"{sp}-{sp}", str(c["corner-sharing"]), str(c["edge-sharing"]), str(c["face-sharing"])], None)
+                for sp, c in results["connectivity_by_species"].items()]
+        print_table(["Species pair", "Corner-sharing", "Edge-sharing", "Face-sharing"], rows, f_out)
+    else:
+        print_dual("Not available.", f_out)
+
+    if rdf_summary is not None:
+        print_section("[8] RADIAL DISTRIBUTION FUNCTION g(r)", f_out)
+        print_dual(f"Full curve written to {rdf_summary['rdf_file']} "
+                   f"(r_max = {rdf_summary['r_max']:.1f} Å, bin width = {rdf_summary['dr']:.2f} Å).", f_out)
+        rows = []
+        for label, (r, g) in rdf_summary["peaks"].items():
+            if r is None:
+                rows.append(([label, "N/A", "no pair found within r_max"], 'yellow'))
+            else:
+                rows.append(([label, f"{r:.3f}", f"{g:.3f}"], None))
+        print_table(["Pair", "First peak r (Å)", "g(r)"], rows, f_out)
+
+    print_section("[9] ATOMIC POSITIONS (Cartesian, Å)", f_out)
+    rows = [([str(atom_id), species, f"{c[0]:.6f}", f"{c[1]:.6f}", f"{c[2]:.6f}"], None)
+            for atom_id, species, c in results["atomic_positions"]]
+    print_table(["Atom", "Species", "x", "y", "z"], rows, f_out)
+
+    print_section("[10] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+    print_dual("Coordination-number/distortion methods used above (see the example README", f_out)
+    print_dual("for the full theory/formula and limitations of each): Hoppe (1979) for ECoN;", f_out)
+    print_dual("Baur (1974) for BLD; Robinson et al. (1971) for BAV (modified here, see [5]);", f_out)
+    print_dual("Zimmermann & Jain for CrystalNN; Brunner & Schwarzenbach for the Brunner", f_out)
+    print_dual("relative-gap method.", f_out)
+
+    print_section("[11] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    if rdf_summary is not None:
+        print_dual(f"RDF data       : {rdf_summary['rdf_file']}", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Compute ECN and structural properties from a SIESTA structure file.",
+        epilog="Example usage:\n"
+               "  stb-structural --file structure.fdf --format fdf --mode mean\n"
+               "  stb-structural --file siesta.STRUCT_OUT --format struct_out --mode list --list 1,4,5\n"
+               "  stb-structural --file structure.fdf --format fdf --mode mean --save-report",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument("--file", required=True, help="Path to structure file.")
+    parser.add_argument("--format", required=True, choices=["fdf", "struct_out"],
+                        help="Input file format:\n"
+                             "  fdf:        SIESTA structure input (%%block LatticeVectors etc.)\n"
+                             "  struct_out: SIESTA post-relaxation output (.STRUCT_OUT)")
+    parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
+    parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write rdf.dat and references.bib into (and "
+                             f"{REPORT_FILE}, with --save-report) (default: current "
+                             "directory). Created if it doesn't exist.")
+    parser.add_argument("--no-rdf", dest="rdf", action="store_false",
+                        help="Skip the radial distribution function g(r) (rdf.dat is not written).")
+    parser.add_argument("--rdf-rmax", type=float, default=10.0,
+                        help="Cutoff radius for g(r), in Å (default: 10.0). Larger values capture "
+                             "more coordination shells but take longer for large structures.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-structural {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    args = parser.parse_args()
+
+    if args.mode == "list" and not args.list:
+        parser.error("--list is required when --mode is 'list'")
+    if args.rdf_rmax <= 0:
+        parser.error("--rdf-rmax must be positive.")
+
+    # No warnings.log: warnings print straight to the console via
+    # warn_handler instead of being written to disk.
+    warnings.showwarning = warn_handler
+
+    if args.intro:
+        show_intro([
+            "Siesta ToolBox Suite",
+            "A comprehensive toolkit for SIESTA DFT simulations",
+            f"Version {VERSION} | University of Brasilia - 2026",
+            "Developed by Dr. Carlos M. O. Bastos"
+        ])
+
+    print("\n" + color_text("STRUCTURAL PROPERTIES:", 'bold'))
+    print("-"*60)
+
+    atoms_position = list(map(int, args.list.strip('[]').split(','))) if args.list else None
+
+    # Read (and validate) the input BEFORE creating --output-dir or opening
+    # the report file, so a bad input file doesn't leave an empty
+    # directory/empty report behind (same convention as bands.py/dos.py).
+    try:
+        structure = structure_io.read_siesta_structure(args.file, args.format)
+    except FileNotFoundError:
+        print(color_text(f"[ERROR] Structure file '{args.file}' not found.", 'red'))
+        sys.exit(1)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
+
+    if atoms_position:
+        invalid = [i for i in atoms_position if i < 1 or i > len(structure)]
+        if invalid:
+            print(color_text(f"[ERROR] Atom index/indices {invalid} out of range "
+                              f"(structure has {len(structure)} atoms, 1-based).", 'red'))
+            sys.exit(1)
+
+    results = compute_ecn(structure, args.mode, atoms_position)
+
+    rdf_data = compute_rdf(structure, r_max=args.rdf_rmax) if args.rdf else None
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Remove stale files from an older version of this tool (which always
+    # wrote warnings.log and structural_information.dat unconditionally,
+    # and could leave a stale rdf.dat behind when re-run with --no-rdf) so
+    # none of them can be mistaken for output of this run.
+    for stale_name in ("warnings.log", "structural_information.dat"):
+        stale_path = os.path.join(args.output_dir, stale_name)
+        if os.path.exists(stale_path):
+            os.remove(stale_path)
+
+    rdf_summary = None
+    if rdf_data is not None:
+        r_centers, g_total, g_by_pair = rdf_data
+        rdf_path = os.path.join(args.output_dir, "rdf.dat")
+        write_rdf_file(rdf_path, r_centers, g_total, g_by_pair)
+        peaks = {"Total": _first_peak(r_centers, g_total)}
+        for pair in sorted(g_by_pair):
+            peaks[f"{pair[0]}-{pair[1]}"] = _first_peak(r_centers, g_by_pair[pair])
+        rdf_summary = {"rdf_file": rdf_path, "r_max": args.rdf_rmax, "dr": 0.05, "peaks": peaks}
+    else:
+        stale_rdf = os.path.join(args.output_dir, "rdf.dat")
+        if os.path.exists(stale_rdf):
+            os.remove(stale_rdf)
+
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_report(results, args.file, args.format, args, rdf_summary, report_path, f_out)
+
+    if f_out:
+        f_out.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+<pdos>
+<nspin>2
+</nspin>
+<norbitals>1
+</norbitals>
+<fermi_energy units="eV">0.0
+</fermi_energy>
+<energy_values units="eV">
+ -1.0 0.0 1.0
+</energy_values>
+<orbital index="1" atom_index="1" species="Si" Z="14"
+ position="0.0 0.0 0.0" n="3" l="0" m="0" z="1" P="false">
+<data>
+  1.0 0.5 2.0 0.6 3.0 0.7
+</data>
+</orbital>
+</pdos>

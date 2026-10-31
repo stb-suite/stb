@@ -1,0 +1,6 @@
+output/
+fatbands_*.dat
+fatbands*.gplot
+fatbands*.pdf
+stb_fatbands_report.txt
+references.bib

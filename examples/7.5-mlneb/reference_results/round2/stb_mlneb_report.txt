@@ -1,0 +1,194 @@
+===== STB-MLNEB REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-29 14:13:20
+Software          : stb 1.9.304, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Endpoints         : /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_initial.fdf -> /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_final.fdf
+Band              : 7 images (endpoints included), linear interpolation + IDPP, atoms matched within --autosort-tol 0.5 Ang
+NEB               : improved tangent, spring k 0.1 eV/Ang^2, FIRE; shaping to 0.1 then climbing image to --fmax 0.05 eV/Ang, --max-steps 200 in total
+Endpoints relaxed : yes, positions only, to --fmax
+Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model)
+Report file       : round2/stb_mlneb_report.txt
+
+[1] STRUCTURES
+------------------------------------------------------------
+[OK] Same composition: 63 atom(s), Si63
+Cell              : a 10.96048, b 10.96048, c 10.96048 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg; 1316.704 Ang^3 (20.9001 Ang^3/atom)
+Shortest distance : initial 2.3730, final 2.3730 Ang
+Atoms that move   : 1 by more than 0.1 Ang between the endpoints (as read; sum of all displacements 2.373 Ang)
+atom (fdf order) | species | displacement (Ang)
+-----------------------------------------------
+1                | Si      | 2.3730            
+
+[2] MODEL
+------------------------------------------------------------
+
+Model card -- identity
+Card file         : /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model
+SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
+Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
+Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
+Architecture      : MACE, r_max 6 Ang, 2 interactions, 509,722 parameters; fine-tuned from mace-mp-0 (medium), start: previous
+
+Model card -- level of theory (what the model reproduces)
+Code              : SIESTA 5.4.2
+Settings          : DFTD3 default; ElectronicTemperature 300 K; Mesh.Cutoff 300 Ry
+                    PAO.Basis block none; PAO.BasisSize DZP; PAO.EnergyShift 0.01 Ry
+                    SCF tolerance 1.0e-5; Spin non-polarized; XC.authors PBE
+                    XC.functional GGA; k x a (Ang) 32 32 32
+DFT-D3            : not in the labels (source: none)
+Pseudopotentials  : Si.psml (md5 878e1f00)
+Energy scale      : SIESTA absolute total energy, eV; E0 Si -117.3061 eV (foundation-residual)
+
+Model card -- training data and trained domain
+Training set      : 57 SIESTA configs (51 train / 6 valid), kinds al-md 12, rattle 39, strain 6; 8-64 atoms per config
+Labels            : energy, forces, stress; stress fitted
+Trained range                 | Value                 
+------------------------------------------------------
+elements / dimensionality     | Si / 3D               
+volume per atom (Ang^3)       | 18.722 .. 22.425      
+shortest distance (Ang)       | 1.852 .. 2.347        
+max force per config (eV/Ang) | 0.98 .. 14.70         
+pressure (GPa)                | -5.81 .. 10.48        
+energy per atom (eV)          | -115.0069 .. -114.2504
+atoms per config              | 8 .. 64               
+
+Model card -- recipe and accuracy
+Recipe            : 100 epochs (kept 96), batch 5, lr 0.001, loss energy 1 + forces 100 + stress 10000, E0s foundation-residual, cuda 342 s
+Errors vs SIESTA            | N  | F RMSE (meV/Ang) | E rel (meV/atom) | S RMSE (GPa)
+-------------------------------------------------------------------------------------
+train                       | 51 | 45.8             | 2.03             | 0.148       
+valid (own split)           | 6  | 52.8             | 0.85             | 0.123       
+out-of-sample (committee)   | 16 | 56.0             | 1.85             | 0.127       
+test set (stb-mlffValidate) | 16 | 28.7             | 1.07             | 0.181       
+foundation model, raw       | 57 | 448.4            | 51.08            | 0.848       
+Fine-tuning gain  : 87 % lower force error than the raw foundation model
+  test, rattle    : F 15.3 meV/Ang over 8 configs
+  test, strain    : F 37.6 meV/Ang over 8 configs
+Phonons vs SIESTA : RMSE 1.10 THz (acoustic 1.51, optical 0.37), imaginary q-points: model 0
+MD check r01_800K_2x2x2: F 29.8-38.9 meV/Ang along 8 SIESTA-labelled frames
+Committee spread  : true error ~ 1.3 x spread (per-config correlation +0.75)
+Verdict (4.17.3)  : STOP (validated 2026-10-24T11:00:18, 16 test configs)
+
+Model card -- stability, speed and usage
+Stability (4.17.2): OK -- 64 atoms, T mean 285 K, NVE drift 0.003 meV/atom/ps
+Speed (4.17.2)    : 35.2 ms/step for 64 atoms on cuda
+Recommended dtype : geometry optimization float64, molecular dynamics float32
+  - Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.
+  - Valid for Si only; any other element is outside the training data.
+  - Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.
+  - Lowest validation force error of its committee.
+  - Run geometry optimisation in float64 and MD in float32 (the suite's convention).
+Trained with      : stb 1.9.292, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0, python 3.12.13, siesta 5.4.2
+Training kinds    : al-md 12, rattle 39, strain 6 -- the card cannot say whether defects or transition states were in the training set; a barrier is only as good as the training data near the saddle
+Loaded in         : 0.5 s
+
+[3] ENDPOINTS
+------------------------------------------------------------
+--- fine-tuned
+endpoint | max|F| before | max|F| after | steps | relaxation | largest move Ang | energy gained eV | E (eV)     
+----------------------------------------------------------------------------------------------------------------
+initial  | 0.3097        | 0.0227       | 22    | converged  | 0.1319           | 0.1098           | -7243.38475
+final    | 0.3097        | 0.0227       | 22    | converged  | 0.1319           | 0.1098           | -7243.38475
+Endpoint energies : E(final) - E(initial) = +0.0000 eV
+
+[4] STARTING PATH
+------------------------------------------------------------
+--- fine-tuned: 7 images, linear interpolation + IDPP (--idpp-fmax 0.1, --idpp-steps 100)
+image | step from previous (Ang) | shortest distance (Ang) | check
+------------------------------------------------------------------
+0     | -                        | 2.3718                  | ok   
+1     | 0.3546                   | 2.3727                  | ok   
+2     | 0.3546                   | 2.3736                  | ok   
+3     | 0.3546                   | 2.3736                  | ok   
+4     | 0.3546                   | 2.3736                  | ok   
+5     | 0.3546                   | 2.3727                  | ok   
+6     | 0.3546                   | 2.3718                  | ok   
+
+[5] NEB BAND
+------------------------------------------------------------
+--- fine-tuned: converged; 16 shaping + 4 climbing step(s) of --max-steps 200; residual force 0.0444 eV/Ang (target --fmax 0.05); 46.4 s
+image | s (Ang) | E - E0 (eV) | max|F| (eV/Ang) | d_min (Ang) | max shift from initial | role             
+----------------------------------------------------------------------------------------------------------
+0     | 0.0000  | +0.0000     | 0.0227          | 2.3718      | 0.0000                 | initial          
+1     | 0.4113  | +0.0875     | 0.4718          | 2.3719      | 0.3417                 |                  
+2     | 0.7890  | +0.3786     | 1.0628          | 2.3665      | 0.6840                 |                  
+3     | 1.1754  | +0.7193     | 0.0478          | 2.3635      | 1.0546                 | climbing (saddle)
+4     | 1.5618  | +0.3786     | 1.0628          | 2.3665      | 1.4251                 |                  
+5     | 1.9394  | +0.0875     | 0.4718          | 2.3719      | 1.7675                 |                  
+6     | 2.3508  | +0.0000     | 0.0227          | 2.3718      | 2.1091                 | final            
+max|F| is the raw force of the model; the NEB converges the force perpendicular to the band (and, on the climbing image, the full force), so a raw force above --fmax on an interior image is normal.
+
+[6] BARRIER
+------------------------------------------------------------
+--- fine-tuned
+eV                                    | spline (reported) | highest image
+-------------------------------------------------------------------------
+forward  (initial -> final)           | 0.7193            | 0.7193       
+backward (final -> initial)           | 0.7193            | 0.7193       
+reaction energy E(final) - E(initial) | +0.0000           | +0.0000      
+Saddle            : s = 1.1754 of 2.3508 Ang (50.0 % of the path); climbing image 3
+The spline is fitted to the image energies AND the forces along the band (ASE fit_images), so it can peak between two images; the highest image is a lower bound.
+
+[7] SADDLE POINT
+------------------------------------------------------------
+Atom 1 (Si, the largest mover, 2.109 Ang between the endpoints): four nearest neighbours along the band
+state   | image | nearest distances (Ang)
+-----------------------------------------
+initial | 0     | 2.372 2.372 2.372 3.660
+saddle  | 3     | 2.776 2.776 2.776 2.776
+final   | 6     | 2.372 2.372 2.372 3.660
+Saddle image      : max|F| 0.0478 eV/Ang, shortest distance 2.3635 Ang, largest shift from the initial image 1.055 Ang
+
+[8] TRAINED RANGE
+------------------------------------------------------------
+The band against the model card's trained range:
+quantity                | trained                | this band                 | verdict
+--------------------------------------------------------------------------------------
+volume per atom (Ang^3) | 18.722 .. 22.425       | 20.900                    | inside 
+shortest distance (Ang) | >= 1.852               | min 2.364 (image 3)       | inside 
+largest force (eV/Ang)  | <= 14.70               | 0.310 (endpoints as read) | inside 
+energy per atom (eV)    | -115.0069 .. -114.2504 | -114.9744 .. -114.9629    | inside 
+
+[9] COMMITTEE UNCERTAINTY
+------------------------------------------------------------
+Not evaluated     : --no-committee.
+
+[10] SIESTA CHECK
+------------------------------------------------------------
+Template          : --calc /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/calc.fdf, pseudopotentials dojo; k-grid --kgrid
+SIESTA single points on the fine-tuned band (E - E of image 0; SIESTA max|F| tells how far the geometry is from a SIESTA stationary point):
+image | model (eV) | SIESTA (eV) | model - SIESTA | SIESTA max|F| | status
+--------------------------------------------------------------------------
+0     | +0.0000    | +0.0000     | +0.0000        | 0.231         | done  
+1     | +0.0875    | +0.0439     | +0.0435        | 0.236         | done  
+2     | +0.3786    | +0.1697     | +0.2089        | 0.439         | done  
+3     | +0.7193    | +0.2512     | +0.4681        | 0.167         | done  
+4     | +0.3786    | +0.1697     | +0.2089        | 0.439         | done  
+5     | +0.0875    | +0.0439     | +0.0435        | 0.236         | done  
+6     | +0.0000    | +0.0000     | +0.0000        | 0.231         | done  
+Barrier on this path: model 0.7193 eV forward / 0.7193 backward; SIESTA 0.2512 / 0.2512 eV (+186 % model vs SIESTA)
+SIESTA at the model's geometries is not SIESTA's own barrier: its endpoints and saddle are not relaxed with SIESTA (see max|F|); the difference to the model is still the model's error there.
+
+[11] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+fine-tuned        : barrier 0.7193 eV forward, 0.7193 eV backward, reaction energy +0.0000 eV
+SIESTA check      : barrier on the model's path 0.2512 eV (model 0.7193 eV)
+Figure            : round2/neb_profile.png
+Relaxed band      : round2/neb_path.xyz
+Data              : round2/neb_band.dat
+gnuplot folder    : round2/plot/ (neb_profile.gplot)
+gnuplot figure    : round2/plot/neb_profile.pdf
+Report            : round2/stb_mlneb_report.txt
+Also available    : --show --save-images --to-mlff
+Wall time         : 52.2 s
+Reading           : an ML-level barrier, as good as the training data near the saddle; confirm a number you will use with a SIESTA NEB (stb-neb, 4.9) or SIESTA single points on these images.
+
+[12] WARNINGS
+------------------------------------------------------------
+  1. SIESTA check: on its own path the model's barrier is 0.719 eV, SIESTA's 0.251 eV -- the model is not reliable for this transition. Add the images to the training set (--to-mlff), retrain (stb-mlffAnalysis) and run the NEB again.
+Library messages  : 12 distinct message(s) from mace/torch/ase captured, not shown

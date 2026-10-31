@@ -1,0 +1,41 @@
+SystemLabel      si
+SystemName       Si8-NVE
+NumberOfAtoms    8
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant  5.476 Ang
+%block LatticeVectors
+ 1.0 0.0 0.0
+ 0.0 1.0 0.0
+ 0.0 0.0 1.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00 0.00 0.00 1
+ 0.00 0.50 0.50 1
+ 0.50 0.00 0.50 1
+ 0.50 0.50 0.00 1
+ 0.25 0.25 0.25 1
+ 0.25 0.75 0.75 1
+ 0.75 0.25 0.75 1
+ 0.75 0.75 0.25 1
+%endblock AtomicCoordinatesAndAtomicSpecies
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+Mesh.Cutoff         150 Ry
+%block kgrid.MonkhorstPack
+ 2 0 0 0.5
+ 0 2 0 0.5
+ 0 0 2 0.5
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+MD.TypeOfRun        Verlet
+MD.InitialTimeStep  1
+MD.FinalTimeStep    20
+MD.LengthTimeStep   1.0 fs
+MD.InitialTemperature  600 K
+WriteMDXmol         true
+WriteMDHistory      true

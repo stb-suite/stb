@@ -1,0 +1,79 @@
+
+TRANSLATE:
+------------------------------------------------------------
+===== STB-TRANSLATE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 13:55:39
+Software          : stb 1.9.312, ase 3.29.0, pymatgen 2026.5.4, spglib 2.7.0
+Input             : ../../si111_adatom_relaxed.STRUCT_OUT -- siesta (auto, from the name 'si111_adatom_relaxed.STRUCT_OUT')
+Output            : si111_adatom_p1.cif -- cif (auto, from the name 'si111_adatom_p1.cif')
+CIF symmetry      : none, P1 (--cif-symprec 0)
+  ... reading ../../si111_adatom_relaxed.STRUCT_OUT
+
+[1] INPUT
+------------------------------------------------------------
+File              : ../../si111_adatom_relaxed.STRUCT_OUT (1787 bytes, 29 lines)
+Format            : siesta (auto, from the name 'si111_adatom_relaxed.STRUCT_OUT')
+Coordinates       : fractional (STRUCT_OUT always); lattice parameter 1.00 Ang
+Coordinate range  : -0.0000 .. 0.9898 (as read)
+
+[2] STRUCTURE
+------------------------------------------------------------
+Formula           : Si25 -- reduced Si, Z = 25 formula units
+Atoms             : 25 (1 species)
+label | element | Z  | count | fraction (%) | mass (u)
+------------------------------------------------------
+Si    | Si      | 14 | 25    | 100.0        | 28.085  
+Cell              : a = 7.75023, b = 7.75023, c = 22.11904 Ang; alpha = 90.000, beta = 90.000, gamma = 60.000 deg
+Lattice vectors (Ang):
+    a:     7.750227     0.000000     0.000000
+    b:     3.875113     6.711893     0.000000
+    c:     0.000000     0.000000    22.119038
+Volume            : 1150.6035 Ang^3 (46.0241 Ang^3/atom); density 1.0133 g/cm^3 (mass 702.125 u)
+Periodicity       : 2D slab/layer -- vacuum (>= 10 Ang gap) along c
+Shortest distance per element pair (minimum image):
+pair  | distance (Ang) | atoms       | / covalent | check
+---------------------------------------------------------
+Si-Si | 2.3257         | Si13 - Si17 | 1.05       |      
+
+[3] SYMMETRY
+------------------------------------------------------------
+symprec (Ang) | space group | number | operations
+-------------------------------------------------
+0.001         | P3m1        | 156    | 6         
+0.01          | P3m1        | 156    | 6         
+0.1           | P3m1        | 156    | 6         
+Crystal system    : trigonal; point group 3m
+Primitive cell    : 25 atoms (symprec 0.01 Ang) -- the input cell is primitive
+
+[4] OUTPUT
+------------------------------------------------------------
+File              : si111_adatom_p1.cif (1963 bytes, 51 lines)
+Format            : cif (auto, from the name 'si111_adatom_p1.cif')
+Coordinates       : fractional (CIF always) 
+CIF symmetry      : none (P1, --cif-symprec 0): cell and positions exactly as read
+Verification (the written file read back):
+quantity                        | input   | output   | verdict
+--------------------------------------------------------------
+composition                     | Si      | Si       | same   
+atoms                           | 25      | 25       | same   
+volume / formula unit (Ang^3)   | 46.0241 | 46.0241  | same   
+largest cell difference (Ang)   |         | 0.00e+00 | ok     
+largest atom displacement (Ang) |         | 1.14e-07 | ok     
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Structure         : Si25, 25 atoms, P3m1
+Written           : si111_adatom_p1.cif
+Also available    : --save-report --view --view-image -cf
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Converting input files is 10% coding, 90% crying.
+

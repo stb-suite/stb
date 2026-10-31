@@ -1,0 +1,85 @@
+
+CLEAN:
+------------------------------------------------------------
+===== STB-CLEAN REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-30 16:35:24
+stb               : 1.9.314
+Target            : <work>/project
+Keep extensions   : .fdf .psf .psml .sh (default)
+Always kept       : hidden files, earlier stb-clean backups, files a kept .fdf reads
+Recursive         : yes (hidden directories skipped)
+Mode              : dry run (nothing touched)
+
+[1] FOLDER
+------------------------------------------------------------
+Directory         : <work>/project
+Files             : 98 (7.6 MB) -- including subdirectories
+Keep / remove     : 12 kept (185.0 KB), 86 to remove (7.4 MB)
+SIESTA input      : bands/calc.fdf, bands/structure.fdf, relax/calc.fdf, relax/structure.fdf; SystemLabel si
+Previous run      : bands/calc.out -- finished normally, 13 geometry steps (last written 2.2 h ago)
+Previous run      : relax/calc.out -- finished normally, 13 geometry steps (last written 2.2 h ago)
+
+[2] KEPT
+------------------------------------------------------------
+file                                | size    | why it stays                            
+----------------------------------------------------------------------------------------
+.notes                              | 22 B    | hidden file (never removed)             
+bands/Si.psml                       | 84.7 KB | pseudopotential                         
+bands/bandlines.txt                 | 80 B    | read by bands/calc.fdf                  
+bands/calc.fdf                      | 921 B   | SIESTA input (.fdf)                     
+bands/run.sh                        | 137 B   | job script                              
+bands/structure.fdf                 | 491 B   | SIESTA input (.fdf)                     
+relax/Si.psml                       | 84.7 KB | pseudopotential                         
+relax/bandlines.txt                 | 80 B    | read by relax/calc.fdf                  
+relax/calc.fdf                      | 921 B   | SIESTA input (.fdf)                     
+relax/run.sh                        | 137 B   | job script                              
+relax/structure.fdf                 | 491 B   | SIESTA input (.fdf)                     
+relax_backup_20260101_120000.tar.gz | 12.4 KB | earlier stb-clean backup (never removed)
+Protected         : 2 file(s) read by a kept .fdf, kept although their extension is not in --keep
+Species           : Si -- pseudopotential kept for Si
+
+[3] REMOVED
+------------------------------------------------------------
+kind                           | files | size     | e.g.                                                     
+-------------------------------------------------------------------------------------------------------------
+restart (SIESTA reads it back) | 8     | 754.3 KB | si.CG, si.DM, si.STRUCT_NEXT_ITER, +1                    
+SIESTA log / status            | 32    | 345.9 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+job-scheduler output           | 2     | 28 B     | siesta.err                                               
+geometry / forces / dynamics   | 10    | 5.8 KB   | si.ANI, si.BONDS, si.BONDS_FINAL, +2                     
+electronic structure           | 18    | 4.0 MB   | si.DOS, si.EIG, si.HSX, +6                               
+real-space grids               | 8     | 873.7 KB | Rho.grid.nc, TotalPotential.grid.nc, si.RHO, +1          
+basis by-products              | 6     | 1.5 MB   | Si.ion, Si.ion.nc, Si.ion.xml                            
+job script (not in --keep)     | 2     | 238 B    | submit.slurm                                             
+total                          | 86    | 7.4 MB   |                                                          
+
+Largest           : bands/si.HSX (628.3 KB), relax/si.HSX (628.3 KB), bands/si.PDOS.xml (538.2 KB), relax/si.PDOS.xml (538.2 KB), bands/si.PDOS (483.6 KB)
+
+[4] RESTART
+------------------------------------------------------------
+file  | holds                  | after cleaning | fdf flag                     | next run                                       
+--------------------------------------------------------------------------------------------------------------------------------
+si.DM | density matrix         | removed        | DM.UseSaveDM true            | starts from a superposition of atomic densities
+si.XV | positions + velocities | removed        | MD.UseSaveXV true            | starts from the geometry in the .fdf           
+si.CG | CG optimizer history   | removed        | MD.UseSaveCG false (default) | starts from a new CG history (flag off anyway) 
+Note              : the previous run moved the geometry (13 steps); its final geometry is in si.XV and si.STRUCT_OUT, which go -- the next run starts again from the .fdf geometry. Keep .XV, or convert si.STRUCT_OUT to an .fdf first (stb-translate, 6.1).
+To continue from the previous run instead of starting fresh, keep its restart files, e.g. --keep .fdf .psf .psml .sh .DM .XV
+
+[5] ARCHIVE & REMOVAL
+------------------------------------------------------------
+Dry run -- nothing archived, nothing removed (86 file(s), 7.4 MB would go).
+
+[6] SUMMARY & FILES
+------------------------------------------------------------
+Would remove      : 86 file(s), 7.4 MB -- rerun without --dry-run
+
+[7] WARNINGS
+------------------------------------------------------------
+  1. project: 'bands/submit.slurm' looks like a job script and will be removed -- add its extension to --keep (--keep .fdf .psf .psml .sh .slurm).
+  2. project: 'relax/submit.slurm' looks like a job script and will be removed -- add its extension to --keep (--keep .fdf .psf .psml .sh .slurm).
+
+------------------------------------------------------------
+Nothing removed.
+

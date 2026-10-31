@@ -1,0 +1,20 @@
+NumberOfSpecies 1
+NumberofAtoms 1
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat Fractional
+
+%block LatticeVectors
+ 4.0843982622   0.0000000000   -0.3573385453
+ -1.7391120959   4.9212266740   0.9203353416
+ 0.0000000000   0.0000000000   6.7000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.100000   0.200000   0.300000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

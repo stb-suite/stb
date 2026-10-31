@@ -1,0 +1,35 @@
+SIESTA check of the 5.10 example: relaxations at the 4.17 training level of theory (PBE, DZP, 300 Ry, k 4x4x1),
+each started from the round-3 model's geometry, bottom bilayer fixed, CG to 0.05 eV/Ang.
+mu_Si = -115.017641 eV/atom (4.17 bulk relaxation, a = 5.480238 Ang)
+clean slab: 19 CG steps (done), max|F| 0.979 -> 0.007 eV/Ang, E -2748.9450 -> -2750.0294 eV (relaxation from the model's geometry -1.0844 eV)
+ideal slab (as cut, single point): E -2749.8878 eV -> SIESTA's own relaxation of the clean slab gains -0.1416 eV; the model's relaxed slab lies +0.9428 eV from the ideal one in SIESTA
+isolated Si atom, spin-unpolarized (the training setting): E -109.0648 eV -> cohesive energy E(atom) - mu = 5.953 eV
+isolated Si atom, spin-polarized: E -109.9280 eV -> cohesive energy E(atom) - mu = 5.090 eV
+round-3 model: isolated atom -111.5834 eV, mu -115.0084 eV/atom -> cohesive energy 3.425 eV: its isolated atom is the reference it never saw
+
+site  steps  state        F0   Fend   E_form SIESTA  @ML geom   relax             round 3           round 2   MACE-MP-0 small  MACE-MP-0 medium   MACE-MP-0 large
+T4       49  done      2.206  0.031         -0.3183    1.1624  -1.481             -2.1904           -0.2400            0.7657            0.4303            0.6022
+B2       89  done      2.427  0.037         -0.3158    2.6294  -2.945             -1.0233               nan               nan               nan               nan
+H3       53  done      1.922  0.033         -0.0437    1.8361  -1.880             -0.7235            1.1872            0.7471            0.5313            0.6058
+T1       33  done      1.106  0.036          1.9179    2.0409  -0.123              0.0562            1.3350            2.0753            1.5261            2.0071
+E_form = E(slab+adatom) - E(slab) - mu_Si (eV); '@ML geom': step 0, SIESTA on the model's own geometry; 'relax': what SIESTA's relaxation gained on top of it; F0/Fend: SIESTA's largest force at the model's geometry / at the end (eV/Ang).
+
+Energy relative to T4 (eV):
+site     SIESTA  @ML geom             round 3           round 2   MACE-MP-0 small  MACE-MP-0 medium   MACE-MP-0 large
+T4       0.0000    0.0000              0.0000            0.0000            0.0000            0.0000            0.0000
+B2       0.0025    1.4670              1.1671               nan               nan               nan               nan
+H3       0.2746    0.6737              1.4669            1.4272           -0.0186            0.1010            0.0036
+T1       2.2362    0.8785              2.2466            1.5750            1.3096            1.0958            1.4050
+
+Where SIESTA's relaxation ended (adatom = the last atom):
+  T4: ended at T4 (0.00 Ang from it), 0.979 Ang above layer 1, bonds 2.516 2.516 2.516 2.547
+  B2: ended at T4 (0.04 Ang from it), 0.959 Ang above layer 1, bonds 2.517 2.517 2.522 2.542
+  H3: ended at H3 (0.06 Ang from it), 1.345 Ang above layer 1, bonds 2.471 2.474 2.474
+  T1: ended at T1 (0.00 Ang from it), 2.059 Ang above layer 1, bonds 2.292
+
+Round-3 model on SIESTA's final geometries (single points, its own mu_Si at a = 5.4802 Ang):
+  T4: E_form -1.5827 eV (SIESTA -0.3183), model's largest force on the free atoms 1.840 eV/Ang
+  B2: E_form -1.6152 eV (SIESTA -0.3158), model's largest force on the free atoms 1.848 eV/Ang
+  H3: E_form 0.7992 eV (SIESTA -0.0437), model's largest force on the free atoms 1.833 eV/Ang
+  T1: E_form 0.2653 eV (SIESTA 1.9179), model's largest force on the free atoms 1.872 eV/Ang
+

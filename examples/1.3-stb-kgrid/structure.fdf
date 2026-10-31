@@ -1,0 +1,32 @@
+# Bulk silicon (conventional cubic diamond cell, 8 atoms)
+# A "bare" structure: only lattice + positions + species -- exactly what
+# stb-inputfile expects to receive, since it builds the rest of calc.fdf
+# around this file (via %include).
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1  14  Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   0.00000000
+ 0.00000000   5.43000000   0.00000000
+ 0.00000000   0.00000000   5.43000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

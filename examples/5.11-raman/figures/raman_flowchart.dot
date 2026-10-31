@@ -1,0 +1,12 @@
+digraph raman {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7, fontsize=9];
+  in    [label="relaxed structure.fdf + calc.fdf", fillcolor="#ffffff"];
+  s1    [label="Stage 1  stb-raman  (5.11.1)\nsupercell, symmetry-reduced displacements\nphonon_disp/disp-*/ + perfect_supercell/"];
+  run1  [label="SIESTA in every folder: forces", fillcolor="#fff4e0", color="#b8860b"];
+  s2    [label="Stage 2  stb-ramanModes  (5.11.2)\nFORCE_SETS (residual forces subtracted), Gamma modes, irreps,\n+/- delta along each mode x probe directions (x, y, z [, xy, xz, yz])\noptical_disp/mode_NN_{plus,minus}_<dir>/"];
+  run2  [label="SIESTA in every folder: OpticalCalculation, eps2(E) along the probe", fillcolor="#fff4e0", color="#b8860b"];
+  s3    [label="Stage 3  stb-ramanAnalysis  (5.11.3)\neps1(0) by Kramers-Kronig, R = d eps / d u (central difference),\nactivity 45a'^2 + 7g'^2, depolarization ratio, spectrum"];
+  in -> s1 -> run1 -> s2 -> run2 -> s3;
+}

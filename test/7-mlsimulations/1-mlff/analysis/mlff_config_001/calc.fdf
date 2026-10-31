@@ -1,0 +1,30 @@
+SystemName          O2_mlff
+SystemLabel         calc
+
+NumberOfAtoms       2
+NumberOfSpecies     1
+
+%block ChemicalSpeciesLabel
+ 1  8  O
+%endblock ChemicalSpeciesLabel
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+
+LatticeConstant     1.0 Ang
+%block LatticeVectors
+ 10.0  0.0  0.0
+  0.0 10.0  0.0
+  0.0  0.0 10.0
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+        5.024835707651        4.993086784941        4.427384426905   1
+        5.076151492820        4.988292331264        5.593293152153   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+DM.MixingWeight     0.1
+DM.NumberPulay      4
+MaxSCFIterations    200
+DM.Tolerance        1.0d-3

@@ -1,0 +1,37 @@
+# Example fixture: bulk Si (diamond cubic, conventional 8-atom cell) with a
+# DELIBERATELY WRONG lattice constant (5.00 Ang instead of the correct
+# ~5.46 Ang) -- simulates a bad initial guess (e.g. hand-typed, or from a
+# different source). Used to exercise stb-mlrelax --relax-cell: verified
+# this session that relaxing this with the MACE-MP-0 foundation potential
+# converges to a=5.46 Ang, matching the well-known PBE-DFT literature value
+# for Si (5.463-5.469 Ang -- MACE-MP-0 is trained on Materials Project's
+# PBE-family data) far better than the wrong starting guess, and close to
+# experiment (5.431 Ang) too.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.00000000   0.00000000   0.00000000
+ 0.00000000   5.00000000   0.00000000
+ 0.00000000   0.00000000   5.00000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

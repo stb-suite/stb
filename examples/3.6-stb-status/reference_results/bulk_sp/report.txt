@@ -1,0 +1,76 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project/bulk_sp
+
+[1] RUN
+------------------------------------------------------------
+Folder            : project/bulk_sp
+SystemLabel       : si
+Input .fdf        : project/bulk_sp/calc.fdf
+Log               : project/bulk_sp/calc.out (SIESTA 5.4.2)
+State             : FINISHED
+Processes         : 4 MPI
+Started           : 30-OCT-2026  20:42:00
+Ended             : 30-OCT-2026  20:42:02
+Wall time         : 2.0 s (CLOCK)
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 2 (Si2)
+Cell (last)       : a = 3.8721, b = 3.8721, c = 3.8721 Ang, V = 41.0516 Ang^3
+Electrons         : 8
+Spin              : none
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+k-points          : 108
+Mesh cutoff       : 200 Ry required, 248.9 Ry used
+
+[3] PROGRESS
+------------------------------------------------------------
+Run type          : single point (Single-point calculation)
+
+[4] SCF
+------------------------------------------------------------
+Iterations        : 8 in 1 step(s); per step min 8, mean 8.0, max 8
+Converged steps   : 1 of 1
+Tolerance         : dDmax < 1e-05, at most 1000 iterations (failure aborts the run)
+
+[5] RESULTS
+------------------------------------------------------------
+Total energy      : -230.035330 eV
+Band structure    : -76.168248 eV
+Fermi level       : -4.177431 eV
+Energy per atom   : -115.017665 eV
+Band gap (.EIG)   : 0.9355 eV (indirect; VBM -4.6394, CBM -3.7039 eV; 108 k-points)
+Max force         : 0.006896 eV/Ang (net 0.000010)
+Pressure          : 2.0864 kBar (0.2086 GPa)
+Log warnings      : 4 line(s), 4 distinct -- e.g. # WARNING: This information might be incomplete!
+
+[6] FILES & NEXT STEPS
+------------------------------------------------------------
+Folder size       : 225.5 KB in 11 files
+output           | files                | read by                                           
+--------------------------------------------------------------------------------------------
+band structure   | si.bands             | stb-bands (3.1)                                   
+eigenvalues      | si.EIG               | band gap here; stb-dos (3.2)                      
+real-space grids | si.RHO               | stb-cube (6.3), stb-bader (3.6), stb-density (3.8)
+final geometry   | si.STRUCT_OUT, si.XV | stb-translate (6.1)                               
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Verdict           : FINISHED -- result usable
+Folders inspected : 1
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Status check complete.
+

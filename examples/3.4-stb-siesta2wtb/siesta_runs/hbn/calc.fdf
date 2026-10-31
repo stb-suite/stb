@@ -1,0 +1,42 @@
+# hBN monolayer, PBE/DZP, 20 Ang of vacuum: single point that saves the Hamiltonian (SaveHS) + bands
+SystemLabel      hbn
+SystemName       hBN-monolayer
+NumberOfAtoms    2
+NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 5 B
+ 2 7 N
+%endblock ChemicalSpeciesLabel
+LatticeConstant  1.0 Ang
+%block LatticeVectors
+  2.5100   0.000000  0.0
+ -1.2550   2.173724  0.0
+  0.0      0.000000 20.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.333333  0.666667  0.5  1
+  0.666667  0.333333  0.5  2
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+Mesh.Cutoff         250 Ry
+%block kgrid.MonkhorstPack
+ 15  0 0 0.0
+  0 15 0 0.0
+  0  0 1 0.0
+%endblock kgrid.MonkhorstPack
+XC.Functional       GGA
+XC.Authors          PBE
+SCF.DM.Tolerance    1.0d-5
+
+SaveHS              true          # hbn.HSX: H and S in real space, what stb-siesta2wtb reads
+
+BandLinesScale      ReciprocalLatticeVectors
+%block BandLines
+  1  0.000000  0.000000 0.0  \Gamma
+ 60  0.500000  0.000000 0.0  M
+ 35  0.333333  0.333333 0.0  K
+ 70  0.000000  0.000000 0.0  \Gamma
+%endblock BandLines

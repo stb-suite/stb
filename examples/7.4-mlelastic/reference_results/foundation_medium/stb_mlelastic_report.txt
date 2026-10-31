@@ -1,0 +1,162 @@
+===== STB-MLELASTIC REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 17:48:44
+Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/si8.fdf
+Mode              : single fit
+Strains           : 7 points in +-1 % per direction (-1, -0.667, -0.333, +0, +0.333, +0.667, +1 %)
+Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200
+Model             : MACE-MP-0 (medium)
+Report file       : ./stb_mlelastic_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si8
+Cell              : a 5.48024, b 5.48024, c 5.48024 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 164.588 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3730 Ang
+Symmetry          : Fd-3m (227), point group m-3m (cubic)
+Constants         : 3D, in GPa
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 medium (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Loaded in         : 0.2 s; float64 (stresses are compared at the 0.01 GPa level)
+
+[3] REFERENCE STATE
+------------------------------------------------------------
+Each model's cell is relaxed (cell + atoms) to its own stress-free minimum before straining.
+--- MACE-MP-0 medium
+Pre-relax         : cell + atoms, max |F| 0.0000 -> 0.0000 eV/Ang in 20 step(s) (converged, --fmax)
+Lattice a, b, c   : 5.48024 5.48024 5.48024 -> 5.45542 5.45542 5.45542 Ang (volume -1.353 %)
+Stress            : pressure -0.976 -> +0.003 GPa; largest component after 0.003 GPa
+
+[4] STRESS-STRAIN FITS
+------------------------------------------------------------
+Per direction: the fitted diagonal constant, R^2 and intercept (stress at zero strain, which should be ~0) of the linear fit, the largest stress reached, and how far the atoms relaxed inside the cell (largest shift from the homogeneous strain; ~0 for atoms at inversion centres).
+--- MACE-MP-0 medium: 6 directions x 7 strains, 84 relaxed cells, 15.4 s
+dir. | column | diagonal (GPa) | R^2      | intercept | max|σ| GPa | max shift Ang | Ang per % | relax steps | fit
+------------------------------------------------------------------------------------------------------------------
+xx   | C11    | 102.90         | 0.999916 | -0.010    | 1.05       | 0.0000        | 0.0000    | 0           | ok 
+yy   | C22    | 102.90         | 0.999916 | -0.010    | 1.05       | 0.0000        | 0.0000    | 0           | ok 
+zz   | C33    | 102.90         | 0.999916 | -0.010    | 1.05       | 0.0000        | 0.0000    | 0           | ok 
+yz   | C44    | 31.31          | 0.999978 | -0.000    | 0.63       | 0.0083        | 0.0083    | 80          | ok 
+xz   | C55    | 31.31          | 0.999978 | +0.000    | 0.63       | 0.0083        | 0.0083    | 80          | ok 
+xy   | C66    | 31.31          | 0.999978 | +0.000    | 0.63       | 0.0083        | 0.0083    | 80          | ok 
+
+[5] TRAINED RANGE
+------------------------------------------------------------
+Strained cells (all directions, relaxed atoms):
+model            | V/atom min | V/atom max | pressure min GPa | pressure max GPa | shortest dist. Ang
+-----------------------------------------------------------------------------------------------------
+MACE-MP-0 medium | 20.0923    | 20.4982    | -0.723           | +0.771           | 2.3544            
+No model card (foundation model): no trained range to compare with.
+
+[6] STIFFNESS TENSOR & CRYSTAL SYMMETRY
+------------------------------------------------------------
+Stiffness C, MACE-MP-0 medium (GPa), Voigt order 1=xx 2=yy 3=zz 4=yz 5=xz 6=xy:
+               j=1       j=2       j=3       j=4       j=5       j=6
+  i=1 |    102.90     60.61     60.61      0.00     -0.00     -0.00
+  i=2 |     60.61    102.90     60.61      0.00     -0.00     -0.00
+  i=3 |     60.61     60.61    102.90      0.00      0.00     -0.00
+  i=4 |      0.00      0.00      0.00     31.31     -0.00      0.00
+  i=5 |     -0.00     -0.00      0.00     -0.00     31.31      0.00
+  i=6 |     -0.00     -0.00     -0.00      0.00      0.00     31.31
+
+C vs C^T          : max |C_ij - C_ji| = 0.000 GPa (C12) [OK] -- reported C is (C + C^T)/2
+Crystal symmetry  : Fd-3m (227), point group m-3m (cubic, 48 rotations, spglib on the pre-relaxed cell)
+Projection        : C averaged over the point group; max |C - C_sym| = 0.000 GPa (0.00 % of the largest constant)
+Independent       : 3 non-zero independent constant(s) under m-3m:
+  C11 = C22 = C33                         102.90 GPa
+  C12 = C13 = C23                          60.61 GPa
+  C44 = C55 = C66                          31.31 GPa
+
+Compliance S = C^-1 (1/TPa), Voigt order 1=xx 2=yy 3=zz 4=yz 5=xz 6=xy:
+               j=1       j=2       j=3       j=4       j=5       j=6
+  i=1 |    17.253    -6.396    -6.396    -0.000     0.000    -0.000
+  i=2 |    -6.396    17.253    -6.396     0.000     0.000     0.000
+  i=3 |    -6.396    -6.396    17.253     0.000    -0.000     0.000
+  i=4 |    -0.000     0.000     0.000    31.940     0.000    -0.000
+  i=5 |     0.000     0.000    -0.000     0.000    31.940    -0.000
+  i=6 |    -0.000     0.000     0.000    -0.000    -0.000    31.940
+
+[7] MECHANICAL STABILITY
+------------------------------------------------------------
+--- MACE-MP-0 medium (Born criteria; Mouhat & Coudert 2014)
+criterion                    | value (GPa) | verdict
+----------------------------------------------------
+smallest eigenvalue of C > 0 | 31.31       | PASS   
+C11 - C12 > 0                | 42.29       | PASS   
+C11 + 2 C12 > 0              | 224.12      | PASS   
+C44 > 0                      | 31.31       | PASS   
+VERDICT           : STABLE
+
+[8] ELASTIC MODULI
+------------------------------------------------------------
+Polycrystalline averages: Voigt assumes uniform strain, Reuss uniform stress; Hill is their mean (Hill 1952).
+average             | B (GPa) | G (GPa) | E (GPa) | Poisson ν
+-------------------------------------------------------------
+Voigt (upper bound) | 74.71   | 27.24   | 72.87   | 0.337    
+Reuss (lower bound) | 74.71   | 26.26   | 70.51   | 0.343    
+Hill (average)      | 74.71   | 26.75   | 71.69   | 0.340    
+
+Pugh ratio B/G    : 2.793 (above ~1.75: ductile, below: brittle; Pugh 1954)
+Cauchy pressure   : C12 - C44 = +29.30 GPa (negative: directional, covalent bonding; positive: metallic)
+Zener ratio       : A = 2 C44 / (C11 - C12) = 1.481 (1 = isotropic)
+Universal anisot. : A^U = 5 G_V/G_R + B_V/B_R - 6 = 0.187 (0 = isotropic; Ranganathan & Ostoja-Starzewski 2008)
+Vickers hardness  : 1.1 GPa (empirical, Chen et al. 2011: 2 (k^2 G)^0.585 - 3, k = G/B)
+Linear compress.  : β_x 4.462, β_y 4.462, β_z 4.462 1/TPa (volume: 13.386 = 1000/B_R)
+
+[9] INTERNAL RELAXATION (clamped vs relaxed ions)
+------------------------------------------------------------
+Clamped ions: the atoms follow the strain homogeneously (no relaxation inside the cell).
+Relaxed ions: the atoms relax at each strained cell -- the physical, measured constants.
+constant        | clamped (GPa) | relaxed (GPa) | relaxation
+------------------------------------------------------------
+C11 = C22 = C33 | 102.90        | 102.90        | -0.0 %    
+C12 = C13 = C23 | 60.61         | 60.61         | -0.0 %    
+C44 = C55 = C66 | 51.25         | 31.31         | -38.9 %   
+Internal relaxation matters for C44 = C55 = C66: a cell with 2+ atoms per primitive cell whose atoms are not all at inversion centres (diamond, zincblende, wurtzite...) relaxes inside the cell under shear.
+
+[10] SOUND VELOCITIES & DEBYE TEMPERATURE
+------------------------------------------------------------
+Density           : 2297.89 kg/m^3 (2.2979 g/cm^3) at the pre-relaxed cell
+Christoffel velocities along Cartesian directions (m/s): the speeds of the three sound waves, eigenvalues of c_ijkl n_j n_l / rho:
+direction | quasi-longitudinal | fast transverse | slow transverse
+------------------------------------------------------------------
+[100]     | 6692               | 3691            | 3691           
+[110]     | 7014               | 3691            | 3033           
+[111]     | 7119               | 3267            | 3267           
+Isotropic (Hill)  : v_l 6931, v_t 3412, mean v_m 3831 m/s (v_m^-3 = (v_l^-3 + 2 v_t^-3)/3)
+Debye temperature : 418.1 K (θ_D = ħ/k_B (6π² n)^(1/3) v_m, n = atoms per volume; Anderson 1963)
+
+[11] DIRECTIONAL ANISOTROPY
+------------------------------------------------------------
+property                         | minimum           | maximum           | max/min
+----------------------------------------------------------------------------------
+Young's modulus E (GPa)          | 57.96 along <100> | 82.40 along <111> | 1.422  
+linear compressibility β (1/TPa) | 4.462             | 4.462             | 1.000  
+Along the Cartesian axes: E[100] 57.96 GPa, E[110] 74.55 GPa, E[111] 82.41 GPa
+
+[12] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+Results           : B 74.7, G 26.8, E 71.7 GPa, ν 0.340, θ_D 418 K, stable
+Stress-strain plot: ./stress_strain.png
+Directional plot  : ./directional_moduli.png
+Anisotropy surface: ./anisotropy_surface.png
+Data              : ./stress_strain.dat
+Data              : ./elastic_tensor.dat
+Data              : ./directional.dat
+Report            : ./stb_mlelastic_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 20.6 s
+
+[13] WARNINGS
+------------------------------------------------------------
+  1. MACE-MP-0 medium: its own equilibrium volume is -1.35 % from the input structure; the constants are at the model's minimum, not at the input lattice.
+Library messages  : 91 distinct message(s) from mace/torch/ase captured, not shown

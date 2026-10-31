@@ -1,0 +1,116 @@
+
+ELASTIC ANALYZER:
+------------------------------------------------------------
+[INFO] Target Log File: siesta.out
+[INFO] Detected dimensionality: 3D (bulk material)
+[INFO] Mode: 3D Bulk (Units: GPa)
+[INFO] Scanning 'relaxed' for 'strain_*' folders...
+[INFO] Detected point group m-3m -- symmetry-equivalent directions will be pooled/reconstructed.
+===== ELASTIC PROPERTIES REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Run directory        : relaxed
+Date/time            : 2026-10-28 20:36:13
+Method               : stress (--symmetry-method basic)
+Mode                 : 3D (GPa)
+Target log file      : siesta.out
+Reference structure  : relaxed/reference_structure.fdf (found)
+strain_* folders found: 14
+Tolerances           : eggbox=5.0%, fit-quality(R^2)=0.995, symprec=0.01, angle-tolerance=5.0 deg
+Plot data directory  : elastic_plots/
+Save gnuplot         : no
+View (matplotlib)    : no
+
+READING FOLDERS:
+   -> relaxed/xx/strain_xx_0.00 : OK
+   -> relaxed/xx/strain_xx_0.33 : OK
+   -> relaxed/xx/strain_xx_0.67 : OK
+   -> relaxed/xx/strain_xx_1.00 : OK
+   -> relaxed/xx/strain_xx_m0.33 : OK
+   -> relaxed/xx/strain_xx_m0.67 : OK
+   -> relaxed/xx/strain_xx_m1.00 : OK
+   -> relaxed/xy/strain_xy_0.00 : OK
+   -> relaxed/xy/strain_xy_0.33 : OK
+   -> relaxed/xy/strain_xy_0.67 : OK
+   -> relaxed/xy/strain_xy_1.00 : OK
+   -> relaxed/xy/strain_xy_m0.33 : OK
+   -> relaxed/xy/strain_xy_m0.67 : OK
+   -> relaxed/xy/strain_xy_m1.00 : OK
+
+[OK] Loaded 14 calculations from 14 folders.
+
+[1] 3D STIFFNESS MATRIX (GPa)
+------------------------------------------------------------
+      j=1      j=2      j=3      j=4      j=5      j=6      
+i=1 |    150.03    56.22    56.22    -0.00    -0.00    -0.00
+i=2 |     56.22   150.03    56.22    -0.00    -0.00    -0.00
+i=3 |     56.22    56.22   150.03    -0.00    -0.00    -0.00
+i=4 |     -0.00    -0.00    -0.00    74.40     0.00     0.00
+i=5 |     -0.00    -0.00    -0.00     0.00    74.40     0.00
+i=6 |     -0.00    -0.00    -0.00     0.00     0.00    74.40
+
+[1b] 3D COMPLIANCE MATRIX (1/GPa)
+------------------------------------------------------------
+      j=1        j=2        j=3        j=4        j=5        j=6        
+i=1 |  8.376e-03 -2.283e-03 -2.283e-03  6.593e-08  6.593e-08  6.593e-08 
+i=2 | -2.283e-03  8.376e-03 -2.283e-03  6.593e-08  6.593e-08  6.593e-08 
+i=3 | -2.283e-03 -2.283e-03  8.376e-03  6.593e-08  6.593e-08  6.593e-08 
+i=4 |  6.593e-08  6.593e-08  6.593e-08  1.344e-02  3.423e-12  3.423e-12 
+i=5 |  6.593e-08  6.593e-08  6.593e-08  3.423e-12  1.344e-02  3.423e-12 
+i=6 |  6.593e-08  6.593e-08  6.593e-08  3.423e-12  3.423e-12  1.344e-02 
+
+[2] MAIN CONSTANTS
+------------------------------------------------------------
+C11:   150.0 GPa  C22:   150.0 GPa  C33:   150.0 GPa  
+C44:    74.4 GPa  C55:    74.4 GPa  C66:    74.4 GPa  
+C12:    56.2 GPa  C13:    56.2 GPa  C23:    56.2 GPa  
+[INFO] Column(s) yy, zz, yz, xz were not computed directly -- reconstructed from a symmetry-equivalent direction (see [INFO]/[DIAGNOSTIC] lines above) via the actual point-group operation, same convention stb-elasticInputs used to skip generating them.
+
+[3] NUMERICAL QUALITY DIAGNOSTICS
+------------------------------------------------------------
+Tensor symmetry (C vs C^T): max |C_ij - C_ji| = 0.003 GPa (i=1, j=4)  [OK]
+Direction fit quality (stress vs. strain):
+  xx: R^2 = 0.999820 | residual stress =   -0.01 GPa  [OK]
+  xy: R^2 = 0.999792 | residual stress =   -0.00 GPa  [OK]
+Eggbox cross-check (stress vs. energy, same data):
+  xx: stress =   150.03 GPa | energy =   148.53 GPa | diff =  1.00%  [OK]
+  xy: stress =    74.40 GPa | energy =    73.74 GPa | diff =  0.88%  [OK]
+[INFO] All checked direction(s) agree within tolerance -- no indication of eggbox contamination in the stress data.
+
+[4] STABILITY AND PROPERTIES
+------------------------------------------------------------
+Young's Modulus (E)  : 150.14 GPa
+Bulk Modulus    (B)  : 87.49 GPa
+Poisson's Ratio (v)  : 0.214
+Universal Anisotropy Index (A^U): 0.260 (0 = isotropic; larger = more anisotropic)
+
+
+VERDICT: STABLE
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Quantity                   | Value     
+---------------------------------------
+C11                        | 150.0 GPa 
+C22                        | 150.0 GPa 
+C33                        | 150.0 GPa 
+C44                        | 74.4 GPa  
+C55                        | 74.4 GPa  
+C66                        | 74.4 GPa  
+C12                        | 56.2 GPa  
+C13                        | 56.2 GPa  
+C23                        | 56.2 GPa  
+E (Young's modulus)        | 150.14 GPa
+B (Bulk modulus)           | 87.49 GPa 
+v (Poisson's ratio)        | 0.214     
+A^U (anisotropy index)     | 0.260     
+Quality warnings (see [3]) | 0         
+VERDICT                    | STABLE    
+
+Full report : elastic_stage2.txt
+Pass --save-gnuplot to also write the fitting data + gnuplot scripts.
+Pass --view to see an interactive matplotlib plot before finishing.
+------------------------------------------------------------
+
+Science is organized knowledge. Wisdom is organized life.

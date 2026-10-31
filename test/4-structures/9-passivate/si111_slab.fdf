@@ -1,0 +1,62 @@
+# Example fixture: Si(111) slab, 4 layers + vacuum (32 atoms), cut via
+# pymatgen.core.surface.SlabGenerator (the same generator stb-slab uses)
+# from bulk diamond-cubic Si (a=5.43 Ang), termination index 0 (the
+# non-polar/symmetric one pymatgen sorts first). Each of the 8 surface
+# atoms is missing exactly 1 bond (coordination 3 instead of the bulk
+# value 4) -- confirmed the missing-bond direction recovered by
+# stb-passivate's vector-sum method sits at exactly 109.47 deg from the
+# existing bonds (the ideal tetrahedral angle). Used to exercise the
+# straightforward auto-passivation path (expect 8 H atoms added, 40 total,
+# no "needs manual attention" warning).
+
+NumberOfSpecies    1
+NumberofAtoms      32
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   -5.43000000
+ -0.00000000   5.43000000   -5.43000000
+ 0.00000000   0.00000000   43.44000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00000000   0.50000000   0.32812500   1
+  0.25000000   0.25000000   0.29687500   1
+  0.00000000   0.00000000   0.32812500   1
+  0.75000000   0.75000000   0.29687500   1
+  0.25000000   0.75000000   0.29687500   1
+  0.50000000   0.50000000   0.32812500   1
+  0.50000000   0.00000000   0.32812500   1
+  0.75000000   0.25000000   0.29687500   1
+  0.00000000   0.50000000   0.45312500   1
+  0.25000000   0.25000000   0.42187500   1
+  0.00000000   0.00000000   0.45312500   1
+  0.75000000   0.75000000   0.42187500   1
+  0.25000000   0.75000000   0.42187500   1
+  0.50000000   0.50000000   0.45312500   1
+  0.50000000   0.00000000   0.45312500   1
+  0.75000000   0.25000000   0.42187500   1
+  0.00000000   0.50000000   0.57812500   1
+  0.25000000   0.25000000   0.54687500   1
+  0.00000000   0.00000000   0.57812500   1
+  0.75000000   0.75000000   0.54687500   1
+  0.25000000   0.75000000   0.54687500   1
+  0.50000000   0.50000000   0.57812500   1
+  0.50000000   0.00000000   0.57812500   1
+  0.75000000   0.25000000   0.54687500   1
+  0.00000000   0.50000000   0.70312500   1
+  0.25000000   0.25000000   0.67187500   1
+  0.00000000   0.00000000   0.70312500   1
+  0.75000000   0.75000000   0.67187500   1
+  0.25000000   0.75000000   0.67187500   1
+  0.50000000   0.50000000   0.70312500   1
+  0.50000000   0.00000000   0.70312500   1
+  0.75000000   0.25000000   0.67187500   1
+%endblock AtomicCoordinatesAndAtomicSpecies

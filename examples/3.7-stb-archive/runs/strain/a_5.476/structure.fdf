@@ -1,0 +1,16 @@
+NumberOfAtoms    2
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant  5.476 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00 0.00 0.00 1
+ 0.25 0.25 0.25 1
+%endblock AtomicCoordinatesAndAtomicSpecies

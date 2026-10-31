@@ -1,0 +1,66 @@
+
+ARCHIVE:
+------------------------------------------------------------
+===== STB-ARCHIVE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.322
+Target            : si_relax
+Mode              : results -- inputs + logs + geometry/trajectory + small electronic outputs (bands, DOS, PDOS, eigenvalues) + post-processing; no grids, restart files, basis tables or H/S/wavefunction binaries
+Always in         : .fdf files, every file they read, pseudopotentials, job scripts
+Never in          : hidden files, earlier archives/backups
+Dry run           : nothing will be written
+
+[1] FOLDER si_relax
+------------------------------------------------------------
+Files             : 45 (2.9 MB)
+Going in          : 36 files (1003.2 KB); left out 9 (1.9 MB)
+The run           : FINISHED, relaxation, SIESTA 5.4.2, E = -230.0355 eV
+
+[2] GOING IN
+------------------------------------------------------------
+input         | size    | why             
+------------------------------------------
+Si.psml       | 84.7 KB | pseudopotential 
+bandlines.txt | 65 B    | read by calc.fdf
+calc.fdf      | 768 B   | SIESTA input    
+structure.fdf | 375 B   | SIESTA input    
+submit.slurm  | 123 B   | job script      
+kind                           | files | size     | e.g.                                                     
+-------------------------------------------------------------------------------------------------------------
+electronic structure           | 8     | 778.0 KB | si.DOS, si.EIG, si.KP, +5                                
+SIESTA log / status            | 16    | 134.4 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+geometry / forces / dynamics   | 5     | 2.5 KB   | si.ANI, si.BONDS, si.BONDS_FINAL, +2                     
+job-scheduler output           | 1     | 1.8 KB   | siesta.err                                               
+restart (SIESTA reads it back) | 1     | 600 B    | si.XV                                                    
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+Subfolders        : analysis -- not included (--recursive takes them)
+
+[3] LEFT OUT
+------------------------------------------------------------
+kind                           | files | size     | why                                    
+-------------------------------------------------------------------------------------------
+basis by-products              | 3     | 762.3 KB | basis table (SIESTA regenerates it)    
+electronic structure           | 1     | 628.3 KB | H/S or wavefunction binary (large)     
+restart (SIESTA reads it back) | 3     | 376.6 KB | restart file (regenerable by rerunning)
+real-space grids               | 2     | 218.4 KB | real-space grid (large)                
+Largest           : si.HSX (628.3 KB), si.DM (375.9 KB), Si.ion (366.3 KB)
+Add back with     : --include .CG .DM .HSX .RHO .STRUCT_NEXT_ITER .grid.nc .ion .ion.nc .ion.xml  (or --mode full)
+
+[4] ARCHIVE
+------------------------------------------------------------
+Dry run           : nothing written (36 files, 1003.2 KB would go in)
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Archived          : 0 of 1 folder(s) (dry run)
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Archived -- science preserved, not deleted.
+

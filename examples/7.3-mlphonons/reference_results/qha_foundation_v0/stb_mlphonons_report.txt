@@ -1,0 +1,106 @@
+===== STB-MLPHONONS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 15:04:20
+Software          : stb 1.9.298, phonopy 4.4.0, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cpu
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/reference_run/si8_mp0.fdf
+Mode              : QHA (volume scan)
+Supercell dim     : 2 x 2 x 2
+Displacement dist.: 0.01 Ang
+q-mesh / path     : 20 x 20 x 20 (DOS, thermal), 101 points per band segment
+Temperatures      : 0 .. 1500 K, step 10
+Model             : MACE-MP-0 (medium)
+Report file       : ./stb_mlphonons_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si8
+Cell              : a 5.4554, b 5.4554, c 5.4554 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 162.362 Ang^3 (20.2952 Ang^3/atom), density 2.2979 g/cm^3
+Shortest distance : 2.3623 Ang
+Supercell         : 2 x 2 x 2 -> 64 atoms; face-to-face widths 10.91, 10.91, 10.91 Ang
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 medium (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Model range       : r_max 6 Ang x 2 interactions = receptive field 12 Ang (force constants can reach that far)
+Loaded in         : 0.1 s
+
+[3] VOLUME SCAN
+------------------------------------------------------------
+Volume range      : -4.0 % to 4.0 % of the input volume (7 points, V_input 162.3619 Ang^3 = 20.2952 Ang^3/atom), isotropic, positions relaxed at each volume
+Cell factor       : 4 (input cell 8 atoms / primitive 2): phonopy's per-primitive-cell F, S, Cv are multiplied by it to match the volumes and energies
+ Strain%   V (Ang^3)   V/atom   a/a_in    E-Emin    f_min    f_max      ZPE F_vib(300K)   time
+                                        meV/atom      THz      THz   meV/at    meV/atom      s
+   -4.00    155.8675  19.4834  0.98648     8.280    0.262   12.080    50.52       17.08    3.9
+   -2.67    158.0323  19.7540  0.99103     3.579    0.268   11.789    49.53       15.92    3.3
+   -1.33    160.1971  20.0246  0.99554     0.872    0.272   11.486    48.47       14.55    3.3
+    0.00    162.3619  20.2952  1.00000     0.000    0.275   11.182    47.36       13.02    3.2
+    1.33    164.5268  20.5658  1.00442     0.812    0.277   10.892    46.28       11.45    3.3
+    2.67    166.6916  20.8364  1.00881     3.165    0.278   10.638    45.30        9.95    3.3
+    4.00    168.8564  21.1071  1.01316     6.933    0.278   10.435    44.47        8.63    2.8
+
+[4] EQUILIBRIUM FIT (T=0, static)
+------------------------------------------------------------
+Equation of state : vinet, 7 volumes, static energies (no vibrations)
+E0 (min. energy)  : -42.736318 eV per cell (-5.342040 eV/atom)
+V0 (eq. volume)   : 162.3703 Ang^3 per cell = 20.2963 Ang^3/atom (+0.005 % vs the input; lattice x 1.00002)
+B0 (bulk modulus) : 74.65 GPa
+B0' (pressure derivative): 5.467
+
+[5] THERMAL EXPANSION SUMMARY
+------------------------------------------------------------
+Zero-point motion : V(0 K) 20.4722 Ang^3/atom vs static 20.2963 (+0.867 %)
+T (K) | V Ang^3/at | a/a0    | alpha_V 1e-6/K | alpha_L 1e-6/K | B_T GPa | Cp kB/at | gamma  | G-Emin meV/at
+------------------------------------------------------------------------------------------------------------
+0     | 20.4722    | 1.00288 | 0.000          | 0.000          | 74.48   | 0.000    | 0.000  | 47.00        
+50    | 20.4718    | 1.00287 | -0.814         | -0.271         | 74.41   | 0.413    | -0.217 | 46.82        
+100   | 20.4733    | 1.00290 | 5.517          | 1.839          | 74.02   | 1.246    | 0.486  | 45.02        
+200   | 20.5030    | 1.00338 | 21.553         | 7.184          | 73.04   | 2.276    | 1.032  | 33.52        
+300   | 20.5551    | 1.00423 | 27.868         | 9.289          | 72.57   | 2.659    | 1.143  | 12.26        
+500   | 20.6805    | 1.00627 | 31.343         | 10.448         | 73.71   | 2.917    | 1.209  | -51.77       
+800   | 20.8690    | 1.00932 | 28.266         | 9.422          | 80.73   | 3.025    | 1.171  | -184.44      
+1000  | 20.9793    | 1.01109 | 24.326         | 8.109          | 89.00   | 3.046    | 1.109  | -290.12      
+1500  | 21.1810    | 1.01432 | 14.318         | 4.773          | 121.57  | 3.044    | 0.895  | -596.85      
+Thermal expansion : alpha_V = (1/V) dV/dT; linear alpha_L = alpha_V / 3 (isotropic scan).
+At T = 300 K:
+  Volume            : 164.4405 Ang^3 per cell
+  Thermal expansion : 2.7868e-05 1/K volumetric, 9.2895e-06 1/K linear
+  Bulk modulus      : 72.57 GPa
+  Gibbs free energy : -42.638247 eV per cell
+At T = 1500 K:
+  Volume            : 169.4478 Ang^3 per cell
+  Thermal expansion : 1.4318e-05 1/K volumetric, 4.7728e-06 1/K linear
+  Bulk modulus      : 121.57 GPa
+  Gibbs free energy : -47.511094 eV per cell
+Negative expansion: below 60 K (minimum alpha_L -0.271 1e-6/K at 50 K) -- modes that soften under compression (gamma < 0, e.g. transverse acoustic) win at low temperature
+
+[6] MODE GRUENEISEN PARAMETERS
+------------------------------------------------------------
+gamma = -d ln f / d ln V, from a straight-line fit of ln f against ln V over the scan; acoustic modes at Gamma are left out.
+q | f at the middle volume (THz)              | gamma per branch                   
+-----------------------------------------------------------------------------------
+Γ |  -0.00  -0.00   0.00  11.18  11.18  11.18 |     -     -     - +1.87 +1.87 +1.87
+X |   4.60   4.60   8.98   8.98  10.14  10.14 | -1.21 -1.21 +1.81 +1.81 +2.68 +2.68
+W |   5.07   5.07   8.46   8.46  10.45  10.45 | -0.90 -0.90 +2.02 +2.02 +2.54 +2.54
+K |   4.30   5.41   8.26   8.83  10.35  10.51 | -1.16 -0.86 +1.82 +2.19 +2.54 +2.49
+L |   3.34   3.34   8.17   9.29  10.72  10.72 | -1.15 -1.15 +0.68 +2.86 +2.24 +2.24
+U |   4.30   5.41   8.26   8.83  10.35  10.51 | -1.16 -0.86 +1.82 +2.19 +2.54 +2.49
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK (1 warning(s), see the last section)
+Results           : V0 20.2963 Ang^3/atom, B0 74.6 GPa, alpha_L(300 K) 9.29 1e-6/K, B_T 72.6 GPa
+QHA plot          : ./qha.png
+Data              : ./qha_thermal_expansion.dat
+Report            : ./stb_mlphonons_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 27.3 s
+
+[8] WARNINGS
+------------------------------------------------------------
+  1. QHA: V(T) leaves the scanned volume range above 1290 K -- the free energy is extrapolated there; widen --strain-range.
+Library messages  : 28 distinct message(s) from mace/torch/phonopy captured, not shown

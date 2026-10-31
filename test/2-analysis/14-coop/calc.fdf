@@ -1,0 +1,52 @@
+
+#SYSTEM_DESCRIPTORS#
+SystemName Sn3O4
+SystemLabel Sn3O4
+
+#BASIS_SET_DEFINITION#
+
+PAO.BasisSize DZP
+PAO.EnergyShift 0.02 Ry
+
+#LATTICE_INFORMATION_AND_KGRID#
+
+%include structure.fdf
+
+kgrid_Monkhorst_Pack [ 2 2 2 ]
+
+#FUNCTIONAL_AND_CONVERGENCE#
+
+MeshCutOff 320 Ry
+FilterCutoff 150 Ry
+MaxSCFIterations 300
+XC.Functional GGA
+XC.Authors PBE
+Spin non-polarized
+SCF.Mixer.Weight 1.0d-1
+SCF.DM.Tolerance 1.0d-6 eV
+ElectronicTemperature 25.0 meV
+Diag.ParallelOverK .true.
+DFTD3 .true.
+
+#READ
+DM.UseSaveDM .true.
+
+#STRUCTURAL_RELAXATION#
+MD.Steps 0
+
+#OUTPUT_OPTIONS#
+WriteCoorInitial .true.
+SaveHS .true.
+
+WriteWaveFunctions T
+WaveFuncKPointsScale ReciprocalLatticeVectors
+%block WaveFuncKPoints
+ 0.0  0.0  0.0
+ 0.5  0.0  0.0
+ 0.0  0.5  0.0
+ 0.0  0.0  0.5
+ 0.5  0.5  0.0
+ 0.5  0.0  0.5
+ 0.0  0.5  0.5
+ 0.5  0.5  0.5
+%endblock WaveFuncKPoints

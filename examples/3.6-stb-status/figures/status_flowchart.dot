@@ -1,0 +1,22 @@
+digraph status {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7, fontsize=9];
+  log    [label="the folder's SIESTA log?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  nolog  [label="NO LOG", fillcolor="#f4f4f4", color="#777777"];
+  fatal  [label="FATAL line in MESSAGES?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  failed [label="FAILED\n(SIESTA's own reason)", fillcolor="#fbe3e1", color="#c0392b"];
+  end    [label="'End of run' in the log or CLOCK?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  fin    [label="FINISHED\nthen: SCF converged every step? relaxation 'Relaxed'?\nforces / stress vs tolerances", fillcolor="#e6f4ea", color="#2e7d32"];
+  age    [label="log written in the last 2 min?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  run    [label="RUNNING?", fillcolor="#fff7e0", color="#b8860b"];
+  stop   [label="STOPPED\n(killed, out of time, crashed)", fillcolor="#fff7e0", color="#b8860b"];
+  log -> nolog [label=" no"];
+  log -> fatal [label=" yes"];
+  fatal -> failed [label=" yes"];
+  fatal -> end [label=" no"];
+  end -> fin [label=" yes"];
+  end -> age [label=" no"];
+  age -> run [label=" yes"];
+  age -> stop [label=" no"];
+}

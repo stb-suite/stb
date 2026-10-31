@@ -1,0 +1,20 @@
+SystemLabel      siesta
+SystemName       siesta
+
+%include structure.fdf
+
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.02 Ry
+
+kgrid.MonkhorstPack   [1  1  1]
+Mesh.CutOff           200  Ry
+FilterCutoff          150  Ry
+
+XC.Functional       GGA
+XC.Authors          PBE
+
+Spin                non-polarized
+
+MD.TypeOfRun         CG
+MD.NumCGsteps        0

@@ -1,0 +1,11 @@
+# stb 5.10 example: relaxation at the 4.17 level of theory, bottom bilayer fixed
+kgrid.MonkhorstPack   [4 4 1]
+MD.TypeOfRun          CG
+MD.NumCGsteps         300
+MD.MaxForceTol        0.05 eV/Ang
+MD.VariableCell       false
+WriteForces           true
+WriteCoorXmol         true
+%block Geometry.Constraints
+  atom 1 2 3 4 5 6 7 8
+%endblock Geometry.Constraints

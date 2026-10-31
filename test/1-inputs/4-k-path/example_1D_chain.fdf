@@ -1,0 +1,24 @@
+# Example fixture: 1D system (infinite linear carbon chain, carbyne-like).
+# Periodic along a (1.30 Ang atom spacing); b and c are vacuum-padded
+# (20 Ang each), far above stb-kgrid's default --vacuum-gap (10 Ang).
+
+NumberOfSpecies    1
+NumberofAtoms      1
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Ang
+
+%block LatticeVectors
+ 1.3000000000    0.0000000000    0.0000000000
+ 0.0000000000   20.0000000000    0.0000000000
+ 0.0000000000    0.0000000000   20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0000000000   10.0000000000   10.0000000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

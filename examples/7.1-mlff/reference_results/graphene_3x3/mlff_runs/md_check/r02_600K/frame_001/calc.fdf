@@ -1,0 +1,32 @@
+%include config_extra.fdf
+
+# Ground-state template for the MLFF example (graphene, 3x3 supercell, 18 atoms).
+# Every training/test folder copies it verbatim and %includes a config_extra.fdf on top
+# that forces a single point -- so a relaxation template would be fine as well.
+SystemLabel      siesta
+SystemName       graphene-3x3
+%include structure.fdf
+
+# Basis and real-space grid (the same in every folder: one energy surface)
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.005 Ry
+Mesh.Cutoff         320 Ry
+
+# k-points: 10x10x1 in the 3x3 cell = the primitive cell's 30x30x1 (k x a ~ 75 Ang).
+# NOT 5x5x1 (= 15x15x1): a grid divisible by 3 holds the Dirac point K exactly, and a
+# coarse one then exaggerates graphene's Kohn anomaly -- the Gamma E2g frequency came out
+# 41-45 THz, amplitude-dependent, against ~47 THz converged (README Section 8.1).
+kgrid.MonkhorstPack   [10  10  1]
+
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                non-polarized
+
+# SCF: a semimetal, smeared at 300 K
+ElectronicTemperature   300 K
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.Mixer.History       6
+SCF.DM.Tolerance        1.0d-5 eV
+Diag.ParallelOverK      .true.

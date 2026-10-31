@@ -1,0 +1,11 @@
+<pdos>
+<nspin>1
+</nspin>
+<norbitals>0
+</norbitals>
+<fermi_energy units="eV">0.0
+</fermi_energy>
+<energy_values units="eV">
+ -1.0 0.0 1.0
+</energy_values>
+</pdos>

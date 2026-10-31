@@ -1,0 +1,215 @@
+===== STB-MLELASTIC REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 18:20:38
+Software          : stb 1.9.300, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cuda (NVIDIA GeForce RTX 3060)
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/si8_rattled.fdf
+Mode              : single fit
+Strains           : 5 points in +-1 % per direction (-1, -0.5, +0, +0.5, +1 %)
+Relaxation        : reference cell + atoms; strained cells atoms relaxed (relaxed-ion constants); --fmax 0.001 eV/Ang, --max-steps 200
+Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_compiled.model)
+Report file       : ./stb_mlelastic_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si8
+Cell              : a 5.48024, b 5.48024, c 5.48024 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 164.588 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3206 Ang
+Symmetry          : P1 (1), point group 1 (triclinic)
+Constants         : 3D, in GPa
+
+[2] MODEL
+------------------------------------------------------------
+
+Model card -- identity
+Card file         : /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.4-mlelastic/../7.2-mlmd/model/mlff_model_compiled.model
+SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
+Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
+Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
+Architecture      : MACE, r_max 6 Ang, 2 interactions, 509,722 parameters; fine-tuned from mace-mp-0 (medium), start: previous
+
+Model card -- level of theory (what the model reproduces)
+Code              : SIESTA 5.4.2
+Settings          : DFTD3 default; ElectronicTemperature 300 K; Mesh.Cutoff 300 Ry
+                    PAO.Basis block none; PAO.BasisSize DZP; PAO.EnergyShift 0.01 Ry
+                    SCF tolerance 1.0e-5; Spin non-polarized; XC.authors PBE
+                    XC.functional GGA; k x a (Ang) 32 32 32
+DFT-D3            : not in the labels (source: none)
+Pseudopotentials  : Si.psml (md5 878e1f00)
+Energy scale      : SIESTA absolute total energy, eV; E0 Si -117.3061 eV (foundation-residual)
+
+Model card -- training data and trained domain
+Training set      : 57 SIESTA configs (51 train / 6 valid), kinds al-md 12, rattle 39, strain 6; 8-64 atoms per config
+Labels            : energy, forces, stress; stress fitted
+Trained range                 | Value                 
+------------------------------------------------------
+elements / dimensionality     | Si / 3D               
+volume per atom (Ang^3)       | 18.722 .. 22.425      
+shortest distance (Ang)       | 1.852 .. 2.347        
+max force per config (eV/Ang) | 0.98 .. 14.70         
+pressure (GPa)                | -5.81 .. 10.48        
+energy per atom (eV)          | -115.0069 .. -114.2504
+atoms per config              | 8 .. 64               
+
+Model card -- recipe and accuracy
+Recipe            : 100 epochs (kept 96), batch 5, lr 0.001, loss energy 1 + forces 100 + stress 10000, E0s foundation-residual, cuda 342 s
+Errors vs SIESTA            | N  | F RMSE (meV/Ang) | E rel (meV/atom) | S RMSE (GPa)
+-------------------------------------------------------------------------------------
+train                       | 51 | 45.8             | 2.03             | 0.148       
+valid (own split)           | 6  | 52.8             | 0.85             | 0.123       
+out-of-sample (committee)   | 16 | 56.0             | 1.85             | 0.127       
+test set (stb-mlffValidate) | 16 | 28.7             | 1.07             | 0.181       
+foundation model, raw       | 57 | 448.4            | 51.08            | 0.848       
+Fine-tuning gain  : 87 % lower force error than the raw foundation model
+  test, rattle    : F 15.3 meV/Ang over 8 configs
+  test, strain    : F 37.6 meV/Ang over 8 configs
+Phonons vs SIESTA : RMSE 1.10 THz (acoustic 1.51, optical 0.37), imaginary q-points: model 0
+MD check r01_800K_2x2x2: F 29.8-38.9 meV/Ang along 8 SIESTA-labelled frames
+Committee spread  : true error ~ 1.3 x spread (per-config correlation +0.75)
+Verdict (4.17.3)  : STOP (validated 2026-10-24T11:00:18, 16 test configs)
+
+Model card -- stability, speed and usage
+Stability (4.17.2): OK -- 64 atoms, T mean 285 K, NVE drift 0.003 meV/atom/ps
+Speed (4.17.2)    : 35.2 ms/step for 64 atoms on cuda
+Recommended dtype : geometry optimization float64, molecular dynamics float32
+  - Energies are SIESTA absolute total energies (eV, E0s fitted to them): compare ONLY energy differences between structures of the same elements -- never mix them with another model's absolute energies.
+  - Valid for Si only; any other element is outside the training data.
+  - Single-element training set: E0 and the mean interaction energy cannot be separated; only energy differences between configurations of this element are meaningful.
+  - Lowest validation force error of its committee.
+  - Run geometry optimisation in float64 and MD in float32 (the suite's convention).
+Trained with      : stb 1.9.292, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0, python 3.12.13, siesta 5.4.2
+Loaded in         : 0.4 s; float64 (stresses are compared at the 0.01 GPa level)
+
+[3] REFERENCE STATE
+------------------------------------------------------------
+Each model's cell is relaxed (cell + atoms) to its own stress-free minimum before straining.
+--- fine-tuned
+Pre-relax         : cell + atoms, max |F| 0.8503 -> 0.0007 eV/Ang in 49 step(s) (converged, --fmax)
+Lattice a, b, c   : 5.48024 5.48024 5.48024 -> 5.47970 5.47970 5.47971 Ang (volume -0.029 %)
+Stress            : pressure +0.107 -> -0.006 GPa; largest component after 0.006 GPa
+
+[4] STRESS-STRAIN FITS
+------------------------------------------------------------
+Per direction: the fitted diagonal constant, R^2 and intercept (stress at zero strain, which should be ~0) of the linear fit, the largest stress reached, and how far the atoms relaxed inside the cell (largest shift from the homogeneous strain; ~0 for atoms at inversion centres).
+--- fine-tuned: 6 directions x 5 strains, 30 relaxed cells, 11.4 s
+dir. | column | diagonal (GPa) | R^2      | intercept | max|σ| GPa | max shift Ang | Ang per % | relax steps | fit
+------------------------------------------------------------------------------------------------------------------
+xx   | C11    | 144.87         | 0.999962 | -0.001    | 1.46       | 0.0000        | 0.0000    | 0           | ok 
+yy   | C22    | 144.87         | 0.999962 | -0.001    | 1.46       | 0.0000        | 0.0000    | 0           | ok 
+zz   | C33    | 144.87         | 0.999962 | -0.001    | 1.46       | 0.0000        | 0.0000    | 0           | ok 
+yz   | C44    | 65.47          | 0.999997 | +0.000    | 1.31       | 0.0079        | 0.0079    | 74          | ok 
+xz   | C55    | 65.47          | 0.999997 | -0.000    | 1.31       | 0.0079        | 0.0079    | 74          | ok 
+xy   | C66    | 65.47          | 0.999997 | +0.000    | 1.31       | 0.0079        | 0.0079    | 74          | ok 
+
+[5] TRAINED RANGE
+------------------------------------------------------------
+Strained cells (all directions, relaxed atoms):
+model      | V/atom min | V/atom max | pressure min GPa | pressure max GPa | shortest dist. Ang
+-----------------------------------------------------------------------------------------------
+fine-tuned | 20.3618    | 20.7732    | -0.925           | +0.949           | 2.3648            
+
+fine-tuned against its model card's trained range:
+quantity                | trained          | this run         | verdict
+-----------------------------------------------------------------------
+volume per atom (Ang^3) | 18.722 .. 22.425 | 20.362 .. 20.773 | inside 
+pressure (GPa)          | -5.81 .. 10.48   | -0.92 .. +0.95   | inside 
+shortest distance (Ang) | >= 1.852         | min 2.365        | inside 
+
+[6] STIFFNESS TENSOR & CRYSTAL SYMMETRY
+------------------------------------------------------------
+Stiffness C, fine-tuned (GPa), Voigt order 1=xx 2=yy 3=zz 4=yz 5=xz 6=xy:
+               j=1       j=2       j=3       j=4       j=5       j=6
+  i=1 |    144.87     68.15     68.15     -0.00      0.00     -0.00
+  i=2 |     68.15    144.87     68.15     -0.00      0.00     -0.00
+  i=3 |     68.15     68.15    144.87     -0.00      0.00     -0.00
+  i=4 |     -0.00     -0.00     -0.00     65.47     -0.00      0.00
+  i=5 |      0.00      0.00      0.00     -0.00     65.47     -0.00
+  i=6 |     -0.00     -0.00     -0.00      0.00     -0.00     65.47
+
+C vs C^T          : max |C_ij - C_ji| = 0.003 GPa (C35) [OK] -- reported C is (C + C^T)/2
+Crystal symmetry  : Fd-3m (227), point group m-3m (cubic, 48 rotations, spglib on the pre-relaxed cell)
+Projection        : C averaged over the point group; max |C - C_sym| = 0.001 GPa (0.00 % of the largest constant)
+Independent       : 3 non-zero independent constant(s) under m-3m:
+  C11 = C22 = C33                         144.87 GPa
+  C12 = C13 = C23                          68.15 GPa
+  C44 = C55 = C66                          65.47 GPa
+
+Compliance S = C^-1 (1/TPa), Voigt order 1=xx 2=yy 3=zz 4=yz 5=xz 6=xy:
+               j=1       j=2       j=3       j=4       j=5       j=6
+  i=1 |     9.876    -3.159    -3.159     0.000    -0.000     0.000
+  i=2 |    -3.159     9.876    -3.159     0.000    -0.000     0.000
+  i=3 |    -3.159    -3.159     9.876     0.000    -0.000     0.000
+  i=4 |     0.000     0.000     0.000    15.274     0.000    -0.000
+  i=5 |    -0.000    -0.000    -0.000     0.000    15.274     0.000
+  i=6 |     0.000     0.000     0.000    -0.000     0.000    15.274
+
+[7] MECHANICAL STABILITY
+------------------------------------------------------------
+--- fine-tuned (Born criteria; Mouhat & Coudert 2014)
+criterion                    | value (GPa) | verdict
+----------------------------------------------------
+smallest eigenvalue of C > 0 | 65.47       | PASS   
+C11 - C12 > 0                | 76.72       | PASS   
+C11 + 2 C12 > 0              | 281.17      | PASS   
+C44 > 0                      | 65.47       | PASS   
+VERDICT           : STABLE
+
+[8] ELASTIC MODULI
+------------------------------------------------------------
+Polycrystalline averages: Voigt assumes uniform strain, Reuss uniform stress; Hill is their mean (Hill 1952).
+average             | B (GPa) | G (GPa) | E (GPa) | Poisson ν
+-------------------------------------------------------------
+Voigt (upper bound) | 93.72   | 54.62   | 137.22  | 0.256    
+Reuss (lower bound) | 93.72   | 51.04   | 129.59  | 0.270    
+Hill (average)      | 93.72   | 52.83   | 133.43  | 0.263    
+
+Pugh ratio B/G    : 1.774 (above ~1.75: ductile, below: brittle; Pugh 1954)
+Cauchy pressure   : C12 - C44 = +2.68 GPa (negative: directional, covalent bonding; positive: metallic)
+Zener ratio       : A = 2 C44 / (C11 - C12) = 1.707 (1 = isotropic)
+Universal anisot. : A^U = 5 G_V/G_R + B_V/B_R - 6 = 0.351 (0 = isotropic; Ranganathan & Ostoja-Starzewski 2008)
+Vickers hardness  : 7.4 GPa (empirical, Chen et al. 2011: 2 (k^2 G)^0.585 - 3, k = G/B)
+Linear compress.  : β_x 3.557, β_y 3.557, β_z 3.557 1/TPa (volume: 10.670 = 1000/B_R)
+
+[9] SOUND VELOCITIES & DEBYE TEMPERATURE
+------------------------------------------------------------
+Density           : 2267.47 kg/m^3 (2.2675 g/cm^3) at the pre-relaxed cell
+Christoffel velocities along Cartesian directions (m/s): the speeds of the three sound waves, eigenvalues of c_ijkl n_j n_l / rho:
+direction | quasi-longitudinal | fast transverse | slow transverse
+------------------------------------------------------------------
+[100]     | 7993               | 5373            | 5373           
+[110]     | 8709               | 5373            | 4113           
+[111]     | 8935               | 4572            | 4572           
+Isotropic (Hill)  : v_l 8509, v_t 4827, mean v_m 5367 m/s (v_m^-3 = (v_l^-3 + 2 v_t^-3)/3)
+Debye temperature : 583.2 K (θ_D = ħ/k_B (6π² n)^(1/3) v_m, n = atoms per volume; Anderson 1963)
+
+[10] DIRECTIONAL ANISOTROPY
+------------------------------------------------------------
+property                         | minimum            | maximum            | max/min
+------------------------------------------------------------------------------------
+Young's modulus E (GPa)          | 101.26 along <100> | 159.28 along <111> | 1.573  
+linear compressibility β (1/TPa) | 3.556              | 3.557              | 1.000  
+Along the Cartesian axes: E[100] 101.26 GPa, E[110] 139.34 GPa, E[111] 159.31 GPa
+
+[11] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Results           : B 93.7, G 52.8, E 133.4 GPa, ν 0.263, θ_D 583 K, stable
+Stress-strain plot: ./stress_strain.png
+Directional plot  : ./directional_moduli.png
+Anisotropy surface: ./anisotropy_surface.png
+Data              : ./stress_strain.dat
+Data              : ./elastic_tensor.dat
+Data              : ./directional.dat
+Report            : ./stb_mlelastic_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 17.0 s
+
+[12] WARNINGS
+------------------------------------------------------------
+  none
+Library messages  : 38 distinct message(s) from mace/torch/ase captured, not shown

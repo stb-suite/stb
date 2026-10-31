@@ -1,0 +1,9 @@
+# Written by stb-mlneb -- %included first, so it wins over calc.fdf
+kgrid.MonkhorstPack [3 3 3]
+NumberOfAtoms 63
+
+# stb-mlneb: single-point evaluation of a NEB image (no relaxation)
+MD.TypeOfRun          CG
+MD.Steps              0
+MD.NumCGsteps         0
+MD.VariableCell       false

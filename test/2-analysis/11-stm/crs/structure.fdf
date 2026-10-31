@@ -1,0 +1,28 @@
+# Structure fetched by stb-fetch from OPTIMADE provider 'twodmatpedia' (id: 2dm-2617).
+# Formula: CrS (4 atoms).
+# Reduced to the primitive unit cell after fetching.
+
+NumberOfSpecies    2
+NumberofAtoms      4
+
+%block ChemicalSpeciesLabel
+ 1   24   Cr
+ 2   16   S
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 3.44516409   0.00000000   0.00000000
+ 0.00000000   3.44516409   0.00000000
+ 0.00000000   0.00000000   23.35462700
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.50000000   0.00000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.50000000   0.00000000   0.06585502   2
+  0.00000000   0.50000000   0.93414498   2
+%endblock AtomicCoordinatesAndAtomicSpecies

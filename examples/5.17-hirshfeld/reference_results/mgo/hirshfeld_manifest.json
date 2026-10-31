@@ -1,0 +1,19 @@
+{
+  "schema": "hirshfeld_manifest_v2",
+  "combined_dir": "combined",
+  "combined_structure": "combined/structure.fdf",
+  "mesh_cutoff": 400.0,
+  "vacuum_box": 20.0,
+  "species": [
+    {
+      "symbol": "Mg",
+      "z_num": 12,
+      "neutral_folder": "neutral/Mg"
+    },
+    {
+      "symbol": "O",
+      "z_num": 8,
+      "neutral_folder": "neutral/O"
+    }
+  ]
+}

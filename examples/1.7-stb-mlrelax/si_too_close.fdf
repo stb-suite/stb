@@ -1,0 +1,35 @@
+# Bulk Si (diamond cubic, conventional 8-atom cell), CORRECT lattice
+# constant (5.43 Ang), but atom index 1 was mis-typed at (0.01, 0.01, 0.01)
+# instead of its correct (0.25, 0.25, 0.25) -- sits ~0.09 Ang from the atom
+# at the origin, far inside the structure-validation MIN_ATOM_DISTANCE_ANG
+# (0.5 Ang) threshold. A deliberately malformed structure, to demonstrate
+# stb-mlrelax's [2] STRUCTURE VALIDATION section actually catching a bad
+# input before relaxing it.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   0.00000000
+ 0.00000000   5.43000000   0.00000000
+ 0.00000000   0.00000000   5.43000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.01000000   0.01000000   0.01000000   1
+  0.00000000   0.00000000   0.00000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

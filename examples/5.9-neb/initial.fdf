@@ -1,0 +1,50 @@
+# NEB example fixture -- "initial" endpoint: a single H atom adsorbed
+# ontop of one carbon of a 3x3 graphene supercell (18 C). Paired with
+# final.fdf, same lattice and composition, H ontop of the NEAREST-
+# NEIGHBOR carbon instead -- a genuine (if small/unconverged) surface-
+# diffusion hop, not an arbitrary displacement. Built from structure.fdf
+# via `stb-supercell -d 3 3 1` then `stb-adsorb --adsorbate H --site-type
+# ontop` (Section 3 of the README walks through this by hand). Treated
+# by this walkthrough AS IF a real SIESTA relaxation had already
+# converged here (Section 2 of the README explains why stb-neb requires
+# that, and what happens if it isn't true yet).
+
+NumberOfSpecies    2
+NumberofAtoms      19
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+ 2   1   H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  7.3800000000   0.0000000000   0.0000000000
+ -3.6900000000   6.3912673200   0.0000000000
+  0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.000000000   0.333333333   0.500000000   1
+ 0.000000000   0.666666667   0.500000000   1
+ 0.333333333   0.000000000   0.500000000   1
+ 0.333333333   0.333333333   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+ 0.666666667   0.000000000   0.500000000   1
+ 0.666666667   0.333333333   0.500000000   1
+ 0.666666667   0.666666667   0.500000000   1
+ 0.111111111   0.222222222   0.500000000   1
+ 0.111111111   0.555555556   0.500000000   1
+ 0.111111111   0.888888889   0.500000000   1
+ 0.444444444   0.222222222   0.500000000   1
+ 0.444444444   0.555555556   0.500000000   1
+ 0.444444444   0.888888889   0.500000000   1
+ 0.777777778   0.222222222   0.500000000   1
+ 0.777777778   0.555555556   0.500000000   1
+ 0.777777778   0.888888889   0.500000000   1
+ 0.000000000   0.000000000   0.600000000   2
+%endblock AtomicCoordinatesAndAtomicSpecies

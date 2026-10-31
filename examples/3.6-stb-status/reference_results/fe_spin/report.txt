@@ -1,0 +1,75 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project/fe_spin
+
+[1] RUN
+------------------------------------------------------------
+Folder            : project/fe_spin
+SystemLabel       : fe
+Input .fdf        : project/fe_spin/calc.fdf
+Log               : project/fe_spin/calc.out (SIESTA 5.4.2)
+State             : FINISHED
+Processes         : 4 MPI
+Started           : 30-OCT-2026  20:42:36
+Ended             : 30-OCT-2026  20:43:08
+Wall time         : 32.3 s (CLOCK)
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 1 (Fe)
+Cell (last)       : a = 2.4509, b = 2.4509, c = 2.4509 Ang, V = 11.3326 Ang^3
+Electrons         : 16
+Spin              : collinear
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+k-points          : 560
+Mesh cutoff       : 300 Ry required, 397.5 Ry used
+
+[3] PROGRESS
+------------------------------------------------------------
+Run type          : single point (Single-point calculation)
+
+[4] SCF
+------------------------------------------------------------
+Iterations        : 31 in 1 step(s); per step min 31, mean 31.0, max 31
+Converged steps   : 1 of 1
+Tolerance         : dDmax < 0.0001, at most 300 iterations (failure aborts the run)
+
+[5] RESULTS
+------------------------------------------------------------
+Total energy      : -3408.673965 eV
+Band structure    : -561.316584 eV
+Fermi level       : -3.332134 eV
+Energy per atom   : -3408.673965 eV
+Band gap (.EIG)   : metallic on the SCF k-mesh (560 k-points)
+Spin moment       : 2.14073 mu_B
+Max force         : 0.000000 eV/Ang (net 0.000000)
+Pressure          : -61.4659 kBar (-6.1466 GPa)
+Log warnings      : 4 line(s), 4 distinct -- e.g. # WARNING: This information might be incomplete!
+
+[6] FILES & NEXT STEPS
+------------------------------------------------------------
+Folder size       : 467.2 KB in 9 files
+output         | files                | read by                     
+--------------------------------------------------------------------
+eigenvalues    | fe.EIG               | band gap here; stb-dos (3.2)
+final geometry | fe.STRUCT_OUT, fe.XV | stb-translate (6.1)         
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Verdict           : FINISHED -- result usable
+Folders inspected : 1
+
+[8] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Status check complete.
+

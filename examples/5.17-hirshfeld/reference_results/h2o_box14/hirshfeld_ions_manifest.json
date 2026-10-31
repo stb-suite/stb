@@ -1,0 +1,25 @@
+{
+  "schema": "hirshfeld_ions_manifest_v2",
+  "hirshfeld_manifest": "hirshfeld_manifest.json",
+  "species": [
+    {
+      "symbol": "O",
+      "cation_folder": "ions/O/cation",
+      "anion_folder": "ions/O/anion",
+      "cation_zero_density": false,
+      "pass0_charges": [
+        -0.25547485621270205
+      ]
+    },
+    {
+      "symbol": "H",
+      "cation_folder": null,
+      "anion_folder": "ions/H/anion",
+      "cation_zero_density": true,
+      "pass0_charges": [
+        0.1277375592615888,
+        0.12773729235639553
+      ]
+    }
+  ]
+}

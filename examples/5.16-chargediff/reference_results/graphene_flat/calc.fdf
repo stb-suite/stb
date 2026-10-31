@@ -1,0 +1,6 @@
+MD.TypeOfRun CG
+MD.Steps 0
+MD.VariableCell false
+Slab.DipoleCorrection .true.
+MeshCutoff 300 Ry
+%include template.fdf

@@ -1,0 +1,19 @@
+digraph wtb {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7];
+  inp   [label="-i calc.fdf  (SystemLabel -> <label>.HSX)\n-o calc.out or -f E_F"];
+  run   [label="[1] SIESTA run: .HSX (version, E_F), log\n(electrons, spin, E_F, finished)"];
+  read  [label="read geometry + H + S (sisl)\nH shifted by -E_F S when the .HSX stores E_F"];
+  sys   [label="[2] system: cell, dimensionality,\nbasis per species"];
+  ham   [label="[3] Hamiltonian: spin -> NP / SP / SOC,\nnsc cells, sparsity, hopping range, S(Gamma)"];
+  ef    [label="[4] Fermi level vs the zero of H,\nband edges from <label>.EIG, occupied states"];
+  dry   [label="--dry-run?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  write [label="[5] write basis_set-<S>.basis, tb-<S>.ham\n(unchanged writer)"];
+  check [label="[6] read tb-<S>.ham back: H(k), S(k) -> eigenvalues\nvs sisl, judged within 5 eV of E_F"];
+  end   [label="[7] for WanTiBEXOS   [8] summary   [9] warnings", fillcolor="#f4f4f4", color="#777777"];
+  inp -> run -> read -> sys -> ham -> ef -> dry;
+  dry -> write [label=" no", fontsize=9];
+  dry -> end [label=" yes", fontsize=9];
+  write -> check -> end;
+}

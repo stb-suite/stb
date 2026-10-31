@@ -1,0 +1,19 @@
+digraph stbcube {
+  rankdir=TB; nodesep=0.3; ranksep=0.32;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7];
+  find   [label="<label>.<TYPE>\n(-l, or the only one in the folder)"];
+  grid   [label="[1] read the grid (sisl)\nmesh, plane spacing, voxel, effective cutoff, cell"];
+  log    [label="[2] SIESTA log (if any)\nelectrons, spin, mesh, cutoff, dipole, spin moment"];
+  spin   [label="[3] spin channels\ntotal / up / down / diff, integrals vs the spin moment"];
+  geom   [label="[4] geometry: <label>.XV\ncell vs grid, atoms, Z_val, vacuum axes"];
+  vals   [label="[5] values in the cube's unit\nextremes + where, integral vs expected,\nisosurface levels, vacuum planes, dipole"];
+  dry    [label="--dry-run?", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  write  [label="[6] write the cube\nBohr; e/Bohr^3 or eV/Ry/Ha"];
+  check  [label="read it back (ASE)\nvalues, cell, atoms, integral"];
+  end    [label="[7] summary   [8] warnings", fillcolor="#f4f4f4", color="#777777"];
+  find -> grid -> log -> spin -> geom -> vals -> dry;
+  dry -> write [label=" no", fontsize=9];
+  dry -> end [label=" yes", fontsize=9];
+  write -> check -> end;
+}

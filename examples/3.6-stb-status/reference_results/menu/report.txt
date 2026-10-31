@@ -1,0 +1,37 @@
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : project (recursive) -- 9 folder(s)
+
+[1] FOLDERS
+------------------------------------------------------------
+folder         | state    | type                     | steps | SCF | E (eV)     | dE (meV/atom) | max F | P (kBar) | gap (eV) | wall  
+--------------------------------------------------------------------------------------------------------------------------------------
+bulk_sp        | FINISHED | single point             | 1     | ok  | -230.0353  | 0.1           | 0.007 | 2.1      | 0.935    | 2.0 s 
+fe_spin        | FINISHED | single point             | 1     | ok  | -3408.6740 | 0.0           | 0.000 | -61.5    | metal    | 32.3 s
+md             | FINISHED | MD                       | 20    | ok  | -918.5653  | -             | 2.289 | 2.3      | 1.800    | 34.4 s
+relax          | FINISHED | relaxation (relaxed)     | 8     | ok  | -230.0355  | 0.0           | 0.002 | -0.9     | 0.941    | 11.8 s
+relax_short    | FINISHED | relaxation (not relaxed) | 3     | ok  | -229.9527  | 41.4          | 0.932 | 27.4     | 0.792    | 6.1 s 
+scf_fail       | FAILED   | single point             | 1     | NO  | -          | -             | -     | -        | -        | -     
+strain/a_5.40  | FINISHED | single point             | 1     | ok  | -230.0124  | 11.6          | 0.007 | 43.4     | 0.864    | 2.0 s 
+strain/a_5.476 | FINISHED | single point             | 1     | ok  | -230.0353  | 0.1           | 0.007 | 2.1      | 0.935    | 2.0 s 
+strain/a_5.55  | FINISHED | single point             | 1     | ok  | -230.0192  | 8.1           | 0.007 | -31.5    | 1.002    | 1.8 s 
+dE: energy per atom above the lowest folder with the same composition and level of theory (XC, spin, mesh cutoff, basis); not for MD
+steps: SCF steps, relaxation moves or MD steps; max F in eV/Ang; P = last pressure
+States            : 1 FAILED, 8 FINISHED
+
+[2] SUMMARY & FILES
+------------------------------------------------------------
+Folders inspected : 9
+
+[3] WARNINGS
+------------------------------------------------------------
+  1. project/relax_short: relaxation NOT converged: SIESTA wrote 'Final (unrelaxed)' coordinates after 3 of 3 moves -- raise MD.NumCGsteps or restart from the .XV.
+  2. project/scf_fail: SIESTA stopped with an error: SCF_NOT_CONV: SCF did not converge in maximum number of steps (required).
+  3. project/scf_fail: SCF not converged in 1 step(s) (step 1).
+
+------------------------------------------------------------
+Status check complete.

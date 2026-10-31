@@ -1,0 +1,94 @@
+
+AIMD TRAJECTORY CONVERTER:
+------------------------------------------------------------
+===== STB-ANI2TRAJ REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.318 / 0.16.4
+Input             : si.ANI
+Output            : si_traj.xyz (xyz)
+Frames kept       : skip 0, then every 1
+Unwrap PBC        : yes
+
+[1] INPUTS
+------------------------------------------------------------
+Trajectory        : si.ANI (37.0 KB, 113 frames x 8 atoms)
+Input .fdf        : ./calc.fdf
+SIESTA log        : ./calc.out (SIESTA 5.4.2), 114 MD steps, NOT finished
+Thermodynamics    : si.MDE (113 rows: T, E_KS, E_tot, V, P per step)
+Last geometry     : si.XV
+Dynamics          : Verlet MD run -> NVE (velocity Verlet)
+Time step         : 1 fs
+Temperatures      : initial 600.0 K
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 8 (Si8)
+Cell (frame 1)    : a = 5.4760, b = 5.4760, c = 5.4760 Ang, V = 164.206 Ang^3
+Density           : 2.2721 g/cm^3 (0.0487 atoms/Ang^3)
+Dimensionality    : 3D (bulk material)
+
+[3] FRAMES AND MD STEPS
+------------------------------------------------------------
+Frames in .ANI    : 113
+MD steps in log   : 114 (steps 1-114)
+Rows in .MDE      : 113 (steps 1-113)
+Frame <-> step    : frame k is the geometry AFTER MD step k (= the geometry of step k+1) -- checked against the log's per-step coordinates (WriteCoorStep), largest difference 5.2e-07 Ang
+                    each frame gets the cell, energies and temperature of ITS step
+Time span         : 1 to 113 fs (0.1120 ps; t = 0 at the input geometry)
+Last frame vs .XV : 4.9e-07 Ang apart (same geometry)
+Kept              : 113 frames (indices 1..113 of 113, every 1)
+
+[4] LATTICE
+------------------------------------------------------------
+Source            : per frame, from the log's 'outcell' block of each frame's MD step
+Cell              : constant over the frames kept
+
+[5] THERMODYNAMICS
+------------------------------------------------------------
+Per frame kept, from the .MDE at each frame's own MD step (drift = slope of a linear fit, per ps):
+      | unit  | first     | last      | mean      | std    | min       | max       | drift /ps 
+-----------------------------------------------------------------------------------------------
+T     | K     | 596.19    | 321.20    | 292.56    | 146.05 | 42.97     | 596.19    | -3.7e+02  
+E_KS  | eV    | -919.1056 | -918.8564 | -918.8305 | 0.1324 | -919.1056 | -918.6042 | +0.3366   
+E_tot | eV    | -918.5662 | -918.5658 | -918.5658 | 0.0002 | -918.5662 | -918.5654 | +0.0005231
+V     | Ang^3 | 164.206   | 164.206   | 164.206   | 0.000  | 164.206   | 164.206   | -6.57e-13 
+P     | kBar  | -2.17     | -0.36     | -0.02     | 1.45   | -2.37     | 2.70      | +1.3      
+T fluctuation     : 0.499 relative; canonical expectation sqrt(2/(3N-3)) = 0.309 for 8 atoms
+E_tot drift (NVE) : +0.065 meV/atom/ps; fluctuation 0.026 meV/atom
+                    (stb-aimdAnalysis, menu 3.18, does RDF, MSD and VDOS on the same trajectory)
+
+[6] MOTION
+------------------------------------------------------------
+Largest step      : 0.0108 Ang between consecutive frames (Si6, frames 1->2) -> up to 1079 m/s
+Boundary jumps    : 0 coordinate jumps of more than half a cell between consecutive frames
+Outside the cell  : 290 atom-frames with a fractional coordinate outside [0, 1)
+                    positions are not wrapped into the cell, so atoms move continuously already: --unwrap changes nothing here
+Displacement, first -> last frame kept (unwrapped):
+species | atoms | RMS (Ang) | max (Ang)
+---------------------------------------
+Si      | 8     | 0.055     | 0.071    
+Closest approach  : 2.200 Ang (Si1-Si6, frame 16)
+
+[7] OUTPUT
+------------------------------------------------------------
+File              : si_traj.xyz (69.9 KB, 113 frames, xyz)
+Per frame         : cell, positions unwrapped; E_KS, E_tot, MD_step, Pressure_kBar, Temp_ion, Time, Volume
+Read-back check   : read again with ASE -- ok
+                    113 frames; positions to 6.9e-18 Ang, cell parameters to 0.0e+00 (the xyz writer's precision)
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Run               : Si8, NVE (velocity Verlet), 113 frames, dt 1 fs
+Written           : si_traj.xyz (113 frames)
+Open with         : ovito si_traj.xyz  (VMD reads it without the cell)
+
+[9] WARNINGS
+------------------------------------------------------------
+  1. ./calc.out did not finish: the run may still be going, or it stopped -- the last frames may be missing from the log.
+
+------------------------------------------------------------
+Trajectory converted -- now go make a nice movie of it.
+

@@ -1,0 +1,5 @@
+# Internal (ionic) relaxation at the imposed strain -- the cell stays fixed. Relaxed-ion elastic constants.
+MD.TypeOfRun       CG
+MD.NumCGsteps      100
+MD.MaxForceTol     0.001 eV/Ang
+MD.VariableCell    false

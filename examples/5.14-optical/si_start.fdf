@@ -1,0 +1,24 @@
+# Bulk silicon, diamond structure, primitive 2-atom FCC cell, at the EXPERIMENTAL lattice
+# constant 5.431 Ang -- the starting point of step 1 (the relaxation that produces
+# structure.fdf). Not the input of stb-optical itself (that needs a relaxed structure).
+SystemName Si diamond (primitive cell)
+SystemLabel siesta
+
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+ 1  14  Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 5.431 Ang
+%block LatticeVectors
+  0.0  0.5  0.5
+  0.5  0.0  0.5
+  0.5  0.5  0.0
+%endblock LatticeVectors
+
+NumberOfAtoms 2
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00  0.00  0.00  1
+ 0.25  0.25  0.25  1
+%endblock AtomicCoordinatesAndAtomicSpecies

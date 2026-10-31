@@ -1,0 +1,17 @@
+# Si, 2-atom primitive cell, lattice in Bohr (as phonopy's SIESTA writer does)
+NumberOfSpecies 1
+NumberOfAtoms 2
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Bohr
+%block LatticeVectors
+  0.000000 5.178074 5.178074
+  5.178074 0.000000 5.178074
+  5.178074 5.178074 0.000000
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.00 0.00 0.00 1
+ 0.25 0.25 0.25 1
+%endblock AtomicCoordinatesAndAtomicSpecies

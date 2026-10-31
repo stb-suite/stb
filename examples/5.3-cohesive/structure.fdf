@@ -1,0 +1,40 @@
+# Real, relaxed GaAs, 2 atoms/cell (1 Ga + 1 As), zincblende, primitive
+# rhombohedral setting -- fetched from the Crystallography Open Database via
+# stb-fetch (--unitcell primitive) and relaxed with SIESTA. This is the exact
+# structure used in this workflow's real, physically-verified investigation
+# (README section 4): the uncorrected cohesive energy comes out badly
+# over-bound (BSSE's textbook signature), the BSSE correction fixes most of
+# it, and a real vacuum/box-size bug -- found and fixed while investigating
+# why the correction wasn't converging with --bsse-cutoff -- lives entirely
+# in this same real dataset's story.
+#
+# Note the near-zero-but-not-exactly-zero terms below (e.g. 0.00395996 where
+# an ideal zincblende cell would have exactly 0): this is a real relaxed
+# structure, not a hand-typed ideal one -- small numerical asymmetry like
+# this is normal and is explained in section 4 (it's also why stb-cohesive's
+# own symmetry detector reports the trigonal subgroup R3m instead of the
+# ideal cubic F-43m here, with zero practical effect on this calculation
+# since each species has only 1 atom in the cell either way).
+
+NumberOfSpecies    2
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   31   Ga
+ 2   33   As
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 0.00395996   2.86331622   2.86331617
+ 2.86331622   0.00395996   2.86331617
+ 2.86331622   2.86331622   0.00395996
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00014953   0.00014953   0.00014953   1
+  0.24984602   0.24984602   0.24984602   2
+%endblock AtomicCoordinatesAndAtomicSpecies

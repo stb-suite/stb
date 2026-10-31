@@ -1,0 +1,82 @@
+
+STATUS:
+------------------------------------------------------------
+===== STB-STATUS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.320
+Target            : stopped
+
+[1] RUN
+------------------------------------------------------------
+Folder            : stopped
+SystemLabel       : si
+Input .fdf        : stopped/calc.fdf
+Log               : stopped/calc.out (SIESTA 5.4.2)
+State             : STOPPED
+                    no end of run, log last written <age> ago -- killed, out of time, or crashed
+Processes         : 4 MPI
+Started           : 30-OCT-2026  20:42:03
+Ended             : -
+Wall time         : 11.8 s (CLOCK)
+
+[2] SYSTEM
+------------------------------------------------------------
+Atoms             : 2 (Si2)
+Cell (last)       : a = 3.8742, b = 3.8742, c = 3.8742 Ang, V = 41.1978 Ang^3
+Electrons         : 8
+Spin              : none
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+k-points          : 108
+Mesh cutoff       : 200 Ry required, 252.0 Ry used
+
+[3] PROGRESS
+------------------------------------------------------------
+Run type          : relaxation (CG coord. optimization)
+Moves             : 4 of at most 30 (plus the input geometry)
+Variable cell     : yes
+Relaxation        : not finished
+step | SCF its       | E_KS (eV) | max F (eV/Ang) | P (kBar) | net F 
+---------------------------------------------------------------------
+0    | 8             | -230.0192 | 0.0068         | -31.51   | 0.0000
+1    | 8             | -230.0341 | 0.1112         | -0.89    | 0.0001
+2    | 4             | -230.0341 | 0.1033         | -3.02    | 0.0002
+3    | 6             | -229.9527 | 0.9318         | 27.39    | 0.0006
+4    | 0 (not conv.) | -         | -              | -        | -     
+
+[4] SCF
+------------------------------------------------------------
+Iterations        : 26 in 5 step(s); per step min 0, mean 5.2, max 8
+Converged steps   : 4 of 5
+Tolerance         : dDmax < 1e-05, at most 1000 iterations (failure aborts the run)
+
+[5] RESULTS
+------------------------------------------------------------
+E_KS (last step)  : -229.952700 eV (no final-energy block: the run did not finish)
+Energy per atom   : -114.976350 eV
+Band gap (.EIG)   : 0.9406 eV (indirect; VBM -4.6468, CBM -3.7062 eV; 108 k-points)
+Log warnings      : 3 line(s), 3 distinct -- e.g. # WARNING: This information might be incomplete!
+
+[6] FILES & NEXT STEPS
+------------------------------------------------------------
+Folder size       : 96.8 KB in 8 files
+output                   | files                | read by                                    
+---------------------------------------------------------------------------------------------
+eigenvalues              | si.EIG               | band gap here; stb-dos (3.2)               
+MD/relaxation trajectory | si.ANI               | stb-ani2traj (6.5), stb-aimdAnalysis (3.18)
+final geometry           | si.STRUCT_OUT, si.XV | stb-translate (6.1)                        
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Verdict           : STOPPED
+Folders inspected : 1
+
+[8] WARNINGS
+------------------------------------------------------------
+  1. the run did not finish: no end of run, log last written <age> ago -- killed, out of time, or crashed.
+
+------------------------------------------------------------
+Status check complete.
+

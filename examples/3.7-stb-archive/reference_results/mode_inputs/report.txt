@@ -1,0 +1,62 @@
+
+ARCHIVE:
+------------------------------------------------------------
+===== STB-ARCHIVE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.322
+Target            : si_relax (recursive)
+Mode              : inputs -- only what the run needs to be repeated: .fdf files, every file they read, pseudopotentials, job scripts
+Always in         : .fdf files, every file they read, pseudopotentials, job scripts
+Never in          : hidden files, earlier archives/backups
+Dry run           : nothing will be written
+
+[1] FOLDER si_relax
+------------------------------------------------------------
+Files             : 47 (3.0 MB) -- including subfolders
+Going in          : 5 files (86.0 KB); left out 42 (2.9 MB)
+The run           : FINISHED, relaxation, SIESTA 5.4.2, E = -230.0355 eV
+
+[2] GOING IN
+------------------------------------------------------------
+input         | size    | why             
+------------------------------------------
+Si.psml       | 84.7 KB | pseudopotential 
+bandlines.txt | 65 B    | read by calc.fdf
+calc.fdf      | 768 B   | SIESTA input    
+structure.fdf | 375 B   | SIESTA input    
+submit.slurm  | 123 B   | job script      
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+
+[3] LEFT OUT
+------------------------------------------------------------
+kind                           | files | size     | why                      
+-----------------------------------------------------------------------------
+electronic structure           | 9     | 1.4 MB   | inputs mode: not an input
+basis by-products              | 3     | 762.3 KB | inputs mode: not an input
+restart (SIESTA reads it back) | 4     | 377.2 KB | inputs mode: not an input
+real-space grids               | 2     | 218.4 KB | inputs mode: not an input
+SIESTA log / status            | 16    | 134.4 KB | inputs mode: not an input
+post-processing / plots        | 2     | 48.2 KB  | inputs mode: not an input
+geometry / forces / dynamics   | 5     | 2.5 KB   | inputs mode: not an input
+job-scheduler output           | 1     | 1.8 KB   | inputs mode: not an input
+Largest           : si.HSX (628.3 KB), si.DM (375.9 KB), Si.ion (366.3 KB)
+Add back with     : --include .ANI .BASIS_ENTHALPY .BONDS .BONDS_FINAL .CG .DM .DOS .EIG .FA .HSX .KP .ORB_INDX .PDOS .PDOS.xml .RHO .STRUCT_NEXT_ITER .STRUCT_OUT .XV .alloc .bands .bib .dat .err .grid.nc .ion .ion.nc .ion.xml .log .out .png .times .yml 0_NORMAL_EXIT BASIS_ENTHALPY BASIS_HARRIS_ENTHALPY CLOCK FORCE_STRESS MESSAGES NON_TRIMMED_KP_LIST PARALLEL_DIST TIMES  (or --mode full)
+
+[4] ARCHIVE
+------------------------------------------------------------
+Dry run           : nothing written (5 files, 86.0 KB would go in)
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Archived          : 0 of 1 folder(s) (dry run)
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Archived -- science preserved, not deleted.
+

@@ -1,0 +1,40 @@
+SystemName          Si8
+SystemLabel         calc
+
+NumberOfAtoms       8
+NumberOfSpecies     1
+
+%block ChemicalSpeciesLabel
+ 1  14  Si
+%endblock ChemicalSpeciesLabel
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   0.00000000
+ 0.00000000   5.43000000   0.00000000
+ 0.00000000   0.00000000   5.43000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+        0.505385597052        0.011336977352        0.507568142394   1
+        0.242640622862        0.253794228641        0.248377931729   1
+       -0.000673775043       -0.005208714451       -0.000860637595   1
+        0.257894116786        0.742060559059        0.750151759664   1
+        0.764411704322        0.245680293962        0.746387654407   1
+        0.007519953952        0.500703271567        0.499078332332   1
+        0.514951723013        0.487692986665       -0.001244311726   1
+        0.745595389699        0.735313305454        0.241998532974   1
+%endblock AtomicCoordinatesAndAtomicSpecies
+
+DM.MixingWeight     0.1
+DM.NumberPulay      4
+MaxSCFIterations    200
+DM.Tolerance        1.0d-3
+
+kgrid_cutoff 5.0 Ang

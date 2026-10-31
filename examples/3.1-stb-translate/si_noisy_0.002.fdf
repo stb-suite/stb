@@ -1,0 +1,23 @@
+# si_bulk.fdf with every atom displaced by up to 0.002 Ang (seed 7)
+NumberOfSpecies 1
+NumberOfAtoms 8
+%block ChemicalSpeciesLabel
+ 1 14 Si
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+  5.48023800 0.00000000 0.00000000
+  0.00000000 5.48023800 0.00000000
+  0.00000000 0.00000000 5.48023800
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.00009131 0.00028992 0.00020122 1
+  0.24979943 0.24985414 0.25027265 1
+  0.99963890 0.50023446 0.50021683 1
+  0.24997660 0.74985623 0.74983827 1
+  0.49982108 0.99995991 0.50000332 1
+  0.75003905 0.25036166 0.75021361 1
+  0.50008918 0.50035689 0.99979221 1
+  0.74975199 0.75008214 0.24966713 1
+%endblock AtomicCoordinatesAndAtomicSpecies

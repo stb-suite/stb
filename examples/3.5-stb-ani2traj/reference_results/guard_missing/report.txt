@@ -1,0 +1,17 @@
+
+AIMD TRAJECTORY CONVERTER:
+------------------------------------------------------------
+===== STB-ANI2TRAJ REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb / sisl        : 1.9.318 / 0.16.4
+Input             : nothing.ANI
+Output            : nothing_traj.xsf (xsf)
+Frames kept       : skip 0, then every 1
+Unwrap PBC        : no
+
+[1] INPUTS
+------------------------------------------------------------
+[FAIL] Input file 'nothing.ANI' not found: SIESTA writes it only with WriteMDXmol true (and <label>.MDE with WriteMDHistory true).

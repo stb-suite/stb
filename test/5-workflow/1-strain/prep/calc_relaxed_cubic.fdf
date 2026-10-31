@@ -1,0 +1,13 @@
+SystemName          Strain test (cubic Si, real relaxation directives)
+SystemLabel         siesta
+
+%include si_cubic.fdf
+
+PAO.BasisSize       SZ
+MeshCutoff          150 Ry
+DM.MixingWeight     0.1
+MaxSCFIterations    200
+
+MD.TypeOfRun          CG
+MD.NumCGsteps         100
+MD.VariableCell       T

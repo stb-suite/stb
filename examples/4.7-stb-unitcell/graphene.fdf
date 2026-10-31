@@ -1,0 +1,27 @@
+# Example fixture: graphene, 2D monolayer (2-atom hexagonal cell, a = 2.46
+# Ang, 20 Ang vacuum along c, space group P6/mmm No. 191). Used to show
+# stb-unitcell's own vacuum-axis caveat: this tool operates on the literal
+# 3D periodic cell, so a vacuum-padded 2D structure gets the same warning
+# stb-supercell/stb-slab/etc. print elsewhere in this suite.
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1    6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 2.4600000000   0.0000000000   0.0000000000
+ -1.2300000000  2.1304074590   0.0000000000
+ 0.0000000000   0.0000000000  20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

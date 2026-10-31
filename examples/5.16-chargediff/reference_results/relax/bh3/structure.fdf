@@ -1,0 +1,25 @@
+# atoms 5..8 of relaxed.fdf, alone
+
+NumberOfSpecies 2
+NumberOfAtoms 4
+
+%block ChemicalSpeciesLabel
+ 1 5 B
+ 2 1 H
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+%block LatticeVectors
+ 12.00000000 0.00000000 0.00000000
+ 0.00000000 12.00000000 0.00000000
+ 0.00000000 0.00000000 12.00000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+  0.4999945200 0.5000000000 0.4315423500 1
+  0.5498052800 0.5862571300 0.4047013900 2
+  0.4003880300 0.5000000000 0.4046938300 2
+  0.5498052800 0.4137428800 0.4047013900 2
+%endblock AtomicCoordinatesAndAtomicSpecies

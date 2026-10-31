@@ -1,0 +1,30 @@
+# Synthetic 3-species fixture for stb-dftu: Sc (a metal with no tabulated
+# reference U), Fe (a metal WITH a tabulated reference U), and O (a
+# non-metal -- DFT+U doesn't apply to it at all). Not a physically
+# realistic structure (arbitrary cubic box) -- built purely to exercise
+# --fdf + --use-reference's 3-way split.
+
+NumberOfSpecies    3
+NumberofAtoms      3
+
+%block ChemicalSpeciesLabel
+ 1   21   Sc
+ 2   26   Fe
+ 3    8   O
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 4.0000000000   0.0000000000   0.0000000000
+ 0.0000000000   4.0000000000   0.0000000000
+ 0.0000000000   0.0000000000   4.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.000000000   0.000000000   0.000000000   1
+  0.500000000   0.500000000   0.500000000   2
+  0.250000000   0.250000000   0.250000000   3
+%endblock AtomicCoordinatesAndAtomicSpecies

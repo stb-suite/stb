@@ -1,0 +1,31 @@
+# O2 triplet in an 8 Ang box, spin-polarized
+SystemLabel      o2
+SystemName       O2-triplet
+NumberOfAtoms    2
+NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 8 O
+%endblock ChemicalSpeciesLabel
+LatticeConstant  1.0 Ang
+%block LatticeVectors
+ 8.0 0.0 0.0
+ 0.0 8.0 0.0
+ 0.0 0.0 8.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat  Ang
+%block AtomicCoordinatesAndAtomicSpecies
+ 4.0000  4.0000  3.3950  1
+ 4.0000  4.0000  4.6050  1
+%endblock AtomicCoordinatesAndAtomicSpecies
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         200 Ry
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                polarized
+SCF.DM.Tolerance    1.0d-5
+SCF.Mixer.Weight    0.1
+MaxSCFIterations    300
+Charge.Hirshfeld    end           # SIESTA's own Hirshfeld charges, at the end of the run
+Charge.Voronoi      end           # ... and Voronoi
+WriteMullikenPop    1             # ... and Mulliken (atomic populations)

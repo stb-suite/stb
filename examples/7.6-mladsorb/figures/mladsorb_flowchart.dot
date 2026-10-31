@@ -1,0 +1,38 @@
+// Flowchart of stb-mladsorb (7.6). Render with:
+//   dot -Tpng -Gdpi=150 mladsorb_flowchart.dot -o mladsorb_flowchart.png
+digraph mladsorb {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.34, bgcolor="white", pad=0.3];
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10,
+           fillcolor="#eef3fb", color="#4a6fa5", penwidth=1.2, margin="0.15,0.07"];
+    edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.7];
+
+    slab    [label="Slab (.fdf)\nvacuum along one axis", fillcolor="#fff7e0", color="#b8860b"];
+    ads     [label="Adsorbate(s)\nelement or G2 molecule (--adsorbate)", fillcolor="#fff7e0", color="#b8860b"];
+    model   [label="Model\nMACE-MP-0 (--model)  or  fine-tuned model + card\n(--custom-model + --custom-model-card)",
+             fillcolor="#fff7e0", color="#b8860b"];
+    clean   [label="1. Clean slab: layers, forces as given\n--relax-depth D: atoms within D Ang of the top relaxed,\ndeeper ones fixed (0 = substrate fixed as given)"];
+    refs    [label="2. References\nisolated adsorbate in a --vacuum-box (own calculator)\n--bulk-reference: mu = E/N of each element's bulk"];
+    sites   [label="3. Candidate sites (pymatgen AdsorbateSiteFinder)\nontop / bridge / hollow, reduced by symmetry (--symprec)\nmultiplicity in the cell, the atom right below each"];
+    runs    [label="4. One relaxation per adsorbate x site x start distance\n(--height, --start-heights; --n-orientations for molecules)\nadsorbate + free substrate, FIRE to --fmax"];
+    where   [label="5. Where did each run END?\nnearest site of the cell to the adsorbate's lowest atom\n(0.6 Ang), height, bonds, substrate displacement"];
+    minima  [label="6. Distinct minima: same end site, within 0.02 eV\nE_ads, dE, E_form, multiplicity, population p(T)\ndistances to minimum 1 + the stb-mlneb command"];
+    curve   [label="7. --height-sweep: binding curve,\nlowest atom held at each height"];
+    comm    [label="8. Committee on every minimum\n(custom model): spread of E_ads,\nsame site first?"];
+    found   [label="9. Same screening with the\nfoundation model (custom model;\n--skip-foundation-comparison)"];
+    domain  [label="10. Trained range of the card"];
+    report  [label="Report (sections, warnings last) + mladsorb.png\nminima as .fdf; --show, --save-data, --save-gnuplot,\n--save-xyz, --save-report",
+             fillcolor="#e6f4e6", color="#2e7d32"];
+    q       [label="Trust the ranking?", shape=diamond, style="filled", fillcolor="#f2f2f2", color="#666666"];
+    siesta  [label="SIESTA on the best sites\nstb-adsorb (5.8): sites, BSSE, Gibbs", shape=box3d, fillcolor="#fde8e8", color="#b22222"];
+    neb     [label="Diffusion barrier between two minima:\nstb-mlneb (7.5) on their .fdf files", fillcolor="#fff0e0", color="#d2691e"];
+    train   [label="Structures far outside the training set:\nadd them to the MLFF workflow (7.1)", fillcolor="#f3eefb", color="#6a4fa5"];
+
+    slab -> clean; model -> clean; ads -> refs;
+    clean -> refs -> sites -> runs -> where -> minima;
+    minima -> curve; minima -> comm; minima -> found; minima -> domain;
+    curve -> report; comm -> report; found -> report; domain -> report;
+    report -> q;
+    q -> siesta [label=" always, before\n a number is used"];
+    q -> train  [label=" committee spread\n >> test set"];
+    report -> neb [style=dashed, label=" hop"];
+}

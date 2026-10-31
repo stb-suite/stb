@@ -1,0 +1,19 @@
+# Magnesium, hexagonal close-packed (P6_3/mmc), 2 atoms, at the experimental lattice (a = 3.2094, c = 5.2108 Ang,
+# room temperature). c along z, a along x: the standard orientation of a hexagonal elastic tensor. Used in README
+# section 5.9 with the MACE-MP-0 foundation model (the fine-tuned model of 5.1 knows only silicon).
+NumberOfSpecies 1
+NumberOfAtoms 2
+%block ChemicalSpeciesLabel
+ 1 12 Mg
+%endblock ChemicalSpeciesLabel
+LatticeConstant 1.0 Ang
+%block LatticeVectors
+  3.20940000  0.00000000  0.00000000
+ -1.60470000  2.77942193  0.00000000
+  0.00000000  0.00000000  5.21080000
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.33333333 0.66666667 0.25000000 1
+ 0.66666667 0.33333333 0.75000000 1
+%endblock AtomicCoordinatesAndAtomicSpecies

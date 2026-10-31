@@ -1,0 +1,75 @@
+name: Documentation
+
+# Builds the MkDocs site (docs/, the guides generated from examples/, and the
+# reference generated from the menu in stb_suite.py and the commands in
+# pyproject.toml) on every change that can affect it, and publishes it to
+# GitHub Pages from main. A command's --help text comes from the committed
+# docs/reference_help.json (regenerate it with docs/dump_help.py), so this job
+# installs only the documentation dependencies.
+# One-time setup: repository Settings > Pages > Source: "GitHub Actions".
+# To rebuild and redeploy without changing any file (for example right after
+# enabling Pages): Actions > Documentation > "Run workflow" (workflow_dispatch).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "examples/**"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "stb-suite/pyproject.toml"
+      - "stb-suite/src/stb/stb_suite.py"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "examples/**"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "stb-suite/pyproject.toml"
+      - "stb-suite/src/stb/stb_suite.py"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install documentation dependencies
+        run: pip install -r docs/requirements.txt
+
+      - name: Build the site (warnings are errors)
+        run: mkdocs build --strict --site-dir site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    # Only publish from main; pull requests just prove the site still builds.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

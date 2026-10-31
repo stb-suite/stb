@@ -1,0 +1,6 @@
+[project]
+name = "demo_extension"
+version = "0.0.0"
+
+[project.scripts]
+stb-demoext = "demo_extension.cli:main"

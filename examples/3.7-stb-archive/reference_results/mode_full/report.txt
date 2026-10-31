@@ -1,0 +1,61 @@
+
+ARCHIVE:
+------------------------------------------------------------
+===== STB-ARCHIVE REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.322
+Target            : si_relax (recursive)
+Mode              : full -- every file (except hidden files and earlier archives)
+Always in         : .fdf files, every file they read, pseudopotentials, job scripts
+Never in          : hidden files, earlier archives/backups
+Dry run           : nothing will be written
+
+[1] FOLDER si_relax
+------------------------------------------------------------
+Files             : 47 (3.0 MB) -- including subfolders
+Going in          : 47 files (3.0 MB); left out 0 (0 B)
+The run           : FINISHED, relaxation, SIESTA 5.4.2, E = -230.0355 eV
+
+[2] GOING IN
+------------------------------------------------------------
+input         | size    | why             
+------------------------------------------
+Si.psml       | 84.7 KB | pseudopotential 
+bandlines.txt | 65 B    | read by calc.fdf
+calc.fdf      | 768 B   | SIESTA input    
+structure.fdf | 375 B   | SIESTA input    
+submit.slurm  | 123 B   | job script      
+kind                           | files | size     | e.g.                                                     
+-------------------------------------------------------------------------------------------------------------
+electronic structure           | 9     | 1.4 MB   | si.DOS, si.EIG, si.HSX, +6                               
+basis by-products              | 3     | 762.3 KB | Si.ion, Si.ion.nc, Si.ion.xml                            
+restart (SIESTA reads it back) | 4     | 377.2 KB | si.CG, si.DM, si.STRUCT_NEXT_ITER, +1                    
+real-space grids               | 2     | 218.4 KB | Rho.grid.nc, si.RHO                                      
+SIESTA log / status            | 16    | 134.4 KB | 0_NORMAL_EXIT, BASIS_ENTHALPY, BASIS_HARRIS_ENTHALPY, +13
+post-processing / plots        | 2     | 48.2 KB  | si_bands.dat, si_bands.png                               
+geometry / forces / dynamics   | 5     | 2.5 KB   | si.ANI, si.BONDS, si.BONDS_FINAL, +2                     
+job-scheduler output           | 1     | 1.8 KB   | siesta.err                                               
+Rerunnable        : yes -- every .fdf, the files they read and a pseudopotential for every species
+
+[3] LEFT OUT
+------------------------------------------------------------
+Nothing -- every file goes in
+
+[4] ARCHIVE
+------------------------------------------------------------
+Dry run           : nothing written (47 files, 3.0 MB would go in)
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Archived          : 0 of 1 folder(s) (dry run)
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Archived -- science preserved, not deleted.
+

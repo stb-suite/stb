@@ -1,0 +1,22 @@
+%include config_extra.fdf
+
+# Template of the 4.20 example for the rock-salt crystals (NaCl, MgO): as calc.fdf,
+# with an 8x8x8 Monkhorst-Pack grid for the 2-atom primitive cell. The isolated-atom
+# folders written from it get a Gamma-only grid in their config_extra.fdf.
+SystemName      hirshfeld_example
+SystemLabel     siesta
+%include structure.fdf
+
+XC.Functional           GGA
+XC.Authors              PBE
+PAO.BasisType           split
+PAO.BasisSize           DZP
+PAO.EnergyShift         0.01 Ry
+Mesh.Cutoff             400 Ry
+ElectronicTemperature   300 K
+Spin                    non-polarized
+kgrid.MonkhorstPack     [8 8 8]
+DM.Tolerance            1.0e-6
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.Mixer.History       6

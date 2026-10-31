@@ -1,0 +1,37 @@
+
+NATIVE CHARGES:
+------------------------------------------------------------
+===== STB-NATIVECHARGES REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.325
+Target            : nocharges
+Methods           : Mulliken (WriteMullikenPop 1), Hirshfeld (Charge.Hirshfeld end), Voronoi (Charge.Voronoi end) -- as SIESTA printed them
+
+[1] RUN
+------------------------------------------------------------
+Folder            : nocharges
+Log               : nocharges/calc.out (SIESTA 5.4.2)
+State             : FINISHED, single point
+Atoms             : 2 (NaCl)
+Basis             : DZP
+Spin              : none
+Mulliken          : not in the log (add WriteMullikenPop 1)
+Hirshfeld         : not in the log (add Charge.Hirshfeld end)
+Voronoi           : not in the log (add Charge.Voronoi end)
+
+[2] SUMMARY & FILES
+------------------------------------------------------------
+Mulliken          : in 0 of 1 folder(s)
+Hirshfeld         : in 0 of 1 folder(s)
+Voronoi           : in 0 of 1 folder(s)
+
+[3] WARNINGS
+------------------------------------------------------------
+  1. nocharges: no Mulliken, Hirshfeld or Voronoi block in the log -- add WriteMullikenPop 1 (Mulliken), Charge.Hirshfeld end (Hirshfeld), Charge.Voronoi end (Voronoi) to the .fdf and rerun.
+
+------------------------------------------------------------
+Native charges report complete.
+

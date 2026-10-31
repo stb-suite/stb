@@ -1,0 +1,27 @@
+# Template of the SIESTA phonon reference (primitive graphene, same level of theory as
+# the MLFF labels: DZP, 320 Ry, PBE, 300 K, k = 30x30 per primitive cell; the 5x5 supercell
+# gets 6x6x1 from stb-phononsCreate --kgrid).
+SystemLabel      siesta
+SystemName       graphene-phonons
+%include structure.fdf
+
+# Basis and real-space grid (the same in every folder: one energy surface)
+PAO.BasisType       split
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.005 Ry
+Mesh.Cutoff         320 Ry
+
+# k-points: 30x30x1 per primitive cell, as for the MLFF labels (README Section 8.1).
+kgrid.MonkhorstPack   [30  30  1]
+
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                non-polarized
+
+# SCF: a semimetal, smeared at 300 K
+ElectronicTemperature   300 K
+MaxSCFIterations        300
+SCF.Mixer.Weight        0.1
+SCF.Mixer.History       6
+SCF.DM.Tolerance        1.0d-5 eV
+Diag.ParallelOverK      .true.

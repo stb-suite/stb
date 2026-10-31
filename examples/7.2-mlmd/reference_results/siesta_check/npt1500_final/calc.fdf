@@ -1,0 +1,26 @@
+%include config_extra.fdf
+
+# SIESTA single point on one MD frame (216 Si atoms, 3x3x3 conventional cells) -- the check of README section 5.3.
+# Same level of theory as the training data of the model in model/ (see its card): PBE, DZP, PAO.EnergyShift
+# 0.01 Ry, Mesh.Cutoff 300 Ry, 300 K electronic temperature, PseudoDojo Si.psml. The 8-atom reference used a 6x6x6
+# k-grid; config_extra.fdf divides it by the supercell (2x2x2), sets NumberOfAtoms and forces a single point.
+SystemLabel      siesta
+SystemName       Si-216-md-frame
+%include structure.fdf
+
+PAO.BasisSize       DZP
+PAO.EnergyShift     0.01 Ry
+Mesh.Cutoff         300 Ry
+
+kgrid.MonkhorstPack   [6 6 6]
+
+XC.Functional       GGA
+XC.Authors          PBE
+Spin                non-polarized
+
+ElectronicTemperature   300 K
+MaxSCFIterations        200
+SCF.Mixer.Weight        0.2
+SCF.Mixer.History       6
+SCF.DM.Tolerance        1.0d-5
+Diag.ParallelOverK      .true.

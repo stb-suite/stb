@@ -1,0 +1,24 @@
+{
+ "frame": "nvt300_final",
+ "n_atoms": 216,
+ "siesta_rms_meV": 576.3010260174573,
+ "energy_offset_reference": "nvt300_final",
+ "models": [
+  {
+   "name": "fine-tuned",
+   "F_rmse_meV": 25.051679518158668,
+   "F_mae_meV": 20.14667270618266,
+   "F_max_meV": 90.18169837591094,
+   "E_minus_siesta_eV_atom": 0.002157037500856623,
+   "dE_meV_atom": 0.0
+  },
+  {
+   "name": "MACE-MP medium",
+   "F_rmse_meV": 241.97584640238279,
+   "F_mae_meV": 196.392390495715,
+   "F_max_meV": 660.3500622615421,
+   "E_minus_siesta_eV_atom": 109.66233887697251,
+   "dE_meV_atom": 0.0
+  }
+ ]
+}

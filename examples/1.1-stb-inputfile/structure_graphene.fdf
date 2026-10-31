@@ -1,0 +1,27 @@
+# 2D system: graphene monolayer (primitive 2-atom cell).
+# Periodic in-plane (a, b, 2.46 Ang hexagonal lattice); c is vacuum-padded
+# (20 Ang out-of-plane) -- far above stb-inputfile's vacuum-detection
+# threshold (10 Ang), so only a and b are treated as periodic.
+# (Same fixture used by test/1-inputs/3-k-path/example_2D_graphene.fdf.)
+
+NumberOfSpecies    1
+NumberofAtoms      2
+
+%block ChemicalSpeciesLabel
+ 1   6   C
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+  2.4600000000   0.0000000000   0.0000000000
+ -1.2300000000   2.1304224390   0.0000000000
+  0.0000000000   0.0000000000   20.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.000000000   0.000000000   0.500000000   1
+ 0.333333333   0.666666667   0.500000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

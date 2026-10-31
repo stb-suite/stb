@@ -1,0 +1,1015 @@
+#!/usr/bin/env python
+
+#################################################
+#     Siesta Tool Box - Suite                   #
+# Developed by Dr. Carlos M. O. Bastos          #
+#      bastoscmo.github.io                      #
+#################################################
+
+from stb import __version__ as VERSION
+
+import os
+import sys
+import argparse
+from datetime import datetime
+import numpy as np
+import spglib
+from pymatgen.core.operations import SymmOp
+from pymatgen.io.ase import AseAtomsAdaptor
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from stb.core import citations, kspace, structure_io
+from stb.core.ase_view import view_structure_interactive
+from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
+
+REPORT_FILE = "stb_symmetry_report.txt"
+BIB_FILE = "references.bib"
+
+# Same default as stb-kgrid/stb-mlrelax/etc. (core/kspace.py's other
+# callers): minimum empty span along an axis, wrapped periodically, to
+# treat it as vacuum-padded rather than genuinely periodic.
+VACUUM_GAP_ANG = 10.0
+
+def compute_layer_group(structure, aperiodic_dir, symprec=0.01):
+    """Layer-group analysis for a genuinely 2D-periodic structure (periodic
+    along the 2 axes other than `aperiodic_dir`, vacuum-padded along it) --
+    the physically correct symmetry classification for a slab, unlike the
+    ordinary 3D space group SPACE GROUP reports (which treats the vacuum as
+    just an unusually tall periodic cell and can report a group that
+    depends on the arbitrary vacuum thickness, not the real 2D symmetry).
+
+    Uses spglib.get_layergroup() directly (needs spglib >= 2.1.0, its
+    Python interface for the 80 layer groups; >= 2.2.0 for a Hall-number
+    bugfix -- see pyproject.toml's spglib pin) since pymatgen's
+    SpacegroupAnalyzer doesn't wrap this yet. Returns None if spglib
+    can't determine a layer group (e.g. not genuinely 2D-periodic within
+    symprec) or if the installed spglib predates this function.
+    """
+    if not hasattr(spglib, "get_layergroup"):
+        return None
+
+    cell = (structure.lattice.matrix, structure.frac_coords,
+            [site.specie.Z for site in structure])
+    ds = spglib.get_layergroup(cell, aperiodic_dir=aperiodic_dir, symprec=symprec)
+    if ds is None:
+        return None
+
+    # ds.equivalent_atoms[i] is the representative atom index of atom i's
+    # orbit (0-based, same convention as compute_symmetry's 3D path, but
+    # spglib returns it flat here rather than pre-grouped into lists like
+    # pymatgen's ss.equivalent_indices).
+    orbit_members = {}
+    for i, rep in enumerate(ds.equivalent_atoms):
+        orbit_members.setdefault(rep, []).append(i)
+
+    sites = []
+    for i, site in enumerate(structure):
+        rep = ds.equivalent_atoms[i]
+        wyckoff = f"{len(orbit_members[rep])}{ds.wyckoffs[i]}"
+        sites.append({
+            "atom_id": i + 1,
+            "species": str(site.specie.symbol),
+            "wyckoff": wyckoff,
+            "site_symmetry": ds.site_symmetry_symbols[i],
+            "orbit": rep + 1,
+        })
+
+    orbits = [
+        {"wyckoff": f"{len(indices)}{ds.wyckoffs[rep]}",
+         "species": str(structure[rep].specie.symbol), "n_atoms": len(indices),
+         "example_atom_id": indices[0] + 1, "site_symmetry": ds.site_symmetry_symbols[rep]}
+        for rep, indices in orbit_members.items()
+    ]
+
+    # Translation components come back as noisy near-integers/near-zeros
+    # (e.g. 9.99999980e-01) rather than exact 0/1 -- round before %1 so
+    # as_xyz_str() doesn't render spurious "+1"/"+0" terms.
+    op_objects = [
+        SymmOp.from_rotation_and_translation(rot, np.round(trans, 6) % 1.0)
+        for rot, trans in zip(ds.rotations, ds.translations)
+    ]
+
+    distortion = _wyckoff_distortion(structure, op_objects)
+    for site in sites:
+        site["distortion"] = distortion[site["atom_id"] - 1]
+
+    return {
+        "symbol": ds.international,
+        "number": ds.number,
+        "hall_symbol": ds.hall,
+        "hall_number": ds.hall_number,
+        "point_group": ds.pointgroup,
+        "setting_choice": ds.choice,
+        "aperiodic_axis": "abc"[aperiodic_dir],
+        "n_distinct_sites": len(orbit_members),
+        "sites": sites,
+        "orbits": orbits,
+        "symmetry_operations": [op.as_xyz_str() for op in op_objects],
+        # For --write-refined: the standardized (layer-group-consistent)
+        # cell spglib derived internally -- same fields/convention as the
+        # ordinary 3D SpglibDataset's std_lattice/std_positions/std_types,
+        # but standardized against the layer group instead of the (for a
+        # vacuum-padded structure, not physically meaningful) 3D space
+        # group core/symmetry.py::reduce_to_unitcell() would otherwise use.
+        "std_lattice": ds.std_lattice,
+        "std_positions": ds.std_positions,
+        "std_types": ds.std_types,
+    }
+
+def compute_point_group(structure, tolerance=0.3):
+    """Molecular point-group analysis for a genuinely isolated (0D) system
+    -- vacuum-padded on all 3 axes. Neither spglib nor SpacegroupAnalyzer
+    handle this case (both are fundamentally periodic-lattice tools; a rod
+    group -- the periodic analogue for a 1D wire, 2 vacuum axes -- doesn't
+    even exist in spglib to fall back on). pymatgen's PointGroupAnalyzer is
+    a separate, non-periodic detector built for exactly this: it treats the
+    input as a plain pymatgen Molecule (Cartesian coordinates only, no
+    lattice), the same way a quantum chemistry package would.
+
+    `tolerance` is in Å (molecular point-group convention) and is
+    deliberately NOT tied to --symprec, which is a much tighter,
+    crystallographic tolerance (1e-3 Å default) unsuited to typical
+    molecular bond-length variation -- pymatgen's own default (0.3 Å) is
+    used unless the caller overrides it.
+
+    Returns None if PointGroupAnalyzer (construction or any of the calls
+    below) fails for any reason -- e.g. a single-atom "molecule" (a
+    perfectly normal case in this suite: stb-cohesive's isolated-atom
+    reference structures are exactly this) raises deep inside pymatgen
+    with an unrelated AttributeError, not a clean exception; verified this
+    is caught rather than aborting the whole symmetry run.
+    """
+    from pymatgen.core import Molecule
+    from pymatgen.symmetry.analyzer import PointGroupAnalyzer
+
+    species = [str(site.specie.symbol) for site in structure]
+    orig_coords = structure.cart_coords
+    mol = Molecule(species, orig_coords)
+    try:
+        pga = PointGroupAnalyzer(mol, tolerance=tolerance)
+
+        eq_sets = pga.get_equivalent_atoms()["eq_sets"]
+        seen = set()
+        groups = []
+        for i in sorted(eq_sets):
+            if i in seen:
+                continue
+            members = sorted(eq_sets[i])
+            seen.update(members)
+            groups.append({
+                "species": species[members[0]],
+                "n_atoms": len(members),
+                "atom_ids": [m + 1 for m in members],
+            })
+
+        # symmetrize_molecule() re-centers on the molecule's own centroid
+        # (the convention point-group operations are defined relative to)
+        # -- shift back by the ORIGINAL centroid so --write-refined can
+        # place the symmetrized molecule back where it was in the original
+        # vacuum box, not at the origin. Verified round-trip on an
+        # already-symmetric structure: shifted-back coordinates matched
+        # the input to ~1e-15.
+        symmetrized_coords = pga.symmetrize_molecule()["sym_mol"].cart_coords + mol.center_of_mass
+
+        ops = pga.get_symmetry_operations()
+        distortion = _point_group_distortion(orig_coords, species, ops, mol.center_of_mass)
+        atoms = [
+            {"atom_id": i + 1, "species": species[i], "distortion": distortion[i]}
+            for i in range(len(species))
+        ]
+
+        return {
+            "symbol": str(pga.get_pointgroup()),
+            "rotational_symmetry_number": pga.get_rotational_symmetry_number(),
+            "symmetry_operations": len(ops),
+            "n_distinct_atoms": len(groups),
+            "groups": groups,
+            "atoms": atoms,
+            "tolerance": tolerance,
+            "symmetrized_cart_coords": symmetrized_coords,
+        }
+    except Exception:
+        return None
+
+def compute_symmetry(structure, symprec=0.01, angle_tolerance=5.0):
+    """Pure computation -- no printing, no file I/O. Returns a results dict
+    that format_report() turns into the console/file report.
+
+    Uses pymatgen's SpacegroupAnalyzer (wrapping spglib) -- the same
+    approach already shared by stb-unitcell/stb-fetch via
+    core/symmetry.py::reduce_to_unitcell(), instead of calling spglib
+    directly with a hand-rolled crystal-system classifier: SpacegroupAnalyzer
+    provides the crystal system (and Pearson symbol, lattice type, per-orbit
+    Wyckoff multiplicity) natively, so there's nothing left to duplicate.
+    """
+    sga = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tolerance)
+    ss = sga.get_symmetrized_structure()
+    # site_symmetry_symbols is the per-atom point-group symmetry AT that
+    # site (e.g. "m-3m" for a rock-salt ion sitting on a high-symmetry
+    # position) -- same original atom order as ss.wyckoff_letters, verified
+    # against ds.wyckoffs (which matches ss.wyckoff_letters exactly).
+    dataset = sga.get_symmetry_dataset()
+    site_symmetry = dataset.site_symmetry_symbols
+
+    # ss.wyckoff_symbols is per ORBIT (e.g. "4a" for a 4-atom equivalence
+    # class), not per atom -- ss.equivalent_indices maps each orbit to its
+    # member atom indices (0-based, original atom order preserved). Rebuild
+    # a per-atom "multiplicity+letter" label by looking up which orbit each
+    # atom belongs to.
+    orbit_of_atom = {}
+    for orbit_idx, indices in enumerate(ss.equivalent_indices):
+        for i in indices:
+            orbit_of_atom[i] = orbit_idx
+
+    sites = []
+    for i, site in enumerate(structure):
+        orbit_idx = orbit_of_atom[i]
+        wyckoff = f"{len(ss.equivalent_indices[orbit_idx])}{ss.wyckoff_letters[i]}"
+        sites.append({
+            "atom_id": i + 1,
+            "species": str(site.specie.symbol),
+            "wyckoff": wyckoff,
+            "site_symmetry": site_symmetry[i],
+            "orbit": orbit_idx + 1,
+            "frac_coords": site.frac_coords,
+        })
+
+    lattice = structure.lattice
+    ops = sga.get_symmetry_operations()
+    distortion = _wyckoff_distortion(structure, ops)
+    for site in sites:
+        site["distortion"] = distortion[site["atom_id"] - 1]
+
+    reduced_formula, z = structure.composition.get_reduced_formula_and_factor()
+    vacuum_axes = kspace.detect_vacuum_axes(structure.frac_coords, lattice.matrix, VACUUM_GAP_ANG)
+
+    # Layer-group detection only makes sense for a genuinely 2D-periodic
+    # structure -- exactly one aperiodic (vacuum) axis. A wire (2 vacuum
+    # axes) has no analogue available -- spglib doesn't implement rod
+    # groups -- but a genuinely isolated molecule (vacuum on all 3 axes,
+    # i.e. 0D) can fall back to pymatgen's separate, non-periodic
+    # PointGroupAnalyzer instead.
+    layer_group = None
+    point_group = None
+    if sum(vacuum_axes) == 1:
+        layer_group = compute_layer_group(structure, vacuum_axes.index(True), symprec)
+    elif sum(vacuum_axes) == 3:
+        point_group = compute_point_group(structure)
+
+    return {
+        "vacuum_axes": vacuum_axes,
+        "layer_group": layer_group,
+        "point_group_analysis": point_group,
+        "space_group_symbol": sga.get_space_group_symbol(),
+        "space_group_number": sga.get_space_group_number(),
+        "hall_symbol": sga.get_hall(),
+        "hall_number": dataset.hall_number,
+        "point_group": sga.get_point_group_symbol(),
+        "crystal_system": sga.get_crystal_system(),
+        "lattice_type": sga.get_lattice_type(),
+        "pearson_symbol": sga.get_pearson_symbol(),
+        "setting_choice": dataset.choice,
+        "symprec": symprec,
+        "angle_tolerance": angle_tolerance,
+        "lattice": {
+            "a": lattice.a, "b": lattice.b, "c": lattice.c,
+            "alpha": lattice.alpha, "beta": lattice.beta, "gamma": lattice.gamma,
+            "volume": lattice.volume,
+            "vectors": lattice.matrix,
+            "reduced_formula": reduced_formula,
+            "z": z,
+        },
+        "sites": sites,
+        "n_distinct_sites": len(ss.equivalent_indices),
+        "orbits": [
+            {"wyckoff": ss.wyckoff_symbols[k], "species": str(structure[indices[0]].specie.symbol),
+             "n_atoms": len(indices), "example_atom_id": indices[0] + 1,
+             "site_symmetry": site_symmetry[indices[0]]}
+            for k, indices in enumerate(ss.equivalent_indices)
+        ],
+        "symmetry_operations": [op.as_xyz_str() for op in ops],
+    }
+
+def _wyckoff_distortion(structure, ops):
+    """Per-atom distortion (Å) from exact symmetry: applies every DETECTED
+    symmetry operation to each atom's position and measures the distance to
+    the nearest same-species atom that operation should map it onto exactly
+    if the structure had perfect symmetry; an atom's distortion is the
+    largest such distance over all non-identity operations.
+
+    This is bounded by construction to roughly <= the symprec that produced
+    `ops` (that's the definition of symprec: the tolerance within which
+    spglib accepted this operation set as valid), so it gives a finer,
+    per-atom breakdown *within* that tolerance budget rather than just the
+    pass/fail group determination.
+
+    (An earlier, simpler attempt used SpacegroupAnalyzer.get_refined_structure()
+    -- its docstring claims "atoms moved to the expected symmetry positions"
+    -- but empirically it returns the input positions essentially unchanged
+    (verified: every atom's distance to its refined counterpart came out
+    exactly 0.0 even for a deliberately noisy test structure), so it
+    couldn't be used for this. Recomputing the residuals directly from the
+    operations themselves, as done here, does produce the expected
+    non-zero, noise-correlated values -- verified against a structure with
+    known injected per-atom noise.)
+    """
+    lattice = structure.lattice
+    species_of = [str(s.specie.symbol) for s in structure]
+    indices_by_species = {}
+    for i, sp in enumerate(species_of):
+        indices_by_species.setdefault(sp, []).append(i)
+
+    distortion = []
+    for i, site in enumerate(structure):
+        candidates = indices_by_species[species_of[i]]
+        max_dist = 0.0
+        for op in ops:
+            p2 = op.operate(site.frac_coords) % 1.0
+            best = min(
+                lattice.get_distance_and_image(p2, structure[j].frac_coords)[0]
+                for j in candidates
+            )
+            max_dist = max(max_dist, best)
+        distortion.append(max_dist)
+    return distortion
+
+def _point_group_distortion(cart_coords, species_of, ops, centroid):
+    """Cartesian-space analogue of _wyckoff_distortion() for a molecular
+    point group: PointGroupAnalyzer's SymmOp objects already operate
+    directly in Cartesian coordinates (no periodic lattice/wrapping
+    involved, unlike the crystallographic case) -- but relative to the
+    molecule's own CENTERED frame (centroid at the origin), the convention
+    point-group operations are defined in, not the original coordinates
+    (which are wherever the molecule happens to sit in the vacuum box).
+    Operating directly on uncentered coordinates gives nonsense (caught by
+    testing: every distortion came out ~equal to the box size itself,
+    since the operations were rotating points ~12 Å from the *box*
+    origin, not ~0.04 Å from the *molecule's* centroid). Centering first
+    (both the operated point and the atoms it's compared against, so the
+    shared offset cancels in the distance) fixes this -- same recentering
+    already used correctly for --write-refined's symmetrize_molecule()
+    call, just missed here initially.
+    """
+    centered = cart_coords - centroid
+    indices_by_species = {}
+    for i, sp in enumerate(species_of):
+        indices_by_species.setdefault(sp, []).append(i)
+
+    distortion = []
+    for i in range(len(centered)):
+        candidates = indices_by_species[species_of[i]]
+        max_dist = 0.0
+        for op in ops:
+            p2 = op.operate(centered[i])
+            best = min(np.linalg.norm(p2 - centered[j]) for j in candidates)
+            max_dist = max(max_dist, best)
+        distortion.append(max_dist)
+    return distortion
+
+# Default tolerance sweep for --scan-symprec: log-spaced from tight (typical
+# DFT-relaxation numerical noise) to loose enough to reveal near-symmetry a
+# structure might have lost to that same noise.
+DEFAULT_SYMPREC_SCAN = (1e-5, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1)
+
+def scan_symprec(structure, symprec_values=DEFAULT_SYMPREC_SCAN, angle_tolerance=5.0):
+    """Runs symmetry detection at each symprec in symprec_values (ascending)
+    and returns a list of (symprec, space_group_symbol, space_group_number)
+    -- lets a caller see whether a structure's *apparent* symmetry is being
+    hidden by small numerical noise (e.g. from a DFT relaxation) that a
+    tighter tolerance is picking up as a genuine distortion."""
+    results = []
+    for sp in symprec_values:
+        sga = SpacegroupAnalyzer(structure, symprec=sp, angle_tolerance=angle_tolerance)
+        results.append((sp, sga.get_space_group_symbol(), sga.get_space_group_number()))
+    return results
+
+def scan_symprec_layer(structure, aperiodic_dir, symprec_values=DEFAULT_SYMPREC_SCAN):
+    """Layer-group analogue of scan_symprec(): runs spglib.get_layergroup()
+    at each symprec, for a vacuum-padded structure where the layer group
+    (not the 3D space group) is the physically meaningful one to watch for
+    tolerance sensitivity. An entry's symbol/number is None if
+    get_layergroup() couldn't determine one at that tolerance."""
+    results = []
+    for sp in symprec_values:
+        lg = compute_layer_group(structure, aperiodic_dir, sp)
+        results.append((sp, lg["symbol"] if lg else None, lg["number"] if lg else None))
+    return results
+
+def _describe_symprec_scan(scan_results, label="space group"):
+    """One-line summary of the scan: the first tolerance (if any) at which
+    the group changes from the tightest-tolerance result. Only reports the
+    first transition, not every subsequent one, if it changes more than
+    once across the scanned range. A None symbol/number (detection failed
+    at that tolerance, only possible for the layer-group scan) counts as
+    its own distinct state, same as any other change."""
+    first_symbol, first_number = scan_results[0][1], scan_results[0][2]
+    for symprec, symbol, number in scan_results[1:]:
+        if number != first_number:
+            first_str = f"{first_symbol} (No. {first_number})" if first_number is not None else "not determined"
+            cur_str = f"{symbol} (No. {number})" if number is not None else "not determined"
+            return f"Symmetry changes at symprec >= {symprec:g}: {first_str} -> {cur_str}."
+    return f"No change in detected {label} across the scanned tolerance range."
+
+# Default tolerance sweep for --scan-symprec's point-group scan: molecular
+# point-group tolerance is in Å with different, generally larger, typical
+# values than --symprec (crystallographic, DEFAULT_SYMPREC_SCAN's scale) --
+# see compute_point_group()'s docstring for why these aren't tied together.
+DEFAULT_POINT_GROUP_TOLERANCE_SCAN = (0.01, 0.05, 0.1, 0.3, 0.5, 1.0)
+
+def scan_point_group_tolerance(structure, tolerance_values=DEFAULT_POINT_GROUP_TOLERANCE_SCAN):
+    """Point-group analogue of scan_symprec(): runs compute_point_group()
+    at each tolerance, for an isolated molecule where the point group (not
+    the 3D space group) is the physically meaningful one to watch for
+    tolerance sensitivity. An entry's symbol is None if
+    compute_point_group() couldn't determine one at that tolerance."""
+    results = []
+    for tol in tolerance_values:
+        pg = compute_point_group(structure, tolerance=tol)
+        results.append((tol, pg["symbol"] if pg else None))
+    return results
+
+def _describe_point_group_scan(scan_results):
+    """One-line summary of a point-group tolerance scan: the first
+    tolerance (if any) at which the symbol changes from the
+    tightest-tolerance result. Only reports the first transition."""
+    first_symbol = scan_results[0][1]
+    for tol, symbol in scan_results[1:]:
+        if symbol != first_symbol:
+            a = first_symbol if first_symbol is not None else "not determined"
+            b = symbol if symbol is not None else "not determined"
+            return f"Point group changes at tolerance >= {tol:g} Å: {a} -> {b}."
+    return "No change in detected point group across the scanned tolerance range."
+
+def compare_symmetry(results_a, results_b, label_a, label_b):
+    """Compares two compute_symmetry() results (e.g. a structure before and
+    after a SIESTA relaxation) -- same space group or not, and how their
+    symmetry-operation counts differ. Both must have been computed with the
+    same symprec/angle_tolerance for the comparison to mean anything.
+
+    If both structures have a detected layer group (e.g. comparing a 2D
+    slab before/after relaxation) or point group (e.g. comparing an
+    isolated molecule's geometry before/after relaxation), that's compared
+    too -- the 3D space group comparison alone would only describe the
+    padded supercells, the same limitation SPACE GROUP has for a single
+    structure.
+    """
+    layer_comparison = None
+    lg_a, lg_b = results_a["layer_group"], results_b["layer_group"]
+    if lg_a is not None and lg_b is not None:
+        layer_comparison = {
+            "symbol_a": lg_a["symbol"], "number_a": lg_a["number"],
+            "symbol_b": lg_b["symbol"], "number_b": lg_b["number"],
+            "n_ops_a": len(lg_a["symmetry_operations"]), "n_ops_b": len(lg_b["symmetry_operations"]),
+            "same": lg_a["number"] == lg_b["number"],
+        }
+    point_comparison = None
+    pg_a, pg_b = results_a["point_group_analysis"], results_b["point_group_analysis"]
+    if pg_a is not None and pg_b is not None:
+        point_comparison = {
+            "symbol_a": pg_a["symbol"], "symbol_b": pg_b["symbol"],
+            "n_ops_a": pg_a["symmetry_operations"], "n_ops_b": pg_b["symmetry_operations"],
+            "same": pg_a["symbol"] == pg_b["symbol"],
+        }
+    return {
+        "label_a": label_a, "label_b": label_b,
+        "symbol_a": results_a["space_group_symbol"], "number_a": results_a["space_group_number"],
+        "symbol_b": results_b["space_group_symbol"], "number_b": results_b["space_group_number"],
+        "n_ops_a": len(results_a["symmetry_operations"]), "n_ops_b": len(results_b["symmetry_operations"]),
+        "same_space_group": results_a["space_group_number"] == results_b["space_group_number"],
+        "layer_comparison": layer_comparison,
+        "point_comparison": point_comparison,
+    }
+
+def _describe_comparison(cmp):
+    if cmp["same_space_group"]:
+        lines = [f"Symmetry PRESERVED between the two structures: both "
+                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops)."]
+    else:
+        direction = "gained" if cmp["n_ops_b"] > cmp["n_ops_a"] else "lost"
+        lines = [f"Symmetry CHANGED between the two structures: "
+                f"{cmp['symbol_a']} (No. {cmp['number_a']}, {cmp['n_ops_a']} ops) -> "
+                f"{cmp['symbol_b']} (No. {cmp['number_b']}, {cmp['n_ops_b']} ops) -- "
+                f"{direction} symmetry operations."]
+    lc = cmp["layer_comparison"]
+    if lc is not None:
+        if lc["same"]:
+            lines.append(f"Layer group PRESERVED: both {lc['symbol_a']} "
+                         f"(No. {lc['number_a']}, {lc['n_ops_a']} ops).")
+        else:
+            direction = "gained" if lc["n_ops_b"] > lc["n_ops_a"] else "lost"
+            lines.append(f"Layer group CHANGED: {lc['symbol_a']} (No. {lc['number_a']}, "
+                         f"{lc['n_ops_a']} ops) -> {lc['symbol_b']} (No. {lc['number_b']}, "
+                         f"{lc['n_ops_b']} ops) -- {direction} symmetry operations.")
+    pc = cmp["point_comparison"]
+    if pc is not None:
+        if pc["same"]:
+            lines.append(f"Point group PRESERVED: both {pc['symbol_a']} ({pc['n_ops_a']} ops).")
+        else:
+            direction = "gained" if pc["n_ops_b"] > pc["n_ops_a"] else "lost"
+            lines.append(f"Point group CHANGED: {pc['symbol_a']} ({pc['n_ops_a']} ops) -> "
+                         f"{pc['symbol_b']} ({pc['n_ops_b']} ops) -- {direction} symmetry operations.")
+    return "\n".join(lines)
+
+# --- Report formatting --------------------------------------------------
+# Same numbered-section report style as the rest of the suite's newer tools
+# ([0] RUN METADATA ... [N] SUMMARY & FILES via print_section/print_dual/
+# print_table) -- replaces the old ad hoc _rule()/_WIDTH plain-text layout.
+# The underlying numbers/physics (compute_symmetry/compute_layer_group/
+# compute_point_group and friends, above) are unchanged; only how they're
+# printed. Section numbers are fixed labels, not renumbered when a
+# conditional section is absent (e.g. no --compare-to skips straight from
+# [8] to [10]) -- same convention structural.py's own conditional RDF
+# section uses.
+
+def _vacuum_note_lines(results):
+    """Prose lines for [1] DIMENSIONALITY & VACUUM AXES -- which axes (if
+    any) are vacuum-padded, and which section (SPACE GROUP / LAYER GROUP /
+    POINT GROUP) is the physically meaningful symmetry classification."""
+    n_vacuum = sum(results["vacuum_axes"])
+    if not n_vacuum:
+        return ["No vacuum gap detected along any axis -- a genuine 3D bulk structure. "
+                "SPACE GROUP below is the physically meaningful symmetry classification."]
+
+    axis_names = [name for name, is_vacuum in zip("abc", results["vacuum_axes"]) if is_vacuum]
+    lines = [f"Vacuum gap (>= {VACUUM_GAP_ANG:g} Å) detected along axis/axes "
+             f"{', '.join(axis_names)} (e.g. a slab or wire). 3D space-group detection isn't "
+             "physically meaningful for a vacuum-padded structure -- spglib treats the vacuum "
+             "as ordinary empty space, not a broken periodicity, so SPACE GROUP"]
+    if results["layer_group"] is not None:
+        lines.append("below describes the padded supercell, not the real 2D symmetry -- see "
+                     "LAYER GROUP for that (spglib's dedicated 2D detection, not a heuristic).")
+    elif n_vacuum == 1:
+        lines.append("below describes the padded supercell, not the real layer symmetry. "
+                     "Dedicated layer-group detection was attempted (exactly one vacuum axis) "
+                     "but failed -- the structure may not be genuinely 2D-periodic within "
+                     "--symprec, or the installed spglib predates get_layergroup() (>= 2.1.0).")
+    elif results["point_group_analysis"] is not None:
+        lines.append("below describes the padded supercell, not the real molecular symmetry -- "
+                     "see POINT GROUP for that (pymatgen's separate, non-periodic detector; "
+                     "spglib has no rod-group equivalent for the 2-vacuum-axis/wire case).")
+    elif n_vacuum == 3:
+        lines.append("below describes the padded supercell, not the real molecular symmetry. "
+                     "Molecular point-group detection was attempted (all 3 axes vacuum-padded, "
+                     "i.e. an isolated molecule) but failed (pymatgen's PointGroupAnalyzer).")
+    else:
+        lines.append("below describes the padded supercell, not the real rod symmetry. This "
+                     "structure has 2 vacuum axes (a wire) -- spglib has no rod-group detection "
+                     "(the periodic analogue for a 1D system) to fall back on.")
+    return lines
+
+def _orbit_rows(orbits):
+    return [([o["wyckoff"], o["species"], str(o["n_atoms"]), o["site_symmetry"], str(o["example_atom_id"])], None)
+            for o in orbits]
+
+def print_report(results, args, source_file, fmt, show_operations, symprec_scan,
+                 layer_symprec_scan, point_group_scan, comparison, refined_path, report_path, f_out):
+    lat = results["lattice"]
+
+    print_dual(color_text("===== STB-SYMMETRY REPORT =====", 'magenta'), f_out)
+
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Date/time      : {datetime.now():%Y-%m-%d %H:%M:%S}", f_out)
+    print_dual(f"Input file     : {source_file} (format: {fmt})", f_out)
+    print_dual(f"Symmetry prec. : symprec={results['symprec']:g}, "
+               f"angle_tolerance={results['angle_tolerance']:g}°", f_out)
+    print_dual(f"Output dir     : {args.output_dir}", f_out)
+    print_dual(f"Compare to     : {args.compare_to if args.compare_to else 'no'}", f_out)
+    print_dual(f"Write refined  : "
+               f"{os.path.join(args.output_dir, args.write_refined) if args.write_refined else 'no'}", f_out)
+    print_dual(f"Interactive view: {'yes' if args.view else 'no'}", f_out)
+
+    print_section("[1] DIMENSIONALITY & VACUUM AXES", f_out)
+    for line in _vacuum_note_lines(results):
+        print_dual(line, f_out)
+
+    print_section("[2] SPACE GROUP", f_out)
+    rows = [
+        (["Space group", f"{results['space_group_symbol']} (No. {results['space_group_number']})"], None),
+        (["Hall symbol", f"{results['hall_symbol']} (Hall No. {results['hall_number']})"], None),
+        (["Point group", results["point_group"]], None),
+        (["Crystal system", results["crystal_system"]], None),
+        (["Lattice type", results["lattice_type"]], None),
+        (["Pearson symbol", results["pearson_symbol"]], None),
+    ]
+    if results["setting_choice"]:
+        rows.append((["Setting choice", results["setting_choice"]], None))
+    rows.append((["Symmetry operations", str(len(results["symmetry_operations"]))], None))
+    print_table(["Property", "Value"], rows, f_out)
+
+    if results["layer_group"] is not None:
+        lg = results["layer_group"]
+        print_section("[3] LAYER GROUP", f_out)
+        print_dual(f"Aperiodic axis: {lg['aperiodic_axis']} -- the physically correct symmetry "
+                   "for this vacuum-padded structure (spglib's dedicated layer-group detection, "
+                   "not a heuristic filter of the SPACE GROUP above).", f_out)
+        rows = [
+            (["Layer group", f"{lg['symbol']} (No. {lg['number']})"], None),
+            (["Hall symbol", f"{lg['hall_symbol']} (Hall No. {lg['hall_number']})"], None),
+            (["Point group", lg["point_group"]], None),
+        ]
+        if lg["setting_choice"]:
+            rows.append((["Setting choice", lg["setting_choice"]], None))
+        rows.append((["Symmetry operations", str(len(lg["symmetry_operations"]))], None))
+        print_table(["Property", "Value"], rows, f_out)
+        print_dual(f"Symmetrically distinct sites: {lg['n_distinct_sites']}", f_out)
+        print_table(["Wyckoff", "Species", "n atoms", "Site symmetry", "Example atom"],
+                    _orbit_rows(lg["orbits"]), f_out)
+        rows = [([str(s["atom_id"]), s["species"], s["wyckoff"], s["site_symmetry"], str(s["orbit"]),
+                  f"{s['distortion']:.4f}"], None) for s in lg["sites"]]
+        print_table(["Atom", "Sp.", "Wyckoff", "Site symmetry", "Orbit", "Distortion(Å)"], rows, f_out)
+        if show_operations:
+            print_dual(f"Symmetry operations ({len(lg['symmetry_operations'])}), in x,y,z notation:", f_out)
+            for i, op_str in enumerate(lg["symmetry_operations"]):
+                print_dual(f"{i+1:>4}: {op_str}", f_out)
+
+    if results["point_group_analysis"] is not None:
+        pg = results["point_group_analysis"]
+        print_section("[3] POINT GROUP", f_out)
+        print_dual("Isolated molecule (all 3 axes vacuum-padded) -- pymatgen's PointGroupAnalyzer, "
+                   "a separate non-periodic detector (spglib has no equivalent for a finite/0D "
+                   "structure).", f_out)
+        print_table(["Property", "Value"], [
+            (["Point group", pg["symbol"]], None),
+            (["Rotational symmetry number", str(pg["rotational_symmetry_number"])], None),
+            (["Symmetry operations", str(pg["symmetry_operations"])], None),
+            (["Detection tolerance", f"{pg['tolerance']:g} Å (molecular convention, "
+              "independent of --symprec)"], None),
+        ], f_out)
+        print_dual(f"Symmetrically distinct atoms: {pg['n_distinct_atoms']}", f_out)
+        rows = [([g["species"], str(g["n_atoms"]), ", ".join(str(a) for a in g["atom_ids"])], None)
+                for g in pg["groups"]]
+        print_table(["Species", "n atoms", "Atom IDs"], rows, f_out)
+        print_dual("Distortion = how far this atom sits from where the point-group operations "
+                   "(Cartesian, no periodic lattice) would exactly place it:", f_out)
+        rows = [([str(a["atom_id"]), a["species"], f"{a['distortion']:.4f}"], None) for a in pg["atoms"]]
+        print_table(["Atom", "Sp.", "Distortion(Å)"], rows, f_out)
+
+    print_section("[4] LATTICE", f_out)
+    print_table(["Quantity", "Value"], [
+        (["a", f"{lat['a']:.3f} Å"], None),
+        (["b", f"{lat['b']:.3f} Å"], None),
+        (["c", f"{lat['c']:.3f} Å"], None),
+        (["alpha", f"{lat['alpha']:.2f}°"], None),
+        (["beta", f"{lat['beta']:.2f}°"], None),
+        (["gamma", f"{lat['gamma']:.2f}°"], None),
+        (["Volume", f"{lat['volume']:.3f} Å³"], None),
+        (["Formula", f"{lat['reduced_formula']} (Z = {lat['z']:g} formula units in this cell)"], None),
+    ], f_out)
+    print_dual("Lattice vectors (Å):", f_out)
+    for i, vec in enumerate(lat["vectors"]):
+        print_dual(f"  a_{i+1}: {vec[0]:12.6f}  {vec[1]:12.6f}  {vec[2]:12.6f}", f_out)
+
+    if symprec_scan is not None or layer_symprec_scan is not None or point_group_scan is not None:
+        print_section("[5] TOLERANCE SENSITIVITY SCAN", f_out)
+        if symprec_scan is not None:
+            print_dual("Space-group symprec scan:", f_out)
+            rows = [([f"{sp:g}", f"{sym} (No. {num})" if num is not None else "not determined"], None)
+                    for sp, sym, num in symprec_scan]
+            print_table(["symprec", "space group"], rows, f_out)
+            print_dual(_describe_symprec_scan(symprec_scan), f_out)
+        if layer_symprec_scan is not None:
+            print_dual("Layer-group symprec scan:", f_out)
+            rows = [([f"{sp:g}", f"{sym} (No. {num})" if num is not None else "not determined"], None)
+                    for sp, sym, num in layer_symprec_scan]
+            print_table(["symprec", "layer group"], rows, f_out)
+            print_dual(_describe_symprec_scan(layer_symprec_scan, label="layer group"), f_out)
+        if point_group_scan is not None:
+            print_dual("Point-group tolerance scan:", f_out)
+            rows = [([f"{tol:g}", sym if sym is not None else "not determined"], None)
+                    for tol, sym in point_group_scan]
+            print_table(["tolerance(Å)", "point group"], rows, f_out)
+            print_dual(_describe_point_group_scan(point_group_scan), f_out)
+
+    print_section(f"[6] SYMMETRICALLY DISTINCT SITES: {results['n_distinct_sites']}", f_out)
+    print_table(["Wyckoff", "Species", "n atoms", "Site symmetry", "Example atom"],
+                _orbit_rows(results["orbits"]), f_out)
+
+    print_section("[7] ATOMIC SITES", f_out)
+    print_dual("Fractional coordinates. Distortion = how far this atom sits from where the "
+               "detected symmetry operations would exactly place it -- bounded by roughly "
+               "symprec, 0 means the operations map it exactly.", f_out)
+    rows = [([str(s["atom_id"]), s["species"], s["wyckoff"], f"{s['frac_coords'][0]:.6f}",
+              f"{s['frac_coords'][1]:.6f}", f"{s['frac_coords'][2]:.6f}", str(s["orbit"]),
+              f"{s['distortion']:.4f}"], None) for s in results["sites"]]
+    print_table(["Atom", "Sp.", "Wyckoff", "Frac. x", "Frac. y", "Frac. z", "Orbit", "Distortion(Å)"],
+                rows, f_out)
+
+    if show_operations:
+        print_section(f"[8] SYMMETRY OPERATIONS ({len(results['symmetry_operations'])}), in x,y,z notation", f_out)
+        for i, op_str in enumerate(results["symmetry_operations"]):
+            print_dual(f"{i+1:>4}: {op_str}", f_out)
+
+    if comparison is not None:
+        print_section("[9] SYMMETRY COMPARISON", f_out)
+        sg_a = f"{comparison['symbol_a']} (No. {comparison['number_a']})"
+        sg_b = f"{comparison['symbol_b']} (No. {comparison['number_b']})"
+        rows = [
+            (["Space group", sg_a, sg_b], None),
+            (["Symmetry operations", str(comparison["n_ops_a"]), str(comparison["n_ops_b"])], None),
+        ]
+        lc = comparison["layer_comparison"]
+        if lc is not None:
+            rows.append((["Layer group", f"{lc['symbol_a']} (No. {lc['number_a']})",
+                          f"{lc['symbol_b']} (No. {lc['number_b']})"], None))
+            rows.append((["Layer group ops", str(lc["n_ops_a"]), str(lc["n_ops_b"])], None))
+        pc = comparison["point_comparison"]
+        if pc is not None:
+            rows.append((["Point group", pc["symbol_a"], pc["symbol_b"]], None))
+            rows.append((["Point group ops", str(pc["n_ops_a"]), str(pc["n_ops_b"])], None))
+        print_table(["Property", comparison["label_a"], comparison["label_b"]], rows, f_out)
+        print_dual(_describe_comparison(comparison), f_out)
+
+    print_section("[10] REFERENCES", f_out)
+    bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
+    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    print_dual(color_text(
+        f"[OK] Citations for the methods used in this run written to "
+        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+    print_dual("Symmetry detection uses spglib (via pymatgen's SpacegroupAnalyzer) for the 3D "
+               "space group and layer group, and pymatgen's PointGroupAnalyzer for the molecular "
+               "point group -- see the example README for the underlying theory/approximations "
+               "and their limitations.", f_out)
+
+    print_section("[11] SUMMARY & FILES", f_out)
+    print_dual("Status         : OK", f_out)
+    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    if refined_path:
+        print_dual(f"Refined struct.: {refined_path}", f_out)
+    if report_path:
+        print_dual(f"Report         : {report_path}", f_out)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Analyze crystal symmetry (space group, Wyckoff positions, symmetry "
+                     "operations) from a SIESTA structure file.",
+        epilog="Example usage:\n"
+               "  stb-symmetry --file structure.fdf --format fdf\n"
+               "  stb-symmetry --file siesta.STRUCT_OUT --format struct_out --symprec 1e-4",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument("--file", required=True, help="Path to structure file.")
+    parser.add_argument("--format", required=True, choices=["fdf", "struct_out"],
+                        help="Input file format:\n"
+                             "  fdf:        SIESTA structure input (%%block LatticeVectors etc.)\n"
+                             "  struct_out: SIESTA post-relaxation output (.STRUCT_OUT)")
+    parser.add_argument("--symprec", type=float, default=0.01,
+                        help="Symmetry-detection tolerance in Å (default: 0.01, pymatgen's own "
+                             "default). Loosen further (e.g. 0.02-0.05) for a structure relaxed "
+                             "with a looser force tolerance -- a tighter value than the "
+                             "relaxation's own residual numerical noise can misdetect the true "
+                             "space group; use --scan-symprec to check where a given structure's "
+                             "symmetry call is sensitive.")
+    parser.add_argument("--angle-tolerance", type=float, default=5.0,
+                        help="Symmetry-detection angle tolerance in degrees (default: 5.0).")
+    parser.add_argument("--no-operations", dest="show_operations", action="store_false",
+                        help="Skip the full symmetry-operations list in the report -- keeps "
+                             "just the count in the SPACE GROUP section. Useful for "
+                             "high-symmetry structures where the full list is long.")
+    parser.add_argument("--scan-symprec", action="store_true",
+                        help="Also detect symmetry at a range of tolerances "
+                             f"({', '.join(f'{v:g}' for v in DEFAULT_SYMPREC_SCAN)}) and report "
+                             "where the space group changes -- reveals symmetry that's present "
+                             "but hidden by small numerical noise (e.g. from a DFT relaxation) "
+                             "at the --symprec you asked for. For a structure with exactly one "
+                             "vacuum axis, also scans the layer group; for one with all 3 axes "
+                             "vacuum-padded (an isolated molecule), scans the point group's own "
+                             "tolerance instead (both physically meaningful there, in their own "
+                             "report sections).")
+    parser.add_argument("--compare-to", type=str, metavar="PATH",
+                        help="Also analyze a second structure file and report whether it "
+                             "shares the same space group -- e.g. compare a pre-relaxation "
+                             ".fdf against its post-relaxation .STRUCT_OUT to check whether "
+                             "symmetry survived. Analyzed with the same --symprec/"
+                             "--angle-tolerance as --file. If both structures have a detected "
+                             "layer group (e.g. comparing a 2D slab) or point group (e.g. "
+                             "comparing an isolated molecule), that's compared too.")
+    parser.add_argument("--compare-format", choices=["fdf", "struct_out"],
+                        help="File format of --compare-to (required if --compare-to is given).")
+    parser.add_argument("--write-refined", type=str, metavar="FILENAME",
+                        help="Also write the symmetry-refined structure (conventional cell, "
+                             "positions snapped to the detected symmetry) as this .fdf file "
+                             "inside --output-dir, with a header documenting the source file, "
+                             "tolerances, and which group it was refined against -- the same "
+                             "reduction stb-unitcell --mode refined uses. For a "
+                             "structure with exactly one vacuum axis, refines against the layer "
+                             "group instead; for one with all 3 axes vacuum-padded (an isolated "
+                             "molecule), symmetrizes it as a molecule instead (both physically "
+                             "meaningful there, unlike the 3D space group) -- skipped with an "
+                             "error for a wire (2 vacuum axes, no rod-group equivalent exists) "
+                             "or if the applicable detection failed.")
+    parser.add_argument("-o", "--output-dir", type=str, default=".",
+                        help="Directory to write references.bib into (and "
+                             f"{REPORT_FILE}, with --save-report) (default: current "
+                             "directory). Created if it doesn't exist.")
+    parser.add_argument("--save-report", action="store_true",
+                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+    parser.add_argument("--view", action="store_true",
+                        help="Open an interactive 3D view (via ASE) of the analyzed structure "
+                             "-- or, if --write-refined/--compare-to is also given, both "
+                             "structures side by side (page through frames in ase-gui) -- after "
+                             "the report is written. Needs a display. Off by default.")
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"stb-symmetry {VERSION}")
+    parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
+    args = parser.parse_args()
+
+    if args.symprec <= 0:
+        parser.error("--symprec must be positive.")
+    if args.angle_tolerance <= 0:
+        parser.error("--angle-tolerance must be positive.")
+    if args.compare_to and not args.compare_format:
+        parser.error("--compare-format is required when --compare-to is given.")
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Remove a stale symmetry.dat left by an older version of this tool
+    # (which always wrote it unconditionally) so it's never mistaken for
+    # current output.
+    stale_path = os.path.join(args.output_dir, "symmetry.dat")
+    if os.path.exists(stale_path):
+        os.remove(stale_path)
+
+    if args.intro:
+        show_intro([
+            "Siesta ToolBox Suite",
+            "A comprehensive toolkit for SIESTA DFT simulations",
+            f"Version {VERSION} | University of Brasilia - 2026",
+            "Developed by Dr. Carlos M. O. Bastos"
+        ])
+
+    print("\n" + color_text("CRYSTAL SYMMETRY ANALYSIS:", 'bold'))
+    print("-"*60)
+
+    print("\n[INFO] Reading structure file...")
+    try:
+        structure = structure_io.read_siesta_structure(args.file, args.format)
+    except FileNotFoundError:
+        print(color_text(f"[ERROR] Structure file '{args.file}' not found.", 'red'))
+        sys.exit(1)
+    except ValueError as e:
+        print(color_text(f"[ERROR] {e}", 'red'))
+        sys.exit(1)
+
+    print("[INFO] Detecting symmetry...")
+    try:
+        results = compute_symmetry(structure, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+    except Exception as e:
+        print(color_text(f"[ERROR] Symmetry detection failed: {e}", 'red'))
+        sys.exit(1)
+
+    symprec_scan = None
+    layer_symprec_scan = None
+    point_group_scan = None
+    if args.scan_symprec:
+        print("[INFO] Scanning symprec sensitivity...")
+        try:
+            symprec_scan = scan_symprec(structure, angle_tolerance=args.angle_tolerance)
+        except Exception as e:
+            print(color_text(f"[WARNING] --scan-symprec failed: {e}", 'yellow'))
+        n_vacuum_scan = sum(results["vacuum_axes"])
+        if n_vacuum_scan == 1:
+            print("[INFO] Scanning layer-group symprec sensitivity...")
+            try:
+                layer_symprec_scan = scan_symprec_layer(structure, results["vacuum_axes"].index(True))
+            except Exception as e:
+                print(color_text(f"[WARNING] --scan-symprec (layer group) failed: {e}", 'yellow'))
+        elif n_vacuum_scan == 3:
+            print("[INFO] Scanning point-group tolerance sensitivity...")
+            try:
+                point_group_scan = scan_point_group_tolerance(structure)
+            except Exception as e:
+                print(color_text(f"[WARNING] --scan-symprec (point group) failed: {e}", 'yellow'))
+
+    comparison = None
+    if args.compare_to:
+        print("\n[INFO] Reading comparison structure file...")
+        try:
+            structure2 = structure_io.read_siesta_structure(args.compare_to, args.compare_format)
+        except FileNotFoundError:
+            print(color_text(f"[ERROR] Comparison structure file '{args.compare_to}' not found.", 'red'))
+            sys.exit(1)
+        except ValueError as e:
+            print(color_text(f"[ERROR] {e}", 'red'))
+            sys.exit(1)
+
+        print("[INFO] Detecting symmetry of comparison structure...")
+        try:
+            results2 = compute_symmetry(structure2, symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+        except Exception as e:
+            print(color_text(f"[ERROR] Symmetry detection failed for comparison structure: {e}", 'red'))
+            sys.exit(1)
+        comparison = compare_symmetry(results, results2, args.file, args.compare_to)
+
+    refined_structure = None
+    refined_path = None
+    if args.write_refined:
+        # Written inside --output-dir (like references.bib/the report),
+        # not wherever the current working directory happens to be.
+        write_refined_target = os.path.join(args.output_dir, args.write_refined)
+        base_header = [
+            f"Symmetry-refined structure generated by stb-symmetry {VERSION}.",
+            f"Source: {args.file} (format: {args.format})",
+            f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
+            f"Detection tolerance: symprec={args.symprec:g}, angle_tolerance={args.angle_tolerance:g}°",
+        ]
+        n_vacuum = sum(results["vacuum_axes"])
+        if n_vacuum == 1 and results["layer_group"] is not None:
+            # Refine against the layer group instead of the (for a
+            # vacuum-padded structure, not physically meaningful) 3D space
+            # group -- uses the same std_lattice/std_positions/std_types
+            # convention as an ordinary SpglibDataset, just standardized
+            # against the 2D symmetry instead.
+            print(f"\n[INFO] Writing layer-group-refined structure to {write_refined_target}...")
+            try:
+                from pymatgen.core import Element, Lattice, Structure
+                lg = results["layer_group"]
+                species = [Element.from_Z(int(z)).symbol for z in lg["std_types"]]
+                refined_structure = Structure(Lattice(lg["std_lattice"]), species, lg["std_positions"])
+                header_comment = base_header + [
+                    f"Refined against: LAYER GROUP {lg['symbol']} (No. {lg['number']}), "
+                    f"aperiodic axis {lg['aperiodic_axis']}."
+                ]
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure),
+                                       write_refined_target, header_comment=header_comment)
+                refined_path = write_refined_target
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+        elif n_vacuum == 3 and results["point_group_analysis"] is not None:
+            # Symmetrize the molecule (pymatgen's own symmetrize_molecule(),
+            # Cartesian, re-centered on its own centroid by convention) and
+            # shift it back into the original vacuum box using the
+            # ORIGINAL centroid -- the box/lattice itself is untouched,
+            # only the atom positions within it are cleaned up. Verified
+            # round-trip: shifted-back coordinates matched input to ~1e-15
+            # for an already-symmetric structure.
+            print(f"\n[INFO] Writing point-group-refined structure to {write_refined_target}...")
+            try:
+                from pymatgen.core import Structure
+                pg = results["point_group_analysis"]
+                species = [str(site.specie.symbol) for site in structure]
+                refined_structure = Structure(
+                    structure.lattice, species, pg["symmetrized_cart_coords"], coords_are_cartesian=True)
+                header_comment = base_header + [
+                    f"Refined against: POINT GROUP {pg['symbol']} (isolated molecule, "
+                    f"detection tolerance {pg['tolerance']:g} Å)."
+                ]
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure),
+                                       write_refined_target, header_comment=header_comment)
+                refined_path = write_refined_target
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+        elif n_vacuum > 0:
+            print(color_text(
+                "\n[ERROR] --write-refined skipped: refining needs either a genuinely 3D bulk "
+                "structure (0 vacuum axes), a successfully-detected layer group (exactly 1 "
+                "vacuum axis), or a successfully-detected point group (exactly 3 vacuum axes, "
+                "an isolated molecule) to standardize against -- this structure has "
+                f"{n_vacuum} vacuum axis/axes and " +
+                ("no layer group was determined" if n_vacuum == 1 else
+                 "no point group was determined" if n_vacuum == 3 else
+                 "no rod-group equivalent is available (spglib doesn't implement rod groups)") +
+                ". Refining against the 3D space group instead could reshape the cell/vacuum "
+                "axis into something that no longer represents the intended structure.", 'red'))
+        else:
+            print(f"\n[INFO] Writing symmetry-refined structure to {write_refined_target}...")
+            try:
+                from stb.core.symmetry import reduce_to_unitcell
+                refined_structure, _ = reduce_to_unitcell(
+                    structure, "refined", symprec=args.symprec, angle_tolerance=args.angle_tolerance)
+                header_comment = base_header + [
+                    f"Refined against: SPACE GROUP {results['space_group_symbol']} "
+                    f"(No. {results['space_group_number']})."
+                ]
+                structure_io.write_fdf(structure_io.from_pymatgen(refined_structure),
+                                       write_refined_target, header_comment=header_comment)
+                refined_path = write_refined_target
+            except Exception as e:
+                print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
+
+    print()
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    print_report(results, args, args.file, args.format, args.show_operations,
+                symprec_scan, layer_symprec_scan, point_group_scan, comparison,
+                refined_path, report_path, f_out)
+
+    if f_out:
+        f_out.close()
+
+    # --view runs last, after every report section above has already printed,
+    # so a blocking GUI window never delays or hides them -- shows both
+    # frames (input vs. refined/comparison structure) when either is
+    # available, so the user can page through the actual comparison in
+    # ase-gui, or just the single analyzed structure otherwise.
+    if args.view:
+        input_atoms = AseAtomsAdaptor.get_atoms(structure)
+        if refined_structure is not None:
+            view_structure_interactive([input_atoms, AseAtomsAdaptor.get_atoms(refined_structure)])
+        elif args.compare_to:
+            view_structure_interactive([input_atoms, AseAtomsAdaptor.get_atoms(structure2)])
+        else:
+            view_structure_interactive(input_atoms)
+
+if __name__ == "__main__":
+    main()

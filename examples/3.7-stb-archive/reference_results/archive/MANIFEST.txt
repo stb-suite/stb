@@ -1,0 +1,78 @@
+STB-ARCHIVE MANIFEST
+========================================================================
+Created           : <date>
+stb               : 1.9.322
+Source folder     : <work>/si_relax
+Mode              : results -- inputs + logs + geometry/trajectory + small electronic outputs (bands, DOS, PDOS, eigenvalues) + post-processing; no grids, restart files, basis tables or H/S/wavefunction binaries
+
+THE RUN (stb-status)
+SystemLabel       : si
+State             : FINISHED
+Run type          : relaxation
+SIESTA            : 5.4.2, 4 MPI processes
+Atoms             : 2 (Si2)
+XC functional     : GGA Perdew, Burke & Ernzerhof 1996
+Spin              : none
+k-points          : 108
+Mesh cutoff       : 200 Ry required, 248.0 Ry used
+Relaxation        : converged
+Total energy      : -230.035507 eV
+Fermi level       : -4.180341 eV
+Band gap (.EIG)   : 0.9406 eV
+Max force         : 0.002029 eV/Ang
+Wall time         : 12.0 s
+
+FILES IN THIS ARCHIVE (38; SHA-256 also in SHA256SUMS)
+  5fd8b08356245c59cb637e2a12febea7a2b5a99c5cb08612f02ebc11a0b95193          30  0_NORMAL_EXIT   [SIESTA log / status; result]
+  35c56c3db5821c20a56377d6d294ad9d9dc4ee725492b747ba242238b6ee11a1         333  BASIS_ENTHALPY   [SIESTA log / status; result]
+  9849946fdb7ed281535f0b9241038bea20e15bbcef8695d9aa6fb6d4b0797f0f         333  BASIS_HARRIS_ENTHALPY   [SIESTA log / status; result]
+  8773d6d4713887fcf812c538656ed366fba011bf87998426defaa94268ad9a28        2799  CLOCK   [SIESTA log / status; result]
+  e0ffa80ad49f1e894545916c71381ad21a4bfc8c57bc424c63a0f245e1da135c         354  FORCE_STRESS   [SIESTA log / status; result]
+  f13e34878bda4c789e164475a59c850256a43e501e252a0ee1bb134c8bc4bb97          20  MESSAGES   [SIESTA log / status; result]
+  52274009ffed92982ab256277a0082a9defbdd46cd89fb7020bb0d1db9a7aff2        6271  NON_TRIMMED_KP_LIST   [SIESTA log / status; result]
+  0776512c0e5dfdf8fded0be9d0b0e441f5b755afecf617284e81319c6528f00d        1310  OUTVARS.yml   [SIESTA log / status; result]
+  e53880fb68cc7d1e59cba5cba61c5d80d4dd29c912cddd2ad055b021731f9c21         208  PARALLEL_DIST   [SIESTA log / status; result]
+  d74058dc9ee391d2cda64f3974b39929f22b26ef8b03a5895cbb8bdc9b2e50ee       86715  Si.psml   [input (needed to run again); pseudopotential]
+  7e8af1cdf40dc76f17829e885d7a8241490359e1e282c852e2e176d56e019608        6014  TIMES   [SIESTA log / status; result]
+  f9190295df0dab882984002d15e585bfba6d85a3d3a1363ea5ba60bd5afadd91       20406  analysis/si_bands.dat   [post-processing / plots; result]
+  aaf3b27072d358b570ee84027618ff79f133f2904c5ee00b266584be7d578ff7       28953  analysis/si_bands.png   [post-processing / plots; result]
+  775590d1b46f54fbc66d4e6a09fc820e93dc5e8e9e8487f9a2adfcf4012c8862          65  bandlines.txt   [input (needed to run again); read by calc.fdf]
+  5527657756ec0ccde42f44c89ef01235dc8890bbd505ddce2f1510c3f79a7d16         768  calc.fdf   [input (needed to run again); SIESTA input]
+  ecd1c8735826da02727e384d11d298c8e1686ea4be0ec6de23759826028ffdaa       55282  calc.out   [SIESTA log / status; result]
+  8c2edf605d7da43592cd48f5589fe676fe5a5c0016b90e09420b03d4c116c1b9       56751  fdf.20261030T212534.638.log   [SIESTA log / status; result]
+  2b0a21514fcf4ec87ff93f519a7b0e697eaaa886a06e513b4ddccf0668e894a6         712  si.ANI   [geometry / forces / dynamics; result]
+  356524a963764a6abe7f6614917bbc100e47e1c7e44c32afc146d62f139773e5         381  si.BASIS_ENTHALPY   [SIESTA log / status; result]
+  77a6842e511104b37cf438429a4b4033be2927088676f3475830d6a6e983811b         720  si.BONDS   [geometry / forces / dynamics; result]
+  79337bc03e63af353d29c57eb05e405fa0932aba4233dd05c3e83a3c7d65116d         720  si.BONDS_FINAL   [geometry / forces / dynamics; result]
+  835a0fe155aaa1e74eb1d91ce2f2f862a54de572a51039d771d7d1558c926009       16400  si.DOS   [electronic structure; result]
+  d8d1c13630ecbb883c8eb7df188664e8a416ba9091041b1f7b3675e0accd8aee       54151  si.EIG   [electronic structure; result]
+  16fab1c86c78b45216131b0cee94ecd07af9e41e03d169b4720dc39216410ed5         129  si.FA   [geometry / forces / dynamics; result]
+  e617d3cbc77034475c1c6096783716ca5062304b1d746b24e9077787a889041f        7573  si.KP   [electronic structure; result]
+  12f4477e0bcf405ad3699070db2b9f718c397a44092342cc53fbc4dd61f45890      254314  si.ORB_INDX   [electronic structure; result]
+  c42ef265c66d902885259c1988545b146e47ecd7114f89d8a58a4d52cbb609a7      203624  si.PDOS   [electronic structure; result]
+  988cc9fb2eac049d525a244c1014b64b00e3234ee5642c66a1f354f6502fba3c        7573  si.PDOS.KP   [electronic structure; result]
+  d0155fdcd0a389ce2b872dec32b2c12a0abccf37ba893aef4d40789b9072081d      223062  si.PDOS.xml   [electronic structure; result]
+  e08e383d2f1502262916bbd3b4e658f20d382ce748db480e680a75362838a080         315  si.STRUCT_OUT   [geometry / forces / dynamics; result]
+  edcf2ebf37d6af372a02230d0d6f0c76ff2efef9a0d43fce023ebd321094f462         600  si.XV   [restart (SIESTA reads it back); result]
+  342a62d2da6bcefc47188fab994e00db28101879ab69c9ce8491360fcaef2e48         457  si.alloc   [SIESTA log / status; result]
+  0fc6ca07b21246333196c0962e42866612cd7f630dd049cec3c0ca4b2ba0f930       29931  si.bands   [electronic structure; result]
+  1e2d80e35fe786184d788421b5347fb383829c9d979204b3faa8aed617153e20        1039  si.bib   [SIESTA log / status; result]
+  77a768f9cc3296d6f7f6da5c93fd555b4650313bd9ebb42528a06527949e7c62        6013  si.times   [SIESTA log / status; result]
+  102c5704c0ddd2bafefb57fc56d1625dc08c7d3f842c9969db8ec7157966d001        1814  siesta.err   [job-scheduler output; result]
+  e4f418ef395870da374efe654903fffeecf4d6e4780914f7e190714c2d29f65e         375  structure.fdf   [input (needed to run again); SIESTA input]
+  e0daeeaac45907f304981c80f314c842ad15dcde893c00c6446d021d3124896e         123  submit.slurm   [input (needed to run again); job script]
+
+LEFT OUT (9)
+      108360  Rho.grid.nc   [real-space grids; real-space grid (large)]
+      375079  Si.ion   [basis by-products; basis table (SIESTA regenerates it)]
+       61804  Si.ion.nc   [basis by-products; basis table (SIESTA regenerates it)]
+      343759  Si.ion.xml   [basis by-products; basis table (SIESTA regenerates it)]
+         392  si.CG   [restart (SIESTA reads it back); restart file (regenerable by rerunning)]
+      384916  si.DM   [restart (SIESTA reads it back); restart file (regenerable by rerunning)]
+      643344  si.HSX   [electronic structure; H/S or wavefunction binary (large)]
+      115304  si.RHO   [real-space grids; real-space grid (large)]
+         315  si.STRUCT_NEXT_ITER   [restart (SIESTA reads it back); restart file (regenerable by rerunning)]
+
+RESTORE
+  tar -xzf <this archive>
+  cd si_relax && sha256sum -c SHA256SUMS

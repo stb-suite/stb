@@ -1,0 +1,9 @@
+output/
+ipr.dat
+ipr_up.dat
+ipr_down.dat
+ipr.gplot
+ipr.pdf
+stb_ipr_report.txt
+references.bib
+calc.HSX

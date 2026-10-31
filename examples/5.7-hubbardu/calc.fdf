@@ -1,0 +1,13 @@
+SystemLabel siesta
+%include structure.fdf
+PAO.BasisType split
+PAO.BasisSize DZP
+kgrid.MonkhorstPack [4 4 4]
+Mesh.CutOff 200 Ry
+XC.functional GGA
+XC.authors PBE
+Spin non-polarized
+MaxSCFIterations 200
+DM.MixingWeight 0.1
+DM.NumberPulay 4
+SCF.H.Tolerance 0.001 eV

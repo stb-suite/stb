@@ -1,0 +1,31 @@
+# Vacancy-migration NEB endpoint, paired with vac_initial.fdf: the atom
+# that sat at (0,0,0) in vac_initial.fdf has hopped to the (0.25,0.25,0.25)
+# site (a real nearest-neighbor Si-Si bond distance, ~2.35 Ang), leaving a
+# vacancy at (0,0,0) instead -- models the same vacancy migrating one hop
+# through the diamond lattice.
+NumberOfSpecies    1
+NumberofAtoms      7
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 1.0 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 5.43000000   0.00000000   0.00000000
+ 0.00000000   5.43000000   0.00000000
+ 0.00000000   0.00000000   5.43000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.50000000   0.00000000   0.50000000   1
+  0.25000000   0.25000000   0.25000000   1
+  0.25000000   0.75000000   0.75000000   1
+  0.75000000   0.25000000   0.75000000   1
+  0.00000000   0.50000000   0.50000000   1
+  0.50000000   0.50000000   0.00000000   1
+  0.75000000   0.75000000   0.25000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

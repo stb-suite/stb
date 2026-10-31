@@ -1,0 +1,63 @@
+
+NATIVE CHARGES:
+------------------------------------------------------------
+===== STB-NATIVECHARGES REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+stb               : 1.9.325
+Target            : nacl
+Methods           : Mulliken (WriteMullikenPop 1), Hirshfeld (Charge.Hirshfeld end), Voronoi (Charge.Voronoi end) -- as SIESTA printed them
+
+[1] RUN
+------------------------------------------------------------
+Folder            : nacl
+Log               : nacl/calc.out (SIESTA 5.4.2)
+State             : FINISHED, single point
+Atoms             : 2 (NaCl)
+Basis             : DZP
+Spin              : none
+Mulliken          : found
+Hirshfeld         : found
+Voronoi           : found
+
+[2] CHARGES PER ATOM
+------------------------------------------------------------
+# | el | Z_val | q Mulliken | q Hirshfeld | q Voronoi | spread
+--------------------------------------------------------------
+1 | Na | 9     | +0.0771    | +0.1370     | +0.1664   | 0.0893
+2 | Cl | 7     | -0.0771    | -0.1370     | -0.1664   | 0.0893
+q in e (positive = electrons lost); spread = largest minus smallest q over the methods
+
+[3] PER SPECIES
+------------------------------------------------------------
+species | atoms | mean q Mulliken | mean q Hirshfeld | mean q Voronoi
+---------------------------------------------------------------------
+Na      | 1     | +0.0771         | +0.1370          | +0.1664       
+Cl      | 1     | -0.0771         | -0.1370          | -0.1664       
++-: spread over the atoms of one species (equivalent atoms should agree)
+
+[4] CHECKS
+------------------------------------------------------------
+method    | sum of q (e) | max |pop + q - Z_val| | sum of Sz
+------------------------------------------------------------
+Mulliken  | +0.000000    | 0.0e+00               | -        
+Hirshfeld | +0.000000    | 0.0e+00               | -        
+Voronoi   | -0.000001    | 0.0e+00               | -        
+Expected          : sum of q = +0 e
+Method dependence : up to 0.089 e (Cl2) -- a partial charge is a convention, not an observable
+
+[5] SUMMARY & FILES
+------------------------------------------------------------
+Mulliken          : in 1 of 1 folder(s)
+Hirshfeld         : in 1 of 1 folder(s)
+Voronoi           : in 1 of 1 folder(s)
+
+[6] WARNINGS
+------------------------------------------------------------
+  none
+
+------------------------------------------------------------
+Native charges report complete.
+

@@ -1,0 +1,16 @@
+digraph charges {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7, fontsize=9];
+  log   [label="the SIESTA log of each folder\n(<label>.out or the only *.out)"];
+  blk   [label="the LAST 'Mulliken / Hirshfeld / Voronoi Atomic Populations:' blocks\n(WriteMullikenPop 1, Charge.Hirshfeld end, Charge.Voronoi end)"];
+  aux   [label="Z_val per species, spin moment, electric dipole (log)\nNetCharge (.fdf), geometry (.XV), run state (stb-status)"];
+  atom  [label="[2] per atom: q of every method side by side, spread, Sz"];
+  spec  [label="[3] per species: mean and spread over equivalent atoms"];
+  chk   [label="[4] checks: sum of q = -NetCharge, population + q = Z_val,\nsum of Sz = spin moment, method dependence"];
+  dip   [label="[5] molecule or slab: dipole of the point charges vs SIESTA's"];
+  batch [label="several folders: one table per species and method; --csv"];
+  log -> blk -> atom -> spec -> chk -> dip;
+  log -> aux -> chk;
+  spec -> batch [style=dashed];
+}

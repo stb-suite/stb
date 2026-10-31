@@ -1,0 +1,51 @@
+
+RAMAN SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS
+------------------------------------------------------------
+===== RAMAN STAGE 3 REPORT (ANALYSIS) =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : <date>
+Directory         : raman_study
+SystemLabel       : siesta
+Modes in table    : 3
+Displacement      : 0.02 Ang (from Stage 2)
+
+[1] READING RUNS
+------------------------------------------------------------
+  Mode 1 (25.3293 THz / 844.89 cm^-1):
+    -> Rxx=-0.000000  Ryy=-0.000000  Rzz=0.000000  Rxy=0.000000  Rxz=0.000028  Ryz=0.005757  (1/Ang)  activity~0.000696  rho~0.7500 (depolarized)
+  Mode 2 (46.1026 THz / 1537.82 cm^-1):
+    -> Rxx=948.934678  Ryy=7033.077281  Rzz=0.000092  Rxy=3009.056068  Rxz=0.000000  Ryz=-0.000000  (1/Ang)  activity~814540418.632881  rho~0.3531 (polarized)
+  Mode 3 (46.1026 THz / 1537.82 cm^-1):
+    -> Rxx=-1555.762719  Ryy=193.979259  Rzz=-0.000023  Rxy=122.093861  Rxz=0.000000  Ryz=-0.000000  (1/Ang)  activity~28903995.202271  rho~0.4106 (polarized)
+
+[2] RAMAN-ACTIVE MODES SUMMARY
+------------------------------------------------------------
+  Mode  THz       cm^-1     Rxx         Ryy         Rzz         Rxy         Rxz         Ryz         Activity     rho       Polarization
+  1     25.3293   844.89    -0.000000   -0.000000   0.000000    0.000000    0.000028    0.005757    0.000696     0.7500    depolarized
+  2     46.1026   1537.82   948.934678  7033.077281 0.000092    3009.056068 0.000000    -0.000000   8.1454e+08   0.3531    polarized
+  3     46.1026   1537.82   -1555.762719 193.979259  -0.000023   122.093861  0.000000    -0.000000   2.8904e+07   0.4106    polarized
+
+[NOTE] Activity computed from the FULL Raman tensor (diagonal + off-diagonal Rxy/Rxz/Ryz), the exact literature invariant (45a^2+7gamma^2).
+[NOTE] rho (depolarization ratio) uses the same diagonal-only/full-tensor scope as activity above, per mode.
+[WARNING] Degenerate modes 2, 3 (46.10 THz) have activities 8.145e+08, 2.89e+07: they must be equal (activity is an invariant of the degenerate set). The tensor is not reliable -- typical of a zero-gap system (graphene, a metal), whose eps1(0) is set by the broadening and the Optical.Mesh, or of unconverged optical runs.
+
+[3] SPECTRUM
+------------------------------------------------------------
+Grid              : 744.9 - 1637.8 cm^-1, 2000 points, 10.00 cm^-1 linewidth
+Peaks detected    : 1 (prominence >= 1.0% of max intensity)
+  Position (cm^-1)    Rel. intensity (%)
+  1537.76             100.0
+[Saved] raman_study/plot/raman_spectrum.dat, raman_study/plot/raman_spectrum.gplot (cd raman_study/plot && gnuplot raman_spectrum.gplot)
+
+[4] SUMMARY & FILES
+------------------------------------------------------------
+Modes analyzed      : 3/3
+Files               : raman_study/plot/raman_spectrum.dat, raman_study/plot/raman_spectrum.gplot
+
+[INFO] Complete job!
+
+------------------------------------------------------------
+Raman analysis complete.
+

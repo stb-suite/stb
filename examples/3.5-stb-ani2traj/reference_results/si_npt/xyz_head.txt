@@ -1,0 +1,2 @@
+8
+Lattice="5.475974 -1.5e-05 -3e-06 -1.5e-05 5.475999 1.5e-05 -3e-06 1.5e-05 5.476018" Properties=species:S:1:pos:R:3 E_KS=-919.10391 Temp_ion=894.28 E_tot=-918.29475 Volume=164.206 Pressure_kBar=-0.383 MD_step=2 Time=1.0 pbc="T T T"

@@ -1,0 +1,24 @@
+// Flowchart of stb-translate (3.1). Render with:
+//   dot -Tpng -Gdpi=150 translate_flowchart.dot -o translate_flowchart.png
+digraph translate {
+    graph [rankdir=TB, fontname="Helvetica", fontsize=11, nodesep=0.35, ranksep=0.32, bgcolor="white", pad=0.3];
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10,
+           fillcolor="#eef3fb", color="#4a6fa5", penwidth=1.2, margin="0.15,0.07"];
+    edge  [fontname="Helvetica", fontsize=9, color="#555555", arrowsize=0.7];
+
+    in      [label="Input file(s): -i  (a glob = batch)\nfdf, STRUCT_OUT, POSCAR, CIF, XYZ (+ --lattice-vectors),\nXSF, FHI-aims geometry.in, DFTB+ .gen", fillcolor="#fff7e0", color="#b8860b"];
+    fmt     [label="1. Formats\n-if or from the input's name (per file in batch)\n-of or from -o's name"];
+    read    [label="2. Read: cell vectors x lattice parameter (units -> Ang),\nspecies, positions (fractional or Cartesian),\nCIF symmetry operations applied"];
+    rng     [label="3. Coordinates as stored and their range\n(fractional far outside [0,1] / Cartesian all < 1 Ang:\na likely Direct/Cartesian mix-up)"];
+    struct  [label="4. Structure: formula, Z, species, cell lengths/angles,\nvolume, density, periodicity (vacuum gaps),\nshortest distance per element pair vs covalent radii"];
+    sym     [label="5. Symmetry (spglib): space group at 0.001 / 0.01 / 0.1 Ang,\ncrystal system, point group, primitive cell"];
+    dry     [label="--dry-run: stop here", shape=box, style="rounded,dashed", fillcolor="white"];
+    write   [label="6. Write in the output format\n-cf direct|cartesian where the format allows both;\nCIF: symmetrized at --cif-symprec (0 = P1, as read)"];
+    check   [label="7. Read the written file back and compare:\ncomposition, atoms, volume / formula unit,\ncell and largest atom displacement\n(or StructureMatcher for a re-expressed CIF cell)"];
+    report  [label="Report (sections, warnings last) + output file(s)\n--save-report, --view, --view-image\nbatch: one summary table", fillcolor="#e6f4e6", color="#2e7d32"];
+
+    in -> fmt -> read -> rng -> struct -> sym;
+    sym -> dry [style=dashed];
+    sym -> write -> check -> report;
+    dry -> report [style=dashed];
+}

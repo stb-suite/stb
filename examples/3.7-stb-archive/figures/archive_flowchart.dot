@@ -1,0 +1,19 @@
+digraph archive {
+  rankdir=TB; nodesep=0.3; ranksep=0.3;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5f8", color="#1f6f8b", fontname="Helvetica", fontsize=11];
+  edge [color="#555555", arrowsize=0.7, fontsize=9];
+  files  [label="every file of the folder (--recursive: and its subfolders)\nhidden files and earlier archives never"];
+  input  [label="an input? .fdf, a file an .fdf reads (%include, < file),\npseudopotential, job script", shape=diamond, fillcolor="#fdf2e9", color="#c0392b"];
+  inn    [label="GOES IN (always)", fillcolor="#e6f4ea", color="#2e7d32"];
+  mode   [label="--include / --exclude, then --mode\nresults: logs, geometry, bands, DOS, eigenvalues, plots\ninputs: nothing more   full: everything"];
+  out    [label="LEFT OUT, with the reason\n(restart, grid, basis table, H/S binary, large unknown)", fillcolor="#fff7e0", color="#b8860b"];
+  status [label="the run, from stb-status: state, type, energy, settings"];
+  write  [label="write <folder>_archive.tar.gz (never over an existing one):\nfiles + MANIFEST.txt + SHA256SUMS"];
+  check  [label="read it back: every file's size and SHA-256", shape=box];
+  files -> input;
+  input -> inn [label=" yes"];
+  input -> mode [label=" no"];
+  mode -> inn [label=" kept"];
+  mode -> out [label=" not kept"];
+  inn -> write; status -> write; write -> check;
+}

@@ -1,0 +1,120 @@
+===== STB-MLPHONONS REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time         : 2026-10-28 14:55:38
+Software          : stb 1.9.298, phonopy 4.4.0, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
+Device            : cpu
+Input file        : /home/carlos/Dropbox/dev/stb/examples/7.3-mlphonons/si8.fdf
+Mode              : single-volume
+Supercell dim     : 2 x 2 x 2
+Displacement dist.: 0.01 Ang
+q-mesh / path     : 20 x 20 x 20 (DOS, thermal), 101 points per band segment
+Temperatures      : 0 .. 1000 K, step 10
+Model             : MACE-MP-0 (large)
+Report file       : ./stb_mlphonons_report.txt
+
+[1] STRUCTURE
+------------------------------------------------------------
+[OK] Read 8 atom(s), dimensionality: 3D (bulk material)
+Formula           : Si8
+Cell              : a 5.4802, b 5.4802, c 5.4802 Ang; alpha 90.00, beta 90.00, gamma 90.00 deg
+Volume            : 164.588 Ang^3 (20.5735 Ang^3/atom), density 2.2668 g/cm^3
+Shortest distance : 2.3730 Ang
+Supercell         : 2 x 2 x 2 -> 64 atoms; face-to-face widths 10.96, 10.96, 10.96 Ang
+
+[2] MODEL
+------------------------------------------------------------
+Model             : MACE-MP-0 large (foundation, no card): trained on the Materials Project PBE/PBE+U relaxations -- not on your SIESTA level of theory
+Model range       : r_max 4.5 Ang x 2 interactions = receptive field 9 Ang (force constants can reach that far)
+Loaded in         : 0.1 s
+
+[3] DISPLACEMENTS & FORCE CONSTANTS
+------------------------------------------------------------
+--- MACE-MP-0 (large)
+Input forces      : max |F| 0.0000 eV/Ang
+Pre-relax         : max |F| 0.0000 eV/Ang after 0 step(s) (converged, --fmax 0.05); largest atomic shift 0.0000 Ang
+Symmetry          : Fd-3m (227) (point group m-3m, 1536 operations in the supercell)
+Displacements     : 1 of 0.01 Ang (vs. 384 without symmetry: 99.7 % fewer evaluations)
+Residual forces   : max 2.68e-15 eV/Ang per atom in the undisplaced supercell -- subtracted from every displacement's
+Acoustic sum rule : largest violation 1.41e-14 eV/Ang^2 before symmetrization (imposed afterwards)
+Force constants   : 4.3 s (MACE-MP-0 (large))
+Primitive cell    : 2 atoms (phonopy, spglib); supercell 64 atoms
+[OK] Force constants (ASR-corrected) saved to ./phonopy_disp.yaml
+
+[4] FREQUENCIES AT HIGH-SYMMETRY POINTS
+------------------------------------------------------------
+Frequencies in THz, sorted, 6 branches per q-point (2-atom primitive cell; reduced q in its reciprocal basis).
+q | reduced q           | model             | frequencies (THz)                        
+---------------------------------------------------------------------------------------
+Γ | [0.000 0.000 0.000] | MACE-MP-0 (large) |   0.00   0.00   0.00   9.88   9.88   9.88
+X | [0.500 0.000 0.500] | MACE-MP-0 (large) |   4.41   4.41   8.32   8.32   8.85   8.85
+W | [0.500 0.250 0.750] | MACE-MP-0 (large) |   5.05   5.05   7.85   7.85   9.06   9.06
+K | [0.375 0.375 0.750] | MACE-MP-0 (large) |   4.13   5.44   7.70   8.13   9.03   9.11
+L | [0.500 0.500 0.500] | MACE-MP-0 (large) |   3.04   3.04   7.78   8.25   9.39   9.39
+U | [0.625 0.250 0.625] | MACE-MP-0 (large) |   4.13   5.44   7.70   8.13   9.03   9.11
+
+Gamma-point modes (MACE-MP-0 (large)): irreducible representations (phonopy), IR-active = the representation of a vector (that of the acoustic modes)
+irrep | deg. | THz      | cm^-1    | meV     | character
+--------------------------------------------------------
+T1u   | 3    |    0.000 |      0.0 |    0.00 | acoustic 
+T2g   | 3    |    9.881 |    329.6 |   40.86 | optical  
+
+[5] BAND STRUCTURE & STABILITY
+------------------------------------------------------------
+Bravais lattice   : face-centred cubic (FCC)
+Path              : Γ-X-W-K-Γ-L-U-W-L-K | U-X
+[MACE-MP-0 (large)] Band path : 0.000 .. 9.881 THz (329.6 cm^-1)
+[MACE-MP-0 (large)] No imaginary modes found along the band path (minimum 0.0000 THz, tolerance -0.01 THz).
+[MACE-MP-0 (large)] Mesh 8000 q : 0 q-point(s) with an imaginary mode; softest 0.261 THz (band 0, q = [0.025 0.025 0.025])
+[MACE-MP-0 (large)] Sound velocities (m/s), slopes of the three acoustic branches at |q| = 0.01 1/Ang:
+direction | TA1     | TA2     | LA     
+---------------------------------------
+Γ→X       |    3843 |    3843 |    5978
+Γ→W       |    3283 |    3847 |    6298
+Γ→K       |    2992 |    3849 |    6439
+Γ→L       |    3298 |    3298 |    6592
+Γ→U       |    3564 |    3757 |    6200
+
+[6] DENSITY OF STATES
+------------------------------------------------------------
+[MACE-MP-0 (large)] Max frequency 9.878 THz (329.5 cm^-1, 40.9 meV); mean 6.933 THz; Debye temperature 457 K (second moment of the DOS)
+[MACE-MP-0 (large)] DOS integrates to 5.98 states (3N = 6)
+Species (PDOS)    : Si
+species | states | share   | mean f (THz) | upper edge (THz)
+------------------------------------------------------------
+Si      | 5.98   | 100.0 % | 6.93         | 9.86            
+
+[7] THERMAL PROPERTIES
+------------------------------------------------------------
+Harmonic, at the input volume. Classical limit: Cv -> 3 k_B per atom (Dulong-Petit).
+
+[MACE-MP-0 (large)] per 2-atom primitive cell (mol = mol of cells) and per atom:
+Zero-point energy : 8.2997 kJ/mol = 43.01 meV/atom
+T (K) | F kJ/mol | S J/K/mol | Cv J/K/mol | U kJ/mol | F meV/at | S kB/at | Cv kB/at | Cv/3kB
+---------------------------------------------------------------------------------------------
+100   | 7.878    | 12.917    | 22.646     | 9.170    | 40.83    | 0.777   | 1.362    | 45 %  
+300   | 1.095    | 51.851    | 44.601     | 16.651   | 5.67     | 3.118   | 2.682    | 89 %  
+500   | -11.824  | 75.594    | 47.872     | 25.974   | -61.27   | 4.546   | 2.879    | 96 %  
+800   | -38.179  | 98.421    | 49.084     | 40.558   | -197.85  | 5.919   | 2.952    | 98 %  
+1000  | -59.002  | 109.408   | 49.370     | 50.406   | -305.76  | 6.579   | 2.969    | 99 %  
+
+[8] SUMMARY & FILES
+------------------------------------------------------------
+Status            : OK
+Results           : highest frequency 9.878 THz, Gamma optical 9.88 THz, Debye T 457 K, imaginary q 0/8000
+Force constants   : ./phonopy_disp.yaml
+Band structure    : ./bands.png
+Data              : ./bands.dat
+DOS               : ./dos.png
+Data              : ./dos.dat
+Thermal properties: ./thermal.png
+Data              : ./thermal.dat
+Report            : ./stb_mlphonons_report.txt
+Also available    : --save-gnuplot --show
+Wall time         : 10.6 s
+
+[9] WARNINGS
+------------------------------------------------------------
+  none
+Library messages  : 13 distinct message(s) from mace/torch/phonopy captured, not shown

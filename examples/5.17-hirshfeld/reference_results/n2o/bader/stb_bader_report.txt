@@ -1,0 +1,63 @@
+===== STB-BADER REPORT =====
+
+[0] RUN METADATA
+------------------------------------------------------------
+Date/time      : 2026-10-23 18:54:17
+Label          : siesta
+Output dir     : ../bader
+Speed mode     : normal
+Reference file : calc.out
+Vacuum tol.    : disabled
+Threads        : 12
+Keep .cube     : no
+Export volumes : no
+
+[1] VALENCE (Z_val) SETUP
+------------------------------------------------------------
+Source: Siesta Output (calc.out)
+Species | Z_val | Source         
+---------------------------------
+N       | 5.00  | detected (.out)
+O       | 6.00  | detected (.out)
+
+[2] PYBADER CONFIGURATION
+------------------------------------------------------------
+Setting          | Value   
+---------------------------
+Method           | neargrid
+Refine method    | neargrid
+Threads          | 12      
+Vacuum tolerance | disabled
+Spin-polarized   | no      
+
+[3] PER-ATOM BADER POPULATIONS
+------------------------------------------------------------
+Idx | Elem | Pop(e-) | Z_val | Net Charge | State        | Vol(Å³)   | SurfD(Å)
+-------------------------------------------------------------------------------
+1   | N    | 4.8648  | 5.00  | +0.1352    | Donor (+)    | 1251.4767 | 0.5218  
+2   | N    | 4.9530  | 5.00  | +0.0470    | Neutral      | 241.4137  | 0.5694  
+3   | O    | 6.1821  | 6.00  | -0.1821    | Acceptor (-) | 1251.1097 | 0.5280  
+Total Integrated: 16.0000 (Target: 16.00)
+
+[4] PER-SPECIES SUMMARY
+------------------------------------------------------------
+Elem | N | Mean(e-) | Std(e-)
+-----------------------------
+N    | 2 | +0.0911  | 0.0441 
+O    | 1 | -0.1821  | 0.0000 
+
+[5] DIAGNOSTICS & WARNINGS
+------------------------------------------------------------
+Bader analysis has known limitations this tool cannot detect or correct for: non-nuclear attractors (basins not centered on any atom, common in ionic/metallic systems) are always folded into the nearest atom by PyBader; Z_val is only as accurate as the .out parse or the FALLBACK_VALENCE table (semicore-inclusive pseudopotentials can differ from the 'standard valence' assumed there); and --speed fast trades basin-boundary accuracy for speed. See the example README for the underlying theory and a fuller discussion of each limitation.
+
+[6] REFERENCES
+------------------------------------------------------------
+[OK] Citations for the methods used in this run written to '../bader/references.bib' (2 entries).
+Bader charge partitioning via PyBader, implementing the grid-based algorithm of Tang, Sanville & Henkelman (2009); underlying theory: Bader's Atoms-in-Molecules (AIM) quantum theory (1990) -- see the example README for both.
+
+[7] SUMMARY & FILES
+------------------------------------------------------------
+Status         : OK
+Cube file(s)   : deleted (--no-cube)
+References     : ../bader/references.bib
+Report         : ../bader/stb_bader_report.txt

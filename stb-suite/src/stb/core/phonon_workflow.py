@@ -1,0 +1,531 @@
+"""Shared Phonopy displacement-generation and force-constant-loading logic
+for SIESTA phonon calculations.
+
+Extracted from stb-phononsCreate (build_phonon_displacements/
+write_displacement_folders) and stb-phononsPos (load_phonon_with_force_
+constants, detect_system_label) once stb-raman became a second, real
+consumer -- same extract-on-second-use policy as core/heterostructure.py.
+Everything specific to one tool's own extra features (ML pre-relax,
+symmetry table, thermal properties, band structure, DOS/PDOS, mode
+freezing) stays in phonons_create.py/phonons_pos.py -- only the genuinely
+shared Phonopy-object plumbing moved here.
+
+get_gamma_modes() is new code: nothing in the suite previously exposed
+Gamma-point eigenvectors as reusable data (phonons_pos.py only fetches
+eigenvectors transiently, via run_mesh(with_eigenvectors=True), for
+PDOS/thermal-displacement purposes).
+"""
+
+import os
+import re
+import glob
+import shutil
+import subprocess
+
+import numpy as np
+from ase import Atoms
+from ase.io import write as ase_write
+from phonopy import Phonopy
+from phonopy.interface.siesta import write_siesta, get_physical_units
+
+from stb.core.cli import color_text, print_dual
+
+_LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
+
+# Below this (THz), a "negative" frequency is treated as numerical noise
+# (e.g. residual acoustic-sum-rule violation after symmetrize_force_
+# constants(), or plain floating-point roundoff at Gamma where the true
+# acoustic-branch frequency is exactly 0) rather than a genuine imaginary/
+# unstable mode -- verified live (in stb-mlphonons): post-ASR-correction, a
+# real run's worst Gamma-point residual was ~5e-5 THz, several orders of
+# magnitude below this threshold; a genuinely unstable mode is typically
+# at least ~0.1 THz. Shared by stb-mlphonons and stb-phononsPos, extracted
+# here once the latter became a second consumer.
+IMAGINARY_MODE_TOL_THZ = -0.01
+
+
+def detect_system_label(phonon_dir):
+    """Auto-detect SystemLabel from the calc.fdf/structure.fdf copied into
+    the first disp-* folder, same regex-based approach as
+    hubbardu.get_system_label/wantibexos.get_system_label. Returns None
+    (not "siesta") when nothing is found, so callers can tell
+    "not detected" apart from a genuine label of "siesta". Moved here
+    verbatim from phonons_pos.py once stb-ramanModes needed the identical
+    auto-detection.
+    """
+    disp_dirs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*")))
+    if not disp_dirs:
+        return None
+    for fdf_path in glob.glob(os.path.join(disp_dirs[0], "*.fdf")):
+        try:
+            with open(fdf_path) as f:
+                match = _LABEL_RE.search(f.read())
+        except OSError:
+            continue
+        if match:
+            return match.group(1)
+    return None
+
+
+def _no_auto_primitive_warning():
+    """phonopy 4 warns whenever primitive_matrix is 'auto' and resolves to a smaller cell, even when 'auto' is passed
+    on purpose; here it always is, and the loader reports the cell sizes itself."""
+    import contextlib
+    import warnings
+
+    @contextlib.contextmanager
+    def ctx():
+        with warnings.catch_warnings():
+            try:
+                from phonopy.structure.cells import PrimitiveMatrixAutoDefaultWarning
+                warnings.simplefilter("ignore", PrimitiveMatrixAutoDefaultWarning)
+            except ImportError:                       # phonopy < 4 has no such warning
+                pass
+            yield
+    return ctx()
+
+
+def build_phonon_displacements(unitcell, supercell_matrix, distance_ang, symprec=None, primitive_matrix="auto"):
+    """Constructs the Phonopy object and generates the displaced supercells via generate_displacements().
+
+    Units: phonopy's SIESTA interface keeps cell and positions in BOHR (every other calculator interface uses
+    Angstrom), and takes every length in that unit. Both lengths given here are in Angstrom and are converted:
+    `distance_ang` (else the displacement would be 1.89x smaller than asked) and `symprec` -- passed raw, a
+    '--symprec 0.01' (Angstrom, as every tool's help says) meant 0.0053 Ang: a relaxed N-graphyne came out Pm instead
+    of Cmmm, with twice the displacements.
+
+    `symprec` None leaves phonopy's own default (1e-5 bohr), far too tight for a DFT-relaxed structure (AlP was R3m
+    instead of F-43m); every tool with a --symprec passes it (default 0.01 Ang).
+
+    `primitive_matrix` is always passed: phonopy 4 changed its default from the identity to 'auto', and the value is
+    written into phonopy_disp.yaml, so every later phonopy.load inherits it. 'auto' (spglib's primitive cell) is right
+    for bands, DOS and Gamma modes of a crystal; thermal sums are then per PRIMITIVE cell. Pass np.eye(3) when the
+    quantity must be per INPUT cell (stb-adsorbAnalysis --compute-gibbs --zpe-mode full: a clean N x N slab would
+    otherwise shrink to its 1 x 1 primitive and lose most of its modes).
+
+    Returns (phonon, supercells) -- phonon.dataset has the symmetry-reduced displacement pattern, supercells the
+    displaced structures (some entries may be None, as phonopy.supercells_with_displacements).
+    """
+    bohr_to_angstrom = get_physical_units().Bohr
+    phonopy_kwargs = {"calculator": "siesta", "primitive_matrix": primitive_matrix}
+    if symprec is not None:
+        phonopy_kwargs["symprec"] = symprec / bohr_to_angstrom
+    with _no_auto_primitive_warning():
+        phonon = Phonopy(unitcell, supercell_matrix=supercell_matrix, **phonopy_kwargs)
+    phonon.generate_displacements(distance=distance_ang / bohr_to_angstrom)
+    supercells = phonon.supercells_with_displacements
+    return phonon, supercells
+
+
+def write_displacement_folders(output_root, phonon, supercells, structure_filename,
+                                calc_path, pseudos_to_copy):
+    """Writes disp-NNN/ (displaced structure + calc.fdf copied + pseudos)
+    and saves phonopy_disp.yaml. Returns (folders, yaml_path) -- folders
+    is the list of disp-NNN/ paths actually written (skipping any None
+    entry in `supercells`).
+    """
+    folders = []
+    for i, scell in enumerate(supercells):
+        if scell is None:
+            continue
+
+        folder_name = os.path.join(output_root, f"disp-{i + 1:03d}")
+        os.makedirs(folder_name, exist_ok=True)
+
+        disp_struct_path = os.path.join(folder_name, os.path.basename(structure_filename))
+        write_siesta(disp_struct_path, scell)
+
+        shutil.copy(calc_path, os.path.join(folder_name, os.path.basename(calc_path)))
+
+        for pseudo_path in pseudos_to_copy:
+            pseudo_filename = os.path.basename(pseudo_path)
+            shutil.copy(pseudo_path, os.path.join(folder_name, pseudo_filename))
+
+        folders.append(folder_name)
+
+    yaml_path = os.path.join(output_root, "phonopy_disp.yaml")
+    phonon.save(yaml_path)
+    return folders, yaml_path
+
+
+# The undisplaced supercell, run with SIESTA next to the disp-NNN/ folders. Not
+# named disp-000: every consumer globs disp-* for the displacements.
+PERFECT_DIR = "perfect_supercell"
+
+
+def write_perfect_supercell(output_root, phonon, structure_filename, calc_path, pseudos_to_copy):
+    """Writes <output_root>/perfect_supercell/ -- the undisplaced supercell with
+    the same calc.fdf and pseudopotentials as the disp-NNN/ folders. Its SIESTA
+    forces are the reference's residual forces in the supercell, subtracted
+    from every displacement's by load_phonon_with_force_constants: a residual
+    that is harmless per atom (e.g. 0.004 eV/Ang left by a relaxation) adds up
+    coherently over a sublattice and, in a 5x5 graphene supercell, halved the
+    Gamma force constants (E2g 31.9 instead of 41.0 THz). Returns the folder."""
+    folder = os.path.join(output_root, PERFECT_DIR)
+    os.makedirs(folder, exist_ok=True)
+    write_siesta(os.path.join(folder, os.path.basename(structure_filename)), phonon.supercell)
+    shutil.copy(calc_path, os.path.join(folder, os.path.basename(calc_path)))
+    for pseudo_path in pseudos_to_copy:
+        shutil.copy(pseudo_path, os.path.join(folder, os.path.basename(pseudo_path)))
+    return folder
+
+
+def subtract_residual_forces(phonon, residual):
+    """Subtracts `residual` (n_atoms x 3, the undisplaced supercell's forces, in
+    the same units as the dataset) from every displacement's forces and rebuilds
+    the force constants (symmetrized). Returns the max |residual| per atom."""
+    # phonopy (FORCE_SETS creation) removes each force set's drift -- its mean force per atom --
+    # so the residual is centred the same way, or its own drift would be left in every set.
+    residual = np.asarray(residual) - np.asarray(residual).mean(axis=0)
+    ds = phonon.dataset
+    for d in ds["first_atoms"]:
+        d["forces"] = np.asarray(d["forces"]) - residual
+    phonon.dataset = ds
+    phonon.produce_force_constants()
+    phonon.symmetrize_force_constants(show_drift=False)
+    return float(np.linalg.norm(residual, axis=1).max())
+
+
+def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None,
+                                      symprec=None, info=None, primitive_matrix=None):
+    """Builds FORCE_SETS from disp-*/<system_label>.FA (subprocess
+    phonopy-init --siesta -f, falling back to plain `phonopy` on older
+    installs -- same fallback phonons_pos.py already used) and loads the
+    Phonopy object with force constants ready. Skips straight to loading
+    when `has_embedded_fc` (an ML-sourced phonopy_disp.yaml, e.g. from
+    stb-mlphonons, already has force constants embedded -- no SIESTA
+    .FA/FORCE_SETS involved at all).
+
+    `symprec` is in Angstrom and converted to the yaml's own unit (bohr for a SIESTA-sourced yaml, Angstrom for an
+    ML-sourced one); None leaves phonopy.load's default (1e-5). It feeds the primitive-cell detection and the
+    force-constant symmetrization. `primitive_matrix` (None = the one written in phonopy_disp.yaml) overrides the
+    yaml's: np.eye(3) makes every thermal sum per input cell, also for a yaml written before
+    build_phonon_displacements passed the matrix explicitly. The primitive and input cell sizes are reported.
+
+    Leaves the process chdir'd into `phonon_dir` on return (phonopy.load
+    needs phonopy_disp.yaml/FORCE_SETS to be resolved relative to the
+    current directory) -- callers that write further output there
+    (thermal properties, bands, ...) rely on this, same as the original
+    inline code in phonons_pos.py. Returns
+    (phonon, internal_to_angstrom, original_dir); callers must
+    os.chdir(original_dir) themselves once done.
+
+    When <phonon_dir>/perfect_supercell/<label>.FA exists (stb-phononsCreate
+    writes the folder), its forces -- the reference's residual forces -- are
+    subtracted from every displacement's before the force constants are built,
+    and FORCE_SETS is rewritten with the corrected forces (the original is kept
+    as FORCE_SETS.raw). `info` (a dict), if given, receives 'residual_max'
+    (eV/Ang, None when not subtracted) and 'residual_status' ('subtracted',
+    'not finished' or 'absent').
+
+    Raises SystemExit(1) (after printing a report-visible error via
+    print_dual) on any failure -- same fail-loud behavior as the code
+    this was extracted from, since a partial/corrupted phonon load isn't
+    recoverable mid-run.
+    """
+    import phonopy  # local import: phonons_pos.py already guards this at
+    # module level with a friendly install hint if missing; core modules
+    # shouldn't duplicate that guard for every caller.
+
+    if has_embedded_fc:
+        print_dual("Force constants already embedded in phonopy_disp.yaml "
+                    "(ML-computed, e.g. via stb-mlphonons) -- skipping SIESTA "
+                    ".FA/FORCE_SETS extraction.", f_out)
+    else:
+        fa_files_abs = sorted(glob.glob(os.path.join(phonon_dir, "disp-*", f"{system_label}.FA")))
+
+        if not fa_files_abs:
+            print_dual(color_text(
+                f"[ERROR] No {system_label}.FA files found in {phonon_dir}/disp-*", 'red'), f_out)
+            print_dual(color_text("Make sure SIESTA calculations finished successfully.", 'yellow'), f_out)
+            raise SystemExit(1)
+
+        fa_files_rel = [os.path.relpath(f, phonon_dir) for f in fa_files_abs]
+        print_dual(f"Force files found : {len(fa_files_rel)} (label '{system_label}')", f_out)
+
+        # phonopy >=4 moved the FORCE_SETS-creation flags ("-f"/"--siesta")
+        # out of the main `phonopy` CLI into a separate `phonopy-init`
+        # command; older installs (<4) only have `phonopy`. Prefer the new
+        # command when present, fall back otherwise.
+        force_sets_bin = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
+        cmd = [force_sets_bin, "--siesta", "-f"] + fa_files_rel
+
+        try:
+            subprocess.check_call(cmd, cwd=phonon_dir, stdout=subprocess.DEVNULL)
+            print_dual(color_text("FORCE_SETS       : generated successfully", 'green'), f_out)
+        except subprocess.CalledProcessError as e:
+            print_dual(color_text(f"[ERROR] Failed to generate FORCE_SETS. Phonopy error: {e}", 'red'), f_out)
+            raise SystemExit(1)
+
+    print("[INFO] Initializing Phonopy API and loading FORCE_SETS ...")
+    original_dir = os.getcwd()
+    perfect_fa = os.path.abspath(os.path.join(phonon_dir, PERFECT_DIR, f"{system_label}.FA"))
+    perfect_dir = os.path.abspath(os.path.join(phonon_dir, PERFECT_DIR))
+    yaml_unit = 1.0 if has_embedded_fc else get_physical_units().Bohr     # Angstrom per yaml length unit
+    load_kwargs = {} if symprec is None else {"symprec": symprec / yaml_unit}
+    if primitive_matrix is not None:
+        load_kwargs["primitive_matrix"] = primitive_matrix
+    try:
+        os.chdir(phonon_dir)
+        with _no_auto_primitive_warning():
+            phonon = phonopy.load("phonopy_disp.yaml", **load_kwargs)
+    except Exception as e:
+        print_dual(color_text(f"[ERROR] Could not load phonopy data: {e}", 'red'), f_out)
+        os.chdir(original_dir)
+        raise SystemExit(1)
+
+    n_prim, n_unit = len(phonon.primitive.symbols), len(phonon.unitcell.symbols)
+    print_dual(f"Cells            : input {n_unit} atoms, primitive {n_prim} atoms, supercell "
+               f"{len(phonon.supercell.symbols)} atoms" + (f" -- thermal sums are per PRIMITIVE cell (x{n_unit / n_prim:g} "
+                                                          "for the input cell)" if n_prim != n_unit else ""), f_out)
+    status, res_max = "absent", None
+    if not has_embedded_fc:
+        if os.path.isfile(perfect_fa):
+            from stb.core.siesta_log import read_fa_forces
+            residual = read_fa_forces(perfect_fa)
+            if residual is None or len(residual) != len(phonon.supercell.symbols):
+                print_dual(color_text(f"[WARNING] {PERFECT_DIR}/{system_label}.FA is unreadable or has the wrong "
+                                      "atom count -- residual forces NOT subtracted.", 'yellow'), f_out)
+                status = "unreadable"
+            else:
+                from phonopy.file_IO import write_FORCE_SETS
+                if os.path.isfile("FORCE_SETS"):
+                    shutil.copy("FORCE_SETS", "FORCE_SETS.raw")
+                res_max = subtract_residual_forces(phonon, residual)
+                write_FORCE_SETS(phonon.dataset, filename="FORCE_SETS")
+                status = "subtracted"
+                print_dual(color_text(f"Residual forces  : subtracted (undisplaced supercell, max {res_max:.4f} "
+                                      "eV/Ang per atom); FORCE_SETS rewritten, original in FORCE_SETS.raw",
+                                      'green'), f_out)
+        elif os.path.isdir(perfect_dir):
+            status = "not finished"
+            print_dual(color_text(f"[WARNING] {PERFECT_DIR}/ has no finished SIESTA run ({system_label}.FA) -- the "
+                                  "reference's residual forces are NOT subtracted; run SIESTA there and analyse again.",
+                                  'yellow'), f_out)
+        else:
+            print_dual(color_text(f"[WARNING] No {PERFECT_DIR}/ folder: the reference's residual forces are NOT "
+                                  "subtracted. Even ~0.005 eV/Ang per atom adds up over the supercell and can shift "
+                                  "Gamma-point optical modes by many THz -- rerun the prep stage (stb-phononsCreate, stb-ir and "
+                                  "stb-raman write the folder) and run SIESTA there, or relax the reference much "
+                                  "tighter.", 'yellow'), f_out)
+    if info is not None:
+        info["residual_max"], info["residual_status"] = res_max, status
+
+    # phonon's internal cell/positions are in bohr (SIESTA-interface
+    # convention, calculator="siesta") for a stb-phononsCreate-sourced run,
+    # but already in native Angstrom (calculator=None) for an ML-sourced one
+    # -- internal_to_angstrom is what actually converts *this* phonon
+    # object's internal units to real Angstrom, 1.0 (no-op) for the ML case.
+    # Using the real Bohr-to-Angstrom constant unconditionally here was a
+    # real, previously-fixed bug (see phonons_pos.py's original note) --
+    # preserved exactly here.
+    true_bohr_to_angstrom = get_physical_units().Bohr
+    internal_to_angstrom = 1.0 if has_embedded_fc else true_bohr_to_angstrom
+    return phonon, internal_to_angstrom, original_dir
+
+
+def get_gamma_modes(phonon, exclude_acoustic=True, extra_trivial_tol_thz=None):
+    """Runs phonon.run_qpoints([[0, 0, 0]]) and returns
+    (frequencies, mode_indices, n_extra_trivial) at Gamma: frequencies in
+    THz, mode_indices the corresponding 0-based Phonopy band indices --
+    usable directly as the `band_index` in phonon.run_modulations([[q_point,
+    band_index, amplitude, phase]]) (see displace_along_mode below), rather
+    than exposing raw eigenvectors and reimplementing Phonopy's own
+    mass-weighting/normalization math here.
+
+    `exclude_acoustic=True` (default) drops the first 3 modes (pure
+    translation, omega ~ 0 at Gamma) -- these aren't real Raman-active
+    vibrations. This is the right, and ONLY, trivial-mode count for a
+    genuinely 3D/2D/1D (at least one real periodic direction) structure --
+    free rotation isn't a zero-energy motion there, so no other mode is
+    ever trivial no matter how soft it is.
+
+    `extra_trivial_tol_thz`: for a genuinely isolated (0D) structure only,
+    a real molecule has 3 MORE trivial modes at Gamma beyond translation --
+    free rotation (3 for a non-linear molecule, 2 for a linear one, since
+    spinning about the molecular axis isn't a real degree of freedom for
+    point masses on a line). Verified live with a relaxed H2O molecule via
+    MACE-MP-0: bands 0-2 (translation, ~-1.9 to -1.5 THz -- numerical box
+    noise) and bands 3-5 (rotation, ~-0.01 to 0.22 THz -- distinctly
+    closer to zero) are both far below the genuine vibrational modes at
+    44.5/111.6/115.2 THz. When given (in THz), after the first 3 bands, up
+    to 3 MORE contiguous bands are also dropped as long as their
+    |frequency| stays below this tolerance -- naturally stops at 2 extra
+    for a linear molecule (the 3rd real mode is a genuine, much higher-
+    frequency vibration) and at 3 for a non-linear one. The hard cap of 3
+    extra is what makes this safe to call unconditionally once a caller
+    has confirmed 0D (e.g. via core.kspace.detect_vacuum_axes): it can
+    never eat into a real vibrational mode of a 3D/2D/1D structure, because
+    those callers must never pass this parameter at all -- there's no
+    "maybe rotational" ambiguity to resolve there in the first place.
+    """
+    phonon.run_qpoints([[0, 0, 0]])
+    frequencies = phonon.qpoints.frequencies[0]
+    mode_indices = np.arange(len(frequencies))
+    if not exclude_acoustic:
+        return frequencies, mode_indices, 0
+
+    n_trivial = 3
+    if extra_trivial_tol_thz is not None:
+        for i in range(3, min(6, len(frequencies))):
+            if abs(frequencies[i]) < extra_trivial_tol_thz:
+                n_trivial += 1
+            else:
+                break
+
+    return frequencies[n_trivial:], mode_indices[n_trivial:], n_trivial - 3
+
+
+def _unit_mode_probe(phonon, band_index, internal_to_angstrom):
+    """Runs a unit-amplitude probe of phonon mode `band_index` at Gamma
+    via phonon.run_modulations, and returns
+    (delta_positions_ang, probe_shift): `delta_positions_ang` is the
+    per-atom Cartesian displacement pattern (n_atoms, 3) in Angstrom at
+    that unit-amplitude probe; `probe_shift` is the largest per-atom
+    Cartesian displacement norm in that pattern (Angstrom) -- the
+    calibration factor needed to turn Phonopy's own (not-Angstrom)
+    amplitude units into a real physical displacement. Shared by
+    displace_along_mode (rescales this pattern to a specific +/-delta
+    Angstrom displacement of the actual structure) and
+    mode_eigendisplacement (normalizes this pattern to a unit-amplitude
+    eigendisplacement) -- extracted out from displace_along_mode once
+    mode_eigendisplacement needed the identical calibration trick,
+    instead of duplicating it.
+
+    Raises ValueError if probe_shift == 0 (zero displacement amplitude at
+    a unit probe -- can't calibrate a real Angstrom displacement from it).
+    """
+    q_point = [0, 0, 0]
+    phonon.run_modulations([1, 1, 1], [[q_point, band_index, 1.0, 0.0]])
+    mod = phonon.modulation
+    # Minimum-image difference in FRACTIONAL coordinates: Phonopy wraps the modulated
+    # positions into [0, 1), so an atom sitting on the cell boundary (fractional 0.0 or 1.0)
+    # that moves in the negative direction would otherwise show a spurious shift of one
+    # whole lattice vector and ruin the calibration below.
+    delta_frac = (np.array(mod.modulated_supercells[0].scaled_positions)
+                  - np.array(mod.supercell.scaled_positions))
+    delta_frac -= np.round(delta_frac)
+    delta_positions_ang = (delta_frac @ np.array(mod.supercell.cell)) * internal_to_angstrom
+    probe_shift = np.linalg.norm(delta_positions_ang, axis=1).max()
+    if probe_shift == 0:
+        raise ValueError(f"Mode {band_index} has zero displacement amplitude at a unit "
+                          "probe -- cannot calibrate a real Angstrom displacement.")
+    return delta_positions_ang, probe_shift
+
+
+def displace_along_mode(phonon, band_index, amplitude_ang, internal_to_angstrom, sign=1.0):
+    """Displaces the Gamma-point primitive cell along phonon mode
+    `band_index` (0-based Phonopy band index at q=[0,0,0], e.g. from
+    get_gamma_modes) by `sign * amplitude_ang` (Angstrom).
+
+    Uses phonon.run_modulations -- the SAME machinery phonons_pos.py's
+    --freeze-unstable-mode already uses to turn a phonon mode into a real
+    Cartesian displacement pattern (mass-weighting and normalization
+    handled by Phonopy itself, not reimplemented here) -- with dimension
+    [1, 1, 1] (no supercell expansion: Gamma has no cell-to-cell phase
+    variation to visualize, so the "modulated supercell" IS the primitive
+    cell). run_modulations' amplitude parameter isn't itself in Angstrom
+    (same note as the freeze-unstable-mode code this mirrors), so a
+    unit-amplitude probe is run first (via _unit_mode_probe) and the real
+    displacement rescaled linearly from it.
+
+    Returns a PhonopyAtoms (phonon.modulation.modulated_supercells[0]) --
+    same object type/unit-convention as build_phonon_displacements's
+    output, ready for phonopy.interface.siesta.write_siesta.
+    """
+    _, probe_shift = _unit_mode_probe(phonon, band_index, internal_to_angstrom)
+    scale = sign * amplitude_ang / probe_shift
+
+    q_point = [0, 0, 0]
+    phonon.run_modulations([1, 1, 1], [[q_point, band_index, scale, 0.0]])
+    mod = phonon.modulation
+    return mod.modulated_supercells[0]
+
+
+def mode_eigendisplacement(phonon, band_index, internal_to_angstrom):
+    """The real-Cartesian-Angstrom eigendisplacement pattern of phonon
+    mode `band_index` at Gamma, shape (n_atoms, 3), unit-normalized so
+    the LARGEST per-atom Cartesian norm is exactly 1.0 -- the SAME
+    normalization convention displace_along_mode already uses internally
+    (a displacement of `amplitude_ang` there means "amplitude_ang along
+    THIS same max-atom-shift-normalized pattern"). This is a deliberate,
+    load-bearing physical choice, not an arbitrary one: it's what makes
+    the bulk IR path's mode effective charge
+    (dmu/dQ = sum_atom Z*_atom @ e_atom(mode), core.born_charges) land on
+    the same physical footing as the non-bulk path's own
+    (mu(+delta)-mu(-delta))/(2*delta) -- both express "per Angstrom of
+    displacement along this same normalized pattern". Combining Z* with a
+    differently-normalized eigendisplacement (e.g. mass-weighted,
+    sum|e|^2=1) would silently put the two IR paths' intensities on
+    different, non-comparable footings.
+
+    Reuses _unit_mode_probe's own calibration (a single run_modulations
+    call, no second one needed -- unlike displace_along_mode, which needs
+    a real displaced structure, this only needs the normalized pattern
+    itself).
+    """
+    delta_positions_ang, probe_shift = _unit_mode_probe(phonon, band_index, internal_to_angstrom)
+    return delta_positions_ang / probe_shift
+
+
+def phonopy_atoms_to_ase(patoms, internal_to_angstrom):
+    """PhonopyAtoms (internal units -- bohr for a SIESTA-sourced phonon
+    object, already Angstrom for an ML-sourced one, same convention as
+    everywhere else in this workflow) -> ase.Atoms in real Angstrom, ready
+    for ase.io.write (xsf/pdb/xyz all expect real physical units, no
+    internal-unit ambiguity of their own).
+
+    Extracted from raman_modes.py/ir_modes.py's own identical
+    _phonopy_atoms_to_ase once ir_analysis.py became a third consumer
+    (Stage 3's mode-animation/--view-modes export needs the exact same
+    conversion Stage 2's --export-animations/--view-animation already
+    used) -- same extract-on-second-use policy as the rest of this module.
+    """
+    return Atoms(symbols=patoms.symbols,
+                 positions=np.array(patoms.positions) * internal_to_angstrom,
+                 cell=np.array(patoms.cell) * internal_to_angstrom,
+                 pbc=True)
+
+
+def build_mode_animation_frames(phonon, band_index, amplitude_ang, internal_to_angstrom, n_frames=20):
+    """Builds a looping animation of one Gamma-point mode's eigendisplacement
+    (a smooth 0 -> +A -> 0 -> -A -> 0 sweep, `n_frames` frames) as a list of
+    ase.Atoms -- pure in-memory build, no disk I/O, shared by
+    --export-animations (written to disk via write_mode_animation below) and
+    --view-animation (opened directly in ASE's interactive viewer). Reuses
+    displace_along_mode (already used to build the real Optical/dipole
+    calculation folders) at each frame's signed amplitude -- passing a
+    NEGATIVE amplitude_ang directly (rather than using its `sign` parameter)
+    works identically, since displace_along_mode only ever multiplies the
+    two together internally.
+    """
+    amplitudes = amplitude_ang * np.sin(2 * np.pi * np.arange(n_frames) / n_frames)
+    frames = []
+    for amp in amplitudes:
+        displaced = displace_along_mode(phonon, band_index, float(amp), internal_to_angstrom, sign=1.0)
+        frames.append(phonopy_atoms_to_ase(displaced, internal_to_angstrom))
+    return frames
+
+
+def write_mode_animation(frames, out_path, fmt='xsf'):
+    """Writes a pre-built list of ase.Atoms frames (see
+    build_mode_animation_frames) as an animated trajectory file. `fmt` is
+    the raw ASE format string, not this suite's own user-facing "xyz"
+    choice -- default 'xsf' (animated .axsf, readable directly by
+    XCrySDen/VESTA) matches stb-ramanModes/stb-irModes' own
+    --export-animations default; stb-irAnalysis's always-on mode-vibration
+    export instead passes 'extxyz' (extended XYZ, carries a Lattice= tag
+    per frame) -- the SAME ASE format string stb-ani2traj's own "xyz"
+    output choice maps to internally (OUTPUT_FORMATS["xyz"] =
+    ("extxyz", ".xyz")), part of the shared xsf/pdb/xyz trajectory-format
+    convention documented for every other trajectory writer in this suite.
+    Plain ASE 'xyz' (no `fmt='extxyz'`) silently drops the Lattice=/pbc
+    info -- always pass 'extxyz' for a periodic structure's animation.
+
+    ase.io.write(..., format=fmt) accepts a list of Atoms directly and
+    produces the multi-frame format on its own for all three -- verified
+    during planning (ase.io.formats.ioformats['xsf'].single is False, and
+    likewise for 'extxyz'/'proteindatabank') -- so this doesn't hand-roll
+    any of the animated formats itself.
+    """
+    ase_write(out_path, frames, format=fmt)

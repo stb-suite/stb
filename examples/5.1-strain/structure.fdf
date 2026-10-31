@@ -1,0 +1,35 @@
+# Bulk silicon, conventional cubic cell (8 atoms, diamond structure) --
+# already relaxed at its DFT equilibrium lattice constant. This is the
+# structure the imaginary "original relaxation" (calc.fdf, next to this
+# file) is assumed to have produced. Cubic (point group m-3m) on purpose:
+# it makes stb-strain's own axis-symmetry advisory ([3] in the report)
+# fire and say x/y/z are mechanically equivalent -- a real, useful piece
+# of the report this example also demonstrates.
+
+NumberOfSpecies    1
+NumberofAtoms      8
+
+%block ChemicalSpeciesLabel
+ 1   14   Si
+%endblock ChemicalSpeciesLabel
+
+LatticeConstant 5.43 Ang
+
+AtomicCoordinatesFormat  Fractional
+
+%block LatticeVectors
+ 1.0000000000   0.0000000000   0.0000000000
+ 0.0000000000   1.0000000000   0.0000000000
+ 0.0000000000   0.0000000000   1.0000000000
+%endblock LatticeVectors
+
+%block AtomicCoordinatesAndAtomicSpecies
+  0.000000000   0.000000000   0.000000000   1
+  0.500000000   0.500000000   0.000000000   1
+  0.500000000   0.000000000   0.500000000   1
+  0.000000000   0.500000000   0.500000000   1
+  0.250000000   0.250000000   0.250000000   1
+  0.750000000   0.750000000   0.250000000   1
+  0.750000000   0.250000000   0.750000000   1
+  0.250000000   0.750000000   0.750000000   1
+%endblock AtomicCoordinatesAndAtomicSpecies

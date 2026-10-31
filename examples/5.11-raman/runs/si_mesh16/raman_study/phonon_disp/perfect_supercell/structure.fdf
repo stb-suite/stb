@@ -1,0 +1,19 @@
+NumberOfSpecies 1
+%block ChemicalSpeciesLabel
+   1   14 Si
+%endblock ChemicalSpeciesLabel
+
+%block LatticeVectors
+    0.0000000000000000    5.1883338161245032    5.1883338161245032
+    5.1883338161245032    0.0000000000000000    5.1883338161245032
+    5.1883338161245032    5.1883338161245032    0.0000000000000000
+%endblock LatticeVectors
+
+AtomicCoordinatesFormat  Fractional
+
+LatticeConstant 1.0 Bohr
+
+%block AtomicCoordinatesAndAtomicSpecies
+   0.9999989000000000   0.9999989000000000   0.9999989000000000 1
+   0.2500011300000000   0.2500011300000000   0.2500011300000000 1
+%endblock AtomicCoordinatesAndAtomicSpecies

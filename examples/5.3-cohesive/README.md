@@ -198,19 +198,34 @@ default `cohesive_runs/`, matching `strain_runs/`/`elastic_runs/`):
 - `atoms_bsse_check/` (one extra cutoff) or `atoms_bsse_check_<cutoff>/`
   (2+ cutoffs, a scan) — only with `--bsse-convergence-check`.
 
-### 2.2 No `calc.fdf` prerequisite — and why
+### 2.2 The `calc.fdf`: built-in, or your own (`-c/--calc`)
 
-Unlike `stb-strain`/`stb-elasticInputs`, `stb-cohesive` takes **no**
-`-c/--calc-fdf` input at all — it always builds its own single-point SCF
-`calc.fdf` internally (DZP basis, GGA-PBE, `MeshCutoff 320 Ry`,
-`SCF.DM.Tolerance 1e-5 eV`), identically across the full structure and every
-isolated-atom-type calculation. This is deliberate: a cohesive-energy
-comparison is only meaningful if every energy in the sum comes from
-*exactly* the same basis/functional/mesh — safer to guarantee that by
-generating every `calc.fdf` from one template than to trust a hand-edited
-file to stay in sync everywhere. `-k/--k-density` (default `0.2` 1/Ang) and
-`--spin`/`--dispersion` are the only physics knobs Stage 1 exposes for the
-full structure; everything else about the SCF setup is fixed on purpose.
+A cohesive-energy comparison is only meaningful if every energy in the sum
+comes from *exactly* the same basis, functional and mesh. `stb-cohesive`
+guarantees that by generating every folder's `calc.fdf` from **one**
+template:
+
+- **Without `-c`** it uses a built-in single-point template (DZP, GGA-PBE,
+  `PAO.EnergyShift 0.02 Ry`, `Mesh.Cutoff 320 Ry`, `SCF.DM.Tolerance 1e-5 eV`).
+  `-k/--k-density` (default `0.2` 1/Ang), `--spin` and `--dispersion` are then
+  the only knobs for the full structure. The numbers of this README were made
+  this way.
+- **With `-c mycalc.fdf`** (since 2.0.1) the template is yours: the basis,
+  `PAO.EnergyShift`, `Mesh.Cutoff`, functional and SCF settings of your study.
+  It must `%include structure.fdf`. It is copied **untouched** into the full
+  structure and into every atomic reference; what the workflow has to impose
+  goes into a `config_extra.fdf` that is `%include`d on top of it (SIESTA keeps
+  the first occurrence of a label):
+
+  | Folder | `config_extra.fdf` forces |
+  |---|---|
+  | `structure/` | `--spin`, `--dispersion`, and the k-grid only when the template has none or `-k` is given |
+  | `atoms/`, `atoms_bsse*/` | `Spin polarized`, a Gamma-only k-grid, a single point (`MD.Steps 0`, fixed cell), `--dispersion` |
+
+  The report prints the template's level of theory (basis size, energy shift,
+  mesh cutoff, functional), so the run records what it used. The basis range
+  matters a great deal here: for GaAs the uncorrected cohesive energy is
+  `-4.69` eV/atom at `PAO.EnergyShift 0.02 Ry` and `-3.87` at `0.01 Ry`.
 
 ### 2.3 The vacuum-buffer guarantee, live
 

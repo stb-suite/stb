@@ -152,6 +152,15 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-cohesive -c/--calc FILE`: your own `calc.fdf` template for the full structure and every atomic
+  reference, so the whole study runs at one level of theory. Before, the tool wrote a fixed template
+  (`PAO.EnergyShift 0.02 Ry`, `Mesh.Cutoff 320 Ry`) and any other choice meant editing every generated
+  `calc.fdf` by hand (127 files for 13 solids in one study), with nothing recorded in the report. The
+  template is copied untouched; what the workflow must impose goes into a `config_extra.fdf` included on
+  top of it: Spin polarized, a Gamma-only k-grid and a single point for the atomic references; `--spin`,
+  `--dispersion` and the k-grid (only when the template has none, or `-k` is given) for the full
+  structure. The report lists the template's level of theory. Without `--calc` the generated files are
+  identical to 2.0.0's. Also asked by the menu (5.3.1).
 - `stb-phononsPos`: section `[2]` reports how far the force constants are from the crystal's symmetry
   (largest change of a Gamma frequency when they are symmetrized by the space group) and warns above
   0.05 THz, the sign of modes split that symmetry makes degenerate. `--symmetrize-fc` applies the

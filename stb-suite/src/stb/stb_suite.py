@@ -381,8 +381,18 @@ def run_cohesive_setup() -> None:
         print(color_text("File not found!", 'red'))
         struct_file = get_input("Input structure FDF file (-s): ").strip()
 
-    k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
-    while k_density <= 0:
+    cohesive_calc = get_input(
+        "Your own calc.fdf template -- basis, PAO.EnergyShift, Mesh.Cutoff ... used in EVERY folder "
+        "(must '%include structure.fdf') [blank: built-in DZP / 0.02 Ry / 320 Ry / PBE]: ").strip()
+    while cohesive_calc and not os.path.isfile(cohesive_calc):
+        print(color_text("File not found!", 'red'))
+        cohesive_calc = get_input("calc.fdf template [blank: built-in]: ").strip()
+
+    k_density = get_float_input(
+        ("K-point density of the full structure (default: 0 = the template's own k-grid; a value "
+         "replaces it): " if cohesive_calc else "K-point density (default: 0.2): "),
+        0.0 if cohesive_calc else 0.2)
+    while k_density < 0 or (k_density == 0 and not cohesive_calc):
         print(color_text("Density must be a positive number!", 'red'))
         k_density = get_float_input("K-point density (default: 0.2): ", 0.2)
 
@@ -459,12 +469,15 @@ def run_cohesive_setup() -> None:
 
     args = [
         "-s", struct_file,
-        "-k", str(k_density),
         "--vacuum", str(vacuum),
         "--vacuum-gap", str(vacuum_gap),
         "--output-dir", output_dir,
         "--no-intro",
     ]
+    if k_density > 0:
+        args.extend(["-k", str(k_density)])
+    if cohesive_calc:
+        args.extend(["--calc", cohesive_calc])
     if dispersion:
         args.append("--dispersion")
     args.append("--bsse-correction" if bsse_correction else "--no-bsse-correction")

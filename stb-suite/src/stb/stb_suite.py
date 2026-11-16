@@ -3507,7 +3507,18 @@ def run_slab_generator() -> None:
         elif hkl_values == [0, 0, 0]:
             print(color_text("Miller index (0, 0, 0) is not valid.", 'red'))
 
-    min_slab_size = get_float_input("\nMinimum slab thickness in Ang [default: 10.0]: ", 10.0)
+    layers = None
+    while True:
+        layers_str = get_input("\nNumber of atomic layers (blank = give a minimum thickness instead): ").strip()
+        if not layers_str:
+            break
+        if layers_str.isdigit() and int(layers_str) >= 1:
+            layers = int(layers_str)
+            break
+        print(color_text("Please enter a whole number of layers (1 or more), or leave blank.", 'red'))
+    min_slab_size = 10.0
+    if layers is None:
+        min_slab_size = get_float_input("Minimum slab thickness in Ang [default: 10.0]: ", 10.0)
     min_vacuum_size = get_float_input("Minimum vacuum thickness in Ang [default: 15.0]: ", 15.0)
 
     primitive_choice = get_input("\nReduce to primitive cell before cutting? (y/N): ").strip().lower()
@@ -3536,7 +3547,7 @@ def run_slab_generator() -> None:
     args = [
         "--file", input_file,
         "--hkl", *[str(v) for v in hkl_values],
-        "--min-slab-size", str(min_slab_size),
+        *(["--layers", str(layers)] if layers is not None else ["--min-slab-size", str(min_slab_size)]),
         "--min-vacuum-size", str(min_vacuum_size),
         "--output", output_file,
         "--no-intro"

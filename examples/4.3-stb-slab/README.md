@@ -205,6 +205,8 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 | `-f/--file`          | Input bulk structure file, `.fdf` (required)                           |
 | `--hkl H K L`        | Miller index of the surface to cut (required)                          |
 | `--min-slab-size`    | Minimum slab thickness, Å (default `10.0`)                             |
+| `--layers N`         | Number of atomic layers instead of a thickness: layers are removed from the top until N are left, same vacuum (`--min-slab-size` is ignored; not with `--symmetrize`) |
+| `--layer-tol`        | Atoms within this height, Å, are one atomic layer (default `0.1`)      |
 | `--min-vacuum-size`  | Minimum vacuum thickness, Å (default `15.0`)                           |
 | `--lll-reduce`       | LLL-reduce the slab lattice                                            |
 | `--center-slab`      | Center the slab in the vacuum                                          |

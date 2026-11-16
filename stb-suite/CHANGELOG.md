@@ -1,5 +1,56 @@
 # Changelog
 
+What changed in each version of STB-SUITE, newest first. Under each version: **Fixed** (a wrong
+result, a crash, a misleading message), **Changed** (a default or a behaviour that differs from the
+version before) and **Added** (new options and tools).
+
+## 2.0.1 (unreleased)
+
+### Fixed
+
+- `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
+  pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
+  now gives pybader what it needs from the standard library, so any setuptools version works. When
+  an installed dependency fails to import, the message shows the original error instead of telling
+  you to install it again.
+- Elastic constants (5.2), `--symmetry-method full` and `--method energy`: a cubic crystal with
+  numerical noise in its cell (a relaxed structure, 3e-6 Ang) got one strain direction, `xx`, instead
+  of two, and `stb-elasticAnalysis` then printed a shear constant with no meaning (Si: C44 = -6288 GPa,
+  E = 941 GPa, Poisson -1.26) with zero quality warnings.
+  - `stb-elasticInputs` now builds the symmetry operations from the cell with the symmetry made exact,
+    and counts a constant as determined by a direction only when that direction reaches it through a
+    response no more than 100 times weaker than the direct ones. The choice of directions no longer
+    depends on the noise (tested up to 1e-3 Ang on cubic, hexagonal and triclinic cells).
+  - `stb-elasticAnalysis` stops with an `[ERROR]` when the folders that were run leave open a constant
+    it reports, names those constants and the directions to add. Before, this was a warning in 3D,
+    silent in 2D, and the tensor was printed anyway. Constants the report never shows (out of plane in
+    2D) may stay open, as before.
+  - Folders made by 2.0.0 for a cubic crystal with only `xx`: run `stb-elasticInputs --dirs xy` (or
+    `yz`) for the missing shear direction; the `xx` folders stay valid.
+- `stb-slab`: the cell's c vector was in general not perpendicular to the surface (fcc primitive
+  cell, (111): 35.3 degrees off), so the surface was tilted with respect to the xy plane, while
+  everything that follows takes z as the normal: `stb-adsorb` places the adsorbate along z, SIESTA's
+  slab dipole correction acts along the vacuum axis, and the thickness and vacuum in the report were
+  measured along z (Ag(111), 5 layers: 11.70 Ang printed, 9.55 Ang real).
+  - The slab is now written with c along the surface normal, a along x and b in the xy plane. Only c
+    changes, to its component along the normal: the atoms, the in-plane cell and the vacuum are the
+    same (checked on fcc, diamond, quartz and a triclinic cell: every interatomic distance is kept).
+    The report lists the three cell vectors and the angle the generated c made with the normal.
+  - Thickness and vacuum are measured along the normal, also in the termination table of `-i`.
+  - A slab whose generated cell already had c along the normal is written exactly as before. For any
+    other, the file differs from the one 2.0.0 wrote: same slab, different cell.
+
+### Added
+
+- `stb-slab --layers N`: the slab's size as a number of atomic layers instead of a minimum thickness
+  in Angstrom, for a convergence series in layers (3, 4, 5, ...). The slab is cut thick enough and
+  layers are removed from its top until N are left; the bottom face is the chosen termination and the
+  vacuum is the same for every N. `--layer-tol` (default 0.1 Ang) sets which atoms count as one
+  layer: a buckled plane, like the two halves of a Si(111) bilayer, is two layers unless the tolerance
+  is raised above its buckling. Also asked by the menu (4.3).
+- `stb-slab` reports the number of atomic layers of every slab it writes, the atoms in each and the
+  spacing between them.
+
 ## 2.0.0 (2026-10-31) -- first stable release
 
 - Every tool is version 2.0.0. The `main` branch holds the stable releases (2.0.1, ... for bug

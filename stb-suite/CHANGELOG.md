@@ -112,6 +112,10 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-mlffValidate --phonon-ref`: the phonon table now has a row for the foundation model next to
+  every round (it was given for the fine-tuned model only), says where the largest deviation is
+  (q-point and band), and gives the error twice, labelled: (a) on the q-mesh and (b) along the band
+  path a band plot shows. The two differ for the same model, and the report did not say which it was.
 - `stb-adsorb --fix-layers N` (`--layer-tol`): holds the N lowest atomic layers of the slab fixed, with
   the same `%block Geometry.Constraints` in `clean_slab/` and in every site folder. Before, the whole
   slab always relaxed. Also asked by the menu (5.8.1).

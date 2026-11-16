@@ -438,7 +438,29 @@ def phonon_errors(ref_phonon, ml_phonon, mesh):
     f_ml = np.sort(ml_phonon.get_qpoints_dict()["frequencies"], axis=1)
     err = f_ml - f_ref
     n_ac = 3
+    worst_q, worst_band = np.unravel_index(int(np.argmax(np.abs(err))), err.shape)
+    path = None
+    try:    # the same error along the band path stb-phononsPos / stb-mlphonons plot (ASE's Bravais-lattice path)
+        from stb.phonons_pos import build_band_path, band_path_to_phonopy_format
+        built = build_band_path(ml_phonon.primitive, 1.0, 10.0, symprec=0.01)    # the ML object is in Angstrom
+        bands, labels, _connections = band_path_to_phonopy_format(built[0], built[1], 51)
+        q_path = np.concatenate(bands)
+        ref_phonon.run_qpoints(q_path)
+        p_ref = np.sort(ref_phonon.get_qpoints_dict()["frequencies"], axis=1)
+        ml_phonon.run_qpoints(q_path)
+        p_ml = np.sort(ml_phonon.get_qpoints_dict()["frequencies"], axis=1)
+        p_err = p_ml - p_ref
+        pq, pb = np.unravel_index(int(np.argmax(np.abs(p_err))), p_err.shape)
+        path = {"labels": "-".join("G" if x == "GAMMA" else str(x) for x in labels),
+                "n_q": int(len(q_path)), "rmse_THz": float(np.sqrt(np.mean(p_err ** 2))),
+                "acoustic_rmse_THz": float(np.sqrt(np.mean(p_err[:, :n_ac] ** 2))),
+                "optical_rmse_THz": (float(np.sqrt(np.mean(p_err[:, n_ac:] ** 2))) if p_err.shape[1] > n_ac else None),
+                "max_abs_THz": float(np.abs(p_err).max()),
+                "max_q": [round(float(x), 4) for x in q_path[pq]], "max_band": int(pb) + 1}
+    except Exception:
+        path = None
     return {"mesh": list(mesh), "n_q": int(len(q)),
+            "max_q": [round(float(x), 4) for x in q[worst_q]], "max_band": int(worst_band) + 1, "path": path,
             "rmse_THz": float(np.sqrt(np.mean(err ** 2))),
             "acoustic_rmse_THz": float(np.sqrt(np.mean(err[:, :n_ac] ** 2))),
             "optical_rmse_THz": (float(np.sqrt(np.mean(err[:, n_ac:] ** 2)))
@@ -1315,6 +1337,13 @@ def main():
         if found["overall"] is None:
             warn("Baseline: the foundation model failed on every test config.")
             found = None
+        elif ref_phonon is not None:
+            try:
+                with capture_library_noise(library_noise, "phonons foundation"):
+                    found["phonons"] = phonon_errors(ref_phonon, committee_phonons([fcalc], ref_phonon, to_ang),
+                                                     args.phonon_mesh)
+            except Exception as e:
+                warn(f"Phonons: foundation model: comparison failed ({e}).")
 
     # ---- [2] models scored
     print_section("[2] MODELS SCORED", f_out)
@@ -1542,24 +1571,45 @@ def main():
                  else "is missing" if st == "absent" else "is unreadable") + " -- the reference's residual forces stay in "
                  "the SIESTA force constants (each model's are subtracted), which biases Gamma-point modes; run SIESTA "
                  "in the undisplaced supercell (stb-phononsCreate writes it).")
-        rows = []
-        for k, v in scored:
-            ph = v.get("phonons")
+        rows, path_rows = [], []
+        entries = [(_round_label(k), v.get("phonons"), True) for k, v in scored]
+        if found and found.get("phonons"):
+            entries.append((f"foundation ({size})", found["phonons"], False))
+        for label, ph, is_round in entries:
             if not ph:
                 continue
-            rows.append(([_round_label(k), f"{ph['rmse_THz']:.2f}", f"{ph['acoustic_rmse_THz']:.2f}",
+            where = f"q = ({', '.join(f'{x:g}' for x in ph['max_q'])}), band {ph['max_band']}"
+            rows.append(([label, f"{ph['rmse_THz']:.2f}", f"{ph['acoustic_rmse_THz']:.2f}",
                           _fmt(ph["optical_rmse_THz"], "{:.2f}"), f"{ph['mean_shift_THz']:+.2f}",
-                          f"{ph['max_abs_THz']:.2f}", f"{ph['model_max_THz']:.2f} / {ph['ref_max_THz']:.2f}",
+                          f"{ph['max_abs_THz']:.2f}", where, f"{ph['model_max_THz']:.2f} / {ph['ref_max_THz']:.2f}",
                           f"{ph['model_min_THz']:+.2f} / {ph['ref_min_THz']:+.2f}", str(ph["model_imaginary_q"])],
                          None))
-            if ph["model_imaginary_q"] > ph["ref_imaginary_q"]:
-                warn(f"Phonons: {_round_label(k)} has imaginary modes at {ph['model_imaginary_q']} of {ph['n_q']} "
+            pp = ph.get("path")
+            if pp:
+                path_rows.append(([label, f"{pp['rmse_THz']:.2f}", f"{pp['acoustic_rmse_THz']:.2f}",
+                                   _fmt(pp["optical_rmse_THz"], "{:.2f}"), f"{pp['max_abs_THz']:.2f}",
+                                   f"q = ({', '.join(f'{x:g}' for x in pp['max_q'])}), band {pp['max_band']}"], None))
+            if is_round and ph["model_imaginary_q"] > ph["ref_imaginary_q"]:
+                warn(f"Phonons: {label} has imaginary modes at {ph['model_imaginary_q']} of {ph['n_q']} "
                      f"q-points (min {ph['model_min_THz']:.2f} THz) that SIESTA does not have -- the model is "
                      "dynamically unstable there; add near-equilibrium configs (small --stdev) to training.")
-        print_table(["Round", "RMSE", "Acoustic", "Optical", "Shift", "Max |dev|", "Top (ML/ref)",
+        mesh_label = 'x'.join(map(str, args.phonon_mesh))
+        print_dual(f"(a) On the q-MESH {mesh_label} (every q-point of the Brillouin zone, equal weight):", f_out)
+        print_table(["Model", "RMSE", "Acoustic", "Optical", "Shift", "Max |dev|", "Max at", "Top (ML/ref)",
                      "Min (ML/ref)", "Imag. q"], rows, f_out)
-        print_dual(f"THz on a {'x'.join(map(str, args.phonon_mesh))} q-mesh, the SAME displacements as SIESTA; "
-                   "shift = mean ML - ref (systematic softening < 0).", f_out)
+        print_dual("THz; the SAME displacements as SIESTA; shift = mean ML - ref (systematic softening < 0); "
+                   "bands sorted by frequency at each q-point.", f_out)
+        if path_rows:
+            first = next(ph for _l, ph, _r in entries if ph and ph.get("path"))["path"]
+            print_dual(f"\n(b) Along the band PATH {first['labels']} ({first['n_q']} q-points, the lines a band plot "
+                       "shows):", f_out)
+            print_table(["Model", "RMSE", "Acoustic", "Optical", "Max |dev|", "Max at"], path_rows, f_out)
+            print_dual("The two numbers differ for the same model: the path samples only high-symmetry lines (and "
+                       "counts their ends twice), the mesh the whole zone. Quote the one that matches the figure or "
+                       "the property: (b) next to a band plot, (a) for thermodynamics / DOS.", f_out)
+        else:
+            print_dual("Band-path error not computed (the path could not be built for this cell): the "
+                       "numbers above are mesh errors, not the ones a band plot shows.", f_out)
     else:
         print_section("[6] PHONONS", f_out)
         print_dual("Not compared (no --phonon-ref). A finished stb-phononsCreate folder of the same system gives a "

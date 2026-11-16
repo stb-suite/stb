@@ -118,6 +118,15 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,
+  0.002, 0.001, 0.0005 Ry (`--energyshift-values` for another). The old linear default, 0.001 to 0.05 in
+  steps of 0.01, had no point between 0.001 and 0.011 Ry, the range in use, while the parameter acts
+  logarithmically. `--energyshift-range MIN MAX STEP` still gives a linear sweep.
+- `stb-convergenceAnalysis` no longer judges a PAO.EnergyShift sweep by the total energy, which has no
+  practical plateau in this parameter (0.01 to 1.5 eV/atom between 0.011 and 0.001 Ry, not monotonic for
+  graphene): the verdict was always "not converged" or the smallest value. It uses the relaxed volume,
+  says so, and tabulates the smallest and largest orbital cutoff radius of each run.
+
 - **The generated `calc.fdf` no longer turns the orbital filter on.** The templates of `stb-inputfile`
   (all four types) and `stb-cohesive` wrote `FilterCutoff 150 Ry`, which makes SIESTA filter the basis
   orbitals (effective cutoff 73.5 Ry): the basis changes with it, and E(V) gets noisy. Cu and Al (PBE,
@@ -184,6 +193,9 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-convergence --single-point`: every folder is a single point at the input geometry, so that only
+  the swept parameter changes (by default each value relaxes positions and cell, which mixes the
+  parameter's effect with the relaxation's noise).
 - `stb-eosInputs` / `stb-eosAnalysis` accept 2D materials and wires. A structure with vacuum was
   refused ("bulk only"), and area scans had to be built by hand. Now only the periodic lattice vectors
   are scaled (`--strain-range` is an area strain for a 2D material, a length strain for a wire; the

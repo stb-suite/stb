@@ -109,6 +109,10 @@ PARAMETER_DEFAULTS = {
     "kgrid":       {"min": 0.05, "max": 0.30, "step": 0.05, "unit": "1/Ang", "tighter": "smaller"},
 }
 PARAMETER_ORDER = ["meshcutoff", "energyshift", "kgrid"]
+# PAO.EnergyShift acts logarithmically: almost all of the change sits between the
+# smallest values, and a linear grid (0.001, 0.011, 0.021 ...) has no point in the
+# range that is actually used. Default since 2.0.1: this geometric set.
+ENERGYSHIFT_VALUES = [0.02, 0.01, 0.005, 0.002, 0.001, 0.0005]
 
 
 def substitute_numeric_tag(calc_text, parameter, value):
@@ -219,6 +223,17 @@ def main():
                         metavar=("MIN", "MAX", "STEP"),
                         help="Custom PAO.EnergyShift sweep range (Ry) (see --meshcutoff-range). "
                              "Only meaningful if 'energyshift' is in --parameter.")
+    parser.add_argument("--energyshift-values", type=float, nargs='+', default=None, metavar="RY",
+                        help="Explicit PAO.EnergyShift values (Ry) instead of a linear range. Default when "
+                             "neither this nor --energyshift-range is given: the geometric set "
+                             f"{' '.join(f'{v:g}' for v in ENERGYSHIFT_VALUES)} (the parameter acts "
+                             "logarithmically; versions up to 2.0.0 used 0.001 to 0.05 in steps of 0.01, "
+                             "which has no point between 0.001 and 0.011).")
+    parser.add_argument("--single-point", action="store_true",
+                        help="Do not relax: every folder is a single point at the input geometry (MD.Steps 0, "
+                             "fixed cell), so only the swept parameter changes. Default: full relaxation "
+                             "(positions + cell), which mixes the parameter's effect with the relaxation's "
+                             "noise but gives the relaxed volume to judge convergence by.")
     parser.add_argument("--kgrid-range", type=float, nargs=3, default=None,
                         metavar=("MIN", "MAX", "STEP"),
                         help="Custom k-grid density sweep range (1/Ang) (see "
@@ -269,10 +284,21 @@ def main():
         if custom is not None and p not in args.parameter:
             parser.error(f"--{p}-range was given but '{p}' is not in --parameter.")
 
+    if args.energyshift_values is not None:
+        if "energyshift" not in args.parameter:
+            parser.error("--energyshift-values was given but 'energyshift' is not in --parameter.")
+        if args.energyshift_range is not None:
+            parser.error("--energyshift-values and --energyshift-range are two ways to say the same thing: give one.")
+        if any(v <= 0 for v in args.energyshift_values):
+            parser.error("--energyshift-values must be positive.")
     ranges = {}
     for p in args.parameter:
         custom = range_flags[p]
-        if custom is not None:
+        if p == "energyshift" and custom is None:
+            given = args.energyshift_values is not None
+            ranges[p] = {"values": sorted(set(args.energyshift_values if given else ENERGYSHIFT_VALUES), reverse=True),
+                         "source": "custom (--energyshift-values)" if given else "suggested default (geometric)"}
+        elif custom is not None:
             mn, mx, st = custom
             if st <= 0:
                 parser.error(f"--{p}-range: step must be > 0.")
@@ -320,7 +346,8 @@ def main():
     print_dual(f"Calc template     : {args.calc}", f_out)
     print_dual(f"Pseudo source     : {args.pseudo_dir or '(not given)'}", f_out)
     print_dual(f"Parameter(s)      : {', '.join(args.parameter)}", f_out)
-    print_dual(f"Relax steps       : {args.relax_steps}", f_out)
+    print_dual(f"Geometry          : " + ("single point at the input geometry (--single-point)" if args.single_point
+                                          else f"full relaxation, positions + cell, up to {args.relax_steps} steps"), f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
     print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
@@ -347,9 +374,18 @@ def main():
         r = ranges[p]
         d = PARAMETER_DEFAULTS[p]
         rows.append(([p, r["source"],
+                      (", ".join(f"{v:g}" for v in r["values"]) + f" ({d['unit']})") if "values" in r else
                       f"{r['min']:g} to {r['max']:g}, step {r['step']:g} ({d['unit']})",
                       f"{d['tighter']} = more converged"], None))
     print_table(["Parameter", "Range source", "Sweep range", "Convergence direction"], rows, f_out)
+    if "energyshift" in args.parameter:
+        print_dual(color_text(
+            "[NOTE] PAO.EnergyShift: the TOTAL energy has no practical plateau in this parameter. Bases of "
+            "different range are not nested, and the total energy still moves by 0.01-1.5 eV/atom between "
+            "0.011 and 0.001 Ry (Si 13 meV, graphene 23 meV, NaCl 0.52 eV, Ag 1.28 eV, GaAs 1.46 eV). Judge "
+            "this sweep by a physical quantity -- the relaxed volume / lattice parameter (reported by "
+            "stb-convergenceAnalysis), or better V0 and B0 from an E(V) scan at each value (stb-eosInputs "
+            "with a template per value) -- and an energy DIFFERENCE where one matters.", 'cyan'), f_out)
 
     print_section("[3] RELAXATION & PARAMETER ENFORCEMENT", f_out)
     with open(args.calc) as f:
@@ -365,12 +401,17 @@ def main():
     steps_label = f"{before['steps_key']}={before['steps']}" if before['steps_key'] else "(absent)"
     print_dual(f"Calc template (before forcing): MD.TypeOfRun={before['typeofrun'] or '(absent)'}  "
                f"Steps: {steps_label}  MD.VariableCell={before['variablecell'] or '(absent)'}", f_out)
-    print_dual(f"Forced via '{EXTRA_FDF_FILE}' (prepended -- always wins) in every folder -- the "
-               "full structure (positions + cell) relaxes at each swept value:", f_out)
-    print_table(["Directive", "Forced value"], [
-        (["MD.TypeOfRun", "CG"], None),
-        (["MD.Steps", str(args.relax_steps)], None),
-        (["MD.VariableCell", "true (full relaxation: positions + cell)"], None),
+    if args.single_point:
+        print_dual(f"Forced via '{EXTRA_FDF_FILE}' (prepended -- always wins) in every folder -- a single point "
+                   "at the input geometry, so only the swept parameter changes between folders:", f_out)
+        forced_rows = [(["MD.TypeOfRun", "CG"], None), (["MD.Steps", "0 (--single-point)"], None),
+                       (["MD.VariableCell", "false"], None)]
+    else:
+        print_dual(f"Forced via '{EXTRA_FDF_FILE}' (prepended -- always wins) in every folder -- the "
+                   "full structure (positions + cell) relaxes at each swept value:", f_out)
+        forced_rows = [(["MD.TypeOfRun", "CG"], None), (["MD.Steps", str(args.relax_steps)], None),
+                       (["MD.VariableCell", "true (full relaxation: positions + cell)"], None)]
+    print_table(["Directive", "Forced value"], forced_rows + [
         (["Swept parameter", f"{', '.join(args.parameter)} -- one value per folder, see [5]"], None),
     ], f_out)
     forced_calc_text = prepend_include(original_calc_text, EXTRA_FDF_FILE)
@@ -416,7 +457,7 @@ def main():
     per_parameter_count = {}
     for p in args.parameter:
         r = ranges[p]
-        values = build_values(r["min"], r["max"], r["step"])
+        values = r["values"] if "values" in r else build_values(r["min"], r["max"], r["step"])
         for value in values:
             folder_name = f"convergence_{p}_{value:.4f}"
             folder = os.path.join(args.output_dir, p, folder_name)
@@ -427,15 +468,26 @@ def main():
             except ValueError as e:
                 fail(str(e))
 
-            extra_fdf_text = (
-                "# Auto-generated by stb-convergence -- forces this folder's own swept parameter\n"
-                "# value plus full relaxation (positions + cell), regardless of --calc's own settings.\n"
-                f"{directive_line}\n"
-                "\n"
-                "MD.TypeOfRun       CG\n"
-                f"MD.Steps           {args.relax_steps}\n"
-                "MD.VariableCell    true\n"
-            )
+            if args.single_point:
+                extra_fdf_text = (
+                    "# Auto-generated by stb-convergence (--single-point) -- forces this folder's own swept\n"
+                    "# parameter value and a single point at the input geometry, regardless of --calc's settings.\n"
+                    f"{directive_line}\n"
+                    "\n"
+                    "MD.TypeOfRun       CG\n"
+                    "MD.Steps           0\n"
+                    "MD.VariableCell    false\n"
+                )
+            else:
+                extra_fdf_text = (
+                    "# Auto-generated by stb-convergence -- forces this folder's own swept parameter\n"
+                    "# value plus full relaxation (positions + cell), regardless of --calc's own settings.\n"
+                    f"{directive_line}\n"
+                    "\n"
+                    "MD.TypeOfRun       CG\n"
+                    f"MD.Steps           {args.relax_steps}\n"
+                    "MD.VariableCell    true\n"
+                )
 
             shutil.copy(args.structure, os.path.join(folder, structure_basename))
             with open(os.path.join(folder, calc_basename), "w") as fh:

@@ -151,7 +151,7 @@ def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, decl
         issues.append("SCF?")
     if max_force is not None and max_force > force_tolerance:
         issues.append("F>tol")
-    if declared_steps is not None and geometry_steps >= declared_steps:
+    if declared_steps and geometry_steps >= declared_steps:   # 0 declared steps = a single point, nothing to exhaust
         issues.append("steps")
     return ",".join(issues) if issues else "OK"
 
@@ -249,6 +249,31 @@ def write_curve_plot(dat_path, parameter_name, rows):
     return gplot_path
 
 
+# Cutoff radii of the basis orbitals of each run, {(parameter, value): (min, max)} in Bohr,
+# filled by analyze_one_sweep for the PAO.EnergyShift table.
+ORBITAL_RADII = {}
+_RC_LINE_RE = re.compile(r"^\s*rc\s*=\s*([0-9]+\.[0-9]+)\s*$")
+
+
+def orbital_radii(out_path):
+    """(smallest, largest) cutoff radius in Bohr among the 'rc =' lines SIESTA prints for each
+    basis orbital while it generates the basis; None when the log has none."""
+    radii = []
+    try:
+        with open(out_path, errors="ignore") as fh:
+            for line in fh:
+                if line.startswith("siesta: ") or "outcoor" in line:
+                    if radii:
+                        break
+                match = _RC_LINE_RE.match(line)
+                if match:
+                    radii.append(float(match.group(1)))
+    except OSError:
+        return None
+    radii = [r for r in radii if r > 0.0]
+    return (min(radii), max(radii)) if radii else None
+
+
 def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_out):
     """Reads every folder's calc.out + structure.fdf + config_extra.fdf and
     returns (rows, n_skipped) sorted ascending by swept value. Each row is
@@ -287,6 +312,8 @@ def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_
         declared_steps = read_declared_relax_steps(folder)
         quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps)
 
+        if parameter == "energyshift":
+            ORBITAL_RADII[(parameter, value)] = orbital_radii(out_path)
         data.append([value, energy, n_atoms, scf_converged, max_force, volume, quality])
 
     data.sort(key=lambda d: d[0])
@@ -349,6 +376,43 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
     volume_rows = [r for r in rows if r[4] is not None]
     volume_converged = (scan_volume_convergence(volume_rows, args.volume_tolerance, increasing_is_accurate)
                          if len(volume_rows) >= 2 else None)
+    volumes_seen = [r[4] for r in volume_rows]
+    fixed_geometry = len(volumes_seen) >= 2 and (max(volumes_seen) - min(volumes_seen)) < 1e-6 * max(volumes_seen)
+
+    if parameter == "energyshift":
+        radii_rows = [([f"{r[0]:.4f}"] + ([f"{rc[0]:.3f}", f"{rc[1]:.3f}", f"{rc[1] * 0.529177:.3f}"] if rc else
+                                         ["--", "--", "--"]), None)
+                      for r in rows for rc in [ORBITAL_RADII.get((parameter, r[0]))]]
+        if any(ORBITAL_RADII.get((parameter, r[0])) for r in rows):
+            print_dual("Cutoff radii of the basis orbitals (from each log's 'rc =' lines):", f_out)
+            print_table(["PAO.EnergyShift (Ry)", "smallest rc (Bohr)", "largest rc (Bohr)", "largest rc (Ang)"],
+                        radii_rows, f_out)
+        print_dual(color_text(
+            "[NOTE] PAO.EnergyShift is NOT judged by the total energy here. The total energy has no practical "
+            "plateau in this parameter: bases of different range are not nested and E still moves by 0.01-1.5 "
+            "eV/atom per step (it is not even monotonic for graphene), so the energy criterion would always "
+            "answer 'not converged' or 'the smallest value scanned'. The |Delta E/atom| column is shown for "
+            "information only.", 'cyan'), f_out)
+        if fixed_geometry:
+            print_dual(color_text(
+                "[NOTE] Every run has the same cell (a --single-point sweep): there is no relaxed volume to "
+                "judge by either. Use these runs for energy DIFFERENCES you care about, and get V0 and B0 at "
+                "each value from an E(V) scan (stb-eosInputs / stb-eosAnalysis) for the verdict on the basis "
+                "range.", 'cyan'), f_out)
+            return None, None, None
+        direction_hint = "or lower"
+        if volume_converged is not None:
+            print_dual(f"{color_text('Structure converged at:', 'green')} {parameter} = {volume_converged:.4f} "
+                       f"({direction_hint}, |Delta V/V| < {args.volume_tolerance}%, relaxed cell). The relaxed "
+                       "volume also carries the noise of each relaxation: confirm with V0 from an E(V) scan "
+                       "(stb-eosInputs) at this value and the next smaller one.", f_out)
+        else:
+            print_dual(color_text(
+                f"[WARNING] No point met the {args.volume_tolerance}% relaxed-volume tolerance within the scanned "
+                "range. Reducing PAO.EnergyShift further may not help: check V0/B0 from an E(V) scan per value, "
+                "the basis size (DZP -> TZP) and, if the range does not close, optimized orbital radii "
+                "(PAO.Basis).", 'yellow'), f_out)
+        return None, volume_converged, volume_converged
 
     direction_hint = "or higher" if increasing_is_accurate else "or lower"
     if energy_converged is not None:

@@ -40,6 +40,13 @@ version before) and **Added** (new options and tools).
   - A slab whose generated cell already had c along the normal is written exactly as before. For any
     other, the file differs from the one 2.0.0 wrote: same slab, different cell.
 
+- `stb-adsorb` (also `stb-mladsorb` and every tool that detects vacuum): a slab with exactly the
+  threshold of vacuum (10 Ang by default) was rejected as "no vacuum axis", because the gap read back
+  from the file is 9.99999 Ang. Gaps within 0.01 Ang of the threshold now count, and the error of
+  `stb-adsorb` gives the gap measured along each axis and the `--vacuum-gap` value to pass.
+- `stb-adsorb` with a `--calc` that has no `kgrid.MonkhorstPack [nx ny nz]` line ended in a Python
+  traceback; it is a clean error now.
+
 ### Changed
 
 - **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single
@@ -67,6 +74,12 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-adsorb --fix-layers N` (`--layer-tol`): holds the N lowest atomic layers of the slab fixed, with
+  the same `%block Geometry.Constraints` in `clean_slab/` and in every site folder. Before, the whole
+  slab always relaxed. Also asked by the menu (5.8.1).
+- `stb-adsorb --anchor-atom ATOM` (element or atom number): the atom of a molecular adsorbate that
+  faces the surface; `--height` is then the height of that atom. Without it H2O is placed with the
+  hydrogens towards the surface, and the orientation could only be changed through `--ml-rank`.
 - `stb-slab --layers N`: the slab's size as a number of atomic layers instead of a minimum thickness
   in Angstrom, for a convergence series in layers (3, 4, 5, ...). The slab is cut thick enough and
   layers are removed from its top until N are left; the bottom face is the chosen termination and the

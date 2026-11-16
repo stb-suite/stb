@@ -133,6 +133,19 @@ def to_fractional(positions, lattice, is_cartesian: bool):
     return positions @ np.linalg.inv(np.asarray(lattice, dtype=float))
 
 
+# A gap this close below the threshold still counts: a slab built with exactly
+# 10 Ang of vacuum measures 9.99999 Ang after a round trip through a file, and
+# was rejected by a plain '>=' against the default threshold of 10.
+VACUUM_GAP_TOL_ANG = 0.01
+
+
+def vacuum_gaps_ang(frac_coords, lattice) -> list[float]:
+    """Largest empty span along each lattice vector, in Angstrom (measured
+    along the vector itself; periodic wrap included)."""
+    frac_coords = np.asarray(frac_coords, dtype=float)
+    return [float(_largest_circular_gap(frac_coords[:, i]) * np.linalg.norm(lattice[i])) for i in range(3)]
+
+
 def detect_vacuum_axes(frac_coords, lattice, vacuum_gap: float) -> list[bool]:
     """Flags, for each of the 3 lattice directions, whether atoms leave a gap
     of at least `vacuum_gap` Angstrom with nothing in it (wrapped
@@ -141,13 +154,7 @@ def detect_vacuum_axes(frac_coords, lattice, vacuum_gap: float) -> list[bool]:
     all 3 axes for an isolated molecule in a box -- as opposed to a genuinely
     periodic axis that merely happens to be long.
     """
-    frac_coords = np.asarray(frac_coords, dtype=float)
-    axes_vacuum = []
-    for i in range(3):
-        gap_frac = _largest_circular_gap(frac_coords[:, i])
-        gap_ang = gap_frac * np.linalg.norm(lattice[i])
-        axes_vacuum.append(gap_ang >= vacuum_gap)
-    return axes_vacuum
+    return [gap >= vacuum_gap - VACUUM_GAP_TOL_ANG for gap in vacuum_gaps_ang(frac_coords, lattice)]
 
 
 def dimensionality_label(vacuum_axes) -> str:

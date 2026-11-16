@@ -721,8 +721,16 @@ def run_adsorb_setup() -> None:
                     "  Keep only the N best unique orientations (blank = keep all): ").strip()
                 orient_top_k = int(orient_top_k_str) if orient_top_k_str.isdigit() else None
 
+    anchor_atom = get_input(
+        "\nAtom of the molecule that faces the surface -- element (O for H2O) or atom number; "
+        "--height is then that atom's height [blank: molecule as stored, single atoms: blank]: ").strip()
+    fix_layers = get_int_input(
+        "Number of bottom atomic layers of the slab to hold fixed (0 = the whole slab relaxes) "
+        "[default: 0]: ", 0)
+
     both_sides = False
-    if not positions_file_path and site_type != 'all' and not ml_rank and height_sweep is None:
+    if (not positions_file_path and site_type != 'all' and not ml_rank and height_sweep is None
+            and fix_layers <= 0):
         both_sides = get_input(
             "\nAlso adsorb on the opposite face (free-standing 2D material)? "
             "(y/N): ").strip().lower() in ('y', 'yes')
@@ -837,6 +845,10 @@ def run_adsorb_setup() -> None:
             args.extend(["--orientation-rmsd-tol", str(orient_rmsd_tol)])
     if both_sides:
         args.append("--both-sides")
+    if anchor_atom:
+        args.extend(["--anchor-atom", anchor_atom])
+    if fix_layers > 0:
+        args.extend(["--fix-layers", str(fix_layers)])
     if uses_mace:
         args.extend(["--ml-device", ml_device])
         if ml_steps != 200:

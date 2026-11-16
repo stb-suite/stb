@@ -219,10 +219,20 @@ def resolve_slab_orientation(structure, vacuum_gap):
     vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, vacuum_gap)
     if sum(vacuum_axes) != 1:
         detected = ', '.join(axis for axis, is_vac in zip('abc', vacuum_axes) if is_vac) or 'none'
+        gaps = kspace.vacuum_gaps_ang(frac_coords, structure.lattice)
+        measured = ', '.join(f"{axis} {gap:.2f}" for axis, gap in zip('abc', gaps))
+        hint = ""
+        if sum(vacuum_axes) == 0:
+            widest = max(gaps)
+            hint = (f" The widest gap here is {widest:.2f} Ang, below the threshold of {vacuum_gap:g} Ang: "
+                    f"if that gap is the slab's vacuum, pass --vacuum-gap {max(1.0, np.floor(widest - 0.5)):g} "
+                    "(any value below it and above the largest gap between atomic layers).")
         raise ValueError(
             "needs a slab/2D material with vacuum along exactly one axis; detected vacuum "
-            f"axis/axes: {detected}. A bulk 3D structure (no vacuum) or a wire/molecule "
-            "(vacuum on 2-3 axes) doesn't have a single well-defined surface to adsorb onto."
+            f"axis/axes: {detected} (largest empty gap along each axis, Ang: {measured}; an axis "
+            f"counts as vacuum from {vacuum_gap:g} Ang, --vacuum-gap).{hint} A bulk 3D structure "
+            "(no vacuum) or a wire/molecule (vacuum on 2-3 axes) doesn't have a single well-defined "
+            "surface to adsorb onto."
         )
 
     relabel_note = None
@@ -452,8 +462,96 @@ def validate_fragment_manifest(manifest, fdf_structure):
     return slab_labels, adsorbate_labels
 
 
+def fixed_atoms_block(fixed_indices, note=""):
+    """config_extra.fdf text that holds the given atoms (0-based indices, in
+    the order of the written structure) fixed during a relaxation: a
+    %block Geometry.Constraints with one 'atom from i to j' line per run of
+    consecutive atoms (1-based, the form every SIESTA version reads)."""
+    indices = sorted(int(i) + 1 for i in fixed_indices)
+    runs, start, previous = [], indices[0], indices[0]
+    for index in indices[1:]:
+        if index != previous + 1:
+            runs.append((start, previous))
+            start = index
+        previous = index
+    runs.append((start, previous))
+    lines = ["# Auto-generated: " + (note or f"{len(indices)} atom(s) held fixed during the relaxation") + ".",
+             "%block Geometry.Constraints"]
+    lines += [f"  atom from {a} to {b}" for a, b in runs]
+    lines += ["%endblock Geometry.Constraints", ""]
+    return "\n".join(lines) + "\n"
+
+
+def bottom_layer_atoms(pmg_slab, n_layers, tol):
+    """Atoms of the lowest `n_layers` atomic layers of a slab whose vacuum is
+    along c (the adsorbate goes on the other, +c, face). Returns
+    (fixed atom indices, all layers) -- layers as core.layers.atomic_layers
+    gives them, bottom to top. Raises ValueError when the slab has no layer
+    left to relax."""
+    from stb.core.layers import atomic_layers
+    layers = atomic_layers(pmg_slab, tol)
+    if n_layers >= len(layers):
+        raise ValueError(
+            f"--fix-layers {n_layers}: the slab has {len(layers)} atomic layer(s) at --layer-tol "
+            f"{tol:g} Ang, so nothing would be left free under the adsorbate. Fix fewer layers "
+            "(half of them is the usual choice) or raise --layer-tol if a buckled plane was "
+            "counted as several layers.")
+    fixed = np.concatenate([indices for _height, indices in layers[:n_layers]])
+    return sorted(int(i) for i in fixed), layers
+
+
+def orient_by_anchor(mol, anchor):
+    """Rotates and shifts a molecule so that atom `anchor` (0-based) sits at
+    the origin with the rest of the molecule above it (+z): the vector from
+    the anchor to the centroid of the other atoms becomes +z. The adsorbate
+    placement puts the molecule's origin at --height above the site, so the
+    anchor is the atom that ends at that height, facing the surface. Returns
+    (new Molecule, lowest z of any other atom) -- a negative second value means
+    another atom still hangs below the anchor."""
+    coords = np.array(mol.cart_coords, dtype=float)
+    if len(coords) == 1:
+        return Molecule(mol.species, [[0.0, 0.0, 0.0]]), 0.0
+    others = np.delete(coords, anchor, axis=0)
+    axis = others.mean(axis=0) - coords[anchor]
+    norm = np.linalg.norm(axis)
+    shifted = coords - coords[anchor]
+    if norm > 1e-6:
+        axis /= norm
+        z = np.array([0.0, 0.0, 1.0])
+        v = np.cross(axis, z)
+        s, c = np.linalg.norm(v), float(np.dot(axis, z))
+        if s < 1e-10:
+            rotation = np.eye(3) if c > 0 else np.diag([1.0, -1.0, -1.0])
+        else:
+            k = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            rotation = np.eye(3) + k + k @ k * ((1 - c) / s ** 2)
+        shifted = shifted @ rotation.T
+    return Molecule(mol.species, shifted), float(np.delete(shifted[:, 2], anchor).min())
+
+
+def resolve_anchor(mol, spec):
+    """0-based index of the anchor atom of `mol` for --anchor-atom `spec`: an
+    element symbol (must occur exactly once in the molecule, else the 1-based
+    atom number is needed) or a 1-based atom number. Raises ValueError."""
+    symbols = [site.specie.symbol for site in mol]
+    listing = ", ".join(f"{i}:{s}" for i, s in enumerate(symbols, start=1))
+    if spec.isdigit():
+        index = int(spec) - 1
+        if not 0 <= index < len(symbols):
+            raise ValueError(f"--anchor-atom {spec}: the molecule has atoms {listing}.")
+        return index
+    matches = [i for i, s in enumerate(symbols) if s.lower() == spec.lower()]
+    if not matches:
+        raise ValueError(f"--anchor-atom {spec}: no such element in the molecule ({listing}).")
+    if len(matches) > 1:
+        raise ValueError(f"--anchor-atom {spec}: {len(matches)} atoms of that element in the molecule "
+                         f"({listing}); give the atom number instead.")
+    return matches[0]
+
+
 def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
-                            force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None):
+                            force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None,
+                            fixed_atoms=None, fixed_note=""):
     """Writes structure.fdf + calc.fdf + config_extra.fdf + copied
     pseudopotentials for one reference/candidate folder (adsorb.py's
     clean_slab/, adsorbate/, sites/site_*/; neb_sites.py's site_A/,
@@ -486,6 +584,9 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
     structure.fdf. Left at the default None for a single-fragment folder
     (clean_slab/, adsorbate/) -- unchanged, bare-element-symbol behavior.
 
+    `fixed_atoms` (0-based indices in `pmg_structure`'s order, which is the
+    order written) adds a Geometry.Constraints block holding them fixed.
+
     Returns the FdfStructure written, in case a caller needs the exact same
     geometry object again without re-reading the file.
     """
@@ -502,6 +603,8 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
             f.write(DIPOLE_CORRECTION_BLOCK)
         if force_vdw:
             f.write(VDW_CORRECTION_BLOCK)
+        if fixed_atoms:
+            f.write(fixed_atoms_block(fixed_atoms, fixed_note))
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
     for label in fdf_structure.species:

@@ -296,6 +296,21 @@ like this graphene fixture (verified: `site_1_ontop_bothsides/structure.fdf`
 has `NumberofAtoms 4` — 2 substrate + 1 adsorbate per face); `--height-sweep
 <min> <max> <step>` writes an approach curve instead of one fixed height.
 
+Three options for a real slab (since 2.0.1):
+
+- `--fix-layers N` holds the N lowest atomic layers of the slab at their input
+  positions, with the same `%block Geometry.Constraints` in `clean_slab/` and
+  in every site folder (so the two energies of `E_ads` relax the same atoms).
+  Without it the whole slab relaxes. `--layer-tol` (0.1 Ang) sets what counts
+  as one layer; the report lists the layers found and the atoms fixed.
+- `--anchor-atom O` (an element, or an atom number of the molecule) turns a
+  molecular adsorbate so that this atom faces the surface, and `--height`
+  becomes the height of that atom. Without it the molecule keeps the
+  orientation of the G2 database: for H2O the hydrogens point to the surface.
+- The slab is recognized by its vacuum (`--vacuum-gap`, 10 Ang). A slab with
+  exactly that much vacuum is accepted, and when no vacuum is found the error
+  gives the gap measured along each axis and the value to pass.
+
 **A caution worth knowing before you script this yourself:** calling
 `stb-adsorb` twice into the *same* `-O` output directory with two
 different single `--site-type` values (e.g. once for `ontop`, once for

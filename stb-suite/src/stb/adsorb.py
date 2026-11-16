@@ -31,7 +31,9 @@ from stb.core.adsorption_sites import (
     cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
     generate_systematic_orientations, deduplicate_orientations,
     parse_positions_file, write_positions_file,
+    bottom_layer_atoms, orient_by_anchor, resolve_anchor,
 )
+from stb.core.layers import LAYER_TOL_ANG
 from stb.neb import wrap_into_cell
 
 # REPORT_FILE is always written -- it carries the machine-readable
@@ -272,6 +274,25 @@ def main():
                               "stb-adsorbAnalysis will report E_ads vs. height for it. Same min/"
                               "max/step convention as stb-convergence. Incompatible with "
                               "--both-sides.")
+    parser.add_argument("--anchor-atom", default=None, metavar="ATOM",
+                         help="For a molecular adsorbate: the atom that faces the surface, as an "
+                              "element symbol (when the molecule has one atom of it: O for H2O, C "
+                              "for CO) or an atom number (1-based, in the molecule's own order). "
+                              "The molecule is turned so that this atom is the lowest one, the rest "
+                              "pointing away from the surface, and --height is then the height of "
+                              "THIS atom above the site. Default: the molecule as the G2 database "
+                              "stores it (H2O: hydrogens towards the surface), its origin at "
+                              "--height. With --ml-rank orientation sampling it only sets the "
+                              "starting orientation the samples are rotated from.")
+    parser.add_argument("--fix-layers", type=int, default=0, metavar="N",
+                         help="Hold the N lowest atomic layers of the slab fixed at their input "
+                              "(bulk-like) positions, in clean_slab/ and in every site folder alike: "
+                              "a %%block Geometry.Constraints in each config_extra.fdf. The adsorbate "
+                              "goes on the top (+c) face. Default 0: the whole slab relaxes. The "
+                              "usual choice is the lower half of the layers.")
+    parser.add_argument("--layer-tol", type=float, default=LAYER_TOL_ANG, metavar="ANG",
+                         help="With --fix-layers: atoms whose heights differ by less than this are "
+                              f"one atomic layer (default: {LAYER_TOL_ANG} Ang, as in stb-slab).")
     parser.add_argument("--both-sides", action="store_true",
                          help="Adsorb on both exposed faces (for a free-standing 2D material with "
                               "vacuum on both sides of the c-axis). Requires a concrete --site-type "
@@ -422,6 +443,13 @@ def main():
         parser.error("--both-sides and --ml-rank are not supported together yet.")
     if args.both_sides and args.height_sweep is not None:
         parser.error("--both-sides and --height-sweep are not supported together yet.")
+    if args.fix_layers < 0:
+        parser.error("--fix-layers must be 0 (nothing fixed) or a positive number of layers.")
+    if args.layer_tol <= 0:
+        parser.error("--layer-tol must be positive.")
+    if args.fix_layers and args.both_sides:
+        parser.error("--fix-layers holds the BOTTOM layers and --both-sides adsorbs on the bottom "
+                      "face too: not supported together.")
     if args.top_k is not None and not args.ml_rank:
         parser.error("--top-k is only valid with --ml-rank.")
     orientation_flags_used = (
@@ -523,6 +551,10 @@ def main():
                     f"{', '.join(f'{h:.2f}' for h in heights)} Ang", f_out)
     else:
         print_dual(f"  Height          : {heights[0]:.2f} Ang", f_out)
+    print_dual(f"  Anchor atom     : {args.anchor_atom or '(molecule as stored in the G2 database)'}", f_out)
+    print_dual(f"  Fixed layers    : "
+                + (f"{args.fix_layers} lowest (layer tolerance {args.layer_tol:g} Ang)" if args.fix_layers
+                   else "none -- the whole slab relaxes (--fix-layers N to hold the bottom ones)"), f_out)
     print_dual(f"  Both sides      : {'yes' if args.both_sides else 'no'}", f_out)
     print_dual(f"  ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}", f_out)
     print_dual(f"  ML rank         : {'yes' if args.ml_rank else 'no'}"
@@ -557,12 +589,34 @@ def main():
             "below, or stb-adsorbBsse's atom-count/species match).", 'yellow'), f_out)
     else:
         print_dual("  Slab already centered in the vacuum gap (no boundary-wrap risk).", f_out)
+    fixed_atoms, fixed_note = None, ""
+    if args.fix_layers:
+        try:
+            fixed_atoms, slab_layers = bottom_layer_atoms(pmg_structure, args.fix_layers, args.layer_tol)
+        except ValueError as e:
+            print_dual(color_text(f"[ERROR] {e}", 'red'), f_out)
+            sys.exit(1)
+        fixed_note = (f"stb-adsorb --fix-layers {args.fix_layers}: the {args.fix_layers} lowest of "
+                      f"{len(slab_layers)} atomic layers ({len(fixed_atoms)} atoms) held fixed")
+        heights_ang = [h for h, _ in slab_layers]
+        print_dual(f"  Slab layers     : {len(slab_layers)} ("
+                    + ", ".join(f"{len(idx)}" for _h, idx in slab_layers) + " atoms, bottom to top)", f_out)
+        print_dual(f"  Fixed           : layers 1-{args.fix_layers} = {len(fixed_atoms)} of {n_substrate} "
+                    f"slab atoms (up to {heights_ang[args.fix_layers - 1] - heights_ang[0]:.2f} Ang above "
+                    f"the bottom layer); {len(slab_layers) - args.fix_layers} layer(s) free. Same block in "
+                    "clean_slab/ and in every site folder.", f_out)
     write_reference_folder(clean_slab_dir, pmg_structure, calc_text, slab_species_meta, args.pseudo_dir,
-                            force_dipole=True, force_vdw=True)
+                            force_dipole=True, force_vdw=True, fixed_atoms=fixed_atoms, fixed_note=fixed_note)
     print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}", f_out)
     view_frames.append(("clean_slab", AseAtomsAdaptor.get_atoms(pmg_structure)))
 
-    adsorbate_calc_text = force_spin_polarized(force_gamma_kgrid(calc_text))
+    try:
+        adsorbate_calc_text = force_spin_polarized(force_gamma_kgrid(calc_text))
+    except ValueError as e:
+        print_dual(color_text(
+            f"[ERROR] {e} The isolated-adsorbate reference is run at Gamma by rewriting that tag: "
+            "give the slab's k-grid in --calc as one line, 'kgrid.MonkhorstPack [nx ny nz]' (the %block form is not rewritten).", 'red'), f_out)
+        sys.exit(1)
     adsorbate_dirs = {}  # name -> dir, used below when writing sites
     for i, (name, mol) in enumerate(adsorbates):
         if args.ml_prerelax:
@@ -590,6 +644,27 @@ def main():
             adsorbates[i] = (name, mol)
             print_dual(f"  {'Converged' if converged else 'Hit step cap, not fully converged'} after "
                         f"{steps} step(s).", f_out)
+
+        if args.anchor_atom and len(mol) > 1:
+            try:
+                anchor_index = resolve_anchor(mol, args.anchor_atom)
+            except ValueError as e:
+                print_dual(color_text(f"[ERROR] '{name}': {e}", 'red'), f_out)
+                sys.exit(1)
+            mol, lowest_other = orient_by_anchor(mol, anchor_index)
+            adsorbates[i] = (name, mol)
+            symbol = mol[anchor_index].specie.symbol
+            print_dual(f"  {color_text('Orientation:', 'cyan')} '{name}' turned so that atom "
+                        f"{anchor_index + 1} ({symbol}) faces the surface; --height is the height of "
+                        f"this atom above the site, the other atoms start {lowest_other:+.2f} Ang or "
+                        "more above it.", f_out)
+            if lowest_other < -0.05:
+                print_dual(color_text(
+                    f"  [WARNING] '{name}': another atom is {-lowest_other:.2f} Ang BELOW the anchor in "
+                    "this orientation (the anchor is not at the end of the molecule) -- it is the one "
+                    "closest to the surface. Check the site folders before running SIESTA.", 'yellow'), f_out)
+        elif args.anchor_atom:
+            print_dual(f"  [NOTE] '{name}' is a single atom: --anchor-atom does not apply.", f_out)
 
         extent = molecule_extent(mol)
         if extent > 0.5 * args.vacuum_box:
@@ -1169,7 +1244,7 @@ def main():
         site_dir = os.path.join(sites_root, label)
         write_reference_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir,
                                 force_spin=args.force_spin, force_dipole=True, force_vdw=True,
-                                n_substrate=n_substrate)
+                                n_substrate=n_substrate, fixed_atoms=fixed_atoms, fixed_note=fixed_note)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))

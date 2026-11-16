@@ -374,6 +374,17 @@ def main():
         (["Swept parameter", f"{', '.join(args.parameter)} -- one value per folder, see [5]"], None),
     ], f_out)
     forced_calc_text = prepend_include(original_calc_text, EXTRA_FDF_FILE)
+    from stb.core import fdf_directives
+    d3_value = fdf_directives.parse_directives(original_calc_text).get("dftd3", "")
+    if d3_value.strip().lower().strip(".") in ("true", "t", "yes", "y"):
+        print_dual(color_text(
+            "[WARNING] The template turns DFT-D3 on and every folder relaxes the CELL. SIESTA 5.4.2 writes "
+            "the D3 contribution to the stress tensor with the wrong sign (energies and forces are right; "
+            "measured on Ag and Cu: P(D3) - P(PBE) = +4.75 GPa against -dE_D3/dV = -4.75 GPa), so with that "
+            "version the cell relaxes to the wrong volume -- too large -- and the convergence is judged at a "
+            "geometry that is not the minimum. Check the SIESTA version; with 5.4.2, converge the parameter "
+            "without D3 or get the volume from the energies (stb-eosInputs / stb-eosAnalysis).",
+            'yellow'), f_out)
 
     print_section("[4] PSEUDOPOTENTIALS", f_out)
     if args.pseudo_dir:

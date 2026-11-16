@@ -47,6 +47,19 @@ version before) and **Added** (new options and tools).
 - `stb-adsorb` with a `--calc` that has no `kgrid.MonkhorstPack [nx ny nz]` line ended in a Python
   traceback; it is a clean error now.
 
+- DFT-D3 and the stress tensor: SIESTA 5.4.2 writes the D3 contribution to the stress with the wrong
+  sign (Ag and Cu, 13 volumes: P(D3) - P(PBE) = +4.75 GPa where -dE_D3/dV = -4.75 GPa; energies and
+  forces are right). The defect is SIESTA's, but the suite used that stress with no notice. It now
+  warns wherever the stress of a D3 run is used:
+  - `stb-mlffAnalysis` trained on the stress by default (weight 10000) with wrong stress labels: it
+    warns and recommends `--no-stress-training` when the labels include D3 and the logs are from an
+    affected version (or the version cannot be read).
+  - `stb-eosAnalysis`: the pressure cross-check `[5]` says that P_SIESTA and the B0 from the stress are
+    not reliable for these runs, and that V0 and B0 from the energies are.
+  - `stb-elasticAnalysis --method stress`: warns and points to `--method energy`.
+  - `stb-convergence` (every folder relaxes the cell) and `stb-inputfile -t relax -d3`: warn that the
+    cell relaxes to the wrong volume with that version.
+
 ### Changed
 
 - **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single

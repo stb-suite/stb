@@ -1073,6 +1073,14 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             f_out
         )
 
+        if d3_enabled and chosen_mode == 'relax':
+            print_dual(color_text(
+                "[WARNING] DFT-D3 with a variable-cell relaxation: SIESTA 5.4.2 writes the D3 contribution "
+                "to the stress tensor with the wrong sign (energies and forces are right), so with that "
+                "version the cell relaxes to the wrong volume. Check your SIESTA version; with 5.4.2 get "
+                "the cell from the energies (stb-eosInputs / stb-eosAnalysis) and relax only the atoms "
+                "(MD.VariableCell false).", 'yellow'), f_out)
+
         d3_line_new = f"DFTD3                   {d3_flag}"
 
         # --- Set Spin flag ---

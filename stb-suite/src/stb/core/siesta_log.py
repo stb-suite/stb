@@ -461,6 +461,30 @@ def get_siesta_version(path: str) -> str | None:
     return None
 
 
+# SIESTA versions in which the DFT-D3 contribution to the STRESS tensor was
+# found with the wrong sign (energies and forces are right). 5.4.2: Ag and Cu,
+# 13 volumes each, P(PBE+D3) - P(PBE) = +4.75 GPa where -dE_D3/dV = -4.75 GPa,
+# ratio -1.00 at every volume.
+D3_STRESS_WRONG_SIGN_VERSIONS = ("5.4.2",)
+
+
+def d3_stress_caution(version: str | None, consequence: str) -> str | None:
+    """Warning text for a result that uses SIESTA's stress from runs with
+    DFT-D3 on, or None when the version is known and not in the list above.
+    `consequence` says what goes wrong for the caller and what to do instead."""
+    if version in D3_STRESS_WRONG_SIGN_VERSIONS:
+        head = (f"DFT-D3 + stress: these runs are SIESTA {version}, where the D3 contribution to the "
+                "stress tensor has the wrong sign (measured on Ag and Cu: P(D3) - P(PBE) = +4.75 GPa "
+                "against -dE_D3/dV = -4.75 GPa; energies and forces are right).")
+    elif version is None:
+        head = ("DFT-D3 + stress: SIESTA 5.4.2 writes the D3 contribution to the stress tensor with the "
+                "wrong sign (energies and forces are right); the SIESTA version of these runs could not "
+                "be read, so check it.")
+    else:
+        return None
+    return f"{head} {consequence}"
+
+
 def get_free_energy(path: str) -> float | None:
     """Last 'siesta: FreeEng' value (eV) from a SIESTA .out file."""
     energy = None

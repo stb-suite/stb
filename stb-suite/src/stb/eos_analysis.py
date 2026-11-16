@@ -78,6 +78,11 @@ _THEORY_LABELS = {"xcfunctional": "XC functional", "xcauthors": "XC authors", "p
 
 # ---- reading --------------------------------------------------------------------
 
+def fdf_directives_true(value):
+    """An fdf logical as SIESTA reads it (.true./T/true/yes); None/absent -> False."""
+    return value is not None and str(value).strip().lower().strip(".") in ("true", "t", "yes", "y")
+
+
 def folder_theory(folder_path):
     """{label: value} of the settings that shape the energy surface, as SIESTA reads them in this
     folder (config_extra.fdf first, then calc.fdf, then the rest), plus the k-grid and the md5 of
@@ -663,6 +668,15 @@ def main():
         if b_stress is not None:
             print_dual(f"B0 from the stress alone   : {b_stress:.2f} GPa (B = -V dP/dV at V0, polynomial fit of P_SIESTA) "
                        f"vs {b0:.2f} GPa from the energies ({b_stress - b0:+.2f} GPa, {100 * (b_stress - b0) / b0:+.2f} %)", f_out)
+        d3_caution = None
+        if fdf_directives_true(ref_theory.get("dftd3")):
+            d3_caution = siesta_log.d3_stress_caution(
+                next((d["version"] for d in data if d.get("version")), None),
+                "Expect P_SIESTA to disagree with -dE/dV here and the B0 'from the stress' to be wrong; V0 and B0 "
+                "from the ENERGIES (the fit above) are not affected. The disagreement of this table is the "
+                "direct test: twice the D3 pressure when the defect is present.")
+            if d3_caution:
+                print_dual(warn(d3_caution), f_out)
         print_dual(color_text("An independent second route to B0 on the same runs: with SIESTA's fixed-shape orbitals the stress "
                               "and -dE/dV must agree, so a disagreement points to the real-space mesh (raise Mesh.Cutoff), "
                               "an unconverged SCF (tighten DM.Tolerance) or a too narrow/noisy scan.", 'cyan'), f_out)
@@ -738,6 +752,9 @@ def main():
             hint = "the scan may be too wide (anharmonic) or too narrow (noise): try another --strain-range, and check the SCF settings."
         if name.startswith("P_SIESTA agrees") or name.startswith("Residual pressure") or name.startswith("B0 from stress"):
             hint = "energy and stress disagree: raise Mesh.Cutoff (egg-box effect of the real-space mesh), tighten DM.Tolerance, or widen the scan."
+            if fdf_directives_true(ref_theory.get("dftd3")):
+                hint += (" These runs have DFT-D3 on: SIESTA 5.4.2 gives the D3 stress the wrong sign, which alone "
+                         "produces this disagreement (see [5]); trust the energy route.")
         if name.startswith("Residual forces"):
             hint = "the ions are not at equilibrium at the scaled cells: use stb-eosInputs --relax-positions."
         if name.startswith("Same level"):

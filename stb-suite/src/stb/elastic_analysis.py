@@ -1162,6 +1162,39 @@ def report_ions(rows, f_out):
     return result
 
 
+def d3_stress_check(folders, file_name, method, f_out):
+    """--method stress on runs with DFT-D3: warns when the SIESTA version of
+    the logs gives the D3 stress the wrong sign (core/siesta_log). Returns the
+    number of warnings (0 or 1)."""
+    from stb.core import fdf_directives
+    import glob
+    for folder in folders:
+        paths = sorted(glob.glob(os.path.join(folder, "*.fdf")),
+                       key=lambda p: (os.path.basename(p) != "config_extra.fdf", os.path.basename(p) != "calc.fdf", p))
+        texts = []
+        for path in paths:
+            try:
+                with open(path, errors="replace") as fh:
+                    texts.append(fh.read())
+            except OSError:
+                pass
+        if not texts:
+            continue
+        value = fdf_directives.parse_directives(*texts).get("dftd3", "")
+        if value.strip().lower().strip(".") not in ("true", "t", "yes", "y"):
+            return 0
+        caution = siesta_log.d3_stress_caution(
+            siesta_log.get_siesta_version(os.path.join(folder, file_name)),
+            "Every constant fitted from the stress carries the D3 part with the wrong sign: use the energy "
+            "route for these runs (stb-elasticInputs --method energy, then stb-elasticAnalysis --method "
+            "energy). The eggbox cross-check in [3] compares the two routes on the pure directions.")
+        if caution and method == "stress":
+            print_dual(color_text(f"[WARNING] {caution}", 'yellow'), f_out)
+            return 1
+        return 0
+    return 0
+
+
 def save_and_compare_constants(run_dir, compare_dir, C_sym, ions, args, unit_label, f_out):
     """Writes the fitted tensor to <run_dir>/elastic_constants.json and, when
     the other series of 'stb-elasticInputs --ions both' (or --compare-with)
@@ -1868,6 +1901,7 @@ def main():
     print_dual(f"View (matplotlib)    : {'yes' if args.view else 'no'}", f_out)
 
     ions = report_ions(ion_survey(folders, args.file), f_out)
+    ions["warnings"] += d3_stress_check(folders, args.file, args.method, f_out)
 
     if args.method == "energy":
         # --- Energy-strain (parabolic fit) path: its own folder

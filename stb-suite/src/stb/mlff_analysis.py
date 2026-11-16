@@ -1314,7 +1314,20 @@ def main():
                    f"({max(1, round(len(atoms_list) * args.valid_fraction))} config(s), different for each seed)", f_out)
     if init_models[0] is not None:
         print_dual("Starting weights  : " + "; ".join(f"seed {sd} <- {m_}" for sd, m_ in zip(seeds, init_models)), f_out)
-    if stress_ok and args.no_stress_training:
+    d3_caution = None
+    if labels_d3 and stress_ok:
+        d3_caution = siesta_log.d3_stress_caution(
+            next((v for v in (_siesta_version(a.info["folder"]) for a in atoms_list[:5]) if v), None),
+            "The stress labels are therefore wrong by twice the D3 stress, and the loss weights them "
+            f"{args.stress_weight:g} times: train with --no-stress-training (energies and forces still "
+            "carry E(V) when the set has several volumes), or relabel with a SIESTA version without the "
+            "defect. Check on your own runs: stb-eosAnalysis compares the SIESTA pressure with -dE/dV.")
+    if d3_caution and train_stress:
+        warn("Setup: " + d3_caution)
+    if stress_ok and args.no_stress_training and d3_caution:
+        print_dual(color_text("[OK] --no-stress-training with DFT-D3 labels: the stress of these runs is not "
+                              "used (its D3 part is unreliable in this SIESTA version).", 'green'), f_out)
+    elif stress_ok and args.no_stress_training:
         warn("Setup: --no-stress-training although every config has a stress: the volume response is not fitted.")
     elif not stress_ok:
         warn("Setup: stress missing in some configs -- trained on energy + forces only; the volume "

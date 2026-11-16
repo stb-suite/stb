@@ -184,7 +184,11 @@ else echo -e "   -> ${RED}Failed:${NC} E2g split $(cat gr/e2g.txt) THz after the
 echo "Testing: a phonopy_disp.yaml written with phonopy's 1e-5 tolerance is reported"
 sed -i 's/symmetry_tolerance: .*/symmetry_tolerance: 1.00000e-05/' gr/phonopy_disp.yaml
 stb-phononsPos -dir gr -m 8 8 1 --no-intro > log_gr_tol.txt 2>&1
-check_contains "Prep tolerance   : 5.29e-06 Ang in phonopy_disp.yaml (Cmmm)" log_gr_tol.txt
+check_contains "Prep tolerance   : 5.29e-06 Ang in phonopy_disp.yaml (Cmmm at it)" log_gr_tol.txt
+check_contains "Displacements    : 1 in the folders, 1 needed by P6/mmm" log_gr_tol.txt
+echo "Testing: an analysis --symprec too tight for the set (Cmmm needs more than the one P6/mmm displacement)"
+stb-phononsPos -dir gr -m 8 8 1 --symprec 1e-6 --no-intro > log_gr_tight.txt 2>&1
+check_contains "\[WARNING\] The displacement set (1) is smaller than the one Cmmm" log_gr_tight.txt
 
 echo -e "\n--- Testing --view completes headlessly without hanging (matplotlib Agg backend) ---"
 MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos \

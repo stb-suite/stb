@@ -123,9 +123,10 @@ version before) and **Added** (new options and tools).
   `--symmetrize-fc`) and the force-constant symmetry check reported 0.000 THz.
   - The space group is now computed with spglib at `--symprec` and compared with phonopy's; on a
     mismatch the phonopy object is rebuilt with the requested tolerance and the force constants are
-    recomputed (with a `[WARNING]`). The report gives the space group used and the tolerance of the
-    prep stage, and warns when the displacements were reduced with a higher symmetry than the one now
-    used to build the force constants. Same data: E2g 38.575 / 38.576 THz.
+    recomputed (with a `[WARNING]`; the NAC parameters read from `BORN` are kept). The report gives the
+    space group used, the tolerance written in `phonopy_disp.yaml`, and the number of displacements in the
+    folders against the number that group needs, with a warning when there are fewer (the set was reduced
+    with a higher symmetry than the one now used). Same data: E2g 38.575 / 38.576 THz.
   - The force-constant symmetry check of `[2]` was skipped with phonopy 4.5 ('index 2 is out of
     bounds'): it needs the full force constants, which are now built for it.
 - `stb-convergence` (relaxation mode, the default): `config_extra.fdf` forced a variable-cell relaxation

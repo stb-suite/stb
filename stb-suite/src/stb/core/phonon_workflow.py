@@ -225,8 +225,8 @@ def _ensure_symmetry_tolerance(phonon, symprec_ang, yaml_unit, f_out=None, info=
     group is now computed with spglib at the requested tolerance and compared with phonopy's; on a mismatch the
     Phonopy object is rebuilt explicitly with that tolerance (same cell, matrices, dataset). The tolerance used
     at the prep stage (yaml) is reported: a prep tolerance LARGER than the analysis one means the displacement set
-    was reduced with a higher symmetry than the one now used to build the force constants (underdetermined).
-    Returns the (possibly rebuilt) Phonopy object."""
+    was reduced with a higher symmetry than the one now used to build the force constants (underdetermined); that is
+    checked by counting the displacements the group at `symprec_ang` needs. Returns the (possibly rebuilt) object."""
     target = symprec_ang / yaml_unit
     expected = _spglib_group(phonon.unitcell, target)
     ds_prim = phonon.primitive_symmetry.dataset
@@ -246,6 +246,9 @@ def _ensure_symmetry_tolerance(phonon, symprec_ang, yaml_unit, f_out=None, info=
         with _no_auto_primitive_warning():
             new = _Phonopy(phonon.unitcell, **kwargs)
         new.dataset = phonon.dataset
+        nac = getattr(phonon, "nac_params", None)
+        if nac is not None:                  # BORN / yaml NAC read by phonopy.load (IR, LO-TO splitting)
+            new.nac_params = nac
         try:
             new.produce_force_constants()
             new.symmetrize_force_constants(show_drift=False)
@@ -264,37 +267,34 @@ def _ensure_symmetry_tolerance(phonon, symprec_ang, yaml_unit, f_out=None, info=
                + (" (rebuilt)" if rebuilt else ""), f_out)
     yaml_tol = _read_yaml_tolerance()
     if yaml_tol is not None:
-        yaml_tol_ang = yaml_tol * yaml_unit
         prep_group = _spglib_group(phonon.unitcell, yaml_tol)
-        prep_txt = f"{prep_group[0]}" if prep_group else "?"
-        print_dual(f"Prep tolerance   : {yaml_tol_ang:.2e} Ang in phonopy_disp.yaml ({prep_txt})", f_out)
-        if prep_group is not None and expected is not None and prep_group[1] != expected[1]:
-            n_prep = _n_ops(phonon.unitcell, yaml_tol)
-            n_now = _n_ops(phonon.unitcell, target)
-            if n_prep is not None and n_now is not None and n_prep > n_now:
-                print_dual(color_text(
-                    f"[WARNING] The displacements were reduced with {prep_group[0]} (prep tolerance "
-                    f"{yaml_tol_ang:.2e} Ang) but the force constants are built with {expected[0]}: the "
-                    "displacement set may not determine every force constant. Use the prep --symprec here.",
-                    'yellow'), f_out)
-            else:
-                print_dual(color_text(
-                    f"[INFO] Prep tolerance gave {prep_group[0]}, this analysis {expected[0]}: the displacement set "
-                    "is larger than needed (harmless).", 'cyan'), f_out)
+        print_dual(f"Prep tolerance   : {yaml_tol * yaml_unit:.2e} Ang in phonopy_disp.yaml"
+                   + (f" ({prep_group[0]} at it)" if prep_group else ""), f_out)
+    # Is the displacement set enough for the group the force constants are built with? Counted directly: the
+    # yaml's tolerance does not say which one reduced the set (the cluster's graphene had 1e-5 in the yaml and
+    # the single displacement of P6/mmm).
+    try:
+        first = phonon.dataset["first_atoms"]
+        n_have = len(first)
+        dist = float(np.linalg.norm(first[0]["displacement"]))
+        from phonopy import Phonopy as _Phonopy
+        with _no_auto_primitive_warning():
+            probe = _Phonopy(phonon.unitcell, supercell_matrix=phonon.supercell_matrix,
+                             primitive_matrix=phonon.primitive_matrix, symprec=target)
+        probe.generate_displacements(distance=dist)
+        n_need = len(probe.dataset["first_atoms"])
+        print_dual(f"Displacements    : {n_have} in the folders, {n_need} needed by {final_sym}", f_out)
+        if n_have < n_need:
+            print_dual(color_text(
+                f"[WARNING] The displacement set ({n_have}) is smaller than the one {final_sym} needs ({n_need}): it "
+                "was reduced with a higher symmetry than the one now used, and some force constants are not "
+                "determined. Use the --symprec of the prep stage here.", 'yellow'), f_out)
+    except Exception:
+        pass
     if info is not None:
         info["space_group"] = final_sym
         info["symmetry_rebuilt"] = rebuilt
     return phonon
-
-
-def _n_ops(cell, symprec_internal):
-    import spglib
-    try:
-        sym = spglib.get_symmetry((np.asarray(cell.cell), np.asarray(cell.scaled_positions),
-                                   np.asarray(cell.numbers)), symprec=symprec_internal)
-    except Exception:
-        return None
-    return None if sym is None else len(sym["rotations"])
 
 
 def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None,

@@ -429,6 +429,46 @@ check_contains "Force tolerance" log_menu.txt
 check_success adsorption_curve.dat
 
 
+# --- N12 (2.1.0): the adsorbate's final orientation per site ---
+echo -e "\n--- Testing the orientation table: H2O that ends lying flat is reported as CHANGED ---"
+OT=orient_run
+rm -rf $OT && mkdir -p $OT
+cp structure.fdf calc.fdf $OT/
+(cd $OT && stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type all --all-sites -O . --no-intro \
+    > log_prep.txt 2>&1)
+printf 'siesta: FreeEng =    -200.000000\nSCF cycle converged after 12 iterations\n' > $OT/clean_slab/calc.out
+for a in $OT/adsorbate*/; do printf 'siesta: FreeEng =    -466.000000\nSCF cycle converged after 9 iterations\n' > ${a}calc.out; done
+python3 - "$OT" <<'PYEOF'
+import sys, glob, numpy as np, sisl
+from stb.core import structure_io
+sites = sorted(glob.glob(f"{sys.argv[1]}/sites/site_*/"))
+for k, site_dir in enumerate(sites[:2]):
+    fdf = structure_io.read_fdf(f"{site_dir}/structure.fdf")
+    cart = np.array([pos @ fdf.lattice if fdf.coord_format == "fractional" else pos for _, pos in fdf.atoms])
+    ads = [i for i, (lab, _) in enumerate(fdf.atoms) if lab.endswith("_ads")]
+    if k == 0:   # lay the molecule flat: rotate it by 90 deg about the in-plane axis through its centre
+        c = cart[ads].mean(axis=0)
+        d = cart[ads] - c
+        n = np.cross(d[1] - d[0], d[2] - d[0]); n /= np.linalg.norm(n)       # current plane normal
+        target = np.array([0.0, 0.0, 1.0])
+        v = np.cross(n, target); s_ = np.linalg.norm(v); cth = n @ target
+        if s_ > 1e-8:
+            vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+            R = np.eye(3) + vx + vx @ vx * ((1 - cth) / s_**2)
+            cart[ads] = c + d @ R.T
+    atoms = [sisl.Atom(structure_io.real_element(lab, fdf.species_meta)) for lab, _ in fdf.atoms]
+    sisl.get_sile(f"{site_dir}/siesta.XV", mode="w").write_geometry(
+        sisl.Geometry(cart, atoms=atoms, lattice=sisl.Lattice(fdf.lattice)))
+    open(f"{site_dir}/calc.out", "w").write(f"siesta: FreeEng =    {-666.4 - 0.1 * (k == 0):.6f}\n"
+                                            "SCF cycle converged after 14 iterations\n")
+PYEOF
+(cd $OT && stb-adsorbAnalysis --dir . --no-intro > log_orient.txt 2>&1)
+check_contains "Adsorbate orientation (tilt from the surface plane" $OT/log_orient.txt
+check_contains "CHANGED" $OT/log_orient.txt
+check_contains "Final orientations found" $OT/log_orient.txt
+check_contains "lying" $OT/log_orient.txt
+check_contains "ended in another orientation than they started in" $OT/log_orient.txt
+
 popd > /dev/null
 
 # --- 6. Summary ---

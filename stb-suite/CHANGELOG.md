@@ -185,6 +185,12 @@ version before) and **Added** (new options and tools).
   records the pseudopotential source in `basis_scan_<stage>.json` (as typed: a bank name stays a bank
   name) and the command carries it; for a scan written by an earlier version the command shows
   `-p <pseudopotential source>` to fill in.
+- `stb-adsorbAnalysis` did not show where the molecule ended: in a 12-point H2O/Ag(111) series, 4
+  relaxations ended lying flat, ~0.1 eV more bound, and the ranking mixed them with upright ones without
+  saying so. Section `[2b]` now has an orientation table per site, at the start and at the end of the
+  relaxation (tilt of the molecular plane, or axis, from the surface plane; lying / tilted / upright; the
+  atom closest to the surface; vertical extent), marks the sites whose orientation CHANGED, lists the
+  final orientations reached with the lowest E_ads of each, and warns when more than one was reached.
 
 ### Changed
 

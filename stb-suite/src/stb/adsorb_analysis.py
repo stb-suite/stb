@@ -307,6 +307,54 @@ def fragment_min_distance(fdf_structure, slab_labels, adsorbate_labels):
     return float(dm[np.ix_(slab_idx, ads_idx)].min())
 
 
+ORIENTATION_FLAT_DEG = 30.0      # tilt below this: lying flat; above 90 - this: upright; else tilted
+
+
+def adsorbate_orientation(fdf_structure, ads_labels):
+    """Orientation of the adsorbate in `fdf_structure` relative to the surface (normal = a x b, the slab's
+    vacuum axis is c in every stb-adsorb site). Atoms are selected by their '_ads' labels and gathered by
+    minimum image around the first one, so a molecule cut by a cell face is whole. Returns a dict or None:
+      kind    'atom' / 'linear' / 'planar' (3+ atoms, plane from the smallest principal axis)
+      tilt    linear: angle of the molecular axis from the SURFACE PLANE (0 = lying, 90 = upright);
+              planar: angle between the molecular plane and the surface plane (0 = lying flat, 90 = upright)
+      cls     'lying' / 'tilted' / 'upright' (ORIENTATION_FLAT_DEG), None for one atom
+      lowest  element of the adsorbate atom closest to the surface ('level' when dz < 0.2 Ang)
+      extent  vertical extent of the adsorbate along the normal, Ang
+    """
+    lattice = np.asarray(fdf_structure.lattice, dtype=float)
+    pmg = structure_io.to_pymatgen(structure_io.strip_fragment_labels(fdf_structure))
+    labels = [label for label, _ in fdf_structure.atoms]
+    idx = [i for i, label in enumerate(labels) if label in ads_labels]
+    if not idx:
+        return None
+    frac = np.array([pmg[i].frac_coords for i in idx])
+    frac = frac[0] + (frac - frac[0] - np.round(frac - frac[0]))
+    xyz = frac @ lattice
+    normal = np.cross(lattice[0], lattice[1])
+    normal /= np.linalg.norm(normal)
+    heights = xyz @ normal
+    extent = float(heights.max() - heights.min())
+    # which atom faces the surface is noise for a molecule lying level (dz below 0.2 Ang)
+    lowest = pmg[idx[int(np.argmin(heights))]].specie.symbol if extent >= 0.2 or len(idx) == 1 else "level"
+    out = {"kind": "atom", "tilt": None, "cls": None, "lowest": lowest, "extent": extent}
+    if len(idx) < 2:
+        return out
+    centred = xyz - xyz.mean(axis=0)
+    _, sv, vt = np.linalg.svd(centred)
+    if len(idx) == 2 or sv[1] < 0.1 * sv[0]:
+        axis = vt[0]
+        tilt = float(np.degrees(np.arcsin(min(1.0, abs(axis @ normal)))))
+        out["kind"] = "linear"
+    else:
+        plane_normal = vt[2]
+        tilt = float(np.degrees(np.arccos(min(1.0, abs(plane_normal @ normal)))))
+        out["kind"] = "planar"
+    out["tilt"] = tilt
+    out["cls"] = ("lying" if tilt < ORIENTATION_FLAT_DEG else
+                  "upright" if tilt > 90.0 - ORIENTATION_FLAT_DEG else "tilted")
+    return out
+
+
 def force_system_label(calc_text, label):
     """Substitutes/appends SystemLabel -- every derived Gibbs-prep folder
     needs its own distinct label so SIESTA's per-run files (.FA, .DM, ...)
@@ -464,6 +512,62 @@ def write_local_hessian_folders(gibbs_dir, base_structure, local_indices, displa
         }, f)
 
 
+def report_orientations(rows, f_out):
+    """[2b] orientation table: the adsorbate's orientation at the start and at the end of each site's
+    relaxation, and the lowest E_ads reached in each final orientation. A molecule can end in another
+    minimum than the one it started in -- in a 12-point H2O/Ag(111) series 4 relaxations ended lying flat,
+    ~0.1 eV more bound, and the report did not show it."""
+    have = [r for r in rows if r.orientation and r.orientation[0] and r.orientation[0]["kind"] != "atom"]
+    if not have:
+        return
+    def fmt(o):
+        if o is None:
+            return "--"
+        low = "level" if o["lowest"] == "level" else f"{o['lowest']} lowest"
+        return f"{o['cls']} {o['tilt']:.0f} deg, {low}, dz {o['extent']:.2f}"
+    table, changed = [], []
+    for r in have:
+        ini, fin = r.orientation
+        moved = (fin is not None and (fin["cls"] != ini["cls"] or fin["lowest"] != ini["lowest"]
+                                       or abs(fin["tilt"] - ini["tilt"]) > ORIENTATION_FLAT_DEG))
+        if moved:
+            changed.append(r.label)
+        table.append(([r.label, ini["kind"], fmt(ini), fmt(fin) if fin is not None else "(not relaxed yet)",
+                       "CHANGED" if moved else ("--" if fin is None else "same"), f"{r.e_ads:.4f}"],
+                      'yellow' if moved else None))
+    print_dual("", f_out)
+    print_dual(f"Adsorbate orientation (tilt from the surface plane: 0 = lying, 90 = upright; 'lying' below "
+               f"{ORIENTATION_FLAT_DEG:g} deg, 'upright' above {90 - ORIENTATION_FLAT_DEG:g}; dz = vertical extent; "
+               "planar molecules by their plane, linear ones by their axis):", f_out)
+    print_table(["Site", "Shape", "Initial", "Final (relaxed)", "Orientation", "E_ads(eV)"], table, f_out)
+    finals = {}
+    for r in have:
+        fin = r.orientation[1]
+        if fin is not None:
+            key = (r.ads_name, fin["cls"], fin["lowest"])
+            lab, e, n = finals.get(key, (r.label, r.e_ads, 0))
+            if r.e_ads < e:
+                lab, e = r.label, r.e_ads
+            finals[key] = (lab, e, n + 1)
+    if finals:
+        print_dual("Final orientations found (lowest E_ads in each):", f_out)
+        print_table(["Adsorbate", "Final orientation", "Lowest atom", "Sites", "Best site", "Lowest E_ads(eV)"],
+                    [([name or '(default)', cls, low, str(n), lab, f"{e:.4f}"], None)
+                     for (name, cls, low), (lab, e, n) in sorted(finals.items(), key=lambda kv: kv[1][1])], f_out)
+    if changed:
+        print_dual(color_text(
+            f"[WARNING] {len(changed)} of {len(have)} site(s) ended in another orientation than they started in: "
+            f"{', '.join(changed)}. Sites that differ in E_ads may differ in orientation, not in site; compare "
+            "within one final orientation, and start the other sites from it if it is the lower one.",
+            'yellow'), f_out)
+    by_ads = {}
+    for (name, cls, low) in finals:
+        by_ads.setdefault(name, set()).add((cls, low))
+    if any(len(v) > 1 for v in by_ads.values()):
+        print_dual(color_text(
+            "[NOTE] More than one final orientation was reached; the ranking in [3] mixes them.", 'cyan'), f_out)
+
+
 def relaxation_stopped_early(out_path):
     """None when the log is a single point, an unfinished run or a relaxation
     SIESTA itself called relaxed; else a short text ('146 of 300 moves, max|F|
@@ -490,8 +594,9 @@ class SiteRow:
     """
     def __init__(self, label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
                  dipole=None, spin_moment=None, bond_change=None,
-                 e_bsse_slab=None, e_bsse_ads=None):
+                 e_bsse_slab=None, e_bsse_ads=None, orientation=None):
         self.label = label
+        self.orientation = orientation    # (initial, final) adsorbate_orientation dicts, or None
         self.ads_name = ads_name
         self.height = height
         self.e_site = e_site
@@ -764,22 +869,28 @@ def main():
         dipole_mag = float(np.linalg.norm(dipole_vec)) if dipole_vec is not None else None
         spin_moment = siesta_log.get_spin_moment(out_path)
         bond_change = None
+        orientation = None
         try:
             initial_fdf = structure_io.read_fdf(os.path.join(site_dir, "structure.fdf"))
             frag_labels = resolve_fragment_labels(site_dir, initial_fdf)
             if frag_labels is not None:
                 slab_labels, ads_labels = frag_labels
                 dist_initial = fragment_min_distance(initial_fdf, slab_labels, ads_labels)
-                relaxed_fdf, _used_relaxed = structure_io.read_relaxed_or_input(site_dir)
+                relaxed_fdf, used_relaxed = structure_io.read_relaxed_or_input(site_dir)
                 dist_relaxed = fragment_min_distance(relaxed_fdf, slab_labels, ads_labels)
                 if dist_initial is not None and dist_relaxed is not None:
                     bond_change = dist_relaxed - dist_initial
+                try:
+                    orientation = (adsorbate_orientation(initial_fdf, ads_labels),
+                                   adsorbate_orientation(relaxed_fdf, ads_labels) if used_relaxed else None)
+                except Exception:
+                    orientation = None
         except Exception:
             bond_change = None
 
         rows.append(SiteRow(label, ads_name, height, e_site, e_ads, e_ads_bsse, scf_ok, max_force,
                              dipole=dipole_mag, spin_moment=spin_moment, bond_change=bond_change,
-                             e_bsse_slab=e_bsse_slab, e_bsse_ads=e_bsse_ads))
+                             e_bsse_slab=e_bsse_slab, e_bsse_ads=e_bsse_ads, orientation=orientation))
         row_color = 'yellow' if (not scf_ok or label in force_warn_labels) else None
         table_rows.append(([
             label, ads_name or '--', "--" if height is None else f"{height:.2f}",
@@ -876,6 +987,7 @@ def main():
         f"{r.bond_change:+.4f}" if r.bond_change is not None else "--",
     ], None) for r in rows]
     print_table(["Site", "Dipole(a.u.)", "MagMoment(muB)", "Bond Change(Ang)"], diag_rows, f_out)
+    report_orientations(rows, f_out)
 
     bsse_breakdown_rows = [r for r in rows if r.e_ads_bsse is not None]
     if bsse_breakdown_rows:

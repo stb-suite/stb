@@ -109,6 +109,10 @@ def relax_endpoint(label, pmg, calc, args, noise=None):
             "pmg": AseAtomsAdaptor.get_structure(at)}
 
 
+# Endpoints whose atoms all coincide within this (Angstrom) are the same structure.
+IDENTICAL_ENDPOINTS_ANG = 1e-3
+
+
 def neb_band(initial_pmg, final_pmg, calc, args, noise=None, label="model"):
     """The whole pipeline on one (initial, final) pair, both wrapped into [0, 1) and on one
     lattice: endpoint relaxations, interpolation (+ IDPP), climbing-image NEB, spline fit. Prints
@@ -135,6 +139,17 @@ def neb_band(initial_pmg, final_pmg, calc, args, noise=None, label="model"):
         from pymatgen.core import Structure
         fin = ends[1]["pmg"]
         ends[1]["pmg"] = Structure(fin.lattice, fin.species, fin.frac_coords - shift)
+    span = ends[1]["pmg"].frac_coords - ends[0]["pmg"].frac_coords
+    endpoint_distance = float(np.linalg.norm(span @ ends[0]["pmg"].lattice.matrix, axis=1).max())
+    if endpoint_distance < IDENTICAL_ENDPOINTS_ANG:
+        relaxed = any(e.get("steps") for e in ends)
+        raise ValueError(
+            f"the initial and final states are nearly identical ({label}: no atom moves more than "
+            f"{endpoint_distance:.1e} Ang between them"
+            + (" after the endpoint relaxation -- the two inputs relax into the same minimum of this model"
+               if relaxed else "")
+            + "): there is no path, so no barrier along this band. Give two different minima as "
+            "--initial and --final.")
     with _quiet(noise, label):
         guess = linear_interpolate_images(ends[0]["pmg"], ends[1]["pmg"], args.n_images,
                                           autosort_tol=args.autosort_tol)
@@ -586,7 +601,12 @@ def siesta_template(args, state, wf_base):
         if not rec.get("calc"):
             raise ValueError("the workflow's reference is one self-contained .fdf (no separate calc.fdf): pass --calc")
         calc = mlff_workflow.resolve(rec["calc"], wf_base)
-        ref = structure_io.read_fdf(mlff_workflow.resolve(rec["file"], wf_base))
+        ref_path = mlff_workflow.resolve(rec.get("file") or "", wf_base)
+        if not os.path.isfile(ref_path):
+            raise ValueError(f"the workflow's reference structure '{ref_path}' does not exist (recorded in the "
+                             "workflow file as 'reference.file', relative to that file) -- restore it or pass "
+                             "a workflow file whose reference is still in place")
+        ref = structure_io.read_fdf(ref_path)
         ref_cell = np.linalg.norm(np.array(structure_io.lattice_only(ref)), axis=1)
         pseudo_dir = rec.get("pseudo_dir") or "."
         if pseudo_dir not in BANKS:
@@ -1085,7 +1105,10 @@ def main():
     label_main = "fine-tuned" if args.custom_model else f"MACE-MP-0 {args.model}"
 
     print(f"  ... {label_main}: endpoints, band and climbing-image NEB", flush=True)
-    series = [neb_band(initial_pmg, final_pmg, calc, args, noise, label_main)]
+    try:
+        series = [neb_band(initial_pmg, final_pmg, calc, args, noise, label_main)]
+    except ValueError as error:
+        fail(str(error)[0].upper() + str(error)[1:])
     if compare:
         print(f"  ... MACE-MP-0 {args.model}: the same NEB", flush=True)
         with capture_library_noise(noise, "foundation model"):

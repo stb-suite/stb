@@ -160,6 +160,11 @@ version before) and **Added** (new options and tools).
 - `stb-convergenceAnalysis --parameter basis`: the orbital filter was not detected in SIESTA 5.4.2 logs
   (Cu with `FilterCutoff 150 Ry`: the prep warned, the analysis did not). The log check now also knows
   5.4.2's `Filter: Requested cutoff` and `PAO Filter: Cutoff used` lines.
+- `stb-mlffValidate --phonon-ref` on a 2D material: the default q-mesh was 8x8x8, so the frequencies
+  were also compared at q along the vacuum, where the dispersion is an artefact of the periodic images
+  (graphene 3x3: the largest deviation was at q = (0.3125, 0.3125, 0.0625)). The default `--phonon-mesh`
+  now has 1 along every vacuum axis of the reference cell (8x8x1 for a slab or a sheet); the report says
+  so. An explicit `--phonon-mesh` is used as given.
 
 ### Changed
 

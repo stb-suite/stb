@@ -81,6 +81,17 @@ check_python() {   # $1 = description, $2 = python code exiting 0 on success
 
 echo "--- Starting tester for stb-mlffValidate (item 7.1.3) ---"
 
+# No mace needed: the default --phonon-mesh of --phonon-ref has 1 along a vacuum axis (2.1.0): an 8x8x8 mesh on
+# graphene sampled q along the vacuum (largest deviation at q = (0.3125, 0.3125, 0.0625)).
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+check_python "default phonon q-mesh: graphene 8 8 1, bulk Si 8 8 8" "
+from stb.mlff_validate import default_phonon_mesh
+g = default_phonon_mesh('$ROOT_DIR/test/5-workflow/4-phonons/analysis/graphene_5x5')[0]
+b = default_phonon_mesh('$ROOT_DIR/examples/7.3-mlphonons/reference_results/siesta_phonons')[0]
+print('graphene', g, 'Si', b)
+assert g == [8, 8, 1] and b == [8, 8, 8]
+"
+
 if ! command -v mace_run_train &> /dev/null; then
     echo -e "${YELLOW}SKIPPED${NC}: 'mace_run_train' not on PATH (needs 'pip install stb_suite[ml]')."
     exit 0

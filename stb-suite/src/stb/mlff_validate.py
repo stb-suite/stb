@@ -393,6 +393,23 @@ def load_siesta_phonons(phonon_dir, f_out, info=None):
     return phonon, to_ang
 
 
+def default_phonon_mesh(phonon_dir, n=8, vacuum_gap=5.0):
+    """(mesh, vacuum_axes): n x n x n with 1 along every vacuum axis of the unit cell in phonopy_disp.yaml. A 3D
+    mesh on a 2D material samples q along the vacuum, where the dispersion is an artefact of the periodic images
+    (graphene 3x3: the largest deviation of the 8x8x8 mesh was at q = (0.3125, 0.3125, 0.0625))."""
+    from phonopy.interface.phonopy_yaml import PhonopyYaml
+    from stb.core.kspace import detect_vacuum_axes
+    try:
+        yaml = PhonopyYaml()
+        yaml.read(os.path.join(phonon_dir, "phonopy_disp.yaml"))
+        uc = yaml.unitcell
+        bohr = 0.529177210903 if (yaml.calculator or "").lower() == "siesta" else 1.0
+        vac = detect_vacuum_axes(np.asarray(uc.scaled_positions), np.asarray(uc.cell) * bohr, vacuum_gap)
+    except Exception:
+        vac = [False, False, False]
+    return [1 if v else n for v in vac], vac
+
+
 def committee_phonons(calcs, ref_phonon, to_ang):
     """Phonopy object in Angstrom/eV with the committee-mean forces on the SAME
     displacements and supercell as `ref_phonon`, so frequencies can be compared
@@ -956,8 +973,9 @@ def main():
                         help="A finished stb-phononsCreate folder (phonopy_disp.yaml + disp-*/ with "
                              "SIESTA forces): the committee-mean model is run on the SAME "
                              "displacements and its frequencies compared q-point by q-point.")
-    parser.add_argument("--phonon-mesh", type=int, nargs=3, default=[8, 8, 8], metavar=("NA", "NB", "NC"),
-                        help="q-point mesh for --phonon-ref (default: 8 8 8).")
+    parser.add_argument("--phonon-mesh", type=int, nargs=3, default=None, metavar=("NA", "NB", "NC"),
+                        help="q-point mesh for --phonon-ref (default: 8 8 8, with 1 along every vacuum axis of the "
+                             "reference cell -- 8 8 1 for a slab or a 2D material).")
     parser.add_argument("--target-force", type=float, default=None, metavar="MEV_ANG",
                         help="Test F RMSE (meV/Ang) that is good enough for the intended use: the "
                              "verdict says stop once the latest round reaches it.")
@@ -1135,7 +1153,13 @@ def main():
     print_dual(f"Verdict criteria  : target F RMSE {_fmt(args.target_force, '{:g} meV/Ang')}, "
                f"plateau below {args.plateau:g} % gain per round", f_out)
     if args.phonon_ref:
-        print_dual(f"Phonon reference  : {args.phonon_ref} (mesh {' '.join(map(str, args.phonon_mesh))})", f_out)
+        mesh_note = ""
+        if args.phonon_mesh is None:
+            args.phonon_mesh, vac = default_phonon_mesh(args.phonon_ref)
+            mesh_note = (f", 1 along the vacuum axis/axes {', '.join('abc'[i] for i in range(3) if vac[i])}"
+                         if any(vac) else "") + " (default)"
+        print_dual(f"Phonon reference  : {args.phonon_ref} (mesh {' '.join(map(str, args.phonon_mesh))}{mesh_note})",
+                   f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

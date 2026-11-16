@@ -221,7 +221,7 @@ $ stb-convergence -s structure.fdf -c calc.fdf -p dojo --parameter all --no-intr
 Parameter   | Range source      | Sweep range                    | Convergence direction
 -------------------------------------------------------------------------------------------
 meshcutoff  | suggested default | 100 to 400, step 50 (Ry)       | larger = more converged
-energyshift | suggested default | 0.001 to 0.05, step 0.01 (Ry)  | smaller = more converged
+energyshift | suggested default (geometric) | 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005 (Ry) | smaller = more converged
 kgrid       | suggested default | 0.05 to 0.3, step 0.05 (1/Ang) | smaller = more converged
 ```
 
@@ -229,11 +229,37 @@ producing 3 independent subtrees on disk:
 
 ```
 convergence_runs/meshcutoff/convergence_meshcutoff_{100,150,200,250,300,350,400}.0000/
-convergence_runs/energyshift/convergence_energyshift_{0.0010,0.0110,0.0210,0.0310,0.0410,0.0510}/
+convergence_runs/energyshift/convergence_energyshift_{0.0200,0.0100,0.0050,0.0020,0.0010,0.0005}/
 convergence_runs/kgrid/convergence_kgrid_{0.0500,0.1000,0.1500,0.2000,0.2500,0.3000}/
 ```
 
 Case 2 of `example_5.5.sh` runs this live.
+
+Since 2.0.1 the `energyshift` sweep is this geometric set (`--energyshift-values` for
+another; `--energyshift-range MIN MAX STEP` still gives a linear one). The parameter acts
+logarithmically, and the linear default of 2.0.0 (0.001 to 0.05 in steps of 0.01) had no
+point between 0.001 and 0.011 Ry, the range in use. Stage 2 does **not** judge this
+parameter by the total energy, which has no practical plateau in it (0.01 to 1.5 eV/atom
+between 0.011 and 0.001 Ry, and not even monotonic for graphene): it uses the relaxed
+volume and lists the orbital cutoff radii of each run. Two more options:
+
+- `--single-point` writes every folder as a single point at the input geometry, so that
+  only the swept parameter changes (the default relaxes positions and cell at each value).
+- `--parameter basis` is a workflow of its own for the basis set, which has two
+  independent axes, range (`PAO.EnergyShift`) and cardinality (`PAO.BasisSize`). Each
+  setting is judged by the equilibrium volume (area, for a 2D material) of an E(V) scan of
+  9 single points, in three stages run one after the other:
+
+  | `--basis-stage` | Scans | Fixed | Closes when V0 is within |
+  |---|---|---|---|
+  | `mesh` (default) | `Mesh.Cutoff` 350, 500, 700, 1000 Ry | `PAO.EnergyShift` 0.002 Ry | 0.2 % of the next two meshes |
+  | `range` | `PAO.EnergyShift` 0.02 ... 0.0005 Ry | `--mesh-cutoff` | 0.5 % of the next two values |
+  | `size` | the template's `PAO.BasisSize` and one step up (DZP to TZP) | `--mesh-cutoff`, `--energyshift` | 1 % between the two |
+
+  `stb-convergenceAnalysis --dir <output-dir>` fits every scan, gives the verdict of each
+  stage, the fit residual and the orbital radii, and prints the command of the next stage;
+  `--reference-v0` compares the converged volume with an all-electron one. The template
+  must not turn the orbital filter on (`FilterCutoff`) nor carry a `%block PAO.Basis`.
 
 ### 2.5 Custom ranges, and the k-grid density convention
 

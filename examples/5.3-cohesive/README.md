@@ -407,11 +407,11 @@ the identical report for identical answers.
 ## 4. Worked example: a real GaAs calculation, end-to-end
 
 > **Energy convention of the numbers in this section.** They were obtained with 2.0.0, which used
-> SIESTA's `FreeEng` (E_KS minus T*S of the electronic smearing). Since 2.0.1 `stb-cohesiveAnalysis`
+> SIESTA's `FreeEng` (E_KS minus TS of the electronic smearing). Since 2.0.1 `stb-cohesiveAnalysis`
 > uses the Kohn-Sham energy E_KS by default, because the isolated Ga atom (p1, degenerate orbitals,
-> `ElectronicTemperature 300 K`) carries `-T*S = -49.4 meV` that is not physical; As has none. With
+> `ElectronicTemperature 300 K`) carries `-TS = -49.4 meV` that is not physical; As has none. With
 > the default the GaAs values below come out 25 meV/atom more negative; `--energy free` reproduces
-> them exactly. Section `[2b]` of the report lists E_KS, FreeEng and -T*S of every run.
+> them exactly. Section `[2b]` of the report lists E_KS, FreeEng and -TS of every run.
 
 This is not illustrative data — it's the exact real investigation that
 motivated sections 1.5/1.6/2.4 and the multi-cutoff scan feature itself,

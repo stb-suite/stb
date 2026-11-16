@@ -3012,7 +3012,7 @@ output flags), ready to be uncommented.
 \midrule
 \fdf{PAO.BasisSize} & DZP & DZP & SZ & DZP\\
 \fdf{PAO.EnergyShift} & 0.02 Ry & 0.01 Ry & 0.02 Ry & 0.02 Ry\\
-\fdf{Mesh.CutOff} / \fdf{FilterCutoff} & \multicolumn{4}{c}{320 Ry / 150 Ry in all templates}\\
+\fdf{Mesh.CutOff} & \multicolumn{4}{c}{320 Ry in all templates; \fdf{FilterCutoff} is written commented out since 2.0.1 (it filters the basis orbitals)}\\
 \fdf{XC.Functional}/\fdf{XC.Authors} & \multicolumn{4}{c}{GGA / PBE \cite{Perdew1996pbe}}\\
 \fdf{kgrid.MonkhorstPack} & from density & from density & $1\times1\times1$ (kept) & from density\\
 SCF & \multicolumn{4}{c}{\fdf{MaxSCFIterations 300}, \fdf{SCF.Mixer.Weight 0.1}, \fdf{SCF.Mixer.History 6}, 300~K smearing}\\
@@ -19800,34 +19800,37 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 \subsubsection{Flag reference}\label{g4.3-flag-reference}
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2118}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7882}}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3220}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.6780}}@{}}
 \toprule\noalign{}
 Flag & Meaning \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
 \endlastfoot
-\texttt{-f/\allowbreak{}-\allowbreak{}\/-\allowbreak{}file} & Input bulk structure file, \texttt{.\allowbreak{}fdf} (required) \\
+\texttt{-\allowbreak{}f/\allowbreak{}-\/-\allowbreak{}file} & Input bulk structure file, \texttt{.\allowbreak{}fdf} (required) \\
 \texttt{-\/-\allowbreak{}hkl\ H\ K\ L} & Miller index of the surface to cut (required) \\
 \texttt{-\/-\allowbreak{}min-\allowbreak{}slab-\allowbreak{}size} & Minimum slab thickness, Å (default \texttt{10.\allowbreak{}0}) \\
+\texttt{-\/-\allowbreak{}layers\ N} & Number of atomic layers instead of a thickness: layers are removed from the top until N are left, same vacuum (\texttt{-\/-\allowbreak{}min-\allowbreak{}slab-\allowbreak{}size} is ignored; not with \texttt{-\/-\allowbreak{}symmetrize}) \\
+\texttt{-\/-\allowbreak{}layer-\allowbreak{}tol} & Atoms within this height, Å, are one atomic layer (default \texttt{0.\allowbreak{}1}) \\
 \texttt{-\/-\allowbreak{}min-\allowbreak{}vacuum-\allowbreak{}size} & Minimum vacuum thickness, Å (default \texttt{15.\allowbreak{}0}) \\
 \texttt{-\/-\allowbreak{}lll-\allowbreak{}reduce} & LLL-reduce the slab lattice \\
 \texttt{-\/-\allowbreak{}center-\allowbreak{}slab} & Center the slab in the vacuum \\
 \texttt{-\/-\allowbreak{}primitive} & Reduce the bulk to its primitive cell before cutting \\
 \texttt{-\/-\allowbreak{}symmetrize} & Ask pymatgen to symmetrize polar/asymmetric terminations \\
 \texttt{-\/-\allowbreak{}symprec} & Symmetry tolerance, Å --- polar/symmetric diagnostics AND the before/after table (default \texttt{0.\allowbreak{}1}) \\
-\texttt{-i/\allowbreak{}-\allowbreak{}\/-\allowbreak{}interactive} & Show all terminations and pick one by hand \\
+\texttt{-\allowbreak{}i/\allowbreak{}-\/-\allowbreak{}interactive} & Show all terminations and pick one by hand \\
 \texttt{-\/-\allowbreak{}termination\ N} & Pick a specific termination index directly \\
 \texttt{-\/-\allowbreak{}all} & Write every termination found \\
 \texttt{-\/-\allowbreak{}passivate} & Cap dangling bonds on each written slab \\
 \texttt{-\/-\allowbreak{}passivant} & Element to passivate with, only with \texttt{-\/-\allowbreak{}passivate} (default \texttt{H}) \\
 \texttt{-\/-\allowbreak{}cutoff} & Neighbor-search radius, Å, only with \texttt{-\/-\allowbreak{}passivate} (default: auto) \\
 \texttt{-\/-\allowbreak{}bond-\allowbreak{}length} & Passivant bond length, Å, only with \texttt{-\/-\allowbreak{}passivate} (default: auto) \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output} & Output \texttt{.\allowbreak{}fdf} base name (default \texttt{slab.\allowbreak{}fdf}) \\
+\texttt{-\allowbreak{}o/\allowbreak{}-\/-\allowbreak{}output} & Output \texttt{.\allowbreak{}fdf} base name (default \texttt{slab.\allowbreak{}fdf}) \\
 \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} & Pre-relax each written slab with a MACE potential before writing \\
 \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax-\allowbreak{}cell} & With \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax}, also relax the in-plane cell (vacuum axis stays fixed) \\
 \texttt{-\/-\allowbreak{}model} & MACE-MP-0 size for \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax}: \texttt{small}/\texttt{medium}/\texttt{large} (default \texttt{small}) \\
 \texttt{-\/-\allowbreak{}custom-\allowbreak{}model} & Path to a custom fine-tuned \texttt{.\allowbreak{}model} file for \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} \\
+\texttt{-\/-\allowbreak{}custom-\allowbreak{}model-\allowbreak{}card} & Model card (\texttt{mlff\_\allowbreak{}model\_\allowbreak{}card.\allowbreak{}json}, written by \texttt{stb-\allowbreak{}mlffAnalysis} next to the model) -\/- \textbf{required} with \texttt{-\/-\allowbreak{}custom-\allowbreak{}model} \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}report} & Persist the full report (incl. symmetry table) to disk \\
 \texttt{-\/-\allowbreak{}view} & Open the bulk structure and every written slab in ASE\textquotesingle s interactive viewer \\
 \end{longtable}
@@ -19899,19 +19902,22 @@ Cuts a Miller-index slab from a bulk SIESTA FDF structure. Adds vacuum along the
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-slab [-h] -f FILENAME --hkl H K L [--min-slab-size MIN_SLAB_SIZE]
-                [--min-vacuum-size MIN_VACUUM_SIZE] [--lll-reduce] [--center-slab]
-                [--primitive] [--symmetrize] [--symprec SYMPREC]
-                [-i | --termination TERMINATION] [--all] [--passivate]
-                [--passivant PASSIVANT] [--cutoff CUTOFF] [--bond-length BOND_LENGTH]
-                [--ml-relax] [--ml-relax-cell] [--model {small,medium,large}]
-                [--custom-model PATH] [--custom-model-card JSON] [--device {cpu,cuda}]
-                [--save-report] [--view] [-o OUTPUT] [-v] [--no-intro]
+                [--layers N] [--layer-tol ANG] [--min-vacuum-size MIN_VACUUM_SIZE]
+                [--lll-reduce] [--center-slab] [--primitive] [--symmetrize]
+                [--symprec SYMPREC] [-i | --termination TERMINATION] [--all]
+                [--passivate] [--passivant PASSIVANT] [--cutoff CUTOFF]
+                [--bond-length BOND_LENGTH] [--ml-relax] [--ml-relax-cell]
+                [--model {small,medium,large}] [--custom-model PATH]
+                [--custom-model-card JSON] [--device {cpu,cuda}] [--save-report]
+                [--view] [-o OUTPUT] [-v] [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
 \optitem{-f, -{}-file FILENAME}{\index{stb-slab@\texttt{stb-slab}!--file@\texttt{--file}}Path to the input bulk structure file (.fdf).\optmeta{required}}
 \optitem{-{}-hkl H K L}{\index{stb-slab@\texttt{stb-slab}!--hkl@\texttt{--hkl}}Miller index of the surface to cut, e.g. \texttt{-{}-hkl} 1 0 0\optmeta{required; type: int}}
 \optitem{-{}-min-\allowbreak{}slab-\allowbreak{}size MIN\_\allowbreak{}SLAB\_\allowbreak{}SIZE}{\index{stb-slab@\texttt{stb-slab}!--min-slab-size@\texttt{--min-slab-size}}Minimum slab thickness in Angstrom (default: 10.0).\optmeta{type: float}}
+\optitem{-{}-layers N}{\index{stb-slab@\texttt{stb-slab}!--layers@\texttt{--layers}}Number of atomic layers of the slab, instead of a thickness: the slab is cut thick enough and layers are removed from its top until N are left (the bottom face is the chosen termination), the vacuum unchanged. For a convergence series in the number of layers. \texttt{-{}-min-\allowbreak{}slab-\allowbreak{}size} is then ignored. Not with \texttt{-{}-symmetrize}.\optmeta{type: int}}
+\optitem{-{}-layer-\allowbreak{}tol ANG}{\index{stb-slab@\texttt{stb-slab}!--layer-tol@\texttt{--layer-tol}}Atoms whose heights along the surface normal differ by less than this belong to one atomic layer (default: 0.1 Ang). A buckled plane counts as two layers unless this is raised above its buckling.\optmeta{type: float}}
 \optitem{-{}-min-\allowbreak{}vacuum-\allowbreak{}size MIN\_\allowbreak{}VACUUM\_\allowbreak{}SIZE}{\index{stb-slab@\texttt{stb-slab}!--min-vacuum-size@\texttt{--min-vacuum-size}}Minimum vacuum thickness in Angstrom (default: 15.0).\optmeta{type: float}}
 \optitem{-{}-lll-\allowbreak{}reduce}{\index{stb-slab@\texttt{stb-slab}!--lll-reduce@\texttt{--lll-reduce}}LLL-reduce the slab lattice (pymatgen SlabGenerator option).\optmeta{switch, off by default}}
 \optitem{-{}-center-\allowbreak{}slab}{\index{stb-slab@\texttt{stb-slab}!--center-slab@\texttt{--center-slab}}Center the slab in the middle of the vacuum (pymatgen SlabGenerator option).\optmeta{switch, off by default}}
@@ -24586,7 +24592,7 @@ Example usage:
 
 This workflow has 2 stages: \textbf{Stage 1} (\texttt{stb-\allowbreak{}elasticInputs}, code \texttt{5.\allowbreak{}2.\allowbreak{}1})
 applies canonical Voigt strains to a relaxed structure and writes one
-ready-to-run, single-point SIESTA folder per strain value; \textbf{Stage 2}
+ready-to-run SIESTA folder per strain value (fixed cell; atoms relaxed or held, \texttt{-\/-\allowbreak{}ions}); \textbf{Stage 2}
 (\texttt{stb-\allowbreak{}elasticAnalysis}, code \texttt{5.\allowbreak{}2.\allowbreak{}2}) reads the finished SIESTA runs back and
 fits the full symmetric stiffness matrix \texttt{C\_\allowbreak{}ij}, then checks whether the
 material is even mechanically stable. Together they answer a question
@@ -24748,20 +24754,48 @@ automatically, whenever \texttt{-\/-\allowbreak{}method\ stress} is used --- reu
 applies a canonical Voigt strain (or, for \texttt{-\/-\allowbreak{}method\ energy}, a pure or
 combined pattern) to the lattice vectors for a range of strain values, and
 writes one ready-to-run folder per value: the deformed structure, a copy of
-\texttt{calc.\allowbreak{}fdf} (with the single-point override added, section 2.2), a new
+\texttt{calc.\allowbreak{}fdf} (with the override added, section 2.2), a new
 \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, and any linked pseudopotentials. It also writes ONE
 \texttt{reference\_\allowbreak{}structure.\allowbreak{}fdf} --- the \emph{undeformed} structure --- at the top of
 \texttt{-\/-\allowbreak{}output-\allowbreak{}dir} (section 2.4). It does \textbf{not} run SIESTA itself --- you run
 each folder yourself, then hand the results to Stage 2 (section 3).
 
-Unlike \texttt{stb-\allowbreak{}strain}, there is \textbf{no \texttt{-\/-\allowbreak{}relax-\allowbreak{}mode}}: every generated folder
-is unconditionally forced to a pure single-point SCF (section 2.2) --- the
-imposed strain must stay exactly at the sampled geometry for the
-stress/energy fit to be physically meaningful, so there\textquotesingle s no "which
-convention do you want the cell to relax under" choice to make in the first
-place.
+Unlike \texttt{stb-\allowbreak{}strain}, there is \textbf{no \texttt{-\/-\allowbreak{}relax-\allowbreak{}mode}}: the cell of every
+generated folder is fixed at the imposed strain (section 2.2), because the
+stress/energy fit needs the response AT that strain.
 
-\paragraph{The single-point-SCF precedence proof, live}\label{g5.2-22-the-single-point-scf-precedence-proof-live}
+\textbf{Clamped or relaxed ions (\texttt{-\/-\allowbreak{}ions}, since 2.0.1).} What the atoms do inside
+the strained cell is a separate choice:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1753}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4124}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4124}}@{}}
+\toprule\noalign{}
+\texttt{-\/-\allowbreak{}ions} & Each folder runs & Constants \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{relaxed} (default) & CG relaxation at fixed cell (\texttt{MD.\allowbreak{}Steps} = \texttt{-\/-\allowbreak{}relax-\allowbreak{}steps}, 200; \texttt{MD.\allowbreak{}MaxForceTol} = \texttt{-\/-\allowbreak{}fmax}, 0.01 eV/Ang) & relaxed-ion: what an experiment measures and what \texttt{stb-\allowbreak{}mlelastic} reports \\
+\texttt{clamped} & a single point (what 2.0.0 always wrote) & clamped-ion: atoms at the positions the homogeneous strain gives them \\
+\texttt{both} & the two series, in \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}relaxed} and \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}clamped} & both; analysing each prints relaxed minus clamped \\
+\end{longtable}
+\endgroup
+
+The two coincide only when symmetry leaves no force on the atoms of a strained
+cell (fcc/bcc metals, rock salt). With an atom off an inversion centre (diamond,
+zincblende, graphene, hBN, wurtzite, perovskites) a strain is followed by an
+internal relaxation and the clamped-ion constant is larger: Si C44 is \textasciitilde100 GPa
+clamped and \textasciitilde75 GPa relaxed. \texttt{stb-\allowbreak{}elasticAnalysis} says which kind it fitted
+(section \texttt{{[}0b{]}}), warns when a clamped-ion run shows forces above 0.05 eV/Ang
+on a strained cell, and flags every relaxation that stopped before its force
+tolerance. The fit itself is the same in both modes, for \texttt{-\/-\allowbreak{}method\ stress}
+(stress of the last geometry) and \texttt{-\/-\allowbreak{}method\ energy} (energy of the last
+geometry).
+
+The SiC data shipped with this example are \textbf{clamped-ion} runs made with
+2.0.0; the commands below carry \texttt{-\/-\allowbreak{}ions\ clamped} so they reproduce them.
+
+\paragraph{\texorpdfstring{2.2 The override precedence proof, live}{2.2 The override precedence proof, live}}\label{g5.2-22-the-single-point-scf-precedence-proof-live}
 
 \texttt{-\/-\allowbreak{}calc} (\texttt{calc.\allowbreak{}fdf} in this folder) is the SAME file used for
 \texttt{structure.\allowbreak{}fdf}\textquotesingle s own real relaxation --- DZP basis, a 12×12×1 Monkhorst-Pack
@@ -24774,19 +24808,20 @@ section 2.2 of \texttt{5.\allowbreak{}1-\allowbreak{}strain/\allowbreak{}README.
 regardless of what \texttt{-\/-\allowbreak{}calc} contains:
 
 \begin{codeblock}
-$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --dirs all --symmetry-method full --steps 5 --no-intro
-[4] SINGLE-POINT SCF ENFORCEMENT
+$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --dirs all --symmetry-method full --steps 5 --no-intro
+[4] FIXED CELL, IONS: CLAMPED
 ------------------------------------------------------------
 Calc template (current state, before forcing):
   MD.TypeOfRun=CG  Steps: MD.Steps=200  MD.VariableCell=true
-Every generated folder is forced to a pure single-point SCF -- NO ionic relaxation, NO cell relaxation -- regardless of the state above, since the imposed strain must stay exactly at the sampled geometry for the stress/energy fit to be meaningful. Forced via '%include config_extra.fdf' PREPENDED at the very top of every generated calc.fdf (before your own directives, including the structure %include) -- SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so this ordering guarantees the forced values win even if your own template already sets any of them (the common case for a real relaxation calc.fdf).
+The cell of every generated folder is fixed at the imposed strain (MD.VariableCell false), whatever the template says: the fit needs the stress/energy AT that strain.
+Ions CLAMPED: a single point, atoms at the positions the homogeneous strain gives them. Equal to the relaxed-ion constants only when symmetry leaves no force on the atoms; stb-elasticAnalysis warns when the forces say otherwise.
+Forced via '%include config_extra.fdf' PREPENDED at the very top of every generated calc.fdf (before your own directives, including the structure %include) -- SIESTA's fdf reader is first-occurrence-wins for duplicate labels, so the forced values win even if your own template already sets any of them.
 
-config_extra.fdf (written into every generated folder):
-  # Auto-generated by stb-elasticInputs -- forces a pure single-point SCF (no ionic or
-  # cell relaxation) at the imposed-strain geometry, regardless of --calc's own settings.
+config_extra.fdf of the clamped series (in every folder of 'elastic_runs'):
+  # Auto-generated by stb-elasticInputs (--ions clamped): single-point SCF, no ionic
+  # or cell relaxation, at the imposed-strain geometry, regardless of --calc's settings.
   MD.TypeOfRun       CG
   MD.Steps           0
-  MD.NumCGsteps      0
   MD.VariableCell    false
 \end{codeblock}
 
@@ -24819,7 +24854,7 @@ relaxation template, exactly like this one.
 \paragraph{\texorpdfstring{2.3 \texttt{-\/-\allowbreak{}method\ stress} vs. \texttt{energy} at generation time}{2.3 -\/-method stress vs. energy at generation time}}\label{g5.2-23---method-stress-vs-energy-at-generation-time}
 
 \begin{codeblock}
-$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --method energy --steps 5 --no-intro
+$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --method energy --steps 5 --no-intro
 [3] DEFORMATION DIRECTIONS / SYMMETRY REDUCTION
 ------------------------------------------------------------
 [INFO] Point group -6m2 has 5 independent elastic constant(s); 2 strain pattern(s) needed to determine the ones reachable without leaving the periodic plane/axis (of 6 physically valid candidate(s), 21 in total).
@@ -24891,15 +24926,15 @@ scale for free with the deformed cell).
 
 \paragraph{Output layout, and running it both ways}\label{g5.2-25-output-layout-and-running-it-both-ways}
 
-\texttt{-\/-\allowbreak{}output-\allowbreak{}dir\ \textless{}dir\textgreater{}/\allowbreak{}\textless{}direction\textgreater{}/\allowbreak{}strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/} --- same nested
+\texttt{-\/-\allowbreak{}output-\allowbreak{}dir\ \textless{}dir\textgreater{}/\allowbreak{}\textless{}direction\textgreater{}/\allowbreak{}strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/\allowbreak{}} --- same nested
 convention \texttt{stb-\allowbreak{}strain} itself uses, with \texttt{reference\_\allowbreak{}structure.\allowbreak{}fdf} at the
 top level (section 2.4) so \texttt{cd\ \textless{}output-\allowbreak{}dir\textgreater{}\ \&\&\ stb-\allowbreak{}elasticAnalysis} (or, from
-the parent directory, \texttt{stb-\allowbreak{}elasticAnalysis\ -\allowbreak{}\/-\allowbreak{}dir\ \textless{}output-\allowbreak{}dir\textgreater{}}) finds
+the parent directory, \texttt{stb-\allowbreak{}elasticAnalysis\ -\/-\allowbreak{}dir\ \textless{}output-\allowbreak{}dir\textgreater{}}) finds
 everything with no extra flags:
 
 \begin{codeblock}
 # Direct CLI
-stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs all --symmetry-method full --steps 5 --no-intro
 
 # Interactive
@@ -25118,10 +25153,9 @@ Reading this the way sections 1 and 3 set up:
 \begin{itemize}
 \tightlist
 \item
-  \textbf{No \texttt{-\/-\allowbreak{}relax-\allowbreak{}mode}} (section 2.1) --- every generated folder is always a
-  pure single-point SCF; there is no clamped-cell-vs-relaxed-transverse-stress
-  choice the way \texttt{stb-\allowbreak{}strain} offers, since the imposed strain must stay
-  exactly at the sampled geometry for either fitting method to be valid.
+  \textbf{No \texttt{-\/-\allowbreak{}relax-\allowbreak{}mode}} (section 2.1) --- the cell is always fixed at the imposed
+  strain; there is no clamped-cell-vs-relaxed-transverse-stress choice the way
+  \texttt{stb-\allowbreak{}strain} offers. Only the atoms may relax (\texttt{-\/-\allowbreak{}ions}).
 \item
   \textbf{\texttt{-\/-\allowbreak{}method\ energy}\textquotesingle s DFT cost scales with symmetry, not always
   favorably} --- a genuinely low-symmetry (triclinic/monoclinic) structure
@@ -25162,20 +25196,20 @@ Reading this the way sections 1 and 3 set up:
   \begin{itemize}
   \tightlist
   \item
-    CLI: \texttt{stb-\allowbreak{}elasticInputs\ -\allowbreak{}s\ structure.\allowbreak{}fdf\ -\allowbreak{}c\ calc.\allowbreak{}fdf\ -\allowbreak{}p\ \textless{}bank\textgreater{}\ -\allowbreak{}\/-\allowbreak{}dirs\ all\ -\allowbreak{}\/-\allowbreak{}symmetry-\allowbreak{}method\ \textless{}basic\textbar{}full\textgreater{}\ -\allowbreak{}\/-\allowbreak{}max\ \textless{}pct\textgreater{}\ -\allowbreak{}\/-\allowbreak{}steps\ \textless{}n\textgreater{}} (or
+    CLI: \texttt{stb-\allowbreak{}elasticInputs\ -\allowbreak{}s\ structure.\allowbreak{}fdf\ -\allowbreak{}c\ calc.\allowbreak{}fdf\ -\allowbreak{}p\ \textless{}bank\textgreater{}\ {[}-\/-\allowbreak{}ions\ relaxed\textbar{}clamped\textbar{}both{]}\ -\/-\allowbreak{}dirs\ all\ -\/-\allowbreak{}symmetry-\allowbreak{}method\ \textless{}basic\textbar{}full\textgreater{}\ -\/-\allowbreak{}max\ \textless{}pct\textgreater{}\ -\/-\allowbreak{}steps\ \textless{}n\textgreater{}} (or
     \texttt{-\/-\allowbreak{}method\ energy} instead of \texttt{-\/-\allowbreak{}symmetry-\allowbreak{}method}).
   \item
     Interactive: \texttt{stb-\allowbreak{}suite} → \texttt{5.\allowbreak{}2.\allowbreak{}1} --- same questions instead of flags.
   \item
-    Either way, this writes \texttt{elastic\_\allowbreak{}runs/\allowbreak{}\textless{}direction\textgreater{}/\allowbreak{}strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/}
+    Either way, this writes \texttt{elastic\_\allowbreak{}runs/\allowbreak{}\textless{}direction\textgreater{}/\allowbreak{}strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/\allowbreak{}}
     folders (section 2.5) plus one top-level \texttt{reference\_\allowbreak{}structure.\allowbreak{}fdf}
     (section 2.4).
   \end{itemize}
 \item
   \textbf{Run SIESTA yourself in every generated folder.} Stage 1 never runs
-  SIESTA --- \texttt{cd} into each \texttt{strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/} and run it like any
+  SIESTA --- \texttt{cd} into each \texttt{strain\_\allowbreak{}\textless{}direction\textgreater{}\_\allowbreak{}\textless{}pct\textgreater{}/\allowbreak{}} and run it like any
   other SIESTA calculation (\texttt{siesta\ calc.\allowbreak{}fdf\ \textgreater{}\ calc.\allowbreak{}out}, or through your
-  own batch/queue script). Repeat for every \texttt{\textless{}direction\textgreater{}/} subfolder.
+  own batch/queue script). Repeat for every \texttt{\textless{}direction\textgreater{}/\allowbreak{}} subfolder.
 \item
   \textbf{Run Stage 2} (\texttt{stb-\allowbreak{}elasticAnalysis}, code \texttt{5.\allowbreak{}2.\allowbreak{}2}) once every run
   finishes:
@@ -25183,7 +25217,7 @@ Reading this the way sections 1 and 3 set up:
   \begin{itemize}
   \tightlist
   \item
-    CLI: \texttt{stb-\allowbreak{}elasticAnalysis\ -\allowbreak{}\/-\allowbreak{}dir\ elastic\_\allowbreak{}runs\ -\allowbreak{}\/-\allowbreak{}symmetry-\allowbreak{}method\ \textless{}basic\textbar{}full\textgreater{}} (must match Stage 1\textquotesingle s own choice; omit for \texttt{-\/-\allowbreak{}method\ energy}, which always uses its own symmetry-allowed-subspace fit).
+    CLI: \texttt{stb-\allowbreak{}elasticAnalysis\ -\/-\allowbreak{}dir\ elastic\_\allowbreak{}runs\ -\/-\allowbreak{}symmetry-\allowbreak{}method\ \textless{}basic\textbar{}full\textgreater{}} (must match Stage 1\textquotesingle s own choice; omit for \texttt{-\/-\allowbreak{}method\ energy}, which always uses its own symmetry-allowed-subspace fit).
   \item
     Interactive: \texttt{stb-\allowbreak{}suite} → \texttt{5.\allowbreak{}2.\allowbreak{}2}.
   \item
@@ -25198,7 +25232,7 @@ Reading this the way sections 1 and 3 set up:
   re-examine, not a generic "something\textquotesingle s wrong somewhere".
 \item
   \textbf{Read \texttt{{[}4{]}\ STABILITY\ AND\ PROPERTIES}} --- the Born mechanical-stability
-  criteria and the final \texttt{VERDICT:\allowbreak{}\ STABLE}/\texttt{UNSTABLE}; \textbf{\texttt{{[}5{]}\ SUMMARY\ \&\ FILES}} for the same numbers in one glanceable table plus where
+  criteria and the final \texttt{VERDICT:\ STABLE}/\texttt{UNSTABLE}; \textbf{\texttt{{[}5{]}\ SUMMARY\ \&\ FILES}} for the same numbers in one glanceable table plus where
   everything ended up on disk.
 \item
   \textbf{(Optional) persist or plot}: \texttt{-\/-\allowbreak{}save-\allowbreak{}report} writes
@@ -25339,25 +25373,30 @@ the atoms in each strained cell, and compare the initial slopes.
 \label{ref-5.2}
 \subsubsection{\texorpdfstring{\texttt{stb-elasticInputs}}{stb-elasticInputs}}
 \label{cmd-stb-elasticInputs}\index{stb-elasticInputs@\texttt{stb-elasticInputs}|textbf}
-Stage 1 of 2: applies one or more canonical Voigt strains to a SIESTA structure and writes one ready-to-run folder (structure + \texttt{calc.\allowbreak{}fdf} + \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} + pseudopotentials) per scanned strain value, forcing a pure single-point SCF at each imposed strain. Doesn't run SIESTA -- run each folder yourself, then use \texttt{stb-\allowbreak{}elasticAnalysis}.
+Stage 1 of 2: applies one or more canonical Voigt strains to a SIESTA structure and writes one ready-to-run folder (structure + \texttt{calc.\allowbreak{}fdf} + \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} + pseudopotentials) per scanned strain value. The cell is fixed at each imposed strain; the atoms relax inside it by default (relaxed-ion constants, \texttt{-{}-ions}). Doesn't run SIESTA -- run each folder yourself, then use \texttt{stb-\allowbreak{}elasticAnalysis}.
 
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-elasticInputs [-h] -s STRUCTURE -c CALC [-p PSEUDO_DIR]
                          [--method {stress,energy}] [--dirs DIRS [DIRS ...]]
-                         [--symmetry-method {basic,full}] [--max MAX] [--steps STEPS]
-                         [-o OUTPUT_DIR] [--vacuum-gap VACUUM_GAP] [--symprec SYMPREC]
+                         [--symmetry-method {basic,full}]
+                         [--ions {relaxed,clamped,both}] [--relax-steps RELAX_STEPS]
+                         [--fmax FMAX] [--max MAX] [--steps STEPS] [-o OUTPUT_DIR]
+                         [--vacuum-gap VACUUM_GAP] [--symprec SYMPREC]
                          [--angle-tolerance ANGLE_TOLERANCE] [--save-report] [-v]
                          [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--structure@\texttt{--structure}}Input \texttt{structure.\allowbreak{}fdf} -- lattice + atomic coordinates. Only this file's \%block LatticeVectors is rewritten per strain step; everything else is preserved verbatim. Atomic coordinates MUST be fractional (checked in [1] of the report -- Cartesian positions would not scale with the strained cell).\optmeta{required}}
-\optitem{-c, -{}-calc CALC}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}', prepended at the very top (see [4] of the report for why) -- this forces every generated folder to a pure single-point SCF, regardless of what MD settings this template itself contains.\optmeta{required}}
+\optitem{-c, -{}-calc CALC}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}', prepended at the very top (see [4] of the report for why) -- this fixes the cell and sets what the atoms do (\texttt{-{}-ions}), regardless of what MD settings this template itself contains.\optmeta{required}}
 \optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
 \optitem{-{}-method \{stress,\allowbreak{}energy\}}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--method@\texttt{--method}}Physical quantity the generated strains are meant to feed (default: stress). 'stress': single-component canonical Voigt strains, for \texttt{stb-\allowbreak{}elasticAnalysis's} stress-strain fit (\texttt{-{}-method} stress there too). 'energy': a point-group-selected set of pure AND combined (two Voigt components at once, e.g. 'xx+yy') strain patterns for an energy-strain (parabolic) fit -- combined patterns are physically required for off-diagonal constants there, since a pure single-component strain's energy curvature only ever determines its own diagonal constant. Always auto-selects (\texttt{-{}-dirs} must be left at its 'all' default); needs more DFT calculations than \texttt{-{}-method} stress for the same crystal system, since each pattern only yields one number (a curvature) instead of a full stress column.\optmeta{choices: stress, energy}}
 \optitem{-{}-dirs DIRS [DIRS .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--dirs@\texttt{--dirs}}List of directions to generate.\newline Options: [xx, yy, zz, xy, xz, yz, bi, hydro, all].\newline Example: \texttt{-{}-dirs} xx yy xy\newline 'all' auto-reduces to 1 representative direction per symmetry-\newline equivalent group (e.g. just 2 of the 6 for a cubic material) --\newline \texttt{stb-\allowbreak{}elasticAnalysis} reconstructs the rest by symmetry. Pass every\newline direction explicitly (not 'all') to run all 6 anyway, e.g. to get\newline \texttt{stb-\allowbreak{}elasticAnalysis's} diagnostic comparison across truly independent\newline DFT calculations instead.\optmeta{default: all}}
 \optitem{-{}-symmetry-\allowbreak{}method \{basic,\allowbreak{}full\}}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--symmetry-method@\texttt{--symmetry-method}}How 'all' picks which directions to actually run (default: basic). 'basic': only reduces when a single point-group operation maps one canonical direction exactly onto another (e.g. cubic); misses reductions like hexagonal's C11=C22, which come from the full elastic tensor's symmetry, not a pairwise direction match. 'full': picks the minimal set of directions that fully determines the point group's independent elastic constants (greedy rank selection) -- catches hexagonal/trigonal reductions too. Must match the \texttt{-{}-symmetry-\allowbreak{}method} passed to \texttt{stb-\allowbreak{}elasticAnalysis} later.\optmeta{choices: basic, full}}
+\optitem{-{}-ions \{relaxed,\allowbreak{}clamped,\allowbreak{}both\}}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--ions@\texttt{--ions}}What the atoms do at each strained cell (default: relaxed).\newline 'relaxed': the atoms relax inside the fixed strained cell (CG) --\newline relaxed-ion constants, the ones an experiment measures and the\newline ones \texttt{stb-\allowbreak{}mlelastic} reports. 'clamped': a single point, atoms at\newline the positions the strain alone gives them (what 2.0.0 always\newline wrote) -- cheaper, and exact when symmetry leaves no force on\newline the atoms (fcc/bcc metals, rock salt; NOT diamond, zincblende,\newline graphene, hBN, wurtzite, perovskites under shear). 'both': the\newline two series in \textless{}output-dir\textgreater{}/relaxed and \textless{}output-dir\textgreater{}/clamped;\newline \texttt{stb-\allowbreak{}elasticAnalysis} on each then tabulates the contribution of\newline the internal relaxation.\optmeta{choices: relaxed, clamped, both}}
+\optitem{-{}-relax-\allowbreak{}steps RELAX\_\allowbreak{}STEPS}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--relax-steps@\texttt{--relax-steps}}\texttt{-{}-ions} relaxed/both: maximum number of CG steps, MD.Steps (default: 200).\optmeta{type: int}}
+\optitem{-{}-fmax FMAX}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--fmax@\texttt{--fmax}}\texttt{-{}-ions} relaxed/both: force tolerance of the relaxation in eV/Ang, MD.MaxForceTol (default: 0.01). The stress converges only to first order in the residual force, so keep it tight.\optmeta{type: float}}
 \optitem{-{}-max MAX}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--max@\texttt{--max}}Max strain \% (default: 2.0)\optmeta{type: float}}
 \optitem{-{}-steps STEPS}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--steps@\texttt{--steps}}Steps per direction (default: 4)\optmeta{type: int}}
 \optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--output-dir@\texttt{--output-dir}}Top-level directory (default: elastic\_runs). Run folders go into its own '\textless{}output-dir\textgreater{}/\textless{}direction\textgreater{}/strain\_\textless{}direction\textgreater{}\_\textless{}val\textgreater{}/' subfolder, same convention as \texttt{stb-\allowbreak{}strain's} own \texttt{-{}-output-\allowbreak{}dir} -- so \texttt{stb-\allowbreak{}elasticAnalysis} can just 'cd \textless{}output-dir\textgreater{}' and find everything (including \texttt{reference\_\allowbreak{}structure.\allowbreak{}fdf}) with no extra flags.}
@@ -25372,6 +25411,8 @@ usage: stb-elasticInputs [-h] -s STRUCTURE -c CALC [-p PSEUDO_DIR]
 Example usage:
   stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --dirs all
   stb-elasticInputs -s structure.fdf -c calc.fdf --dirs xx yy xy --max 1.5 --steps 6 --save-report
+  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions both      # relaxed/ and clamped/
+  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions clamped   # single points, as 2.0.0
 \end{helpblock}
 
 \subsubsection{\texorpdfstring{\texttt{stb-elasticAnalysis}}{stb-elasticAnalysis}}
@@ -25384,7 +25425,8 @@ usage: stb-elasticAnalysis [-h] [-f FILE] [-d DIR] [--method {stress,energy}]
                            [--dimensionality {auto,3d,2d,1d}]
                            [--vacuum-gap VACUUM_GAP] [--symmetry-method {basic,full}]
                            [--reference-structure REFERENCE_STRUCTURE]
-                           [--symprec SYMPREC] [--angle-tolerance ANGLE_TOLERANCE]
+                           [--compare-with DIR] [--symprec SYMPREC]
+                           [--angle-tolerance ANGLE_TOLERANCE]
                            [--eggbox-tolerance EGGBOX_TOLERANCE]
                            [--fit-quality-tolerance FIT_QUALITY_TOLERANCE]
                            [--plot-dir PLOT_DIR] [--save-gnuplot] [--view]
@@ -25399,6 +25441,7 @@ usage: stb-elasticAnalysis [-h] [-f FILE] [-d DIR] [--method {stress,energy}]
 \optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--vacuum-gap@\texttt{--vacuum-gap}}Vacuum gap threshold in Ang (default: 10.0) used only by \texttt{-{}-dimensionality} auto, same convention as \texttt{stb-\allowbreak{}elasticInputs/\allowbreak{}stb-\allowbreak{}kgrid/\allowbreak{}stb-\allowbreak{}strain}.\optmeta{type: float}}
 \optitem{-{}-symmetry-\allowbreak{}method \{basic,\allowbreak{}full\}}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--symmetry-method@\texttt{--symmetry-method}}How to use detected symmetry (default: basic). 'basic': exact reconstruction/pooling only when a single point-group operation maps one canonical strain direction exactly onto another (misses reductions like hexagonal's C11=C22, which come from the FULL elastic tensor's invariance, not a pairwise direction match). 'full': fits the whole stiffness matrix at once, constrained a priori to the point group's symmetry-allowed subspace -- catches every crystal system's correct independent-constant count uniformly (cubic, hexagonal, trigonal, ...), at the cost of being a global least-squares fit rather than an exact per-column one. Requires \texttt{-{}-reference-\allowbreak{}structure} to be available.\optmeta{choices: basic, full}}
 \optitem{-{}-reference-\allowbreak{}structure REFERENCE\_\allowbreak{}STRUCTURE}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--reference-structure@\texttt{--reference-structure}}UNDEFORMED structure file (default: \texttt{reference\_\allowbreak{}structure.\allowbreak{}fdf} inside \texttt{-{}-dir}, written automatically by \texttt{stb-\allowbreak{}elasticInputs} next to the strain\_*/ folders), used only to detect symmetry for the diagnostic/pooling/reconstruction across equivalent directions. Must be the undeformed structure, not one from inside a strain folder -- a single-axis strain genuinely lowers the symmetry (e.g. cubic strained along x alone is exactly tetragonal, not 'cubic with noise'), so reading symmetry from a strained structure would silently misdetect it. Never required -- falls back to independent per-direction fitting if unavailable.}
+\optitem{-{}-compare-\allowbreak{}with DIR}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--compare-with@\texttt{--compare-with}}Another analysed run directory of the SAME material with the other treatment of the ions (clamped vs relaxed): tabulates relaxed minus clamped, the internal-relaxation contribution. Found automatically for the relaxed/ and clamped/ folders of '\texttt{stb-\allowbreak{}elasticInputs} \texttt{-{}-ions} both' (run this analysis on each).}
 \optitem{-{}-symprec SYMPREC}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--symprec@\texttt{--symprec}}Symmetry-detection tolerance (default: 0.01, pymatgen's own default). Loosen further (e.g. 0.02-0.05) for a structure relaxed with a looser force tolerance -- a tighter value than the relaxation's own residual numerical noise can misdetect the true space group.\optmeta{type: float}}
 \optitem{-{}-angle-\allowbreak{}tolerance ANGLE\_\allowbreak{}TOLERANCE}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--angle-tolerance@\texttt{--angle-tolerance}}Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own default), same use as \texttt{-{}-symprec}.\optmeta{type: float}}
 \optitem{-{}-eggbox-\allowbreak{}tolerance EGGBOX\_\allowbreak{}TOLERANCE}{\index{stb-elasticAnalysis@\texttt{stb-elasticAnalysis}!--eggbox-tolerance@\texttt{--eggbox-tolerance}}Relative difference (\%, default: 5.0) above which the mandatory eggbox cross-check (\texttt{-{}-method} stress only, see section [3] of the report) flags a direction. Every diagonal constant actually run is computed two independent ways from the SAME \texttt{calc.\allowbreak{}out} files -- a stress-linear fit and an energy-parabolic fit -- with no new DFT calculations; a disagreement beyond this tolerance is a hint of eggbox (or other numerical) contamination in the stress data. Needs \texttt{-{}-reference-\allowbreak{}structure}; skipped with a warning (not an error) if it isn't available.\optmeta{type: float}}
@@ -25641,19 +25684,46 @@ default \texttt{cohesive\_\allowbreak{}runs/}, matching \texttt{strain\_\allowbr
   (2+ cutoffs, a scan) --- only with \texttt{-\/-\allowbreak{}bsse-\allowbreak{}convergence-\allowbreak{}check}.
 \end{itemize}
 
-\paragraph{\texorpdfstring{2.2 No \texttt{calc.\allowbreak{}fdf} prerequisite --- and why}{2.2 No calc.fdf prerequisite --- and why}}\label{g5.3-22-no-calcfdf-prerequisite--and-why}
+\paragraph{\texorpdfstring{2.2 The \texttt{calc.\allowbreak{}fdf}: built-in, or your own (\texttt{-\allowbreak{}c/\allowbreak{}-\/-\allowbreak{}calc})}{2.2 The calc.fdf: built-in, or your own (-c/--calc)}}\label{g5.3-22-no-calcfdf-prerequisite--and-why}
 
-Unlike \texttt{stb-\allowbreak{}strain}/\texttt{stb-\allowbreak{}elasticInputs}, \texttt{stb-\allowbreak{}cohesive} takes \textbf{no}
-\texttt{-c/\allowbreak{}-\allowbreak{}\/-\allowbreak{}calc-\allowbreak{}fdf} input at all --- it always builds its own single-point SCF
-\texttt{calc.\allowbreak{}fdf} internally (DZP basis, GGA-PBE, \texttt{MeshCutoff\ 320\ Ry},
-\texttt{SCF.\allowbreak{}DM.\allowbreak{}Tolerance\ 1e-\allowbreak{}5\ eV}), identically across the full structure and every
-isolated-atom-type calculation. This is deliberate: a cohesive-energy
-comparison is only meaningful if every energy in the sum comes from
-\emph{exactly} the same basis/functional/mesh --- safer to guarantee that by
-generating every \texttt{calc.\allowbreak{}fdf} from one template than to trust a hand-edited
-file to stay in sync everywhere. \texttt{-k/\allowbreak{}-\allowbreak{}\/-\allowbreak{}k-\allowbreak{}density} (default \texttt{0.\allowbreak{}2} 1/Ang) and
-\texttt{-\/-\allowbreak{}spin}/\texttt{-\/-\allowbreak{}dispersion} are the only physics knobs Stage 1 exposes for the
-full structure; everything else about the SCF setup is fixed on purpose.
+A cohesive-energy comparison is only meaningful if every energy in the sum
+comes from \emph{exactly} the same basis, functional and mesh. \texttt{stb-\allowbreak{}cohesive}
+guarantees that by generating every folder\textquotesingle s \texttt{calc.\allowbreak{}fdf} from \textbf{one}
+template:
+
+\begin{itemize}
+\item
+  \textbf{Without \texttt{-\allowbreak{}c}} it uses a built-in single-point template (DZP, GGA-PBE,
+  \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}, \texttt{SCF.\allowbreak{}DM.\allowbreak{}Tolerance\ 1e-\allowbreak{}5\ eV}).
+  \texttt{-\allowbreak{}k/\allowbreak{}-\/-\allowbreak{}k-\allowbreak{}density} (default \texttt{0.\allowbreak{}2} 1/Ang), \texttt{-\/-\allowbreak{}spin} and \texttt{-\/-\allowbreak{}dispersion} are then
+  the only knobs for the full structure. The numbers of this README were made
+  this way.
+\item
+  \textbf{With \texttt{-\allowbreak{}c\ mycalc.\allowbreak{}fdf}} (since 2.0.1) the template is yours: the basis,
+  \texttt{PAO.\allowbreak{}EnergyShift}, \texttt{Mesh.\allowbreak{}Cutoff}, functional and SCF settings of your study.
+  It must \texttt{\%include\ structure.\allowbreak{}fdf}. It is copied \textbf{untouched} into the full
+  structure and into every atomic reference; what the workflow has to impose
+  goes into a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} that is \texttt{\%include}d on top of it (SIESTA keeps
+  the first occurrence of a label):
+
+  \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3220}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.6780}}@{}}
+  \toprule\noalign{}
+  Folder & \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} forces \\
+  \midrule\noalign{}
+  \endhead
+  \bottomrule\noalign{}
+  \endlastfoot
+  \texttt{structure/\allowbreak{}} & \texttt{-\/-\allowbreak{}spin}, \texttt{-\/-\allowbreak{}dispersion}, and the k-grid only when the template has none or \texttt{-\allowbreak{}k} is given \\
+  \texttt{atoms/\allowbreak{}}, \texttt{atoms\_\allowbreak{}bsse*/\allowbreak{}} & \texttt{Spin\ polarized}, a Gamma-only k-grid, a single point (\texttt{MD.\allowbreak{}Steps\ 0}, fixed cell), \texttt{-\/-\allowbreak{}dispersion} \\
+  \end{longtable}
+\endgroup
+
+  The report prints the template\textquotesingle s level of theory (basis size, energy shift,
+  mesh cutoff, functional), so the run records what it used. The basis range
+  matters a great deal here: for GaAs the uncorrected cohesive energy is
+  \texttt{-\allowbreak{}4.\allowbreak{}69} eV/atom at \texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry} and \texttt{-\allowbreak{}3.\allowbreak{}87} at \texttt{0.\allowbreak{}01\ Ry}.
+\end{itemize}
 
 \paragraph{The vacuum-buffer guarantee, live}\label{g5.3-23-the-vacuum-buffer-guarantee-live}
 
@@ -25842,17 +25912,26 @@ the identical report for identical answers.
 
 \subsubsection{Worked example: a real GaAs calculation, end-to-end}\label{g5.3-4-worked-example-a-real-gaas-calculation-end-to-end}
 
+\begin{quote}
+\textbf{Energy convention of the numbers in this section.} They were obtained with 2.0.0, which used
+SIESTA\textquotesingle s \texttt{FreeEng} (E\_KS minus TS of the electronic smearing). Since 2.0.1 \texttt{stb-\allowbreak{}cohesiveAnalysis}
+uses the Kohn-Sham energy E\_KS by default, because the isolated Ga atom (p1, degenerate orbitals,
+\texttt{ElectronicTemperature\ 300\ K}) carries \texttt{-\allowbreak{}TS\ =\ -\allowbreak{}49.\allowbreak{}4\ meV} that is not physical; As has none. With
+the default the GaAs values below come out 25 meV/atom more negative; \texttt{-\/-\allowbreak{}energy\ free} reproduces
+them exactly. Section \texttt{{[}2b{]}} of the report lists E\_KS, FreeEng and -TS of every run.
+\end{quote}
+
 This is not illustrative data --- it\textquotesingle s the exact real investigation that
 motivated sections 1.5/1.6/2.4 and the multi-cutoff scan feature itself,
 run on the real \texttt{structure.\allowbreak{}fdf} in this folder (GaAs, zincblende, DZP/GGA
--PBE, \texttt{dojo} pseudopotentials, \texttt{-k\ 0.\allowbreak{}2}, \texttt{-\/-\allowbreak{}bsse-\allowbreak{}cutoff\ 4.\allowbreak{}0},
+-PBE, \texttt{dojo} pseudopotentials, \texttt{-\allowbreak{}k\ 0.\allowbreak{}2}, \texttt{-\/-\allowbreak{}bsse-\allowbreak{}cutoff\ 4.\allowbreak{}0},
 \texttt{-\/-\allowbreak{}bsse-\allowbreak{}convergence-\allowbreak{}check}).
 
 \textbf{First pass} (before the vacuum-buffer fix, section 1.6 --- box was a fixed
 20 Ang cube regardless of cutoff):
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}lll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3871}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2903}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3226}}@{}}
 \toprule\noalign{}
 Method & Per atom (eV/atom) & Delta vs Uncorrected \\
 \midrule\noalign{}
@@ -25872,34 +25951,37 @@ Reading this the way sections 1.2/1.5 set up:
 \item
   \textbf{The uncorrected result is badly over-bound} --- a commonly cited
   experimental/reference cohesive energy for GaAs is around \texttt{\textasciitilde{}3.\allowbreak{}3} eV/atom;
-  \texttt{-4.\allowbreak{}6876} is roughly \textbf{42\% too strong}, the textbook BSSE signature
+  \texttt{-\allowbreak{}4.\allowbreak{}6876} is roughly \textbf{42\% too strong}, the textbook BSSE signature
   (section 1.2) at essentially textbook scale.
 \item
-  \textbf{BSSE-corrected (\texttt{-3.\allowbreak{}6479}) lands much closer} to that reference value
+  \textbf{BSSE-corrected (\texttt{-\allowbreak{}3.\allowbreak{}6479}) lands much closer} to that reference value
   (\textasciitilde11\% high, a very ordinary residual GGA-PBE error) --- strong evidence the
   correction is doing exactly what section 1.3 says it should.
 \item
-  \textbf{BSSE check (\texttt{-3.\allowbreak{}1724}) is a large, suspicious jump} --- \texttt{+0.\allowbreak{}4755\ eV/\allowbreak{}atom}
+  \textbf{BSSE check (\texttt{-\allowbreak{}3.\allowbreak{}1724}) is a large, suspicious jump} --- \texttt{+0.\allowbreak{}4755\ eV/\allowbreak{}atom}
   between a 4.0 and 6.0 Ang cutoff is about 13\% of the entire cohesive
   energy, far too large to treat the 4.0 Ang result as converged.
 \end{itemize}
 
 That large jump is what triggered the actual investigation: was it real
 physics (the cutoff genuinely too small), or the vacuum-box artifact section
-1.6 warns about? The evidence pointed at the box: with the \emph{old} fixed 20
+1.6 warns about? The box was the first suspect: with the \emph{old} fixed 20
 Ang cube, the 6.0 Ang-cutoff cluster\textquotesingle s outermost ghost atom sat only \texttt{4.\allowbreak{}0}
-Ang from the box edge (\texttt{half\_\allowbreak{}box\ -\allowbreak{}\ cutoff\ =\allowbreak{}\ 10\ -\allowbreak{}\ 6}) --- and the real PAO
-orbital cutoff radii read straight out of \texttt{calc.\allowbreak{}out} (\texttt{grep\ "rc\ =\allowbreak{}"}) showed
-Ga\textquotesingle s own basis reaching as far as \textbf{7.12 Ang}, comfortably farther than
-that 4.0 Ang buffer. A real risk of periodic self-interaction, not a
-theoretical one.
+Ang from the box edge (\texttt{half\_\allowbreak{}box\ -\allowbreak{}\ cutoff\ =\ 10\ -\allowbreak{}\ 6}), i.e. \texttt{8.\allowbreak{}0} Ang from
+its own periodic image. The PAO cutoff radii in \texttt{calc.\allowbreak{}out} (\texttt{grep\ "rc\ ="})
+show Ga\textquotesingle s longest orbital at \texttt{rc\ =\ 7.\allowbreak{}12} --- in \textbf{Bohr}, the unit SIESTA
+prints \texttt{rc} in (the \texttt{PAO.\allowbreak{}Basis} block of the same \texttt{calc.\allowbreak{}out} confirms it),
+which is \textbf{3.77 Ang}. Two such orbitals on facing images reach \texttt{2\ x\ 3.\allowbreak{}77\ =\ 7.\allowbreak{}54} Ang, just short of the 8.0 Ang between them: by the numbers the old
+box was close to the limit but not over it. (An earlier version of this
+text read the 7.12 as Angstrom and concluded that the images overlapped;
+they did not.) The second pass confirms it.
 
 \textbf{Second pass}, after fixing the vacuum-buffer bug (section 1.6: box side
-\texttt{=\allowbreak{}\ 2*cutoff\ +\ vacuum}, guaranteeing a constant \texttt{10.\allowbreak{}0\ Ang} buffer at \emph{any}
+\texttt{=\ 2*cutoff\ +\ vacuum}, guaranteeing a constant \texttt{10.\allowbreak{}0\ Ang} buffer at \emph{any}
 cutoff) and re-running for real:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}lll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3243}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3919}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2838}}@{}}
 \toprule\noalign{}
 Method & Per atom (eV/atom), fixed box & Change vs. first pass \\
 \midrule\noalign{}
@@ -25913,9 +25995,8 @@ BSSE check (6.0 Ang) & -3.1741 & +0.0017 eV/atom \\
 
 \textbf{The numbers barely moved at all} --- about 1-3 meV, an order of magnitude
 smaller than typical real-space-grid ("eggbox") noise, let alone a
-correction of order 1 eV. If the old fixed box really had been contaminating
-the result, tripling its buffer (4.0 → 10.0 Ang) should have changed the
-answer visibly. It didn\textquotesingle t.
+correction of order 1 eV. This is what the orbital radii above predict: the
+old box did not let the images overlap, so widening it changes nothing.
 
 \textbf{Conclusion}: the large 4.0→6.0 Ang shift is \textbf{real physics, not a box
 -size artifact} --- 4.0 Ang (4 ghost neighbors, the first coordination shell
@@ -25925,17 +26006,41 @@ a real risk that, for a different material or a larger requested cutoff,
 absolutely could bite --- sections 1.6/2.3), but it wasn\textquotesingle t \emph{this} material\textquotesingle s
 actual problem. This is exactly what directly motivated building the
 multi-cutoff scan (section 1.5/2.4): a single before/after pair can\textquotesingle t tell
-you \emph{whether} a shift is converging, only that it changed. \textbf{An honest note
-for anyone reproducing this}: a real multi-point scan
-(\texttt{-\/-\allowbreak{}bsse-\allowbreak{}convergence-\allowbreak{}increment\ 4\ 8\ 12}, say) has not yet been run on this
-real structure --- a genuine next step, not a result already in hand.
+you \emph{whether} a shift is converging, only that it changed.
+
+\textbf{6.0 Ang is not converged either.} The scan was later continued with the
+same settings (2.0.0, the default \texttt{calc.\allowbreak{}fdf} of \texttt{stb-\allowbreak{}cohesive}: DZP,
+\texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}), which reproduces the three
+values above exactly:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2812}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4844}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2344}}@{}}
+\toprule\noalign{}
+Ghost cutoff (Ang) & E\_coh, BSSE-corrected (eV/atom) & Step (meV/atom) \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+4.0 & -3.6502 & \\
+6.0 & -3.1741 & +476 \\
+8.0 & -3.0814 & +93 \\
+10.0 & -3.0584 & +23 \\
+12.0 & -3.0514 & +7 \\
+\end{longtable}
+\endgroup
+
+The corrected value keeps moving: \texttt{-\allowbreak{}3.\allowbreak{}1741} at 6 Ang is 0.12 eV/atom from the
+12 Ang value, and the last step is still 7 meV/atom. For GaAs with this basis
+quote the scan, not the 6 Ang number, and take at least 10-12 Ang of ghosts.
+The uncorrected value also depends strongly on the basis range: with
+\texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}01\ Ry} it is \texttt{-\allowbreak{}3.\allowbreak{}87} instead of \texttt{-\allowbreak{}4.\allowbreak{}69} eV/atom.
 
 One more small, secondary finding along the way, purely for illustration of
 how much a numbered report surfaces without being asked: \texttt{stb-\allowbreak{}cohesive}
 detected space group \texttt{R3m} (trigonal, No. 160) for this structure, not the
 ideal cubic zincblende \texttt{F-\allowbreak{}43m} (No. 216) --- traced to the full structure\textquotesingle s
-own SIESTA stress tensor showing a small residual shear (\texttt{-1.\allowbreak{}09} kbar
-alongside a \texttt{-19.\allowbreak{}03} kbar hydrostatic component), i.e. this specific relaxed
+own SIESTA stress tensor showing a small residual shear (\texttt{-\allowbreak{}1.\allowbreak{}09} kbar
+alongside a \texttt{-\allowbreak{}19.\allowbreak{}03} kbar hydrostatic component), i.e. this specific relaxed
 geometry carries a small real trigonal-type distortion, not a symmetry
 -detection bug. Zero practical effect here (each species has only 1 atom in
 the cell, so site multiplicity is 1 regardless of point group), but exactly
@@ -26139,7 +26244,7 @@ Prepare folder structure for cohesive energy calculations.
 
 \paragraph{Synopsis}
 \begin{helpblock}
-usage: stb-cohesive [-h] -s STRUCTURE [-p PP_PATH] [-k K_DENSITY] [--spin]
+usage: stb-cohesive [-h] -s STRUCTURE [-p PP_PATH] [-c CALC] [-k K_DENSITY] [--spin]
                     [--vacuum VACUUM] [--vacuum-gap VACUUM_GAP] [-O OUTPUT_DIR]
                     [--bsse-correction] [--no-bsse-correction]
                     [--bsse-cutoff BSSE_CUTOFF] [--symprec SYMPREC]
@@ -26152,7 +26257,8 @@ usage: stb-cohesive [-h] -s STRUCTURE [-p PP_PATH] [-k K_DENSITY] [--spin]
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-cohesive@\texttt{stb-cohesive}!--structure@\texttt{--structure}}Path to the initial \texttt{structure.\allowbreak{}fdf} file\optmeta{required}}
 \optitem{-p, -{}-pp-\allowbreak{}path PP\_\allowbreak{}PATH}{\index{stb-cohesive@\texttt{stb-cohesive}!--pp-path@\texttt{--pp-path}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path.}
-\optitem{-k, -{}-k-\allowbreak{}density K\_\allowbreak{}DENSITY}{\index{stb-cohesive@\texttt{stb-cohesive}!--k-density@\texttt{--k-density}}K-point density in 1/Angstrom (default: 0.2)\optmeta{type: float}}
+\optitem{-c, -{}-calc CALC}{\index{stb-cohesive@\texttt{stb-cohesive}!--calc@\texttt{--calc}}Your own \texttt{calc.\allowbreak{}fdf} template (basis, PAO.EnergyShift, Mesh.Cutoff, XC, SCF ...), used for the full structure AND every atomic reference, so they share one level of theory. It must '\%include \texttt{structure.\allowbreak{}fdf}'. It is copied untouched into every folder; what the workflow has to impose goes into a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} included on top of it: for the atomic references Spin polarized, a Gamma-only k-grid and a single point; for the full structure \texttt{-{}-spin}, \texttt{-{}-dispersion} and the k-grid (only when the template has none or -k is given). Default: the built-in template (DZP, PAO.EnergyShift 0.02 Ry, Mesh.Cutoff 320 Ry, PBE).}
+\optitem{-k, -{}-k-\allowbreak{}density K\_\allowbreak{}DENSITY}{\index{stb-cohesive@\texttt{stb-cohesive}!--k-density@\texttt{--k-density}}K-point density in 1/Angstrom for the full structure (default: 0.2; with \texttt{-{}-calc}, the template's own k-grid when it has one)\optmeta{type: float}}
 \optitem{-{}-spin}{\index{stb-cohesive@\texttt{stb-cohesive}!--spin@\texttt{--spin}}Set the full structure calculation to spin polarized\optmeta{switch, off by default}}
 \optitem{-{}-vacuum VACUUM}{\index{stb-cohesive@\texttt{stb-cohesive}!--vacuum@\texttt{--vacuum}}Guaranteed buffer (Ang/2, see below) between the outermost atom of each isolated-atom-type calculation and the edge of its cubic simulation box (default: 20.0). For a plain isolated atom (no neighbors) the box is exactly this value, same as before. For a BSSE ghost cluster (see \texttt{-{}-bsse-\allowbreak{}cutoff}) or its \texttt{-{}-bsse-\allowbreak{}convergence-\allowbreak{}check} counterpart, the box automatically GROWS with the cluster's own radius (box side = 2*cutoff + \texttt{-{}-vacuum}) so the buffer beyond the outermost ghost atom stays exactly \texttt{-{}-vacuum/\allowbreak{}2} regardless of how large \texttt{-{}-bsse-\allowbreak{}cutoff/\allowbreak{}-{}-bsse-\allowbreak{}convergence-\allowbreak{}increment} are -- otherwise a bigger convergence-check cluster would eat into a fixed-size box and risk interacting with its own periodic images, contaminating the very convergence check it's meant to validate. Increase for elements with unusually diffuse basis orbitals.\optmeta{type: float}}
 \optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-cohesive@\texttt{stb-cohesive}!--vacuum-gap@\texttt{--vacuum-gap}}Vacuum gap threshold in Ang used to detect which lattice axes of the FULL structure are periodic vs. vacuum-padded (default: 10.0), same convention as \texttt{stb-\allowbreak{}kgrid/\allowbreak{}stb-\allowbreak{}strain/\allowbreak{}stb-\allowbreak{}elasticInputs}. Vacuum-padded axes are forced to a single (Gamma-only) k-grid division regardless of \texttt{-{}-k-\allowbreak{}density}.\optmeta{type: float}}
@@ -26183,14 +26289,16 @@ Process cohesive energy results from SIESTA calculations.
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-cohesiveAnalysis [-h] -o OUT_FILE [-d DIR_PATH]
-                            [--force-tolerance FORCE_TOLERANCE] [--save-report]
-                            [--view] [-v] [--no-intro]
+                            [--force-tolerance FORCE_TOLERANCE]
+                            [--energy {ks,free,zero}] [--save-report] [--view] [-v]
+                            [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
 \optitem{-o, -{}-out OUT\_\allowbreak{}FILE}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--out@\texttt{--out}}Name of the SIESTA output file (e.g., \texttt{calc.\allowbreak{}out})\optmeta{required}}
 \optitem{-d, -{}-dir DIR\_\allowbreak{}PATH}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--dir@\texttt{--dir}}Path to the folder containing 'structure' and 'atoms' directories (default: cohesive\_runs, matching \texttt{stb-\allowbreak{}cohesive's} own \texttt{-{}-output-\allowbreak{}dir} default -- no \texttt{-{}-dir} needed in the common case, even run from the parent directory).}
 \optitem{-{}-force-\allowbreak{}tolerance FORCE\_\allowbreak{}TOLERANCE}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--force-tolerance@\texttt{--force-tolerance}}Residual atomic force in eV/Ang (default: 0.05) above which the full structure's \texttt{calc.\allowbreak{}out} is flagged as possibly not relaxed -- the cohesive energy would then reflect a strained/off-equilibrium geometry rather than the true minimum. Advisory only, never blocks the result.\optmeta{type: float}}
+\optitem{-{}-energy \{ks,\allowbreak{}free,\allowbreak{}zero\}}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--energy@\texttt{--energy}}Which energy of each run enters the cohesive energy (default: ks).\newline 'ks': the Kohn-Sham total energy (siesta: Etot).\newline 'free': SIESTA's FreeEng = E\_KS - T*S of the electronic smearing -- what\newline versions up to 2.0.0 used. An open-shell atom with degenerate orbitals has\newline fractional occupations and -T*S != 0 at ElectronicTemperature 300 K (Si, Ga:\newline -49 meV; As, Ag: 0), so the cohesive energy then depends on a smearing\newline temperature that is not physical.\newline 'zero': (E\_KS + FreeEng)/2, the T -\textgreater{} 0 extrapolation used for smeared metals.\newline Section [2b] lists E\_KS, FreeEng and -T*S of every run in any case.\optmeta{choices: ks, free, zero}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--save-report@\texttt{--save-report}}Also persist the report to \textless{}dir\textgreater{}/cohesive\_results.dat. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-cohesiveAnalysis@\texttt{stb-cohesiveAnalysis}!--view@\texttt{--view}}Show an interactive matplotlib preview of the BSSE-correction figure (see [4] of the report) before finishing. The figure itself is always saved when BSSE data is available, regardless of this flag. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -27177,10 +27285,10 @@ Post-processing for SIESTA phonon calculations using Phonopy.
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-phononsPos [-h] [-dir DIRECTORY] [-l LABEL] [-m MESH MESH MESH]
-                      [--tmin TMIN] [--tmax TMAX] [--tstep TSTEP]
-                      [--plot-dir PLOT_DIR] [--bands] [--band-points BAND_POINTS]
-                      [--vacuum-gap VACUUM_GAP] [--dos] [--pdos]
-                      [--thermal-displacements] [--freeze-unstable-mode]
+                      [--shifted-mesh] [--symmetrize-fc] [--tmin TMIN] [--tmax TMAX]
+                      [--tstep TSTEP] [--plot-dir PLOT_DIR] [--bands]
+                      [--band-points BAND_POINTS] [--vacuum-gap VACUUM_GAP] [--dos]
+                      [--pdos] [--thermal-displacements] [--freeze-unstable-mode]
                       [--freeze-amplitude FREEZE_AMPLITUDE] [--symprec SYMPREC]
                       [--save-report] [--save-gnuplot] [--view] [-v] [--no-intro]
 \end{helpblock}
@@ -27189,6 +27297,8 @@ usage: stb-phononsPos [-h] [-dir DIRECTORY] [-l LABEL] [-m MESH MESH MESH]
 \optitem{-dir, -{}-directory DIRECTORY}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--directory@\texttt{--directory}}Directory containing the displacement folders (default: phonon\_runs)}
 \optitem{-l, -{}-label LABEL}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--label@\texttt{--label}}SystemLabel used in \texttt{calc.\allowbreak{}fdf} (default: auto-detected from the copied calc.fdf/structure.fdf, falling back to 'siesta')}
 \optitem{-m, -{}-mesh MESH MESH MESH}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--mesh@\texttt{--mesh}}Q-point mesh for thermal properties (default: 20 20 20)\optmeta{type: int}}
+\optitem{-{}-shifted-\allowbreak{}mesh}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--shifted-mesh@\texttt{--shifted-mesh}}Use phonopy's half-grid shift for even mesh divisions (what versions up to 2.0.0 did). Default: a Gamma-centred mesh, which keeps the point-group symmetry of every lattice -- on a hexagonal lattice the shifted 30x30x1 mesh is not symmetric and phonopy falls back to time reversal only (MeshSymmetryFallbackWarning).\optmeta{switch, off by default}}
+\optitem{-{}-symmetrize-\allowbreak{}fc}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--symmetrize-fc@\texttt{--symmetrize-fc}}Symmetrize the force constants by the space group before anything is computed (phonopy's symmetrize\_force\_constants\_by\_space\_group). Section [2] always reports how much the Gamma frequencies would change, i.e. how far the raw force constants are from the crystal's symmetry; this option applies it.\optmeta{switch, off by default}}
 \optitem{-{}-tmin TMIN}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--tmin@\texttt{--tmin}}Minimum temperature in K (default: 0)\optmeta{type: float}}
 \optitem{-{}-tmax TMAX}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--tmax@\texttt{--tmax}}Maximum temperature in K (default: 1000)\optmeta{type: float}}
 \optitem{-{}-tstep TSTEP}{\index{stb-phononsPos@\texttt{stb-phononsPos}!--tstep@\texttt{--tstep}}Temperature step in K (default: 10)\optmeta{type: float}}
@@ -27470,7 +27580,7 @@ $ stb-convergence -s structure.fdf -c calc.fdf -p dojo --parameter all --no-intr
 Parameter   | Range source      | Sweep range                    | Convergence direction
 -------------------------------------------------------------------------------------------
 meshcutoff  | suggested default | 100 to 400, step 50 (Ry)       | larger = more converged
-energyshift | suggested default | 0.001 to 0.05, step 0.01 (Ry)  | smaller = more converged
+energyshift | suggested default (geometric) | 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005 (Ry) | smaller = more converged
 kgrid       | suggested default | 0.05 to 0.3, step 0.05 (1/Ang) | smaller = more converged
 \end{codeblock}
 
@@ -27478,11 +27588,49 @@ producing 3 independent subtrees on disk:
 
 \begin{codeblock}
 convergence_runs/meshcutoff/convergence_meshcutoff_{100,150,200,250,300,350,400}.0000/
-convergence_runs/energyshift/convergence_energyshift_{0.0010,0.0110,0.0210,0.0310,0.0410,0.0510}/
+convergence_runs/energyshift/convergence_energyshift_{0.0200,0.0100,0.0050,0.0020,0.0010,0.0005}/
 convergence_runs/kgrid/convergence_kgrid_{0.0500,0.1000,0.1500,0.2000,0.2500,0.3000}/
 \end{codeblock}
 
 Case 2 of \texttt{example\_\allowbreak{}5.\allowbreak{}5.\allowbreak{}sh} runs this live.
+
+Since 2.0.1 the \texttt{energyshift} sweep is this geometric set (\texttt{-\/-\allowbreak{}energyshift-\allowbreak{}values} for
+another; \texttt{-\/-\allowbreak{}energyshift-\allowbreak{}range\ MIN\ MAX\ STEP} still gives a linear one). The parameter acts
+logarithmically, and the linear default of 2.0.0 (0.001 to 0.05 in steps of 0.01) had no
+point between 0.001 and 0.011 Ry, the range in use. Stage 2 does \textbf{not} judge this
+parameter by the total energy, which has no practical plateau in it (0.01 to 1.5 eV/atom
+between 0.011 and 0.001 Ry, and not even monotonic for graphene): it uses the relaxed
+volume and lists the orbital cutoff radii of each run. Two more options:
+
+\begin{itemize}
+\item
+  \texttt{-\/-\allowbreak{}single-\allowbreak{}point} writes every folder as a single point at the input geometry, so that
+  only the swept parameter changes (the default relaxes positions and cell at each value).
+\item
+  \texttt{-\/-\allowbreak{}parameter\ basis} is a workflow of its own for the basis set, which has two
+  independent axes, range (\texttt{PAO.\allowbreak{}EnergyShift}) and cardinality (\texttt{PAO.\allowbreak{}BasisSize}). Each
+  setting is judged by the equilibrium volume (area, for a 2D material) of an E(V) scan of
+  9 single points, in three stages run one after the other:
+
+  \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1273}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3636}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2545}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2545}}@{}}
+  \toprule\noalign{}
+  \texttt{-\/-\allowbreak{}basis-\allowbreak{}stage} & Scans & Fixed & Closes when V0 is within \\
+  \midrule\noalign{}
+  \endhead
+  \bottomrule\noalign{}
+  \endlastfoot
+  \texttt{mesh} (default) & \texttt{Mesh.\allowbreak{}Cutoff} 350, 500, 700, 1000 Ry & \texttt{PAO.\allowbreak{}EnergyShift} 0.002 Ry & 0.2 \% of the next two meshes \\
+  \texttt{range} & \texttt{PAO.\allowbreak{}EnergyShift} 0.02 ... 0.0005 Ry & \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} & 0.5 \% of the next two values \\
+  \texttt{size} & the template\textquotesingle s \texttt{PAO.\allowbreak{}BasisSize} and one step up (DZP to TZP) & \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff}, \texttt{-\/-\allowbreak{}energyshift} & 1 \% between the two \\
+  \end{longtable}
+\endgroup
+
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}dir\ \textless{}output-\allowbreak{}dir\textgreater{}} fits every scan, gives the verdict of each
+  stage, the fit residual and the orbital radii, and prints the command of the next stage;
+  \texttt{-\/-\allowbreak{}reference-\allowbreak{}v0} compares the converged volume with an all-electron one. The template
+  must not turn the orbital filter on (\texttt{FilterCutoff}) nor carry a \texttt{\%block\ PAO.\allowbreak{}Basis}.
+\end{itemize}
 
 \paragraph{Custom ranges, and the k-grid density convention}\label{g5.5-25-custom-ranges-and-the-k-grid-density-convention}
 
@@ -27900,21 +28048,35 @@ Stage 1 of 2: writes one ready-to-run SIESTA folder per swept value of one or mo
 
 \paragraph{Synopsis}
 \begin{helpblock}
-usage: stb-convergence [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR]
-                       --parameter PARAMETER [PARAMETER ...]
+usage: stb-convergence [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR] --parameter
+                       PARAMETER [PARAMETER ...] [--basis-stage {mesh,range,size}]
+                       [--basis-values V [V ...]] [--basis-sizes SIZE LARGER]
+                       [--mesh-cutoff RY] [--energyshift RY]
+                       [--scan-points SCAN_POINTS] [--scan-range PCT]
                        [--meshcutoff-range MIN MAX STEP]
-                       [--energyshift-range MIN MAX STEP] [--kgrid-range MIN MAX STEP]
-                       [--relax-steps RELAX_STEPS] [--vacuum-gap VACUUM_GAP]
-                       [-o OUTPUT_DIR] [--save-report] [-v] [--no-intro]
+                       [--energyshift-range MIN MAX STEP]
+                       [--energyshift-values RY [RY ...]] [--single-point]
+                       [--kgrid-range MIN MAX STEP] [--relax-steps RELAX_STEPS]
+                       [--vacuum-gap VACUUM_GAP] [-o OUTPUT_DIR] [--save-report] [-v]
+                       [--no-intro]
 \end{helpblock}
 \optgroup{Options}
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-convergence@\texttt{stb-convergence}!--structure@\texttt{--structure}}Input \texttt{structure.\allowbreak{}fdf}, copied as '\texttt{structure.\allowbreak{}fdf}' into every generated folder (default: \texttt{structure.\allowbreak{}fdf}).}
 \optitem{-c, -{}-calc CALC}{\index{stb-convergence@\texttt{stb-convergence}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template (default: \texttt{calc.\allowbreak{}fdf}) -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}', prepended at the very top (see [3] of the report) -- this forces full relaxation and the swept parameter's value, regardless of what this template itself contains.}
 \optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-convergence@\texttt{stb-convergence}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
-\optitem{-{}-parameter PARAMETER [PARAMETER .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--parameter@\texttt{--parameter}}Which tag(s) to sweep: meshcutoff, energyshift, kgrid, or 'all' for all three (one independent sweep per parameter, each in its own subfolder).\optmeta{required}}
+\optitem{-{}-parameter PARAMETER [PARAMETER .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--parameter@\texttt{--parameter}}Which tag(s) to sweep: meshcutoff, energyshift, kgrid, or 'all' for all three (one independent sweep per parameter, each in its own subfolder). Or 'basis' (alone): the basis-set convergence by equations of state, see \texttt{-{}-basis-\allowbreak{}stage}.\optmeta{required}}
+\optitem{-{}-basis-\allowbreak{}stage \{mesh,\allowbreak{}range,\allowbreak{}size\}}{\index{stb-convergence@\texttt{stb-convergence}!--basis-stage@\texttt{--basis-stage}}\texttt{-{}-parameter} basis: which stage to write (default: mesh). Each stage is a set of\newline E(V) scans of single points, judged by the equilibrium volume (2D: area):\newline   mesh : Mesh.Cutoff 350, 500, 700, 1000 Ry at PAO.EnergyShift 0.002 Ry\newline   range: PAO.EnergyShift 0.02 ... 0.0005 Ry at \texttt{-{}-mesh-\allowbreak{}cutoff}\newline   size : the template's PAO.BasisSize and one step up (DZP -\textgreater{} TZP) at\newline          \texttt{-{}-mesh-\allowbreak{}cutoff} and \texttt{-{}-energyshift}\newline Run them in this order, each with the value the previous one found.\optmeta{choices: mesh, range, size}}
+\optitem{-{}-basis-\allowbreak{}values V [V .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--basis-values@\texttt{--basis-values}}\texttt{-{}-parameter} basis: the Mesh.Cutoff values (stage mesh) or PAO.EnergyShift values (stage range) to scan instead of the defaults.\optmeta{type: float}}
+\optitem{-{}-basis-\allowbreak{}sizes SIZE LARGER}{\index{stb-convergence@\texttt{stb-convergence}!--basis-sizes@\texttt{--basis-sizes}}\texttt{-{}-parameter} basis \texttt{-{}-basis-\allowbreak{}stage} size: the two PAO.BasisSize to compare (default: the template's and the next one on SZ \textless{} DZ \textless{} DZP \textless{} TZP \textless{} TZ2P).}
+\optitem{-{}-mesh-\allowbreak{}cutoff RY}{\index{stb-convergence@\texttt{stb-convergence}!--mesh-cutoff@\texttt{--mesh-cutoff}}\texttt{-{}-parameter} basis, stages range and size: Mesh.Cutoff of every scan (default: the template's).\optmeta{type: float}}
+\optitem{-{}-energyshift RY}{\index{stb-convergence@\texttt{stb-convergence}!--energyshift@\texttt{--energyshift}}\texttt{-{}-parameter} basis: PAO.EnergyShift held fixed in stage mesh (default 0.002) and stage size (default: the template's).\optmeta{type: float}}
+\optitem{-{}-scan-\allowbreak{}points SCAN\_\allowbreak{}POINTS}{\index{stb-convergence@\texttt{stb-convergence}!--scan-points@\texttt{--scan-points}}\texttt{-{}-parameter} basis: single points per E(V) scan (default: 9, at least 5).\optmeta{type: int}}
+\optitem{-{}-scan-\allowbreak{}range PCT}{\index{stb-convergence@\texttt{stb-convergence}!--scan-range@\texttt{--scan-range}}\texttt{-{}-parameter} basis: half-width of each scan in \% of the volume (default 12), of the area for a 2D material (default 8) or of the length for a wire (default 4).\optmeta{type: float}}
 \optitem{-{}-meshcutoff-\allowbreak{}range MIN MAX STEP}{\index{stb-convergence@\texttt{stb-convergence}!--meshcutoff-range@\texttt{--meshcutoff-range}}Custom Mesh.CutOff sweep range (Ry). Omit to use the suggested default (see [2] of the report). Only meaningful if 'meshcutoff' is in \texttt{-{}-parameter}.\optmeta{type: float}}
 \optitem{-{}-energyshift-\allowbreak{}range MIN MAX STEP}{\index{stb-convergence@\texttt{stb-convergence}!--energyshift-range@\texttt{--energyshift-range}}Custom PAO.EnergyShift sweep range (Ry) (see \texttt{-{}-meshcutoff-\allowbreak{}range}). Only meaningful if 'energyshift' is in \texttt{-{}-parameter}.\optmeta{type: float}}
+\optitem{-{}-energyshift-\allowbreak{}values RY [RY .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--energyshift-values@\texttt{--energyshift-values}}Explicit PAO.EnergyShift values (Ry) instead of a linear range. Default when neither this nor \texttt{-{}-energyshift-\allowbreak{}range} is given: the geometric set 0.02 0.01 0.005 0.002 0.001 0.0005 (the parameter acts logarithmically; versions up to 2.0.0 used 0.001 to 0.05 in steps of 0.01, which has no point between 0.001 and 0.011).\optmeta{type: float}}
+\optitem{-{}-single-\allowbreak{}point}{\index{stb-convergence@\texttt{stb-convergence}!--single-point@\texttt{--single-point}}Do not relax: every folder is a single point at the input geometry (MD.Steps 0, fixed cell), so only the swept parameter changes. Default: full relaxation (positions + cell), which mixes the parameter's effect with the relaxation's noise but gives the relaxed volume to judge convergence by.\optmeta{switch, off by default}}
 \optitem{-{}-kgrid-\allowbreak{}range MIN MAX STEP}{\index{stb-convergence@\texttt{stb-convergence}!--kgrid-range@\texttt{--kgrid-range}}Custom k-grid density sweep range (1/Ang) (see \texttt{-{}-meshcutoff-\allowbreak{}range}). Only meaningful if 'kgrid' is in \texttt{-{}-parameter}.\optmeta{type: float}}
 \optitem{-{}-relax-\allowbreak{}steps RELAX\_\allowbreak{}STEPS}{\index{stb-convergence@\texttt{stb-convergence}!--relax-steps@\texttt{--relax-steps}}Number of relaxation steps (MD.Steps) forced in every generated folder (default: 100). Both atomic positions and the cell relax (MD.VariableCell true).\optmeta{type: int}}
 \optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-convergence@\texttt{stb-convergence}!--vacuum-gap@\texttt{--vacuum-gap}}\texttt{-{}-parameter} kgrid only: vacuum-axis detection threshold in Angstrom, same meaning as \texttt{stb-\allowbreak{}kgrid's} \texttt{-{}-vacuum-\allowbreak{}gap} (default: 10.0).\optmeta{type: float}}
@@ -27938,6 +28100,7 @@ Stage 2 of 2: analyzes a \texttt{stb-\allowbreak{}convergence} sweep and reports
 \begin{helpblock}
 usage: stb-convergenceAnalysis [-h] [--dir DIR] [--file FILE] [--tolerance TOLERANCE]
                                [--volume-tolerance VOLUME_TOLERANCE]
+                               [--reference-v0 ANG3_PER_ATOM]
                                [--force-tolerance FORCE_TOLERANCE] [-o OUTPUT_DIR]
                                [--apply CALC_FDF] [--vacuum-gap VACUUM_GAP]
                                [--save-report] [--save-gnuplot] [--view] [-v]
@@ -27949,6 +28112,7 @@ usage: stb-convergenceAnalysis [-h] [--dir DIR] [--file FILE] [--tolerance TOLER
 \optitem{-{}-file FILE}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--file@\texttt{--file}}SIESTA output filename inside each run folder (default: \texttt{calc.\allowbreak{}out}).}
 \optitem{-{}-tolerance TOLERANCE}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--tolerance@\texttt{--tolerance}}Energy convergence tolerance in eV/atom (default: 0.01).\optmeta{type: float}}
 \optitem{-{}-volume-\allowbreak{}tolerance VOLUME\_\allowbreak{}TOLERANCE}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--volume-tolerance@\texttt{--volume-tolerance}}Relaxed-cell-volume convergence tolerance, as a percent change between consecutive swept values (default: 0.5).\optmeta{type: float}}
+\optitem{-{}-reference-\allowbreak{}v0 ANG3\_\allowbreak{}PER\_\allowbreak{}ATOM}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--reference-v0@\texttt{--reference-v0}}Basis convergence (\texttt{stb-\allowbreak{}convergence} \texttt{-{}-parameter} basis) only: an all-electron equilibrium volume per atom to compare the converged basis with -- the only way to notice a basis that converges to the wrong value.\optmeta{type: float}}
 \optitem{-{}-force-\allowbreak{}tolerance FORCE\_\allowbreak{}TOLERANCE}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--force-tolerance@\texttt{--force-tolerance}}Residual-force data-quality flag threshold in eV/Ang (default: 0.05) -- NOT a convergence criterion, just flags a run whose CG relaxation may not have reached a genuine minimum.\optmeta{type: float}}
 \optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write \textless{}parameter\textgreater{}\_convergence.dat/.gplot into with \texttt{-{}-save-\allowbreak{}gnuplot}, and the report into with \texttt{-{}-save-\allowbreak{}report} (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-apply CALC\_\allowbreak{}FDF}{\index{stb-convergenceAnalysis@\texttt{stb-convergenceAnalysis}!--apply@\texttt{--apply}}Writes every parameter's converged (recommended) value into this \texttt{calc.\allowbreak{}fdf} in place (same tag substitution \texttt{stb-\allowbreak{}convergence} itself uses) -- parameters with no converged value found are skipped.}
@@ -30169,23 +30333,25 @@ cell is what the rest of the walkthrough (Section 4) actually uses.
 $ stb-adsorb --adsorbate O -O output/stage1 --no-intro
 \end{codeblock}
 
-writes \texttt{clean\_\allowbreak{}slab/}, \texttt{adsorbate/} (forced spin-polarized --- many single
+writes \texttt{clean\_\allowbreak{}slab/\allowbreak{}}, \texttt{adsorbate/\allowbreak{}} (forced spin-polarized --- many single
 atoms/molecules, like O, N, or NO, have a non-zero ground-state spin), and
-one \texttt{sites/\allowbreak{}site\_\allowbreak{}1\_\allowbreak{}ontop/} (the default site type/index). By default
+one \texttt{sites/\allowbreak{}site\_\allowbreak{}1\_\allowbreak{}ontop/\allowbreak{}} (the default site type/index). By default
 (\texttt{-\/-\allowbreak{}force-\allowbreak{}spin}, ON unless you pass \texttt{-\/-\allowbreak{}no-\allowbreak{}force-\allowbreak{}spin}), every
-\texttt{sites/\allowbreak{}site\_\allowbreak{}*/} folder is ALSO forced spin-polarized --- the physically
+\texttt{sites/\allowbreak{}site\_\allowbreak{}*/\allowbreak{}} folder is ALSO forced spin-polarized --- the physically
 relevant quantity, \texttt{E\_\allowbreak{}ads}, comes from the \textbf{combined} slab+adsorbate
 calculation, and a single adsorbate atom bonded to a slab commonly leaves
 that combined system with a net magnetic moment too (most simply, an odd
 total valence-electron count, which a spin-restricted calculation cannot
-represent at all). \texttt{clean\_\allowbreak{}slab/} itself is left alone (no adsorbate
+represent at all). \texttt{clean\_\allowbreak{}slab/\allowbreak{}} itself is left alone (no adsorbate
 present, no clear universal reason to force it). Every folder also gets
-\texttt{Slab.\allowbreak{}DipoleCorrection\ T} forced on \texttt{clean\_\allowbreak{}slab/} and every \texttt{sites/\allowbreak{}site\_\allowbreak{}*/}
-(never the isolated \texttt{adsorbate/} reference, which is a molecule in an
+\texttt{Slab.\allowbreak{}DipoleCorrection\ T} forced on \texttt{clean\_\allowbreak{}slab/\allowbreak{}} and every \texttt{sites/\allowbreak{}site\_\allowbreak{}*/\allowbreak{}}
+(never the isolated \texttt{adsorbate/\allowbreak{}} reference, which is a molecule in an
 all-around vacuum box, not a slab) --- adsorbing on only one face breaks the
 slab\textquotesingle s inversion/mirror symmetry along the vacuum axis, giving the cell a
 net dipole along a PERIODIC direction that would otherwise contaminate the
-total energy with a spurious periodic-image field. \texttt{clean\_\allowbreak{}slab/}\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}
+total energy with a spurious periodic-image field (same reasoning, and the
+same fdf tag, \texttt{stb-\allowbreak{}her}/\texttt{stb-\allowbreak{}oer} already force unconditionally for their
+own one-sided-adsorbate site folders). \texttt{clean\_\allowbreak{}slab/\allowbreak{}}\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}
 is exactly:
 
 \begin{codeblock}
@@ -30194,7 +30360,7 @@ is exactly:
 MD.VariableCell false
 \end{codeblock}
 
-while a \texttt{sites/\allowbreak{}site\_\allowbreak{}*/}\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} additionally has:
+while a \texttt{sites/\allowbreak{}site\_\allowbreak{}*/\allowbreak{}}\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} additionally has:
 
 \begin{codeblock}
 # Auto-generated -- forces spin-polarized SCF (see write_reference_folder's
@@ -30215,18 +30381,45 @@ Report structure (\texttt{{[}0{]}}--\texttt{{[}6{]}}, \texttt{-\/-\allowbreak{}s
 [6] LIBRARY WARNINGS
 \end{codeblock}
 
-\texttt{-\/-\allowbreak{}site-\allowbreak{}type\ all\ -\allowbreak{}\/-\allowbreak{}all-\allowbreak{}sites} writes one folder per symmetrically-distinct
+\texttt{-\/-\allowbreak{}site-\allowbreak{}type\ all\ -\/-\allowbreak{}all-\allowbreak{}sites} writes one folder per symmetrically-distinct
 site of every type instead of just one; \texttt{-\/-\allowbreak{}both-\allowbreak{}sides} additionally mirrors
 each selected site onto the bottom face for a free-standing 2D material
 like this graphene fixture (verified: \texttt{site\_\allowbreak{}1\_\allowbreak{}ontop\_\allowbreak{}bothsides/\allowbreak{}structure.\allowbreak{}fdf}
 has \texttt{NumberofAtoms\ 4} --- 2 substrate + 1 adsorbate per face); \texttt{-\/-\allowbreak{}height-\allowbreak{}sweep\ \textless{}min\textgreater{}\ \textless{}max\textgreater{}\ \textless{}step\textgreater{}} writes an approach curve instead of one fixed height.
 
+Three options for a real slab (since 2.0.1):
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{-\/-\allowbreak{}fix-\allowbreak{}layers\ N} holds the N lowest atomic layers of the slab at their input
+  positions, with the same \texttt{\%block\ Geometry.\allowbreak{}Constraints} in \texttt{clean\_\allowbreak{}slab/\allowbreak{}} and
+  in every site folder (so the two energies of \texttt{E\_\allowbreak{}ads} relax the same atoms).
+  Without it the whole slab relaxes. \texttt{-\/-\allowbreak{}layer-\allowbreak{}tol} (0.1 Ang) sets what counts
+  as one layer; the report lists the layers found and the atoms fixed.
+\item
+  \texttt{-\/-\allowbreak{}anchor-\allowbreak{}atom\ O} (an element, or an atom number of the molecule) turns a
+  molecular adsorbate so that this atom faces the surface, and \texttt{-\/-\allowbreak{}height}
+  becomes the height of that atom. Without it the molecule keeps the
+  orientation of the G2 database: for H2O the hydrogens point to the surface.
+\item
+  \texttt{-\/-\allowbreak{}optimizer\ cg\textbar{}broyden\textbar{}fire}, \texttt{-\/-\allowbreak{}force-\allowbreak{}tol} (eV/Ang) and \texttt{-\/-\allowbreak{}max-\allowbreak{}displ} (Bohr) force the
+  relaxation settings in every folder; by default the template\textquotesingle s own are used. A weakly
+  bound molecule on a metal can keep SIESTA\textquotesingle s CG from converging for hundreds of steps:
+  try \texttt{-\/-\allowbreak{}optimizer\ fire\ -\/-\allowbreak{}max-\allowbreak{}displ\ 0.\allowbreak{}05}, and \texttt{-\/-\allowbreak{}force-\allowbreak{}tol\ 0.\allowbreak{}03} on a flat surface.
+  \texttt{stb-\allowbreak{}adsorbAnalysis} flags every run that stopped at the step limit unrelaxed.
+\item
+  The slab is recognized by its vacuum (\texttt{-\/-\allowbreak{}vacuum-\allowbreak{}gap}, 10 Ang). A slab with
+  exactly that much vacuum is accepted, and when no vacuum is found the error
+  gives the gap measured along each axis and the value to pass.
+\end{itemize}
+
 \textbf{A caution worth knowing before you script this yourself:} calling
-\texttt{stb-\allowbreak{}adsorb} twice into the \emph{same} \texttt{-O} output directory with two
+\texttt{stb-\allowbreak{}adsorb} twice into the \emph{same} \texttt{-\allowbreak{}O} output directory with two
 different single \texttt{-\/-\allowbreak{}site-\allowbreak{}type} values (e.g. once for \texttt{ontop}, once for
 \texttt{bridge}) overwrites \texttt{sites/\allowbreak{}adsorption\_\allowbreak{}sites.\allowbreak{}txt} --- the machine-readable
 site table \texttt{stb-\allowbreak{}adsorbAnalysis} reads for each site\textquotesingle s adsorbate/height ---
-silently dropping the first call\textquotesingle s row. Use a single \texttt{-\/-\allowbreak{}site-\allowbreak{}type\ all\ -\allowbreak{}\/-\allowbreak{}all-\allowbreak{}sites} call instead (as Section 4 below does) if you want more than
+silently dropping the first call\textquotesingle s row. Use a single \texttt{-\/-\allowbreak{}site-\allowbreak{}type\ all\ -\/-\allowbreak{}all-\allowbreak{}sites} call instead (as Section 4 below does) if you want more than
 one site type in the same study.
 
 Interactive path: \texttt{stb-\allowbreak{}suite}, type \texttt{5.\allowbreak{}8.\allowbreak{}1} at the main prompt --- same
@@ -31225,7 +31418,9 @@ usage: stb-adsorb [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR]
                   [--adsorbate ADSORBATE] [--list]
                   [--site-type {ontop,bridge,hollow,all}] [--site-index SITE_INDEX]
                   [--all-sites] [--position X Y] [--positions-file PATH]
-                  [--height HEIGHT] [--height-sweep MIN MAX STEP] [--both-sides]
+                  [--height HEIGHT] [--height-sweep MIN MAX STEP] [--anchor-atom ATOM]
+                  [--optimizer {cg,broyden,fire}] [--force-tol EV_PER_ANG]
+                  [--max-displ BOHR] [--fix-layers N] [--layer-tol ANG] [--both-sides]
                   [--symprec SYMPREC] [--force-spin] [--no-force-spin]
                   [--vacuum-gap VACUUM_GAP] [--vacuum-box VACUUM_BOX] [--ml-prerelax]
                   [--ml-rank] [--ml-model {small,medium,large}]
@@ -31251,6 +31446,12 @@ usage: stb-adsorb [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR]
 \optitem{-{}-positions-\allowbreak{}file PATH}{\index{stb-adsorb@\texttt{stb-adsorb}!--positions-file@\texttt{--positions-file}}'.dat' file with one or more adsorption site positions, as in-plane fractional (a, b) coordinates relative to the file's own LATTICE\_A/LATTICE\_B/LATTICE\_C lines ('number type frac\_a frac\_b' per site line; '\#' comments and blank lines ignored) -- used INSTEAD of automatic site-finding (\texttt{-{}-site-\allowbreak{}type/\allowbreak{}-{}-symprec} are ignored). \texttt{-{}-all-\allowbreak{}sites/\allowbreak{}-{}-site-\allowbreak{}index} then select among the file's positions exactly as they would among auto-found ones. \texttt{stb-\allowbreak{}adsorb} always writes 'sites/site\_positions.dat' with the lattice and positions actually used this run (auto-found or manual alike), in the same format, so it can be inspected, hand-edited, and fed back here for a future run. Mutually exclusive with \texttt{-{}-position} and \texttt{-{}-both-\allowbreak{}sides}.}
 \optitem{-{}-height HEIGHT}{\index{stb-adsorb@\texttt{stb-adsorb}!--height@\texttt{--height}}Adsorption distance in Ang above the surface (default: 2.0). Ignored if \texttt{-{}-height-\allowbreak{}sweep} is given.\optmeta{type: float}}
 \optitem{-{}-height-\allowbreak{}sweep MIN MAX STEP}{\index{stb-adsorb@\texttt{stb-adsorb}!--height-sweep@\texttt{--height-sweep}}Generate one site per height in this range (inclusive), instead of a single fixed \texttt{-{}-height} -- an approach-curve scan. \texttt{stb-\allowbreak{}adsorbAnalysis} will report E\_ads vs. height for it. Same min/max/step convention as \texttt{stb-\allowbreak{}convergence}. Incompatible with \texttt{-{}-both-\allowbreak{}sides}.\optmeta{type: float}}
+\optitem{-{}-anchor-\allowbreak{}atom ATOM}{\index{stb-adsorb@\texttt{stb-adsorb}!--anchor-atom@\texttt{--anchor-atom}}For a molecular adsorbate: the atom that faces the surface, as an element symbol (when the molecule has one atom of it: O for H2O, C for CO) or an atom number (1-based, in the molecule's own order). The molecule is turned so that this atom is the lowest one, the rest pointing away from the surface, and \texttt{-{}-height} is then the height of THIS atom above the site. Default: the molecule as the G2 database stores it (H2O: hydrogens towards the surface), its origin at \texttt{-{}-height}. With \texttt{-{}-ml-\allowbreak{}rank} orientation sampling it only sets the starting orientation the samples are rotated from.}
+\optitem{-{}-optimizer \{cg,\allowbreak{}broyden,\allowbreak{}fire\}}{\index{stb-adsorb@\texttt{stb-adsorb}!--optimizer@\texttt{--optimizer}}Geometry optimizer written into every folder's \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (MD.TypeOfRun CG / Broyden / FIRE). Default: whatever \texttt{-{}-calc} sets. A weakly bound molecule on a metal is ill-conditioned for SIESTA's CG -- stiff bonds next to almost free translations and rotations: H2O on Ag(111) was still at 0.03-1.3 eV/Ang after 130-146 CG steps. Try 'fire' or 'broyden' there, with a small \texttt{-{}-max-\allowbreak{}displ}.\optmeta{choices: cg, broyden, fire}}
+\optitem{-{}-force-\allowbreak{}tol EV\_\allowbreak{}PER\_\allowbreak{}ANG}{\index{stb-adsorb@\texttt{stb-adsorb}!--force-tol@\texttt{--force-tol}}Force tolerance of the relaxations, MD.MaxForceTol in eV/Ang (default: \texttt{-{}-calc}'s own). 0.02 is a usual value; a flat energy surface (physisorbed molecule) may need 0.03-0.05 to finish at all.\optmeta{type: float}}
+\optitem{-{}-max-\allowbreak{}displ BOHR}{\index{stb-adsorb@\texttt{stb-adsorb}!--max-displ@\texttt{--max-displ}}Largest atomic displacement per step, MD.MaxDispl in Bohr (default: \texttt{-{}-calc}'s own, i.e. SIESTA's 0.2). About 0.05 keeps a molecular adsorbate from overshooting.\optmeta{type: float}}
+\optitem{-{}-fix-\allowbreak{}layers N}{\index{stb-adsorb@\texttt{stb-adsorb}!--fix-layers@\texttt{--fix-layers}}Hold the N lowest atomic layers of the slab fixed at their input (bulk-like) positions, in clean\_slab/ and in every site folder alike: a \%block Geometry.Constraints in each \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}. The adsorbate goes on the top (+c) face. Default 0: the whole slab relaxes. The usual choice is the lower half of the layers.\optmeta{type: int}}
+\optitem{-{}-layer-\allowbreak{}tol ANG}{\index{stb-adsorb@\texttt{stb-adsorb}!--layer-tol@\texttt{--layer-tol}}With \texttt{-{}-fix-\allowbreak{}layers}: atoms whose heights differ by less than this are one atomic layer (default: 0.1 Ang, as in \texttt{stb-\allowbreak{}slab}).\optmeta{type: float}}
 \optitem{-{}-both-\allowbreak{}sides}{\index{stb-adsorb@\texttt{stb-adsorb}!--both-sides@\texttt{--both-sides}}Adsorb on both exposed faces (for a free-standing 2D material with vacuum on both sides of the c-axis). Requires a concrete \texttt{-{}-site-\allowbreak{}type} (not 'all'); incompatible with \texttt{-{}-position}, \texttt{-{}-ml-\allowbreak{}rank} and \texttt{-{}-height-\allowbreak{}sweep}.\optmeta{switch, off by default}}
 \optitem{-{}-symprec SYMPREC}{\index{stb-adsorb@\texttt{stb-adsorb}!--symprec@\texttt{--symprec}}Symmetry-reduction tolerance for site-finding (default: 0.01, pymatgen's own default).\optmeta{type: float}}
 \optitem{-{}-force-\allowbreak{}spin}{\index{stb-adsorb@\texttt{stb-adsorb}!--force-spin@\texttt{--force-spin}}Force Spin polarized (via \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, overriding \texttt{-{}-calc's} own Spin tag if any) in every 'sites/site\_*/' folder too, not just the isolated-adsorbate reference (default: ON) -- a single adsorbate atom (or a molecule containing one) bonded to a slab commonly leaves the combined system with a net magnetic moment (most simply, an odd total valence-electron count, which a spin-restricted calculation cannot represent at all). Costs nothing for a genuinely closed-shell site (converges to zero moment). Does not affect 'clean\_slab/' (no adsorbate present).\optmeta{switch, off by default}}
@@ -32784,8 +32985,8 @@ usage: stb-stackingfault [-h] -l1 LAYER1 -l2 LAYER2 -c CALC [-p PSEUDO_DIR]
 \optitem{-{}-relax-\allowbreak{}z-\allowbreak{}steps RELAX\_\allowbreak{}Z\_\allowbreak{}STEPS}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--relax-z-steps@\texttt{--relax-z-steps}}With \texttt{-{}-mode} 1: MD.Steps for the restricted SIESTA z-relaxation (default: 200). Ignored in modes 2/3.\optmeta{type: int}}
 \optitem{-{}-scan \{surface,\allowbreak{}x,\allowbreak{}y,\allowbreak{}xy\}}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--scan@\texttt{--scan}}Sweep shape (default: surface):\newline surface = full 2D grid (\texttt{-nx} x \texttt{-ny} points), the gamma-surface -- output is the pm3d map/heatmap already documented above.\newline x       = 1D sweep along shift\_x only (shift\_y fixed at 0) -- \texttt{-n} points, output is a line plot (E vs. distance along x).\newline y       = 1D sweep along shift\_y only (shift\_x fixed at 0) -- \texttt{-n} points, output is a line plot (E vs. distance along y).\newline xy      = 1D sweep along the diagonal shift\_x == shift\_y -- \texttt{-n} points, output is a line plot (E vs. distance along the diagonal).\newline \texttt{-nx/\allowbreak{}-\allowbreak{}ny} only apply to 'surface'; \texttt{-n/\allowbreak{}-{}-scan-\allowbreak{}points} only applies to 'x'/'y'/'xy'.\optmeta{choices: surface, x, y, xy}}
 \optitem{-n, -{}-scan-\allowbreak{}points SCAN\_\allowbreak{}POINTS}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--scan-points@\texttt{--scan-points}}With \texttt{-{}-scan} x/y/xy: number of points along the 1D sweep (default: 15). Ignored under \texttt{-{}-scan} surface (see \texttt{-nx/\allowbreak{}-\allowbreak{}ny} instead).\optmeta{type: int}}
-\optitem{-nx, -{}-grid-\allowbreak{}nx GRID\_\allowbreak{}NX}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--grid-nx@\texttt{--grid-nx}}With \texttt{-{}-scan} surface: grid resolution along shift\_x, this many lateral shifts covering [0, 1) (default: 7). Independent of \texttt{-{}-grid-\allowbreak{}ny} -- an anisotropic lattice (a != b, e.g. a rectangular or low-symmetry 2D cell) often warrants a different sampling density per axis rather than forcing a square grid. Ignored under \texttt{-{}-scan} x/y/xy (see \texttt{-n/\allowbreak{}-{}-scan-\allowbreak{}points} instead).\optmeta{type: int}}
-\optitem{-ny, -{}-grid-\allowbreak{}ny GRID\_\allowbreak{}NY}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--grid-ny@\texttt{--grid-ny}}With \texttt{-{}-scan} surface: grid resolution along shift\_y (default: 7). See \texttt{-{}-grid-\allowbreak{}nx}. Ignored under \texttt{-{}-scan} x/y/xy.\optmeta{type: int}}
+\optitem{-nx, -{}-grid-\allowbreak{}nx GRID\_\allowbreak{}NX}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--grid-nx@\texttt{--grid-nx}}With \texttt{-{}-scan} surface: grid resolution along shift\_x, this many lateral shifts covering [0, 1) (default: 6 on a hexagonal lattice, so that the grid contains the AB/BA registries at shifts 1/3 and 2/3 -- use a multiple of 3 there --, 7 otherwise). Independent of \texttt{-{}-grid-\allowbreak{}ny} -- an anisotropic lattice (a != b, e.g. a rectangular or low-symmetry 2D cell) often warrants a different sampling density per axis rather than forcing a square grid. Ignored under \texttt{-{}-scan} x/y/xy (see -n/\texttt{-{}-scan-\allowbreak{}points} instead).\optmeta{type: int}}
+\optitem{-ny, -{}-grid-\allowbreak{}ny GRID\_\allowbreak{}NY}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--grid-ny@\texttt{--grid-ny}}With \texttt{-{}-scan} surface: grid resolution along shift\_y (default: as -nx). See \texttt{-{}-grid-\allowbreak{}nx}. Ignored under \texttt{-{}-scan} x/y/xy.\optmeta{type: int}}
 \optitem{-{}-ml-\allowbreak{}prerelax-\allowbreak{}layers}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--ml-prerelax-layers@\texttt{--ml-prerelax-layers}}Relax each monolayer's positions (cell fixed) with MACE-MP-0 before stacking -- a cheap safety net when you're not fully certain \texttt{-{}-layer1/\allowbreak{}-{}-layer2} are already at equilibrium. Needs the optional 'ml' extra.\optmeta{switch, off by default}}
 \optitem{-{}-ml-\allowbreak{}preview}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--ml-preview@\texttt{--ml-preview}}Evaluate the whole grid's single-point energy on MACE-MP-0 (fast, no SIESTA) and write \texttt{stackingfault\_\allowbreak{}ml\_\allowbreak{}preview.\allowbreak{}png} -- a quick sanity check of the gamma-surface's shape before committing to the full Nx x Ny DFT single-points. Written alongside the normal SIESTA folders, not instead of them. Needs the optional 'ml' extra.\optmeta{switch, off by default}}
 \optitem{-{}-ml-\allowbreak{}model \{small,\allowbreak{}medium,\allowbreak{}large\}}{\index{stb-stackingfault@\texttt{stb-stackingfault}!--ml-model@\texttt{--ml-model}}MACE-MP-0 model size (default: medium). Ignored if \texttt{-{}-ml-\allowbreak{}custom-\allowbreak{}model} is given.\optmeta{choices: small, medium, large}}
@@ -38073,8 +38274,9 @@ points above gives \texttt{V0\ =\allowbreak{}\ 40.\allowbreak{}666\ Å³} agains
 
 \paragraph{3.1 What it does}\label{g5.15-31-what-it-does}
 
-\texttt{stb-\allowbreak{}eosInputs} takes an \textbf{already relaxed} structure (\texttt{-f}, fractional coordinates, bulk only)
-and your \texttt{calc.\allowbreak{}fdf} template (\texttt{-c}, default \texttt{.\allowbreak{}/\allowbreak{}calc.\allowbreak{}fdf}) and, for each of \texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} volumes
+\texttt{stb-\allowbreak{}eosInputs} takes an \textbf{already relaxed} structure (\texttt{-\allowbreak{}f}, fractional coordinates; a bulk solid, or a 2D
+material / wire, Section 3.5)
+and your \texttt{calc.\allowbreak{}fdf} template (\texttt{-\allowbreak{}c}, default \texttt{.\allowbreak{}/\allowbreak{}calc.\allowbreak{}fdf}) and, for each of \texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} volumes
 between \texttt{−-\/-\allowbreak{}strain-\allowbreak{}range} and \texttt{+-\/-\allowbreak{}strain-\allowbreak{}range} percent, writes
 
 \begin{codeblock}
@@ -38086,8 +38288,8 @@ between \texttt{−-\/-\allowbreak{}strain-\allowbreak{}range} and \texttt{+-\/-
 <output-dir>/eos_scan.json   the plan: structure, volumes, forced directives
 \end{codeblock}
 
-It does not run SIESTA. Run each folder (\texttt{mpirun\ -np\ N\ siesta\ calc.\allowbreak{}fdf\ \textgreater{}\ calc.\allowbreak{}out}) and call
-Stage 2. Pseudopotentials follow the suite\textquotesingle s convention (\texttt{-p\ dojo}, \texttt{-p\ virtual\_\allowbreak{}vault} or a folder path;
+It does not run SIESTA. Run each folder (\texttt{mpirun\ -\allowbreak{}np\ N\ siesta\ calc.\allowbreak{}fdf\ \textgreater{}\ calc.\allowbreak{}out}) and call
+Stage 2. Pseudopotentials follow the suite\textquotesingle s convention (\texttt{-\allowbreak{}p\ dojo}, \texttt{-\allowbreak{}p\ virtual\_\allowbreak{}vault} or a folder path;
 the same as \texttt{stb-\allowbreak{}optical}, \texttt{stb-\allowbreak{}inputfile}, ...), and the interactive menu asks for them with the same prompt.
 
 \paragraph{\texorpdfstring{3.2 \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}: everything mandatory, the template untouched}{3.2 config\_extra.fdf: everything mandatory, the template untouched}}\label{g5.15-32-config_extrafdf-everything-mandatory-the-template-untouched}
@@ -38203,16 +38405,37 @@ Printed where they apply and repeated at the end of the report:
   number of volumes (no point at the input volume).
 \end{itemize}
 
-\paragraph{3.5 Bulk only, and the crystal system}\label{g5.15-35-bulk-only-and-the-crystal-system}
+\paragraph{\texorpdfstring{3.5 Bulk, 2D materials and wires; the crystal system}{3.5 Bulk, 2D materials and wires; the crystal system}}\label{g5.15-35-bulk-only-and-the-crystal-system}
 
-A vacuum-padded structure (slab, wire, molecule) has no bounded cell volume: it is refused with an
-error. For a non-cubic crystal the report adds the \emph{constrained-path} note of Section 1.9 and records the crystal
+Since 2.0.1 a structure with vacuum is scanned too, by scaling \textbf{only its periodic lattice vectors}:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2258}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3145}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1371}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3226}}@{}}
+\toprule\noalign{}
+Vacuum along & Scaled & \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} is & Stage 2 reports \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+no axis (bulk) & a, b, c by \texttt{(1+s)\^{}(1/\allowbreak{}3)} & a volume strain & \texttt{V0}, \texttt{B0} (GPa) \\
+one axis (2D material, slab) & the two periodic vectors by \texttt{(1+s)\^{}(1/\allowbreak{}2)} & an \textbf{area} strain & equilibrium area and in-plane lattice vectors, in-plane stiffness \texttt{A\ d2E/\allowbreak{}dA2} in \textbf{N/m} \\
+two axes (wire) & the periodic vector by \texttt{(1+s)} & a \textbf{length} strain & equilibrium length, axial stiffness \texttt{L\ d2E/\allowbreak{}dL2} in \textbf{nN} \\
+\end{longtable}
+\endgroup
+
+The vacuum vector is not touched, so the cell volume is the area (length) times a constant and the same
+\texttt{E(V)} machinery fits it; Stage 2 converts the result back and says that \texttt{V0} (Ang\^{}3) and \texttt{B0} (GPa)
+include the vacuum and are not material properties. The pressure cross-check uses the stress conjugate to
+the scan (the mean in-plane stress for a 2D material). For an isotropic sheet the in-plane stiffness equals
+\texttt{(C11\ +\ C12)/\allowbreak{}2} of the 2D elastic tensor of \texttt{stb-\allowbreak{}elasticAnalysis}. The atoms keep their fractional
+coordinates: a buckled or multi-layer sheet whose thickness should respond needs \texttt{-\/-\allowbreak{}relax-\allowbreak{}positions}.
+A molecule (vacuum along three axes) is refused. For a non-cubic crystal the report adds the \emph{constrained-path} note of Section 1.9 and records the crystal
 system in \texttt{eos\_\allowbreak{}scan.\allowbreak{}json}, from where Stage 2 repeats it.
 
 \paragraph{3.6 Validation}\label{g5.15-36-validation}
 
 \texttt{-\/-\allowbreak{}n-\allowbreak{}volumes} below 5 and a \texttt{-\/-\allowbreak{}strain-\allowbreak{}range} outside (0, 40) \% are rejected; a missing \texttt{-\/-\allowbreak{}file},
-an explicit \texttt{-c} that does not exist, an unknown \texttt{-p} source, and a vacuum-padded structure all exit
+an explicit \texttt{-\allowbreak{}c} that does not exist, an unknown \texttt{-\allowbreak{}p} source, and a molecule (no periodic axis) all exit
 with a clear \texttt{{[}ERROR{]}}.
 
 \paragraph{3.7 Running it both ways}\label{g5.15-37-running-it-both-ways}
@@ -38695,8 +38918,8 @@ per volume depending on the setup (the denser k-grid, finer mesh and TZP basis a
   \textbf{Isotropic scaling.} For non-cubic crystals the result is the modulus along the constrained path; the tool says so
   but does not relax the shape. Section 1.9.
 \item
-  \textbf{Bulk only.} A vacuum-padded cell is refused; layered materials with van der Waals gaps are bulk --- use \texttt{-\/-\allowbreak{}d3} in
-  the template and expect \texttt{B0\textquotesingle{}} and the c-axis to need care.
+  \textbf{Layered materials with van der Waals gaps are bulk} --- use \texttt{-\/-\allowbreak{}d3} in the template and expect \texttt{B0\textquotesingle{}} and the
+  c-axis to need care. A single layer with vacuum is a 2D scan (Section 3.5), not shown with real runs in this example.
 \item
   \textbf{\texttt{B0\textquotesingle{}} is poorly determined} by a narrow scan (it describes the asymmetry of the curve); do not quote it
   to more than two figures and do not over-interpret differences between setups of 0.1--0.2.
@@ -38916,7 +39139,7 @@ usage: stb-eosInputs [-h] -f FILE [-c FDF] [-p PSEUDO_DIR] [--n-volumes N_VOLUME
 \optitem{-{}-kgrid NX NY NZ}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--kgrid@\texttt{--kgrid}}Force this SCF k-grid in every folder (\texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}), over the template's.\optmeta{type: int}}
 \optitem{-{}-kgrid-\allowbreak{}density D}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--kgrid-density@\texttt{--kgrid-density}}Force an SCF k-grid of this density, 1/Ang (as \texttt{stb-\allowbreak{}kgrid}), over the template's. Without \texttt{-{}-kgrid}/\texttt{-{}-kgrid-\allowbreak{}density} the template's own grid is kept; if it has none, one of density 0.2 is forced (SIESTA would sample Gamma only).\optmeta{type: float}}
 \optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--output-dir@\texttt{--output-dir}}Directory for the 'vol\_\textless{}pct\textgreater{}' folders (default: eos\_runs).}
-\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes -- bulk only, a vacuum-padded structure is rejected (default: 10.0).\optmeta{type: float}}
+\optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--vacuum-gap@\texttt{--vacuum-gap}}Gap (Ang) used to detect vacuum-padded axes (default: 10.0). With vacuum along one axis (2D material, slab) only the two periodic vectors are scaled and \texttt{-{}-strain-\allowbreak{}range} is an AREA strain; with vacuum along two (wire), only the periodic one and it is a LENGTH strain. A molecule (three) is rejected.\optmeta{type: float}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--save-report@\texttt{--save-report}}Also persist the report to \textless{}output-dir\textgreater{}/\texttt{stb\_\allowbreak{}eosInputs\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
@@ -47648,7 +47871,7 @@ usage: stb-mlphonons [-h] --file FILE [--model {small,medium,large}]
 \optitem{-{}-tmax TMAX}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--tmax@\texttt{--tmax}}Max temperature, K (default: 1000).\optmeta{type: float}}
 \optitem{-{}-tstep TSTEP}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--tstep@\texttt{--tstep}}Temperature step, K (default: 10).\optmeta{type: float}}
 \optitem{-{}-qha}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--qha@\texttt{--qha}}Quasi-harmonic approximation instead of a single-volume calculation: scans \texttt{-{}-n-\allowbreak{}volumes} isotropically-scaled volumes and fits an equation of state (thermal expansion, bulk modulus, Cp and Grueneisen parameters vs. T, mode Grueneisen parameters). No foundation-model comparison in this mode. Off by default.\optmeta{switch, off by default}}
-\optitem{-{}-n-\allowbreak{}volumes N\_\allowbreak{}VOLUMES}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--n-volumes@\texttt{--n-volumes}}Number of volume points for \texttt{-{}-qha}, \textgreater{}= 4 (default: 5).\optmeta{type: int}}
+\optitem{-{}-n-\allowbreak{}volumes N\_\allowbreak{}VOLUMES}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--n-volumes@\texttt{--n-volumes}}Number of volume points for \texttt{-{}-qha}, \textgreater{}= 5 (default: 5).\optmeta{type: int}}
 \optitem{-{}-strain-\allowbreak{}range STRAIN\_\allowbreak{}RANGE}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--strain-range@\texttt{--strain-range}}Volume range around equilibrium for \texttt{-{}-qha}, +/- \% (default: 3.0).\optmeta{type: float}}
 \optitem{-{}-eos \{vinet,\allowbreak{}murnaghan,\allowbreak{}birch\_murnaghan\}}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--eos@\texttt{--eos}}Equation of state for \texttt{-{}-qha} (default: vinet).\optmeta{choices: vinet, murnaghan, birch\_murnaghan}}
 \optitem{-{}-check-\allowbreak{}convergence}{\index{stb-mlphonons@\texttt{stb-mlphonons}!--check-convergence@\texttt{--check-convergence}}Instead of a single-volume calculation, run the same pipeline at multiple supercell sizes (\texttt{-{}-convergence-\allowbreak{}dims}) and compare them with the largest one along the band path and at the special points (RMSE, largest difference), plus heat capacity, entropy and ZPE -- MACE is cheap enough to check \texttt{-{}-dim} convergence directly, unlike DFT. Not supported together with \texttt{-{}-qha}. Off by default.\optmeta{switch, off by default}}
@@ -48827,7 +49050,8 @@ set & what & runs \\
 \end{longtable}
 \endgroup
 
-\texttt{stb-\allowbreak{}elasticInputs} writes single points only; for relaxed ions each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} is replaced by
+These runs were made with 2.0.0, whose \texttt{stb-\allowbreak{}elasticInputs} wrote single points only (\texttt{-\/-\allowbreak{}ions\ clamped} since 2.0.1,
+where \texttt{-\/-\allowbreak{}ions\ both\ -\/-\allowbreak{}fmax\ 0.\allowbreak{}001} writes the two series directly); for relaxed ions each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} is replaced by
 \texttt{config\_\allowbreak{}extra\_\allowbreak{}relaxed.\allowbreak{}fdf} (\texttt{MD.\allowbreak{}TypeOfRun\ CG}, \texttt{MD.\allowbreak{}MaxForceTol\ 0.\allowbreak{}001\ eV/\allowbreak{}Ang}, \texttt{MD.\allowbreak{}VariableCell\ false}) --- the
 first-occurrence-wins \texttt{\%include} at the top of \texttt{calc.\allowbreak{}fdf} makes it override everything else.
 
@@ -48835,7 +49059,7 @@ first-occurrence-wins \texttt{\%include} at the top of \texttt{calc.\allowbreak{
 curvature of the energy:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2447}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2659}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4894}}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2121}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3485}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4394}}@{}}
 \toprule\noalign{}
 GPa & from the stress & from the energy \\
 \midrule\noalign{}
@@ -48868,7 +49092,7 @@ GPa & from the stress & from the energy \\
 \textbf{SIESTA, the model and experiment} (\texttt{siesta\_\allowbreak{}compare.\allowbreak{}py}; ranges are stress / energy route):
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1823}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1436}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1657}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1657}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1657}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1768}}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2234}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1383}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1064}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1596}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.1596}}>{\raggedright\arraybackslash}p{(\linewidth - 12\tabcolsep) * \real{0.2128}}@{}}
 \toprule\noalign{}
 GPa & SIESTA & fine-tuned & model vs SIESTA & experiment {[}15{]} & SIESTA vs experiment \\
 \midrule\noalign{}
@@ -52189,6 +52413,326 @@ commands outside the menu) and the first sentence of its description.
 \end{longtable}
 \endgroup
 
+
+\chapter{Changes in version 2.0.1}\label{app-changes-201}
+Version 2.0.1 is the bug-fix release that follows 2.0.0; at the time of writing it is the content of the \texttt{dev} branch and has not been tagged. This appendix is the 2.0.1 section of \texttt{stb-suite/CHANGELOG.md}: what was fixed, the defaults and behaviours that differ from 2.0.0 (several of them change generated inputs or reported numbers), and the options that are new. The tool chapters describe the tools as they are in 2.0.1.
+
+\section{Fixed}
+
+\begin{itemize}
+\item
+  \texttt{stb-\allowbreak{}bader} did not start on a fresh install ("pybader library not found", also for \texttt{-\/-\allowbreak{}version}):
+  pybader 0.3.12 imports \texttt{pkg\_\allowbreak{}resources}, which setuptools 81 and later no longer ship. The suite
+  now gives pybader what it needs from the standard library, so any setuptools version works. When
+  an installed dependency fails to import, the message shows the original error instead of telling
+  you to install it again.
+\item
+  Elastic constants (5.2), \texttt{-\/-\allowbreak{}symmetry-\allowbreak{}method\ full} and \texttt{-\/-\allowbreak{}method\ energy}: a cubic crystal with
+  numerical noise in its cell (a relaxed structure, 3e-6 Ang) got one strain direction, \texttt{xx}, instead
+  of two, and \texttt{stb-\allowbreak{}elasticAnalysis} then printed a shear constant with no meaning (Si: C44 = -6288 GPa,
+  E = 941 GPa, Poisson -1.26) with zero quality warnings.
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{stb-\allowbreak{}elasticInputs} now builds the symmetry operations from the cell with the symmetry made exact,
+    and counts a constant as determined by a direction only when that direction reaches it through a
+    response no more than 100 times weaker than the direct ones. The choice of directions no longer
+    depends on the noise (tested up to 1e-3 Ang on cubic, hexagonal and triclinic cells).
+  \item
+    \texttt{stb-\allowbreak{}elasticAnalysis} stops with an \texttt{{[}ERROR{]}} when the folders that were run leave open a constant
+    it reports, names those constants and the directions to add. Before, this was a warning in 3D,
+    silent in 2D, and the tensor was printed anyway. Constants the report never shows (out of plane in
+    2D) may stay open, as before.
+  \item
+    Folders made by 2.0.0 for a cubic crystal with only \texttt{xx}: run \texttt{stb-\allowbreak{}elasticInputs\ -\/-\allowbreak{}dirs\ xy} (or
+    \texttt{yz}) for the missing shear direction; the \texttt{xx} folders stay valid.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}slab}: the cell\textquotesingle s c vector was in general not perpendicular to the surface (fcc primitive
+  cell, (111): 35.3 degrees off), so the surface was tilted with respect to the xy plane, while
+  everything that follows takes z as the normal: \texttt{stb-\allowbreak{}adsorb} places the adsorbate along z, SIESTA\textquotesingle s
+  slab dipole correction acts along the vacuum axis, and the thickness and vacuum in the report were
+  measured along z (Ag(111), 5 layers: 11.70 Ang printed, 9.55 Ang real).
+
+  \begin{itemize}
+  \tightlist
+  \item
+    The slab is now written with c along the surface normal, a along x and b in the xy plane. Only c
+    changes, to its component along the normal: the atoms, the in-plane cell and the vacuum are the
+    same (checked on fcc, diamond, quartz and a triclinic cell: every interatomic distance is kept).
+    The report lists the three cell vectors and the angle the generated c made with the normal.
+  \item
+    Thickness and vacuum are measured along the normal, also in the termination table of \texttt{-\allowbreak{}i}.
+  \item
+    A slab whose generated cell already had c along the normal is written exactly as before. For any
+    other, the file differs from the one 2.0.0 wrote: same slab, different cell.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}adsorb} (also \texttt{stb-\allowbreak{}mladsorb} and every tool that detects vacuum): a slab with exactly the
+  threshold of vacuum (10 Ang by default) was rejected as "no vacuum axis", because the gap read back
+  from the file is 9.99999 Ang. Gaps within 0.01 Ang of the threshold now count, and the error of
+  \texttt{stb-\allowbreak{}adsorb} gives the gap measured along each axis and the \texttt{-\/-\allowbreak{}vacuum-\allowbreak{}gap} value to pass.
+\item
+  \texttt{stb-\allowbreak{}adsorb} with a \texttt{-\/-\allowbreak{}calc} that has no \texttt{kgrid.\allowbreak{}MonkhorstPack\ {[}nx\ ny\ nz{]}} line ended in a Python
+  traceback; it is a clean error now.
+\item
+  DFT-D3 and the stress tensor: SIESTA 5.4.2 writes the D3 contribution to the stress with the wrong
+  sign (Ag and Cu, 13 volumes: P(D3) - P(PBE) = +4.75 GPa where -dE\_D3/dV = -4.75 GPa; energies and
+  forces are right). The defect is SIESTA\textquotesingle s, but the suite used that stress with no notice. It now
+  warns wherever the stress of a D3 run is used:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{stb-\allowbreak{}mlffAnalysis} trained on the stress by default (weight 10000) with wrong stress labels: it
+    warns and recommends \texttt{-\/-\allowbreak{}no-\allowbreak{}stress-\allowbreak{}training} when the labels include D3 and the logs are from an
+    affected version (or the version cannot be read).
+  \item
+    \texttt{stb-\allowbreak{}eosAnalysis}: the pressure cross-check \texttt{{[}5{]}} says that P\_SIESTA and the B0 from the stress are
+    not reliable for these runs, and that V0 and B0 from the energies are.
+  \item
+    \texttt{stb-\allowbreak{}elasticAnalysis\ -\/-\allowbreak{}method\ stress}: warns and points to \texttt{-\/-\allowbreak{}method\ energy}.
+  \item
+    \texttt{stb-\allowbreak{}convergence} (every folder relaxes the cell) and \texttt{stb-\allowbreak{}inputfile\ -\allowbreak{}t\ relax\ -\allowbreak{}d3}: warn that the
+    cell relaxes to the wrong volume with that version.
+  \end{itemize}
+\item
+  MACE tools on a CPU-only node with an old NVIDIA driver: torch\textquotesingle s \texttt{UserWarning:\ CUDA\ initialization:\ The\ NVIDIA\ driver\ on\ your\ system\ is\ too\ old} no longer reaches the output or the report\textquotesingle s library
+  warnings (it made the \texttt{stb-\allowbreak{}mlmd} test fail). A run that asks for the GPU still gets its own error.
+\item
+  \texttt{stb-\allowbreak{}strainAnalysis} said "slope under a clamped transverse cell" and "transverse stress
+  (diagnostic, clamped cell)" also for runs made with \texttt{stb-\allowbreak{}strain\ -\/-\allowbreak{}relax-\allowbreak{}mode\ stress-\allowbreak{}constrained},
+  where the transverse cell relaxes and the slope is Young\textquotesingle s modulus. It now reads the mode from each
+  folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, words the report accordingly, and for the relaxed mode gives Poisson\textquotesingle s
+  ratio from the transverse strain of the final cells (\texttt{*.\allowbreak{}STRUCT\_\allowbreak{}OUT}).
+\item
+  \texttt{stb-\allowbreak{}cohesive}: the log called the whole \texttt{-\/-\allowbreak{}vacuum} a "buffer beyond the outermost atom" and, lines
+  below, half of it; the first line now says what the value is (the vacuum gap between images, box
+  side = 2 x cutoff + vacuum) and the buffer per side.
+\item
+  Example 5.3 (cohesive energy): the orbital radius \texttt{rc\ =\ 7.\allowbreak{}12} read from \texttt{calc.\allowbreak{}out} is in Bohr (3.77
+  Ang), not Angstrom, so the old box did not let periodic images overlap; the text is corrected. The
+  README now shows the ghost-cutoff scan up to 12 Ang: the corrected GaAs value at 6 Ang (-3.1741
+  eV/atom) is not converged (-3.0514 at 12 Ang).
+\item
+  \texttt{stb-\allowbreak{}mlelastic} on a 2D material (or a 1D one, or 3D with missing directions): the clamped-ion scan
+  was run (twice the evaluations) but its table, \texttt{INTERNAL\ RELAXATION\ (clamped\ vs\ relaxed\ ions)}, was
+  printed only for a complete 3D tensor. It is printed for every dimensionality now.
+\item
+  \texttt{stb-\allowbreak{}opticalAnalysis} called graphene "dielectric (non-metallic)" with an absorption edge at 0.25 eV
+  when the run folder had no \texttt{\textless{}label\textgreater{}.\allowbreak{}EIG} to read the Kohn-Sham gap from: the edge came from the
+  finite k-mesh and the 0.1 eV broadening. An onset below 3 x the broadening (at least 0.3 eV), or a
+  Kohn-Sham gap below the broadening, is now reported as "gap not resolved": no dielectric
+  classification, no Tauc gap, and a warning that the spectrum below about twice the broadening is
+  not reliable. A missing \texttt{.\allowbreak{}EIG} is said.
+\item
+  \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha\ -\/-\allowbreak{}n-\allowbreak{}volumes\ 4} was accepted and failed at the very end, after every volume had
+  been computed (\texttt{At\ least\ 5\ volume\ points\ are\ needed\ to\ fit\ S(V)}). The minimum is 5 and the option
+  is checked before anything runs.
+\item
+  \texttt{stb-\allowbreak{}eosAnalysis} warned \texttt{B0\textquotesingle{}\ within\ 4.\allowbreak{}5-\allowbreak{}7.\allowbreak{}0} for ordinary fits (Si: 4.25-4.47 with R\^{}2 0.999998), so
+  the warning appeared in almost every run. The accepted range is 3.0-7.0, and the message says what a
+  value outside it means (a scan too narrow or noisy to fix B0\textquotesingle), not that the fit is wrong.
+\item
+  Test of \texttt{stb-\allowbreak{}crystalcast\ -\/-\allowbreak{}ml-\allowbreak{}rank} without the \texttt{ml} extra: the tool does exit with code 1 and the
+  install hint; the test read the exit code after an \texttt{if} and an \texttt{echo}, so it always saw 0.
+\item
+  \texttt{stb-\allowbreak{}nebCycle} on a band whose images coincide (identical initial and final states) wrote the next
+  cycle and ended with \texttt{Success} and exit code 0: its guard only caught NaN forces, which ASE does not
+  produce in that case. The geometries are now checked before any step: neighbouring images closer
+  than 0.001 Ang stop the cycle with an \texttt{{[}ERROR{]}} and exit code 1, and no folder is written.
+\item
+  \texttt{stb-\allowbreak{}mlneb} with identical endpoints (or two inputs that relax into the same minimum) ended in
+  \texttt{numpy.\allowbreak{}linalg.\allowbreak{}LinAlgError:\ Singular\ matrix}. It now stops with a message: nearly identical states,
+  no barrier along this band.
+\item
+  \texttt{stb-\allowbreak{}mlneb\ -\/-\allowbreak{}siesta-\allowbreak{}check/\allowbreak{}-\/-\allowbreak{}to-\allowbreak{}mlff\ -\/-\allowbreak{}mlff-\allowbreak{}workflow}: a workflow whose reference structure file is
+  missing gave a Python \texttt{FileNotFoundError}; it is a clean error naming the file. (In the test suite
+  the file was missing because three tests still pointed to fixture folders by their numbers from
+  before the 2026-10-31 renumbering; fixed.)
+\item
+  \texttt{stb-\allowbreak{}mlmd}: the initial velocities are rescaled to exactly the temperature asked for (a
+  Maxwell-Boltzmann draw of 72 atoms gave 263.5 K for 300 K). Trajectories with the same seed
+  therefore differ from 2.0.0\textquotesingle s. The lines \texttt{Initial\ state} / \texttt{Final\ state} printed a potential energy
+  as \texttt{E\ =\ .\allowbreak{}.\allowbreak{}.\allowbreak{}}, which read as a 1.27 eV change of the total energy in an NVE run: they now give E\_pot,
+  E\_kin and E\_tot. An NVE run from an equilibrium geometry whose mean temperature ends below 75 \% of
+  \texttt{-\/-\allowbreak{}temperature} (equipartition halves it) gets a warning in the final section, with what to do.
+\end{itemize}
+
+\section{Changed}
+
+\begin{itemize}
+\item
+  \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}parameter\ energyshift}: the default sweep is the geometric set 0.02, 0.01, 0.005,
+  0.002, 0.001, 0.0005 Ry (\texttt{-\/-\allowbreak{}energyshift-\allowbreak{}values} for another). The old linear default, 0.001 to 0.05 in
+  steps of 0.01, had no point between 0.001 and 0.011 Ry, the range in use, while the parameter acts
+  logarithmically. \texttt{-\/-\allowbreak{}energyshift-\allowbreak{}range\ MIN\ MAX\ STEP} still gives a linear sweep.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis} no longer judges a PAO.EnergyShift sweep by the total energy, which has no
+  practical plateau in this parameter (0.01 to 1.5 eV/atom between 0.011 and 0.001 Ry, not monotonic for
+  graphene): the verdict was always "not converged" or the smallest value. It uses the relaxed volume,
+  says so, and tabulates the smallest and largest orbital cutoff radius of each run.
+\item
+  \textbf{The generated \texttt{calc.\allowbreak{}fdf} no longer turns the orbital filter on.} The templates of \texttt{stb-\allowbreak{}inputfile}
+  (all four types) and \texttt{stb-\allowbreak{}cohesive} wrote \texttt{FilterCutoff\ 150\ Ry}, which makes SIESTA filter the basis
+  orbitals (effective cutoff 73.5 Ry): the basis changes with it, and E(V) gets noisy. Cu and Al (PBE,
+  DZP, 9 volumes): fit residual 2.13 and 1.43 meV/atom with the line, 0.11 and 0.07 without; Cu V0
+  11.715 -\textgreater{} 11.904 Ang\^{}3 (all-electron 11.951) and B0 128 -\textgreater{} 141 GPa (141.3); Al B0 71 -\textgreater{} 80 GPa (78.1).
+  Doubling \texttt{Mesh.\allowbreak{}Cutoff} or the k-grid did not help. The line is now written commented out.
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \textbf{Numbers change} for every input generated from now on (large for Al and Cu, medium for Ag, none
+    for Si, graphene, hBN).
+  \item
+    Without the filter \texttt{Mesh.\allowbreak{}Cutoff} has to be converged per system: 350 Ry is enough for Si, NaCl, Al,
+    Cu, Ag, graphene and hBN, but Ge and GaAs need about 500 Ry (V0 at 350 vs 1000 Ry: GaAs +0.56 \%).
+  \item
+    A template that still has \texttt{FilterCutoff}/\texttt{FilterTol} gets a warning from \texttt{stb-\allowbreak{}eosInputs},
+    \texttt{stb-\allowbreak{}eosAnalysis} (which also names the filter among the causes of a large fit residual),
+    \texttt{stb-\allowbreak{}elasticInputs} and \texttt{stb-\allowbreak{}convergence}.
+  \end{itemize}
+\item
+  \textbf{\texttt{stb-\allowbreak{}cohesiveAnalysis} uses the Kohn-Sham energy E\_KS, not SIESTA\textquotesingle s \texttt{FreeEng}.} \texttt{FreeEng} includes
+  -T*S of the electronic smearing, and an open-shell isolated atom with degenerate orbitals has
+  fractional occupations at \texttt{ElectronicTemperature\ 300\ K}: -49.4 meV for Si (p2) and Ga (p1), 0 for As
+  and Ag, 0 for a gapped solid. The cohesive energy then depended on a smearing temperature that is not
+  physical (Si: -4.5138 with FreeEng, -4.5632 eV/atom with E\_KS; GaAs 25 meV/atom).
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \textbf{Numbers change}: cohesive energies of systems with such atoms come out more negative than in
+    2.0.0. \texttt{-\/-\allowbreak{}energy\ free} gives the 2.0.0 values; \texttt{-\/-\allowbreak{}energy\ zero} the T -\textgreater{} 0 extrapolation
+    (E\_KS + FreeEng)/2.
+  \item
+    New section \texttt{{[}2b{]}\ ENERGIES\ USED}: the convention, and E\_KS, FreeEng and -T\emph{S of every run, with a
+    warning when a reference has \textbar T}S\textbar{} above 1 meV.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}stackingfault\ -\/-\allowbreak{}scan\ surface}: the default grid is 6 x 6 on a hexagonal lattice (7 x 7 on any
+  other, as before). The AB/BA registries of a hexagonal bilayer are at shifts (1/3, 2/3) and
+  (2/3, 1/3), which a 7 x 7 grid does not contain: the reported minimum was 0.8 meV above the exact AB
+  and the corrugation 3.62 instead of 3.78 meV/Ang\^{}2. A grid that is not a multiple of 3 on such a
+  lattice now warns, in the prep and in \texttt{stb-\allowbreak{}stackingfaultAnalysis}. \texttt{-\allowbreak{}ny} defaults to \texttt{-\allowbreak{}nx}.
+\item
+  \texttt{stb-\allowbreak{}phononsPos} and \texttt{stb-\allowbreak{}mlphonons} use a Gamma-centred q-mesh. phonopy shifts an even mesh by half
+  a step, and on a hexagonal lattice that mesh loses the point group (\texttt{-\allowbreak{}m\ 30\ 30\ 1}:
+  \texttt{MeshSymmetryFallbackWarning}, only time reversal used). Thermal properties change in the last
+  digits (graphene, 30x30x1: zero-point energy 170.64 -\textgreater{} 170.63 meV/atom). \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}shifted-\allowbreak{}mesh} gives the old mesh.
+\item
+  Supported Python versions are 3.10 to 3.12 (\texttt{requires-\allowbreak{}python} now says so). 3.9 was listed but never
+  worked: phonopy does not build there, so \texttt{pip\ install} failed late with an unrelated-looking build
+  error; pip now refuses at once with the reason.
+\item
+  \textbf{Elastic constants (5.2) are relaxed-ion by default.} \texttt{stb-\allowbreak{}elasticInputs} used to force a single
+  point in every folder, so the workflow could only give clamped-ion constants, while \texttt{stb-\allowbreak{}mlelastic}
+  relaxes the atoms: the same strain gave two different quantities with no notice. In a crystal with
+  an atom off an inversion centre (diamond, zincblende, graphene, hBN, wurtzite, perovskites) the
+  strain leaves forces on the atoms (Si \texttt{xy} at 2 \%: 0.39 eV/Ang) and the measured constant is the
+  relaxed one (Si C44: 102 GPa clamped, 75 GPa relaxed; graphene C12 +23 \%).
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{stb-\allowbreak{}elasticInputs\ -\/-\allowbreak{}ions\ relaxed\textbar{}clamped\textbar{}both} (default \texttt{relaxed}): the cell stays fixed at the
+    imposed strain; \texttt{relaxed} writes a CG relaxation into \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (\texttt{-\/-\allowbreak{}relax-\allowbreak{}steps}, 200;
+    \texttt{-\/-\allowbreak{}fmax}, 0.01 eV/Ang), \texttt{clamped} the single point 2.0.0 wrote, \texttt{both} the two series in
+    \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}relaxed} and \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}clamped}. It holds for \texttt{-\/-\allowbreak{}method\ stress} and
+    \texttt{-\/-\allowbreak{}method\ energy}. Also asked by the menu (5.2.1).
+  \item
+    \textbf{To get the inputs 2.0.0 generated, pass \texttt{-\/-\allowbreak{}ions\ clamped}.}
+  \item
+    \texttt{stb-\allowbreak{}elasticAnalysis} has a new section \texttt{{[}0b{]}}: whether the folders are clamped- or relaxed-ion
+    (read from each log), the CG moves and the last maximum force per direction. It warns when a
+    relaxation stopped before its force tolerance, when the folders mix the two kinds, when a folder
+    ran with a variable cell, and, for clamped-ion runs, when a strained cell shows a force above
+    0.05 eV/Ang (the constants are then not the measured ones). The summary states the kind.
+  \item
+    It writes the fitted tensor to \texttt{elastic\_\allowbreak{}constants.\allowbreak{}json} in the run directory and, for the two
+    series of \texttt{-\/-\allowbreak{}ions\ both} (or \texttt{-\/-\allowbreak{}compare-\allowbreak{}with\ DIR}), prints relaxed minus clamped for every
+    reported constant: the internal-relaxation contribution.
+  \item
+    The stress and the energy were already read from the last geometry of each log, so folders
+    relaxed by hand (a replaced \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}) give the same numbers as before.
+  \end{itemize}
+\end{itemize}
+
+\section{Added}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}parameter\ basis} and its report in \texttt{stb-\allowbreak{}convergenceAnalysis}: basis-set convergence
+  by equations of state, in three stages (\texttt{-\/-\allowbreak{}basis-\allowbreak{}stage\ mesh\ \textbar{}\ range\ \textbar{}\ size}). Each setting is judged by
+  the equilibrium volume (2D: area) of an E(V) scan of 9 single points, not by the total energy:
+  \texttt{mesh} scans Mesh.Cutoff 350-1000 Ry at PAO.EnergyShift 0.002 Ry, \texttt{range} scans PAO.EnergyShift
+  0.02-0.0005 Ry at \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff}, \texttt{size} compares the template\textquotesingle s PAO.BasisSize with the next one at
+  \texttt{-\/-\allowbreak{}mesh-\allowbreak{}cutoff} and \texttt{-\/-\allowbreak{}energyshift}. The analysis fits every scan, gives the verdict of each stage (the
+  first setting within 0.2 \% / 0.5 \% / 1 \% of the next two), lists the orbital radii and the fit
+  residual, warns about an active orbital filter and a range that does not close, and prints the command
+  of the next stage. \texttt{-\/-\allowbreak{}reference-\allowbreak{}v0} compares with an all-electron volume.
+\item
+  \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}single-\allowbreak{}point}: every folder is a single point at the input geometry, so that only
+  the swept parameter changes (by default each value relaxes positions and cell, which mixes the
+  parameter\textquotesingle s effect with the relaxation\textquotesingle s noise).
+\item
+  \texttt{stb-\allowbreak{}eosInputs} / \texttt{stb-\allowbreak{}eosAnalysis} accept 2D materials and wires. A structure with vacuum was
+  refused ("bulk only"), and area scans had to be built by hand. Now only the periodic lattice vectors
+  are scaled (\texttt{-\/-\allowbreak{}strain-\allowbreak{}range} is an area strain for a 2D material, a length strain for a wire; the
+  vacuum vector is not touched), and Stage 2 reports the equilibrium area and in-plane lattice vectors
+  with the in-plane stiffness \texttt{A\ d2E/\allowbreak{}dA2} in N/m (wire: length, axial stiffness in nN). Its pressure
+  cross-check uses the stress conjugate to the scan. Bulk structures are handled exactly as before.
+\item
+  \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}optimizer\ cg\textbar{}broyden\textbar{}fire}, \texttt{-\/-\allowbreak{}force-\allowbreak{}tol}, \texttt{-\/-\allowbreak{}max-\allowbreak{}displ}: relaxation settings written
+  into every folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (default: whatever \texttt{-\/-\allowbreak{}calc} sets). A weakly bound molecule on a
+  metal is ill-conditioned for SIESTA\textquotesingle s CG: H2O on Ag(111) 3x3 was still at 0.03-1.3 eV/Ang after
+  130-146 steps (11 h on 32 cores). With a molecular adsorbate and a CG template the tool now says so.
+\item
+  \texttt{stb-\allowbreak{}adsorbAnalysis} warns about every run (clean slab or site) that ended at the step limit without
+  reaching the force tolerance. SIESTA ends such a job normally (\texttt{0\_\allowbreak{}NORMAL\_\allowbreak{}EXIT}), and the energy was
+  used as if it were a minimum.
+\item
+  \texttt{stb-\allowbreak{}cohesive\ -\allowbreak{}c/\allowbreak{}-\/-\allowbreak{}calc\ FILE}: your own \texttt{calc.\allowbreak{}fdf} template for the full structure and every atomic
+  reference, so the whole study runs at one level of theory. Before, the tool wrote a fixed template
+  (\texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}) and any other choice meant editing every generated
+  \texttt{calc.\allowbreak{}fdf} by hand (127 files for 13 solids in one study), with nothing recorded in the report. The
+  template is copied untouched; what the workflow must impose goes into a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} included on
+  top of it: Spin polarized, a Gamma-only k-grid and a single point for the atomic references; \texttt{-\/-\allowbreak{}spin},
+  \texttt{-\/-\allowbreak{}dispersion} and the k-grid (only when the template has none, or \texttt{-\allowbreak{}k} is given) for the full
+  structure. The report lists the template\textquotesingle s level of theory. Without \texttt{-\/-\allowbreak{}calc} the generated files are
+  identical to 2.0.0\textquotesingle s. Also asked by the menu (5.3.1).
+\item
+  \texttt{stb-\allowbreak{}phononsPos}: section \texttt{{[}2{]}} reports how far the force constants are from the crystal\textquotesingle s symmetry
+  (largest change of a Gamma frequency when they are symmetrized by the space group) and warns above
+  0.05 THz, the sign of modes split that symmetry makes degenerate. \texttt{-\/-\allowbreak{}symmetrize-\allowbreak{}fc} applies the
+  symmetrization.
+\item
+  \texttt{stb-\allowbreak{}mlffValidate\ -\/-\allowbreak{}phonon-\allowbreak{}ref}: the phonon table now has a row for the foundation model next to
+  every round (it was given for the fine-tuned model only), says where the largest deviation is
+  (q-point and band), and gives the error twice, labelled: (a) on the q-mesh and (b) along the band
+  path a band plot shows. The two differ for the same model, and the report did not say which it was.
+\item
+  \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}fix-\allowbreak{}layers\ N} (\texttt{-\/-\allowbreak{}layer-\allowbreak{}tol}): holds the N lowest atomic layers of the slab fixed, with
+  the same \texttt{\%block\ Geometry.\allowbreak{}Constraints} in \texttt{clean\_\allowbreak{}slab/\allowbreak{}} and in every site folder. Before, the whole
+  slab always relaxed. Also asked by the menu (5.8.1).
+\item
+  \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}anchor-\allowbreak{}atom\ ATOM} (element or atom number): the atom of a molecular adsorbate that
+  faces the surface; \texttt{-\/-\allowbreak{}height} is then the height of that atom. Without it H2O is placed with the
+  hydrogens towards the surface, and the orientation could only be changed through \texttt{-\/-\allowbreak{}ml-\allowbreak{}rank}.
+\item
+  \texttt{stb-\allowbreak{}slab\ -\/-\allowbreak{}layers\ N}: the slab\textquotesingle s size as a number of atomic layers instead of a minimum thickness
+  in Angstrom, for a convergence series in layers (3, 4, 5, ...). The slab is cut thick enough and
+  layers are removed from its top until N are left; the bottom face is the chosen termination and the
+  vacuum is the same for every N. \texttt{-\/-\allowbreak{}layer-\allowbreak{}tol} (default 0.1 Ang) sets which atoms count as one
+  layer: a buckled plane, like the two halves of a Si(111) bilayer, is two layers unless the tolerance
+  is raised above its buckling. Also asked by the menu (4.3).
+\item
+  \texttt{stb-\allowbreak{}slab} reports the number of atomic layers of every slab it writes, the atoms in each and the
+  spacing between them.
+\end{itemize}
 
 \chapter{Units and conversion factors}\label{app-units}
 \begin{center}\small

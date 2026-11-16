@@ -382,7 +382,8 @@ points above gives `V0 = 40.666 Å³` against `40.659 Å³` of the fit. Three nu
 
 ### 3.1 What it does
 
-`stb-eosInputs` takes an **already relaxed** structure (`-f`, fractional coordinates, bulk only)
+`stb-eosInputs` takes an **already relaxed** structure (`-f`, fractional coordinates; a bulk solid, or a 2D
+material / wire, Section 3.5)
 and your `calc.fdf` template (`-c`, default `./calc.fdf`) and, for each of `--n-volumes` volumes
 between `−--strain-range` and `+--strain-range` percent, writes
 

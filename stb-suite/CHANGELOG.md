@@ -60,11 +60,15 @@ version before) and **Added** (new options and tools).
   - `stb-convergence` (every folder relaxes the cell) and `stb-inputfile -t relax -d3`: warn that the
     cell relaxes to the wrong volume with that version.
 
+- MACE tools on a CPU-only node with an old NVIDIA driver: torch's `UserWarning: CUDA initialization:
+  The NVIDIA driver on your system is too old` no longer reaches the output or the report's library
+  warnings (it made the `stb-mlmd` test fail). A run that asks for the GPU still gets its own error.
+
 ### Changed
 
 - Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never
-  worked: phonopy does not build there and the code uses 3.10 syntax, so `pip install` failed late with
-  an unrelated-looking build error; pip now refuses at once with the reason.
+  worked: phonopy does not build there, so `pip install` failed late with an unrelated-looking build
+  error; pip now refuses at once with the reason.
 
 - **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single
   point in every folder, so the workflow could only give clamped-ion constants, while `stb-mlelastic`

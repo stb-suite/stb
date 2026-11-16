@@ -215,6 +215,17 @@ def finish_progress_line() -> None:
         sys.stderr.flush()
 
 
+def ignore_cuda_probe_warning():
+    """On a CPU-only node with an old NVIDIA driver torch prints, at its first
+    CUDA probe, 'UserWarning: CUDA initialization: The NVIDIA driver on your
+    system is too old'. It says nothing a CPU run needs, and a run that asks
+    for the GPU gets its own clear error from mace_relax.resolve_device."""
+    warnings.filterwarnings("ignore", message=r"CUDA initialization", category=UserWarning)
+
+
+ignore_cuda_probe_warning()
+
+
 @contextlib.contextmanager
 def capture_library_noise(collector, label):
     """Captures stdout prints and warnings.warn() calls made by external
@@ -242,6 +253,7 @@ def capture_library_noise(collector, label):
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            ignore_cuda_probe_warning()
             with contextlib.redirect_stdout(buf):
                 yield
     finally:

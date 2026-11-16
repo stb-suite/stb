@@ -81,6 +81,13 @@ version before) and **Added** (new options and tools).
   was run (twice the evaluations) but its table, `INTERNAL RELAXATION (clamped vs relaxed ions)`, was
   printed only for a complete 3D tensor. It is printed for every dimensionality now.
 
+- `stb-opticalAnalysis` called graphene "dielectric (non-metallic)" with an absorption edge at 0.25 eV
+  when the run folder had no `<label>.EIG` to read the Kohn-Sham gap from: the edge came from the
+  finite k-mesh and the 0.1 eV broadening. An onset below 3 x the broadening (at least 0.3 eV), or a
+  Kohn-Sham gap below the broadening, is now reported as "gap not resolved": no dielectric
+  classification, no Tauc gap, and a warning that the spectrum below about twice the broadening is
+  not reliable. A missing `.EIG` is said.
+
 ### Changed
 
 - `stb-phononsPos` and `stb-mlphonons` use a Gamma-centred q-mesh. phonopy shifts an even mesh by half

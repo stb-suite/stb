@@ -465,6 +465,12 @@ def main():
                         help="Number of relaxation steps (MD.Steps) forced in "
                              "every generated folder (default: 100). Both atomic positions and "
                              "the cell relax (MD.VariableCell true).")
+    parser.add_argument("--max-stress-tol", type=float, default=0.02,
+                        help="Relaxation mode: MD.MaxStressTol forced in every folder, in GPa (default: 0.02). "
+                             "SIESTA's own default, 1 GPa, is ~1 %% of the volume of Si (B0 ~ 88 GPa) -- twice "
+                             "the 0.5 %% the analysis judges by -- and stopped most relaxations at the input cell.")
+    parser.add_argument("--max-force-tol", type=float, default=0.01,
+                        help="Relaxation mode: MD.MaxForceTol forced in every folder, in eV/Ang (default: 0.01).")
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
                         help="--parameter kgrid only: vacuum-axis detection threshold in Angstrom, "
                              "same meaning as stb-kgrid's --vacuum-gap (default: 10.0).")
@@ -643,7 +649,9 @@ def main():
         print_dual(f"Forced via '{EXTRA_FDF_FILE}' (prepended -- always wins) in every folder -- the "
                    "full structure (positions + cell) relaxes at each swept value:", f_out)
         forced_rows = [(["MD.TypeOfRun", "CG"], None), (["MD.Steps", str(args.relax_steps)], None),
-                       (["MD.VariableCell", "true (full relaxation: positions + cell)"], None)]
+                       (["MD.VariableCell", "true (full relaxation: positions + cell)"], None),
+                       (["MD.MaxStressTol", f"{args.max_stress_tol:g} GPa (SIESTA's default: 1 GPa)"], None),
+                       (["MD.MaxForceTol", f"{args.max_force_tol:g} eV/Ang"], None)]
     print_table(["Directive", "Forced value"], forced_rows + [
         (["Swept parameter", f"{', '.join(args.parameter)} -- one value per folder, see [5]"], None),
     ], f_out)
@@ -720,6 +728,8 @@ def main():
                     "MD.TypeOfRun       CG\n"
                     f"MD.Steps           {args.relax_steps}\n"
                     "MD.VariableCell    true\n"
+                    f"MD.MaxStressTol    {args.max_stress_tol:g} GPa\n"
+                    f"MD.MaxForceTol     {args.max_force_tol:g} eV/Ang\n"
                 )
 
             shutil.copy(args.structure, os.path.join(folder, structure_basename))

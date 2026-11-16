@@ -294,6 +294,27 @@ check_contains "Applied.*meshcutoff = 250.0000" log_menu_advanced.txt
 check_contains "Mesh.CutOff   250.0000 Ry" menu_apply_target.fdf
 
 
+# --- 10b. Relaxations that never moved the cell (SIESTA's 1 GPa default stress tolerance) ---
+echo -e "\n--- Testing: relaxation stopped at the input cell is flagged (P tolerance 1 GPa, V=input) ---"
+rm -rf es_relax
+CELL=$(awk '/%block LatticeVectors/{f=1;next} /%endblock LatticeVectors/{f=0} f' "$FIXTURE_DIR/convergence_meshcutoff_150.0000/structure.fdf")
+for pair in 0.0200:-500.90 0.0100:-500.95 0.0050:-500.97; do
+    v=${pair%%:*}; e=${pair##*:}
+    d=es_relax/energyshift/convergence_energyshift_$v
+    mkdir -p $d
+    cp "$FIXTURE_DIR/convergence_meshcutoff_150.0000/structure.fdf" $d/
+    printf 'PAO.EnergyShift %s Ry\nMD.TypeOfRun CG\nMD.Steps 100\nMD.VariableCell true\n' $v > $d/config_extra.fdf
+    { echo "Begin CG opt. move =      0"; echo "SCF cycle converged after 10 iterations"; echo "siesta: FreeEng =    $e";
+      echo "outcell: Unit cell vectors (Ang):"; echo "$CELL";
+      echo "siesta: Stress tensor (static) (eV/Ang**3):";
+      echo "siesta:     -0.005990    0.000000    0.000000"; echo "siesta:      0.000000   -0.005990    0.000000";
+      echo "siesta:      0.000000    0.000000   -0.005990"; } > $d/calc.out
+done
+stb-convergenceAnalysis --dir es_relax --no-intro > log_es_relax.txt 2>&1
+check_contains "Ptol=1GPa" log_es_relax.txt
+check_contains "V=input" log_es_relax.txt
+check_contains "relaxation(s) ended with exactly the input cell" log_es_relax.txt
+
 popd > /dev/null
 
 # --- 11. Summary ---

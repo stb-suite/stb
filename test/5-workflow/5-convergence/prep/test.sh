@@ -76,6 +76,9 @@ check_contains "Mesh.CutOff           250.0000  Ry" convergence_runs/meshcutoff/
 check_contains "MD.TypeOfRun       CG" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.Steps.*200" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.VariableCell    true" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
+# the relaxation closes on the stress too: SIESTA's own MD.MaxStressTol (1 GPa) stopped Si at its input cell
+check_contains "MD.MaxStressTol    0.02 GPa" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
+check_contains "MD.MaxForceTol     0.01 eV/Ang" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 # Pseudopotentials are always COPIED (shutil.copy2), never symlinked -- see
 # core/pseudopotentials.py's own module docstring (a symlink into a bundled
 # bank breaks the moment the folder is archived/rsynced elsewhere, e.g. to

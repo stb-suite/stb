@@ -128,6 +128,18 @@ version before) and **Added** (new options and tools).
     used to build the force constants. Same data: E2g 38.575 / 38.576 THz.
   - The force-constant symmetry check of `[2]` was skipped with phonopy 4.5 ('index 2 is out of
     bounds'): it needs the full force constants, which are now built for it.
+- `stb-convergence` (relaxation mode, the default): `config_extra.fdf` forced a variable-cell relaxation
+  but no stress tolerance, so SIESTA's default of 1 GPa applied -- about 1 % of the volume of Si (B0 ~
+  88 GPa), twice the 0.5 % the analysis judges by. On Si (DZP, 350 Ry) the relaxations from 0.0005 to
+  0.01 Ry stopped at their first step (0.96 GPa left at 0.0005 Ry) and the analysis tabulated the input
+  volume as the relaxed one.
+  - Every folder now gets `MD.MaxStressTol` (new `--max-stress-tol`, default 0.02 GPa) and
+    `MD.MaxForceTol` (new `--max-force-tol`, default 0.01 eV/Ang); `--single-point` is unchanged.
+  - `stb-convergenceAnalysis` reads the tolerance back and the final stress from each log, and flags
+    `P>tol` (stress left above the tolerance), `Ptol=1GPa` (no tolerance below SIESTA's default: folders
+    from earlier versions) and `V=input` (the cell never moved under a loose tolerance). Those runs are
+    left out of the volume verdict, with a `[WARNING]`; when every run is one of them there is no verdict.
+    Regenerate such folders and rerun them.
 
 ### Changed
 

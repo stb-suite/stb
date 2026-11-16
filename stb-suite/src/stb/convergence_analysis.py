@@ -71,7 +71,27 @@ from stb.convergence import PARAMETER_DEFAULTS, PARAMETER_ORDER, substitute_nume
 
 _FOLDER_RE = re.compile(r'^convergence_([a-zA-Z]+)_([\d.]+)$')
 _RELAX_STEPS_RE = re.compile(r'MD\.(?:NumCGsteps|Steps)\s+(\d+)', re.IGNORECASE)
+_STRESS_TOL_RE = re.compile(r'^\s*MD\.MaxStressTol\s+([0-9.eE+-]+)\s*([A-Za-z/*0-9]+)?', re.IGNORECASE | re.MULTILINE)
+SIESTA_DEFAULT_STRESS_TOL_GPA = 1.0
+EV_PER_ANG3_TO_GPA = 160.21766
 REPORT_FILE = "convergence_report.txt"
+
+
+def read_declared_stress_tol_gpa(folder):
+    """MD.MaxStressTol forced in this folder's config_extra.fdf, in GPa -- None when absent (SIESTA's default,
+    1 GPa, then applies; versions up to 2.1.0.dev33 of stb-convergence did not write it)."""
+    path = os.path.join(folder, "config_extra.fdf")
+    try:
+        with open(path) as f:
+            m = _STRESS_TOL_RE.search(f.read())
+    except OSError:
+        return None
+    if not m:
+        return None
+    value, unit = float(m.group(1)), (m.group(2) or "GPa").lower()
+    factor = {"gpa": 1.0, "mpa": 1e-3, "kbar": 0.1, "bar": 1e-4, "ev/ang**3": EV_PER_ANG3_TO_GPA,
+              "ev/ang^3": EV_PER_ANG3_TO_GPA, "ry/bohr**3": 14710.5, "ry/bohr^3": 14710.5}.get(unit, 1.0)
+    return value * factor
 
 # Whether accuracy improves as the swept value increases -- derived from
 # stb-convergence's own PARAMETER_DEFAULTS['tighter'] rather than a second,
@@ -141,7 +161,8 @@ def read_declared_relax_steps(folder):
     return int(m.group(1)) if m else None
 
 
-def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps):
+def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps,
+                 stress_gpa=None, stress_tol_gpa=None, volume_unchanged=False):
     """Short data-quality code for one run's table row -- 'OK', or a comma
     -joined list of concerns (never blocks the convergence scan itself,
     just flags a run whose own geometry/energy might not be trustworthy).
@@ -153,6 +174,13 @@ def quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, decl
         issues.append("F>tol")
     if declared_steps and geometry_steps >= declared_steps:   # 0 declared steps = a single point, nothing to exhaust
         issues.append("steps")
+    if declared_steps:
+        if stress_gpa is not None and stress_tol_gpa is not None and stress_gpa > stress_tol_gpa:
+            issues.append("P>tol")
+        if stress_tol_gpa is None or stress_tol_gpa >= SIESTA_DEFAULT_STRESS_TOL_GPA:
+            issues.append("Ptol=1GPa")
+        if volume_unchanged:
+            issues.append("V=input")
     return ",".join(issues) if issues else "OK"
 
 
@@ -294,7 +322,23 @@ def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_
         volume = abs(float(np.linalg.det(outcell))) if outcell is not None else None
         geometry_steps = siesta_log.count_geometry_steps(out_path)
         declared_steps = read_declared_relax_steps(folder)
-        quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps)
+        stress = siesta_log.get_stress_tensor(out_path)
+        stress_gpa = float(np.abs(stress).max()) * EV_PER_ANG3_TO_GPA if stress is not None else None
+        stress_tol = read_declared_stress_tol_gpa(folder)
+        volume_unchanged = False
+        if declared_steps and volume is not None:
+            try:
+                v_input = abs(float(np.linalg.det(structure_io.lattice_only(structure))))
+                # an already-relaxed input may legitimately stop at step 0 under a tight tolerance: only a
+                # loose tolerance (SIESTA's 1 GPa) or a stress left above 0.05 GPa makes it suspicious
+                loose = stress_tol is None or stress_tol >= SIESTA_DEFAULT_STRESS_TOL_GPA
+                volume_unchanged = (v_input > 0 and abs(volume - v_input) < 1e-5 * v_input
+                                    and (loose or (stress_gpa is not None and stress_gpa > 0.05)))
+            except Exception:
+                pass
+        quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps,
+                               stress_gpa, stress_tol if stress_tol is not None else SIESTA_DEFAULT_STRESS_TOL_GPA,
+                               volume_unchanged)
 
         if parameter == "energyshift":
             ORBITAL_RADII[(parameter, value)] = orbital_radii(out_path)
@@ -354,10 +398,20 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
             f"[WARNING] {n_flagged}/{len(rows)} run(s) flagged (SCF? = SCF convergence not "
             f"confirmed, F>tol = residual force above --force-tolerance "
             f"{args.force_tolerance} eV/Ang, steps = relaxation used its full declared step "
-            "budget) -- their geometry may not be a genuine relaxed minimum.", 'yellow'), f_out)
+            "budget, P>tol = final stress above MD.MaxStressTol, Ptol=1GPa = no MD.MaxStressTol below SIESTA's "
+            "1 GPa default (~1 % of the volume of a B0 ~ 90 GPa solid), V=input = the cell never moved) -- their "
+            "geometry may not be a genuine relaxed minimum.", 'yellow'), f_out)
+    n_unmoved = sum(1 for r in rows if "V=input" in r[8])
+    if n_unmoved:
+        print_dual(color_text(
+            f"[WARNING] {n_unmoved}/{len(rows)} relaxation(s) ended with exactly the input cell: the relaxation "
+            "stopped at the first step (stress below a loose MD.MaxStressTol), so their 'relaxed' volume is the "
+            "input one and the volume verdict below means nothing for them. Regenerate the folders with "
+            "stb-convergence (it now forces MD.MaxStressTol, --max-stress-tol, default 0.02 GPa) and rerun.",
+            'yellow'), f_out)
 
     energy_converged = scan_energy_convergence(rows, args.tolerance, increasing_is_accurate)
-    volume_rows = [r for r in rows if r[4] is not None]
+    volume_rows = [r for r in rows if r[4] is not None and "V=input" not in r[8]]
     volume_converged = (scan_volume_convergence(volume_rows, args.volume_tolerance, increasing_is_accurate)
                          if len(volume_rows) >= 2 else None)
     volumes_seen = [r[4] for r in volume_rows]
@@ -385,6 +439,10 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
                 "range.", 'cyan'), f_out)
             return None, None, None
         direction_hint = "or lower"
+        if not volume_rows:
+            print_dual(color_text("[WARNING] No relaxed volume to judge by (every relaxation ended at its input "
+                                  "cell, see above): no verdict.", 'yellow'), f_out)
+            return None, None, None
         if volume_converged is not None:
             print_dual(f"{color_text('Structure converged at:', 'green')} {parameter} = {volume_converged:.4f} "
                        f"({direction_hint}, |Delta V/V| < {args.volume_tolerance}%, relaxed cell). The relaxed "
@@ -411,6 +469,9 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
         print_dual(f"{color_text('Structure converged at:', 'green')} {parameter} = "
                    f"{volume_converged:.4f} ({direction_hint}, |Delta V/V| < {args.volume_tolerance}%, "
                    "relaxed cell)", f_out)
+    elif not volume_rows and any("V=input" in r[8] for r in rows):
+        print_dual(color_text("[WARNING] No relaxed volume to judge by (every relaxation ended at its input "
+                              "cell): no structural verdict.", 'yellow'), f_out)
     else:
         print_dual(color_text(
             f"[WARNING] No point met the {args.volume_tolerance}% relaxed-volume tolerance within "

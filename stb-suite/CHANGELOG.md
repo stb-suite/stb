@@ -170,6 +170,11 @@ version before) and **Added** (new options and tools).
   gives what `stb-eosAnalysis` gives for the same kind of scan: the equilibrium area A0 (Ang^2), a0 (the
   first periodic vector at A0) and the in-plane stiffness A d2E/dA2 in N/m -- (C11 + C12)/2 of an
   isotropic sheet; for a wire the length and the axial stiffness in nN. The criteria are unchanged.
+- `stb-cohesiveAnalysis`: the warning on the electronic entropy (-T*S above 1 meV) explained every term
+  as an isolated atom's fractional occupation, also when the only such term was the solid's (Ag: -1.0 meV,
+  the smearing at the Fermi level of a metal). Atoms and solid now get separate messages: a `[WARNING]`
+  for the isolated-atom/BSSE runs as before, a `[NOTE]` for the full structure that calls it the usual
+  smearing correction.
 
 ### Changed
 

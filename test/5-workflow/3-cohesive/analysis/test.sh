@@ -375,6 +375,16 @@ check_contains "Uncorrected.*-450.1111.*-450.1111" log_menu.txt
 check_success cohesive_results.dat
 
 
+# --- N8: the solid's -T*S (metal smearing) is not reported as an isolated-atom artefact ---
+echo -e "\n--- Testing: -T*S of the full structure gets its own note (Ag-like metal), no atom warning ---"
+rm -rf ts_run && mkdir -p ts_run/structure ts_run/atoms/C
+cp "$FIXTURE_DIR/structure/structure.fdf" ts_run/structure/
+printf 'siesta: Etot    =    -500.120000\nsiesta: FreeEng =    -500.121500\n' > ts_run/structure/calc.out
+printf 'siesta: Etot    =     -50.012345\nsiesta: FreeEng =     -50.012345\n' > ts_run/atoms/C/calc.out
+stb-cohesiveAnalysis -o calc.out -d ts_run --no-intro > log_ts.txt 2>&1
+check_contains "The full structure has -T\*S = -1.5 meV" log_ts.txt
+check_not_contains "For an isolated atom it comes from" log_ts.txt
+
 popd > /dev/null
 
 # --- 9. Summary ---

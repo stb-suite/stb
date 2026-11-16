@@ -539,17 +539,29 @@ def main():
         table.append(([label, f"{total:.6f}", f"{free:.6f}", f"{1000 * minus_ts:+.1f}"],
                       'yellow' if flagged else None))
     print_table(["Run", "E_KS (eV)", "FreeEng (eV)", "-T*S (meV)"], table, f_out)
-    if hot:
-        worst = max(hot, key=lambda item: abs(item[1]))
+    # The solid and the atoms get separate texts: in a metal the solid's -T*S is the Fermi-level smearing of a
+    # partly filled band (Ag: -1.0 meV, the only term above 1 meV, once reported as an atom's artefact).
+    hot_solid = [h for h in hot if h[0] == "full structure"]
+    hot_atoms = [h for h in hot if h[0] != "full structure"]
+    convention = (", and --energy free does exactly that here." if args.energy == "free" else
+                  "; the energy used here leaves it out"
+                  + (" (half of it, with --energy zero)." if args.energy == "zero" else "."))
+    if hot_atoms:
+        worst = max(hot_atoms, key=lambda item: abs(item[1]))
         print_dual(color_text(
-            f"[WARNING] {len(hot)} run(s) have an electronic entropy term above {1000 * ENTROPY_WARN_EV:g} meV "
-            f"(largest: {worst[0]}, -T*S = {1000 * worst[1]:+.1f} meV). For an isolated atom it comes from "
-            "fractional occupation of degenerate orbitals at the smearing temperature (ElectronicTemperature), "
-            "not from physics: FreeEng would carry it into the cohesive energy"
-            + (", and --energy free does exactly that here." if args.energy == "free" else
-               "; the energy used here leaves it out" + (" (half of it, with --energy zero)." if args.energy == "zero" else "."))
+            f"[WARNING] {len(hot_atoms)} isolated-atom/BSSE run(s) have an electronic entropy term above "
+            f"{1000 * ENTROPY_WARN_EV:g} meV (largest: {worst[0]}, -T*S = {1000 * worst[1]:+.1f} meV). For an isolated "
+            "atom it comes from fractional occupation of degenerate orbitals at the smearing temperature "
+            "(ElectronicTemperature), not from physics: FreeEng would carry it into the cohesive energy" + convention
             + " A lower ElectronicTemperature in the atoms' calc.fdf makes the three conventions agree.",
             'yellow'), f_out)
+    if hot_solid:
+        print_dual(color_text(
+            f"[NOTE] The full structure has -T*S = {1000 * hot_solid[0][1]:+.1f} meV: the smearing of the occupations "
+            "around the Fermi level of a metal (or a small-gap solid) at ElectronicTemperature. It is the usual "
+            "smearing correction, not an artefact; E_KS and FreeEng bracket the T -> 0 energy, which --energy zero "
+            "estimates as their mean. If it is large compared with the precision you need, lower "
+            "ElectronicTemperature and use a denser k-grid.", 'cyan'), f_out)
 
     print_section("[3] COHESIVE ENERGY RESULTS", f_out)
     e_coh_total = e_bulk - sum_isolated_energy

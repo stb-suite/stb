@@ -157,6 +157,9 @@ version before) and **Added** (new options and tools).
   taken as having no k-grid, so the full structure's `config_extra.fdf` got a Monkhorst-Pack block from
   the default density, which SIESTA reads first (E05 template, `kgrid.Cutoff 15.0 Ang`: a 10x10x10 grid,
   560 k-points). These count as the template's own k-grid now, as the help says; `-k` still replaces it.
+- `stb-convergenceAnalysis --parameter basis`: the orbital filter was not detected in SIESTA 5.4.2 logs
+  (Cu with `FilterCutoff 150 Ry`: the prep warned, the analysis did not). The log check now also knows
+  5.4.2's `Filter: Requested cutoff` and `PAO Filter: Cutoff used` lines.
 
 ### Changed
 

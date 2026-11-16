@@ -127,8 +127,12 @@ def fit_sub_scan(folder, out_file, n_atoms):
             try:
                 with open(out_path, errors="ignore") as fh:
                     head = fh.read(400000)
-                filtered = bool(re.search(r"^\s*FilterCutoff\s+[1-9]|Filter:\s+Number of eigenvalues|"
-                                          r"filtering orbs|Filtering orbital", head, re.M | re.I))
+                # SIESTA 5.4.2 prints 'Filter: Requested cutoff: 150.000000 Ry' and 'PAO Filter: Cutoff used:
+                # 73.50 Ry' (the earlier patterns alone missed it); the input echo may show 'FilterCutoff 150 Ry'
+                filtered = bool(re.search(r"^\s*FilterCutoff\s+[1-9]|^\s*FilterTol\s+[0-9.]*[1-9]|"
+                                          r"Filter:\s+Requested cutoff|PAO Filter:\s+Cutoff used|"
+                                          r"Filter:\s+Number of eigen|filtering orbs|Filtering orbital",
+                                          head, re.M | re.I))
             except OSError:
                 pass
     result = {"n": len(volumes), "n_folders": len(folders), "v0": None, "b0": None, "rms": None,

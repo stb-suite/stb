@@ -97,6 +97,18 @@ version before) and **Added** (new options and tools).
 - Test of `stb-crystalcast --ml-rank` without the `ml` extra: the tool does exit with code 1 and the
   install hint; the test read the exit code after an `if` and an `echo`, so it always saw 0.
 
+- `stb-nebCycle` on a band whose images coincide (identical initial and final states) wrote the next
+  cycle and ended with `Success` and exit code 0: its guard only caught NaN forces, which ASE does not
+  produce in that case. The geometries are now checked before any step: neighbouring images closer
+  than 0.001 Ang stop the cycle with an `[ERROR]` and exit code 1, and no folder is written.
+- `stb-mlneb` with identical endpoints (or two inputs that relax into the same minimum) ended in
+  `numpy.linalg.LinAlgError: Singular matrix`. It now stops with a message: nearly identical states,
+  no barrier along this band.
+- `stb-mlneb --siesta-check/--to-mlff --mlff-workflow`: a workflow whose reference structure file is
+  missing gave a Python `FileNotFoundError`; it is a clean error naming the file. (In the test suite
+  the file was missing because three tests still pointed to fixture folders by their numbers from
+  before the 2026-10-31 renumbering; fixed.)
+
 ### Changed
 
 - `stb-stackingfault --scan surface`: the default grid is 6 x 6 on a hexagonal lattice (7 x 7 on any

@@ -227,7 +227,7 @@ rm -rf graphene_3d_override
 #     wiring/report sections, same scope as test/7-mlsimulations/3-mlphonons's
 #     own --custom-model test. ---
 echo -e "\n--- Fine-tuning a quick Si model to test --custom-model with (--epochs 3) ---"
-PHONONS_FIXTURES="$FIXTURE_DIR/../2-mlphonons/si_mlff_fixtures"
+PHONONS_FIXTURES="$FIXTURE_DIR/../3-mlphonons/si_mlff_fixtures"
 if [ -d "$PHONONS_FIXTURES" ]; then
     cp -r "$PHONONS_FIXTURES" mlff_config_src
     mv mlff_config_src/mlff_config_* .

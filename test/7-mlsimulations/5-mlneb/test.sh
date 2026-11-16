@@ -111,7 +111,7 @@ fi
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cp "$FIXTURE_DIR/vac_initial.fdf" "$FIXTURE_DIR/vac_final.fdf" "$TEST_DIR/"
-cp "$FIXTURE_DIR/../3-mlelastic/si8.fdf" "$TEST_DIR/si8.fdf"
+cp "$FIXTURE_DIR/../4-mlelastic/si8.fdf" "$TEST_DIR/si8.fdf"
 echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 

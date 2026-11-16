@@ -269,7 +269,7 @@ rm -rf h_nb
 #     no committed carbon+hydrogen SIESTA dataset to fine-tune against,
 #     so this section deliberately doesn't reuse graphene_slab.fdf/H) ---
 echo -e "\n--- Fine-tuning a quick Si model to test the foundation-model comparison with ---"
-PHONONS_FIXTURES="$FIXTURE_DIR/../2-mlphonons/si_mlff_fixtures"
+PHONONS_FIXTURES="$FIXTURE_DIR/../3-mlphonons/si_mlff_fixtures"
 if [ -d "$PHONONS_FIXTURES" ]; then
     cp -r "$PHONONS_FIXTURES" mlff_config_src
     mv mlff_config_src/mlff_config_* .

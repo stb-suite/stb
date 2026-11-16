@@ -40,6 +40,30 @@ def get_atom_counts(fdf_path):
 _SITE_DIR_RE = re.compile(r"^site_.+_x(\d+)$")
 
 
+# Which energy of each log enters the cohesive energy (--energy) and what every
+# folder gave, for the table of section [2b].
+#   ks   : Kohn-Sham total energy E_KS (default)
+#   free : SIESTA's FreeEng = E_KS - T*S of the electronic smearing (what 2.0.0 used)
+#   zero : (E_KS + FreeEng) / 2, the usual T -> 0 extrapolation for a smeared metal
+ENERGY = {"mode": "ks", "rows": []}
+ENTROPY_WARN_EV = 1e-3
+
+
+def read_energy(path, label=None):
+    """The energy of one SIESTA log in the chosen convention, or None. Records
+    (label, E_KS, FreeEng) for the report."""
+    free = siesta_log.get_free_energy(path)
+    total = siesta_log.get_total_energy(path)
+    if free is None and total is None:
+        return None
+    if total is None:
+        total = free
+    if free is None:
+        free = total
+    ENERGY["rows"].append((label or os.path.relpath(os.path.dirname(path)), total, free))
+    return {"ks": total, "free": free, "zero": 0.5 * (total + free)}[ENERGY["mode"]]
+
+
 def read_bsse_energy(bsse_root, sym, out_file):
     """Reads the BSSE-corrected isolated-atom energy for species `sym` under
     `bsse_root` ('atoms_bsse' or 'atoms_bsse_check'), transparently handling
@@ -61,7 +85,7 @@ def read_bsse_energy(bsse_root, sym, out_file):
     sym_dir = os.path.join(bsse_root, sym)
     flat_path = os.path.join(sym_dir, out_file)
     if os.path.isfile(flat_path):
-        energy = siesta_log.get_free_energy(flat_path)
+        energy = read_energy(flat_path)
         return energy, energy is not None
 
     if not os.path.isdir(sym_dir):
@@ -78,7 +102,7 @@ def read_bsse_energy(bsse_root, sym, out_file):
     weighted_sum = 0.0
     for d in site_dirs:
         mult = int(_SITE_DIR_RE.match(d).group(1))
-        e = siesta_log.get_free_energy(os.path.join(sym_dir, d, out_file))
+        e = read_energy(os.path.join(sym_dir, d, out_file))
         if e is None:
             return None, False
         weighted_sum += e * mult
@@ -245,6 +269,16 @@ def main():
                              "geometry rather than the true minimum. Advisory only, never "
                              "blocks the result.")
 
+    parser.add_argument("--energy", choices=["ks", "free", "zero"], default="ks",
+                        help="Which energy of each run enters the cohesive energy (default: ks).\n"
+                             "'ks': the Kohn-Sham total energy (siesta: Etot).\n"
+                             "'free': SIESTA's FreeEng = E_KS - T*S of the electronic smearing -- what\n"
+                             "versions up to 2.0.0 used. An open-shell atom with degenerate orbitals has\n"
+                             "fractional occupations and -T*S != 0 at ElectronicTemperature 300 K (Si, Ga:\n"
+                             "-49 meV; As, Ag: 0), so the cohesive energy then depends on a smearing\n"
+                             "temperature that is not physical.\n"
+                             "'zero': (E_KS + FreeEng)/2, the T -> 0 extrapolation used for smeared metals.\n"
+                             "Section [2b] lists E_KS, FreeEng and -T*S of every run in any case.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
 
@@ -260,6 +294,7 @@ def main():
                         help="Do not show the introduction")
 
     args = parser.parse_args()
+    ENERGY["mode"] = args.energy
 
     if not os.path.isdir(args.dir_path):
         print(color_text(f"[FAIL] Directory '{args.dir_path}' not found.", 'red'))
@@ -350,7 +385,7 @@ def main():
     errors = False
 
     struct_out_path = os.path.join(struct_dir, args.out_file)
-    e_bulk = siesta_log.get_free_energy(struct_out_path)
+    e_bulk = read_energy(struct_out_path, "full structure")
     if e_bulk is None:
         print_dual(color_text(
             f"[WARNING] Could not find '{args.out_file}' or finished calculation for the "
@@ -394,7 +429,7 @@ def main():
     sum_isolated_energy = 0.0
     for sym, count in used_species.items():
         sym_dir = os.path.join(atoms_dir, sym)
-        e_atom = siesta_log.get_free_energy(os.path.join(sym_dir, args.out_file))
+        e_atom = read_energy(os.path.join(sym_dir, args.out_file), f"isolated atom {sym}")
         if e_atom is None:
             print_dual(color_text(
                 f"[WARNING] Could not find '{args.out_file}' or results for isolated atom: "
@@ -487,6 +522,35 @@ def main():
         sys.exit(1)
 
     # --- [3] COHESIVE ENERGY RESULTS ---
+    print_section("[2b] ENERGIES USED", f_out)
+    names = {"ks": "E_KS, the Kohn-Sham total energy (--energy ks, the default)",
+             "free": "FreeEng = E_KS - T*S of the electronic smearing (--energy free, as in 2.0.0)",
+             "zero": "(E_KS + FreeEng)/2, the T -> 0 extrapolation (--energy zero)"}
+    print_dual(f"Energy of each run: {names[args.energy]}.", f_out)
+    seen, table, hot = set(), [], []
+    for label, total, free in ENERGY["rows"]:
+        if label in seen:
+            continue
+        seen.add(label)
+        minus_ts = free - total
+        flagged = abs(minus_ts) > ENTROPY_WARN_EV
+        if flagged:
+            hot.append((label, minus_ts))
+        table.append(([label, f"{total:.6f}", f"{free:.6f}", f"{1000 * minus_ts:+.1f}"],
+                      'yellow' if flagged else None))
+    print_table(["Run", "E_KS (eV)", "FreeEng (eV)", "-T*S (meV)"], table, f_out)
+    if hot:
+        worst = max(hot, key=lambda item: abs(item[1]))
+        print_dual(color_text(
+            f"[WARNING] {len(hot)} run(s) have an electronic entropy term above {1000 * ENTROPY_WARN_EV:g} meV "
+            f"(largest: {worst[0]}, -T*S = {1000 * worst[1]:+.1f} meV). For an isolated atom it comes from "
+            "fractional occupation of degenerate orbitals at the smearing temperature (ElectronicTemperature), "
+            "not from physics: FreeEng would carry it into the cohesive energy"
+            + (", and --energy free does exactly that here." if args.energy == "free" else
+               "; the energy used here leaves it out" + (" (half of it, with --energy zero)." if args.energy == "zero" else "."))
+            + " A lower ElectronicTemperature in the atoms' calc.fdf makes the three conventions agree.",
+            'yellow'), f_out)
+
     print_section("[3] COHESIVE ENERGY RESULTS", f_out)
     e_coh_total = e_bulk - sum_isolated_energy
     e_coh_per_atom = e_coh_total / total_atoms

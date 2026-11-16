@@ -501,6 +501,30 @@ def get_free_energy(path: str) -> float | None:
     return energy
 
 
+def get_total_energy(path: str) -> float | None:
+    """Last Kohn-Sham total energy (eV) of a SIESTA .out file: the 'siesta: Etot    ='
+    line of the final summary (6 decimals), else the last 'siesta: E_KS(eV) =' (4
+    decimals) of an unfinished log. Unlike get_free_energy it has no -TS term of the
+    electronic smearing."""
+    etot, e_ks = None, None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if line.startswith("siesta: Etot") and "=" in line:
+                    try:
+                        etot = float(line.split('=')[1].split()[0])
+                    except (IndexError, ValueError):
+                        pass
+                elif line.startswith("siesta: E_KS(eV)") and "=" in line:
+                    try:
+                        e_ks = float(line.split('=')[1].split()[0])
+                    except (IndexError, ValueError):
+                        pass
+    except Exception:
+        return None
+    return etot if etot is not None else e_ks
+
+
 def get_electric_dipole(path: str) -> np.ndarray | None:
     """Last 'siesta: Electric dipole (a.u.) = X  Y  Z' line from a SIESTA
     .out file, as a (3,) array in atomic units. SIESTA only prints this

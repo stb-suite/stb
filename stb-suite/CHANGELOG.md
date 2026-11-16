@@ -111,6 +111,17 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- **`stb-cohesiveAnalysis` uses the Kohn-Sham energy E_KS, not SIESTA's `FreeEng`.** `FreeEng` includes
+  -T*S of the electronic smearing, and an open-shell isolated atom with degenerate orbitals has
+  fractional occupations at `ElectronicTemperature 300 K`: -49.4 meV for Si (p2) and Ga (p1), 0 for As
+  and Ag, 0 for a gapped solid. The cohesive energy then depended on a smearing temperature that is not
+  physical (Si: -4.5138 with FreeEng, -4.5632 eV/atom with E_KS; GaAs 25 meV/atom).
+  - **Numbers change**: cohesive energies of systems with such atoms come out more negative than in
+    2.0.0. `--energy free` gives the 2.0.0 values; `--energy zero` the T -> 0 extrapolation
+    (E_KS + FreeEng)/2.
+  - New section `[2b] ENERGIES USED`: the convention, and E_KS, FreeEng and -T*S of every run, with a
+    warning when a reference has |T*S| above 1 meV.
+
 - `stb-stackingfault --scan surface`: the default grid is 6 x 6 on a hexagonal lattice (7 x 7 on any
   other, as before). The AB/BA registries of a hexagonal bilayer are at shifts (1/3, 2/3) and
   (2/3, 1/3), which a 7 x 7 grid does not contain: the reported minimum was 0.8 meV above the exact AB

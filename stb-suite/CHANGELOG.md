@@ -77,6 +77,10 @@ version before) and **Added** (new options and tools).
   README now shows the ghost-cutoff scan up to 12 Ang: the corrected GaAs value at 6 Ang (-3.1741
   eV/atom) is not converged (-3.0514 at 12 Ang).
 
+- `stb-mlelastic` on a 2D material (or a 1D one, or 3D with missing directions): the clamped-ion scan
+  was run (twice the evaluations) but its table, `INTERNAL RELAXATION (clamped vs relaxed ions)`, was
+  printed only for a complete 3D tensor. It is printed for every dimensionality now.
+
 ### Changed
 
 - Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never

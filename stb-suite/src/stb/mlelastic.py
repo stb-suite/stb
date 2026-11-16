@@ -840,8 +840,8 @@ def report_clamped(res, f_out, warn):
     big = [r[0][0] for r in rows if r[0][3] != "nan %" and abs(float(r[0][3].rstrip(" %"))) > 5]
     if big:
         print_dual(f"Internal relaxation matters for {', '.join(big)}: a cell with 2+ atoms per primitive cell whose "
-                   "atoms are not all at inversion centres (diamond, zincblende, wurtzite...) relaxes inside the cell "
-                   "under shear.", f_out)
+                   "atoms are not all at inversion centres (diamond, zincblende, wurtzite, graphene, hBN...) relaxes "
+                   "inside the cell under strain.", f_out)
 
 
 def report_sound(res, f_out, warn):
@@ -1344,12 +1344,21 @@ def main():
     elif dimensionality == "2d":
         sections("IN-PLANE MODULI")
         report_2d(main_res, f_out)
+        if "C_clamped" in main_res:
+            sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+            report_clamped(main_res, f_out, warn)
         p = os.path.join(args.output_dir, "inplane_youngs.png")
         figures.append(plot_inplane(series, unit, p))
         files.append(("In-plane E(θ) plot", p))
     elif dimensionality == "3d":
         warn(f"No data for {', '.join(main_res['missing'])}: the 3D moduli, sound velocities and directional properties "
              "need all six directions and are skipped.")
+        if "C_clamped" in main_res:
+            sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+            report_clamped(main_res, f_out, warn)
+    elif "C_clamped" in main_res:
+        sections("INTERNAL RELAXATION (clamped vs relaxed ions)")
+        report_clamped(main_res, f_out, warn)
 
     if len(series) > 1:
         sections("FINE-TUNED vs FOUNDATION")

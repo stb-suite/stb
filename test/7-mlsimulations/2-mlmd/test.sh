@@ -73,6 +73,23 @@ check_exit_code() {
 
 echo "--- Starting tester for stb-mlmd (item 7.2) ---"
 
+# No mace needed: the model card's settings line says 'DFT-D3 off' for a model without D3 (2.1.0; it printed
+# 'DFTD3 default', which reads as D3 on)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+D3_OUT=$(python3 - "$ROOT_DIR/examples/7.2-mlmd/model" <<'PYEOF'
+import glob, json, sys
+from stb.core import model_card
+d = sys.argv[1]
+card = json.load(open(f"{d}/mlff_model_card.json"))
+model_card.print_model_card(card, f"{d}/mlff_model_card.json", sorted(glob.glob(f"{d}/*.model"))[0], None, lambda *a: None)
+PYEOF
+)
+if echo "$D3_OUT" | grep -q "Settings          : DFT-D3 off;"; then
+    echo -e "   -> ${GREEN}Verified:${NC} model card settings line: DFT-D3 off"; PASS=$((PASS+1))
+else
+    echo -e "   -> ${RED}Failed:${NC} model card settings line does not say 'DFT-D3 off'"; FAIL=$((FAIL+1))
+fi
+
 if ! python3 -c "import mace" 2>/dev/null; then
     echo -e "${YELLOW}Skipped entirely:${NC} the optional 'ml' extra is not installed."
     echo "Install with: pip install stb_suite[ml]  (then re-run this test)"

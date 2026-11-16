@@ -197,6 +197,9 @@ version before) and **Added** (new options and tools).
   within 0.4 % and was chosen, though V0 jumps +3 % at 0.002 Ry. A setting now has to agree with EVERY
   tighter setting of the scan (Ge: 0.002 Ry). On the nine test systems: Si and graphene 0.005 Ry; Ge,
   NaCl, Al, Cu and hBN 0.002 Ry; GaAs and Ag 0.001 Ry. In 2D the verdict speaks of the area.
+- `stb-mlmd` (and every tool that prints the model card): the settings line said `DFTD3 default` for a
+  model trained without D3, which reads as D3 on. It now says `DFT-D3 on` or `DFT-D3 off`, from the
+  card's own `dftd3.on`.
 
 ### Changed
 

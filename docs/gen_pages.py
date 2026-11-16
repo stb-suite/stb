@@ -17,6 +17,9 @@ Reference (`reference/`), one page per console command:
   see `dump_help.py`), its menu code, and a link to its guide.
 - `reference/stb-suite.md` is the map of every menu code.
 
+Changelog (`changelog.md`): the release notes at the top of
+`stb-suite/CHANGELOG.md`, the one file where a version's changes are written.
+
 If STB_DOCS_EXTRA_ROOTS names extension repositories (see stbdocs/catalog.py), their
 menu entries, examples and commands are added to all of the above, and those pages
 have no "edit this page" link (the source is not in this repository).
@@ -54,6 +57,8 @@ log = logging.getLogger("mkdocs.plugins.gen_pages")
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
+CHANGELOG = ROOT / "stb-suite" / "CHANGELOG.md"
+CHANGELOG_HISTORY_MARKER = "# Per-tool history before the versions were unified"
 
 REPO_URL = "https://github.com/stb-suite/stb"
 BRANCH = "main"
@@ -440,6 +445,19 @@ def main():
         for page in in_cat:
             nav.append(f"    * [{page.label}]({posixpath.relpath(page.dest, 'guides')})")
     write_nav("guides/SUMMARY.md", nav)
+
+    # Changelog: the release notes of stb-suite/CHANGELOG.md, up to the
+    # per-tool history that precedes the unified version (kept in the repository).
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    cut = changelog.find(CHANGELOG_HISTORY_MARKER)
+    if cut == -1:
+        log.warning("stb-suite/CHANGELOG.md: %r not found; publishing the whole file", CHANGELOG_HISTORY_MARKER)
+    else:
+        changelog = (changelog[:cut].rstrip() + "\n\n## Before 2.0.0\n\n"
+                     "Until 2.0.0 every tool carried a version of its own. That history, and the table of "
+                     "old and new menu codes, are in "
+                     f"[`stb-suite/CHANGELOG.md`]({REPO_URL}/blob/{BRANCH}/stb-suite/CHANGELOG.md).\n")
+    write_page("changelog.md", github_markdown_to_python_markdown(changelog), "stb-suite/CHANGELOG.md")
 
     # Reference
     write_page("reference/index.md", reference_index(menu, scripts, helps, in_menu), "docs/gen_pages.py")

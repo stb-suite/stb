@@ -89,3 +89,4 @@ nav:
   - Home: index.md
   - Guides: guides/
   - Reference: reference/
+  - Changelog: changelog.md

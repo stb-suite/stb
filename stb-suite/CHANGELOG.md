@@ -177,6 +177,9 @@ version before) and **Added** (new options and tools).
   smearing correction.
 - `stb-cohesive --calc` showed `FilterCutoff` in its level-of-theory line but gave no warning, unlike
   `stb-eosInputs`, `stb-elasticInputs` and `stb-convergence`; it now gives the same `[WARNING]`.
+- `stb-convergence` (and every tool that puts `%include config_extra.fdf` on top of a template): a
+  template that already had the line got a second identical one. Harmless, but it read as a mistake; the
+  file now keeps one, at the top.
 
 ### Changed
 

@@ -79,6 +79,12 @@ check_contains "MD.VariableCell    true" convergence_runs/meshcutoff/convergence
 # the relaxation closes on the stress too: SIESTA's own MD.MaxStressTol (1 GPa) stopped Si at its input cell
 check_contains "MD.MaxStressTol    0.02 GPa" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
 check_contains "MD.MaxForceTol     0.01 eV/Ang" convergence_runs/meshcutoff/convergence_meshcutoff_250.0000/config_extra.fdf
+echo "Testing: a template that already has '%include config_extra.fdf' keeps ONE such line"
+{ echo "%include config_extra.fdf"; cat calc.fdf; } > calc_inc.fdf
+stb-convergence -s structure.fdf -c calc_inc.fdf --parameter meshcutoff --meshcutoff-range 150 200 50 \
+    -o conv_inc --no-intro > log_inc.txt 2>&1
+CNT=$(grep -ci "^ *%include *config_extra.fdf" conv_inc/meshcutoff/convergence_meshcutoff_150.0000/calc_inc.fdf)
+if [ "$CNT" = "1" ]; then echo -e "   -> ${GREEN}Verified:${NC} one include line"; PASS=$((PASS+1)); else echo -e "   -> ${RED}Failed:${NC} $CNT include lines"; FAIL=$((FAIL+1)); fi
 # Pseudopotentials are always COPIED (shutil.copy2), never symlinked -- see
 # core/pseudopotentials.py's own module docstring (a symlink into a bundled
 # bank breaks the moment the folder is archived/rsynced elsewhere, e.g. to

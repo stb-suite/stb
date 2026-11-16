@@ -1052,7 +1052,19 @@ def prepend_include(calc_text: str, include_name: str) -> str:
     sit. Shared by elastic_inputs.py and phonons_create.py, both of which
     need to force single-point SCF over a user-supplied relaxation calc.fdf
     template.
+
+    A template that already has '%include <include_name>' (a calc.fdf copied from an earlier generated folder)
+    keeps ONE such line, at the top: the old ones are removed rather than repeated (two identical includes did no
+    harm but read as a mistake).
     """
+    import re as _re
+    pattern = _re.compile(r"^\s*%include\s+" + _re.escape(include_name) + r"\s*(#.*)?$", _re.IGNORECASE)
+    lines = calc_text.splitlines(keepends=True)
+    if any(pattern.match(l) for l in lines):
+        kept = [l for l in lines if not pattern.match(l)]
+        while kept and not kept[0].strip():
+            kept.pop(0)
+        calc_text = "".join(kept)
     return f"%include {include_name}\n\n" + calc_text
 
 

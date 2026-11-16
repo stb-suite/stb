@@ -89,7 +89,7 @@ echo -e "\n--- Testing --parameter all with only --meshcutoff-range customized (
 rm -rf convergence_runs
 stb-convergence -s structure.fdf -c calc.fdf -p dojo --parameter all --meshcutoff-range 150 300 50 --no-intro > log_mixed.txt 2>&1
 check_contains "Parameter(s)      : meshcutoff, energyshift, kgrid" log_mixed.txt
-check_contains "Relax steps       : 100" log_mixed.txt
+check_contains "full relaxation, positions + cell, up to 100 steps" log_mixed.txt
 check_contains "meshcutoff  | custom (--meshcutoff-range)" log_mixed.txt
 check_contains "energyshift | suggested default" log_mixed.txt
 check_contains "kgrid       | suggested default" log_mixed.txt
@@ -113,7 +113,7 @@ fi
 echo -e "\n--- Testing --parameter energyshift (suggested default range, default --relax-steps) ---"
 rm -rf convergence_runs
 stb-convergence -s structure.fdf -c calc.fdf -p dojo --parameter energyshift --no-intro > log_energyshift.txt 2>&1
-check_contains "energyshift | suggested default | 0.001 to 0.05, step 0.01 (Ry)" log_energyshift.txt
+check_contains "energyshift | suggested default (geometric) | 0.02, 0.01, 0.005, 0.002, 0.001, 0.0005 (Ry)" log_energyshift.txt
 check_contains "6 folder(s) written under 'convergence_runs' (1 parameter(s))" log_energyshift.txt
 check_success convergence_runs/energyshift/convergence_energyshift_0.0010/calc.fdf
 check_contains "PAO.EnergyShift     0.0010 Ry" convergence_runs/energyshift/convergence_energyshift_0.0010/config_extra.fdf
@@ -221,7 +221,7 @@ echo "Testing: navigate 5.5.1 -> dojo bank -> 'all' shortcut -> no customization
 rm -rf convergence_runs
 printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\nall\nn\nn\nn\n\n\n\ny\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
 check_contains "Selected: meshcutoff, energyshift, kgrid" log_menu_all.txt
-check_contains "Relax steps       : 100" log_menu_all.txt
+check_contains "full relaxation, positions + cell, up to 100 steps" log_menu_all.txt
 check_contains "19 folder(s) written under 'convergence_runs' (3 parameter(s))" log_menu_all.txt
 check_success convergence_runs/convergence_stage1.txt
 

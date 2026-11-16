@@ -190,7 +190,8 @@ stb-convergenceAnalysis --dir convergence_runs --no-intro > log_multi.txt 2>&1
 check_contains "\[2.1\] MESHCUTOFF SWEEP" log_multi.txt
 check_contains "\[2.2\] ENERGYSHIFT SWEEP" log_multi.txt
 check_contains "\[2.3\] KGRID SWEEP" log_multi.txt
-check_contains "Energy converged at:.*energyshift = 0.0050" log_multi.txt
+# EnergyShift is judged by the relaxed volume only (no plateau in E); these logs carry no cell
+check_contains "PAO.EnergyShift is NOT judged by the total energy" log_multi.txt
 check_contains "Energy converged at:.*kgrid = 0.1000" log_multi.txt
 
 
@@ -221,10 +222,10 @@ printf 'Mesh.CutOff   150.0000 Ry\nPAO.EnergyShift 0.0500 Ry\nkgrid.MonkhorstPac
     > apply_target.fdf
 stb-convergenceAnalysis --dir convergence_runs --apply apply_target.fdf --no-intro > log_apply.txt 2>&1
 check_contains "\[Applied\].*meshcutoff = 300.0000" log_apply.txt
-check_contains "\[Applied\].*energyshift = 0.0050" log_apply.txt
+check_contains "Skipped energyshift: no converged value to apply" log_apply.txt
 check_contains "\[Applied\].*kgrid = 0.1000" log_apply.txt
 check_contains "Mesh.CutOff   300.0000 Ry" apply_target.fdf
-check_contains "PAO.EnergyShift 0.0050 Ry" apply_target.fdf
+check_contains "PAO.EnergyShift 0.0500 Ry" apply_target.fdf
 # Bulk Si, 5.43 Ang cubic cell (from convergence_meshcutoff_150.0000/structure.fdf),
 # no vacuum: density 0.1000 -> ceil(reciprocal length / 0.1) = 12 divisions/axis.
 check_contains "kgrid.MonkhorstPack   \[12  12  12\]" apply_target.fdf

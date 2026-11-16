@@ -140,6 +140,19 @@ version before) and **Added** (new options and tools).
     from earlier versions) and `V=input` (the cell never moved under a loose tolerance). Those runs are
     left out of the volume verdict, with a `[WARNING]`; when every run is one of them there is no verdict.
     Regenerate such folders and rerun them.
+- `stb-elasticAnalysis`, folders prepared with `stb-elasticInputs --symmetry-method full` and analysed
+  with the default `--symmetry-method basic`: the constants of the directions 'full' had left out came
+  out 0 with no error (Si with `xx` only: C44 = 0; graphene and hBN with `xx` only: C22 = C66 = 0), and
+  the report ended in "VERDICT: UNSTABLE".
+  - `stb-elasticInputs` writes `elastic_scan.json` (symmetry method, directions) into every series
+    folder, always. Without `--symmetry-method`, `stb-elasticAnalysis` uses the method found there (or
+    in the `Symmetry method` line of `elastic_stage1.txt`, for folders of earlier versions); the report
+    says where it was read. With no record the default is still `basic`.
+  - With `basic`, a constant the point group allows that comes out 0 because neither of its directions
+    was run nor reconstructed is now an `[ERROR]` (no tensor is reported). It says whether the
+    directions run determine the tensor with `--symmetry-method full`, or which directions to add.
+  - The `[ERROR]` of `full` for an undetermined constant proposes the direction `stb-elasticInputs`
+    itself would choose (`xy` for cubic, was `yz`).
 
 ### Changed
 

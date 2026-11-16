@@ -63,6 +63,7 @@ from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required
 from stb.core.structure_io import read_md_state, is_siesta_true, prepend_include
 
 REPORT_FILE = "elastic_stage1.txt"
+SCAN_FILE = "elastic_scan.json"
 EXTRA_FDF_FILE = "config_extra.fdf"
 REFERENCE_FILE = "reference_structure.fdf"
 
@@ -702,6 +703,17 @@ def main():
                + "); per series:", f_out)
     for d, n in per_direction_count.items():
         print_dual(f"  {d}: {n} folder(s)", f_out)
+    # The plan, always written (the report only with --save-report): stb-elasticAnalysis reads the symmetry
+    # method from it, since folders reduced with 'full' analysed with 'basic' gave zero constants with no error.
+    import json
+    for mode in ion_modes:
+        try:
+            with open(os.path.join(series_dirs[mode], SCAN_FILE), "w") as fh:
+                json.dump({"tool": "stb-elasticInputs", "version": VERSION, "symmetry_method": args.symmetry_method,
+                           "method": getattr(args, "method", "stress"), "ions": mode,
+                           "directions": list(per_direction_count)}, fh, indent=1)
+        except OSError:
+            pass
     if report_path:
         print_dual(f"Report            : {report_path}", f_out)
     print_dual(color_text("\nNext steps:", 'yellow'), f_out)

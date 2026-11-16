@@ -250,7 +250,7 @@ def compute_stiffness_matrix_full(data, conv_factor, pmg_structure, symprec, ang
     # normal result (a cubic crystal with only 'xx' once gave C44 = -6288 GPa)
     # -- the caller stops when a constant it reports is among them.
     design = np.vstack([symmetry.stress_design_block(basis, mode) for mode in directions_used])
-    remaining = [m for m in symmetry.VOIGT_MODES if m not in directions_used]
+    remaining = [m for m in PREP_DIRECTION_ORDER if m not in directions_used]
     determinacy = {
         'rank': symmetry.numerical_rank(design),
         'open': symmetry.undetermined_constants(basis, design),
@@ -1254,6 +1254,85 @@ def save_and_compare_constants(run_dir, compare_dir, C_sym, ions, args, unit_lab
                "on the atoms. The relaxed-ion values are the ones to compare with experiment.", f_out)
 
 
+PREP_DIRECTION_ORDER = ['xx', 'yy', 'zz', 'xy', 'xz', 'yz']   # stb-elasticInputs' order: its choices and ours agree
+
+
+def read_prep_symmetry_method(run_dir):
+    """(method, source) the folders were prepared with: elastic_scan.json (written since 2.1.0) or the
+    'Symmetry method' line of elastic_stage1.txt (--save-report), in `run_dir` or its parent (a relaxed/ or
+    clamped/ series of --ions both). None when neither exists."""
+    import json
+    for folder in (run_dir, os.path.dirname(os.path.abspath(run_dir))):
+        path = os.path.join(folder, "elastic_scan.json")
+        if os.path.isfile(path):
+            try:
+                with open(path) as fh:
+                    method = json.load(fh).get("symmetry_method")
+                if method in ("basic", "full"):
+                    return method, path
+            except (OSError, ValueError):
+                pass
+        path = os.path.join(folder, "elastic_stage1.txt")
+        if os.path.isfile(path):
+            try:
+                with open(path, errors="ignore") as fh:
+                    m = re.search(r"Symmetry method\s*:\s*(basic|full)", fh.read())
+                if m:
+                    return m.group(1), path
+            except OSError:
+                pass
+    return None
+
+
+def stop_if_basic_left_zero(C, pmg_structure, data, missing_directions, dimensionality, symprec, angle_tolerance,
+                            f_out):
+    """--symmetry-method basic: ends with an [ERROR] when a constant the point group allows (and this
+    dimensionality reports) came out exactly 0 because its direction was never run and no single point-group
+    operation maps a measured direction onto it. Folders reduced by stb-elasticInputs --symmetry-method full
+    (Si: only xx and xy; graphene/hBN: only xx) analysed with 'basic' used to give C44 = 0 (or C22 = C66 = 0)
+    and 'VERDICT: UNSTABLE' with no error."""
+    try:
+        basis, point_group = symmetry.symmetry_allowed_basis(pmg_structure, symprec, angle_tolerance)
+    except Exception:
+        return
+    allowed = np.sum([np.abs(B) for B in basis], axis=0) > 1e-8
+    reported = REPORTED_VOIGT[dimensionality]
+    # a constant is left open only when NEITHER of its two columns has data (measured or reconstructed by
+    # 'basic'): a zero read from a measured column is a measurement, not a hole
+    hole = {DIRECTION_TO_COLUMN[d] for d in missing_directions if d in DIRECTION_TO_COLUMN}
+    zero = [(m, n) for (m, n) in symmetry.VOIGT_INDEPENDENT_PAIRS
+            if m in reported and n in reported and allowed[m, n] and m in hole and n in hole
+            and abs(C[m, n]) < 1e-12 and abs(C[n, m]) < 1e-12]
+    if not zero:
+        return
+    names = ", ".join(f"C{m + 1}{n + 1}" for (m, n) in zero)
+    run = [d for d in symmetry.VOIGT_MODES if d in data]
+    print_dual(color_text(
+        f"[ERROR] Point group {point_group} allows {names}, but --symmetry-method basic left "
+        f"{'it' if len(zero) == 1 else 'them'} at 0: no direction run ({', '.join(run) or 'none'}) gives "
+        f"{'it' if len(zero) == 1 else 'them'}, and 'basic' only reconstructs a direction that one point-group "
+        "operation maps onto a measured one. No elastic tensor is reported (a zero constant would make every "
+        "modulus and the stability verdict wrong).", 'red'), f_out)
+    design = (np.vstack([symmetry.stress_design_block(basis, mode) for mode in run]) if run
+              else np.zeros((0, len(basis))))
+    open_reported = [(m, n) for (m, n) in (symmetry.undetermined_constants(basis, design) if run else [(0, 0)])
+                     if m in reported and n in reported]
+    if run and not open_reported:
+        print_dual("        These directions DO determine the whole tensor with the tensor-invariance fit: run again "
+                   "with --symmetry-method full (folders prepared with stb-elasticInputs --symmetry-method full "
+                   "need it).", f_out)
+    else:
+        remaining = [m for m in PREP_DIRECTION_ORDER if m not in run]
+        add = [m for m in symmetry.select_directions_by_rank(basis, order=run + remaining) if m not in run]
+        add = [m for m in add if m in RELEVANT_DIRECTIONS[dimensionality]]
+        if add:
+            print_dual(f"        Run also: stb-elasticInputs --dirs {' '.join(add)}  (same structure, template and "
+                       "strain range), then this analysis again with --symmetry-method full.", f_out)
+    if f_out:
+        f_out.close()
+    sys.exit(1)
+
+
 def stop_if_undetermined(determinacy, num_independent, point_group, directions_used,
                           dimensionality, method, f_out):
     """Ends the run with an [ERROR] when the directions/patterns that were run
@@ -1621,8 +1700,10 @@ def main():
                         help="Vacuum gap threshold in Ang (default: 10.0) used only by "
                              "--dimensionality auto, same convention as stb-elasticInputs/"
                              "stb-kgrid/stb-strain.")
-    parser.add_argument("--symmetry-method", choices=["basic", "full"], default="basic",
-                        help="How to use detected symmetry (default: basic). 'basic': exact "
+    parser.add_argument("--symmetry-method", choices=["basic", "full"], default=None,
+                        help="How to use detected symmetry (default: the method the folders were prepared "
+                             "with, read from elastic_scan.json or elastic_stage1.txt; 'basic' when neither "
+                             "says). 'basic': exact "
                              "reconstruction/pooling only when a single point-group operation "
                              "maps one canonical strain direction exactly onto another (misses "
                              "reductions like hexagonal's C11=C22, which come from the FULL "
@@ -1697,6 +1778,15 @@ def main():
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     args = parser.parse_args()
+
+    symmetry_method_source = "--symmetry-method"
+    if args.symmetry_method is None:
+        found = read_prep_symmetry_method(args.dir)
+        if found is not None:
+            args.symmetry_method, symmetry_method_source = found
+        else:
+            args.symmetry_method, symmetry_method_source = "basic", "default (no prep record found)"
+    args.symmetry_method_source = symmetry_method_source
 
     if args.reference_structure is None:
         args.reference_structure = os.path.normpath(os.path.join(args.dir, "reference_structure.fdf"))
@@ -1880,7 +1970,10 @@ def main():
     print_dual(f"Run directory        : {args.dir}", f_out)
     print_dual(f"Date/time            : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f_out)
     print_dual(f"Method               : {args.method}"
-               + (f" (--symmetry-method {args.symmetry_method})" if args.method == "stress" else ""),
+               + ((f" (--symmetry-method {args.symmetry_method})"
+                   + (f" -- method read from {args.symmetry_method_source}"
+                      if args.symmetry_method_source.endswith((".json", ".txt")) else ""))
+                  if args.method == "stress" else ""),
                f_out)
     mode_labels = {"3d": "3D (GPa)", "2d": "2D (N/m)", "1d": "1D (nN)"}
     print_dual(f"Mode                 : {mode_labels[args.dimensionality]}", f_out)
@@ -2017,6 +2110,9 @@ def main():
     else:
         C, filled_by_symmetry, missing_directions = compute_stiffness_matrix(
             data, CONV_FACTOR, symmetry_info, unit_label, f_out)
+        if pmg_structure is not None:
+            stop_if_basic_left_zero(C, pmg_structure, data, missing_directions, args.dimensionality,
+                                    args.symprec, args.angle_tolerance, f_out)
 
     # Directions that never exist for this dimensionality (e.g. 'xx' for
     # a 1D wire, which always touches a vacuum-padded axis) aren't a

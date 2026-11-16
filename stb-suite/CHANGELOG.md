@@ -90,6 +90,12 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- `stb-stackingfault --scan surface`: the default grid is 6 x 6 on a hexagonal lattice (7 x 7 on any
+  other, as before). The AB/BA registries of a hexagonal bilayer are at shifts (1/3, 2/3) and
+  (2/3, 1/3), which a 7 x 7 grid does not contain: the reported minimum was 0.8 meV above the exact AB
+  and the corrugation 3.62 instead of 3.78 meV/Ang^2. A grid that is not a multiple of 3 on such a
+  lattice now warns, in the prep and in `stb-stackingfaultAnalysis`. `-ny` defaults to `-nx`.
+
 - `stb-phononsPos` and `stb-mlphonons` use a Gamma-centred q-mesh. phonopy shifts an even mesh by half
   a step, and on a hexagonal lattice that mesh loses the point group (`-m 30 30 1`:
   `MeshSymmetryFallbackWarning`, only time reversal used). Thermal properties change in the last

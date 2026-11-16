@@ -147,6 +147,19 @@ def build_z_relax_block(n_atoms, md_steps):
     )
 
 
+def is_hexagonal_inplane(lattice_matrix, tol=0.02):
+    """True for a 2D lattice with |a| = |b| and 60 or 120 degrees between them
+    (graphene, hBN, TMDs). On such a lattice the high-symmetry registries
+    of a bilayer (AB, BA) sit at shifts (1/3, 2/3) and (2/3, 1/3), which a
+    grid only contains when its divisions are multiples of 3."""
+    a, b = np.asarray(lattice_matrix, dtype=float)[:2]
+    la, lb = np.linalg.norm(a), np.linalg.norm(b)
+    if abs(la - lb) > tol * max(la, lb):
+        return False
+    cos = float(np.dot(a, b) / (la * lb))
+    return abs(abs(cos) - 0.5) < tol
+
+
 def build_scan_points(scan, grid_nx, grid_ny, scan_n):
     """Builds the list of (label, i, j, shift_x, shift_y) points to sample
     for every --scan mode. 'surface' is today's full Cartesian-product grid
@@ -386,15 +399,17 @@ def main():
                          help="With --scan x/y/xy: number of points along the 1D sweep (default: "
                               "15). Ignored under --scan surface (see -nx/-ny instead).")
 
-    parser.add_argument("-nx", "--grid-nx", type=int, default=7,
+    parser.add_argument("-nx", "--grid-nx", type=int, default=None,
                          help="With --scan surface: grid resolution along shift_x, this many "
-                              "lateral shifts covering [0, 1) (default: 7). Independent of "
+                              "lateral shifts covering [0, 1) (default: 6 on a hexagonal lattice, "
+                              "so that the grid contains the AB/BA registries at shifts 1/3 and "
+                              "2/3 -- use a multiple of 3 there --, 7 otherwise). Independent of "
                               "--grid-ny -- an anisotropic lattice (a != b, e.g. a rectangular "
                               "or low-symmetry 2D cell) often warrants a different sampling "
                               "density per axis rather than forcing a square grid. Ignored under "
                               "--scan x/y/xy (see -n/--scan-points instead).")
-    parser.add_argument("-ny", "--grid-ny", type=int, default=7,
-                         help="With --scan surface: grid resolution along shift_y (default: 7). "
+    parser.add_argument("-ny", "--grid-ny", type=int, default=None,
+                         help="With --scan surface: grid resolution along shift_y (default: as -nx). "
                               "See --grid-nx. Ignored under --scan x/y/xy.")
 
     parser.add_argument("--ml-prerelax-layers", action="store_true",
@@ -448,9 +463,9 @@ def main():
         ])
 
     if args.scan == "surface":
-        if args.grid_nx < 2:
+        if args.grid_nx is not None and args.grid_nx < 2:
             parser.error("-nx/--grid-nx must be >= 2 (need at least 2 points for a sweep).")
-        if args.grid_ny < 2:
+        if args.grid_ny is not None and args.grid_ny < 2:
             parser.error("-ny/--grid-ny must be >= 2 (need at least 2 points for a sweep).")
     elif args.scan_points < 2:
         parser.error("-n/--scan-points must be >= 2 (need at least 2 points for a sweep).")
@@ -481,6 +496,13 @@ def main():
     species_meta = structure_io.species_dict(layer1_structure)
     layer1_pmg = read_layer(args.layer1)
     layer2_pmg = read_layer(args.layer2)
+    hexagonal = is_hexagonal_inplane(layer1_pmg.lattice.matrix)
+    grid_default = 6 if hexagonal else 7
+    grid_chosen = args.grid_nx is None and args.grid_ny is None
+    if args.grid_nx is None:
+        args.grid_nx = args.grid_ny if args.grid_ny is not None else grid_default
+    if args.grid_ny is None:
+        args.grid_ny = args.grid_nx
 
     with open(args.calc) as f:
         calc_text = f.read()
@@ -514,7 +536,17 @@ def main():
     print_dual(f"  Output dir      : {output_root} (run folder: {run_root})", f_out)
     if args.scan == "surface":
         print_dual(f"  Grid            : {args.grid_nx} x {args.grid_ny} (surface)"
-                    + (" (asymmetric)" if args.grid_nx != args.grid_ny else ""), f_out)
+                    + (" (asymmetric)" if args.grid_nx != args.grid_ny else "")
+                    + (f" -- default for a {'hexagonal' if hexagonal else 'non-hexagonal'} lattice"
+                       if grid_chosen else ""), f_out)
+        if hexagonal and (args.grid_nx % 3 or args.grid_ny % 3):
+            print_dual(color_text(
+                f"  [WARNING] Hexagonal lattice with a {args.grid_nx} x {args.grid_ny} grid: the "
+                "high-symmetry registries AB/BA are at shifts (1/3, 2/3) and (2/3, 1/3), which this "
+                "grid does not contain, so the reported minimum, maximum and corrugation are those of "
+                "the nearest grid points (graphene bilayer, 7 x 7: minimum 0.8 meV above the true AB, "
+                "corrugation 3.62 instead of 3.78 meV/Ang^2). Use divisions that are multiples of 3 "
+                "(6, 9, 12).", 'yellow'), f_out)
     else:
         scan_desc = {"x": "shift_x only", "y": "shift_y only", "xy": "diagonal shift_x=shift_y"}
         print_dual(f"  Grid            : {args.scan_points} points, 1D ({scan_desc[args.scan]})",

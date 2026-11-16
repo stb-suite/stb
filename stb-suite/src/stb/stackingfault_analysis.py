@@ -573,6 +573,15 @@ def main():
         sys.exit(1)
 
     print_section('[2] STACKING FAULT ANALYSIS', f_out)
+    if scan == "surface" and lattice is not None and (grid_nx % 3 or grid_ny % 3):
+        from stb.stackingfault import is_hexagonal_inplane
+        if is_hexagonal_inplane(lattice):
+            print_dual(color_text(
+                f"[WARNING] Hexagonal lattice sampled on a {grid_nx} x {grid_ny} grid: the high-symmetry "
+                "registries AB/BA sit at shifts (1/3, 2/3) and (2/3, 1/3), which are not grid points. The "
+                "minimum, maximum and corrugation below are those of the nearest grid points, not of the "
+                "exact registries (the corrugation is underestimated). Rerun stb-stackingfault with "
+                "divisions that are multiples of 3.", 'yellow'), f_out)
     print_dual(f"[INFO] Interface area (in-plane): {area:.4f} Ang^2 (used to convert relative "
                 "energies to meV/Ang^2)", f_out)
     print_dual(f"Equilibrium stacking (min)    : {min_row.label}  (shift "

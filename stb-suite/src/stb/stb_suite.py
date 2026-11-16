@@ -1353,8 +1353,9 @@ def run_stackingfault_setup() -> None:
             "\nGrid resolution: shift_x and shift_y are sampled independently -- an anisotropic "
             "lattice (a != b) often warrants a different sampling density per axis rather than a "
             "square grid.", 'cyan'))
-        grid_nx = get_int_input("Grid resolution along shift_x (Nx) [default: 7]: ", 7)
-        grid_ny = get_int_input("Grid resolution along shift_y (Ny) [default: 7]: ", 7)
+        grid_nx = get_int_input("Grid resolution along shift_x (Nx) [default: 6 on a hexagonal lattice -- "
+                                "keep it a multiple of 3 there --, 7 otherwise]: ", 0)
+        grid_ny = get_int_input("Grid resolution along shift_y (Ny) [default: as Nx]: ", 0)
         scan_points = 15
     else:
         grid_nx = grid_ny = 7
@@ -1443,7 +1444,10 @@ def run_stackingfault_setup() -> None:
         "--no-intro",
     ]
     if scan == "surface":
-        args.extend(["-nx", str(grid_nx), "-ny", str(grid_ny)])
+        if grid_nx > 0:
+            args.extend(["-nx", str(grid_nx)])
+        if grid_ny > 0:
+            args.extend(["-ny", str(grid_ny)])
     else:
         args.extend(["-n", str(scan_points)])
     if pp_path:
@@ -1472,7 +1476,7 @@ def run_stackingfault_setup() -> None:
         ("Layer 2", layer2_file),
         ("Calc template", calc_file),
         ("Pseudopotentials", pp_path or "(none)"),
-        ("Grid", f"{grid_nx} x {grid_ny} (surface)" + (" (asymmetric)" if grid_nx != grid_ny else "")
+        ("Grid", (f"{grid_nx or 'auto'} x {grid_ny or 'as Nx'} (surface)")
          if scan == "surface" else f"{scan_points} points, 1D ({scan})"),
         ("Gap", f"{gap} Ang" + (" (starting guess)" if mode in (1, 2) else " (fixed)")),
         ("Twist (fixed)", f"{twist} deg"),

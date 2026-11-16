@@ -24,8 +24,11 @@ conventions as stb-optical and the other workflow prep stages.
 volumes, forced directives, level of theory) so that stb-eosAnalysis can compare
 what was planned with what SIESTA actually did.
 
-Bulk (3D periodic) only: an equation of state needs a bounded cell volume.
-The scan scales the cell isotropically and keeps its shape -- for a non-cubic
+Bulk, and since 2.0.1 a 2D material or a wire too: with vacuum along one (two)
+axis, only the periodic lattice vectors are scaled -- the strain is then an AREA
+(length) strain, the vacuum vector(s) stay as given -- and stb-eosAnalysis reports
+the equilibrium area / in-plane lattice parameter and the in-plane stiffness in N/m.
+The scan scales the periodic cell isotropically and keeps its shape -- for a non-cubic
 crystal it gives E(V) at the input c/a (and b/a), so its B0 is the bulk modulus
 of THAT constrained path, not of the fully relaxed solid; the report says so.
 """
@@ -153,8 +156,10 @@ def main():
     parser.add_argument("-o", "--output-dir", default="eos_runs",
                         help="Directory for the 'vol_<pct>' folders (default: eos_runs).")
     parser.add_argument("--vacuum-gap", type=float, default=10.0,
-                        help="Gap (Ang) used to detect vacuum-padded axes -- bulk only, a vacuum-padded "
-                             "structure is rejected (default: 10.0).")
+                        help="Gap (Ang) used to detect vacuum-padded axes (default: 10.0). With vacuum along "
+                             "one axis (2D material, slab) only the two periodic vectors are scaled and "
+                             "--strain-range is an AREA strain; with vacuum along two (wire), only the "
+                             "periodic one and it is a LENGTH strain. A molecule (three) is rejected.")
     parser.add_argument("--save-report", action="store_true",
                         help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-eosInputs {VERSION}")
@@ -216,11 +221,22 @@ def main():
     is_cartesian = structure.coord_format == 'cartesian'
     frac_coords = kspace.to_fractional(positions, structure.lattice, is_cartesian)
     vacuum_axes = kspace.detect_vacuum_axes(frac_coords, structure.lattice, args.vacuum_gap)
-    if any(vacuum_axes):
+    if all(vacuum_axes):
         sys.exit(color_text(
-            f"[ERROR] {kspace.dimensionality_label(vacuum_axes)}: this tool is bulk (3D periodic) only -- an "
-            "equation of state assumes a well-defined, bounded cell volume, which a slab/wire/molecule "
-            "doesn't have.", 'red'))
+            f"[ERROR] {kspace.dimensionality_label(vacuum_axes)}: no periodic axis to scale -- an equation "
+            "of state needs a periodic cell (3D solid, 2D material or wire).", 'red'))
+    periodic_axes = [i for i, vac in enumerate(vacuum_axes) if not vac]
+    n_periodic = len(periodic_axes)
+    measure_name = {3: "volume", 2: "area", 1: "length"}[n_periodic]
+    # What stays fixed across the scan: the vacuum height (2D) or cross-section (1D), so that
+    # cell volume = measure x extent and E(V) is E(area) or E(length) in disguise.
+    if n_periodic == 2:
+        scan_measure0 = float(np.linalg.norm(np.cross(lattice[periodic_axes[0]], lattice[periodic_axes[1]])))
+    elif n_periodic == 1:
+        scan_measure0 = float(np.linalg.norm(lattice[periodic_axes[0]]))
+    else:
+        scan_measure0 = float(abs(np.linalg.det(lattice)))
+    fixed_extent = float(abs(np.linalg.det(lattice))) / scan_measure0
 
     os.makedirs(args.output_dir, exist_ok=True)
     report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
@@ -275,7 +291,7 @@ def main():
     sg = space_group_info(structure)
     if sg:
         print_dual(f"Space group     : {sg[0]} (No. {sg[1]}), {sg[2]} system", f_out)
-        if sg[2] != "cubic":
+        if sg[2] != "cubic" and n_periodic == 3:
             print_dual(warn(
                 f"The {sg[2]} cell is scaled isotropically, so the scan keeps its shape: the fit gives "
                 "the bulk modulus along the constrained path (fixed c/a and angles), not the fully "
@@ -372,25 +388,42 @@ def main():
     # ------------------------------------------------------------------ [3]
     print_section("[3] SCAN DEFINITION", f_out)
     strains = np.linspace(-abs(args.strain_range), abs(args.strain_range), args.n_volumes)
-    print_dual(f"Volume strain   : {-args.strain_range:+.2f} % .. {args.strain_range:+.2f} %, {args.n_volumes} points "
-               f"(step {strains[1] - strains[0]:.3f} %)", f_out)
-    print_dual("Cell scaling    : L = L0 * (1 + strain/100)^(1/3) on every lattice vector (shape kept); "
-               "fractional positions unchanged", f_out)
+    print_dual(f"{measure_name.capitalize()} strain".ljust(16) + f": {-args.strain_range:+.2f} % .. "
+               f"{args.strain_range:+.2f} %, {args.n_volumes} points (step {strains[1] - strains[0]:.3f} %)", f_out)
+    if n_periodic == 3:
+        print_dual("Cell scaling    : L = L0 * (1 + strain/100)^(1/3) on every lattice vector (shape kept); "
+                   "fractional positions unchanged", f_out)
+    else:
+        kept = ", ".join("abc"[i] for i in range(3) if i not in periodic_axes)
+        print_dual(f"Cell scaling    : {kspace.dimensionality_label(vacuum_axes)} -- L = L0 * (1 + strain/100)^(1/"
+                   f"{n_periodic}) on the periodic vector(s) {', '.join('abc'[i] for i in periodic_axes)} only; "
+                   f"the vacuum vector(s) {kept} are not touched, so the strain is an {measure_name.upper()} strain "
+                   f"({measure_name}_0 = {scan_measure0:.4f} Ang{'^2' if n_periodic == 2 else ''}). The cell volume "
+                   "still changes by the same percentage, which is what the folder names and the table show; "
+                   "stb-eosAnalysis converts the fit back to "
+                   + ("area and an in-plane stiffness in N/m." if n_periodic == 2 else "length and an axial stiffness in nN."),
+                   f_out)
+        print_dual(color_text("[NOTE] Atoms keep their fractional coordinates: along the vacuum axis they keep "
+                              "their heights exactly, in the plane they follow the strain. A buckled or "
+                              "multi-layer sheet whose thickness should respond needs --relax-positions.", 'cyan'), f_out)
     if args.n_volumes % 2 == 0:
         print_dual(color_text("[NOTE] An even number of volumes has no point at the input volume itself; use an "
                               "odd number to keep V0_input in the scan.", 'cyan'), f_out)
     plan = []
     rows = []
     for s in strains:
-        factor = (1.0 + s / 100.0) ** (1.0 / 3.0)
+        factor = (1.0 + s / 100.0) ** (1.0 / n_periodic)
+        axis_factors = [factor if i in periodic_axes else 1.0 for i in range(3)]
         vol = v0 * (1.0 + s / 100.0)
+        d_scaled = d_min * factor if (d_min and n_periodic == 3) else None   # in 2D/1D only in-plane distances scale
         plan.append({"folder": strain_folder_name(s), "strain_pct": float(s), "linear_factor": float(factor),
+                     "axis_factors": axis_factors,
                      "volume": float(vol), "volume_per_atom": float(vol / n_atoms),
-                     "lengths": [float(x * factor) for x in lengths],
-                     "d_min": (d_min * factor if d_min else None)})
+                     "lengths": [float(x * f) for x, f in zip(lengths, axis_factors)],
+                     "d_min": d_scaled})
         rows.append(([strain_folder_name(s) + "/", f"{s:+.2f}", f"{vol:.4f}", f"{vol / n_atoms:.4f}", f"{factor:.5f}",
-                      " ".join(f"{x * factor:.4f}" for x in lengths),
-                      f"{d_min * factor:.4f}" if d_min else "-"], None))
+                      " ".join(f"{x * f:.4f}" for x, f in zip(lengths, axis_factors)),
+                      f"{d_scaled:.4f}" if d_scaled else "-"], None))
     print_table(["Folder", "dV/V0 (%)", "V (Ang^3)", "V/atom", "L/L0", "a b c (Ang)", "d_min (Ang)"], rows, f_out)
     if args.strain_range < 2.0:
         print_dual(warn(f"--strain-range {args.strain_range:g} % is very narrow: the curvature of E(V) is then "
@@ -452,7 +485,8 @@ def main():
         os.makedirs(folder, exist_ok=True)
         factor = item["linear_factor"]
         scaled_path = os.path.join(folder, structure_name)
-        structure_io.rewrite_fdf_lattice(args.file, raw_vectors * factor, scaled_path)
+        structure_io.rewrite_fdf_lattice(
+            args.file, np.asarray(raw_vectors) * np.array(item["axis_factors"])[:, None], scaled_path)
         files = [structure_name]
         if calc_mode == "template":
             with open(os.path.join(folder, "calc.fdf"), "w") as f:
@@ -503,6 +537,8 @@ def main():
                               if k in ("xcfunctional", "xcauthors", "paobasistype", "paobasissize", "paoenergyshift",
                                        "meshcutoff", "spin", "electronictemperature", "dmtolerance", "dftd3")}},
         "scan": {"n_volumes": args.n_volumes, "strain_range_pct": args.strain_range, "points": plan},
+        "dimensionality": {"n_periodic": n_periodic, "periodic_axes": periodic_axes, "measure": measure_name,
+                           "measure_input": scan_measure0, "fixed_extent": fixed_extent},
         "pseudo_source": pseudo_label or None,
     }
     with open(os.path.join(args.output_dir, MANIFEST_FILE), "w") as f:

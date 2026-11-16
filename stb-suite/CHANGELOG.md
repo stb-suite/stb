@@ -184,6 +184,12 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-eosInputs` / `stb-eosAnalysis` accept 2D materials and wires. A structure with vacuum was
+  refused ("bulk only"), and area scans had to be built by hand. Now only the periodic lattice vectors
+  are scaled (`--strain-range` is an area strain for a 2D material, a length strain for a wire; the
+  vacuum vector is not touched), and Stage 2 reports the equilibrium area and in-plane lattice vectors
+  with the in-plane stiffness `A d2E/dA2` in N/m (wire: length, axial stiffness in nN). Its pressure
+  cross-check uses the stress conjugate to the scan. Bulk structures are handled exactly as before.
 - `stb-adsorb --optimizer cg|broyden|fire`, `--force-tol`, `--max-displ`: relaxation settings written
   into every folder's `config_extra.fdf` (default: whatever `--calc` sets). A weakly bound molecule on a
   metal is ill-conditioned for SIESTA's CG: H2O on Ag(111) 3x3 was still at 0.03-1.3 eV/Ang after

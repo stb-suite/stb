@@ -86,6 +86,23 @@ def fdf_directives_true(value):
     return value is not None and str(value).strip().lower().strip(".") in ("true", "t", "yes", "y")
 
 
+def effective_pressure(stress, cell, periodic_axes):
+    """The pressure conjugate to the scanned quantity, in eV/Ang^3 per cell volume, so that it equals
+    -dE/dV of the fit: -trace/3 for a 3D solid; for a 2D material -(sigma_xx' + sigma_yy')/2 over the two
+    in-plane directions (the stress along the vacuum does no work: the vacuum vector is not scaled); for a
+    wire minus the stress along it."""
+    stress = np.asarray(stress, dtype=float)
+    if len(periodic_axes) == 3:
+        return float(-np.trace(stress) / 3.0)
+    if len(periodic_axes) == 2:
+        normal = np.cross(cell[periodic_axes[0]], cell[periodic_axes[1]])
+        normal = normal / np.linalg.norm(normal)
+        return float(-(np.trace(stress) - normal @ stress @ normal) / 2.0)
+    along = np.asarray(cell[periodic_axes[0]], dtype=float)
+    along = along / np.linalg.norm(along)
+    return float(-(along @ stress @ along))
+
+
 def folder_theory(folder_path):
     """{label: value} of the settings that shape the energy surface, as SIESTA reads them in this
     folder (config_extra.fdf first, then calc.fdf, then the rest), plus the k-grid and the md5 of
@@ -423,6 +440,10 @@ def main():
 
     manifest = read_manifest(args.dir)
     plan = {p["folder"]: p for p in (manifest or {}).get("scan", {}).get("points", [])}
+    dims = (manifest or {}).get("dimensionality") or {"n_periodic": 3, "periodic_axes": [0, 1, 2],
+                                                      "measure": "volume", "measure_input": None,
+                                                      "fixed_extent": None}
+    n_periodic = dims["n_periodic"]
 
     report_path = REPORT_FILE if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
@@ -507,7 +528,8 @@ def main():
             continue
         converged, iterations = siesta_log.get_scf_convergence(out_path)
         stress = siesta_log.get_stress_tensor(out_path)
-        pressure = float(-np.trace(stress) / 3 * _EV_A3_TO_GPA) if stress is not None else np.nan
+        pressure = (effective_pressure(stress, cell, dims["periodic_axes"]) * _EV_A3_TO_GPA
+                    if stress is not None else np.nan)
         item = {"folder": folder, "volume": float(abs(np.linalg.det(cell))), "energy": float(energy),
                 "scf": bool(converged), "iterations": iterations, "force": siesta_log.get_max_force(out_path),
                 "pressure": pressure, "n_atoms": count_atoms(folder_path),
@@ -651,20 +673,61 @@ def main():
     kappa = 1000.0 / b0
     print_dual(f"Compressibility            : 1/B0 = {kappa:.3f} TPa^-1; B(V0) from the curve = {float(b_of_v(v0)):.2f} GPa", f_out)
 
+    lowdim = None
+    if n_periodic < 3 and dims.get("fixed_extent"):
+        extent = dims["fixed_extent"]          # vacuum height (2D, Ang) or cross-section (1D, Ang^2): constant in the scan
+        if n_periodic == 2:
+            stiff, unit, name = b0 * extent * 0.1, "N/m", "in-plane stiffness (2D bulk modulus) A d2E/dA2"
+            stiff_err = jack[1] * extent * 0.1 if jack else None
+            m0, m_unit = v0 / extent, "Ang^2"
+        else:
+            stiff, unit, name = b0 * extent * 0.01, "nN", "axial stiffness L d2E/dL2"
+            stiff_err = jack[1] * extent * 0.01 if jack else None
+            m0, m_unit = v0 / extent, "Ang"
+        lowdim = {"measure": dims["measure"], "value": m0, "unit": m_unit, "stiffness": stiff,
+                  "stiffness_unit": unit, "stiffness_err": stiff_err}
+        print_dual("", f_out)
+        print_dual(color_text(f"{'2D MATERIAL' if n_periodic == 2 else 'WIRE'}: only the periodic vector(s) were "
+                              f"scaled, so the fit above is E({dims['measure']}) written against the cell volume "
+                              f"(volume = {dims['measure']} x {extent:.4f} "
+                              f"{'Ang of cell height' if n_periodic == 2 else 'Ang^2 of cross-section'}, constant).",
+                              'cyan'), f_out)
+        print_dual(f"Equilibrium {dims['measure']:<6}        : {color_text(f'{m0:.4f}', 'bold')} {m_unit}"
+                   + (f" (input {dims['measure_input']:.4f}, {100 * (m0 / dims['measure_input'] - 1):+.2f} %)"
+                      if dims.get("measure_input") else ""), f_out)
+        print_dual(f"{name[0].upper() + name[1:]:<27}: {color_text(f'{stiff:.2f}', 'bold')} {unit}"
+                   + (f" +/- {stiff_err:.2f}" if stiff_err is not None else ""), f_out)
+        print_dual(f"V0 in Ang^3 and B0 in GPa above refer to the cell INCLUDING its vacuum: they change with the "
+                   f"vacuum thickness and are not material properties. Quote the {dims['measure']} and the stiffness "
+                   f"in {unit}." + (" For an isotropic sheet the stiffness is (C11 + C12)/2 of the 2D elastic tensor "
+                                    "(stb-elasticAnalysis)." if n_periodic == 2 else ""), f_out)
+
     # geometry suggestion
-    scale = (v0 / v_ref) ** (1.0 / 3.0) if v_ref else None
+    scale = (v0 / v_ref) ** (1.0 / n_periodic) if v_ref else None
     new_lc = None
     if scale is not None:
         lc = (manifest or {}).get("structure", {}).get("latticeconstant") if manifest else None
         print_dual(f"Versus the input structure : V0 / V_input = {v0 / v_ref:.5f} ({100 * (v0 / v_ref - 1):+.2f} % in volume, "
                    f"linear scale {scale:.5f})", f_out)
-        if lc:
+        if lc and n_periodic == 3:
             new_lc = lc * scale
             print_dual(f"Suggested LatticeConstant  : {lc:.5f} -> {new_lc:.5f} Ang (the equilibrium volume at the "
                        "input's shape)", f_out)
+        elif n_periodic < 3:
+            lengths0 = (manifest or {}).get("structure", {}).get("lengths")
+            if lengths0:
+                print_dual("Equilibrium lattice vectors: "
+                           + ", ".join(f"|{'abc'[i]}| = {lengths0[i] * scale:.5f} Ang" for i in dims["periodic_axes"])
+                           + f" (input x {scale:.5f}; scale ONLY these vectors -- changing LatticeConstant "
+                           "would stretch the vacuum too)", f_out)
 
     # ------------------------------------------------------------------ [5]
     print_section("[5] PRESSURE CROSS-CHECK (SIESTA stress vs -dE/dV)", f_out)
+    if n_periodic < 3:
+        print_dual("P_SIESTA here is the stress conjugate to the scan: minus the mean of the "
+                   + ("two in-plane normal stresses" if n_periodic == 2 else "stress along the wire")
+                   + " (the stress along the vacuum does no work), per cell volume, so it compares with -dE/dV.",
+                   f_out)
     p_fit = p_of_v(volumes)
     have_p = np.isfinite(pressures)
     b_stress, p_at_v0 = stress_bulk_modulus(volumes, pressures, v0)
@@ -796,6 +859,11 @@ def main():
     print_dual(f"Result          : V0 = {v0:.4f} Ang^3, E0 = {e0:.6f} eV, B0 = {b0:.2f} GPa"
                + (f" +/- {jack[1]:.2f}" if jack else "") + (f", B0' = {bprime:.3f}" if bprime is not None else "")
                + f"  ({form}, R^2 {r2:.6f})", f_out)
+    if lowdim:
+        print_dual(f"                  {lowdim['measure']} = {lowdim['value']:.4f} {lowdim['unit']}, stiffness = "
+                   f"{lowdim['stiffness']:.2f} {lowdim['stiffness_unit']}"
+                   + (f" +/- {lowdim['stiffness_err']:.2f}" if lowdim['stiffness_err'] is not None else "")
+                   + "  <- the physical numbers for this system (V0/B0 include the vacuum)", f_out)
     print_dual(f"Checks          : {n_pass} ok, {n_warn} warning(s)", f_out)
 
     curve_p = p_of_v(fit["curve_v"])

@@ -476,6 +476,99 @@ def rotate_elastic_tensor(C, R):
     return full_tensor_to_voigt(T_rot)
 
 
+def _spd_sqrt(G):
+    """Square root of a symmetric positive-definite matrix."""
+    w, v = np.linalg.eigh(G)
+    return (v * np.sqrt(w)) @ v.T
+
+
+def exact_point_group_rotations(sga, lattice_matrix):
+    """The point group's Cartesian rotation matrices, orthogonal and closed as a
+    group to machine precision.
+
+    spglib finds the operations within `symprec` and returns them as integer
+    matrices in the cell's own basis -- exact. Turned into Cartesian matrices with
+    the cell as given (pymatgen's `cartesian=True`), they inherit the cell's
+    numerical noise: a relaxed structure with 3e-6 Ang of noise gives rotations
+    1e-6 away from the true ones, and everything derived from them carries that
+    error (an invariant-tensor basis mixed at the 1e-6 level, which a rank test
+    then reads as real coupling -- silicon's shear constant looked determined by
+    an xx strain alone). Here the metric tensor is first averaged over the integer
+    operations, which gives the nearest cell that has the symmetry exactly, in the
+    same orientation; the rotations are built from that cell.
+    """
+    L = np.asarray(lattice_matrix, dtype=float)
+    integer_ops = []
+    for op in sga.get_point_group_operations(cartesian=False):
+        W = np.rint(op.rotation_matrix)
+        if not any(np.array_equal(W, seen) for seen in integer_ops):
+            integer_ops.append(W)
+
+    G = L @ L.T
+    G_sym = sum(W.T @ G @ W for W in integer_ops) / len(integer_ops)
+    orientation = np.linalg.solve(_spd_sqrt(G), L)         # L = sqrt(G) . orientation
+    L_sym_T = (_spd_sqrt(G_sym) @ orientation).T
+    L_sym_T_inv = np.linalg.inv(L_sym_T)
+    return [L_sym_T @ W @ L_sym_T_inv for W in integer_ops]
+
+
+# When is a constant "determined" by a set of strain directions? Not when the
+# design matrix merely has full rank in exact arithmetic: a crystal whose axes sit
+# 1e-6 rad away from x, y, z (the noise of a relaxed cell) has a C44 that an xx
+# strain does reach, through a stress component 1e-6 times the direct ones, and a
+# fit through it multiplies the noise of the stress by 1e6. A direction of the
+# coefficient space counts as determined only when its singular value is above
+# DESIGN_RTOL x the largest one, i.e. when the data fix it through a response no
+# more than 100 times weaker than the direct ones.
+DESIGN_RTOL = 1e-2
+
+
+def numerical_rank(A, rtol=DESIGN_RTOL):
+    """Rank of A, counting the singular values above rtol x the largest one."""
+    A = np.atleast_2d(np.asarray(A, dtype=float))
+    if A.size == 0:
+        return 0
+    s = np.linalg.svd(A, compute_uv=False)
+    if s.size == 0 or s[0] <= 1e-12:
+        return 0
+    return int(np.sum(s > rtol * s[0]))
+
+
+def stress_design_block(basis, mode):
+    """Design-matrix block (6 x len(basis)) of one Voigt strain mode in the stress
+    method: the stress each basis tensor gives for a unit strain of that mode."""
+    eps_v = voigt_strain_engineering(strain_tensor(mode))
+    return np.array([Bk @ eps_v for Bk in basis]).T
+
+
+def undetermined_constants(basis, design):
+    """The elastic constants a set of measurements leaves open.
+
+    `design` is the stacked design matrix of the fit (rows: measurements, columns:
+    coefficients of `basis`). Any combination of basis tensors in its null space
+    can be added to the fitted tensor without changing a single measured number,
+    so every Voigt entry such a combination touches is not determined by the data
+    (a least-squares solve fills it with the minimum-norm value, or with noise
+    amplified by a nearly zero singular value, and both look like a result). "Null
+    space" is judged with DESIGN_RTOL. Returns the (m, n) pairs, m <= n, 0-based; empty when the fit is
+    fully determined.
+    """
+    K = len(basis)
+    design = np.atleast_2d(np.asarray(design, dtype=float)).reshape(-1, K)
+    if design.shape[0] == 0:
+        null_vectors = np.eye(K)
+    else:
+        _, s, vt = np.linalg.svd(design, full_matrices=True)
+        null_vectors = vt[numerical_rank(design):]
+    open_pairs = set()
+    for vec in null_vectors:
+        free = sum(c * Bk for c, Bk in zip(vec, basis))
+        for (m, n) in VOIGT_INDEPENDENT_PAIRS:
+            if abs(free[m, n]) > 1e-3:
+                open_pairs.add((m, n))
+    return sorted(open_pairs)
+
+
 def symmetry_allowed_basis(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     """Returns (basis, point_group_symbol): `basis` is a list of 6x6 Voigt
     matrices spanning the subspace of elastic tensors invariant under every
@@ -496,15 +589,17 @@ def symmetry_allowed_basis(pmg_structure, symprec=0.01, angle_tolerance=5.0):
     tables per crystal system, applied numerically instead of by hand so it
     covers any of the 32 point groups uniformly (no per-crystal-system
     special-casing, unlike equivalent_strain_modes above).
+
+    The operations are the exact ones (exact_point_group_rotations), so the
+    basis does not depend on the numerical noise of the cell or the positions.
     """
     sga = SpacegroupAnalyzer(pmg_structure, symprec=symprec, angle_tolerance=angle_tolerance)
     point_group = sga.get_point_group_symbol()
-    ops = sga.get_point_group_operations(cartesian=True)
+    rotations = exact_point_group_rotations(sga, pmg_structure.lattice.matrix)
 
     n = len(VOIGT_INDEPENDENT_PAIRS)
     constraints = []
-    for op in ops:
-        R = op.rotation_matrix
+    for R in rotations:
         L = np.zeros((n, n))
         for p, (m, nn) in enumerate(VOIGT_INDEPENDENT_PAIRS):
             unit = np.zeros((6, 6))
@@ -516,8 +611,7 @@ def symmetry_allowed_basis(pmg_structure, symprec=0.01, angle_tolerance=5.0):
 
     M = np.vstack(constraints)
     _, s, vt = np.linalg.svd(M, full_matrices=True)
-    tol = 1e-8 * max(M.shape)
-    rank = int(np.sum(s > tol))
+    rank = int(np.sum(s > 1e-8 * max(s[0], 1.0)))   # the group is exact: the null space sits at 1e-15
 
     basis = []
     for vec in vt[rank:]:
@@ -555,11 +649,10 @@ def select_directions_by_rank(basis, order=VOIGT_MODES):
     blocks = []
     target_rank = len(basis)
     for mode in order:
-        eps_v = voigt_strain_engineering(strain_tensor(mode))
-        block = np.array([Bk @ eps_v for Bk in basis]).T  # shape (6, len(basis))
+        block = stress_design_block(basis, mode)  # shape (6, len(basis))
         trial = blocks + [block]
-        rank = np.linalg.matrix_rank(np.vstack(trial), tol=1e-8)
-        prev_rank = np.linalg.matrix_rank(np.vstack(blocks), tol=1e-8) if blocks else 0
+        rank = numerical_rank(np.vstack(trial))
+        prev_rank = numerical_rank(np.vstack(blocks)) if blocks else 0
         if rank > prev_rank:
             blocks = trial
             kept.append(mode)
@@ -656,8 +749,8 @@ def select_energy_patterns_by_rank(basis, candidates):
         gamma = voigt_strain_engineering(eps_t)
         row = [gamma @ Bk @ gamma for Bk in basis]
         trial = rows + [row]
-        rank = np.linalg.matrix_rank(np.array(trial), tol=1e-8)
-        prev_rank = np.linalg.matrix_rank(np.array(rows), tol=1e-8) if rows else 0
+        rank = numerical_rank(np.array(trial))
+        prev_rank = numerical_rank(np.array(rows)) if rows else 0
         if rank > prev_rank:
             rows = trial
             kept.append((name, eps_t))

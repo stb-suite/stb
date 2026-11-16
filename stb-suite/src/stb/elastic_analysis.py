@@ -211,14 +211,15 @@ def compute_stiffness_matrix_full(data, conv_factor, pmg_structure, symprec, ang
     entry for them either).
 
     Returns (C, point_group, num_independent, directions_used,
-    reconstructed_directions, achieved_rank): `reconstructed_directions`
+    reconstructed_directions, determinacy): `reconstructed_directions`
     lists directions with no data at all (mirrors "filled_by_symmetry" in
-    the basic path); `achieved_rank` is how many of the `num_independent`
-    constants the directions actually run determine (< num_independent
-    means the fit below is underdetermined for at least some constants --
-    left to the caller to decide whether that matters, since e.g. in 2D
-    mode the undetermined constants are typically the out-of-plane ones
-    the report never shows anyway).
+    the basic path); `determinacy` says what the directions actually run
+    fix: 'rank' (how many of the `num_independent` constants), 'open' (the
+    Voigt entries left undetermined, see core/symmetry.py::
+    undetermined_constants) and 'add' (directions that would close them).
+    The caller decides whether an open constant matters, since e.g. in 2D
+    mode the open ones are typically the out-of-plane constants the report
+    never shows anyway.
     """
     basis, point_group = symmetry.symmetry_allowed_basis(pmg_structure, symprec, angle_tolerance)
 
@@ -232,21 +233,26 @@ def compute_stiffness_matrix_full(data, conv_factor, pmg_structure, symprec, ang
             points.append((symmetry.strain_tensor(mode, delta), S))
 
     if not points:
-        return np.zeros((6, 6)), point_group, len(basis), [], list(symmetry.VOIGT_MODES), 0
+        return (np.zeros((6, 6)), point_group, len(basis), [], list(symmetry.VOIGT_MODES),
+                {'rank': 0, 'open': list(symmetry.VOIGT_INDEPENDENT_PAIRS), 'add': []})
 
-    # Rank check: do the directions actually run even span the symmetry
-    # -allowed subspace? If not, the least-squares solve below is genuinely
-    # underdetermined for some constants (numpy silently returns the
-    # minimum-norm solution, which would otherwise look like a normal
-    # result) -- the caller decides whether/how to warn about this.
-    blocks = [np.array([Bk @ symmetry.voigt_strain_engineering(symmetry.strain_tensor(mode))
-                         for Bk in basis]).T
-              for mode in directions_used]
-    achieved_rank = np.linalg.matrix_rank(np.vstack(blocks), tol=1e-8) if blocks else 0
+    # Do the directions actually run determine every symmetry-allowed
+    # constant? If not, the least-squares solve below fills the open ones with
+    # a minimum-norm value or with amplified noise, and either looks like a
+    # normal result (a cubic crystal with only 'xx' once gave C44 = -6288 GPa)
+    # -- the caller stops when a constant it reports is among them.
+    design = np.vstack([symmetry.stress_design_block(basis, mode) for mode in directions_used])
+    remaining = [m for m in symmetry.VOIGT_MODES if m not in directions_used]
+    determinacy = {
+        'rank': symmetry.numerical_rank(design),
+        'open': symmetry.undetermined_constants(basis, design),
+        'add': [m for m in symmetry.select_directions_by_rank(basis, order=directions_used + remaining)
+                if m not in directions_used],
+    }
 
     C = symmetry.fit_stiffness_matrix(basis, points, conv_factor)
     reconstructed = [m for m in symmetry.VOIGT_MODES if m not in data]
-    return C, point_group, len(basis), directions_used, reconstructed, achieved_rank
+    return C, point_group, len(basis), directions_used, reconstructed, determinacy
 
 
 def _parse_energy_folder_name(folder):
@@ -377,7 +383,8 @@ def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, 
     correction, just the in-plane area or axial length).
 
     Returns (C, point_group, num_independent, directions_used,
-    achieved_rank, series, fit_coeffs). `series` ({pattern: {'delta': [...],
+    determinacy, series, fit_coeffs). `determinacy` is as in
+    compute_stiffness_matrix_full. `series` ({pattern: {'delta': [...],
     'energy': [...]}}) and `fit_coeffs` ({pattern: (a, b, c)}, the raw
     polyfit coefficients) are the same raw data/fit this function already
     computed internally to build C -- returned so write_energy_plots can
@@ -424,13 +431,15 @@ def compute_stiffness_matrix_energy(folders, file_name, pmg_structure, symprec, 
         gammas.append(gamma)
 
     if not pattern_targets:
-        return np.zeros((6, 6)), point_group, len(basis), [], 0, series, fit_coeffs
+        return (np.zeros((6, 6)), point_group, len(basis), [],
+                {'rank': 0, 'open': list(symmetry.VOIGT_INDEPENDENT_PAIRS), 'add': []}, series, fit_coeffs)
 
-    blocks = [[gamma @ Bk @ gamma for Bk in basis] for gamma in gammas]
-    achieved_rank = np.linalg.matrix_rank(np.array(blocks), tol=1e-8)
+    design = np.array([[gamma @ Bk @ gamma for Bk in basis] for gamma in gammas])
+    determinacy = {'rank': symmetry.numerical_rank(design),
+                   'open': symmetry.undetermined_constants(basis, design), 'add': []}
 
     C = symmetry.fit_stiffness_matrix_energy(basis, pattern_targets, conv_factor)
-    return C, point_group, len(basis), directions_used, achieved_rank, series, fit_coeffs
+    return C, point_group, len(basis), directions_used, determinacy, series, fit_coeffs
 
 
 def eggbox_cross_check(data, folders, file_name, pmg_structure, dimensionality, conv_factor, tolerance, f_out):
@@ -1029,6 +1038,47 @@ def check_stability_and_report(C, dimensionality, unit_label, f_out):
     return summary
 
 
+# Voigt indices (0-based) of the constants each dimensionality reports.
+REPORTED_VOIGT = {"3d": {0, 1, 2, 3, 4, 5}, "2d": {0, 1, 5}, "1d": {2}}
+
+
+def stop_if_undetermined(determinacy, num_independent, point_group, directions_used,
+                          dimensionality, method, f_out):
+    """Ends the run with an [ERROR] when the directions/patterns that were run
+    leave open a constant this dimensionality reports.
+
+    The fit would still return a number for it -- the minimum-norm value, or
+    noise divided by a nearly zero singular value (a cubic crystal run along
+    'xx' only: C11 and C12 right, C44 = -6288 GPa, E = 941 GPa, nu = -1.26) --
+    and every modulus derived from the tensor would inherit it. Constants the
+    report never shows (out-of-plane ones in 2D, everything but C33 in 1D) may
+    stay open.
+    """
+    reported = REPORTED_VOIGT[dimensionality]
+    open_reported = [(m, n) for (m, n) in determinacy['open'] if m in reported and n in reported]
+    if not open_reported:
+        return
+    names = ", ".join(f"C{m + 1}{n + 1}" for (m, n) in open_reported)
+    ran = ", ".join(directions_used) if directions_used else "(none)"
+    what = "direction(s)" if method == "stress" else "pattern(s)"
+    print_dual(color_text(
+        f"[ERROR] The {what} run ({ran}) determine {determinacy['rank']} of the {num_independent} "
+        f"independent elastic constant(s) of point group {point_group}. Not determined by these data: "
+        f"{names}. No elastic tensor is reported: a fit would fill these with meaningless numbers, "
+        "and so would every modulus derived from them.", 'red'), f_out)
+    relevant = RELEVANT_DIRECTIONS[dimensionality]
+    add = [m for m in determinacy['add'] if m in relevant]
+    if method == "stress" and add:
+        print_dual(f"        Run also: stb-elasticInputs --dirs {' '.join(add)}  (same structure, "
+                   "template and strain range), then this analysis again.", f_out)
+    else:
+        print_dual("        Run the missing strain patterns with stb-elasticInputs (its default selection "
+                   "gives a fully determined tensor).", f_out)
+    if f_out:
+        f_out.close()
+    sys.exit(1)
+
+
 def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                           eggbox_results=None, fit_diagnostics=None, symmetry_check=None,
                           plot_files=None, report_path=REPORT_FILE):
@@ -1623,7 +1673,7 @@ def main():
         # scanning/parsing (pure+combined pattern names, total energy
         # instead of stress), entirely inside compute_stiffness_matrix_energy.
         print(f"\n{color_text('READING FOLDERS (energy-strain patterns):', 'bold')}")
-        C, point_group, num_independent, directions_used, achieved_rank, energy_series, fit_coeffs = \
+        C, point_group, num_independent, directions_used, determinacy, energy_series, fit_coeffs = \
             compute_stiffness_matrix_energy(folders, args.file, pmg_structure, args.symprec,
                                              args.angle_tolerance, args.dimensionality, CONV_FACTOR,
                                              unit_label, f_out)
@@ -1642,13 +1692,8 @@ def main():
         print_dual(f"{color_text('[INFO]', 'cyan')} Point group {point_group} has "
                    f"{num_independent} independent elastic constant(s); fit used "
                    f"{len(directions_used)} strain pattern(s): {directions_used}.", f_out)
-        if achieved_rank < num_independent and args.dimensionality == "3d":
-            print_dual(color_text(
-                f"[WARNING] Pattern(s) run ({directions_used}) only determine "
-                f"{achieved_rank} of {num_independent} independent elastic constants for "
-                f"point group {point_group} -- the fit is underdetermined; run more "
-                "patterns from stb-elasticInputs --method energy for a fully determined "
-                "tensor.", 'yellow'), f_out)
+        stop_if_undetermined(determinacy, num_independent, point_group, directions_used,
+                             args.dimensionality, "energy", f_out)
 
         C_sym = 0.5 * (C + C.T)
 
@@ -1723,7 +1768,7 @@ def main():
     # additionally pooled (2+ measured) or reconstructed (only 1
     # measured, matching stb-elasticInputs' 'all' DFT-cost reduction).
     if args.symmetry_method == "full":
-        C, point_group, num_independent, directions_used, filled_by_symmetry, achieved_rank = \
+        C, point_group, num_independent, directions_used, filled_by_symmetry, determinacy = \
             compute_stiffness_matrix_full(data, CONV_FACTOR, pmg_structure, args.symprec,
                                            args.angle_tolerance, unit_label, f_out)
         missing_directions = []
@@ -1731,17 +1776,8 @@ def main():
                    f"{num_independent} independent elastic constant(s); fit used "
                    f"{len(directions_used)} of 6 canonical direction(s): "
                    f"{', '.join(directions_used) if directions_used else '(none)'}.", f_out)
-        # In 2D mode the report only ever shows the in-plane constants
-        # (C11/C22/C12/C66); an underdetermined out-of-plane constant
-        # (C33/C44/C13, typically inaccessible anyway on a vacuum-padded
-        # axis) isn't something the user can or needs to act on, so only
-        # warn about it in 3D mode, where every constant is reported.
-        if achieved_rank < num_independent and args.dimensionality == "3d":
-            print_dual(color_text(
-                f"[WARNING] Direction(s) run ({', '.join(directions_used) if directions_used else '(none)'}) "
-                f"only determine {achieved_rank} of {num_independent} independent elastic "
-                f"constants for point group {point_group} -- the fit is underdetermined; run "
-                "more of the 6 canonical directions for a fully determined tensor.", 'yellow'), f_out)
+        stop_if_undetermined(determinacy, num_independent, point_group, directions_used,
+                             args.dimensionality, "stress", f_out)
     else:
         C, filled_by_symmetry, missing_directions = compute_stiffness_matrix(
             data, CONV_FACTOR, symmetry_info, unit_label, f_out)

@@ -66,6 +66,7 @@ def fit_eos(volumes, energies, eos_string):
         "v0": v0, "e0": e0, "b0_gpa": b0_gpa, "bprime": bprime,
         "r_squared": r_squared, "curve_v": x, "curve_e": y,
         "v0_outside_range": v0_outside_range,
+        "residuals": np.asarray(e) - np.asarray(y_at_data),    # eV, at the scanned volumes (their order)
     }
 
 

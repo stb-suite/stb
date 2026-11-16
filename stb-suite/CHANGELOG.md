@@ -193,6 +193,15 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-convergence --parameter basis` and its report in `stb-convergenceAnalysis`: basis-set convergence
+  by equations of state, in three stages (`--basis-stage mesh | range | size`). Each setting is judged by
+  the equilibrium volume (2D: area) of an E(V) scan of 9 single points, not by the total energy:
+  `mesh` scans Mesh.Cutoff 350-1000 Ry at PAO.EnergyShift 0.002 Ry, `range` scans PAO.EnergyShift
+  0.02-0.0005 Ry at `--mesh-cutoff`, `size` compares the template's PAO.BasisSize with the next one at
+  `--mesh-cutoff` and `--energyshift`. The analysis fits every scan, gives the verdict of each stage (the
+  first setting within 0.2 % / 0.5 % / 1 % of the next two), lists the orbital radii and the fit
+  residual, warns about an active orbital filter and a range that does not close, and prints the command
+  of the next stage. `--reference-v0` compares with an all-electron volume.
 - `stb-convergence --single-point`: every folder is a single point at the input geometry, so that only
   the swept parameter changes (by default each value relaxes positions and cell, which mixes the
   parameter's effect with the relaxation's noise).

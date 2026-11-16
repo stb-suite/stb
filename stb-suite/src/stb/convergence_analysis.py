@@ -255,23 +255,7 @@ ORBITAL_RADII = {}
 _RC_LINE_RE = re.compile(r"^\s*rc\s*=\s*([0-9]+\.[0-9]+)\s*$")
 
 
-def orbital_radii(out_path):
-    """(smallest, largest) cutoff radius in Bohr among the 'rc =' lines SIESTA prints for each
-    basis orbital while it generates the basis; None when the log has none."""
-    radii = []
-    try:
-        with open(out_path, errors="ignore") as fh:
-            for line in fh:
-                if line.startswith("siesta: ") or "outcoor" in line:
-                    if radii:
-                        break
-                match = _RC_LINE_RE.match(line)
-                if match:
-                    radii.append(float(match.group(1)))
-    except OSError:
-        return None
-    radii = [r for r in radii if r > 0.0]
-    return (min(radii), max(radii)) if radii else None
+from stb.core.basis_scan import orbital_radii  # noqa: E402  (shared with the basis-convergence report)
 
 
 def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_out):
@@ -454,6 +438,153 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
     return energy_converged, volume_converged, recommended
 
 
+def analyze_basis(base, args, f_out):
+    """Report of a basis-set convergence by equations of state (stb-convergence --parameter basis):
+    every stage found under `base`, its scans fitted, the verdict of each stage."""
+    from stb.core import basis_scan as bs
+    manifests = bs.read_manifests(base)
+    warnings = []
+
+    def warn(text):
+        warnings.append(text)
+        print_dual(color_text(f"[WARNING] {text}", 'yellow'), f_out)
+
+    print_section("[1] STAGES FOUND", f_out)
+    print_table(["Stage", "What it tests", "Scans"], [
+        ([stage, bs.STAGE_TITLES[stage], str(len(manifests[stage]["sub_scans"])) if stage in manifests else "not run"],
+         None if stage in manifests else 'yellow') for stage in bs.STAGES], f_out)
+    first = next(iter(manifests.values()))
+    n_periodic, n_atoms, measure = first["n_periodic"], first["n_atoms"], first["measure"]
+    quantity = {3: "V0", 2: "area (V0 of the cell at fixed height)", 1: "length (V0 at fixed cross-section)"}[n_periodic]
+    print_dual(f"Control quantity  : the equilibrium {measure} of each E({measure[0].upper()}) scan -- "
+               f"{quantity}; Birch-Murnaghan fit of the single points. The total energy is not a criterion: "
+               "it has no plateau in the basis parameters.", f_out)
+
+    verdicts = {}
+    for index, stage in enumerate([st for st in bs.STAGES if st in manifests], start=1):
+        man = manifests[stage]
+        print_section(f"[2.{index}] STAGE {stage.upper()}: {bs.STAGE_TITLES[stage]}", f_out)
+        tolerance = bs.CLOSE_PCT[stage][n_periodic]
+        scans = man["sub_scans"]          # written from loosest to tightest
+        fits = [bs.fit_sub_scan(os.path.join(base, sc["name"]), args.file, n_atoms) for sc in scans]
+        v0s = [fit["v0"] for fit in fits]
+        tightest = next((v for v in reversed(v0s) if v is not None), None)
+        rows = []
+        for sc, fit in zip(scans, fits):
+            label = (f"{sc['value']:g} Ry" if stage != "size" else str(sc["value"]))
+            if fit["v0"] is None:
+                rows.append(([label, f"{fit['n']}/{fit['n_folders']}", "--", "--", "--", "--", "--",
+                              "; ".join(fit["problems"][:2]) or "fewer than 5 finished points"], 'yellow'))
+                continue
+            radii = fit["radii"]
+            shown_b0 = f"{fit['b0']:.1f}" + ("" if fit["rms"] is not None and fit["rms"] < bs.B0_RESIDUAL_MEV else " (noisy)")
+            rows.append(([label, f"{fit['n']}/{fit['n_folders']}", f"{fit['v0'] / n_atoms:.4f}",
+                          f"{100 * (fit['v0'] / tightest - 1):+.2f}" if tightest else "--", shown_b0,
+                          f"{fit['rms']:.3f}" if fit["rms"] is not None else "--",
+                          f"{radii[0]:.2f} / {radii[1]:.2f}" if radii else "--",
+                          "V0 OUTSIDE THE SCAN" if fit["outside"] else ("; ".join(fit["problems"][:1]) or "ok")],
+                         'yellow' if fit["outside"] or fit["problems"] else None))
+        print_table([{"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}[stage], "Points",
+                     "V0/atom (Ang^3)", "vs tightest (%)", "B0 (GPa)", "fit rms (meV/atom)", "rc min / max (Bohr)",
+                     "Notes"], rows, f_out)
+        if n_periodic < 3:
+            print_dual(f"V0 and B0 include the vacuum of the cell: only their RELATIVE change means something here "
+                       f"(the {measure} changes by the same percentage); B0 is not a material property.", f_out)
+
+        if stage == "size":
+            good = [v for v in v0s if v is not None]
+            if len(good) == 2:
+                change = 100 * abs(good[1] / good[0] - 1)
+                passed = change < tolerance
+                verdicts[stage] = (scans[0]["value"] if passed else None, f"{change:.2f} %")
+                print_dual(color_text(
+                    f"VERDICT: {scans[0]['value']} -> {scans[1]['value']} changes V0 by {change:.2f} % "
+                    f"({'<' if passed else '>='} {tolerance:g} %): the cardinality of {scans[0]['value']} is "
+                    + ("enough for this structure." if passed else "NOT enough; use the larger basis (and repeat "
+                       "the range stage with it)."), 'green' if passed else 'yellow'), f_out)
+            else:
+                verdicts[stage] = (None, "incomplete")
+                warn("Size stage: both scans are needed for a verdict.")
+        else:
+            position, how = bs.closing_point(v0s, tolerance)
+            if position is None:
+                verdicts[stage] = (None, "does not close")
+                warn(f"Stage {stage}: no setting has a V0 within {tolerance:g} % of the next two. "
+                     + ("Extend the scan to larger Mesh.Cutoff (--basis-values)." if stage == "mesh" else
+                        "Reducing PAO.EnergyShift further does not fix a basis whose range does not close: "
+                        "optimize the orbital radii (%block PAO.Basis, SIESTA's Util/Optimizer) or go up in "
+                        "cardinality."))
+            else:
+                value = scans[position]["value"]
+                verdicts[stage] = (value, how)
+                print_dual(color_text(
+                    f"VERDICT: {'Mesh.Cutoff' if stage == 'mesh' else 'PAO.EnergyShift'} = {value:g} Ry -- the "
+                    f"{'smallest mesh' if stage == 'mesh' else 'largest shift'} whose V0 is within {tolerance:g} % of "
+                    + ("the next two settings." if how == "two" else "the next setting; it is the last but one of "
+                       "the scan, so the closing was verified against ONE point only -- add a tighter value "
+                       "(--basis-values) to confirm."), 'green' if how == "two" else 'yellow'), f_out)
+                if how == "one":
+                    warnings.append(f"Stage {stage}: closing at {value:g} Ry verified against one point only.")
+        for sc, fit in zip(scans, fits):
+            if fit["radii"] and not (bs.RC_RANGE_BOHR[0] <= fit["radii"][1] <= bs.RC_RANGE_BOHR[1]) and stage == "range":
+                warn(f"{sc['name']}: largest orbital radius {fit['radii'][1]:.2f} Bohr, outside the usual "
+                     f"{bs.RC_RANGE_BOHR[0]:g}-{bs.RC_RANGE_BOHR[1]:g} Bohr ("
+                     + ("orbitals too short: expect a compressed, too stiff solid" if fit["radii"][1] < bs.RC_RANGE_BOHR[0]
+                        else "very long orbitals: costly, and they need a finer mesh") + ").")
+        if any(fit["filter"] for fit in fits):
+            warn(f"Stage {stage}: the logs show the orbital filter (FilterCutoff/FilterTol) at work -- the basis "
+                 "tested is the filtered one, and the fit residuals carry its noise.")
+        noisy = [sc["name"] for sc, fit in zip(scans, fits)
+                 if fit["rms"] is not None and fit["rms"] >= bs.B0_RESIDUAL_MEV]
+        if noisy:
+            print_dual(color_text(
+                f"[NOTE] Fit residual above {bs.B0_RESIDUAL_MEV:g} meV/atom in {', '.join(noisy)}: B0 of those scans "
+                "is not used for anything (V0 is far less sensitive to this noise). A residual that does not go "
+                "down with Mesh.Cutoff has another origin (Ge and Ag kept 0.2-0.5 meV/atom at every mesh).", 'cyan'),
+                f_out)
+        if args.reference_v0 and tightest:
+            off = 100 * (tightest / n_atoms / args.reference_v0 - 1)
+            print_dual(f"Reference          : tightest setting gives V0/atom {tightest / n_atoms:.4f} Ang^3, "
+                       f"{off:+.2f} % from --reference-v0 {args.reference_v0:g}.", f_out)
+            chosen = verdicts[stage][0]
+            if stage == "range" and chosen is not None:
+                loose = next((f["v0"] for s_, f in zip(scans, fits) if s_["value"] == 0.01 and f["v0"]), None)
+                picked = fits[[s_["value"] for s_ in scans].index(chosen)]["v0"]
+                if loose and abs(loose / n_atoms / args.reference_v0 - 1) < abs(picked / n_atoms / args.reference_v0 - 1):
+                    warn("PAO.EnergyShift 0.01 Ry is closer to the reference than the converged value: that is a "
+                         "cancellation of errors (short orbitals compress the solid), not a better basis.")
+
+    print_section("[3] SUMMARY & NEXT STEPS", f_out)
+    names = {"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}
+    print_table(["Stage", "Parameter", "Result"], [
+        ([stage, names[stage],
+          ("not run" if stage not in verdicts else
+           (f"{verdicts[stage][0]:g} Ry" if isinstance(verdicts[stage][0], float) else str(verdicts[stage][0]))
+           + (" (one point only)" if verdicts[stage][1] == "one" else "") if verdicts[stage][0] is not None
+           else f"NOT CONVERGED ({verdicts[stage][1]})")],
+         None if stage in verdicts and verdicts[stage][0] is not None else 'yellow') for stage in bs.STAGES], f_out)
+    mesh_v = verdicts.get("mesh", (None,))[0]
+    range_v = verdicts.get("range", (None,))[0]
+    if "range" not in manifests and mesh_v is not None:
+        print_dual(f"Next: stb-convergence --parameter basis --basis-stage range --mesh-cutoff {mesh_v:g} "
+                   f"-s {first['structure']} -c {first['calc']} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+    elif "size" not in manifests and range_v is not None:
+        mesh_used = manifests["range"]["sub_scans"][0].get("mesh_cutoff")
+        print_dual(f"Next: stb-convergence --parameter basis --basis-stage size --energyshift {range_v:g}"
+                   + (f" --mesh-cutoff {mesh_used:g}" if mesh_used else "")
+                   + f" -s {first['structure']} -c {first['calc']} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+    print_dual(color_text(
+        "The verdict holds for this structure. Energies with an isolated atom or molecule (cohesive, adsorption) "
+        "need the counterpoise correction and their own test (the corrected cohesive energy of Si still moved 7 "
+        "meV where the structure had closed); in 2D the in-plane lattice parameter does not test the decay of the "
+        "orbitals into the vacuum. A basis can also close at the wrong value (Ge: V0 +4.6 % with TZP at 0.0005 "
+        "Ry): only an all-electron reference (--reference-v0, Ang^3/atom) shows that.", 'cyan'), f_out)
+    if warnings:
+        print_dual(color_text(f"\n{len(warnings)} warning(s):", 'yellow'), f_out)
+        for number, text in enumerate(warnings, start=1):
+            print_dual(f"  {number}. {text}", f_out)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=f"""{color_text("Stage 2 of 2: analyzes a stb-convergence sweep and reports where "
@@ -477,6 +608,10 @@ def main():
     parser.add_argument("--volume-tolerance", type=float, default=0.5,
                         help="Relaxed-cell-volume convergence tolerance, as a percent change "
                              "between consecutive swept values (default: 0.5).")
+    parser.add_argument("--reference-v0", type=float, default=None, metavar="ANG3_PER_ATOM",
+                        help="Basis convergence (stb-convergence --parameter basis) only: an all-electron "
+                             "equilibrium volume per atom to compare the converged basis with -- the only way "
+                             "to notice a basis that converges to the wrong value.")
     parser.add_argument("--force-tolerance", type=float, default=0.05,
                         help="Residual-force data-quality flag threshold in eV/Ang (default: "
                              "0.05) -- NOT a convergence criterion, just flags a run whose CG "
@@ -542,6 +677,14 @@ def main():
 
     if not os.path.isdir(args.dir):
         fail(f"Directory '{args.dir}' not found.")
+
+    from stb.core import basis_scan
+    for candidate in (args.dir, os.path.join(args.dir, "basis")):
+        if os.path.isdir(candidate) and basis_scan.read_manifests(candidate):
+            analyze_basis(candidate, args, f_out)
+            if f_out:
+                f_out.close()
+            return
 
     print_section("[1] DISCOVERED PARAMETER SWEEPS", f_out)
     sweeps = discover_parameter_sweeps(args.dir)

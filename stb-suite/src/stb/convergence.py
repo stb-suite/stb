@@ -180,6 +180,203 @@ def build_parameter_directive(parameter, value, structure, vacuum_gap):
     return line, detail
 
 
+def run_basis_mode(args, parser):
+    """--parameter basis: one stage of the basis-set convergence by equations of state (see
+    core/basis_scan.py). Writes <output-dir>/basis/<stage>_<value>/vol_<pct>/ single points."""
+    import json
+    from stb.core import basis_scan as bs
+    from stb.core import fdf_directives
+
+    for path, what in ((args.structure, "Structure"), (args.calc, "Calc")):
+        if not os.path.isfile(path):
+            sys.exit(color_text(f"[ERROR] {what} file '{path}' not found.", 'red'))
+    if args.pseudo_dir:
+        try:
+            args.pseudo_dir = resolve_pseudo_source(args.pseudo_dir)
+        except ValueError as e:
+            sys.exit(color_text(f"[ERROR] {e}", 'red'))
+    with open(args.calc) as f:
+        calc_text = f.read()
+    template = fdf_directives.parse_directives(calc_text)
+    stage = args.basis_stage
+
+    def template_number(key):
+        try:
+            return float(template[key].split()[0])
+        except (KeyError, ValueError, IndexError):
+            return None
+
+    template_mesh, template_shift = template_number("meshcutoff"), template_number("paoenergyshift")
+    template_size = (template.get("paobasissize") or "DZP").split()[0]
+    mesh_fixed = args.mesh_cutoff if args.mesh_cutoff is not None else template_mesh
+    if stage == "mesh":
+        shift_fixed = args.energyshift if args.energyshift is not None else bs.MESH_STAGE_SHIFT
+        values = sorted(set(args.basis_values or bs.MESH_VALUES))
+        size_fixed = template_size
+    elif stage == "range":
+        if mesh_fixed is None:
+            parser.error("--basis-stage range needs the Mesh.Cutoff found by the mesh stage: pass --mesh-cutoff "
+                         "(the template sets none).")
+        values = sorted(set(args.basis_values or bs.SHIFT_VALUES), reverse=True)
+        shift_fixed, size_fixed = None, template_size
+    else:
+        if mesh_fixed is None:
+            parser.error("--basis-stage size needs --mesh-cutoff (the template sets no Mesh.Cutoff).")
+        shift_fixed = args.energyshift if args.energyshift is not None else template_shift
+        if shift_fixed is None:
+            parser.error("--basis-stage size needs the PAO.EnergyShift found by the range stage: pass --energyshift.")
+        upper = bs.next_size(template_size)
+        values = args.basis_sizes or ([template_size, upper] if upper else None)
+        if not values:
+            parser.error(f"No basis size above '{template_size}' on the ladder {' < '.join(bs.SIZE_LADDER)}: "
+                         "give the two sizes to compare with --basis-sizes.")
+        size_fixed = None
+    if stage != "size" and args.basis_values and any(v <= 0 for v in args.basis_values):
+        parser.error("--basis-values must be positive.")
+
+    if args.intro:
+        show_intro(["Siesta ToolBox Suite", "A comprehensive toolkit for SIESTA DFT simulations",
+                    f"Version {VERSION} | University of Brasilia - 2026", "Developed by Dr. Carlos M. O. Bastos"])
+    base = os.path.join(args.output_dir, "basis")
+    os.makedirs(base, exist_ok=True)
+    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    f_out = open(report_path, "w") if report_path else None
+
+    def fail(message):
+        print_dual(color_text(f"[FAIL] {message}", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
+
+    print_dual(color_text("===== STB-CONVERGENCE REPORT (BASIS SET BY EQUATIONS OF STATE) =====", 'magenta'), f_out)
+    print_section("[0] RUN METADATA", f_out)
+    print_dual(f"Structure file    : {args.structure}", f_out)
+    print_dual(f"Calc template     : {args.calc}", f_out)
+    print_dual(f"Pseudo source     : {args.pseudo_dir or '(not given)'}", f_out)
+    print_dual(f"Stage             : {stage} -- {bs.STAGE_TITLES[stage]}", f_out)
+    print_dual(f"Output dir        : {base}", f_out)
+
+    print_section("[1] INPUT STRUCTURE", f_out)
+    try:
+        structure = structure_io.read_fdf(args.structure)
+    except (ValueError, FileNotFoundError) as e:
+        fail(str(e))
+    if structure.coord_format == 'cartesian':
+        fail("Atomic coordinates are Cartesian: scaling the lattice vectors would not move the atoms. Convert to "
+             "fractional coordinates first (stb-translate).")
+    counts = structure_io.atom_counts(structure)
+    species = sorted(sp for sp, n in counts.items() if n > 0)
+    n_atoms = sum(counts.values())
+    lattice = np.array(structure.lattice, dtype=float) * structure.lattice_constant
+    positions = np.array([pos for _, pos in structure.atoms])
+    vacuum_axes = kspace.detect_vacuum_axes(positions, lattice, args.vacuum_gap)
+    periodic_axes = [i for i, vac in enumerate(vacuum_axes) if not vac]
+    n_periodic = len(periodic_axes)
+    if n_periodic == 0:
+        fail("No periodic axis: this convergence scans the cell (volume, area or length).")
+    volume0 = float(abs(np.linalg.det(lattice)))
+    measure = {3: "volume", 2: "area", 1: "length"}[n_periodic]
+    scan_range = args.scan_range if args.scan_range is not None else bs.SCAN_RANGE_PCT[n_periodic]
+    strains = np.linspace(-scan_range, scan_range, args.scan_points)
+    print_table(["Quantity", "Value"], [
+        (["Composition", ", ".join(f"{sp}{n}" for sp, n in counts.items())], None),
+        (["Atoms", str(n_atoms)], None),
+        (["Dimensionality", kspace.dimensionality_label(vacuum_axes)], None),
+        (["Cell volume", f"{volume0:.4f} Ang^3"], None),
+    ], f_out)
+
+    print_section("[2] THE THREE STAGES", f_out)
+    print_dual(
+        "A numerical-orbital basis has two independent axes, range (PAO.EnergyShift) and cardinality "
+        "(PAO.BasisSize), and the total energy has no plateau in either. Each setting is therefore judged by "
+        f"the equilibrium {measure} of an E({measure[0].upper()}) scan of single points, one stage at a time:", f_out)
+    for name in bs.STAGES:
+        print_dual(f"  {'->' if name == stage else '  '} {name:<6}: {bs.STAGE_TITLES[name]}", f_out)
+    print_dual("Run this stage, analyse it (stb-convergenceAnalysis), then generate the next one with the value found.",
+               f_out)
+    caution = fdf_directives.filter_caution(calc_text)
+    if caution:
+        print_dual(color_text(f"[WARNING] {caution} With the filter on, this convergence tests the filtered basis.",
+                              'yellow'), f_out)
+    if re.search(r"^\s*%block\s+PAO\.?Basis\b", calc_text, re.M | re.I):
+        print_dual(color_text(
+            "[WARNING] The template has a %block PAO.Basis: SIESTA takes the orbitals of those species from the "
+            "block and ignores PAO.EnergyShift / PAO.BasisSize for them, so the range and size stages would "
+            "compare identical bases. Remove the block for this convergence.", 'yellow'), f_out)
+    if stage == "mesh" and not args.energyshift:
+        print_dual(f"PAO.EnergyShift is held at {shift_fixed:g} Ry in this stage (a tight value, so that the mesh "
+                   "is tested with the long orbitals the next stage will use; --energyshift to change).", f_out)
+
+    print_section("[3] SCANS OF THIS STAGE", f_out)
+    print_dual(f"{measure.capitalize()} strain : -{scan_range:g} % .. +{scan_range:g} %, {args.scan_points} single points per "
+               "scan" + ("" if n_periodic == 3 else f" (only the periodic vector(s) "
+                         f"{', '.join('abc'[i] for i in periodic_axes)} are scaled; the vacuum is not touched)"), f_out)
+    raw_vectors = np.asarray(structure_io.raw_lattice_vectors(structure), dtype=float)
+    structure_basename, calc_basename = os.path.basename(args.structure), os.path.basename(args.calc)
+    forced_calc = prepend_include(calc_text, EXTRA_FDF_FILE)
+    rows, sub_scans = [], []
+    for value in values:
+        mesh = value if stage == "mesh" else mesh_fixed
+        shift = value if stage == "range" else shift_fixed
+        size = value if stage == "size" else size_fixed
+        name = bs.sub_scan_name(stage, value)
+        extra = ("# Auto-generated by stb-convergence --parameter basis: the settings of this scan and a single\n"
+                 "# point at fixed cell, whatever the template says (first occurrence wins).\n"
+                 f"PAO.BasisSize       {size}\n"
+                 + (f"PAO.EnergyShift     {shift:g} Ry\n" if shift is not None else "")
+                 + (f"Mesh.CutOff         {mesh:g} Ry\n" if mesh is not None else "")
+                 + "\nMD.TypeOfRun        CG\nMD.Steps            0\nMD.VariableCell     false\n")
+        for strain in strains:
+            factor = (1.0 + strain / 100.0) ** (1.0 / n_periodic)
+            axis_factors = np.array([factor if i in periodic_axes else 1.0 for i in range(3)])
+            folder = os.path.join(base, name, bs.strain_folder(strain))
+            os.makedirs(folder, exist_ok=True)
+            structure_io.rewrite_fdf_lattice(args.structure, raw_vectors * axis_factors[:, None],
+                                             os.path.join(folder, structure_basename))
+            with open(os.path.join(folder, calc_basename), "w") as fh:
+                fh.write(forced_calc)
+            with open(os.path.join(folder, EXTRA_FDF_FILE), "w") as fh:
+                fh.write(extra)
+            for sym in species:
+                copy_pseudo(args.pseudo_dir, sym, folder)
+        sub_scans.append({"name": name, "value": value, "mesh_cutoff": mesh, "energyshift": shift, "size": size})
+        rows.append(([name + "/", str(size), f"{shift:g} Ry" if shift is not None else "(template)",
+                      f"{mesh:g} Ry" if mesh is not None else "(template)", str(len(strains))], None))
+    print_table(["Scan", "PAO.BasisSize", "PAO.EnergyShift", "Mesh.Cutoff", "Folders"], rows, f_out)
+    if stage != "mesh" and mesh_fixed is not None:
+        print_dual(f"Mesh.Cutoff {mesh_fixed:g} Ry in every scan"
+                   + (" (--mesh-cutoff)" if args.mesh_cutoff is not None else " (the template's; use the value the "
+                      "mesh stage found)") + ".", f_out)
+
+    manifest = {"format": "stb-basis-scan", "version": 1, "tool": f"stb-convergence {VERSION}", "stage": stage,
+                "structure": args.structure, "calc": args.calc, "n_atoms": n_atoms, "volume": volume0,
+                "n_periodic": n_periodic, "periodic_axes": periodic_axes, "measure": measure,
+                "scan_range_pct": scan_range, "scan_points": args.scan_points, "sub_scans": sub_scans}
+    with open(os.path.join(base, bs.manifest_name(stage)), "w") as fh:
+        json.dump(manifest, fh, indent=1)
+
+    print_section("[4] SUMMARY & NEXT STEPS", f_out)
+    n_total = len(sub_scans) * len(strains)
+    print_dual(f"{n_total} single-point folder(s) written under '{base}' ({len(sub_scans)} scan(s) x {len(strains)}).", f_out)
+    print_dual(color_text("\nNext steps:", 'yellow'), f_out)
+    print_dual(f"  1. Run SIESTA in every '{base}/{stage}_*/vol_*/' folder (single points).", f_out)
+    print_dual(f"  2. stb-convergenceAnalysis --dir {args.output_dir}", f_out)
+    following = {"mesh": "  3. Then the range stage at the mesh found:  stb-convergence --parameter basis "
+                         "--basis-stage range --mesh-cutoff <Ry> ...",
+                 "range": "  3. Then the size stage at the EnergyShift found:  stb-convergence --parameter basis "
+                          "--basis-stage size --mesh-cutoff <Ry> --energyshift <Ry> ...",
+                 "size": "  3. If the size stage passes, the basis of the template with the values found is the "
+                         "converged one for this structure."}[stage]
+    print_dual(following, f_out)
+    print_dual(color_text(
+        "\nThe verdict holds for THIS structure's equilibrium geometry. Energies that involve an isolated atom or "
+        "molecule (cohesive, adsorption) need the counterpoise correction and their own test; in 2D the in-plane "
+        "lattice parameter does not test how the orbitals decay into the vacuum (work function, adsorption, "
+        "interlayer distance).", 'cyan'), f_out)
+    if f_out:
+        f_out.close()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stage 1 of 2: writes one ready-to-run SIESTA folder per swept value of one "
@@ -213,7 +410,33 @@ def main():
     parser.add_argument("--parameter", nargs='+', required=True,
                         help="Which tag(s) to sweep: meshcutoff, energyshift, kgrid, or 'all' "
                              "for all three (one independent sweep per parameter, each in its "
-                             "own subfolder).")
+                             "own subfolder). Or 'basis' (alone): the basis-set convergence by "
+                             "equations of state, see --basis-stage.")
+    parser.add_argument("--basis-stage", choices=["mesh", "range", "size"], default="mesh",
+                        help="--parameter basis: which stage to write (default: mesh). Each stage is a set of\n"
+                             "E(V) scans of single points, judged by the equilibrium volume (2D: area):\n"
+                             "  mesh : Mesh.Cutoff 350, 500, 700, 1000 Ry at PAO.EnergyShift 0.002 Ry\n"
+                             "  range: PAO.EnergyShift 0.02 ... 0.0005 Ry at --mesh-cutoff\n"
+                             "  size : the template's PAO.BasisSize and one step up (DZP -> TZP) at\n"
+                             "         --mesh-cutoff and --energyshift\n"
+                             "Run them in this order, each with the value the previous one found.")
+    parser.add_argument("--basis-values", type=float, nargs='+', default=None, metavar="V",
+                        help="--parameter basis: the Mesh.Cutoff values (stage mesh) or PAO.EnergyShift values "
+                             "(stage range) to scan instead of the defaults.")
+    parser.add_argument("--basis-sizes", nargs=2, default=None, metavar=("SIZE", "LARGER"),
+                        help="--parameter basis --basis-stage size: the two PAO.BasisSize to compare (default: "
+                             "the template's and the next one on SZ < DZ < DZP < TZP < TZ2P).")
+    parser.add_argument("--mesh-cutoff", type=float, default=None, metavar="RY",
+                        help="--parameter basis, stages range and size: Mesh.Cutoff of every scan (default: the "
+                             "template's).")
+    parser.add_argument("--energyshift", type=float, default=None, metavar="RY",
+                        help="--parameter basis: PAO.EnergyShift held fixed in stage mesh (default 0.002) and "
+                             "stage size (default: the template's).")
+    parser.add_argument("--scan-points", type=int, default=9,
+                        help="--parameter basis: single points per E(V) scan (default: 9, at least 5).")
+    parser.add_argument("--scan-range", type=float, default=None, metavar="PCT",
+                        help="--parameter basis: half-width of each scan in %% of the volume (default 12), of the "
+                             "area for a 2D material (default 8) or of the length for a wire (default 4).")
     parser.add_argument("--meshcutoff-range", type=float, nargs=3, default=None,
                         metavar=("MIN", "MAX", "STEP"),
                         help="Custom Mesh.CutOff sweep range (Ry). Omit to use the suggested "
@@ -255,6 +478,16 @@ def main():
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
     args = parser.parse_args()
+
+    if "basis" in args.parameter:
+        if len(args.parameter) > 1:
+            parser.error("--parameter basis is a workflow of its own: give it alone.")
+        if args.scan_points < 5:
+            parser.error("--scan-points must be at least 5 (the equation of state has 4 parameters).")
+        if args.scan_range is not None and not 0 < args.scan_range < 40:
+            parser.error("--scan-range must be between 0 and 40 %.")
+        run_basis_mode(args, parser)
+        return
 
     # Expand 'all' / validate parameter names, de-duplicated, in a stable
     # (PARAMETER_ORDER) order regardless of how the user listed them.

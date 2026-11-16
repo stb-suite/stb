@@ -109,6 +109,13 @@ version before) and **Added** (new options and tools).
   the file was missing because three tests still pointed to fixture folders by their numbers from
   before the 2026-10-31 renumbering; fixed.)
 
+- `stb-mlmd`: the initial velocities are rescaled to exactly the temperature asked for (a
+  Maxwell-Boltzmann draw of 72 atoms gave 263.5 K for 300 K). Trajectories with the same seed
+  therefore differ from 2.0.0's. The lines `Initial state` / `Final state` printed a potential energy
+  as `E = ...`, which read as a 1.27 eV change of the total energy in an NVE run: they now give E_pot,
+  E_kin and E_tot. An NVE run from an equilibrium geometry whose mean temperature ends below 75 % of
+  `--temperature` (equipartition halves it) gets a warning in the final section, with what to do.
+
 ### Changed
 
 - **The generated `calc.fdf` no longer turns the orbital filter on.** The templates of `stb-inputfile`

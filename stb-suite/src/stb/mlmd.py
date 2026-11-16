@@ -86,6 +86,13 @@ def build_dynamics(atoms, ensemble, timestep_fs, temperature_k, friction_fs, pre
     rng = np.random.default_rng(seed) if seed is not None else None
     MaxwellBoltzmannDistribution(atoms, temperature_K=temperature_k, rng=rng)
     Stationary(atoms)
+    # A Maxwell-Boltzmann draw of N atoms has a temperature that scatters by
+    # ~sqrt(2/3N) around the target (72 atoms, seed 1: 263.5 K for 300 K), and
+    # removing the centre-of-mass motion lowers it further: rescaled so that the
+    # run starts at exactly the temperature asked for.
+    drawn = atoms.get_temperature()
+    if temperature_k > 0 and drawn > 0:
+        atoms.set_velocities(atoms.get_velocities() * np.sqrt(temperature_k / drawn))
 
     dt = timestep_fs * units.fs
     if ensemble == "nve":
@@ -721,7 +728,9 @@ def main():
     # ---- [5]
     print_section("[5] PRODUCTION RUN", f_out)
     e0 = atoms.get_potential_energy()
-    print_dual(f"Initial state     : E = {e0:.4f} eV, T = {atoms.get_temperature():.1f} K", f_out)
+    k0 = atoms.get_kinetic_energy()
+    print_dual(f"Initial state     : E_pot = {e0:.4f} eV, E_kin = {k0:.4f} eV, E_tot = {e0 + k0:.4f} eV, "
+               f"T = {atoms.get_temperature():.1f} K", f_out)
 
     frames, t_fs, epots, ekins, temps, press, vols, abcs, fmaxs = [], [], [], [], [], [], [], [], []
     n_chunks = args.n_steps // args.stride
@@ -772,7 +781,10 @@ def main():
         print_table(["Step", "t (ps)", "T (K)", "E_pot/atom (eV)", "P (GPa)", "V/atom (Ang^3)", "Fmax (eV/Ang)"],
                     rows, f_out)
     ef = atoms.get_potential_energy()
-    print_dual(f"Final state       : E = {ef:.4f} eV, T = {atoms.get_temperature():.1f} K", f_out)
+    kf = atoms.get_kinetic_energy()
+    print_dual(f"Final state       : E_pot = {ef:.4f} eV, E_kin = {kf:.4f} eV, E_tot = {ef + kf:.4f} eV, "
+               f"T = {atoms.get_temperature():.1f} K", f_out)
+    print_dual("E_pot changes along any run; in NVE it is E_tot that must stay constant (section [7]).", f_out)
     print_dual(f"[OK] Collected {len(frames)} frame(s) (stride {args.stride}).", f_out)
     ms_step = 1000 * wall / max(args.n_steps, 1)
     ns_day = (86400 / (wall / max(args.n_steps, 1))) * args.timestep * 1e-6 if wall > 0 else None
@@ -846,6 +858,12 @@ def main():
         print_dual(f"E_tot start -> end: {etots[0]:.6f} -> {etots[-1]:.6f} eV ({EV_TO_MEV * (eta[-1] - eta[0]):+.4f} meV/atom)", f_out)
         print_dual(f"Temperature       : {temps.mean():.1f} K mean (started at {args.temperature:g} K; from a perfect "
                    "lattice NVE equipartition halves it)", f_out)
+        if args.temperature > 0 and temps.mean() < 0.75 * args.temperature:
+            warn(f"NVE: the trajectory ran at {temps.mean():.0f} K on average, not at the {args.temperature:g} K asked "
+                 "for: --temperature only sets the initial velocities, and from an equilibrium geometry half of "
+                 "that kinetic energy becomes potential energy (equipartition). For an NVE run AT "
+                 f"{args.temperature:g} K start it at --temperature {2 * args.temperature:g}, or equilibrate in NVT "
+                 "first and continue from that state.")
         if drift is not None and abs(drift) > NVE_DRIFT_WARN:
             warn(f"NVE: total energy drifts by {drift:+.3f} meV/atom/ps (> {NVE_DRIFT_WARN:g}) -- use a smaller --timestep, "
                  "or the model's forces are not smooth here.")

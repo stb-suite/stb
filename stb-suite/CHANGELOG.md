@@ -88,6 +88,15 @@ version before) and **Added** (new options and tools).
   classification, no Tauc gap, and a warning that the spectrum below about twice the broadening is
   not reliable. A missing `.EIG` is said.
 
+- `stb-mlphonons --qha --n-volumes 4` was accepted and failed at the very end, after every volume had
+  been computed (`At least 5 volume points are needed to fit S(V)`). The minimum is 5 and the option
+  is checked before anything runs.
+- `stb-eosAnalysis` warned `B0' within 4.5-7.0` for ordinary fits (Si: 4.25-4.47 with R^2 0.999998), so
+  the warning appeared in almost every run. The accepted range is 3.0-7.0, and the message says what a
+  value outside it means (a scan too narrow or noisy to fix B0'), not that the fit is wrong.
+- Test of `stb-crystalcast --ml-rank` without the `ml` extra: the tool does exit with code 1 and the
+  install hint; the test read the exit code after an `if` and an `echo`, so it always saw 0.
+
 ### Changed
 
 - `stb-stackingfault --scan surface`: the default grid is 6 x 6 on a hexagonal lattice (7 x 7 on any

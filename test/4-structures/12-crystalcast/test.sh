@@ -400,9 +400,10 @@ echo -e "\n--- Testing --ml-rank ---"
 rm -f mltest.fdf
 stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --ml-rank \
     -o mltest.fdf --no-intro > log_mlrank.txt 2>&1
+MLRANK_RC=$?   # taken here: after the 'if' and the 'echo' below, $? is theirs (always 0)
 if [ "$HAS_MACE" -eq 0 ]; then
     echo "Testing: --ml-rank without the optional 'ml' extra installed (clean error, not a crash)"
-    check_exit_code $? 1
+    check_exit_code $MLRANK_RC 1
     check_contains "mace-torch" log_mlrank.txt
     if [ ! -f mltest.fdf ]; then
         echo -e "   -> ${GREEN}Verified:${NC} fails before generating anything (no mltest.fdf written)"
@@ -413,7 +414,7 @@ if [ "$HAS_MACE" -eq 0 ]; then
     fi
 else
     echo "Testing: --ml-rank with the optional 'ml' extra installed (default small MACE-MP-0)"
-    check_exit_code $? 0
+    check_exit_code $MLRANK_RC 0
     check_contains "ML-ranked structures" log_mlrank.txt
     check_success mltest.fdf
 

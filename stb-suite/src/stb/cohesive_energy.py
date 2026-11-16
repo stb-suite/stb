@@ -496,6 +496,9 @@ def main():
             ("ElectronicTemperature", "electronictemperature")) if key in shown]
         print_dual("  Level of theory     : " + (", ".join(level) if level else "(none of the usual labels set: "
                    "SIESTA's defaults)") + " -- the same file in every folder", f_out)
+        caution = fdf_directives.filter_caution(USER_CALC["text"])
+        if caution:
+            print_dual(color_text(f"[WARNING] {caution}", 'yellow'), f_out)
     print_dual(f"K-point density       : "
                + (f"{args.k_density} 1/Ang" if not keep_template_kgrid else "(the template's own k-grid)"), f_out)
     print_dual(f"Spin (full structure) : {'polarized' if args.spin else 'non-polarized'}", f_out)

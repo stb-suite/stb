@@ -175,6 +175,8 @@ version before) and **Added** (new options and tools).
   the smearing at the Fermi level of a metal). Atoms and solid now get separate messages: a `[WARNING]`
   for the isolated-atom/BSSE runs as before, a `[NOTE]` for the full structure that calls it the usual
   smearing correction.
+- `stb-cohesive --calc` showed `FilterCutoff` in its level-of-theory line but gave no warning, unlike
+  `stb-eosInputs`, `stb-elasticInputs` and `stb-convergence`; it now gives the same `[WARNING]`.
 
 ### Changed
 

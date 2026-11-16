@@ -510,6 +510,7 @@ printf '%%include structure.fdf\nSystemLabel siesta\nkgrid.Cutoff 15.0 Ang\nFilt
 stb-cohesive -s structure.fdf -c cutoff_calc.fdf -O cutoff_run --no-bsse-correction --no-intro > log_cutoff.txt 2>&1
 check_contains "K-grid (full structure): kgrid.Cutoff 15.0 Ang -- the template's own" log_cutoff.txt
 check_not_contains "kgrid.MonkhorstPack" cutoff_run/structure/config_extra.fdf
+check_contains "\[WARNING\] The orbital filter is ON (FilterCutoff 150 Ry)" log_cutoff.txt
 echo "Testing: -k still replaces it"
 rm -rf cutoff_run_k && mkdir -p cutoff_run_k
 stb-cohesive -s structure.fdf -c cutoff_calc.fdf -k 0.2 -O cutoff_run_k --no-bsse-correction --no-intro > log_cutoff_k.txt 2>&1

@@ -1560,11 +1560,11 @@ popd > /dev/null
 # --- 15. Interactive path (stb-suite, shortcut 5.2.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2.2) ---"
 
-echo "Testing: navigate 5.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, basic symmetry, skip advanced) -> save report -> quit"
+echo "Testing: navigate 5.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, symmetry as prepared, skip advanced) -> save report -> quit"
 rm -f elastic_stage2.txt
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (blank -> auto),
-# symmetry-method (blank -> basic), advanced settings (n -> skip, CLI
+# symmetry-method (blank -> as the folders were prepared; none recorded here -> basic), advanced settings (n -> skip, CLI
 # defaults apply), save report (y), save gnuplot (n), view (n), then the
 # "Press Enter to continue" pause, then quit.
 printf '5.2.2\n.\ncalc.out\n\n\n\n\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
@@ -1583,7 +1583,7 @@ echo "Testing: navigate 5.2.2 -> manual dimensionality override -> 1D"
 rm -f elastic_stage2.txt
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (1d -> manual
-# override), symmetry-method (blank -> basic), advanced settings (n ->
+# override), symmetry-method (blank -> as prepared), advanced settings (n ->
 # skip), save report (n), save gnuplot (n), view (n), then the "Press
 # Enter to continue" pause, then quit.
 printf '5.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1

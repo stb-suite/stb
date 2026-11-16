@@ -153,6 +153,8 @@ version before) and **Added** (new options and tools).
     directions run determine the tensor with `--symmetry-method full`, or which directions to add.
   - The `[ERROR]` of `full` for an undetermined constant proposes the direction `stb-elasticInputs`
     itself would choose (`xy` for cubic, was `yz`).
+  - The menu (5.2.2) no longer answers `basic` when Enter is pressed at the symmetry question: Enter keeps
+    the method the folders were prepared with; `1` / `2` still choose `basic` / `full`.
 - `stb-cohesive --calc`: a template that sets its k-points with `kgrid.Cutoff` (or `kgrid.File`) was
   taken as having no k-grid, so the full structure's `config_extra.fdf` got a Monkhorst-Pack block from
   the default density, which SIESTA reads first (E05 template, `kgrid.Cutoff 15.0 Ang`: a 10x10x10 grid,

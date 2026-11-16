@@ -3162,10 +3162,12 @@ def run_elastic_analyzer() -> None:
     # uses the general symmetry-allowed-subspace fit regardless of this flag)
     symmetry_method = None
     if method == "stress":
+        # Enter: the method the folders were prepared with (stb-elasticAnalysis reads elastic_scan.json or
+        # elastic_stage1.txt); forcing 'basic' here gave zero constants on folders reduced with 'full'
         sym_choice = get_input(
-            "\nSymmetry reduction -- [1] basic (default) or [2] full "
+            "\nSymmetry reduction -- [Enter] as the folders were prepared (default), [1] basic or [2] full "
             "(also catches hexagonal/trigonal reductions)? : ").strip()
-        symmetry_method = "full" if sym_choice == '2' else "basic"
+        symmetry_method = {"1": "basic", "2": "full"}.get(sym_choice)
 
     # 7. Advanced settings (rarely-touched tolerances -- gated so the essential
     # flow above stays short; CLI defaults apply untouched when skipped).

@@ -22,7 +22,7 @@ prepare() {
     cp "$OUT/calc.fdf" calc.fdf
     # 1. xx and xy strains, -1 .. +1 %, 7 points: single points (clamped ions)
     [ -d clamped ] || stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --dirs all --max 1 --steps 7 \
-        -o clamped --no-intro < /dev/null > /dev/null
+        -o clamped --ions clamped --no-intro < /dev/null > /dev/null
     # 2. the same cells with the atoms relaxed (relaxed ions, what the model computes): config_extra.fdf replaced
     if [ ! -d relaxed ]; then
         cp -r clamped relaxed
@@ -30,7 +30,7 @@ prepare() {
     fi
     # 3. isotropic strains, -2 .. +2 % in lattice, 9 points: B from E(V) and from the pressure
     [ -d hydro ] || stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --dirs hydro --max 2 --steps 9 \
-        -o hydro --no-intro < /dev/null > /dev/null
+        -o hydro --ions clamped --no-intro < /dev/null > /dev/null
 }
 
 run() {

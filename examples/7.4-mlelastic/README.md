@@ -751,7 +751,8 @@ python3 siesta_compare.py    # the tables below and figures/siesta_vs_model.png 
 | `relaxed` | the same cells, atoms relaxed by CG at fixed cell to 0.001 eV/Å — the model's `--fmax` | 14 |
 | `hydro` | isotropic strains, ±2 % in lattice, 9 points: `B` from `E(V)` and from the pressure | 9 |
 
-`stb-elasticInputs` writes single points only; for relaxed ions each folder's `config_extra.fdf` is replaced by
+These runs were made with 2.0.0, whose `stb-elasticInputs` wrote single points only (`--ions clamped` since 2.0.1,
+where `--ions both --fmax 0.001` writes the two series directly); for relaxed ions each folder's `config_extra.fdf` is replaced by
 `config_extra_relaxed.fdf` (`MD.TypeOfRun CG`, `MD.MaxForceTol 0.001 eV/Ang`, `MD.VariableCell false`) — the
 first-occurrence-wins `%include` at the top of `calc.fdf` makes it override everything else.
 

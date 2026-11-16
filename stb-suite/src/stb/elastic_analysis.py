@@ -42,6 +42,14 @@ RELEVANT_DIRECTIONS = {
     "1d": {'zz'},
 }
 REPORT_FILE = "elastic_stage2.txt"
+# The fitted tensor of a run directory, written next to its strain folders so
+# that the analysis of the other series of 'stb-elasticInputs --ions both'
+# (../relaxed or ../clamped) can tabulate the internal-relaxation contribution.
+RESULT_FILE = "elastic_constants.json"
+# Clamped-ion (single-point) folders: a force above this on a strained cell
+# means the internal relaxation is not negligible (Si xy at 2 %: 0.39 eV/Ang,
+# graphene/hBN xx: 0.20-0.22; Si xx: 0.0004).
+CLAMPED_FORCE_WARN = 0.05   # eV/Ang
 
 # Voigt index (0-based, 1..6 in the usual 1-based convention) -> Cartesian
 # stress-tensor (row, col). Matches this module's existing convention
@@ -1042,6 +1050,177 @@ def check_stability_and_report(C, dimensionality, unit_label, f_out):
 REPORTED_VOIGT = {"3d": {0, 1, 2, 3, 4, 5}, "2d": {0, 1, 5}, "1d": {2}}
 
 
+def ion_survey(folders, file_name):
+    """What the atoms did in every strain folder, read from each log: single
+    point (clamped ions) or a relaxation at fixed cell (relaxed ions), the
+    number of moves, the last maximum force and whether the relaxation reached
+    SIESTA's force tolerance. Folders without a readable log are left out."""
+    from stb.status import parse_log, n_moves
+    rows = []
+    for folder in folders:
+        info = parse_log(os.path.join(folder, file_name))
+        if not info or not info["steps"]:
+            continue
+        direction, pct = siesta_log.parse_strain_folder_name(folder)
+        if direction is None:
+            parsed = _parse_energy_folder_name(folder)
+            direction, pct = parsed if parsed else (os.path.basename(folder), None)
+        relaxing = bool(info["max_moves"]) and info["max_moves"] > 0
+        max_force = next((st["max_force"] for st in reversed(info["steps"])
+                          if st["max_force"] is not None), None)
+        converged = None
+        if relaxing:
+            if info["relaxed"] is not None:
+                converged = info["relaxed"]
+            elif max_force is not None and info["force_tol"] is not None:
+                converged = max_force <= info["force_tol"]
+        rows.append(dict(folder=folder, direction=direction, pct=pct,
+                         mode="relaxed" if relaxing else "clamped",
+                         moves=n_moves(info["steps"]) if relaxing else 0,
+                         max_moves=info["max_moves"], force_tol=info["force_tol"],
+                         max_force=max_force, converged=converged,
+                         variable_cell=info["variable_cell"]))
+    return rows
+
+
+def report_ions(rows, f_out):
+    """Section [0b]: clamped- or relaxed-ion constants, per direction, with
+    the warnings that decide whether the tensor means what its label says.
+    Returns {'mode', 'label', 'warnings'} for the summary."""
+    print_section('[0b] IONS AT EACH STRAINED CELL', f_out)
+    result = dict(mode=None, label="unknown (no readable log)", warnings=0)
+    if not rows:
+        print_dual("No log could be read for this check.", f_out)
+        return result
+    modes = sorted({r["mode"] for r in rows})
+    result["mode"] = modes[0] if len(modes) == 1 else "mixed"
+    result["label"] = {"relaxed": "RELAXED-ION (atoms relaxed at each strained cell)",
+                       "clamped": "CLAMPED-ION (single points, atoms held)",
+                       "mixed": "MIXED (some folders relaxed, some single-point)"}[result["mode"]]
+    print_dual(f"Elastic constants : {result['label']}", f_out)
+    by_direction = {}
+    for r in rows:
+        by_direction.setdefault(r["direction"], []).append(r)
+    table = []
+    for direction, group in by_direction.items():
+        forces = [r["max_force"] for r in group if r["max_force"] is not None]
+        relaxed = [r for r in group if r["mode"] == "relaxed"]
+        not_conv = [r for r in relaxed if r["converged"] is False]
+        table.append(([direction, str(len(group)), "/".join(sorted({r["mode"] for r in group})),
+                       f"{max(r['moves'] for r in group)}" if relaxed else "-",
+                       f"{max(forces):.4f}" if forces else "-",
+                       (f"{len(relaxed) - len(not_conv)}/{len(relaxed)}" if relaxed else "-")],
+                      'yellow' if not_conv else None))
+    print_table(["Direction", "Folders", "Ions", "Max CG moves", "Largest last max|F| (eV/Ang)",
+                 "Relaxations converged"], table, f_out)
+
+    if any(r["variable_cell"] for r in rows):
+        result["warnings"] += 1
+        print_dual(color_text(
+            "[WARNING] At least one folder ran with a VARIABLE cell: the strain it was given is not "
+            "the strain it ended with, and the fit is meaningless for it. stb-elasticInputs forces "
+            "MD.VariableCell false through config_extra.fdf -- check that calc.fdf still includes it.",
+            'yellow'), f_out)
+    if result["mode"] == "mixed":
+        result["warnings"] += 1
+        print_dual(color_text(
+            "[WARNING] The folders mix relaxed-ion and clamped-ion runs: the fitted tensor is "
+            "neither. Run every folder the same way (stb-elasticInputs --ions).", 'yellow'), f_out)
+    not_converged = [r for r in rows if r["mode"] == "relaxed" and r["converged"] is False]
+    if not_converged:
+        result["warnings"] += 1
+        worst = max(not_converged, key=lambda r: r["max_force"] or 0.0)
+        print_dual(color_text(
+            f"[WARNING] {len(not_converged)} relaxation(s) stopped before the force tolerance "
+            f"(worst: {worst['folder']}, max|F| = {worst['max_force']:.4f} eV/Ang after "
+            f"{worst['moves']} moves, tolerance {worst['force_tol']} eV/Ang). The stress is wrong to "
+            "first order in the residual force: restart those folders from their .XV "
+            "(MD.UseSaveXV true) or raise the step limit, then run this analysis again.", 'yellow'),
+            f_out)
+        for r in not_converged:
+            print_dual(f"          {r['folder']}: max|F| = {r['max_force']:.4f} eV/Ang, "
+                       f"{r['moves']} of {r['max_moves']:g} moves", f_out)
+    if result["mode"] == "clamped":
+        strained = [r for r in rows if r["max_force"] is not None and (r["pct"] is None or abs(r["pct"]) > 1e-9)]
+        high = [r for r in strained if r["max_force"] > CLAMPED_FORCE_WARN]
+        if high:
+            result["warnings"] += 1
+            worst = max(high, key=lambda r: r["max_force"])
+            dirs = sorted({r["direction"] for r in high})
+            print_dual(color_text(
+                f"[WARNING] The strained cells leave forces on the atoms (up to {worst['max_force']:.3f} "
+                f"eV/Ang in {worst['folder']}; direction(s) {', '.join(dirs)} above "
+                f"{CLAMPED_FORCE_WARN} eV/Ang). The real crystal relaxes them: the clamped-ion constants "
+                "below are LARGER than the ones measured (relaxed-ion) for every constant these "
+                "directions give. For the relaxed-ion tensor: stb-elasticInputs --ions relaxed (the "
+                "default), same structure, template and strain range.", 'yellow'), f_out)
+        elif strained:
+            print_dual(color_text(
+                f"[INFO] Largest force on a strained cell: {max(r['max_force'] for r in strained):.4f} "
+                f"eV/Ang (below {CLAMPED_FORCE_WARN}): symmetry leaves the atoms where the strain puts "
+                "them, so clamped-ion and relaxed-ion constants coincide here.", 'cyan'), f_out)
+    return result
+
+
+def save_and_compare_constants(run_dir, compare_dir, C_sym, ions, args, unit_label, f_out):
+    """Writes the fitted tensor to <run_dir>/elastic_constants.json and, when
+    the other series of 'stb-elasticInputs --ions both' (or --compare-with)
+    has one too, tabulates relaxed minus clamped for the reported constants."""
+    import json
+    record = dict(ions=ions["mode"], method=args.method, dimensionality=args.dimensionality,
+                  unit=unit_label, C=[[float(v) for v in row] for row in C_sym])
+    try:
+        with open(os.path.join(run_dir, RESULT_FILE), "w") as fh:
+            json.dump(record, fh, indent=1)
+    except OSError as error:
+        print_dual(color_text(f"[NOTE] Could not write {RESULT_FILE} in '{run_dir}': {error}", 'yellow'), f_out)
+
+    if compare_dir is None:
+        name = os.path.basename(os.path.abspath(run_dir))
+        other = {"relaxed": "clamped", "clamped": "relaxed"}.get(name)
+        if other is None:
+            return
+        compare_dir = os.path.relpath(os.path.join(os.path.dirname(os.path.abspath(run_dir)), other))
+        explicit = False
+    else:
+        explicit = True
+    other_path = os.path.join(compare_dir, RESULT_FILE)
+    if not os.path.isfile(other_path):
+        if explicit or os.path.isdir(compare_dir):
+            print_dual(f"\nInternal relaxation: no {RESULT_FILE} in '{compare_dir}' yet -- run "
+                       f"stb-elasticAnalysis -d {compare_dir} and the table is printed there.", f_out)
+        return
+    try:
+        with open(other_path) as fh:
+            other_record = json.load(fh)
+        C_other = np.array(other_record["C"], dtype=float)
+    except (OSError, ValueError, KeyError) as error:
+        print_dual(color_text(f"[NOTE] Could not read '{other_path}': {error}", 'yellow'), f_out)
+        return
+    pair = {record["ions"]: C_sym, other_record.get("ions"): C_other}
+    print_section('[6] INTERNAL RELAXATION (relaxed-ion minus clamped-ion)', f_out)
+    if set(pair) != {"relaxed", "clamped"} or other_record.get("dimensionality") != args.dimensionality:
+        print_dual(color_text(
+            f"[NOTE] '{compare_dir}' holds a {other_record.get('ions')}-ion "
+            f"{other_record.get('dimensionality')} tensor and this run a {record['ions']}-ion "
+            f"{args.dimensionality} one: nothing to compare.", 'yellow'), f_out)
+        return
+    labels = {"1d": [("C33", 2, 2)],
+              "2d": [("C11", 0, 0), ("C22", 1, 1), ("C12", 0, 1), ("C66", 5, 5)],
+              "3d": [("C11", 0, 0), ("C22", 1, 1), ("C33", 2, 2), ("C44", 3, 3), ("C55", 4, 4),
+                     ("C66", 5, 5), ("C12", 0, 1), ("C13", 0, 2), ("C23", 1, 2)]}[args.dimensionality]
+    rows = []
+    for label, i, j in labels:
+        clamped, relaxed = pair["clamped"][i, j], pair["relaxed"][i, j]
+        pct = f"{100.0 * (relaxed - clamped) / clamped:+.1f}" if abs(clamped) > 1e-6 else "-"
+        rows.append(([label, f"{clamped:.2f}", f"{relaxed:.2f}", f"{relaxed - clamped:+.2f}", pct], None))
+    print_table(["Constant", f"Clamped ({unit_label})", f"Relaxed ({unit_label})",
+                 f"Relaxed - clamped ({unit_label})", "%"], rows, f_out)
+    print_dual(f"Other series: {compare_dir} (method {other_record.get('method')}; this run: "
+               f"{args.method}). A constant that does not change is one whose strain leaves no force "
+               "on the atoms. The relaxed-ion values are the ones to compare with experiment.", f_out)
+
+
 def stop_if_undetermined(determinacy, num_independent, point_group, directions_used,
                           dimensionality, method, f_out):
     """Ends the run with an [ERROR] when the directions/patterns that were run
@@ -1081,7 +1260,7 @@ def stop_if_undetermined(determinacy, num_independent, point_group, directions_u
 
 def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                           eggbox_results=None, fit_diagnostics=None, symmetry_check=None,
-                          plot_files=None, report_path=REPORT_FILE):
+                          plot_files=None, report_path=REPORT_FILE, ions=None):
     """Prints/writes the stiffness-matrix + constants + stability sections
     shared by every method (--method stress's basic/full paths and --method
     energy) -- extracted once --method energy needed to reach this same
@@ -1328,6 +1507,11 @@ def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_dir
 
     print_section('[5] SUMMARY & FILES', f_out)
     result_rows = []
+    if ions is not None:
+        warning_count += ions["warnings"]
+        result_rows.append((["Ions", {"relaxed": "relaxed-ion", "clamped": "clamped-ion",
+                                      "mixed": "MIXED (see [0b])"}.get(ions["mode"], "unknown")],
+                            'yellow' if ions["mode"] == "mixed" else None))
     if args.dimensionality == "1d":
         result_rows.append((["C33 (axial stiffness)", f"{C_sym[2,2]:.4f} {unit_label}"], None))
     elif args.dimensionality == "2d":
@@ -1345,7 +1529,8 @@ def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_dir
         result_rows.append((["B (Bulk modulus)", f"{summary['B']:.2f} {unit_label}"], None))
         result_rows.append((["v (Poisson's ratio)", f"{summary['nu']:.3f}"], None))
         result_rows.append((["A^U (anisotropy index)", au_str], None))
-    result_rows.append((["Quality warnings (see [3])", str(warning_count)],
+    result_rows.append((["Quality warnings (see [0b], [3])" if ions is not None
+                         else "Quality warnings (see [3])", str(warning_count)],
                          'yellow' if warning_count else None))
     result_rows.append((["VERDICT", "STABLE" if summary['passes'] else "UNSTABLE"],
                          'green' if summary['passes'] else 'red'))
@@ -1426,6 +1611,12 @@ def main():
                              "reading symmetry from a strained structure would silently misdetect "
                              "it. Never required -- falls back to independent per-direction fitting "
                              "if unavailable.")
+    parser.add_argument("--compare-with", default=None, metavar="DIR",
+                        help="Another analysed run directory of the SAME material with the other "
+                             "treatment of the ions (clamped vs relaxed): tabulates relaxed minus "
+                             "clamped, the internal-relaxation contribution. Found automatically "
+                             "for the relaxed/ and clamped/ folders of 'stb-elasticInputs --ions "
+                             "both' (run this analysis on each).")
     parser.add_argument("--symprec", type=float, default=0.01,
                         help="Symmetry-detection tolerance (default: 0.01, pymatgen's own "
                              "default). Loosen further (e.g. 0.02-0.05) for a structure relaxed "
@@ -1567,6 +1758,14 @@ def main():
     # uses for stb-strain's identical two-layout convention.
     folders = siesta_log.find_strain_folders(args.dir)
     data = {}
+    series = [name for name in ("relaxed", "clamped") if os.path.isdir(os.path.join(args.dir, name))]
+    if not folders and series:
+        print(f"{color_text('[FAIL]', 'red')} '{args.dir}' holds the series folder(s) "
+              f"{' and '.join(series)} of 'stb-elasticInputs --ions both', not strain folders. "
+              "Analyse one series at a time:")
+        for name in series:
+            print(f"       stb-elasticAnalysis -d {os.path.join(args.dir, name)}")
+        sys.exit(1)
 
     Lz = 1.0
     cross_section = 1.0
@@ -1668,6 +1867,8 @@ def main():
     print_dual(f"Save gnuplot         : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib)    : {'yes' if args.view else 'no'}", f_out)
 
+    ions = report_ions(ion_survey(folders, args.file), f_out)
+
     if args.method == "energy":
         # --- Energy-strain (parabolic fit) path: its own folder
         # scanning/parsing (pure+combined pattern names, total energy
@@ -1704,7 +1905,8 @@ def main():
             plot_files = []
 
         emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
-                             plot_files=plot_files)
+                             plot_files=plot_files, report_path=report_path, ions=ions)
+        save_and_compare_constants(args.dir, args.compare_with, C_sym, ions, args, unit_label, f_out)
         if not args.save_gnuplot:
             print_dual("Pass --save-gnuplot to also write the fitting data + gnuplot scripts.", f_out)
         if not args.view:
@@ -1831,7 +2033,9 @@ def main():
 
     emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_directions, f_out,
                          eggbox_results=eggbox_results, fit_diagnostics=fit_diagnostics,
-                         symmetry_check=symmetry_check, plot_files=plot_files)
+                         symmetry_check=symmetry_check, plot_files=plot_files,
+                         report_path=report_path, ions=ions)
+    save_and_compare_constants(args.dir, args.compare_with, C_sym, ions, args, unit_label, f_out)
     if not args.save_gnuplot:
         print_dual("Pass --save-gnuplot to also write the fitting data + gnuplot scripts.", f_out)
     if not args.view:

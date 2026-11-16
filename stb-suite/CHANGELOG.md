@@ -40,6 +40,31 @@ version before) and **Added** (new options and tools).
   - A slab whose generated cell already had c along the normal is written exactly as before. For any
     other, the file differs from the one 2.0.0 wrote: same slab, different cell.
 
+### Changed
+
+- **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single
+  point in every folder, so the workflow could only give clamped-ion constants, while `stb-mlelastic`
+  relaxes the atoms: the same strain gave two different quantities with no notice. In a crystal with
+  an atom off an inversion centre (diamond, zincblende, graphene, hBN, wurtzite, perovskites) the
+  strain leaves forces on the atoms (Si `xy` at 2 %: 0.39 eV/Ang) and the measured constant is the
+  relaxed one (Si C44: 102 GPa clamped, 75 GPa relaxed; graphene C12 +23 %).
+  - `stb-elasticInputs --ions relaxed|clamped|both` (default `relaxed`): the cell stays fixed at the
+    imposed strain; `relaxed` writes a CG relaxation into `config_extra.fdf` (`--relax-steps`, 200;
+    `--fmax`, 0.01 eV/Ang), `clamped` the single point 2.0.0 wrote, `both` the two series in
+    `<output-dir>/relaxed` and `<output-dir>/clamped`. It holds for `--method stress` and
+    `--method energy`. Also asked by the menu (5.2.1).
+  - **To get the inputs 2.0.0 generated, pass `--ions clamped`.**
+  - `stb-elasticAnalysis` has a new section `[0b]`: whether the folders are clamped- or relaxed-ion
+    (read from each log), the CG moves and the last maximum force per direction. It warns when a
+    relaxation stopped before its force tolerance, when the folders mix the two kinds, when a folder
+    ran with a variable cell, and, for clamped-ion runs, when a strained cell shows a force above
+    0.05 eV/Ang (the constants are then not the measured ones). The summary states the kind.
+  - It writes the fitted tensor to `elastic_constants.json` in the run directory and, for the two
+    series of `--ions both` (or `--compare-with DIR`), prints relaxed minus clamped for every
+    reported constant: the internal-relaxation contribution.
+  - The stress and the energy were already read from the last geometry of each log, so folders
+    relaxed by hand (a replaced `config_extra.fdf`) give the same numbers as before.
+
 ### Added
 
 - `stb-slab --layers N`: the slab's size as a number of atomic layers instead of a minimum thickness

@@ -2970,6 +2970,18 @@ def run_elastic_generator() -> None:
     max_strain = get_float_input("\nMax strain % (default: 2.0): ", 2.0)
     steps = get_int_input("Number of steps per direction (default: 4): ", 4)
 
+    # 2b. Ions at each strained cell
+    print("\n" + "-"*60)
+    print(color_text("IONS AT EACH STRAINED CELL", 'cyan').center(60))
+    print("-"*60)
+    print(f"[{color_text('1', 'yellow')}] Relaxed (default) -> atoms relax inside the fixed strained cell "
+          "(relaxed-ion constants, the measured ones)")
+    print(f"[{color_text('2', 'yellow')}] Clamped           -> single points (cheaper; exact only when "
+          "symmetry leaves no force on the atoms)")
+    print(f"[{color_text('3', 'yellow')}] Both              -> two series, relaxed/ and clamped/ "
+          "(internal-relaxation contribution)")
+    ions = {'2': "clamped", '3': "both"}.get(get_input("Select (1-3, default 1): ").strip(), "relaxed")
+
     # 3. Fitting method (stress-strain linear vs. energy-strain parabolic)
     print("\n" + "-"*60)
     print(color_text("FITTING METHOD", 'cyan').center(60))
@@ -3041,6 +3053,7 @@ def run_elastic_generator() -> None:
         "--max", str(max_strain),
         "--steps", str(steps),
         "--method", method,
+        "--ions", ions,
         "--vacuum-gap", str(vacuum_gap),
         "--symprec", str(symprec),
         "--angle-tolerance", str(angle_tolerance),
@@ -3060,6 +3073,7 @@ def run_elastic_generator() -> None:
         ("Calc template", calc_file),
         ("Pseudo source", pseudo_dir or "(not given)"),
         ("Strain range", f"+/-{max_strain}%, {steps} steps"),
+        ("Ions", ions),
         ("Fitting method", method),
         ("Direction strategy", direction_summary),
         ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),

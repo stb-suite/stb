@@ -143,7 +143,8 @@ cat <<'EOF'
 calc.fdf is the SAME file used for structure.fdf's real relaxation --
 MD.TypeOfRun CG, MD.VariableCell true, MD.Steps 200, all still active.
 Unlike stb-strain, stb-elasticInputs needs no --relax-mode and never
-trusts this block to already be single-point: it FORCES one, via a new
+trusts this block: it FORCES a fixed cell and what the atoms do (--ions;
+here clamped = single point, as the shipped data were run), via a new
 config_extra.fdf %include-d at the very TOP of the generated calc.fdf
 (before your own directives) -- SIESTA's fdf reader is first-occurrence
 -wins for duplicate labels, so this ordering guarantees the override
@@ -153,8 +154,8 @@ section, then the proof itself.
 EOF
 mkdir -p "$OUT/case1-precedence"
 cp structure.fdf calc.fdf "$OUT/case1-precedence/"
-echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --dirs all --symmetry-method full --steps 5 --no-intro"
-(cd "$OUT/case1-precedence" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --dirs all --symmetry-method full --steps 5 --no-intro"
+(cd "$OUT/case1-precedence" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs all --symmetry-method full --steps 5 --no-intro | tee console.log \
     | sed -n '/\[4\] SINGLE-POINT/,/\[5\] PSEUDOPOTENTIALS/p')
 echo
@@ -180,11 +181,11 @@ subspace. Same physics, 3x the DFT cost for 'basic'.
 EOF
 mkdir -p "$OUT/case2-symmetry-cost"
 cp structure.fdf calc.fdf "$OUT/case2-symmetry-cost/"
-echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --dirs all --symmetry-method full --steps 5 -o runs_full --no-intro"
-(cd "$OUT/case2-symmetry-cost" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --dirs all --symmetry-method full --steps 5 -o runs_full --no-intro"
+(cd "$OUT/case2-symmetry-cost" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs all --symmetry-method full --steps 5 -o runs_full --no-intro > /dev/null)
-echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --dirs all --symmetry-method basic --steps 5 -o runs_basic --no-intro"
-(cd "$OUT/case2-symmetry-cost" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --dirs all --symmetry-method basic --steps 5 -o runs_basic --no-intro"
+(cd "$OUT/case2-symmetry-cost" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs all --symmetry-method basic --steps 5 -o runs_basic --no-intro > /dev/null)
 n_full=$(find "$OUT/case2-symmetry-cost/runs_full" -type d -name "strain_*" | wc -l)
 n_basic=$(find "$OUT/case2-symmetry-cost/runs_basic" -type d -name "strain_*" | wc -l)
@@ -209,8 +210,8 @@ steps = 10 calculations, between --symmetry-method full's 5 and basic's
 EOF
 mkdir -p "$OUT/case3-method"
 cp structure.fdf calc.fdf "$OUT/case3-method/"
-echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --method energy --steps 5 --no-intro"
-(cd "$OUT/case3-method" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+echo "\$ stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped --method energy --steps 5 --no-intro"
+(cd "$OUT/case3-method" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --method energy --steps 5 --no-intro | sed -n '/\[3\] DEFORMATION/,/\[4\] SINGLE-POINT/p')
 pause
 
@@ -254,7 +255,7 @@ matrix, so section [3]'s eggbox cross-check should show 0% disagreement
 EOF
 mkdir -p "$OUT/case4-stage2-clean"
 cp structure.fdf calc.fdf "$OUT/case4-stage2-clean/"
-(cd "$OUT/case4-stage2-clean" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault \
+(cd "$OUT/case4-stage2-clean" && stb-elasticInputs -s structure.fdf -c calc.fdf -p virtual_vault --ions clamped \
     --dirs xx yy xy --symmetry-method basic --steps 5 --no-intro > /dev/null)
 write_synthetic_data "$OUT/case4-stage2-clean"
 echo "\$ stb-elasticAnalysis --dir elastic_runs --symmetry-method basic --no-intro"

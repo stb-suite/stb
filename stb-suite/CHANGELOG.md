@@ -64,6 +64,19 @@ version before) and **Added** (new options and tools).
   The NVIDIA driver on your system is too old` no longer reaches the output or the report's library
   warnings (it made the `stb-mlmd` test fail). A run that asks for the GPU still gets its own error.
 
+- `stb-strainAnalysis` said "slope under a clamped transverse cell" and "transverse stress
+  (diagnostic, clamped cell)" also for runs made with `stb-strain --relax-mode stress-constrained`,
+  where the transverse cell relaxes and the slope is Young's modulus. It now reads the mode from each
+  folder's `config_extra.fdf`, words the report accordingly, and for the relaxed mode gives Poisson's
+  ratio from the transverse strain of the final cells (`*.STRUCT_OUT`).
+- `stb-cohesive`: the log called the whole `--vacuum` a "buffer beyond the outermost atom" and, lines
+  below, half of it; the first line now says what the value is (the vacuum gap between images, box
+  side = 2 x cutoff + vacuum) and the buffer per side.
+- Example 5.3 (cohesive energy): the orbital radius `rc = 7.12` read from `calc.out` is in Bohr (3.77
+  Ang), not Angstrom, so the old box did not let periodic images overlap; the text is corrected. The
+  README now shows the ghost-cutoff scan up to 12 Ang: the corrected GaAs value at 6 Ang (-3.1741
+  eV/atom) is not converged (-3.0514 at 12 Ang).
+
 ### Changed
 
 - Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never

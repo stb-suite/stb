@@ -422,8 +422,9 @@ def main():
     print_dual(f"K-point density       : {args.k_density} 1/Ang", f_out)
     print_dual(f"Spin (full structure) : {'polarized' if args.spin else 'non-polarized'}", f_out)
     print_dual(f"Dispersion (D3)       : {'ON' if args.dispersion else 'OFF'}", f_out)
-    print_dual(f"Isolated-atom vacuum  : {args.vacuum} Ang (buffer beyond the outermost atom; "
-               "BSSE cluster boxes auto-grow with --bsse-cutoff to keep this buffer constant)",
+    print_dual(f"Isolated-atom vacuum  : {args.vacuum} Ang (vacuum gap between periodic images: box side = "
+               f"2*cutoff + {args.vacuum:g} Ang, i.e. {args.vacuum / 2.0:g} Ang of buffer beyond the outermost "
+               "(ghost) atom on each side, at every --bsse-cutoff)",
                f_out)
     print_dual(f"Vacuum-gap threshold  : {args.vacuum_gap} Ang", f_out)
     if args.bsse_correction:

@@ -50,6 +50,8 @@ from stb.core import structure_io, siesta_log
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.neb import write_image_folder
 
+# Neighbouring images closer than this (largest atomic displacement, Ang) are the same geometry.
+DEGENERATE_STEP_ANG = 1e-3
 CONVERGED_SENTINEL = "NEB_CONVERGED"
 _CYCLE_RE = re.compile(r"^cycle_(\d+)$")
 
@@ -206,6 +208,32 @@ def main():
     for label, energy in zip(labels, energies):
         print_dual(f"  {color_text('[OK]', 'green')} {os.path.basename(cycle_dir)}/{label} : "
                     f"E = {energy:.6f} eV", f_out)
+
+    # A band whose neighbouring images coincide has no tangent and no barrier.
+    # ASE does not always return NaN for it (identical endpoints: every image
+    # the same, zero forces along a zero tangent), so it is checked here, on
+    # the geometries, before any step is taken.
+    step_lengths = []
+    for previous, current in zip(structures[:-1], structures[1:]):
+        delta = current.frac_coords - previous.frac_coords
+        delta -= np.round(delta)
+        step_lengths.append(float(np.linalg.norm(delta @ current.lattice.matrix, axis=1).max()))
+    collapsed = [f"{labels[i]}-{labels[i + 1]}" for i, length in enumerate(step_lengths)
+                 if length < DEGENERATE_STEP_ANG]
+    if collapsed:
+        whole = len(collapsed) == len(step_lengths)
+        print_dual(color_text(
+            "[ERROR] Degenerate band: "
+            + ("every image has the same geometry (largest atomic displacement between neighbours < "
+               f"{DEGENERATE_STEP_ANG} Ang) -- the initial and final states are the same structure, so "
+               "there is no path and no barrier along this band." if whole else
+               f"neighbouring images coincide ({', '.join(collapsed)}: largest atomic displacement < "
+               f"{DEGENERATE_STEP_ANG} Ang) -- the path has collapsed there and has no tangent.")
+            + " No cycle folder is written. Check the endpoints given to stb-neb (--initial/--final must "
+            "be two different minima) or the last cycles' geometries.", 'red'), f_out)
+        if f_out:
+            f_out.close()
+        sys.exit(1)
 
     from ase.calculators.singlepoint import SinglePointCalculator
     from ase.mep.neb import NEB

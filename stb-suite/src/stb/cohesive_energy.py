@@ -436,7 +436,7 @@ def main():
                          "geometry is written under that name"
                          + (f" (it includes: {', '.join(includes)})" if includes else " (it includes no file)") + ".")
         from stb.core import fdf_directives
-        keep_template_kgrid = args.k_density is None and fdf_directives.parse_kgrid(USER_CALC["text"]) is not None
+        keep_template_kgrid = args.k_density is None and fdf_directives.describe_template_kgrid(USER_CALC["text"]) is not None
     if args.k_density is None:
         args.k_density = 0.2
     if args.vacuum <= 0:
@@ -572,8 +572,8 @@ def main():
         sys.exit(1)
     if keep_template_kgrid:
         from stb.core import fdf_directives
-        template_grid = fdf_directives.parse_kgrid(USER_CALC["text"])
-        print_dual(f"K-grid (full structure): {' '.join(str(v) for v in template_grid)} -- the template's own "
+        template_grid = fdf_directives.describe_template_kgrid(USER_CALC["text"])
+        print_dual(f"K-grid (full structure): {template_grid} -- the template's own "
                    f"(pass -k to replace it; -k {args.k_density} would give {kgrid_divs[0]} {kgrid_divs[1]} "
                    f"{kgrid_divs[2]})", f_out)
     else:

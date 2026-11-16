@@ -28,6 +28,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' unexpectedly found in '$2'"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' absent from '$2'"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -492,6 +502,18 @@ check_success cohesive_runs/atoms_bsse_check_6.0/C/site_k_x6/calc.fdf
 check_success cohesive_runs/atoms_bsse_check_8.0/C/site_k_x6/calc.fdf
 check_success cohesive_runs/atoms_bsse_check_10.0/C/site_k_x6/calc.fdf
 
+
+# --- 14b. --calc template with kgrid.Cutoff (N4) and FilterCutoff (N9) ---
+echo -e "\n--- Testing --calc with 'kgrid.Cutoff' (a k-grid of the template: not overridden) and FilterCutoff ---"
+rm -rf cutoff_run && mkdir -p cutoff_run
+printf '%%include structure.fdf\nSystemLabel siesta\nkgrid.Cutoff 15.0 Ang\nFilterCutoff 150 Ry\nMesh.Cutoff 300 Ry\n' > cutoff_calc.fdf
+stb-cohesive -s structure.fdf -c cutoff_calc.fdf -O cutoff_run --no-bsse-correction --no-intro > log_cutoff.txt 2>&1
+check_contains "K-grid (full structure): kgrid.Cutoff 15.0 Ang -- the template's own" log_cutoff.txt
+check_not_contains "kgrid.MonkhorstPack" cutoff_run/structure/config_extra.fdf
+echo "Testing: -k still replaces it"
+rm -rf cutoff_run_k && mkdir -p cutoff_run_k
+stb-cohesive -s structure.fdf -c cutoff_calc.fdf -k 0.2 -O cutoff_run_k --no-bsse-correction --no-intro > log_cutoff_k.txt 2>&1
+check_contains "kgrid.MonkhorstPack" cutoff_run_k/structure/config_extra.fdf
 
 popd > /dev/null
 

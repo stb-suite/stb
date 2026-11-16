@@ -78,3 +78,19 @@ def parse_kgrid(*texts):
         except (ValueError, IndexError):
             return None
     return None
+
+
+def describe_template_kgrid(*texts):
+    """How the fdf texts set the SCF k-sampling, as a short string, or None when they set none (SIESTA then
+    samples Gamma only): the Monkhorst-Pack divisions (list or block form), 'kgrid.Cutoff <value>' or
+    'kgrid.File <name>'. A tool that forces a k-grid only "when the template has none" must test this, not
+    parse_kgrid alone: stb-cohesive --calc once wrote a 10x10x10 block over a template's 'kgrid.Cutoff 15.0 Ang'
+    (the block takes precedence) and SIESTA ran with 560 k-points."""
+    grid = parse_kgrid(*texts)
+    if grid is not None:
+        return "x".join(str(v) for v in grid)
+    values = parse_directives(*texts)
+    for name, key in (("kgrid.File", "kgridfile"), ("kgrid.Cutoff", "kgridcutoff")):
+        if key in values:
+            return f"{name} {values[key]}"
+    return None

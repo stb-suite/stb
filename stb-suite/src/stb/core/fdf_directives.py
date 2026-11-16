@@ -44,6 +44,24 @@ def parse_directives(*texts):
     return values
 
 
+def filter_caution(*texts):
+    """Warning text when the fdf texts (in SIESTA's reading order) turn the orbital
+    filter on (FilterCutoff or FilterTol), else None. The filter changes the basis:
+    with 'FilterCutoff 150 Ry' the fit residual of E(V) was 2.13 (Cu) and 1.43 (Al)
+    meV/atom against 0.11 and 0.07 without it, and Cu's V0 moved from 11.904 to
+    11.715 Ang^3 and B0 from 141 to 128 GPa (all-electron: 11.951, 141.3)."""
+    values = parse_directives(*texts)
+    active = [f"{name} {values[key]}" for name, key in (("FilterCutoff", "filtercutoff"), ("FilterTol", "filtertol"))
+              if key in values]
+    if not active:
+        return None
+    return (f"The orbital filter is ON ({', '.join(active)}): SIESTA filters the basis orbitals, which changes "
+            "the basis itself and adds noise to energy differences between cells of different size -- E(V), "
+            "elastic constants, convergence scans (Cu, FilterCutoff 150 Ry: fit residual 2.1 instead of 0.1 "
+            "meV/atom, V0 -1.6 %, B0 -9 %; Al, Ag affected too; Si, graphene, hBN not). Remove the line and "
+            "converge Mesh.Cutoff instead; 2.0.0's stb-inputfile/stb-cohesive templates wrote it by default.")
+
+
 def parse_kgrid(*texts):
     """The Monkhorst-Pack divisions as an (nx, ny, nz) tuple, from either the list
     form `kgrid.MonkhorstPack [a b c]` or the block form (first three rows, diagonal

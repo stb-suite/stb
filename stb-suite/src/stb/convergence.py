@@ -375,6 +375,9 @@ def main():
     ], f_out)
     forced_calc_text = prepend_include(original_calc_text, EXTRA_FDF_FILE)
     from stb.core import fdf_directives
+    caution = fdf_directives.filter_caution(original_calc_text)
+    if caution:
+        print_dual(color_text(f"[WARNING] {caution}", 'yellow'), f_out)
     d3_value = fdf_directives.parse_directives(original_calc_text).get("dftd3", "")
     if d3_value.strip().lower().strip(".") in ("true", "t", "yes", "y"):
         print_dual(color_text(

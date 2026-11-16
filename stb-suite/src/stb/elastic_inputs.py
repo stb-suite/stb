@@ -576,6 +576,11 @@ def main():
             "own convention) so SIESTA picks up the strained geometry in each generated folder.",
             'yellow'), f_out)
 
+    from stb.core.fdf_directives import filter_caution
+    caution = filter_caution(original_calc_text)
+    if caution:
+        print_dual(color_text(f"[WARNING] {caution}", 'yellow'), f_out)
+
     before = read_md_state(original_calc_text)
     steps_label = f"{before['steps_key']}={before['steps']}" if before['steps_key'] else "(absent)"
     print_dual("Calc template (current state, before forcing):", f_out)

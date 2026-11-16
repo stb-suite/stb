@@ -78,8 +78,9 @@ PAO.EnergyShift     0.01 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [6  6  6]
 Mesh.CutOff           320  Ry  
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.0.1: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   # %block kgrid.MonkhostPack
   # %endblock MonkhostPack
@@ -282,8 +283,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [4  13  1]
 Mesh.CutOff           320  Ry   
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.0.1: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   # %block kgrid.MonkhostPack
   # %endblock MonkhostPack
@@ -477,8 +479,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [1  1  1]
 Mesh.CutOff           320  Ry    
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.0.1: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
   
   # %block kgrid.MonkhostPack
@@ -682,8 +685,9 @@ PAO.EnergyShift     0.02 Ry
 ##Essential Parameters
 kgrid.MonkhorstPack   [1  1  1]
 Mesh.CutOff           320  Ry 
-FilterCutoff          150  Ry
-
+# FilterCutoff        150  Ry   # off since 2.0.1: it filters the orbitals, i.e. changes the basis (noise in
+#                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
+#                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## Optional Parameters
 
   # %block kgrid.MonkhostPack

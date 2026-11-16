@@ -71,11 +71,12 @@ JACKKNIFE_PCT = 1.0               # B0 jackknife sigma / B0
 WINDOW_PCT = 2.0                  # B0 change when refitting the central points only
 
 _THEORY_KEYS = ["xcfunctional", "xcauthors", "paobasistype", "paobasissize", "paoenergyshift",
-                "meshcutoff", "spin", "electronictemperature", "dmtolerance", "dftd3"]
+                "meshcutoff", "spin", "electronictemperature", "dmtolerance", "dftd3", "filtercutoff", "filtertol"]
 _THEORY_LABELS = {"xcfunctional": "XC functional", "xcauthors": "XC authors", "paobasistype": "Basis type",
                   "paobasissize": "Basis size", "paoenergyshift": "PAO energy shift", "meshcutoff": "Mesh cutoff",
                   "spin": "Spin", "electronictemperature": "Electronic temperature",
-                  "dmtolerance": "DM tolerance", "dftd3": "DFT-D3"}
+                  "dmtolerance": "DM tolerance", "dftd3": "DFT-D3", "filtercutoff": "FilterCutoff",
+                  "filtertol": "FilterTol"}
 
 
 # ---- reading --------------------------------------------------------------------
@@ -474,6 +475,14 @@ def main():
     print_table(["Setting", "Value", "Consistency"], rows, f_out)
     if pp:
         print_dual(f"Pseudopotentials: {', '.join(pp)} (md5, first 8)", f_out)
+    if "filtercutoff" in ref_theory or "filtertol" in ref_theory:
+        print_dual(warn(
+            "The orbital filter is ON in these runs ("
+            + ", ".join(f"{_THEORY_LABELS[k]} {ref_theory[k]}" for k in ("filtercutoff", "filtertol") if k in ref_theory)
+            + "): SIESTA filters the basis orbitals, which changes the basis and adds noise to E(V) (Cu, "
+            "FilterCutoff 150 Ry: fit residual 2.1 instead of 0.1 meV/atom, V0 -1.6 %, B0 -9 %; Al and Ag are "
+            "affected too, Si is not). A large residual below can come from it alone: remove the line and "
+            "converge Mesh.Cutoff instead."), f_out)
     for k, lst in differing.items():
         print_dual(warn(f"level of theory differs between folders for {k}: "
                         + ", ".join(f"{f} '{v}'" for f, v in lst[:5]) + (" ..." if len(lst) > 5 else "")
@@ -752,6 +761,9 @@ def main():
         }.get(name)
         if name.startswith("Fit R^2") or name.startswith("Residual rms"):
             hint = "the scan may be too wide (anharmonic) or too narrow (noise): try another --strain-range, and check the SCF settings."
+            if "filtercutoff" in ref_theory or "filtertol" in ref_theory:
+                hint += (" These runs have the orbital filter on (FilterCutoff/FilterTol): it alone gives residuals of "
+                         "1-2 meV/atom in E(V) for some elements (Cu, Al, Ag) -- remove it and converge Mesh.Cutoff.")
         if name.startswith("P_SIESTA agrees") or name.startswith("Residual pressure") or name.startswith("B0 from stress"):
             hint = "energy and stress disagree: raise Mesh.Cutoff (egg-box effect of the real-space mesh), tighten DM.Tolerance, or widen the scan."
             if fdf_directives_true(ref_theory.get("dftd3")):

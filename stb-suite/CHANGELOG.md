@@ -111,6 +111,20 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- **The generated `calc.fdf` no longer turns the orbital filter on.** The templates of `stb-inputfile`
+  (all four types) and `stb-cohesive` wrote `FilterCutoff 150 Ry`, which makes SIESTA filter the basis
+  orbitals (effective cutoff 73.5 Ry): the basis changes with it, and E(V) gets noisy. Cu and Al (PBE,
+  DZP, 9 volumes): fit residual 2.13 and 1.43 meV/atom with the line, 0.11 and 0.07 without; Cu V0
+  11.715 -> 11.904 Ang^3 (all-electron 11.951) and B0 128 -> 141 GPa (141.3); Al B0 71 -> 80 GPa (78.1).
+  Doubling `Mesh.Cutoff` or the k-grid did not help. The line is now written commented out.
+  - **Numbers change** for every input generated from now on (large for Al and Cu, medium for Ag, none
+    for Si, graphene, hBN).
+  - Without the filter `Mesh.Cutoff` has to be converged per system: 350 Ry is enough for Si, NaCl, Al,
+    Cu, Ag, graphene and hBN, but Ge and GaAs need about 500 Ry (V0 at 350 vs 1000 Ry: GaAs +0.56 %).
+  - A template that still has `FilterCutoff`/`FilterTol` gets a warning from `stb-eosInputs`,
+    `stb-eosAnalysis` (which also names the filter among the causes of a large fit residual),
+    `stb-elasticInputs` and `stb-convergence`.
+
 - **`stb-cohesiveAnalysis` uses the Kohn-Sham energy E_KS, not SIESTA's `FreeEng`.** `FreeEng` includes
   -T*S of the electronic smearing, and an open-shell isolated atom with degenerate orbitals has
   fractional occupations at `ElectronicTemperature 300 K`: -49.4 meV for Si (p2) and Ga (p1), 0 for As

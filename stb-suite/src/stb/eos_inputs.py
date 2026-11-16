@@ -299,6 +299,11 @@ def main():
     # ------------------------------------------------------------------ [2]
     print_section("[2] LEVEL OF THEORY READ FROM THE TEMPLATE", f_out)
     forced_kgrid, kgrid_source = None, None
+    if calc_template:
+        from stb.core.fdf_directives import filter_caution
+        caution = filter_caution(calc_template)
+        if caution:
+            print_dual(warn(caution), f_out)
     if calc_mode == "structure-only":
         print_dual("No calc template: the folders get only the scaled structure, and the level of theory "
                    "is whatever you put around it.", f_out)

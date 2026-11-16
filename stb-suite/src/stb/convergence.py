@@ -190,6 +190,7 @@ def run_basis_mode(args, parser):
     for path, what in ((args.structure, "Structure"), (args.calc, "Calc")):
         if not os.path.isfile(path):
             sys.exit(color_text(f"[ERROR] {what} file '{path}' not found.", 'red'))
+    pseudo_given = args.pseudo_dir          # as typed (a bank name stays a bank name in the next-step command)
     if args.pseudo_dir:
         try:
             args.pseudo_dir = resolve_pseudo_source(args.pseudo_dir)
@@ -349,7 +350,8 @@ def run_basis_mode(args, parser):
                       "mesh stage found)") + ".", f_out)
 
     manifest = {"format": "stb-basis-scan", "version": 1, "tool": f"stb-convergence {VERSION}", "stage": stage,
-                "structure": args.structure, "calc": args.calc, "n_atoms": n_atoms, "volume": volume0,
+                "structure": args.structure, "calc": args.calc, "pseudo": pseudo_given,
+                "n_atoms": n_atoms, "volume": volume0,
                 "n_periodic": n_periodic, "periodic_axes": periodic_axes, "measure": measure,
                 "scan_range_pct": scan_range, "scan_points": args.scan_points, "sub_scans": sub_scans}
     with open(os.path.join(base, bs.manifest_name(stage)), "w") as fh:

@@ -648,14 +648,17 @@ def analyze_basis(base, args, f_out):
          None if stage in verdicts and verdicts[stage][0] is not None else 'yellow') for stage in bs.STAGES], f_out)
     mesh_v = verdicts.get("mesh", (None,))[0]
     range_v = verdicts.get("range", (None,))[0]
+    # the pseudopotential source of the stage just run (manifests written before 2.1.0 do not record it)
+    pseudo = next((m.get("pseudo") for m in manifests.values() if m.get("pseudo")), None)
+    pseudo_opt = f" -p {pseudo}" if pseudo else " -p <pseudopotential source>"
     if "range" not in manifests and mesh_v is not None:
         print_dual(f"Next: stb-convergence --parameter basis --basis-stage range --mesh-cutoff {mesh_v:g} "
-                   f"-s {first['structure']} -c {first['calc']} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+                   f"-s {first['structure']} -c {first['calc']}{pseudo_opt} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
     elif "size" not in manifests and range_v is not None:
         mesh_used = manifests["range"]["sub_scans"][0].get("mesh_cutoff")
         print_dual(f"Next: stb-convergence --parameter basis --basis-stage size --energyshift {range_v:g}"
                    + (f" --mesh-cutoff {mesh_used:g}" if mesh_used else "")
-                   + f" -s {first['structure']} -c {first['calc']} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
+                   + f" -s {first['structure']} -c {first['calc']}{pseudo_opt} -o {os.path.dirname(os.path.normpath(base)) or '.'}", f_out)
     print_dual(color_text(
         "The verdict holds for this structure. Energies with an isolated atom or molecule (cohesive, adsorption) "
         "need the counterpoise correction and their own test (the corrected cohesive energy of Si still moved 7 "

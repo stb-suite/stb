@@ -180,6 +180,11 @@ version before) and **Added** (new options and tools).
 - `stb-convergence` (and every tool that puts `%include config_extra.fdf` on top of a template): a
   template that already had the line got a second identical one. Harmless, but it read as a mistake; the
   file now keeps one, at the top.
+- `stb-convergenceAnalysis --parameter basis`: the command it prints for the next stage had no `-p`, so
+  the folders of that stage would have been written without pseudopotentials. `stb-convergence` now
+  records the pseudopotential source in `basis_scan_<stage>.json` (as typed: a bank name stays a bank
+  name) and the command carries it; for a scan written by an earlier version the command shows
+  `-p <pseudopotential source>` to fill in.
 
 ### Changed
 

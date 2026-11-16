@@ -642,6 +642,12 @@ def main():
     # 45.96 THz).
     fc_symmetry = None
     try:
+        fc = phonon.force_constants
+        if fc.shape[0] != fc.shape[1]:
+            # phonopy.load gives compact force constants (n_prim x n_super); the space-group projection needs the
+            # full ones (with compact ones phonopy 4.5 raised 'index 2 is out of bounds' and the check was skipped)
+            phonon.produce_force_constants()
+            phonon.symmetrize_force_constants(show_drift=False)
         raw_fc = np.array(phonon.force_constants, copy=True)
         gamma_raw = np.array(phonon.get_frequencies([0.0, 0.0, 0.0]))
         phonon.symmetrize_force_constants_by_space_group(show_drift=False)

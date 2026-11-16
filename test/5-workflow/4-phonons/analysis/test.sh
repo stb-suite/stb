@@ -157,6 +157,35 @@ stb-phononsPos -dir phonon_runs -m 4 4 4 --symprec 0.1 --no-intro > log_pos_symp
 check_exit_code $? 0
 check_contains "Symmetry precision: 0.1 Ang" log_pos_symprec.txt
 
+echo -e "\n--- Testing graphene 5x5 (real SIESTA forces, one P6/mmm displacement): space group and E2g ---"
+# N1 (2.1.0): the analysis must see P6/mmm at --symprec; under phonopy's 1e-5 the relaxed cell (2/3 -> 0.66667844)
+# is Cmmm and the force constants built from the single P6/mmm displacement split E2g.
+rm -rf gr && cp -r "$FIXTURE_DIR/graphene_5x5" gr
+stb-phononsPos -dir gr -m 8 8 1 --no-intro > log_gr.txt 2>&1
+check_exit_code $? 0
+check_contains "Space group      : P6/mmm" log_gr.txt
+check_contains "Force-constant symmetry: symmetrizing by the space group moves" log_gr.txt
+check_not_contains "Force-constant symmetry check skipped" log_gr.txt
+python3 - <<'PYEOF'
+import os, numpy as np, phonopy
+from phonopy.interface.siesta import get_physical_units
+from stb.core.phonon_workflow import _ensure_symmetry_tolerance
+os.chdir("gr")
+ph = phonopy.load("phonopy_disp.yaml", force_sets_filename="FORCE_SETS", symprec=1e-5)   # what 2.1.0.dev33 got on the cluster
+before = ph.primitive_symmetry.get_international_table()
+ph = _ensure_symmetry_tolerance(ph, 0.01, get_physical_units().Bohr)
+ph.run_qpoints([[0, 0, 0]]); f = np.sort(ph.qpoints.frequencies[0])
+split = abs(f[-1] - f[-2])
+print(f"RESULT before={before} after={ph.primitive_symmetry.get_international_table()} E2g split={split:.4f} THz")
+open("e2g.txt", "w").write(f"{split:.4f}\n")
+PYEOF
+if awk '{exit !($1 < 0.01)}' gr/e2g.txt; then echo -e "   -> ${GREEN}Verified:${NC} E2g degenerate after the rebuild ($(cat gr/e2g.txt) THz)"; PASS=$((PASS+1));
+else echo -e "   -> ${RED}Failed:${NC} E2g split $(cat gr/e2g.txt) THz after the rebuild"; FAIL=$((FAIL+1)); fi
+echo "Testing: a phonopy_disp.yaml written with phonopy's 1e-5 tolerance is reported"
+sed -i 's/symmetry_tolerance: .*/symmetry_tolerance: 1.00000e-05/' gr/phonopy_disp.yaml
+stb-phononsPos -dir gr -m 8 8 1 --no-intro > log_gr_tol.txt 2>&1
+check_contains "Prep tolerance   : 5.29e-06 Ang in phonopy_disp.yaml (Cmmm)" log_gr_tol.txt
+
 echo -e "\n--- Testing --view completes headlessly without hanging (matplotlib Agg backend) ---"
 MPLBACKEND=Agg timeout 60 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos \
     --view --no-intro > log_pos_view.txt 2>&1

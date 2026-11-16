@@ -186,6 +186,117 @@ def subtract_residual_forces(phonon, residual):
     return float(np.linalg.norm(residual, axis=1).max())
 
 
+def _spglib_group(cell, symprec_internal):
+    """(international symbol, number) of a phonopy cell at `symprec_internal` (the cell's own length unit), from
+    spglib directly -- independent of the phonopy version. None when spglib fails."""
+    import spglib
+    try:
+        ds = spglib.get_symmetry_dataset((np.asarray(cell.cell), np.asarray(cell.scaled_positions),
+                                          np.asarray(cell.numbers)), symprec=symprec_internal)
+    except Exception:
+        return None
+    if ds is None:
+        return None
+    sym = getattr(ds, "international", None) or ds["international"]
+    num = getattr(ds, "number", None) or ds["number"]
+    return sym, int(num)
+
+
+def _read_yaml_tolerance(path="phonopy_disp.yaml"):
+    """symmetry_tolerance written by phonopy into phonopy_disp.yaml (yaml length unit), or None."""
+    try:
+        with open(path) as fh:
+            for line in fh:
+                m = re.match(r"\s*symmetry_tolerance:\s*([0-9.eE+-]+)", line)
+                if m:
+                    return float(m.group(1))
+    except OSError:
+        pass
+    return None
+
+
+def _ensure_symmetry_tolerance(phonon, symprec_ang, yaml_unit, f_out=None, info=None):
+    """Makes sure the loaded Phonopy object uses `symprec_ang` (Angstrom) and the space group spglib finds at it.
+
+    phonopy.load gets symprec, but the group phonopy ends up with has not always been the one at that tolerance:
+    on the cluster (another phonopy version) a SIESTA-relaxed 5x5 graphene (positions 0.66667844 instead of 2/3)
+    was analysed as Cmmm, the tolerance of phonopy_disp.yaml (1e-5), and the force constants built from the single
+    P6/mmm displacement split E2g (45.55 / 45.96 THz) while the symmetrization check saw nothing (0.000 THz). The
+    group is now computed with spglib at the requested tolerance and compared with phonopy's; on a mismatch the
+    Phonopy object is rebuilt explicitly with that tolerance (same cell, matrices, dataset). The tolerance used
+    at the prep stage (yaml) is reported: a prep tolerance LARGER than the analysis one means the displacement set
+    was reduced with a higher symmetry than the one now used to build the force constants (underdetermined).
+    Returns the (possibly rebuilt) Phonopy object."""
+    target = symprec_ang / yaml_unit
+    expected = _spglib_group(phonon.unitcell, target)
+    ds_prim = phonon.primitive_symmetry.dataset
+    seen_num = getattr(ds_prim, "number", None)
+    if seen_num is None and isinstance(ds_prim, dict):
+        seen_num = ds_prim.get("number")
+    seen_sym = phonon.primitive_symmetry.get_international_table()
+    tol_now = float(phonon.symmetry.tolerance)
+    rebuilt = False
+    if expected is not None and (seen_num != expected[1] or abs(tol_now - target) > 1e-12 * max(1.0, target)):
+        from phonopy import Phonopy as _Phonopy
+        kwargs = {"supercell_matrix": phonon.supercell_matrix, "primitive_matrix": phonon.primitive_matrix,
+                  "symprec": target}
+        calc = getattr(phonon, "calculator", None)
+        if calc is not None:
+            kwargs["calculator"] = calc
+        with _no_auto_primitive_warning():
+            new = _Phonopy(phonon.unitcell, **kwargs)
+        new.dataset = phonon.dataset
+        try:
+            new.produce_force_constants()
+            new.symmetrize_force_constants(show_drift=False)
+        except Exception:
+            # ML-sourced yaml: force constants embedded, no forces in the dataset
+            new.force_constants = phonon.force_constants
+        if seen_num != expected[1]:
+            print_dual(color_text(
+                f"[WARNING] phonopy loaded the cell as {seen_sym} (tolerance {tol_now * yaml_unit:.2e} Ang) but the "
+                f"requested --symprec {symprec_ang:g} Ang gives {expected[0]} ({expected[1]}) -- the Phonopy object "
+                "was rebuilt with the requested tolerance and the force constants recomputed.", 'yellow'), f_out)
+        phonon = new
+        rebuilt = True
+    final_sym = phonon.primitive_symmetry.get_international_table()
+    print_dual(f"Space group      : {final_sym} at symprec {symprec_ang:g} Ang"
+               + (" (rebuilt)" if rebuilt else ""), f_out)
+    yaml_tol = _read_yaml_tolerance()
+    if yaml_tol is not None:
+        yaml_tol_ang = yaml_tol * yaml_unit
+        prep_group = _spglib_group(phonon.unitcell, yaml_tol)
+        prep_txt = f"{prep_group[0]}" if prep_group else "?"
+        print_dual(f"Prep tolerance   : {yaml_tol_ang:.2e} Ang in phonopy_disp.yaml ({prep_txt})", f_out)
+        if prep_group is not None and expected is not None and prep_group[1] != expected[1]:
+            n_prep = _n_ops(phonon.unitcell, yaml_tol)
+            n_now = _n_ops(phonon.unitcell, target)
+            if n_prep is not None and n_now is not None and n_prep > n_now:
+                print_dual(color_text(
+                    f"[WARNING] The displacements were reduced with {prep_group[0]} (prep tolerance "
+                    f"{yaml_tol_ang:.2e} Ang) but the force constants are built with {expected[0]}: the "
+                    "displacement set may not determine every force constant. Use the prep --symprec here.",
+                    'yellow'), f_out)
+            else:
+                print_dual(color_text(
+                    f"[INFO] Prep tolerance gave {prep_group[0]}, this analysis {expected[0]}: the displacement set "
+                    "is larger than needed (harmless).", 'cyan'), f_out)
+    if info is not None:
+        info["space_group"] = final_sym
+        info["symmetry_rebuilt"] = rebuilt
+    return phonon
+
+
+def _n_ops(cell, symprec_internal):
+    import spglib
+    try:
+        sym = spglib.get_symmetry((np.asarray(cell.cell), np.asarray(cell.scaled_positions),
+                                   np.asarray(cell.numbers)), symprec=symprec_internal)
+    except Exception:
+        return None
+    return None if sym is None else len(sym["rotations"])
+
+
 def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, f_out=None,
                                       symprec=None, info=None, primitive_matrix=None):
     """Builds FORCE_SETS from disp-*/<system_label>.FA (subprocess
@@ -273,6 +384,9 @@ def load_phonon_with_force_constants(phonon_dir, system_label, has_embedded_fc, 
         print_dual(color_text(f"[ERROR] Could not load phonopy data: {e}", 'red'), f_out)
         os.chdir(original_dir)
         raise SystemExit(1)
+
+    if symprec is not None:
+        phonon = _ensure_symmetry_tolerance(phonon, symprec, yaml_unit, f_out, info)
 
     n_prim, n_unit = len(phonon.primitive.symbols), len(phonon.unitcell.symbols)
     print_dual(f"Cells            : input {n_unit} atoms, primitive {n_prim} atoms, supercell "

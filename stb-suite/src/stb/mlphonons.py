@@ -1239,7 +1239,7 @@ def build_parser():
                              "Grueneisen parameters vs. T, mode Grueneisen parameters). No "
                              "foundation-model comparison in this mode. Off by default.")
     parser.add_argument("--n-volumes", type=int, default=5,
-                        help="Number of volume points for --qha, >= 4 (default: 5).")
+                        help="Number of volume points for --qha, >= 5 (default: 5).")
     parser.add_argument("--strain-range", type=float, default=3.0,
                         help="Volume range around equilibrium for --qha, +/- %% (default: 3.0).")
     parser.add_argument("--eos", choices=["vinet", "murnaghan", "birch_murnaghan"], default="vinet",
@@ -1320,9 +1320,11 @@ def main():
     args = parser.parse_args()
     card = model_card.setup_from_args(args.custom_model, args.custom_model_card, "--custom-model", error=parser.error)
 
-    if args.qha and args.n_volumes < 4:
-        parser.error("--n-volumes must be at least 4 -- vinet/murnaghan/birch_murnaghan all "
-                     "fit 4 parameters (E0, V0, B0, B0'), so need at least 4 volumes.")
+    if args.qha and args.n_volumes < 5:
+        parser.error("--n-volumes must be at least 5: the equation of state has 4 parameters (E0, V0, "
+                     "B0, B0') and the entropy S(V) is fitted with a polynomial of degree 4, which "
+                     "needs 5 volumes (with 4 the run used to fail at the very end, after every "
+                     "volume had been computed).")
     for flag_name, flag_val in (("--freeze-unstable-mode", args.freeze_unstable_mode),
                                 ("--animate-mode", args.animate_mode is not None)):
         if args.qha and flag_val:

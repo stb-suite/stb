@@ -6911,7 +6911,7 @@ def run_mlphonons_generator() -> None:
 
     if mode_choice == '2':
         args.append("--qha")
-        n_volumes = get_input("Number of volumes to scan, >= 4 [default: 5]: ").strip()
+        n_volumes = get_input("Number of volumes to scan, >= 5 [default: 5]: ").strip()
         args.extend(["--n-volumes", n_volumes or "5"])
         strain_range = get_input(
             "Max isotropic strain around the reference volume, %% [default: 3.0]: ").strip()

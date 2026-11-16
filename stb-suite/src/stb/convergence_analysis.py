@@ -531,26 +531,48 @@ def analyze_basis(base, args, f_out):
         v0s = [fit["v0"] for fit in fits]
         tightest = next((v for v in reversed(v0s) if v is not None), None)
         rows = []
-        for sc, fit in zip(scans, fits):
+        periodic_axes = man.get("periodic_axes") or [0, 1, 2][:n_periodic]
+        lowdims = [bs.low_dimensional(fit, n_periodic, periodic_axes) for fit in fits]
+        n_cols = 8 if n_periodic == 2 else 7
+        for sc, fit, low in zip(scans, fits, lowdims):
             label = (f"{sc['value']:g} Ry" if stage != "size" else str(sc["value"]))
             if fit["v0"] is None:
-                rows.append(([label, f"{fit['n']}/{fit['n_folders']}", "--", "--", "--", "--", "--",
-                              "; ".join(fit["problems"][:2]) or "fewer than 5 finished points"], 'yellow'))
+                rows.append(([label, f"{fit['n']}/{fit['n_folders']}"] + ["--"] * (n_cols - 2)
+                             + ["; ".join(fit["problems"][:2]) or "fewer than 5 finished points"], 'yellow'))
                 continue
             radii = fit["radii"]
-            shown_b0 = f"{fit['b0']:.1f}" + ("" if fit["rms"] is not None and fit["rms"] < bs.B0_RESIDUAL_MEV else " (noisy)")
-            rows.append(([label, f"{fit['n']}/{fit['n_folders']}", f"{fit['v0'] / n_atoms:.4f}",
-                          f"{100 * (fit['v0'] / tightest - 1):+.2f}" if tightest else "--", shown_b0,
-                          f"{fit['rms']:.3f}" if fit["rms"] is not None else "--",
-                          f"{radii[0]:.2f} / {radii[1]:.2f}" if radii else "--",
-                          "V0 OUTSIDE THE SCAN" if fit["outside"] else ("; ".join(fit["problems"][:1]) or "ok")],
+            noisy = not (fit["rms"] is not None and fit["rms"] < bs.B0_RESIDUAL_MEV)
+            if n_periodic == 3 or low is None:
+                main_cols = [f"{fit['v0'] / n_atoms:.4f}"]
+                stiff_col = f"{fit['b0']:.1f}" + (" (noisy)" if noisy else "")
+            else:
+                main_cols = ([f"{low['measure']:.4f}", f"{low['a0']:.4f}"] if n_periodic == 2
+                             else [f"{low['measure']:.4f}"])
+                stiff_col = (f"{low['stiffness']:.1f}" if low["stiffness"] is not None else "--") + (" (noisy)" if noisy else "")
+            if n_periodic == 2 and low is None:
+                main_cols.append("--")
+            rows.append(([label, f"{fit['n']}/{fit['n_folders']}"] + main_cols
+                         + [f"{100 * (fit['v0'] / tightest - 1):+.2f}" if tightest else "--", stiff_col,
+                            f"{fit['rms']:.3f}" if fit["rms"] is not None else "--",
+                            f"{radii[0]:.2f} / {radii[1]:.2f}" if radii else "--",
+                            f"{measure.upper()} OUTSIDE THE SCAN" if fit["outside"] else ("; ".join(fit["problems"][:1]) or "ok")],
                          'yellow' if fit["outside"] or fit["problems"] else None))
-        print_table([{"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}[stage], "Points",
-                     "V0/atom (Ang^3)", "vs tightest (%)", "B0 (GPa)", "fit rms (meV/atom)", "rc min / max (Bohr)",
-                     "Notes"], rows, f_out)
-        if n_periodic < 3:
-            print_dual(f"V0 and B0 include the vacuum of the cell: only their RELATIVE change means something here "
-                       f"(the {measure} changes by the same percentage); B0 is not a material property.", f_out)
+        first_col = {"mesh": "Mesh.Cutoff", "range": "PAO.EnergyShift", "size": "PAO.BasisSize"}[stage]
+        if n_periodic == 3:
+            header = [first_col, "Points", "V0/atom (Ang^3)", "vs tightest (%)", "B0 (GPa)"]
+        elif n_periodic == 2:
+            header = [first_col, "Points", "A0 (Ang^2)", "a0 (Ang)", "vs tightest (%)", "stiffness (N/m)"]
+        else:
+            header = [first_col, "Points", "L0 (Ang)", "vs tightest (%)", "stiffness (nN)"]
+        print_table(header + ["fit rms (meV/atom)", "rc min / max (Bohr)", "Notes"], rows, f_out)
+        if n_periodic == 2:
+            print_dual("2D: A0 is the equilibrium area of the cell, a0 the length of its first periodic vector at A0 "
+                       "(the periodic vectors are scaled together), the stiffness A d2E/dA2 = B0 x cell height -- "
+                       "(C11 + C12)/2 of an isotropic sheet; as in stb-eosAnalysis. 'vs tightest' is the change "
+                       "in area (a0 changes by half of it).", f_out)
+        elif n_periodic == 1:
+            print_dual("Wire: L0 is the equilibrium length, the stiffness L d2E/dL2 = B0 x cross-section, as in "
+                       "stb-eosAnalysis.", f_out)
 
         if stage == "size":
             good = [v for v in v0s if v is not None]

@@ -165,6 +165,11 @@ version before) and **Added** (new options and tools).
   (graphene 3x3: the largest deviation was at q = (0.3125, 0.3125, 0.0625)). The default `--phonon-mesh`
   now has 1 along every vacuum axis of the reference cell (8x8x1 for a slab or a sheet); the report says
   so. An explicit `--phonon-mesh` is used as given.
+- `stb-convergenceAnalysis --parameter basis` on a 2D material (or a wire) tabulated V0 in Ang^3 and B0
+  in GPa of the cell with its vacuum, with a note that only their relative change meant something. It now
+  gives what `stb-eosAnalysis` gives for the same kind of scan: the equilibrium area A0 (Ang^2), a0 (the
+  first periodic vector at A0) and the in-plane stiffness A d2E/dA2 in N/m -- (C11 + C12)/2 of an
+  isotropic sheet; for a wire the length and the axial stiffness in nN. The criteria are unchanged.
 
 ### Changed
 

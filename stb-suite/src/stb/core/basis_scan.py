@@ -108,6 +108,7 @@ def fit_sub_scan(folder, out_file, n_atoms):
     from stb.core import siesta_log
     from stb.core.eos_fit import fit_eos
     volumes, energies, radii, problems, filtered = [], [], None, [], False
+    sample_cell = None
     folders = sorted(glob.glob(os.path.join(folder, "vol_*")))
     for vol_dir in folders:
         out_path = os.path.join(vol_dir, out_file)
@@ -122,6 +123,8 @@ def fit_sub_scan(folder, out_file, n_atoms):
             problems.append(f"{os.path.basename(vol_dir)}: SCF not confirmed")
         volumes.append(abs(float(np.linalg.det(cell))))
         energies.append(float(energy))
+        if sample_cell is None:
+            sample_cell = np.asarray(cell, dtype=float)
         if radii is None:
             radii = orbital_radii(out_path)
             try:
@@ -136,7 +139,7 @@ def fit_sub_scan(folder, out_file, n_atoms):
             except OSError:
                 pass
     result = {"n": len(volumes), "n_folders": len(folders), "v0": None, "b0": None, "rms": None,
-              "radii": radii, "filter": filtered, "problems": problems, "outside": False}
+              "radii": radii, "filter": filtered, "problems": problems, "outside": False, "cell": sample_cell}
     if len(volumes) < 5:
         return result
     order = np.argsort(volumes)
@@ -151,6 +154,30 @@ def fit_sub_scan(folder, out_file, n_atoms):
                   rms=(float(1000 * np.sqrt(np.mean(np.asarray(residual) ** 2)) / max(n_atoms, 1))
                        if residual is not None else None))
     return result
+
+
+def low_dimensional(fit, n_periodic, periodic_axes):
+    """2D / 1D quantities of one fit, from V0 and B0 of the cell WITH its vacuum and one cell of the scan (the
+    vacuum extent is constant in it): 2D -> area A0 (Ang^2), a0 = |a| sqrt(A0 / A) (Ang, the periodic vectors are
+    scaled together), in-plane stiffness A d2E/dA2 = B0 x height (N/m); 1D -> length L0 (Ang), axial stiffness
+    L d2E/dL2 = B0 x cross-section (nN). Same conversion as stb-eosAnalysis. None for a bulk scan or without a
+    fit / cell."""
+    cell = fit.get("cell")
+    if n_periodic == 3 or cell is None or fit.get("v0") is None:
+        return None
+    volume = abs(float(np.linalg.det(cell)))
+    if n_periodic == 2:
+        i, j = periodic_axes
+        area = float(np.linalg.norm(np.cross(cell[i], cell[j])))
+        extent = volume / area                       # cell height normal to the sheet, Ang
+        a0_area = fit["v0"] / extent
+        return {"measure": a0_area, "measure_unit": "Ang^2", "a0": float(np.linalg.norm(cell[i])) * np.sqrt(a0_area / area),
+                "stiffness": fit["b0"] * extent * 0.1 if fit.get("b0") is not None else None, "stiffness_unit": "N/m"}
+    k = periodic_axes[0]
+    length = float(np.linalg.norm(cell[k]))
+    extent = volume / length                         # cross-section, Ang^2
+    return {"measure": fit["v0"] / extent, "measure_unit": "Ang", "a0": fit["v0"] / extent,
+            "stiffness": fit["b0"] * extent * 0.01 if fit.get("b0") is not None else None, "stiffness_unit": "nN"}
 
 
 def closing_point(v0_list, tolerance_pct):

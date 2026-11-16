@@ -4,7 +4,7 @@
 
 ![Status](https://img.shields.io/badge/status-under%20development-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Python](https://img.shields.io/badge/python-3.9%20to%203.12-blue.svg)
+![Python](https://img.shields.io/badge/python-3.10%20to%203.12-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
 [![Documentation](https://img.shields.io/badge/docs-stb--suite.github.io%2Fstb-informational.svg)](https://stb-suite.github.io/stb/)
 
@@ -45,7 +45,7 @@ A workflow is several commands used in order (for example `stb-strain` then `stb
 
 ## 🧠 Requirements
 
-* **Python 3.9 to 3.12**
+* **Python 3.10 to 3.12**
 * Installed automatically: `numpy`, `ase`, `matplotlib`, `pymatgen`, `spglib`, `sisl`, `pybader`, `scipy`, `phonopy`, `pandas`, `icet`, `pyxtal`
 * Optional **`ml` extra** (`torch`, `mace-torch`, `torch-dftd`) for the ML tools — see below
 

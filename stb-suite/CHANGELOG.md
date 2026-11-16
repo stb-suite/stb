@@ -62,6 +62,10 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never
+  worked: phonopy does not build there and the code uses 3.10 syntax, so `pip install` failed late with
+  an unrelated-looking build error; pip now refuses at once with the reason.
+
 - **Elastic constants (5.2) are relaxed-ion by default.** `stb-elasticInputs` used to force a single
   point in every folder, so the workflow could only give clamped-ion constants, while `stb-mlelastic`
   relaxes the atoms: the same strain gave two different quantities with no notice. In a crystal with

@@ -10,6 +10,8 @@ dynamic = ["version"]
 description = "Siesta ToolBox (STB) suite with softwares pre and pos processing for Siesta code."
 readme = "README.md"
 license = {file = "LICENSE"}
+# 3.9 is out: phonopy has no build for it and the code uses "X | None" annotations (3.10+).
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "numpy",
     "ase",

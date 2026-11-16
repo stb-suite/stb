@@ -171,7 +171,7 @@ def run_phonon_pipeline(atoms_ref, calc, args, f_out, tag, noise, quiet=False):
 
     # with_eigenvectors + no mesh symmetry: the projected DOS needs per-atom character
     with capture_library_noise(noise, tag):
-        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False)
+        phonon.run_mesh(args.mesh, with_eigenvectors=True, is_mesh_symmetry=False, is_gamma_center=True)
         phonon.run_total_dos()
         dos = phonon.get_total_dos_dict()
         phonon.run_projected_dos()
@@ -964,7 +964,7 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
             phonon.symmetrize_force_constants(show_drift=False)
             e_i = relaxed.get_potential_energy()
             v_i = relaxed.get_volume()
-            phonon.run_mesh(args.mesh)
+            phonon.run_mesh(args.mesh, is_gamma_center=True)
             phonon.run_thermal_properties(t_min=args.tmin, t_max=t_max_grid, t_step=args.tstep)
         tp = phonon.thermal_properties
         if factor is None:

@@ -83,6 +83,12 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- `stb-phononsPos` and `stb-mlphonons` use a Gamma-centred q-mesh. phonopy shifts an even mesh by half
+  a step, and on a hexagonal lattice that mesh loses the point group (`-m 30 30 1`:
+  `MeshSymmetryFallbackWarning`, only time reversal used). Thermal properties change in the last
+  digits (graphene, 30x30x1: zero-point energy 170.64 -> 170.63 meV/atom). `stb-phononsPos
+  --shifted-mesh` gives the old mesh.
+
 - Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never
   worked: phonopy does not build there, so `pip install` failed late with an unrelated-looking build
   error; pip now refuses at once with the reason.
@@ -112,6 +118,10 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-phononsPos`: section `[2]` reports how far the force constants are from the crystal's symmetry
+  (largest change of a Gamma frequency when they are symmetrized by the space group) and warns above
+  0.05 THz, the sign of modes split that symmetry makes degenerate. `--symmetrize-fc` applies the
+  symmetrization.
 - `stb-mlffValidate --phonon-ref`: the phonon table now has a row for the foundation model next to
   every round (it was given for the fine-tuned model only), says where the largest deviation is
   (q-point and band), and gives the error twice, labelled: (a) on the q-mesh and (b) along the band

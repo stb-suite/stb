@@ -307,6 +307,11 @@ Three options for a real slab (since 2.0.1):
   molecular adsorbate so that this atom faces the surface, and `--height`
   becomes the height of that atom. Without it the molecule keeps the
   orientation of the G2 database: for H2O the hydrogens point to the surface.
+- `--optimizer cg|broyden|fire`, `--force-tol` (eV/Ang) and `--max-displ` (Bohr) force the
+  relaxation settings in every folder; by default the template's own are used. A weakly
+  bound molecule on a metal can keep SIESTA's CG from converging for hundreds of steps:
+  try `--optimizer fire --max-displ 0.05`, and `--force-tol 0.03` on a flat surface.
+  `stb-adsorbAnalysis` flags every run that stopped at the step limit unrelaxed.
 - The slab is recognized by its vacuum (`--vacuum-gap`, 10 Ang). A slab with
   exactly that much vacuum is accepted, and when no vacuum is found the error
   gives the gap measured along each axis and the value to pass.

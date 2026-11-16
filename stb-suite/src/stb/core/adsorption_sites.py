@@ -462,6 +462,23 @@ def validate_fragment_manifest(manifest, fdf_structure):
     return slab_labels, adsorbate_labels
 
 
+def relaxation_block(optimizer=None, force_tol=None, max_displ=None):
+    """config_extra.fdf text for the relaxation settings a command line asked
+    for ('' when it asked for none, so the template's own stay in force)."""
+    lines = []
+    if optimizer:
+        name = {"cg": "CG", "broyden": "Broyden", "fire": "FIRE"}[optimizer]
+        lines.append(f"MD.TypeOfRun          {name}")
+    if force_tol is not None:
+        lines.append(f"MD.MaxForceTol        {force_tol:g} eV/Ang")
+    if max_displ is not None:
+        lines.append(f"MD.MaxDispl           {max_displ:g} Bohr")
+    if not lines:
+        return ""
+    return ("# Auto-generated: relaxation settings asked on the command line (--optimizer/--force-tol/--max-displ).\n"
+            + "\n".join(lines) + "\n\n")
+
+
 def fixed_atoms_block(fixed_indices, note=""):
     """config_extra.fdf text that holds the given atoms (0-based indices, in
     the order of the written structure) fixed during a relaxation: a
@@ -551,7 +568,7 @@ def resolve_anchor(mol, spec):
 
 def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
                             force_spin=False, force_dipole=False, force_vdw=False, n_substrate=None,
-                            fixed_atoms=None, fixed_note=""):
+                            fixed_atoms=None, fixed_note="", relax_block=""):
     """Writes structure.fdf + calc.fdf + config_extra.fdf + copied
     pseudopotentials for one reference/candidate folder (adsorb.py's
     clean_slab/, adsorbate/, sites/site_*/; neb_sites.py's site_A/,
@@ -605,6 +622,8 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
             f.write(VDW_CORRECTION_BLOCK)
         if fixed_atoms:
             f.write(fixed_atoms_block(fixed_atoms, fixed_note))
+        if relax_block:
+            f.write(relax_block)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
     for label in fdf_structure.species:

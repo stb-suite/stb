@@ -31,7 +31,7 @@ from stb.core.adsorption_sites import (
     cluster_candidate_coords, _MIN_LATERAL_IMAGE_SEPARATION_ANG,
     generate_systematic_orientations, deduplicate_orientations,
     parse_positions_file, write_positions_file,
-    bottom_layer_atoms, orient_by_anchor, resolve_anchor,
+    bottom_layer_atoms, orient_by_anchor, resolve_anchor, relaxation_block,
 )
 from stb.core.layers import LAYER_TOL_ANG
 from stb.neb import wrap_into_cell
@@ -284,6 +284,21 @@ def main():
                               "stores it (H2O: hydrogens towards the surface), its origin at "
                               "--height. With --ml-rank orientation sampling it only sets the "
                               "starting orientation the samples are rotated from.")
+    parser.add_argument("--optimizer", choices=["cg", "broyden", "fire"], default=None,
+                         help="Geometry optimizer written into every folder's config_extra.fdf "
+                              "(MD.TypeOfRun CG / Broyden / FIRE). Default: whatever --calc sets. A weakly "
+                              "bound molecule on a metal is ill-conditioned for SIESTA's CG -- stiff bonds "
+                              "next to almost free translations and rotations: H2O on Ag(111) was still at "
+                              "0.03-1.3 eV/Ang after 130-146 CG steps. Try 'fire' or 'broyden' there, with a "
+                              "small --max-displ.")
+    parser.add_argument("--force-tol", type=float, default=None, metavar="EV_PER_ANG",
+                         help="Force tolerance of the relaxations, MD.MaxForceTol in eV/Ang (default: "
+                              "--calc's own). 0.02 is a usual value; a flat energy surface (physisorbed "
+                              "molecule) may need 0.03-0.05 to finish at all.")
+    parser.add_argument("--max-displ", type=float, default=None, metavar="BOHR",
+                         help="Largest atomic displacement per step, MD.MaxDispl in Bohr (default: --calc's "
+                              "own, i.e. SIESTA's 0.2). About 0.05 keeps a molecular adsorbate from "
+                              "overshooting.")
     parser.add_argument("--fix-layers", type=int, default=0, metavar="N",
                          help="Hold the N lowest atomic layers of the slab fixed at their input "
                               "(bulk-like) positions, in clean_slab/ and in every site folder alike: "
@@ -443,6 +458,11 @@ def main():
         parser.error("--both-sides and --ml-rank are not supported together yet.")
     if args.both_sides and args.height_sweep is not None:
         parser.error("--both-sides and --height-sweep are not supported together yet.")
+    if args.force_tol is not None and args.force_tol <= 0:
+        parser.error("--force-tol must be positive.")
+    if args.max_displ is not None and args.max_displ <= 0:
+        parser.error("--max-displ must be positive.")
+    relax_block = relaxation_block(args.optimizer, args.force_tol, args.max_displ)
     if args.fix_layers < 0:
         parser.error("--fix-layers must be 0 (nothing fixed) or a positive number of layers.")
     if args.layer_tol <= 0:
@@ -555,6 +575,22 @@ def main():
     print_dual(f"  Fixed layers    : "
                 + (f"{args.fix_layers} lowest (layer tolerance {args.layer_tol:g} Ang)" if args.fix_layers
                    else "none -- the whole slab relaxes (--fix-layers N to hold the bottom ones)"), f_out)
+    relax_shown = [f"{name} {value}" for name, value in (
+        ("optimizer", args.optimizer), ("force tolerance", None if args.force_tol is None else f"{args.force_tol:g} eV/Ang"),
+        ("max displacement", None if args.max_displ is None else f"{args.max_displ:g} Bohr")) if value]
+    print_dual("  Relaxation      : " + (", ".join(relax_shown) + " (forced in every folder)" if relax_shown
+                                         else "as --calc sets it"), f_out)
+    template_run = structure_io.read_md_state(calc_text)
+    molecular = any(len(mol) > 1 for _name, mol in adsorbates)
+    if (molecular and not args.optimizer and (template_run["typeofrun"] or "cg").lower() == "cg"
+            and str(template_run["steps"] or "0").strip().isdigit() and int(template_run["steps"] or 0) > 0):
+        print_dual(color_text(
+            "  [NOTE] Molecular adsorbate relaxed with SIESTA's CG (the template's optimizer): on a weakly "
+            "binding surface this can fail to reach the force tolerance in hundreds of steps (stiff bonds "
+            "plus nearly free translation/rotation of the molecule). If the site runs do not converge, "
+            "regenerate with --optimizer fire (or broyden), --max-displ 0.05 and, for a flat surface, "
+            "--force-tol 0.03-0.05; stb-adsorbAnalysis flags every run that stopped at the step limit.",
+            'yellow'), f_out)
     print_dual(f"  Both sides      : {'yes' if args.both_sides else 'no'}", f_out)
     print_dual(f"  ML pre-relax    : {'yes' if args.ml_prerelax else 'no'}", f_out)
     print_dual(f"  ML rank         : {'yes' if args.ml_rank else 'no'}"
@@ -606,7 +642,8 @@ def main():
                     f"the bottom layer); {len(slab_layers) - args.fix_layers} layer(s) free. Same block in "
                     "clean_slab/ and in every site folder.", f_out)
     write_reference_folder(clean_slab_dir, pmg_structure, calc_text, slab_species_meta, args.pseudo_dir,
-                            force_dipole=True, force_vdw=True, fixed_atoms=fixed_atoms, fixed_note=fixed_note)
+                            force_dipole=True, force_vdw=True, fixed_atoms=fixed_atoms, fixed_note=fixed_note,
+                            relax_block=relax_block)
     print_dual(f"  {color_text('[OK]', 'green')} {clean_slab_dir}", f_out)
     view_frames.append(("clean_slab", AseAtomsAdaptor.get_atoms(pmg_structure)))
 
@@ -703,7 +740,7 @@ def main():
         isolated_structure = isolated_adsorbate_structure(mol, args.vacuum_box)
         pmg_isolated = structure_io.to_pymatgen(isolated_structure)
         write_reference_folder(ads_dir, pmg_isolated, adsorbate_calc_text, {}, args.pseudo_dir,
-                                force_vdw=True)
+                                force_vdw=True, relax_block=relax_block)
         adsorbate_dirs[name] = ads_dir
         print_dual(f"  {color_text('[OK]', 'green')} {ads_dir} (Gamma-only, spin-polarized, "
                     f"{args.vacuum_box:.1f} Ang box)", f_out)
@@ -1244,7 +1281,8 @@ def main():
         site_dir = os.path.join(sites_root, label)
         write_reference_folder(site_dir, ads_struct, calc_text, slab_species_meta, args.pseudo_dir,
                                 force_spin=args.force_spin, force_dipole=True, force_vdw=True,
-                                n_substrate=n_substrate, fixed_atoms=fixed_atoms, fixed_note=fixed_note)
+                                n_substrate=n_substrate, fixed_atoms=fixed_atoms, fixed_note=fixed_note,
+                                relax_block=relax_block)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))

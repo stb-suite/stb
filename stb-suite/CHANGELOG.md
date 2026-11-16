@@ -177,6 +177,13 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-adsorb --optimizer cg|broyden|fire`, `--force-tol`, `--max-displ`: relaxation settings written
+  into every folder's `config_extra.fdf` (default: whatever `--calc` sets). A weakly bound molecule on a
+  metal is ill-conditioned for SIESTA's CG: H2O on Ag(111) 3x3 was still at 0.03-1.3 eV/Ang after
+  130-146 steps (11 h on 32 cores). With a molecular adsorbate and a CG template the tool now says so.
+- `stb-adsorbAnalysis` warns about every run (clean slab or site) that ended at the step limit without
+  reaching the force tolerance. SIESTA ends such a job normally (`0_NORMAL_EXIT`), and the energy was
+  used as if it were a minimum.
 - `stb-cohesive -c/--calc FILE`: your own `calc.fdf` template for the full structure and every atomic
   reference, so the whole study runs at one level of theory. Before, the tool wrote a fixed template
   (`PAO.EnergyShift 0.02 Ry`, `Mesh.Cutoff 320 Ry`) and any other choice meant editing every generated

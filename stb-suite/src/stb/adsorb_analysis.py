@@ -464,6 +464,23 @@ def write_local_hessian_folders(gibbs_dir, base_structure, local_indices, displa
         }, f)
 
 
+def relaxation_stopped_early(out_path):
+    """None when the log is a single point, an unfinished run or a relaxation
+    SIESTA itself called relaxed; else a short text ('146 of 300 moves, max|F|
+    0.31 eV/Ang vs tolerance 0.02') for a relaxation that ended unrelaxed."""
+    from stb.status import parse_log, n_moves
+    info = parse_log(out_path)
+    if not info or info["relaxed"] is not False:
+        return None
+    force = next((st["max_force"] for st in reversed(info["steps"]) if st["max_force"] is not None), None)
+    text = f"{n_moves(info['steps'])} of {info['max_moves']:g} moves" if info["max_moves"] else "step limit"
+    if force is not None:
+        text += f", max|F| {force:.3f} eV/Ang"
+        if info["force_tol"] is not None:
+            text += f" vs tolerance {info['force_tol']:g}"
+    return text
+
+
 class SiteRow:
     """One analyzed site: label, which adsorbate/height it belongs to, and
     its computed energies. A plain attribute-holder (not a dataclass, to
@@ -613,6 +630,10 @@ def main():
         sys.exit(1)
     print_dual(f"E_clean_slab : {e_clean_slab:.6f} eV  ({clean_slab_out})", f_out)
     report_quality_diagnostics("clean_slab", clean_slab_out, args.force_tolerance, f_out)
+    unconverged_relax = []
+    stopped = relaxation_stopped_early(clean_slab_out)
+    if stopped:
+        unconverged_relax.append(("clean_slab", stopped))
     clean_slab_fdf_path = os.path.join(args.dir, "clean_slab", "structure.fdf")
     if args.view:
         with capture_library_noise(library_warnings, "sisl/ASE (clean_slab geometry)"):
@@ -701,6 +722,9 @@ def main():
             continue
         e_ads = e_site - e_clean_slab - adsorbate_energies[ads_name]
         scf_ok, max_force = check_scf_and_force(out_path)
+        stopped = relaxation_stopped_early(out_path)
+        if stopped:
+            unconverged_relax.append((label, stopped))
         if not scf_ok:
             scf_warn_labels.append(label)
         if max_force is not None and max_force > args.force_tolerance:
@@ -811,6 +835,14 @@ def main():
         print_dual(color_text(
             f"[WARNING] {len(scf_warn_labels)} site(s) never confirmed SCF convergence -- "
             f"their E_ads may be unreliable: {', '.join(scf_warn_labels)}.", 'yellow'), f_out)
+    if unconverged_relax:
+        print_dual(color_text(
+            f"[WARNING] {len(unconverged_relax)} run(s) ended at the step limit WITHOUT reaching the force "
+            "tolerance (SIESTA wrote 'Final (unrelaxed)' coordinates; the job still ends normally, with "
+            "0_NORMAL_EXIT): " + "; ".join(f"{lab} ({txt})" for lab, txt in unconverged_relax)
+            + ". Their energies are not those of a minimum. Restart them from the .XV (MD.UseSaveXV true), "
+            "or regenerate with stb-adsorb --optimizer fire|broyden / --max-displ 0.05 / a looser "
+            "--force-tol if the surface is flat.", 'yellow'), f_out)
     if force_warn_labels:
         print_dual(color_text(
             f"[WARNING] {len(force_warn_labels)} site(s) have residual force above "

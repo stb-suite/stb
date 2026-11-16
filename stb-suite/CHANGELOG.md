@@ -187,12 +187,6 @@ version before) and **Added** (new options and tools).
   records the pseudopotential source in `basis_scan_<stage>.json` (as typed: a bank name stays a bank
   name) and the command carries it; for a scan written by an earlier version the command shows
   `-p <pseudopotential source>` to fill in.
-- `stb-adsorbAnalysis` did not show where the molecule ended: in a 12-point H2O/Ag(111) series, 4
-  relaxations ended lying flat, ~0.1 eV more bound, and the ranking mixed them with upright ones without
-  saying so. Section `[2b]` now has an orientation table per site, at the start and at the end of the
-  relaxation (tilt of the molecular plane, or axis, from the surface plane; lying / tilted / upright; the
-  atom closest to the surface; vertical extent), marks the sites whose orientation CHANGED, lists the
-  final orientations reached with the lowest E_ads of each, and warns when more than one was reached.
 - `stb-convergenceAnalysis --parameter basis`, mesh and range stages: a setting closed when its V0 agreed
   with the next TWO tighter ones, which accepts a false plateau. On Ge (500 Ry) V0 was 24.517 / 24.426 /
   24.464 / 25.180 / 25.215 / 25.106 Ang^3/atom from 0.02 to 0.0005 Ry: 0.02 Ry agreed with 0.01 and 0.005
@@ -278,6 +272,14 @@ version before) and **Added** (new options and tools).
   - The stress and the energy were already read from the last geometry of each log, so folders
     relaxed by hand (a replaced `config_extra.fdf`) give the same numbers as before.
 
+- `stb-elasticAnalysis --symmetry-method`: the default is now the method the folders were prepared with
+  (from `elastic_scan.json` or `elastic_stage1.txt`), `basic` only when neither exists. The menu (5.2.2)
+  does the same on Enter.
+- `stb-mlffValidate --phonon-mesh`: the default is 8 per periodic axis and 1 per vacuum axis (8x8x1 for a
+  slab or a 2D material; was 8x8x8). Phonon RMSEs on the mesh of 2D systems change.
+- `stb-convergenceAnalysis --parameter basis`: a setting of the mesh or range stage closes only when its V0
+  agrees with every tighter setting of the scan (was: the next two); verdicts can move to tighter values.
+
 ### Added
 
 - `stb-convergence --parameter basis` and its report in `stb-convergenceAnalysis`: basis-set convergence
@@ -336,6 +338,16 @@ version before) and **Added** (new options and tools).
   is raised above its buckling. Also asked by the menu (4.3).
 - `stb-slab` reports the number of atomic layers of every slab it writes, the atoms in each and the
   spacing between them.
+- `stb-adsorbAnalysis`: the orientation of the adsorbate at the start and at the end of each site's
+  relaxation, in section `[2b]` (tilt of the molecular plane, or axis, from the surface plane; lying /
+  tilted / upright; the atom closest to the surface; vertical extent). Sites whose orientation CHANGED are
+  marked, the final orientations reached are listed with the lowest E_ads of each, and a warning says when
+  more than one was reached. In a 12-point H2O/Ag(111) series, 4 relaxations had ended lying flat, ~0.1 eV
+  more bound, and the ranking mixed them with upright ones without saying so.
+- `stb-convergence --max-stress-tol GPA` (default 0.02) and `--max-force-tol EV_PER_ANG` (default 0.01):
+  `MD.MaxStressTol` and `MD.MaxForceTol` of the relaxation mode (see Fixed).
+- `stb-elasticInputs` writes `elastic_scan.json` (symmetry method, directions) into every series folder;
+  `stb-elasticAnalysis` reads the method from it (see Fixed).
 
 ## 2.0.0 (2026-10-31) -- first stable release
 

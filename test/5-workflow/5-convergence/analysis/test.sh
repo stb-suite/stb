@@ -315,6 +315,50 @@ check_contains "Ptol=1GPa" log_es_relax.txt
 check_contains "V=input" log_es_relax.txt
 check_contains "relaxation(s) ended with exactly the input cell" log_es_relax.txt
 
+# --- 10c. --parameter basis, 2D: area / a0 / N/m (N7), 'every tighter value' closing rule (N13),
+#     SIESTA 5.4.2 filter lines (N5), -p in the next-step command (N11). Synthetic E(A) parabolas. ---
+echo -e "\n--- Testing the basis analysis of a 2D range stage (synthetic, false plateau at 0.02-0.005 Ry) ---"
+rm -rf basis2d
+python3 - <<'PYEOF'
+import json, os, numpy as np
+c = 20.0
+def cell(a): return np.array([[a, 0, 0], [-a / 2, a * np.sqrt(3) / 2, 0], [0, 0, c]])
+A_ref = np.linalg.norm(np.cross(cell(2.46)[0], cell(2.46)[1]))
+k = 200.0 / 16.0218                                   # 200 N/m in eV/Ang^2
+# area factor per EnergyShift: 0.02-0.005 agree with each other (a false plateau), the tighter ones +3 %
+factors = {0.02: 1.000, 0.01: 1.004, 0.005: 1.002, 0.002: 1.030, 0.001: 1.031, 0.0005: 1.0295}
+subs = []
+for shift, f in factors.items():
+    name = f"range_{shift:g}"
+    subs.append({"name": name, "value": shift, "mesh_cutoff": 500, "energyshift": shift, "size": "DZP"})
+    A0 = A_ref * f
+    for st in np.linspace(-8, 8, 9):
+        A = A_ref * (1 + st / 100); a = 2.46 * np.sqrt(A / A_ref)
+        E = -310.0 + 0.5 * k / A0 * (A - A0) ** 2
+        d = f"basis2d/basis/{name}/vol_{'m' if st < 0 else ''}{abs(st):.2f}"
+        os.makedirs(d, exist_ok=True)
+        lines = ["Filter: Requested cutoff:  150.000000 Ry", "PAO Filter: Cutoff used:   73.50 Ry",
+                 "outcell: Unit cell vectors (Ang):"] + ["   ".join(f"{x:12.6f}" for x in r) for r in cell(a)]
+        lines += ["", "SCF cycle converged after 10 iterations", f"siesta: Etot    =    {E:.8f}",
+                  f"siesta: E_KS(eV) =    {E:.8f}"]
+        open(f"{d}/calc.out", "w").write("\n".join(lines) + "\n")
+json.dump({"format": "stb-basis-scan", "version": 1, "tool": "test", "stage": "range", "structure": "structure.fdf",
+           "calc": "calc.fdf", "pseudo": "dojo", "n_atoms": 2, "volume": A_ref * c, "n_periodic": 2,
+           "periodic_axes": [0, 1], "measure": "area", "scan_range_pct": 8.0, "scan_points": 9, "sub_scans": subs},
+          open("basis2d/basis/basis_scan_range.json", "w"), indent=1)
+PYEOF
+stb-convergenceAnalysis --dir basis2d --file calc.out --no-intro > log_basis2d.txt 2>&1
+check_contains "A0 (Ang^2) | a0 (Ang)" log_basis2d.txt
+check_contains "stiffness (N/m)" log_basis2d.txt
+check_contains "0.0005 Ry  *| 9/9    | 5.3940     | 2.4957" log_basis2d.txt
+check_contains "VERDICT: PAO.EnergyShift = 0.002 Ry" log_basis2d.txt
+check_contains "whose area is within 0.3 % of every tighter setting" log_basis2d.txt
+check_contains "the logs show the orbital filter" log_basis2d.txt
+check_contains "Next: stb-convergence --parameter basis --basis-stage size --energyshift 0.002 --mesh-cutoff 500 -s structure.fdf -c calc.fdf -p dojo" log_basis2d.txt
+if grep -q "0.0005 Ry .*| 20[0-9]\.[0-9]" log_basis2d.txt; then
+    echo -e "   -> ${GREEN}Verified:${NC} in-plane stiffness ~200 N/m"; PASS=$((PASS+1))
+else echo -e "   -> ${RED}Failed:${NC} in-plane stiffness not ~200 N/m"; FAIL=$((FAIL+1)); fi
+
 popd > /dev/null
 
 # --- 11. Summary ---

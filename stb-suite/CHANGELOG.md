@@ -191,6 +191,12 @@ version before) and **Added** (new options and tools).
   relaxation (tilt of the molecular plane, or axis, from the surface plane; lying / tilted / upright; the
   atom closest to the surface; vertical extent), marks the sites whose orientation CHANGED, lists the
   final orientations reached with the lowest E_ads of each, and warns when more than one was reached.
+- `stb-convergenceAnalysis --parameter basis`, mesh and range stages: a setting closed when its V0 agreed
+  with the next TWO tighter ones, which accepts a false plateau. On Ge (500 Ry) V0 was 24.517 / 24.426 /
+  24.464 / 25.180 / 25.215 / 25.106 Ang^3/atom from 0.02 to 0.0005 Ry: 0.02 Ry agreed with 0.01 and 0.005
+  within 0.4 % and was chosen, though V0 jumps +3 % at 0.002 Ry. A setting now has to agree with EVERY
+  tighter setting of the scan (Ge: 0.002 Ry). On the nine test systems: Si and graphene 0.005 Ry; Ge,
+  NaCl, Al, Cu and hBN 0.002 Ry; GaAs and Ag 0.001 Ry. In 2D the verdict speaks of the area.
 
 ### Changed
 

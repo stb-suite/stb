@@ -37,7 +37,7 @@ SCAN_POINTS = 9
 # 2D material (+-4 % in its lattice vectors), +-4 % in length for a wire.
 SCAN_RANGE_PCT = {3: 12.0, 2: 8.0, 1: 4.0}
 # The control quantity is V0 (which in 2D is the area times a constant, in 1D the length). Largest
-# relative change, in %, between a setting and each of the next two tighter ones for it to count as
+# relative change, in %, between a setting and EVERY tighter one of the scan for it to count as
 # closed. From nine systems (Si, Ge, GaAs, NaCl, Al, Cu, Ag, graphene, hBN): a starting point.
 CLOSE_PCT = {"mesh": {3: 0.2, 2: 0.2, 1: 0.1}, "range": {3: 0.5, 2: 0.3, 1: 0.15}, "size": {3: 1.0, 2: 0.6, 1: 0.3}}
 # B0 is quoted in the verdict only when the fit residual is below this (meV/atom).
@@ -182,18 +182,23 @@ def low_dimensional(fit, n_periodic, periodic_axes):
 
 def closing_point(v0_list, tolerance_pct):
     """Index of the first setting (list ordered from loosest to tightest) whose V0 differs by less than
-    tolerance_pct from the next TWO settings, and how it was verified: (index, 'two') / (index, 'one')
-    when only one tighter setting exists and it agrees / (None, None) when nothing closes. Settings
-    without a fit (None) cannot be closing points and cannot confirm one."""
+    tolerance_pct from EVERY tighter setting of the scan, and how it was verified: (index, 'two') when at least
+    two tighter settings confirm it / (index, 'one') when only one tighter setting exists / (None, None) when
+    nothing closes. Settings without a fit (None) cannot be closing points and are skipped as confirmations.
+
+    'Every tighter setting', not 'the next two': on Ge (500 Ry) V0 was 24.517 / 24.426 / 24.464 / 25.180 /
+    25.215 / 25.106 Ang^3/atom from 0.02 to 0.0005 Ry; 0.02 Ry agreed with 0.01 and 0.005 within 0.4 % and the
+    old rule chose it, though V0 jumps +3 % at 0.002 Ry (a false plateau). With this rule: 0.002 Ry."""
     n = len(v0_list)
 
     def close(i, j):
-        return (v0_list[i] is not None and v0_list[j] is not None
-                and abs(v0_list[i] / v0_list[j] - 1.0) * 100.0 < tolerance_pct)
+        return abs(v0_list[i] / v0_list[j] - 1.0) * 100.0 < tolerance_pct
 
     for i in range(n):
-        if i + 2 < n and close(i, i + 1) and close(i, i + 2):
-            return i, "two"
-    if n >= 2 and close(n - 2, n - 1):
-        return n - 2, "one"
+        if v0_list[i] is None:
+            continue
+        tighter = [j for j in range(i + 1, n) if v0_list[j] is not None]
+        if not tighter or not all(close(i, j) for j in tighter):
+            continue
+        return i, ("two" if len(tighter) >= 2 else "one")
     return None, None

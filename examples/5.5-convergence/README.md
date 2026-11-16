@@ -252,8 +252,8 @@ volume and lists the orbital cutoff radii of each run. Two more options:
 
   | `--basis-stage` | Scans | Fixed | Closes when V0 is within |
   |---|---|---|---|
-  | `mesh` (default) | `Mesh.Cutoff` 350, 500, 700, 1000 Ry | `PAO.EnergyShift` 0.002 Ry | 0.2 % of the next two meshes |
-  | `range` | `PAO.EnergyShift` 0.02 ... 0.0005 Ry | `--mesh-cutoff` | 0.5 % of the next two values |
+  | `mesh` (default) | `Mesh.Cutoff` 350, 500, 700, 1000 Ry | `PAO.EnergyShift` 0.002 Ry | 0.2 % of every larger mesh scanned |
+  | `range` | `PAO.EnergyShift` 0.02 ... 0.0005 Ry | `--mesh-cutoff` | 0.5 % of every smaller value scanned |
   | `size` | the template's `PAO.BasisSize` and one step up (DZP to TZP) | `--mesh-cutoff`, `--energyshift` | 1 % between the two |
 
   `stb-convergenceAnalysis --dir <output-dir>` fits every scan, gives the verdict of each

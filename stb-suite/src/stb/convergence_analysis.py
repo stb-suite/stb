@@ -592,7 +592,7 @@ def analyze_basis(base, args, f_out):
             position, how = bs.closing_point(v0s, tolerance)
             if position is None:
                 verdicts[stage] = (None, "does not close")
-                warn(f"Stage {stage}: no setting has a V0 within {tolerance:g} % of the next two. "
+                warn(f"Stage {stage}: no setting has a V0 within {tolerance:g} % of every tighter setting. "
                      + ("Extend the scan to larger Mesh.Cutoff (--basis-values)." if stage == "mesh" else
                         "Reducing PAO.EnergyShift further does not fix a basis whose range does not close: "
                         "optimize the orbital radii (%block PAO.Basis, SIESTA's Util/Optimizer) or go up in "
@@ -602,8 +602,8 @@ def analyze_basis(base, args, f_out):
                 verdicts[stage] = (value, how)
                 print_dual(color_text(
                     f"VERDICT: {'Mesh.Cutoff' if stage == 'mesh' else 'PAO.EnergyShift'} = {value:g} Ry -- the "
-                    f"{'smallest mesh' if stage == 'mesh' else 'largest shift'} whose V0 is within {tolerance:g} % of "
-                    + ("the next two settings." if how == "two" else "the next setting; it is the last but one of "
+                    f"{'smallest mesh' if stage == 'mesh' else 'largest shift'} whose {'V0' if n_periodic == 3 else measure} is within {tolerance:g} % of "
+                    + ("every tighter setting of the scan." if how == "two" else "the next setting; it is the last but one of "
                        "the scan, so the closing was verified against ONE point only -- add a tighter value "
                        "(--basis-values) to confirm."), 'green' if how == "two" else 'yellow'), f_out)
                 if how == "one":

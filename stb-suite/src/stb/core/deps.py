@@ -39,15 +39,54 @@ def require_pyxtal():
     return pyxtal
 
 
+def _pkg_resources_stand_in():
+    """The two names pybader's __init__ takes from `pkg_resources`, built on the
+    standard library. setuptools 81 dropped `pkg_resources`, and pybader 0.3.12
+    still imports it, so on a fresh install `import pybader` fails although the
+    package is there."""
+    import types
+    from importlib import metadata, resources
+
+    def iter_entry_points(group, name=None):
+        for entry_point in metadata.entry_points(group=group):
+            if name is None or entry_point.name == name:
+                yield entry_point
+
+    def resource_listdir(package, resource_name):
+        folder = resources.files(package).joinpath(resource_name)
+        return [item.name for item in folder.iterdir()]
+
+    module = types.ModuleType("pkg_resources")
+    module.iter_entry_points = iter_entry_points
+    module.resource_listdir = resource_listdir
+    return module
+
+
 def require_pybader():
-    """Imports and returns pybader.interface, or exits with a clear error if
-    it's missing."""
+    """Imports and returns pybader.interface, or exits with a clear error:
+    'not installed' when the package is missing, the original exception when it
+    is installed but fails to import."""
+    stand_in = None
+    try:
+        import pkg_resources  # noqa: F401  (pybader needs it)
+    except ImportError:
+        # Only while pybader loads: another library must not find this
+        # two-function module in place of the real one.
+        stand_in = sys.modules["pkg_resources"] = _pkg_resources_stand_in()
     try:
         import pybader.interface
-    except ImportError:
-        print("\n\033[91m[CRITICAL ERROR] pybader library not found.\033[0m")
-        print("Please install it using: pip install pybader")
+    except ImportError as error:
+        if getattr(error, "name", None) == "pybader":
+            print("\n\033[91m[CRITICAL ERROR] pybader library not found.\033[0m")
+            print("Please install it using: pip install pybader")
+        else:
+            print("\n\033[91m[CRITICAL ERROR] pybader is installed but could not be imported:\033[0m")
+            print(f"  {type(error).__name__}: {error}")
+            print("Reinstalling pybader will not fix this; the missing module above is what it needs.")
         sys.exit(1)
+    finally:
+        if stand_in is not None and sys.modules.get("pkg_resources") is stand_in:
+            del sys.modules["pkg_resources"]
     return pybader.interface
 
 

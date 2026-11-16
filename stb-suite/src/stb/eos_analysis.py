@@ -63,7 +63,9 @@ RESID_RMS_MEV_ATOM = 0.5          # fit residual rms
 PRESSURE_DEV_GPA = 0.5            # |P_SIESTA - P_fit|
 PRESSURE_AT_V0_GPA = 0.2          # residual SIESTA pressure at the fitted V0
 FORCE_TOL = 0.05                  # eV/Ang, fixed-cell residual force
-BPRIME_RANGE = (4.5, 7.0)
+# Typical B0' of solids: 3.5-4.5 for covalent solids and many metals (Si 4.2-4.5, Cu ~5),
+# up to ~6-7 for soft/molecular ones. The old (4.5, 7.0) flagged an ordinary Si fit (4.30).
+BPRIME_RANGE = (3.0, 7.0)
 FORM_SPREAD_PCT = 1.0             # B0 spread between EOS forms
 JACKKNIFE_PCT = 1.0               # B0 jackknife sigma / B0
 WINDOW_PCT = 2.0                  # B0 change when refitting the central points only
@@ -755,6 +757,10 @@ def main():
             if fdf_directives_true(ref_theory.get("dftd3")):
                 hint += (" These runs have DFT-D3 on: SIESTA 5.4.2 gives the D3 stress the wrong sign, which alone "
                          "produces this disagreement (see [5]); trust the energy route.")
+        if name.startswith("B0' within"):
+            hint = ("not an error by itself: B0' is the least constrained parameter of the fit, and a value outside "
+                    "this range usually means a scan that is too narrow or noisy to fix it (see the window "
+                    "sensitivity and the leave-one-out uncertainty); B0 inherits part of that uncertainty.")
         if name.startswith("Residual forces"):
             hint = "the ions are not at equilibrium at the scaled cells: use stb-eosInputs --relax-positions."
         if name.startswith("Same level"):

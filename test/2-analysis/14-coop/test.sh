@@ -143,6 +143,15 @@ check_exit_code $? 2
 check_contains "--image needs --pair" log_image_nopair.txt
 
 
+echo "Testing: x4 normalization column and the magnitude check (x4 ICOOP / bond order ~ 1 from band bottom to E_F)"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 --shift fermi --fermi -3.352 --erange -25 0 \
+    --npoints 60 --sigma 300 --bond-order -o ratio_out --no-intro > log_ratio.txt 2>&1
+check_exit_code $? 0
+check_contains "x4 (both spins, i<->j)" log_ratio.txt
+check_contains "Magnitude: x4 ICOOP / bond order (1 for a window from the bottom of the bands to E_F):" log_ratio.txt
+check_contains "0-7: +0.5[0-9]* / +0.527[0-9] = 1.0[0-9]* \[OK\]" log_ratio.txt
+
+
 # --- 4. Multiple --pair given together ---
 echo -e "\n--- Testing multiple --pair (repeatable) ---"
 

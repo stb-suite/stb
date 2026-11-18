@@ -255,6 +255,14 @@ version before) and **Added** (new options and tools).
   species dropped, `X_ghost` given the entry of `X`. `stb-adsorbBsse` and `stb-chargediffPrep`, which
   write ghost fragments from a template too, do the same.
 
+- `stb-coop`: the bond-order cross-check compared only signs, so it passed a bond across the cell
+  edge with ICOOP ~ 0 and bond order 0.88, and nothing said how the numbers are normalized. sisl's value
+  is per spin channel and one direction (i -> j), while the Mulliken bond order counts both: bond order
+  = 4 x ICOOP for a spin-unpolarized run (2 for a polarized one), checked on Sn3O4 (3.98, and the sum
+  over every orbital pair is N/2). The report now states the normalization, adds an `x4` (or `x2`)
+  column, and compares the magnitude, `x4 ICOOP / bond order`, judging it (warning beyond 10 %) when
+  the window runs from the bottom of the bands to E_F. `coop.dat`/`cohp.dat` are unchanged.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

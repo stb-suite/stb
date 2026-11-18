@@ -210,6 +210,16 @@ def image_breakdown(total_oplist, geometry, E, i, j, tol=1e-4):
     return rows
 
 
+def population_factor(H):
+    """sisl's COOP/COHP is per spin channel (occupation 1 per state) and one-sided (i -> j);
+    the Mulliken bond order counts both directions and, for a spin-unpolarized run, both
+    spins. Returns 4 (unpolarized) or 2 (polarized, non-collinear, spin-orbit): bond order =
+    factor x ICOOP for a window from the bottom of the bands to E_F (Sn3O4: 3.98; the sum
+    over every orbital pair is N_electrons / 2)."""
+    spin = H.spin
+    return 4 if spin.is_unpolarized else 2
+
+
 def bonding_character(quantity, integrated):
     """'bonding'/'antibonding'/'non-bonding' of an energy-integrated curve. COOP > 0 is
     bonding (Hughbanks-Hoffmann); sisl's COHP is built from the raw H(k), Dronskowski's
@@ -491,9 +501,11 @@ def main():
     print(f"[INFO] Accumulating {args.quantity.upper()}(E) over {nk} k-points x {args.npoints} "
           "energy points (this may take a moment) ...")
     total = None
+    lowest_eig = np.inf
     for k_index, block in iter_wfsx_states_by_k(args.wfsx, H):
         kw = k_weights[k_index]
         for spin, state in block.items():
+            lowest_eig = min(lowest_eig, float(np.min(state.eig)))
             if args.quantity == "coop":
                 result = state.COOP(E_query, distribution=dist, atol=args.atol)
             else:
@@ -582,6 +594,7 @@ def main():
     print_dual(f"Selected pairs: {pair_labels}", f_out)
 
     print_section(f"[3] {args.quantity.upper()} CURVE", f_out)
+    g_factor = population_factor(H)
     rows = []
     for lbl in pair_labels:
         curve = curves[lbl]
@@ -589,8 +602,15 @@ def main():
         integrated = float(np.trapezoid(curve, E))
         character = bonding_character(args.quantity, integrated)
         rows.append(([lbl, f"{curve[peak_idx]:.6e} at E={E[peak_idx]:.4f} eV",
-                      f"{integrated:.6e} ({character})"], None))
-    print_table(["Pair", "Largest |value|", "Integrated over --erange"], rows, f_out)
+                      f"{integrated:.6e} ({character})", f"{g_factor * integrated:+.4f}"], None))
+    print_table(["Pair", "Largest |value|", "Integrated over --erange", f"x{g_factor:g} (both spins, i<->j)"],
+                rows, f_out)
+    print_dual(f"Normalization: the curve and {args.quantity}.dat are sisl's value per spin channel and one "
+               f"direction (i -> j). The last column multiplies by {g_factor:g} = "
+               f"{'2 spins x ' if g_factor == 4 else ''}2 directions (i -> j and j -> i): for COOP it is "
+               "on the scale of the Mulliken bond order (equal to it when the window runs from the bottom of "
+               "the bands to E_F), and it is the scale of tables that count both spins and both directions "
+               "(compare with care: codes differ in what they count).", f_out)
     for lbl, rows_img in breakdowns.items():
         if len(rows_img) < 1:
             continue
@@ -620,6 +640,29 @@ def main():
             print_dual(f"  {lbl}: integrated {name} {'positive' if bonding_measure > 0 else 'negative'}, "
                        f"bond order {'positive' if bond_orders[lbl] > 0 else 'negative'} "
                        f"-> {'[OK] signs agree' if agree else '[WARNING] signs disagree'}", f_out)
+        if args.quantity == "coop":
+            # The sign alone missed a bond across the cell edge (ICOOP ~ 0, bond order 0.88): compare
+            # the magnitude too, x g_factor ICOOP / bond order, which is 1 for a window from the bottom
+            # of the bands to E_F.
+            e_top = E_query[-1]
+            full_window = (args.shift == "fermi" and abs(args.erange[1]) <= 0.05
+                           and E_query[0] < lowest_eig - 3 * sigma_eV)
+            print_dual(f"Magnitude: x{g_factor:g} ICOOP / bond order (1 for a window from the bottom of the "
+                       "bands to E_F" + ("):" if full_window else
+                                         f"; this window, {E_query[0]:.2f} to {e_top:.2f} eV absolute, is not "
+                                         "that one -- --shift fermi --erange <below the lowest band> 0 -- so "
+                                         "the ratio is shown, not judged):"), f_out)
+            for lbl in pair_labels:
+                integrated = float(np.trapezoid(curves[lbl], E))
+                bo_val = bond_orders[lbl]
+                if abs(bo_val) < 0.02:
+                    print_dual(f"  {lbl}: bond order {bo_val:+.4f} -- too small for a ratio", f_out)
+                    continue
+                ratio = g_factor * integrated / bo_val
+                off = abs(ratio - 1) > 0.1
+                tag = ("[WARNING] differs from 1 by more than 10 %" if (off and full_window)
+                       else "[OK]" if full_window else "")
+                print_dual(f"  {lbl}: {g_factor * integrated:+.4f} / {bo_val:+.4f} = {ratio:.3f} {tag}", f_out)
     elif args.bond_order:
         print_dual("Not computed (no usable density matrix -- see the error above).", f_out)
     else:

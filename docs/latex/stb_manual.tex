@@ -4059,16 +4059,25 @@ rod group.
 The output (default \file{kpath\_bs.fdf}) contains
 \fdf{BandLinesScale ReciprocalLatticeVectors} and a \fdf{\%block BandLines} with the
 special points in fractional reciprocal coordinates. The first point has count 1
-and every following point 50, i.e. 50 k-points per segment. Point $\Gamma$ is written
+and every following point 50, i.e. 50 k-points per segment; the first point after a
+break of the path also has count 1 (below). Point $\Gamma$ is written
 as \texttt{\textbackslash Gamma}, which SIESTA prints as a label in the
 \file{.bands} file and \cmd{stb-bands} turns into $\Gamma$ on the axis.
 
 \paragraph{Disjoint paths.}
-Standard paths of low-symmetry lattices have breaks (\texttt{Y-H|M-D}). The tool
-writes all segments in one sequence and prints a note at each break; SIESTA then
-computes the straight stretch between the two ends of a break as if it were part
-of the path. Remember this when reading the band plot, or edit the block to split
-the calculation.
+Standard paths have breaks (\texttt{K|U} in fcc, \texttt{Y-H|M-D}). The point after a
+break is written with count 1, which makes SIESTA start a new line there instead of
+computing the straight stretch between the two ends; the tool prints a note at each break.
+Before 2.0.1 that point had count 50, and the band plot showed a \texttt{K-U} segment that
+is no high-symmetry line.
+
+\paragraph{Slightly distorted cells.}
+The Bravais lattice comes from ASE (\opt{-p}, default $2\times10^{-4}$) and the space group from
+spglib (\opt{--symprec}, 0.01~\AA). A relaxed fcc cell with angles of 59.91--59.99$^\circ$ is
+rhombohedral for the first and Fm-3m for the second. When a primitive cell's lattice is less
+symmetric than its space group, the tool uses the smallest larger tolerance that gives the
+lattice of the space group, and warns with the cell angles. A genuinely rhombohedral cell
+(R-3m), a conventional cell, or a lattice more symmetric than the crystal are left alone.
 
 \paragraph{Using it.}
 \file{calc.fdf} written by \cmd{stb-inputfile -t bands} already contains
@@ -10797,9 +10806,9 @@ This example walks through the theory, and a real, serious bug found and
 fixed while reviewing this tool --- using a real SIESTA
 calculation of the tin oxide Sn3O4.
 
-\subsubsection{Theory}\label{g2.14-1-theory}
+\subsubsection{1. Theory}\label{g2.14-1-theory}
 
-\paragraph{What COOP/COHP actually measure}\label{g2.14-11-what-coopcohp-actually-measure}
+\paragraph{1.1 What COOP/COHP actually measure}\label{g2.14-11-what-coopcohp-actually-measure}
 
 For a crystal orbital (Bloch state) \texttt{psi\_\allowbreak{}\{n,\allowbreak{}k\}\ =\allowbreak{}\ sum\_\allowbreak{}mu\ c\_\allowbreak{}mu,\allowbreak{}n(k)\ phi\_\allowbreak{}mu},
 the overlap population between two atomic orbitals \texttt{mu} (on atom I) and
@@ -10816,10 +10825,14 @@ COOP_IJ(E) = sum_(n,k) w_k * [sum_(mu in I, nu in J) c_mu,n(k) c_nu,n(k) S_mu,nu
 \end{codeblock}
 
 COHP replaces the overlap matrix \texttt{S} with the Hamiltonian matrix \texttt{H} in
-the same formula --- a Hamilton-weighted version of the same idea (some
-literature plots \texttt{-COHP} so that positive also means bonding; this suite
-keeps sisl\textquotesingle s own raw sign, i.e. \textbf{COOP/COHP \textgreater{} 0 = bonding}, verified
-below rather than just asserted).
+the same formula --- a Hamilton-weighted version of the same idea. The two
+quantities have \textbf{opposite} sign conventions, and this suite keeps sisl\textquotesingle s
+raw values: \textbf{COOP \textgreater{} 0 = bonding} (Hughbanks-Hoffmann), \textbf{COHP \textless{} 0 =
+bonding} (Dronskowski-Blöchl; the literature often plots \texttt{-\allowbreak{}COHP} so that
+positive means bonding). On this fixture the Sn-O bond 0-6 gives ICOOP
++0.13 and ICOHP -1.44 eV, both labelled \texttt{bonding}. Before 2.0.1 the report
+applied the COOP rule to COHP too and called every COHP bond
+"antibonding".
 
 This suite reuses sisl\textquotesingle s own \texttt{EigenstateElectron.\allowbreak{}COOP()}/\texttt{.\allowbreak{}COHP()}
 (explicitly marked "experimental" in sisl\textquotesingle s own docs), which computes one
@@ -10843,19 +10856,19 @@ non-polarized GGA-PBE (+DFT-D3) calculation of the tin oxide Sn3O4 (14
 atoms, 182 orbitals, DZP basis), sampled at 8 explicit k-points (a
 2x2x2-equivalent mesh).
 
-\paragraph{A worked example: a real bond vs. a non-bond}\label{g2.14-13-a-worked-example-a-real-bond-vs-a-non-bond}
+\paragraph{1.3 A worked example: a real bond vs. a non-bond}\label{g2.14-13-a-worked-example-a-real-bond-vs-a-non-bond}
 
 This fixture\textquotesingle s atom 0 (Sn) has a real Sn-O bond to atom 6 (O) at 2.077
 Ang, and sits 3.800 Ang from atom 1 (another Sn) -\/- too far to be a real
 bond. Watch how differently these two pairs behave.
 
-\textbf{With a window that includes UNoccupied states} (\texttt{-\/-\allowbreak{}erange\ -\allowbreak{}10\ 5}, well
+\textbf{With a window that includes UNoccupied states} (\texttt{-\allowbreak{}\/-\allowbreak{}erange\ -\allowbreak{}10\ 5}, well
 above the real Fermi energy of -3.204 eV), the picture is misleading:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}lll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3429}}@{}}
 \toprule\noalign{}
-Pair & Largest \textbar value\textbar{} & Integrated over \texttt{-\/-\allowbreak{}erange} \\
+Pair & Largest \textbar value\textbar{} & Integrated over \texttt{-\allowbreak{}\/-\allowbreak{}erange} \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
@@ -10870,13 +10883,13 @@ non-bond reads "bonding"! The reason: this window captures a lot of
 UNoccupied antibonding character for the real Sn-O bond (states above
 E\_F that would be antibonding if they were ever filled), which dominates
 the integral. \textbf{Restricting the window to the actual occupied states}
-(\texttt{-\/-\allowbreak{}erange\ -\allowbreak{}25\ -\allowbreak{}3.\allowbreak{}204}, i.e. up to the real Fermi energy) gives the
+(\texttt{-\allowbreak{}\/-\allowbreak{}erange\ -\allowbreak{}25\ -\allowbreak{}3.\allowbreak{}204}, i.e. up to the real Fermi energy) gives the
 physically meaningful picture instead:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}lll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2987}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3247}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3766}}@{}}
 \toprule\noalign{}
-Pair & Largest \textbar value\textbar{} & Integrated over \texttt{-\/-\allowbreak{}erange} \\
+Pair & Largest \textbar value\textbar{} & Integrated over \texttt{-\allowbreak{}\/-\allowbreak{}erange} \\
 \midrule\noalign{}
 \endhead
 \bottomrule\noalign{}
@@ -10890,12 +10903,12 @@ Now it makes physical sense: the real bond shows net bonding character
 over the occupied states, and the non-bonded pair is essentially flat at
 zero. \textbf{The energy window you integrate over matters} -\/- \texttt{stb-\allowbreak{}coop}\textquotesingle s
 own \texttt{{[}3{]}\ COOP/\allowbreak{}COHP\ CURVE} report section prints this integrated value
-with an explicit reminder that it\textquotesingle s over \texttt{-\/-\allowbreak{}erange}, not automatically
+with an explicit reminder that it\textquotesingle s over \texttt{-\allowbreak{}\/-\allowbreak{}erange}, not automatically
 "the occupied states".
 
-\paragraph{\texorpdfstring{1.4 A real, serious bug found and fixed: \texttt{-\/-\allowbreak{}bond-\allowbreak{}order}}{1.4 A real, serious bug found and fixed: -\/-bond-order}}\label{g2.14-14-a-real-serious-bug-found-and-fixed---bond-order}
+\paragraph{\texorpdfstring{1.4 A real, serious bug found and fixed: \texttt{-\allowbreak{}\/-\allowbreak{}bond-\allowbreak{}order}}{1.4 A real, serious bug found and fixed: -\/-bond-order}}\label{g2.14-14-a-real-serious-bug-found-and-fixed---bond-order}
 
-\texttt{-\/-\allowbreak{}bond-\allowbreak{}order} is meant to be a cheap, energy-INTEGRATED complementary
+\texttt{-\allowbreak{}\/-\allowbreak{}bond-\allowbreak{}order} is meant to be a cheap, energy-INTEGRATED complementary
 sanity check on the COOP curve above: the \textbf{Mulliken bond order},
 \texttt{B\_\allowbreak{}IJ\ =\allowbreak{}\ 2\ *\ sum\ M\_\allowbreak{}ij\ *\ S\_\allowbreak{}ij} (summed over orbitals), where \texttt{M} is the
 \textbf{density matrix}. This tool used to call \texttt{H.\allowbreak{}bond\_\allowbreak{}order(.\allowbreak{}.\allowbreak{}.\allowbreak{})} directly
@@ -10908,7 +10921,7 @@ eV, tens of eV for on-site terms) for a density-matrix population
 Verified live on this exact fixture, before the fix:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}ll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.5690}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.4310}}@{}}
 \toprule\noalign{}
 Pair & Old (broken) "bond order" \\
 \midrule\noalign{}
@@ -10925,7 +10938,7 @@ A genuinely bonded pair and a genuinely non-bonded pair gave numbers of
 the same order of magnitude -\/- the smoking gun that this measured nothing
 about bonding at all, just Hamiltonian-matrix-element scale.
 
-\textbf{The fix}: read a REAL density matrix (\texttt{-\/-\allowbreak{}dm-\allowbreak{}file}, or an
+\textbf{The fix}: read a REAL density matrix (\texttt{-\allowbreak{}\/-\allowbreak{}dm-\allowbreak{}file}, or an
 auto-detected \texttt{\textless{}label\textgreater{}.\allowbreak{}DM}) and call \texttt{bond\_\allowbreak{}order()} on THAT instead. One
 more wrinkle needed fixing too: SIESTA\textquotesingle s \texttt{.\allowbreak{}DM} file format doesn\textquotesingle t store
 the overlap matrix at all (confirmed live: \texttt{DM.\allowbreak{}Sk()} gave an exactly-zero
@@ -10936,7 +10949,7 @@ freshly-read density matrix before calling \texttt{bond\_\allowbreak{}order()}.
 After the fix, on the exact same pairs:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}lll@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4429}}@{}}
 \toprule\noalign{}
 Pair & Fixed bond order & Physical read \\
 \midrule\noalign{}
@@ -10954,9 +10967,44 @@ coefficients, not the density matrix) \textbf{agrees in sign} with the fixed
 bond order for both pairs (+0.133 vs +0.527 for the bond, -0.0008 vs
 -0.010 for the non-bond). Two independent methods agreeing is real
 evidence, not just an assertion, that this suite\textquotesingle s COOP sign convention
-(positive = bonding) is correct.
+(positive = bonding) is correct. With \texttt{-\allowbreak{}\/-\allowbreak{}quantity\ cohp} the same check
+compares \texttt{-\allowbreak{}ICOHP} with the bond order.
 
-\subsubsection{Output and options}\label{g2.14-2-output-and-options}
+\paragraph{1.5 Periodic images and normalization}\label{g2.14-15-periodic-images-and-normalization}
+
+\texttt{-\allowbreak{}\/-\allowbreak{}pair\ I\ J} sums the interaction of atom I (in the unit cell) with
+\textbf{every periodic image} of atom J within the orbital range, and the
+report lists them, one row per image (\texttt{N1\ N2\ N3}) with its distance.
+On this fixture Sn 0 and O 7 are bonded across the cell edge, image
+\texttt{+1\ 0\ 0} at 2.077 Å:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2286}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.3429}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.4286}}@{}}
+\toprule\noalign{}
+Image & Distance (Å) & Integrated COOP \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
++1 +0 +0 & 2.077 & +0.1331 \\
++0 +0 +0 & 4.346 & -0.0003 \\
++1 -1 +0 & 4.427 & -0.0002 \\
+\end{longtable}
+\endgroup
+
+\texttt{-\allowbreak{}\/-\allowbreak{}image\ N1\ N2\ N3} keeps one image, i.e. one bond. Before 2.0.1 only the
+image \texttt{0\ 0\ 0} was ever summed: a bond across the cell edge came out \textasciitilde0
+while its bond order was \textasciitilde0.5.
+
+The curve and \texttt{coop.\allowbreak{}dat}/\texttt{cohp.\allowbreak{}dat} are sisl\textquotesingle s value \textbf{per spin channel
+and one direction} (i → j). The Mulliken bond order counts both
+directions and both spins, so for a spin-unpolarized run \textbf{bond order =
+4 × ICOOP} integrated from the bottom of the bands to E\_F (on this
+fixture: 0.5304 vs 0.5271 for 0-7; the sum over every orbital pair is
+N/2 = 36). The report adds a \texttt{x4} column (\texttt{x2} for a spin-polarized run)
+and, with \texttt{-\allowbreak{}\/-\allowbreak{}bond-\allowbreak{}order}, compares the magnitude, not only the sign.
+
+\subsubsection{2. Output and options}\label{g2.14-2-output-and-options}
 
 \begin{itemize}
 \tightlist
@@ -10965,23 +11013,23 @@ evidence, not just an assertion, that this suite\textquotesingle s COOP sign con
   \texttt{PAIR\ SELECTION}, \texttt{COOP/\allowbreak{}COHP\ CURVE}, \texttt{BOND\ ORDER}, \texttt{OUTPUT\ DATA\ \&\ PLOTS},
   \texttt{REFERENCES}, \texttt{SUMMARY\ \&\ FILES}), matching \texttt{stb-\allowbreak{}wfdensity}/\texttt{stb-\allowbreak{}sts}.
 \item
-  \textbf{\texttt{-\/-\allowbreak{}save-\allowbreak{}report}} persists the report to \texttt{stb\_\allowbreak{}coop\_\allowbreak{}report.\allowbreak{}txt} (off by
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}save-\allowbreak{}report}} persists the report to \texttt{stb\_\allowbreak{}coop\_\allowbreak{}report.\allowbreak{}txt} (off by
   default).
 \item
-  \textbf{\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}} writes \texttt{coop.\allowbreak{}dat}/\texttt{cohp.\allowbreak{}dat} and a real multi-pair
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}save-\allowbreak{}gnuplot}} writes \texttt{coop.\allowbreak{}dat}/\texttt{cohp.\allowbreak{}dat} and a real multi-pair
   gnuplot script (one curve per selected pair, via \texttt{columnheader()}),
   together behind one off-by-default flag.
 \item
-  \textbf{\texttt{-\/-\allowbreak{}view}} shows the matplotlib preview (off by default).
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}view}} shows the matplotlib preview (off by default).
 \item
-  \textbf{\texttt{-\/-\allowbreak{}shift\ fermi}\textquotesingle s Fermi-energy source} follows the same
-  priority-ordered hierarchy as \texttt{stb-\allowbreak{}wfdensity}/\texttt{stb-\allowbreak{}sts} (\texttt{-\/-\allowbreak{}fermi} \textgreater{}
-  \texttt{-\/-\allowbreak{}bands-\allowbreak{}file} \textgreater{} \texttt{-\/-\allowbreak{}fermi-\allowbreak{}file} \textgreater{} an auto-detected \texttt{.\allowbreak{}out} log).
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}shift\ fermi}\textquotesingle s Fermi-energy source} follows the same
+  priority-ordered hierarchy as \texttt{stb-\allowbreak{}wfdensity}/\texttt{stb-\allowbreak{}sts} (\texttt{-\allowbreak{}\/-\allowbreak{}fermi} \textgreater{}
+  \texttt{-\allowbreak{}\/-\allowbreak{}bands-\allowbreak{}file} \textgreater{} \texttt{-\allowbreak{}\/-\allowbreak{}fermi-\allowbreak{}file} \textgreater{} an auto-detected \texttt{.\allowbreak{}out} log).
 \item
-  \textbf{\texttt{-\/-\allowbreak{}label} can be combined with \texttt{-\/-\allowbreak{}hsx-\allowbreak{}file}}, which takes precedence
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}label} can be combined with \texttt{-\allowbreak{}\/-\allowbreak{}hsx-\allowbreak{}file}}, which takes precedence
   over \texttt{\textless{}label\textgreater{}.\allowbreak{}HSX}.
 \item
-  \textbf{\texttt{-\/-\allowbreak{}bond-\allowbreak{}order}} uses a real density matrix (\texttt{-\/-\allowbreak{}dm-\allowbreak{}file}/auto-detected
+  \textbf{\texttt{-\allowbreak{}\/-\allowbreak{}bond-\allowbreak{}order}} uses a real density matrix (\texttt{-\allowbreak{}\/-\allowbreak{}dm-\allowbreak{}file}/auto-detected
   \texttt{\textless{}label\textgreater{}.\allowbreak{}DM}), not the Hamiltonian -\/- see section 1.4 above. It errors
   clearly if no usable \texttt{.\allowbreak{}DM} is found, instead of silently returning a
   wrong number.
@@ -10991,29 +11039,29 @@ evidence, not just an assertion, that this suite\textquotesingle s COOP sign con
   bond-order/\texttt{.\allowbreak{}DM} prompt.
 \end{itemize}
 
-\subsubsection{Known limitations}\label{g2.14-3-known-limitations}
+\subsubsection{3. Known limitations}\label{g2.14-3-known-limitations}
 
 \begin{itemize}
 \tightlist
 \item
   sisl\textquotesingle s COOP/COHP API is explicitly "experimental" and memory-heavy for
-  many energy points/large systems -\/- start modest with \texttt{-\/-\allowbreak{}npoints}.
+  many energy points/large systems -\/- start modest with \texttt{-\allowbreak{}\/-\allowbreak{}npoints}.
 \item
   No metadata distinguishes a full-BZ-mesh \texttt{.\allowbreak{}WFSX} from a band-path one;
   \texttt{stb-\allowbreak{}coop} only prints an advisory (few k-points, all equal weight),
   never blocks.
 \item
-  No \texttt{-\/-\allowbreak{}shift\ vbm/\allowbreak{}cbm} (would need a second, expensive full pass over the
-  whole \texttt{.\allowbreak{}WFSX}) -\/- use \texttt{-\/-\allowbreak{}shift\ fermi} instead.
+  No \texttt{-\allowbreak{}\/-\allowbreak{}shift\ vbm/\allowbreak{}cbm} (would need a second, expensive full pass over the
+  whole \texttt{.\allowbreak{}WFSX}) -\/- use \texttt{-\allowbreak{}\/-\allowbreak{}shift\ fermi} instead.
 \item
   Not tested for non-collinear states (sisl\textquotesingle s own docstring caveat,
   passed through unchanged).
 \end{itemize}
 
-\subsubsection{Files in this folder}\label{g2.14-4-files-in-this-folder}
+\subsubsection{4. Files in this folder}\label{g2.14-4-files-in-this-folder}
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1982}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8018}}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2000}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.8000}}@{}}
 \toprule\noalign{}
 File & What it is \\
 \midrule\noalign{}
@@ -11022,13 +11070,13 @@ File & What it is \\
 \endlastfoot
 \texttt{Sn3O4.\allowbreak{}HSX} & The real Hamiltonian + overlap matrix (mandatory -\/- no approximate fallback) \\
 \texttt{Sn3O4.\allowbreak{}selected.\allowbreak{}WFSX} & The full-BZ wavefunction file (8 explicit k-points via \texttt{WaveFuncKPoints}) \\
-\texttt{Sn3O4.\allowbreak{}DM} & The real density matrix, needed for \texttt{-\/-\allowbreak{}bond-\allowbreak{}order} (see section 1.4) \\
+\texttt{Sn3O4.\allowbreak{}DM} & The real density matrix, needed for \texttt{-\allowbreak{}\/-\allowbreak{}bond-\allowbreak{}order} (see section 1.4) \\
 \texttt{Sn3O4.\allowbreak{}XV} & Geometry-only file (not actually needed by \texttt{stb-\allowbreak{}coop}, kept for reference) \\
 \texttt{example\_\allowbreak{}2.\allowbreak{}14.\allowbreak{}sh} & This walkthrough\textquotesingle s runnable script \\
 \end{longtable}
 \endgroup
 
-\subsubsection{Running it}\label{g2.14-5-running-it}
+\subsubsection{5. Running it}\label{g2.14-5-running-it}
 
 \begin{codeblock}
 bash example_2.14.sh
@@ -11042,7 +11090,7 @@ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
     --save-report --save-gnuplot --view
 \end{codeblock}
 
-\subsubsection{What\textquotesingle s next}\label{g2.14-6-whats-next}
+\subsubsection{6. What\textquotesingle s next}\label{g2.14-6-whats-next}
 
 \begin{itemize}
 \tightlist
@@ -11057,6 +11105,7 @@ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
   structure, the band-path analog (not BZ-integrated) of the same
   per-orbital coefficients COOP/COHP consume here.
 \end{itemize}
+
 
 \subsection{Implementation details}
 
@@ -11078,7 +11127,9 @@ sisl \cite{Papior2017sisl} returns, for one k-point at a time, the orbital-pair-
 energy-resolved matrices over the whole auxiliary supercell, so bonds to periodic images
 are included. The tool loops over the k-points of a full-Brillouin-zone \file{.WFSX}, weights
 them with the file's k-weights, and sums the rows and columns of the requested atoms:
-\opt{--pair I J} (0-based, repeatable; $I=J$ gives the on-site term) or
+\opt{--pair I J} (0-based, repeatable; every periodic image of $J$ within the orbital range,
+listed one by one with its distance; \opt{--image N1 N2 N3} keeps one image, i.e. one bond;
+$I=J$ gives the on-site term) or
 \opt{--pair-species A B} (all pairs between two species, including on-site terms when
 $A=B$). The energy grid is \opt{--erange} with \opt{--npoints} points (default 300), each state
 broadened with \opt{--sigma}/\opt{--fwhm} (meV). It needs \file{<label>.HSX}: COOP uses the
@@ -11087,8 +11138,11 @@ overlap and COHP the Hamiltonian.
 \paragraph{Bond order.}
 \opt{--bond-order} adds the Mulliken bond order $2\sum_{\mu\in A,\nu\in B}D_{\mu\nu}S_{\mu\nu}$
 computed from the density matrix (\file{<label>.DM}, or \opt{--dm-file}), with the overlap
-taken from the \file{.HSX} because the \file{.DM} file does not store it. Its sign agrees with
-the integrated COOP and gives an independent check.
+taken from the \file{.HSX} because the \file{.DM} file does not store it. sisl's COOP is per
+spin channel and one-sided ($i\to j$), so for a spin-unpolarized run the bond order is
+$4\times$ICOOP integrated from the bottom of the bands to $E_F$ ($2\times$ for a polarized run;
+Sn$_3$O$_4$: 0.530 against 0.527). The report shows the $\times4$ column and compares sign and
+magnitude ($-$ICOHP for COHP), judging the ratio when the window is the occupied one.
 
 \paragraph{Cautions.}
 sisl marks this API as experimental and it can use a lot of memory: start with a small
@@ -11105,7 +11159,7 @@ Energy-resolved COOP/COHP bonding/antibonding curves for selected atom pairs, fr
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-coop [-h] [--label LABEL] [--wfsx WFSX] [--hsx-file HSX_FILE]
-                --quantity {coop,cohp} [--pair I J] [--pair-species A B]
+                --quantity {coop,cohp} [--pair I J] [--image N1 N2 N3] [--pair-species A B]
                 --erange EMIN EMAX [--npoints NPOINTS] [--shift {none,fermi,manual}]
                 [--fermi FERMI] [--bands-file BANDS_FILE] [--fermi-file FERMI_FILE]
                 [--manual-value MANUAL_VALUE] (--sigma SIGMA | --fwhm FWHM)
@@ -11118,7 +11172,8 @@ usage: stb-coop [-h] [--label LABEL] [--wfsx WFSX] [--hsx-file HSX_FILE]
 \optitem{-{}-wfsx WFSX}{\index{stb-coop@\texttt{stb-coop}!--wfsx@\texttt{--wfsx}}Explicit path to the .WFSX file (alternative to \texttt{-{}-label}).}
 \optitem{-{}-hsx-\allowbreak{}file HSX\_\allowbreak{}FILE}{\index{stb-coop@\texttt{stb-coop}!--hsx-file@\texttt{--hsx-file}}Explicit .HSX path. Required if \texttt{-{}-wfsx} is used instead of \texttt{-{}-label}; optional (and common) together WITH \texttt{-{}-label} too, since the real file is often not literally named \texttt{\textless{}label\textgreater{}.\allowbreak{}HSX} -- \texttt{-{}-label} still auto-detects the .WFSX in that case, only the Hamiltonian source changes.}
 \optitem{-{}-quantity \{coop,\allowbreak{}cohp\}}{\index{stb-coop@\texttt{stb-coop}!--quantity@\texttt{--quantity}}'coop': Crystal Orbital Overlap Population. 'cohp': Crystal Orbital Hamilton Population.\optmeta{required; choices: coop, cohp}}
-\optitem{-{}-pair I J}{\index{stb-coop@\texttt{stb-coop}!--pair@\texttt{--pair}}0-based atom-index pair (repeatable). I == J is allowed (on-site term).\optmeta{type: int}}
+\optitem{-{}-pair I J}{\index{stb-coop@\texttt{stb-coop}!--pair@\texttt{--pair}}0-based atom-index pair (repeatable). Sums EVERY periodic image of J within the orbital range (the report lists each image with its distance); use \texttt{-{}-image} for one bond. I == J is allowed (on-site term).\optmeta{type: int}}
+\optitem{-{}-image N1 N2 N3}{\index{stb-coop@\texttt{stb-coop}!--image@\texttt{--image}}With \texttt{-{}-pair}: only the periodic image (N1, N2, N3) of J, i.e. the one bond between I in the unit cell and J in cell N1 a1 + N2 a2 + N3 a3 (e.g. \texttt{-{}-pair} 4 5 \texttt{-{}-image} 0 -1 0 for a bond across the cell edge). The report's image table gives the image of each neighbour.\optmeta{type: int}}
 \optitem{-{}-pair-\allowbreak{}species A B}{\index{stb-coop@\texttt{stb-coop}!--pair-species@\texttt{--pair-species}}Species-pair (repeatable), e.g. \texttt{-{}-pair-\allowbreak{}species} Sn O -- aggregates ALL atom-index pairs between the two species into one combined curve. If A == B (e.g. Sn Sn), the aggregate also includes each atom's own on-site term, mixed in with the inter-atomic Sn-Sn terms -- use \texttt{-{}-pair} I J for a purely inter-atomic curve instead.}
 \optitem{-{}-erange EMIN EMAX}{\index{stb-coop@\texttt{stb-coop}!--erange@\texttt{--erange}}Energy window (eV), relative to \texttt{-{}-shift's} reference.\optmeta{required; type: float}}
 \optitem{-{}-npoints NPOINTS}{\index{stb-coop@\texttt{stb-coop}!--npoints@\texttt{--npoints}}Number of energy samples (default: 300). sisl's COOP/COHP is memory-heavy for many points -- start modest.\optmeta{type: int}}
@@ -31594,7 +31649,7 @@ usage: stb-adsorb [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR]
 \optitem{-{}-n-\allowbreak{}orientations-\allowbreak{}polar N\_\allowbreak{}ORIENTATIONS\_\allowbreak{}POLAR}{\index{stb-adsorb@\texttt{stb-adsorb}!--n-orientations-polar@\texttt{--n-orientations-polar}}With \texttt{-{}-ml-\allowbreak{}rank} and a multi-atom \texttt{-{}-adsorbate}: systematically sample this many initial molecule orientations PER SITE before relaxing -- which part of the molecule ends up facing the surface (e.g. O-down vs. H-down for H2O) is otherwise fixed by the molecule's default G2 geometry alone. Default 1 = current behavior, no sampling. Combined with \texttt{-{}-n-\allowbreak{}orientations-\allowbreak{}azimuthal} below (total orientations per site = polar x azimuthal); a modest 4x2=8 is a reasonable starting point -- cost scales linearly with this product (one full MACE relax per orientation per site). Works with a single \texttt{-{}-site-\allowbreak{}index} too, not just \texttt{-{}-all-\allowbreak{}sites} -- every sampled orientation of the SAME site is then what gets ranked. Every relaxed orientation (not just the kept/unique ones) is saved to sites/orientation\_trajectory.xyz as a multi-frame trajectory (viewable in VMD/OVITO).\optmeta{type: int}}
 \optitem{-{}-n-\allowbreak{}orientations-\allowbreak{}azimuthal N\_\allowbreak{}ORIENTATIONS\_\allowbreak{}AZIMUTHAL}{\index{stb-adsorb@\texttt{stb-adsorb}!--n-orientations-azimuthal@\texttt{--n-orientations-azimuthal}}With \texttt{-{}-ml-\allowbreak{}rank}: this many evenly-spaced in-plane rotations sampled per polar direction (see \texttt{-{}-n-\allowbreak{}orientations-\allowbreak{}polar}). Default 1.\optmeta{type: int}}
 \optitem{-{}-orientation-\allowbreak{}top-\allowbreak{}k ORIENTATION\_\allowbreak{}TOP\_\allowbreak{}K}{\index{stb-adsorb@\texttt{stb-adsorb}!--orientation-top-k@\texttt{--orientation-top-k}}With \texttt{-{}-ml-\allowbreak{}rank} and orientation sampling: keep only the N best unique (post-deduplication) orientations per site, instead of all surviving ones. Unset (default) keeps every unique orientation found.\optmeta{type: int}}
-\optitem{-{}-orientation-\allowbreak{}rmsd-\allowbreak{}tol ORIENTATION\_\allowbreak{}RMSD\_\allowbreak{}TOL}{\index{stb-adsorb@\texttt{stb-adsorb}!--orientation-rmsd-tol@\texttt{--orientation-rmsd-tol}}With \texttt{-{}-ml-\allowbreak{}rank} and orientation sampling: two relaxed orientations at the same site are treated as duplicates (only the better-energy one kept) when their adsorbate-atom RMSD is below this (Ang) AND their energy differs by less than 0.01 eV. Default 0.3.\optmeta{type: float}}
+\optitem{-{}-orientation-\allowbreak{}rmsd-\allowbreak{}tol ORIENTATION\_\allowbreak{}RMSD\_\allowbreak{}TOL}{\index{stb-adsorb@\texttt{stb-adsorb}!--orientation-rmsd-tol@\texttt{--orientation-rmsd-tol}}With \texttt{-{}-ml-\allowbreak{}rank} and orientation sampling: two relaxed orientations at the same site are treated as duplicates (only the better-energy one kept) when their adsorbate-atom RMSD is below this (Ang) AND their energy differs by less than 0.01 eV. The RMSD matches equal atoms by the best permutation (H2O with its two H swapped is one geometry) and uses the nearest periodic image. Default 0.3.\optmeta{type: float}}
 \optitem{-O, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-adsorb@\texttt{stb-adsorb}!--output-dir@\texttt{--output-dir}}Root directory (default: adsorption\_run) for 'clean\_slab', 'adsorbate' and 'sites' -- everything this study needs lives under one folder, same convention as \texttt{stb-\allowbreak{}hubbardu's} hubbardu\_runs.}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-adsorb@\texttt{stb-adsorb}!--save-report@\texttt{--save-report}}Also persist the full report narrative to \texttt{adsorption\_\allowbreak{}prep\_\allowbreak{}report.\allowbreak{}txt} (under \texttt{-{}-output-\allowbreak{}dir}). Off by default. 'sites/adsorption\_sites.txt' (the SITE\_TABLE \texttt{stb-\allowbreak{}adsorbAnalysis} reads) is always written regardless.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-adsorb@\texttt{stb-adsorb}!--view@\texttt{--view}}Open every generated structure (clean\_slab, isolated adsorbate(s), and every written site) in ASE's interactive 3D viewer as a multi-frame browser, after everything else has finished. Needs a display.\optmeta{switch, off by default}}

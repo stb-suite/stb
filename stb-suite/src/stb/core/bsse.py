@@ -6,7 +6,9 @@ core/). stackingfault_bsse.py was later removed (BSSE correction doesn't
 apply to a same-atom-count, same-basis lateral-shift comparison like a
 gamma-surface scan -- there's no genuinely different-basis-size fragment
 comparison to correct there, unlike an adsorption/interaction energy);
-adsorb_bsse.py remains the sole consumer. The underlying issue this module
+adsorb_bsse.py remains a consumer; species_block_overrides (per-species blocks of a
+template re-keyed to one folder's species, ghosts included) is shared by stb-cohesive,
+stb-adsorbBsse and stb-chargediffPrep. The underlying issue this module
 corrects for, where it IS applicable: SIESTA's localized (PAO) basis set
 lets two weakly-bound fragments artificially lower each other's energy by
 borrowing basis functions across the gap -- a plane-wave code wouldn't

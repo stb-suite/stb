@@ -552,6 +552,8 @@ check_contains "Li_ghost non-perturbative" lif_run/atoms_bsse/F/config_extra.fdf
 echo "Testing: atoms/Li and the full structure fit the template -> nothing re-keyed"
 check_not_contains "PAO.PolarizationScheme" lif_run/atoms/Li/config_extra.fdf
 check_not_contains "PAO.PolarizationScheme" lif_run/structure/config_extra.fdf
+echo "Testing: no false 'Li polarization' warning when config_extra.fdf (read first) has the re-keyed block"
+check_not_contains "gives Li" log_lif.txt
 echo "Testing: built-in template (no --calc) on LiF -> Li non-perturbative in every folder with Li, Li_ghost too"
 rm -rf lif_builtin && mkdir -p lif_builtin
 stb-cohesive -s lif.fdf -p dojo --bsse-cutoff 2.5 -O lif_builtin --no-intro > log_lif_builtin.txt 2>&1
@@ -559,6 +561,7 @@ check_contains "^  Li non-perturbative" lif_builtin/structure/calc.fdf
 check_contains "^  Li non-perturbative" lif_builtin/atoms/Li/calc.fdf
 check_contains "^  Li_ghost non-perturbative" lif_builtin/atoms_bsse/F/calc.fdf
 check_not_contains "non-perturbative" lif_builtin/atoms/F/calc.fdf
+check_not_contains "gives Li" log_lif_builtin.txt
 
 popd > /dev/null
 

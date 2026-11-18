@@ -523,8 +523,9 @@ def missing_nonperturbative(text):
     flag = (d.get("paopolarizationnonperturbative") or "").split()
     if flag and flag[0].lower().strip(".") in ("true", "t", "yes"):
         return []
-    blocks = {normalize_label(b.group(1)): b.group(2) for b in re.finditer(
-        r"%block\s+(\S+)\s*\n(.*?)%endblock", text, re.I | re.S)}
+    blocks = {}
+    for blk in re.finditer(r"%block\s+(\S+)\s*\n(.*?)%endblock", text, re.I | re.S):
+        blocks.setdefault(normalize_label(blk.group(1)), blk.group(2))   # SIESTA keeps the FIRST block
     scheme = blocks.get("paopolarizationscheme", "")
     explicit = blocks.get("paobasis", "")
     missing = []

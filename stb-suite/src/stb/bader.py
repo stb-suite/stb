@@ -469,11 +469,26 @@ def compute_bader_charges(label, output_dir, speed_mode='normal', ref_file=None,
                     "   [WARN] PyBader returned a different number of spin values than charge "
                     "values -- disabling the spin column for this run.", 'yellow'))
                 raw_spins = None
-            if len(raw_volumes) != len(raw_populations) or len(raw_surf_dist) != len(raw_populations):
+            if raw_surf_dist is None:
+                # PyBader's surface_distance() returns None when it finds no basin edge at all:
+                # the whole density is ONE basin, so one atom holds every electron and the
+                # others get none (AlP: the Al pseudo-density has no maximum of its own). Report
+                # the populations with the zero-population warning below instead of crashing on
+                # len(None) as before.
                 print(color_text(
-                    "   [WARN] PyBader returned a different number of volume/surface-distance "
-                    "values than charge values -- disabling those columns for this run.", 'yellow'))
-                raw_volumes = raw_surf_dist = None
+                    "   [WARN] PyBader found no basin edge (the whole density forms a single "
+                    "basin) -- no surface-distance column for this run; see the zero-population "
+                    "warning below.", 'yellow'))
+            if raw_volumes is None or raw_surf_dist is None or len(raw_volumes) != len(raw_populations) \
+                    or len(raw_surf_dist) != len(raw_populations):
+                if raw_volumes is not None and raw_surf_dist is not None:
+                    print(color_text(
+                        "   [WARN] PyBader returned a different number of volume/surface-distance "
+                        "values than charge values -- disabling those columns for this run.", 'yellow'))
+                if raw_volumes is not None and len(raw_volumes) == len(raw_populations):
+                    raw_surf_dist = None
+                else:
+                    raw_volumes = raw_surf_dist = None
 
             for pos in range(n_atoms):
                 orig_i = physical_idx[pos]

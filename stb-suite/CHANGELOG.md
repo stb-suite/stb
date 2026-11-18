@@ -205,6 +205,12 @@ version before) and **Added** (new options and tools).
   the label, the sign-convention sentence and the plot title were not. The bond-order cross-check now
   runs for COHP too, comparing -ICOHP with the bond order.
 
+- `stb-bader` stopped with "[ERROR] Analysis failed: object of type 'NoneType' has no len()" when
+  the whole density forms a single basin (AlP with a valence-only pseudo-density: the Al has no
+  density maximum of its own). PyBader then finds no basin edge and returns no surface distances.
+  The report is now written, Al 0 and P 8 e- as the Henkelman program gives, with the
+  zero-population warning and no surface-distance column.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

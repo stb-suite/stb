@@ -239,6 +239,35 @@ echo "Verifying the total (up+down) integrates to the correct 12.0 e (2 O atoms 
 check_contains "Total Integrated: 12.0000 (Target: 12.00)" log_spinfix.txt
 
 
+# --- 9c. One atom with no density maximum of its own (AlP with a valence-only density:
+#     the Al pseudo-density has no maximum, the whole cell is ONE basin). PyBader then finds
+#     no basin edge and returns no surface distances; stb-bader used to abort with
+#     "object of type 'NoneType' has no len()". It must report Al 0 / P 8 with the
+#     zero-population warning, like the Henkelman program does. ---
+echo -e "\n--- Testing a single-basin density (atom with no maximum: report + warning, no crash) ---"
+python3 -c "
+import sisl, numpy as np
+a, n = 6.0, 30
+lattice = sisl.Lattice([[a, 0, 0], [0, a, 0], [0, 0, a]])
+x = np.arange(n) / n * a
+X, Y, Z = np.meshgrid(x, x, x, indexing='ij')
+d = np.zeros_like(X)
+for sh in np.ndindex(3, 3, 3):
+    o = (np.array(sh) - 1) * a + a / 2
+    d += np.exp(-((X - o[0])**2 + (Y - o[1])**2 + (Z - o[2])**2) / (2 * 0.9**2))
+d *= 8.0 / (d.sum() * (a / n)**3)
+g = sisl.Grid([n, n, n], lattice=lattice); g.grid[:] = d
+sisl.get_sile('onebasin.RHO', mode='w').write_grid(g)
+sisl.Geometry([[0, 0, 0], [a / 2, a / 2, a / 2]], atoms=[sisl.Atom(13), sisl.Atom(15)],
+              lattice=lattice).write('onebasin.fdf')
+"
+timeout 120 stb-bader --label onebasin --no-intro > log_onebasin.txt 2>&1
+check_exit_code $? 0
+check_contains "no basin edge" log_onebasin.txt
+check_contains "Atom(s) 1 got essentially zero Bader population" log_onebasin.txt
+check_contains "Total Integrated: 8.0000 (Target: 8.00)" log_onebasin.txt
+
+
 # --- 10. Robustness / --help / --version ---
 echo -e "\n--- Testing error and robustness cases ---"
 

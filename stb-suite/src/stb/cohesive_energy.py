@@ -16,6 +16,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.bsse import species_block_overrides
+from stb.core.pseudopotentials import add_nonperturbative_block
 from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
 from stb.core.pseudopotentials import BANK_HELP, get_required_pseudos, resolve_pseudo_source, copy_pseudo
 
@@ -176,11 +177,15 @@ def isolated_extra_text(dispersion):
 
 def write_isolated_calc(out_dir, dispersion):
     """calc.fdf (and, under --calc, config_extra.fdf) of an isolated-atom-type folder."""
+    folder_structure = structure_io.read_fdf(os.path.join(out_dir, "structure.fdf"))
     if USER_CALC["text"] is None:
+        text, _ = add_nonperturbative_block(
+            _isolated_atom_calc(dispersion),
+            {lb: meta['Z'] for lb, meta in structure_io.species_dict(folder_structure).items()})
         with open(os.path.join(out_dir, "calc.fdf"), 'w') as f:
-            f.write(_isolated_atom_calc(dispersion))
+            f.write(text)
         return
-    labels = structure_io.species_list(structure_io.read_fdf(os.path.join(out_dir, "structure.fdf")))
+    labels = structure_io.species_list(folder_structure)
     with open(os.path.join(out_dir, EXTRA_FDF_FILE), 'w') as f:
         f.write(isolated_extra_text(dispersion) + species_block_overrides(USER_CALC["text"], labels))
     with open(os.path.join(out_dir, "calc.fdf"), 'w') as f:
@@ -626,6 +631,14 @@ def main():
 
     if args.calc:
         struct_calc = structure_io.prepend_include(USER_CALC["text"], EXTRA_FDF_FILE)
+    else:
+        struct_calc, np_labels = add_nonperturbative_block(
+            struct_calc, {lb: meta['Z'] for lb, meta in
+                          structure_io.species_dict(structure_io.read_fdf(args.structure)).items()})
+        if np_labels:
+            print_dual(color_text(
+                f"[NOTE] {', '.join(np_labels)}: PAO.PolarizationScheme non-perturbative written in every "
+                "calc.fdf (the default perturbative polarization orbital fails for Li).", 'yellow'), f_out)
     with open(os.path.join(struct_dir, "calc.fdf"), 'w') as f:
         f.write(struct_calc)
     for sym in species.keys():

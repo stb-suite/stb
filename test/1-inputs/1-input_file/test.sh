@@ -479,6 +479,35 @@ check_contains "Spin                polarized" calc.fdf
 mv calc.fdf calc_interactive.fdf
 
 
+# --- Li needs the non-perturbative polarization scheme (LiF, DZP: SIESTA's perturbative
+#     polarization orbital of the Li 2s fails to generate). ---
+echo -e "\n--- Testing the Li non-perturbative polarization block (LiF) ---"
+rm -rf lif_in && mkdir -p lif_in
+cat > lif_in/structure.fdf <<'FDFEOF'
+NumberOfAtoms 2
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1 3 Li
+ 2 9 F
+%endblock ChemicalSpeciesLabel
+LatticeConstant 4.03 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+FDFEOF
+(cd lif_in && stb-inputfile structure.fdf -t relax -p dojo --no-intro > ../log_lif.txt 2>&1)
+check_contains "Li: PAO.PolarizationScheme non-perturbative written" log_lif.txt
+check_contains "^  Li non-perturbative" lif_in/calc.fdf
+echo "Testing: no Li -> no PAO.PolarizationScheme block"
+check_not_contains "PAO.PolarizationScheme" calc.fdf
+
 popd > /dev/null
 
 # --- 6. Summary ---

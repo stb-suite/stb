@@ -488,6 +488,77 @@ def _fdf_level(text):
     return xc, how, soc, list(dict.fromkeys(species))
 
 
+# Elements whose perturbative polarization orbital SIESTA fails to generate with the bundled
+# pseudopotentials ("Generation of polarization orbital failed ... Rc no bigger than 1.32 Bohr":
+# the Li 2s shell, rc ~11 Bohr, with the PseudoDojo Li; seen in LiF and in Li on graphene).
+# Others (Na, K, ...) are not verified.
+NONPERTURBATIVE_POLARIZATION_Z = {3: "Li"}
+
+
+def polarization_scheme_block(labels):
+    """%block PAO.PolarizationScheme giving `labels` the non-perturbative scheme."""
+    return ("%block PAO.PolarizationScheme\n" + "".join(f"  {lb} non-perturbative\n" for lb in labels)
+            + "%endblock PAO.PolarizationScheme\n")
+
+
+def missing_nonperturbative(text):
+    """Species labels (Z in NONPERTURBATIVE_POLARIZATION_Z, ghosts included) of an fdf text that
+    get a polarization orbital (PAO.BasisSize with P, DZP by default; no explicit PAO.Basis entry)
+    by the perturbative scheme, which fails for them. [] for a structure-only file."""
+    from stb.core.fdf_directives import parse_directives, normalize_label
+    d = parse_directives(text)
+    m = re.search(r"%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)%endblock", text, re.I | re.S)
+    if not m:
+        return []
+    labels = []
+    for line in m.group(1).splitlines():
+        parts = line.split("#", 1)[0].split()
+        if len(parts) >= 3 and parts[1].lstrip("+-").isdigit() and abs(int(parts[1])) in NONPERTURBATIVE_POLARIZATION_Z:
+            labels.append(parts[2])
+    if not labels:
+        return []
+    size = (d.get("paobasissize") or "DZP").split()[0].upper()
+    if "P" not in size:
+        return []
+    flag = (d.get("paopolarizationnonperturbative") or "").split()
+    if flag and flag[0].lower().strip(".") in ("true", "t", "yes"):
+        return []
+    blocks = {normalize_label(b.group(1)): b.group(2) for b in re.finditer(
+        r"%block\s+(\S+)\s*\n(.*?)%endblock", text, re.I | re.S)}
+    scheme = blocks.get("paopolarizationscheme", "")
+    explicit = blocks.get("paobasis", "")
+    missing = []
+    for lb in labels:
+        if re.search(rf"^\s*{re.escape(lb)}\s+non[-_]?perturbative", scheme, re.I | re.M):
+            continue
+        if re.search(rf"^\s*{re.escape(lb)}\s", explicit, re.M):
+            continue
+        missing.append(lb)
+    return missing
+
+
+def add_nonperturbative_block(calc_text, species_z):
+    """(calc_text with a PAO.PolarizationScheme block for every label of `species_z`
+    ({label: Z}, ghosts with negative Z) that needs it, labels added). Inserted right after the
+    PAO.EnergyShift line (end of the text when there is none); unchanged when nothing is missing."""
+    species_block = ("\n%block ChemicalSpeciesLabel\n"
+                     + "".join(f" {i} {z} {lb}\n" for i, (lb, z) in enumerate(species_z.items(), 1))
+                     + "%endblock ChemicalSpeciesLabel\n")
+    labels = missing_nonperturbative(calc_text + species_block)
+    if not labels:
+        return calc_text, []
+    block = ("# Li: SIESTA's perturbative polarization orbital fails to generate (2s, rc ~11 Bohr);\n"
+             "# the non-perturbative scheme builds it from a real atomic calculation.\n"
+             + polarization_scheme_block(labels))
+    lines = calc_text.splitlines(keepends=True)
+    at = next((k + 1 for k, ln in enumerate(lines) if ln.strip().lower().startswith("pao.energyshift")),
+              len(lines))
+    if at == len(lines) and lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines[at:at] = [block]
+    return "".join(lines), labels
+
+
 def _suggest_table(xc, soc):
     """' (-p dojo-...)' for a functional PseudoDojo has a table of, else ''."""
     xc_word = {"PBE": "", "PBEsol": "-pbesol", "LDA": "-pw"}.get(xc)
@@ -512,6 +583,14 @@ def check_pseudo_level(folder):
     for root in _root_fdfs(folder):
         text = _expand_fdf(os.path.join(folder, root))
         xc, how, soc, species = _fdf_level(text)
+        nonpert = missing_nonperturbative(text) if how is not None or xc is not None else []
+        if nonpert:
+            warnings.append(
+                f"{root} gives {', '.join(nonpert)} a polarization orbital by SIESTA's default perturbative "
+                "scheme, which fails for Li with the PseudoDojo pseudopotential ('Generation of polarization "
+                "orbital failed ... Rc no bigger than 1.32 Bohr'). Add "
+                f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per Li label, "
+                "ghosts too) or 'PAO.Polarization.NonPerturbative true'.")
         labels = [s for s in species if s in pseudo_files] or sorted(pseudo_files)
         headers = {}
         for label in labels:

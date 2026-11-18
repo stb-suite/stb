@@ -266,6 +266,33 @@ else
 fi
 
 
+echo "Testing: a DZP calc.fdf with Li and no non-perturbative scheme -> warning (not blocking)"
+mkdir -p level_li
+cat > level_li/structure.fdf <<'FDFEOF'
+NumberOfAtoms 2
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1 3 Li
+ 2 9 F
+%endblock ChemicalSpeciesLabel
+LatticeConstant 4.03 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+FDFEOF
+printf 'SystemLabel lif\n%%include structure.fdf\nXC.Functional GGA\nXC.Authors PBE\nPAO.BasisSize DZP\n' > level_li/calc.fdf
+stb-pseudo -f level_li/structure.fdf -p dojo -o level_li --no-intro > log_level_li.txt 2>&1
+check_exit_code $? 0
+check_contains "gives Li a polarization orbital by SIESTA's default perturbative scheme" log_level_li.txt
+
+
 # --- 8. Interactive path (stb-suite, shortcut 1.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.2) ---"
 

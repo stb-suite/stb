@@ -263,6 +263,15 @@ version before) and **Added** (new options and tools).
   column, and compares the magnitude, `x4 ICOOP / bond order`, judging it (warning beyond 10 %) when
   the window runs from the bottom of the bands to E_F. `coop.dat`/`cohp.dat` are unchanged.
 
+- Li with the bundled PseudoDojo pseudopotential and a polarized basis (DZP, the default): SIESTA's
+  perturbative polarization orbital of the Li 2s cannot be generated ("Generation of polarization
+  orbital failed ... Rc no bigger than 1.3195 Bohr"), and nothing said so before the run (LiF: 36/36
+  convergence folders failed). `stb-inputfile` and the built-in template of `stb-cohesive` now write
+  `%block PAO.PolarizationScheme` with `Li non-perturbative` (one line per Li label, ghosts included),
+  and every tool that copies pseudopotentials warns when a folder's `.fdf` gives Li a polarization
+  orbital without that scheme (or `PAO.Polarization.NonPerturbative true`). Other alkali metals are not
+  verified.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -18,6 +18,7 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
+from stb.core.pseudopotentials import add_nonperturbative_block
 from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, canonical_bank, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
@@ -1183,6 +1184,17 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             else:
                 # Keep the original template line
                 output_lines.append(line)
+
+        # Li (PseudoDojo) cannot get its polarization orbital by SIESTA's default perturbative
+        # scheme (LiF: 36/36 folders stopped with 'Generation of polarization orbital failed').
+        new_text, np_labels = add_nonperturbative_block(
+            "".join(output_lines),
+            {lb: meta['Z'] for lb, meta in structure_io.species_dict(fdf_structure).items()})
+        if np_labels:
+            output_lines = new_text.splitlines(keepends=True)
+            print_dual(color_text(
+                f"[NOTE] {', '.join(np_labels)}: PAO.PolarizationScheme non-perturbative written (the default "
+                "perturbative polarization orbital fails for Li).", 'yellow'), f_out)
 
         if cell_fixed_for_vacuum:
             print_dual(color_text(

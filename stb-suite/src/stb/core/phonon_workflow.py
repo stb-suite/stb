@@ -27,6 +27,7 @@ from ase import Atoms
 from ase.io import write as ase_write
 from phonopy import Phonopy
 from phonopy.interface.siesta import write_siesta, get_physical_units
+from stb.core.pseudopotentials import note_pseudo_folder
 
 from stb.core.cli import color_text, print_dual
 
@@ -140,6 +141,7 @@ def write_displacement_folders(output_root, phonon, supercells, structure_filena
         for pseudo_path in pseudos_to_copy:
             pseudo_filename = os.path.basename(pseudo_path)
             shutil.copy(pseudo_path, os.path.join(folder_name, pseudo_filename))
+        note_pseudo_folder(folder_name)
 
         folders.append(folder_name)
 
@@ -167,6 +169,7 @@ def write_perfect_supercell(output_root, phonon, structure_filename, calc_path, 
     shutil.copy(calc_path, os.path.join(folder, os.path.basename(calc_path)))
     for pseudo_path in pseudos_to_copy:
         shutil.copy(pseudo_path, os.path.join(folder, os.path.basename(pseudo_path)))
+    note_pseudo_folder(folder)
     return folder
 
 

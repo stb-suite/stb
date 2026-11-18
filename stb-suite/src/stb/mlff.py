@@ -21,7 +21,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io
 from stb.core.adsorption_sites import SINGLE_POINT_BLOCK, CONFIG_EXTRA_FILE
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, get_required_pseudos, resolve_pseudo_source
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.fdf_directives import parse_directives, parse_kgrid
 from stb.core.kspace import detect_vacuum_axes, dimensionality_label
@@ -222,6 +222,7 @@ def write_config_folder(output_root, index, ref_fdf, ref_basename, positions,
 
     for pseudo_path in pseudos_to_copy:
         shutil.copy(pseudo_path, os.path.join(folder, os.path.basename(pseudo_path)))
+    note_pseudo_folder(folder)
 
     return folder
 
@@ -657,7 +658,7 @@ def main():
                              "scales the vacuum.")
     parser.add_argument("--pseudo-dir", default=".",
                         help="Pseudopotentials source: a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder with <element>.psf/.psml "
+                             f"({BANK_HELP}) or a folder with <element>.psf/.psml "
                              "(default: current directory).")
     parser.add_argument("--from-aimd", default=None, metavar="LABEL",
                         help="Also sample starting geometries from an existing AIMD "
@@ -812,7 +813,7 @@ def main():
     for path in ([calc_template] if calc_template else []) + [ref_file]:
         with open(path) as f:
             texts.append(f.read())
-    pseudo_label = (f"bundled bank '{args.pseudo_dir}'" if args.pseudo_dir in BANKS else f"'{args.pseudo_dir}'")
+    pseudo_label = (f"bundled bank '{args.pseudo_dir}'" if is_bank(args.pseudo_dir) else f"'{args.pseudo_dir}'")
     plan_warnings = report_settings(texts, ase_atoms, vacuum_axes, pseudo_label, pseudos_to_copy, f_out)
     system_label = parse_directives(*texts).get("systemlabel", "siesta")
     tmpl_d3 = parse_directives(*texts).get("dftd3")
@@ -999,8 +1000,8 @@ def main():
     if calc_template:
         state["reference"]["calc"] = mlff_workflow.rel(calc_template, wf_base)
     # A folder is stored relative to the workflow file; a bundled bank name
-    # (dojo, virtual_vault) as given.
-    state["reference"]["pseudo_dir"] = (args.pseudo_dir if args.pseudo_dir in BANKS
+    # (dojo, dojo-fr-pbesol, virtual_vault, ...) as given.
+    state["reference"]["pseudo_dir"] = (args.pseudo_dir if is_bank(args.pseudo_dir)
                                         else mlff_workflow.rel(pseudo_path, wf_base))
     state["reference"]["dftd3"] = d3
     mlff_workflow.add_configs(state, entries, wf_base)

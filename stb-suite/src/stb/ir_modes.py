@@ -20,7 +20,7 @@ import yaml
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import force_single_point, force_born_charge_run
-from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, get_gamma_modes, displace_along_mode,
@@ -126,6 +126,7 @@ def write_ir_folder(out_dir, atoms, structure_filename, calc_text, pseudos):
         f.write(calc_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
+    note_pseudo_folder(out_dir)
 
 
 

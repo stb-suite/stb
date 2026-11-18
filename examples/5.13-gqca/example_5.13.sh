@@ -210,7 +210,7 @@ EOF
 mkdir -p "$OUT/case6-interactive"
 cp structure.fdf calc.fdf "$OUT/case6-interactive/"
 (cd "$OUT/case6-interactive" && \
-    printf '5.13.1\nstructure.fdf\nGa\nIn\n\n1\n\n\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.13.1\nstructure.fdf\nGa\nIn\n\n1\n\n\n\n\n\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq -x '*.psml' "$OUT/case1-stage1/gqca_study" "$OUT/case6-interactive/gqca_study" 2>&1 \
         | grep -v "gqca_stage1.txt" | grep -q .; then
     echo "UNEXPECTED: CLI and interactive menu folders differ -- see"

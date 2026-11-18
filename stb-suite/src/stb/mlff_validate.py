@@ -288,7 +288,7 @@ def md_check_reference(state, wf_base, dims):
     import tempfile
     from pymatgen.io.ase import AseAtomsAdaptor
     from stb.core import structure_io
-    from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source
+    from stb.core.pseudopotentials import is_bank, get_required_pseudos, resolve_pseudo_source
     from stb.mlff import resolve_reference
     from stb.mlff_active_learning import supercell_kgrid_block
     rec = (state or {}).get("reference", {})
@@ -303,7 +303,7 @@ def md_check_reference(state, wf_base, dims):
         raise ValueError(err)
     ref = structure_io.read_fdf(ref_file)
     pseudo_dir = rec.get("pseudo_dir") or "."
-    if pseudo_dir not in BANKS:
+    if not is_bank(pseudo_dir):
         pseudo_dir = mlff_workflow.resolve(pseudo_dir, wf_base)
     pseudos, missing = get_required_pseudos(sorted(ref.species), resolve_pseudo_source(pseudo_dir))
     if missing:

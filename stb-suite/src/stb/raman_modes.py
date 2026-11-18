@@ -20,7 +20,7 @@ import yaml
 from phonopy.interface.siesta import write_siesta
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.calc_directives import build_optical_block
-from stb.core.pseudopotentials import get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, get_required_pseudos, resolve_pseudo_source
 from stb.core import kspace
 from stb.core import fdf_directives
 from stb.core.phonon_workflow import (
@@ -90,6 +90,7 @@ def write_optical_folder(out_dir, displaced_atoms, structure_filename, calc_text
         f.write(extra_fdf_text)
     for pseudo_path in pseudos:
         shutil.copy(pseudo_path, os.path.join(out_dir, os.path.basename(pseudo_path)))
+    note_pseudo_folder(out_dir)
 
 
 def main():

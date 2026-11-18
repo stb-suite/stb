@@ -26,7 +26,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, mlff_workflow
 from stb.core.fdf_directives import parse_kgrid, parse_directives
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source
+from stb.core.pseudopotentials import is_bank, get_required_pseudos, resolve_pseudo_source
 from stb.core.cli import (color_text, show_intro, print_dual, print_section, print_table,
                           print_progress_line, finish_progress_line, capture_library_noise)
 from stb.mlff import build_rattled_configs, write_config_folder, resolve_reference
@@ -906,7 +906,7 @@ def main():
         recorded = (state or {}).get("reference", {}).get("pseudo_dir")
         if recorded:
             candidate = mlff_workflow.resolve(recorded, wf_base)
-            args.pseudo_dir = recorded if recorded in BANKS else candidate
+            args.pseudo_dir = recorded if is_bank(recorded) else candidate
         else:
             args.pseudo_dir = "."
     proposer_round = round_entry["round"] if round_entry else (

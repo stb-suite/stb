@@ -18,7 +18,7 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, detect_pseudo_bank
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, canonical_bank, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
 REPORT_FILE = "stb_inputfile_report.txt"
@@ -910,8 +910,8 @@ def build_bib_entries(chosen_mode, d3_enabled, pseudo_bank=None):
         entries.append(_BIB_DFTD3)
     if chosen_mode == 'aimd':
         entries.append(_BIB_NOSE)
-    if pseudo_bank in citations.PSEUDO_BANK_CITATIONS:
-        entries.append(citations.PSEUDO_BANK_CITATIONS[pseudo_bank])
+    if citations.pseudo_bank_citation(pseudo_bank):
+        entries.append(citations.pseudo_bank_citation(pseudo_bank))
     return entries
 
 
@@ -994,6 +994,7 @@ def copy_pseudopotentials(species_list, pp_path, f_out=None):
         return warnings
 
     copied_files = 0
+    note_pseudo_folder(os.getcwd())
     for symbol in species_list:
         psml_filename = f"{symbol}.psml"
         psf_filename = f"{symbol}.psf"
@@ -1285,7 +1286,7 @@ def main():
         type=str,
         default="",
         dest="pp_path",
-        help=f"Pseudopotentials source (optional): a bundled bank ({', '.join(BANKS)}) "
+        help=f"Pseudopotentials source (optional): a bundled bank ({BANK_HELP}) "
              "or a folder path."
     )
 
@@ -1301,7 +1302,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.pp_path in BANKS:
+    if args.pp_path and args.pp_path.lower().startswith("dojo") and not os.path.isdir(args.pp_path):
+        try:
+            canonical_bank(args.pp_path)
+        except ValueError as e:
+            print(color_text(f"[ERROR] {e}", 'red'))
+            sys.exit(1)
+    if is_bank(args.pp_path):
         # Only resolve a recognized bank name -- an invalid value is left
         # as-is so copy_pseudopotentials()'s own os.path.isdir() check
         # produces its existing (non-fatal) "not a valid directory" warning,

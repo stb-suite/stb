@@ -17,7 +17,7 @@ from datetime import datetime
 import numpy as np
 from phonopy.interface.siesta import read_siesta, get_physical_units
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace
 from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
                                      write_perfect_supercell, PERFECT_DIR)
@@ -91,7 +91,7 @@ machinery is shared, via core/phonon_workflow.py).""",
     parser.add_argument("-c", "--calc", type=str, default="calc.fdf",
                         help="Input calculation parameters file (default: calc.fdf)")
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
-                        help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                        help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                              "folder path (default: current directory).")
     parser.add_argument("-dim", type=int, nargs=3, default=[2, 2, 2],
                         help="Supercell dimensions for the phonon force-constant calculation "

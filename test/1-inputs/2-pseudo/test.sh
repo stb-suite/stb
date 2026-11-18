@@ -97,7 +97,42 @@ check_contains "Si" log_list_elements.txt
 
 echo "Testing: --list-elements rejects an unknown bank"
 stb-pseudo --list-elements not_a_bank --no-intro > log_list_bad.txt 2>&1
-check_exit_code $? 2
+check_exit_code $? 1
+check_contains "is not a recognized pseudopotential bank" log_list_bad.txt
+
+echo "Testing: --list-elements on PseudoDojo tables (full-relativistic PBEsol: no Lu; 4f-in-core: Ce-Lu only)"
+stb-pseudo --list-elements dojo-fr-pbesol --no-intro > log_list_fr.txt 2>&1
+check_exit_code $? 0
+check_contains "71 element(s) available" log_list_fr.txt
+check_contains "nc-fr-04 pbesol standard" log_list_fr.txt
+stb-pseudo --list-elements dojo-sr3plus --no-intro > log_list_3plus.txt 2>&1
+check_contains "14 element(s) available" log_list_3plus.txt
+
+echo "Testing: --list-banks lists every table"
+stb-pseudo --list-banks --no-intro > log_list_banks.txt 2>&1
+check_exit_code $? 0
+for name in dojo-sr-pbe-standard dojo-sr-pbe-stringent dojo-sr-pbesol-standard dojo-sr-pw-stringent \
+            dojo-fr-pbe-standard dojo-fr-pbesol-stringent dojo-sr3plus-pbe-standard virtual_vault; do
+    check_contains "$name" log_list_banks.txt
+done
+
+echo "Testing: dojo names -- words in any order, defaults, impossible combinations"
+stb-pseudo --species Fe -p stringent-dojo --dry-run --no-intro > log_bad_order.txt 2>&1
+check_exit_code $? 1
+stb-pseudo --species Fe -p dojo-stringent-pbesol-fr --dry-run --no-intro > log_any_order.txt 2>&1
+check_exit_code $? 0
+check_contains "dojo-fr-pbesol-stringent" log_any_order.txt
+check_contains "fr_pbesol_0.4_stringent/Fe.psml" log_any_order.txt
+stb-pseudo --species Fe -p dojo-soc-lda --dry-run --no-intro > log_fr_lda.txt 2>&1
+check_exit_code $? 1
+check_contains "no full-relativistic LDA table" log_fr_lda.txt
+stb-pseudo --species Ce -p dojo-sr3plus-pbesol --dry-run --no-intro > log_3plus_pbesol.txt 2>&1
+check_exit_code $? 1
+check_contains "exists only for PBE, standard" log_3plus_pbesol.txt
+stb-pseudo --species Ge -p dojo-stringent --dry-run --no-intro > log_ge_stringent.txt 2>&1
+check_contains "z=22" log_ge_stringent.txt
+stb-pseudo --species Ge -p dojo --dry-run --no-intro > log_ge_standard.txt 2>&1
+check_contains "z=14" log_ge_standard.txt
 
 
 # --- 3. -f/--file: resolve + copy from a real multi-species structure ---
@@ -116,8 +151,8 @@ echo -e "\n--- Testing --species with --fallback-dir (At not in 'dojo', is in 'v
 rm -rf out_fallback
 stb-pseudo --species Si At -p dojo --fallback-dir virtual_vault -o out_fallback --no-intro > log_fallback.txt 2>&1
 check_exit_code $? 0
-check_contains "Si  FOUND    (primary, .psml)" log_fallback.txt
-check_contains "At  FOUND    (fallback, .psf)" log_fallback.txt
+check_contains "Si  FOUND    (primary, .psml, PBE, scalar" log_fallback.txt
+check_contains "At  FOUND    (fallback, .psf" log_fallback.txt
 check_success out_fallback/Si.psml
 check_success out_fallback/At.psf
 
@@ -201,25 +236,79 @@ stb-pseudo --species At -p dojo --fallback-dir virtual_vault -o out_bib2 --no-in
 check_contains "@misc{VirtualVault," references.bib
 
 
+# --- 7b. Level of theory: the copied files vs the folder's own calc.fdf (warnings only) ---
+echo -e "\n--- Testing the pseudopotential vs calc.fdf warnings ---"
+mkdir -p level_pbe level_soc level_ok
+for d in level_pbe level_soc level_ok; do cp sic.fdf "$d/structure.fdf"; done
+printf 'SystemLabel sic\n%%include structure.fdf\nXC.Functional GGA\nXC.Authors PBE\n' > level_pbe/calc.fdf
+printf 'SystemLabel sic\n%%include structure.fdf\nXC.Functional GGA\nXC.Authors PBE\nSpin spin-orbit\n' > level_soc/calc.fdf
+cp level_soc/calc.fdf level_ok/calc.fdf
+
+echo "Testing: PBEsol files in a PBE calculation -> warning, files still copied, exit 0"
+stb-pseudo -f sic.fdf -p dojo-pbesol -o level_pbe --no-intro > log_level_pbe.txt 2>&1
+check_exit_code $? 0
+check_contains "calc.fdf uses PBE" log_level_pbe.txt
+check_contains "generated with PBEsol" log_level_pbe.txt
+check_success level_pbe/Si.psml
+
+echo "Testing: Spin spin-orbit with scalar-relativistic files -> warning naming the SIESTA error"
+stb-pseudo -f sic.fdf -p dojo -o level_soc --no-intro > log_level_soc.txt 2>&1
+check_exit_code $? 0
+check_contains "does not contain lj projs" log_level_soc.txt
+
+echo "Testing: Spin spin-orbit with dojo-fr -> no warning"
+stb-pseudo -f sic.fdf -p dojo-fr -o level_ok --no-intro > log_level_ok.txt 2>&1
+check_exit_code $? 0
+if grep -q "Pseudopotentials vs input" log_level_ok.txt; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected level-of-theory warning in log_level_ok.txt"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no level-of-theory warning for a consistent folder"; PASS=$((PASS+1))
+fi
+
+
 # --- 8. Interactive path (stb-suite, shortcut 1.2) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.2) ---"
 
 echo "Testing: navigate 1.2 -> option 1 (structure file) -> invalid then valid file -> dojo -> defaults -> save report -> quit"
 rm -f stb_pseudo_report.txt
-printf '1.2\n1\ndoes_not_exist.fdf\nsic.fdf\ndojo\n\n\n\ny\n\n0\n' | timeout 20 stb-suite > log_menu_file.txt 2>&1
+printf '1.2\n1\ndoes_not_exist.fdf\nsic.fdf\n1\n\n\n\n\n\n\ny\n\n0\n' | timeout 20 stb-suite > log_menu_file.txt 2>&1
 check_exit_code $? 0
 check_contains "Species found in structure : Si, C" log_menu_file.txt
 check_success stb_pseudo_report.txt
 
 echo "Testing: navigate 1.2 -> option 2 (explicit species) -> dry-run -> no report -> quit"
-printf '1.2\n2\nSi C\ndojo\n\n\nn\nn\n\n0\n' | timeout 20 stb-suite > log_menu_species.txt 2>&1
+printf '1.2\n2\nSi C\n1\n\n\n\n\n\nn\nn\n\n0\n' | timeout 20 stb-suite > log_menu_species.txt 2>&1
 check_exit_code $? 0
 check_contains "Species requested : Si, C" log_menu_species.txt
 
-echo "Testing: navigate 1.2 -> option 3 (browse bank) -> dojo -> quit"
-printf '1.2\n3\ndojo\n\n0\n' | timeout 20 stb-suite > log_menu_bank.txt 2>&1
+echo "Testing: navigate 1.2 -> option 3 (browse bank) -> PseudoDojo, defaults -> quit"
+printf '1.2\n3\n1\n\n\n\n\n0\n' | timeout 20 stb-suite > log_menu_bank.txt 2>&1
 check_exit_code $? 0
 check_contains "72 element(s) available" log_menu_bank.txt
+check_contains "dojo-sr-pbe-standard" log_menu_bank.txt
+
+echo "Testing: navigate 1.2 -> option 3 -> PseudoDojo full-relativistic, PBEsol, stringent -> quit"
+printf '1.2\n3\n1\n2\n2\n2\n\n0\n' | timeout 20 stb-suite > log_menu_bank_fr.txt 2>&1
+check_exit_code $? 0
+check_contains "dojo-fr-pbesol-stringent" log_menu_bank_fr.txt
+check_contains "71 element(s) available" log_menu_bank_fr.txt
+
+echo "Testing: the full-relativistic branch offers no LDA (only PBE / PBEsol)"
+if grep -A4 "Functional (must match" log_menu_bank_fr.txt | grep -q "LDA"; then
+    echo -e "   -> ${RED}Failed:${NC} LDA offered for a full-relativistic table"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no LDA option in the full-relativistic branch"; PASS=$((PASS+1))
+fi
+
+echo "Testing: navigate 1.2 -> option 3 -> 4f-in-core lanthanides (no functional/accuracy questions) -> quit"
+printf '1.2\n3\n1\n3\n\n0\n' | timeout 20 stb-suite > log_menu_bank_3plus.txt 2>&1
+check_exit_code $? 0
+check_contains "14 element(s) available" log_menu_bank_3plus.txt
+
+echo "Testing: navigate 1.2 -> option 4 (list every bundled bank) -> quit"
+printf '1.2\n4\n\n0\n' | timeout 20 stb-suite > log_menu_banks.txt 2>&1
+check_exit_code $? 0
+check_contains "dojo-sr3plus-pbe-standard" log_menu_banks.txt
 
 
 popd > /dev/null

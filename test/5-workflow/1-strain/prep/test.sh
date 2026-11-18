@@ -495,7 +495,7 @@ rm -rf strain_runs
 # UNIAXIAL, ALL BIAXIAL, ALL, on this cubic fixture), stmin, stmax, step,
 # save-report (y), then one "Press Enter to continue" pause (not two --
 # run_tool's pause is suppressed for every direction but the last), then quit.
-printf '5.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\nn\n5\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
+printf '5.1.1\nsi_cubic.fdf\ncalc_cubic.fdf\n2\n1\n\n\n\nn\n5\n0\n2\n2\ny\n\n0\n' | stb-suite > log_menu_multi.txt 2>&1
 check_contains "2 independent, non-vacuum direction(s): x, xy" log_menu_multi.txt
 check_contains "Direction(s) to generate.*x, xy" log_menu_multi.txt
 check_contains "Relax mode.*stress-constrained" log_menu_multi.txt

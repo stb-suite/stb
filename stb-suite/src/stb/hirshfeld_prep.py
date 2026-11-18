@@ -79,7 +79,7 @@ import numpy as np
 
 from stb.core import structure_io, hirshfeld as hf
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, BANKS
+from stb.core.pseudopotentials import BANK_HELP, copy_pseudo, resolve_pseudo_source
 
 DEFAULT_MESH_CUTOFF_RY = 400.0
 DEFAULT_VACUUM_ANG = 20.0
@@ -267,7 +267,7 @@ def main():
                               f"large enough that the atom's own density has decayed to ~0 "
                               f"well before the box edge. Default: {DEFAULT_VACUUM_ANG:g} Ang.")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
-                         help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or "
+                         help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or "
                               "a folder path. Default: reuse the directory --structure lives "
                               "in, which already has every pseudopotential the combined "
                               "calculation needed.")

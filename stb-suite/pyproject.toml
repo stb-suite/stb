@@ -142,4 +142,4 @@ version = {attr = "stb._version.__version__"}
 [tool.setuptools.package-data]
 # Bundled pseudopotential banks (see core/pseudopotentials.py) -- must ship
 # inside the wheel/sdist, not just be present on disk during editable dev.
-stb = ["pseudopotentials/*/*"]
+stb = ["pseudopotentials/*/*", "pseudopotentials/*/*/*"]

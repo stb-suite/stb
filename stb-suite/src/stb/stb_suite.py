@@ -24,7 +24,7 @@ except ImportError:
     pass
 
 from stb.core.cli import COLORS, color_text, show_intro, get_input, get_float_input, get_int_input
-from stb.core.pseudopotentials import BANKS
+from stb.core.pseudopotentials import is_bank
 from stb.core.menu import run_tool, prompt_pseudo_source, prompt_model_card
 from stb.core import structure_io, kspace, symmetry
 from stb import strain
@@ -3360,14 +3360,18 @@ def run_pseudo_generator() -> None:
     print(f"  {color_text('1', 'cyan')} = Resolve pseudopotentials for a structure file (.fdf) (default)")
     print(f"  {color_text('2', 'cyan')} = Resolve pseudopotentials for an explicit list of elements")
     print(f"  {color_text('3', 'cyan')} = Browse the elements available in a bundled bank")
-    mode_choice = get_input("Select option (1-3) [default: 1]: ").strip() or '1'
+    print(f"  {color_text('4', 'cyan')} = List every bundled bank (PseudoDojo tables, Virtual Vault)")
+    mode_choice = get_input("Select option (1-4) [default: 1]: ").strip() or '1'
+
+    if mode_choice == '4':
+        run_tool("stb-pseudo", ["--list-banks", "--no-intro"])
+        return
 
     if mode_choice == '3':
-        print(f"\nBundled banks: {', '.join(sorted(BANKS))}")
-        bank = get_input("Bank name: ").strip()
-        while bank not in BANKS:
-            print(color_text(f"Unknown bank. Choose one of: {', '.join(sorted(BANKS))}", 'red'))
-            bank = get_input("Bank name: ").strip()
+        bank = prompt_pseudo_source(optional=False)
+        while not is_bank(bank):
+            print(color_text("Choose a bundled bank (option 1 or 2) to browse it.", 'red'))
+            bank = prompt_pseudo_source(optional=False)
         run_tool("stb-pseudo", ["--list-elements", bank, "--no-intro"])
         return
 
@@ -3384,18 +3388,18 @@ def run_pseudo_generator() -> None:
             input_file = get_input("Input structure file (.fdf): ").strip()
         args = ["--file", input_file, "--no-intro"]
 
-    print(f"\nBundled banks: {', '.join(sorted(BANKS))} (or type a custom directory path)")
-    pp_path = get_input("Primary pseudopotential source (bank name or path): ").strip()
-    while not pp_path:
-        print(color_text("A pseudopotential source is required!", 'red'))
-        pp_path = get_input("Primary pseudopotential source (bank name or path): ").strip()
+    print(color_text("\nPrimary pseudopotential source", 'bold'))
+    pp_path = prompt_pseudo_source(optional=False)
     args.extend(["--pp-path", pp_path])
 
-    fallback = get_input(
-        "Fallback source for elements missing from the primary one "
-        "[optional, press Enter to skip]: ").strip()
-    if fallback:
-        args.extend(["--fallback-dir", fallback])
+    use_fallback = get_input(
+        "\nAdd a fallback source for elements missing from the primary one? "
+        f"(y/N{', recommended for dojo-sr3plus' if 'sr3plus' in pp_path else ''}): ").strip().lower()
+    if use_fallback == 'y':
+        print(color_text("Fallback pseudopotential source", 'bold'))
+        fallback = prompt_pseudo_source(optional=True)
+        if fallback:
+            args.extend(["--fallback-dir", fallback])
 
     output = get_input("Output directory to copy resolved pseudopotentials into [default: .]: ").strip() or "."
     args.extend(["--output", output])

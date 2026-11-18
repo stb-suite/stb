@@ -281,7 +281,7 @@ EOF
 mkdir -p "$OUT/case9-interactive"
 cp structure.fdf calc.fdf "$OUT/case9-interactive/"
 echo "\$ stb-suite  (5.4.1, defaults, dojo bank)"
-(cd "$OUT/case9-interactive" && printf '5.4.1\n\n\n\n\n\n1\nn\nn\nn\n\n0\n' | stb-suite 2>&1 \
+(cd "$OUT/case9-interactive" && printf '5.4.1\n\n\n\n\n\n1\n\n\n\nn\nn\nn\n\n0\n' | stb-suite 2>&1 \
     | sed -n '/\[3\] SYMMETRY REDUCTION/,/\[4\] DISPLACEMENT FOLDERS/p')
 cp -r "$PHONON_RUNS_ML" "$OUT/case9-interactive/phonon_runs_ml"
 echo "\$ stb-suite  (5.4.2, phonon_runs_ml, 'all' shortcut)"

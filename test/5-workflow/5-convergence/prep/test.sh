@@ -228,7 +228,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.5.1) ---"
 
 echo "Testing: navigate 5.5.1 -> dojo bank -> 'all' shortcut -> no customization for any parameter -> default relax-steps -> single combined run -> save report (y) -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\nall\nn\nn\nn\n\n\n\ny\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\nn\nn\nn\n\n\n\ny\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
 check_contains "Selected: meshcutoff, energyshift, kgrid" log_menu_all.txt
 check_contains "full relaxation, positions + cell, up to 100 steps" log_menu_all.txt
 check_contains "19 folder(s) written under 'convergence_runs' (3 parameter(s))" log_menu_all.txt
@@ -236,14 +236,14 @@ check_success convergence_runs/convergence_stage1.txt
 
 echo "Testing: navigate 5.5.1 -> single parameter (meshcutoff) -> customize range -> default relax-steps -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n1\ny\n150\n300\n50\n\n\n\n\n0\n' | stb-suite > log_menu_single.txt 2>&1
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\n1\ny\n150\n300\n50\n\n\n\n\n0\n' | stb-suite > log_menu_single.txt 2>&1
 check_contains "Selected: meshcutoff" log_menu_single.txt
 check_contains "4 folder(s) written under 'convergence_runs' (1 parameter(s))" log_menu_single.txt
 check_contains "custom (--meshcutoff-range)" log_menu_single.txt
 
 echo "Testing: navigate 5.5.1 -> 'all' shortcut -> customize ONLY meshcutoff, defaults for the other two -> ONE combined run, ALL 3 shown together -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\nall\ny\n120\n280\n40\nn\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu_mixed.txt 2>&1
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\ny\n120\n280\n40\nn\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu_mixed.txt 2>&1
 check_contains "Parameter(s)      : meshcutoff, energyshift, kgrid" log_menu_mixed.txt
 check_contains "custom (--meshcutoff-range)" log_menu_mixed.txt
 check_contains "energyshift | suggested default" log_menu_mixed.txt

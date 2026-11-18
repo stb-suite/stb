@@ -19,7 +19,7 @@ from ase import Atoms
 from phonopy.interface.siesta import read_siesta, write_siesta, get_physical_units
 from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_section,
                           print_table, capture_library_noise)
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos
 from stb.core import kspace, mace_relax
 from stb.core.deps import require_mace
 from stb.core.phonon_workflow import (build_phonon_displacements, write_displacement_folders,
@@ -83,7 +83,7 @@ def main():
                         help="Input calculation parameters file (default: calc.fdf)")
 
     parser.add_argument("-p", "--pseudo-dir", type=str, default=".",
-                        help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                        help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                              "folder path (default: current directory).")
 
     parser.add_argument("--vacuum-gap", type=float, default=10.0,

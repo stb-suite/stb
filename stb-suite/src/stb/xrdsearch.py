@@ -28,7 +28,7 @@ from stb.core.cli import (color_text, show_intro, print_dual, print_section, pri
                           capture_library_noise)
 from stb.core import model_card
 from stb.core.deps import require_pyxtal, require_mace
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core import structure_io, kspace, mace_relax
 # First reuse of inputfile.py's generate_calculation() as a library call (previously only
 # ever invoked via the stb-inputfile CLI). It writes 'calc.fdf' (and a citations .bib file)
@@ -203,7 +203,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
     parser.add_argument("-p", "--pseudo-dir", type=str, default="", dest="pseudo_dir",
                         metavar="PATH_OR_BANK",
                         help=f"Pseudopotentials source (optional): a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder path. If given, the required "
+                             f"({BANK_HELP}) or a folder path. If given, the required "
                              "pseudopotential for every species actually present in the cast "
                              "candidates is copied into every candidate folder.")
     parser.add_argument("--view", action="store_true",

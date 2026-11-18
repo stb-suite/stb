@@ -26,7 +26,7 @@ import argparse
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, ldau_proj_block as _base_ldau_proj_block
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, resolve_pseudo_source
 from stb.core.symmetry import find_inequivalent_sites
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
@@ -204,7 +204,7 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
     If `species` is given (an iterable of chemical symbols), only files
     whose base name (before any '-'/'_' suffix, e.g. the "Ga" in
     "Ga-gga.nosemicore.psf") case-insensitively matches one of them are
-    copied. src_dir is frequently one of the bundled banks (BANKS,
+    copied. src_dir is frequently one of the bundled banks (
     ~70-80 elements each) -- without this filter every element in the bank
     gets copied into the run folder instead of just the ones the structure
     actually needs.
@@ -229,6 +229,8 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
         if os.path.isfile(src):
             shutil.copy(src, os.path.join(dest_dir, name))
             copied.append(name)
+    if copied:
+        note_pseudo_folder(dest_dir)
     return copied
 
 
@@ -312,7 +314,7 @@ REFERENCE_U sanity check, ...).""",
                          help="Exchange J (eV), fixed across the whole workflow (default: 0.0).")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="", metavar="DIR",
                          help="Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- "
-                              f"a bundled bank ({', '.join(BANKS)}) or a folder path. Only the "
+                              f"a bundled bank ({BANK_HELP}) or a folder path. Only the "
                               "species actually present in --structure are copied into 'reference/' "
                               "now, and into every scf_alpha_*/frozen_alpha_* folder later by "
                               "stb-hubbarduAlphas. If omitted, you must copy them into every run "

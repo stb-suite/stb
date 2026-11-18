@@ -122,8 +122,8 @@ echo "'Resolved : N/N' line against the direct CLI run above."
 TMP="$(mktemp -d)"
 cp sic.fdf "$TMP/"
 echo
-echo "\$ printf '1.2\\n1\\nsic.fdf\\ndojo\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.2\n1\nsic.fdf\ndojo\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.2\\n1\\nsic.fdf\\n1\\n\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.2\n1\nsic.fdf\n1\n\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_RESOLVED=$(grep "Resolved :" "$OUT/sic_console.log" | head -1)
 MENU_RESOLVED=$(grep "Resolved :" "$TMP/session.log" | head -1)
 if [ "$CLI_RESOLVED" = "$MENU_RESOLVED" ]; then

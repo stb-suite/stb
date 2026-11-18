@@ -315,7 +315,7 @@ EOF
 mkdir -p "$OUT/case7-interactive"
 cp structure.fdf calc.fdf "$OUT/case7-interactive/"
 echo "\$ stb-suite  (5.12.1, dim=3 3 3, dojo bank, --kgrid-density 0.15)"
-(cd "$OUT/case7-interactive" && printf '5.12.1\n\n\n3 3 3\n\n1\n\ny\n\n\n\n0.15\n\n0\n' | stb-suite 2>&1 \
+(cd "$OUT/case7-interactive" && printf '5.12.1\n\n\n3 3 3\n\n1\n\n\n\n\ny\n\n\n\n0.15\n\n0\n' | stb-suite 2>&1 \
     | grep "Displacement folders")
 pause
 

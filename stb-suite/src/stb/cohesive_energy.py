@@ -16,7 +16,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
 from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
-from stb.core.pseudopotentials import BANKS, get_required_pseudos, resolve_pseudo_source, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, get_required_pseudos, resolve_pseudo_source, copy_pseudo
 
 REPORT_FILE = "cohesive_stage1.txt"
 
@@ -284,7 +284,7 @@ def main():
 
     parser.add_argument("-p", "--pp-path", dest="pp_path", type=str, default="",
                         help=f"Pseudopotentials source (optional): a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder path.")
+                             f"({BANK_HELP}) or a folder path.")
 
     parser.add_argument("-c", "--calc", dest="calc", type=str, default=None,
                         help="Your own calc.fdf template (basis, PAO.EnergyShift, Mesh.Cutoff, XC, SCF ...), "

@@ -283,6 +283,29 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- **PseudoDojo tables by relativity, functional and accuracy.** The bundled `dojo` bank now holds
+  eleven PseudoDojo tables (PSML): scalar-relativistic PBE, PBEsol and LDA (PW92), full-relativistic
+  PBE and PBEsol (for spin-orbit), each standard and stringent, plus the lanthanides with 4f in the core
+  (Ce-Lu, PBE standard). Every tool's `-p`/`--pseudo-dir`/`--pp-path` picks one by name,
+  `dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]`, words in any order (`fr` may be
+  written `soc`, `pw` `lda`), a missing word taking its default (sr, pbe, standard): `-p dojo-pbesol`,
+  `-p dojo-fr`, `-p dojo-stringent`. A table that does not exist (`dojo-fr-pw`: there is no
+  full-relativistic LDA table) is a clean error that lists the ones that do. `dojo` alone is
+  `dojo-sr-pbe-standard`, the same files as before, so existing commands, scripts and
+  `mlff_workflow.json` files give the same result. The menu asks for the relativity, the functional and
+  the accuracy after "PseudoDojo", offering only the combinations that exist (Enter keeps the default).
+  `stb-pseudo --list-banks` lists every table, `--list-elements` accepts any table name, and the report
+  gives each file's functional, relativistic treatment and valence (`z=`, e.g. Ge 14 standard, 22
+  stringent); `references.bib` cites PseudoDojo for every table.
+- **Pseudopotentials vs the calculation: warnings.** Every tool that copies pseudopotentials into run
+  folders now reads the functional and the relativistic treatment written in each `.psml`/`.psf` and
+  compares them, when it finishes, with the folder's own `.fdf` (`%include` files followed,
+  `config_extra.fdf` included): a `[WARNING]` when the input's functional (`XC.Functional`/`XC.Authors`,
+  or SIESTA's LDA default when none is set) is not the files' one, when `Spin spin-orbit` meets files
+  with no lj projectors (SIESTA then stops with 'The PSML file does not contain lj projs'), and when one
+  folder mixes functionals or full- and scalar-relativistic files. Each warning is printed once, naming
+  the first folder and how many more share it. Nothing is blocked: the files are copied as asked.
+
 - `stb-convergence --parameter basis` and its report in `stb-convergenceAnalysis`: basis-set convergence
   by equations of state, in three stages (`--basis-stage mesh | range | size`). Each setting is judged by
   the equilibrium volume (2D: area) of an E(V) scan of 9 single points, not by the total energy:

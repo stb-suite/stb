@@ -2393,11 +2393,58 @@ the package:
 \toprule
 \textbf{Name} & \textbf{Format} & \textbf{Content}\\
 \midrule
-\texttt{dojo} & PSML \cite{Garcia2018psml} & PseudoDojo v0.5, PBE, standard accuracy \cite{vanSetten2018pseudodojo}; 72 elements\\
-\texttt{virtual\_vault} & PSF & SIESTA Pseudopotentials Virtual Vault (Troullier--Martins \cite{Troullier1991}); 69 elements\\
+\texttt{dojo-...} & PSML \cite{Garcia2018psml} & PseudoDojo \cite{vanSetten2018pseudodojo}, eleven tables (below)\\
+\texttt{virtual\_vault} & PSF & SIESTA Pseudopotentials Virtual Vault (Troullier--Martins \cite{Troullier1991}), PBE; 69 elements\\
 \bottomrule
 \end{tabularx}
 \end{center}
+
+A PseudoDojo table is chosen by one name,
+\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}: the words go
+in any order (\texttt{fr} may be written \texttt{soc}, \texttt{pw} \texttt{lda}) and a
+missing word takes its default (\texttt{sr}, \texttt{pbe}, \texttt{standard}), so
+\texttt{dojo} is \texttt{dojo-sr-pbe-standard}, the table this bank held before 2.0.1.
+\cmd{stb-pseudo} \opt{--list-banks} lists them; in the menu, ``PseudoDojo'' is followed by
+three questions (relativity, functional, accuracy) that offer only the tables that exist.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+\textbf{Name} & \textbf{Relativity} & \textbf{Functional} & \textbf{Elements}\\
+\midrule
+\texttt{dojo}, \texttt{dojo-stringent} & scalar & PBE (nc-sr-05) & 72\\
+\texttt{dojo-pbesol}, \texttt{dojo-pbesol-stringent} & scalar & PBEsol (nc-sr-04) & 72\\
+\texttt{dojo-pw}, \texttt{dojo-pw-stringent} & scalar & LDA, PW92 (nc-sr-04) & 70\\
+\texttt{dojo-fr}, \texttt{dojo-fr-stringent} & full (spin-orbit) & PBE (nc-fr-04) & 70 (no La, Lu) / 72\\
+\texttt{dojo-fr-pbesol}, \texttt{dojo-fr-pbesol-stringent} & full (spin-orbit) & PBEsol (nc-fr-04) & 71 (no Lu)\\
+\texttt{dojo-sr3plus} & scalar, 4f in core & PBE (nc-sr-04-3plus) & 14 (Ce--Lu)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{itemize}
+\item \emph{Standard or stringent.} Standard is the usual choice. For groups 13--16
+  (Ga--Se, In--Te, Tl--Po) standard already has the d shell in the valence; stringent adds
+  the s and p shell below it (Ge and Sn: $z = 14 \to 22$). For Hf and Ta stringent adds the
+  4f shell ($z = 12 \to 26$, $13 \to 27$). More electrons and orbitals cost more.
+\item \emph{Full-relativistic} (\texttt{fr}) tables are required for \fdf{Spin spin-orbit}:
+  with scalar files SIESTA stops with \texttt{The PSML file does not contain lj projs}. They
+  also run without spin-orbit, but absolute energies from \texttt{fr} and \texttt{sr} files
+  must not be compared. There is no full-relativistic LDA table.
+\item \texttt{dojo-sr3plus} freezes the 4f electrons of the lanthanides in the core: for
+  Ln$^{3+}$ compounds only (no magnetism or 4f states); give the other elements a fallback
+  (\opt{-p}~\texttt{dojo-sr3plus} \opt{--fallback-dir}~\texttt{dojo}).
+\end{itemize}
+
+\paragraph{Level-of-theory warnings.} Every tool that copies pseudopotentials into run
+folders reads, when it finishes, the functional and the relativistic treatment written in
+each \file{.psml}/\file{.psf} and compares them with the folder's own \file{.fdf}
+(\texttt{\%include} files followed, \file{config\_extra.fdf} included). It prints a
+\texttt{[WARNING]} when \fdf{XC.Functional}/\fdf{XC.Authors} (or SIESTA's LDA default when
+neither is set) is not the files' functional, when \fdf{Spin spin-orbit} meets files with no
+lj projectors, and when one folder mixes functionals or full- and scalar-relativistic files.
+Nothing is blocked: SIESTA would run the mismatched calculation, and the decision stays
+with the user.
 
 Files are \emph{copied}, never symlinked: a link into the package or into another
 folder breaks as soon as the run folder is copied to a cluster. \cmd{stb-pseudo}
@@ -3078,7 +3125,7 @@ usage: stb-inputfile [-h] -t {total_energy,relax,aimd,bands} [-d3] [-s] [-p PP_P
 \optitem{-t, -{}-type \{total\_\allowbreak{}energy,\allowbreak{}relax,\allowbreak{}aimd,\allowbreak{}bands\}}{\index{stb-inputfile@\texttt{stb-inputfile}!--type@\texttt{--type}}Calculation mode. Valid choices: total\_energy, relax, aimd, bands\optmeta{required; choices: total\_energy, relax, aimd, bands}}
 \optitem{-d3, -{}-d3}{\index{stb-inputfile@\texttt{stb-inputfile}!--d3@\texttt{--d3}}Enable the DFT-D3 (Grimme) van der Waals dispersion correction, on top of any calculation mode.\optmeta{switch, off by default}}
 \optitem{-s, -{}-spin-\allowbreak{}polarized}{\index{stb-inputfile@\texttt{stb-inputfile}!--spin-polarized@\texttt{--spin-polarized}}Enable spin polarization. Default: non-polarized.\optmeta{switch, off by default}}
-\optitem{-p, -{}-pp-\allowbreak{}path PP\_\allowbreak{}PATH}{\index{stb-inputfile@\texttt{stb-inputfile}!--pp-path@\texttt{--pp-path}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path.}
+\optitem{-p, -{}-pp-\allowbreak{}path PP\_\allowbreak{}PATH}{\index{stb-inputfile@\texttt{stb-inputfile}!--pp-path@\texttt{--pp-path}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path.}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-inputfile@\texttt{stb-inputfile}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{stb\_\allowbreak{}inputfile\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-inputfile@\texttt{stb-inputfile}!--view@\texttt{--view}}Open an interactive 3D view of the structure (via ASE) after generating \texttt{calc.\allowbreak{}fdf}. Needs a display. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -3113,7 +3160,7 @@ structure needs a matching pseudopotential file (\texttt{.\allowbreak{}psf} or \
 in the run folder, named after the species \emph{label} declared in \texttt{\%block\ ChemicalSpeciesLabel}. \texttt{stb-\allowbreak{}pseudo} automates that step: give it a
 structure (or a plain list of elements) and a pseudopotential source, and
 it tells you exactly which elements are covered, which aren\textquotesingle t, and copies
-the ones that are into a folder ready for \texttt{calc.\allowbreak{}fdf}. \texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir}
+the ones that are into a folder ready for \texttt{calc.\allowbreak{}fdf}. \texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir}
 lets you patch gaps from a second source automatically, instead of
 hunting down a missing file by hand.
 
@@ -3154,17 +3201,25 @@ Two format notes that matter in practice:
 \item
   \textbf{\texttt{.\allowbreak{}psf}} is SIESTA\textquotesingle s older native pseudopotential format (the
   \texttt{virtual\_\allowbreak{}vault} bank ships these). \textbf{\texttt{.\allowbreak{}psml}} is a newer,
-  code-agnostic exchange format that SIESTA also reads directly (the
-  \texttt{dojo} bank ships these). Numerically they describe the same kind of
+  code-agnostic exchange format that SIESTA also reads directly (every
+  \texttt{dojo} table ships these). Numerically they describe the same kind of
   object --- \texttt{stb-\allowbreak{}pseudo} copies whichever is present, preferring \texttt{.\allowbreak{}psml}
   when both exist for a species.
 \item
   A pseudopotential is generated for one specific \textbf{exchange-correlation
-  functional} (both bundled banks here are PBE). Using it in a
-  calculation set up for a \emph{different} functional is a real, silent
-  correctness trap --- \texttt{stb-\allowbreak{}pseudo} does not check this (it has no way to
-  know what functional your \texttt{calc.\allowbreak{}fdf} will use), so it\textquotesingle s on you to keep
-  the two consistent.
+  functional} (PseudoDojo has PBE, PBEsol and LDA tables; the Virtual
+  Vault is PBE). Using it in a calculation set up for a \emph{different}
+  functional is a silent correctness trap: SIESTA runs anyway. Every tool
+  that copies pseudopotentials into a run folder therefore reads the
+  functional (and the relativistic treatment) written in each file and
+  compares it with the folder\textquotesingle s own \texttt{.\allowbreak{}fdf} (\texttt{XC.\allowbreak{}Functional}/\texttt{XC.\allowbreak{}Authors},
+  \texttt{Spin\ spin-\allowbreak{}orbit}), printing a \texttt{{[}WARNING{]}} on a mismatch. It never
+  stops the tool: the decision stays with you.
+\item
+  \textbf{Spin-orbit coupling} needs \emph{full-relativistic} pseudopotentials
+  (with \texttt{lj} projectors). With scalar-relativistic files SIESTA stops
+  with \texttt{The\ PSML\ file\ does\ not\ contain\ lj\ projs}; the \texttt{dojo-\allowbreak{}fr-\allowbreak{}*} tables
+  are the ones to use.
 \end{itemize}
 
 \subsubsection{When you\textquotesingle d reach for it}\label{g1.2-when-youd-reach-for-it}
@@ -3173,7 +3228,7 @@ Right before (or right after) \texttt{stb-\allowbreak{}inputfile} (example \text
 sure every element your structure needs actually has a pseudopotential
 available --- and to get them all copied into the run folder in one step,
 instead of resolving each one by hand. It\textquotesingle s also the tool to reach for
-when a bundled bank is missing one particular element: \texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir}
+when a bundled bank is missing one particular element: \texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir}
 lets a second source fill just that gap, without abandoning the first
 source for everything else.
 
@@ -3193,9 +3248,10 @@ stb-suite
 \end{codeblock}
 
 \texttt{1.\allowbreak{}2} first asks what you want to do --- resolve from a structure file
-\textbf{{[}1{]}}, resolve from an explicit element list \textbf{{[}2{]}}, or just browse a
-bundled bank\textquotesingle s contents \textbf{{[}3{]}} --- then walks through the same primary
-source / fallback source / output directory / dry-run / save-report
+\textbf{{[}1{]}}, resolve from an explicit element list \textbf{{[}2{]}}, browse a bundled
+bank\textquotesingle s contents \textbf{{[}3{]}}, or list every bundled bank \textbf{{[}4{]}} --- then walks
+through the same primary source (PseudoDojo: relativity, functional,
+accuracy) / fallback source / output directory / dry-run / save-report
 questions the CLI flags cover. \texttt{example\_\allowbreak{}1.\allowbreak{}2.\allowbreak{}sh} proves the CLI and the
 menu agree.
 
@@ -3222,7 +3278,7 @@ menu agree.
 \end{codeblock}
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
-\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1632}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.5410}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2958}}@{}}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1457}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.6093}}>{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2450}}@{}}
 \toprule\noalign{}
 Folder & Command & What it shows \\
 \midrule\noalign{}
@@ -3236,31 +3292,80 @@ Folder & Command & What it shows \\
 \end{longtable}
 \endgroup
 
-\paragraph{\texorpdfstring{Bundled banks: what\textquotesingle s actually inside \texttt{dojo} vs \texttt{virtual\_\allowbreak{}vault}}{Bundled banks: what\textquotesingle s actually inside dojo vs virtual\_vault}}\label{g1.2-bundled-banks-whats-actually-inside-dojo-vs-virtual_vault}
+\paragraph{\texorpdfstring{Bundled banks: the PseudoDojo tables and \texttt{virtual\_\allowbreak{}vault}}{Bundled banks: the PseudoDojo tables and virtual\_vault}}\label{g1.2-bundled-banks-the-pseudodojo-tables-and-virtual_vault}
 
-\texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbreak{}list-\allowbreak{}elements} (used above with no structure at all) is the
-quickest way to check whether a bank covers what you need \emph{before}
-committing to it:
+The PseudoDojo bank holds eleven tables (norm-conserving ONCVPSP, \texttt{.\allowbreak{}psml}).
+You choose one by relativity, functional and accuracy, with a single name
+given to \texttt{-\allowbreak{}p} (here and in every other tool that takes pseudopotentials):
+
+\begin{codeblock}
+dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]
+\end{codeblock}
+
+The words go in any order, and each missing word takes its default
+(\texttt{sr}, \texttt{pbe}, \texttt{standard}). \texttt{fr} can also be written \texttt{soc}, and \texttt{pw} can be
+written \texttt{lda}. \texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbreak{}list-\allowbreak{}banks} prints the whole list:
+
+\begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
+\begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.3960}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.2673}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.0990}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.0990}}>{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1386}}@{}}
+\toprule\noalign{}
+\texttt{-\allowbreak{}p} name & PseudoDojo table & Relativity & Functional & Elements \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{dojo} = \texttt{dojo-\allowbreak{}sr-\allowbreak{}pbe-\allowbreak{}standard} & nc-sr-05 pbe standard & scalar & PBE & 72 \\
+\texttt{dojo-\allowbreak{}stringent} & nc-sr-05 pbe stringent & scalar & PBE & 72 \\
+\texttt{dojo-\allowbreak{}pbesol}, \texttt{dojo-\allowbreak{}pbesol-\allowbreak{}stringent} & nc-sr-04 pbesol & scalar & PBEsol & 72 \\
+\texttt{dojo-\allowbreak{}pw}, \texttt{dojo-\allowbreak{}pw-\allowbreak{}stringent} & nc-sr-04 pw & scalar & LDA (PW92) & 70 \\
+\texttt{dojo-\allowbreak{}fr} & nc-fr-04 pbe standard & full (SOC) & PBE & 70 (no La, Lu) \\
+\texttt{dojo-\allowbreak{}fr-\allowbreak{}stringent} & nc-fr-04 pbe stringent & full (SOC) & PBE & 72 \\
+\texttt{dojo-\allowbreak{}fr-\allowbreak{}pbesol}, \texttt{dojo-\allowbreak{}fr-\allowbreak{}pbesol-\allowbreak{}stringent} & nc-fr-04 pbesol & full (SOC) & PBEsol & 71 (no Lu) \\
+\texttt{dojo-\allowbreak{}sr3plus} & nc-sr-04-3plus pbe standard & scalar & PBE & 14 (Ce-Lu) \\
+\texttt{virtual\_\allowbreak{}vault} & SIESTA Virtual Vault (\texttt{.\allowbreak{}psf}) & --- & PBE & 69 \\
+\end{longtable}
+\endgroup
 
 \begin{itemize}
 \tightlist
 \item
-  \textbf{\texttt{dojo}} --- PseudoDojo v0.5, PBE, \texttt{.\allowbreak{}psml} format, 72 elements.
+  \textbf{Standard or stringent.} Standard is the usual choice. For groups
+  13--16 (Ga--Se, In--Te, Tl--Po), standard \emph{already} has the d shell in the
+  valence; stringent adds the s and p shell below it (Ge and Sn go from
+  z = 14 to z = 22). For Hf and Ta, stringent adds the 4f shell (z 12 → 26
+  and 13 → 27). More electrons and more orbitals make the calculation more
+  expensive. The report shows each file\textquotesingle s valence (\texttt{z=}).
 \item
-  \textbf{\texttt{virtual\_\allowbreak{}vault}} --- the SIESTA Pseudopotentials Virtual Vault, PBE,
-  \texttt{.\allowbreak{}psf} format, a different (overlapping but not identical) element
-  coverage.
+  \textbf{\texttt{fr}} tables are required for \texttt{Spin\ spin-\allowbreak{}orbit}. They also run
+  without SOC, but do not compare absolute energies from \texttt{fr} and \texttt{sr}
+  files. PseudoDojo has no full-relativistic LDA table.
+\item
+  \textbf{\texttt{sr3plus}} holds the lanthanides Ce--Lu with the 4f electrons frozen in
+  the core. Use it only for Ln3+ compounds: it does not describe f physics
+  (magnetism, 4f states). Give the other elements a fallback, for example
+  \texttt{-\allowbreak{}p\ dojo-\allowbreak{}sr3plus\ -\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir\ dojo}.
+\item
+  \texttt{dojo} names exactly the files this bank held before it was split into
+  tables (PseudoDojo v0.5, PBE, standard), so old commands, scripts and
+  \texttt{mlff\_\allowbreak{}workflow.\allowbreak{}json} files that say \texttt{dojo} give the same result.
 \end{itemize}
 
+In the interactive menu, every question about the pseudopotential source
+offers \emph{PseudoDojo} and then asks for the relativity, the functional and the
+accuracy (Enter keeps the default). Only combinations that exist are offered.
+
+\texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbreak{}list-\allowbreak{}elements\ \textless{}name\textgreater{}} is the quickest way to check whether a
+table covers what you need \emph{before} committing to it.
+
 Neither bank covers every element you might need --- which is exactly why
-\texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir} exists, rather than forcing you to pick one bank and
+\texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir} exists, rather than forcing you to pick one bank and
 live with its gaps.
 
-\paragraph{\texorpdfstring{Filling the gaps: \texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir} made concrete}{Filling the gaps: -\/-fallback-dir made concrete}}\label{g1.2-filling-the-gaps---fallback-dir-made-concrete}
+\paragraph{\texorpdfstring{Filling the gaps: \texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir} made concrete}{Filling the gaps: -\/-fallback-dir made concrete}}\label{g1.2-filling-the-gaps---fallback-dir-made-concrete}
 
 Astatine (\texttt{At}) is a real, if obscure, case: it\textquotesingle s absent from \texttt{dojo} but
 present in \texttt{virtual\_\allowbreak{}vault}. Resolving \texttt{Si\ At} against \texttt{dojo} alone reports
-\texttt{At} as \texttt{MISSING}; adding \texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir\ virtual\_\allowbreak{}vault} resolves it from
+\texttt{At} as \texttt{MISSING}; adding \texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir\ virtual\_\allowbreak{}vault} resolves it from
 the second source instead, and the report says exactly which source
 supplied each element (\texttt{primary} vs \texttt{fallback}) --- nothing is silently
 mixed up.
@@ -3277,6 +3382,9 @@ proving the two paths produce identical output.
 \begin{codeblock}
 stb-pseudo --species Fe O -p dojo -o out/          # a common oxide pair
 stb-pseudo --list-elements virtual_vault           # what's in the other bank?
+stb-pseudo --list-banks                            # every PseudoDojo table
+stb-pseudo --species Bi Se -p dojo-fr -o soc/      # full-relativistic, for spin-orbit
+stb-pseudo -f structure.fdf -p dojo-sr3plus --fallback-dir dojo   # Ln3+ with 4f in the core
 \end{codeblock}
 
 \subsubsection{Flag reference}\label{g1.2-flag-reference}
@@ -3285,34 +3393,39 @@ stb-pseudo --list-elements virtual_vault           # what's in the other bank?
 stb-pseudo (-f/--file <structure.fdf> | --species EL [EL ...]) -p/--pp-path <BANK_OR_PATH>
            [--fallback-dir <BANK_OR_PATH>] [-o/--output <dir>] [--dry-run] [--save-report]
 stb-pseudo --list-elements <BANK>
+stb-pseudo --list-banks
 \end{codeblock}
 
 \begin{itemize}
 \tightlist
 \item
-  \texttt{-f/\allowbreak{}-\allowbreak{}\/-\allowbreak{}file}: a SIESTA structure file (\texttt{.\allowbreak{}fdf}) to read the required
-  species from. Mutually exclusive with \texttt{-\/-\allowbreak{}species}.
+  \texttt{-\allowbreak{}f/\allowbreak{}-\allowbreak{}\/-\allowbreak{}file}: a SIESTA structure file (\texttt{.\allowbreak{}fdf}) to read the required
+  species from. Mutually exclusive with \texttt{-\allowbreak{}\/-\allowbreak{}species}.
 \item
-  \texttt{-\/-\allowbreak{}species}: element symbol(s) to resolve directly, instead of reading
+  \texttt{-\allowbreak{}\/-\allowbreak{}species}: element symbol(s) to resolve directly, instead of reading
   a structure file.
 \item
-  \texttt{-p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path} (required unless \texttt{-\/-\allowbreak{}list-\allowbreak{}elements} is given): a bundled
-  bank name (\texttt{dojo}, \texttt{virtual\_\allowbreak{}vault}) or a directory of your own
-  \texttt{.\allowbreak{}psf}/\texttt{.\allowbreak{}psml} files.
+  \texttt{-\allowbreak{}p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path} (required unless \texttt{-\allowbreak{}\/-\allowbreak{}list-\allowbreak{}elements} is given): a bundled
+  bank name (\texttt{dojo{[}-\allowbreak{}sr\textbar{}-\allowbreak{}fr\textbar{}-\allowbreak{}sr3plus{]}{[}-\allowbreak{}pbe\textbar{}-\allowbreak{}pbesol\textbar{}-\allowbreak{}pw{]}{[}-\allowbreak{}standard\textbar{}-\allowbreak{}stringent{]}},
+  \texttt{virtual\_\allowbreak{}vault}) or a directory of your own \texttt{.\allowbreak{}psf}/\texttt{.\allowbreak{}psml} files.
 \item
-  \texttt{-\/-\allowbreak{}fallback-\allowbreak{}dir} (optional): a second source, consulted only for
-  elements missing from \texttt{-p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path}.
+  \texttt{-\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir} (optional): a second source, consulted only for
+  elements missing from \texttt{-\allowbreak{}p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path}.
 \item
-  \texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output} (optional, default \texttt{.}): directory the resolved
+  \texttt{-\allowbreak{}o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output} (optional, default \texttt{.}): directory the resolved
   pseudopotentials are copied into.
 \item
-  \texttt{-\/-\allowbreak{}dry-\allowbreak{}run} (optional): only run the availability check --- copy
+  \texttt{-\allowbreak{}\/-\allowbreak{}dry-\allowbreak{}run} (optional): only run the availability check --- copy
   nothing.
 \item
-  \texttt{-\/-\allowbreak{}list-\allowbreak{}elements\ \textless{}BANK\textgreater{}}: print the elements available in a bundled
-  bank and exit --- no structure or \texttt{-p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path} needed.
+  \texttt{-\allowbreak{}\/-\allowbreak{}list-\allowbreak{}elements\ \textless{}BANK\textgreater{}}: print the elements available in a bundled
+  bank (any name \texttt{-\allowbreak{}p} accepts) and exit --- no structure or \texttt{-\allowbreak{}p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path}
+  needed.
 \item
-  \texttt{-\/-\allowbreak{}save-\allowbreak{}report} (optional): also persist the report to
+  \texttt{-\allowbreak{}\/-\allowbreak{}list-\allowbreak{}banks}: print every bundled table (relativity, functional,
+  accuracy, element count) and exit.
+\item
+  \texttt{-\allowbreak{}\/-\allowbreak{}save-\allowbreak{}report} (optional): also persist the report to
   \texttt{stb\_\allowbreak{}pseudo\_\allowbreak{}report.\allowbreak{}txt}. Off by default.
 \end{itemize}
 
@@ -3323,10 +3436,11 @@ Run \texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbreak{}help} for the
 
 \subsubsection{What\textquotesingle s next}\label{g1.2-whats-next}
 
-Point \texttt{stb-\allowbreak{}inputfile}\textquotesingle s (example \texttt{1.\allowbreak{}1}) \texttt{-p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path}, or your
+Point \texttt{stb-\allowbreak{}inputfile}\textquotesingle s (example \texttt{1.\allowbreak{}1}) \texttt{-\allowbreak{}p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pp-\allowbreak{}path}, or your
 \texttt{calc.\allowbreak{}fdf}\textquotesingle s pseudopotential setup directly, at the output directory
 \texttt{stb-\allowbreak{}pseudo} just filled --- every species it resolved is already sitting
 there with the right filename.
+
 
 \subsection{Implementation details}
 
@@ -3335,11 +3449,11 @@ The required elements are the distinct species labels of the structure's
 \fdf{ChemicalSpeciesLabel} block (or the \opt{--species} list), sorted. For each one the
 primary source (\opt{-p}) is searched for \file{<El>.psf} or \file{<El>.psml}; elements
 not found there are searched in \opt{--fallback-dir}, if given. Both sources accept a
-bank name (\texttt{dojo}, \texttt{virtual\_vault}) or a folder path; a bank prints its
+bank name (any PseudoDojo table, \texttt{dojo-...}, or \texttt{virtual\_vault}, Section~\ref{sec-pseudo}) or a folder path; a bank prints its
 origin and citation when it is resolved. The report has six sections: metadata,
-required species, sources, an availability table (\texttt{FOUND (primary, .psml)},
-\texttt{FOUND (fallback, .psf)} or \texttt{MISSING} per element), the action taken,
-and references.
+required species, sources, an availability table (\texttt{FOUND (primary, .psml, PBE, scalar, z=4)},
+\texttt{FOUND (fallback, .psf, ...)} or \texttt{MISSING} per element: functional, relativistic
+treatment and valence read from the file), the action taken, and references.
 
 \paragraph{Copying.}
 Files are copied (never linked) into \opt{-o} (created if needed); an existing file
@@ -3356,18 +3470,24 @@ still copied. Invalid argument combinations (no source, both \opt{-f} and
 \opt{--fallback-dir} makes it easy to fill gaps, but a calculation that mixes
 pseudopotentials generated with different recipes (for example PSML from PseudoDojo
 and PSF from the Virtual Vault) is consistent only if all of them use the same XC
-functional as the calculation; check the header of each file.
+functional as the calculation. The availability table shows each file's functional and
+relativistic treatment, and a \texttt{[WARNING]} follows when the resolved files mix
+functionals or full- and scalar-relativistic files, or (when \opt{-o} already holds the
+calculation's \file{.fdf}) when they do not match its \fdf{XC.Functional} or
+\fdf{Spin spin-orbit}.
 
 \subsection{Command-line reference}
 \label{ref-1.2}
 \subsubsection{\texorpdfstring{\texttt{stb-pseudo}}{stb-pseudo}}
 \label{cmd-stb-pseudo}\index{stb-pseudo@\texttt{stb-pseudo}|textbf}
-Resolves the pseudopotentials a structure needs and copies them into a run folder. Give a structure file (\texttt{-f/\allowbreak{}-{}-file}, .fdf) or an explicit element list (\texttt{-{}-species}), plus a pseudopotential source (\texttt{-p/\allowbreak{}-{}-pp-\allowbreak{}path} -- a bundled bank name or a directory of your own .psf/.psml files). Reports which elements were found and which are missing, and copies the resolved files into \texttt{-o/\allowbreak{}-{}-output} (default: the current directory) unless \texttt{-{}-dry-\allowbreak{}run} is given. \texttt{-{}-fallback-\allowbreak{}dir} supplies a second source consulted only for elements missing from the primary one. \texttt{-{}-list-\allowbreak{}elements} browses a bundled bank without needing a structure at all.
+Resolves the pseudopotentials a structure needs and copies them into a run folder. Give a structure file (\texttt{-f/\allowbreak{}-{}-file}, .fdf) or an explicit element list (\texttt{-{}-species}), plus a pseudopotential source (\texttt{-p/\allowbreak{}-{}-pp-\allowbreak{}path} -- a bundled bank name or a directory of your own .psf/.psml files). Reports which elements were found and which are missing, and copies the resolved files into \texttt{-o/\allowbreak{}-{}-output} (default: the current directory) unless \texttt{-{}-dry-\allowbreak{}run} is given. \texttt{-{}-fallback-\allowbreak{}dir} supplies a second source consulted only for elements missing from the primary one. \texttt{-{}-list-\allowbreak{}elements} browses a bundled bank without needing a structure at all, and \texttt{-{}-list-\allowbreak{}banks} lists every bundled table.
+
+PseudoDojo tables: \texttt{-p dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, words in any order, a missing word takes its default (sr, pbe, standard): \texttt{dojo} is scalar-relativistic PBE standard; \texttt{dojo-\allowbreak{}pbesol} PBEsol, \texttt{dojo-\allowbreak{}pw} (or \texttt{dojo-\allowbreak{}lda}) LDA (PW92); \texttt{dojo-\allowbreak{}stringent} adds semicore states (groups 13--16: the s,p shell below the d; Hf/Ta: 4f), more electrons, more expensive; \texttt{dojo-\allowbreak{}fr[-pbesol]} is full-relativistic, required for \texttt{Spin spin-orbit}; \texttt{dojo-\allowbreak{}sr3plus} holds the lanthanides Ce--Lu with 4f in the core (Ln$^{3+}$ compounds only). The table's functional must match the calculation's \texttt{XC.Functional}/\texttt{XC.Authors}.
 
 \paragraph{Synopsis}
 \begin{helpblock}
 usage: stb-pseudo [-h] [-f PATH] [--species SPECIES [SPECIES ...]] [-p BANK_OR_PATH]
-                  [--fallback-dir BANK_OR_PATH] [--list-elements BANK] [-o OUTPUT]
+                  [--fallback-dir BANK_OR_PATH] [--list-elements BANK] [--list-banks] [-o OUTPUT]
                   [--dry-run] [--save-report] [-v] [--no-intro]
 \end{helpblock}
 \optgroup{Options}
@@ -3376,7 +3496,8 @@ usage: stb-pseudo [-h] [-f PATH] [--species SPECIES [SPECIES ...]] [-p BANK_OR_P
 \optitem{-{}-species SPECIES [SPECIES .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-pseudo@\texttt{stb-pseudo}!--species@\texttt{--species}}Element symbol(s) to resolve directly, instead of reading a structure file. Mutually exclusive with \texttt{-f/\allowbreak{}-{}-file}.}
 \optitem{-p, -{}-pp-\allowbreak{}path BANK\_\allowbreak{}OR\_\allowbreak{}PATH}{\index{stb-pseudo@\texttt{stb-pseudo}!--pp-path@\texttt{--pp-path}}Pseudopotential source: a bundled bank name (dojo, virtual\_vault) or a directory of your own .psf/.psml files. Required unless \texttt{-{}-list-\allowbreak{}elements} is given.}
 \optitem{-{}-fallback-\allowbreak{}dir BANK\_\allowbreak{}OR\_\allowbreak{}PATH}{\index{stb-pseudo@\texttt{stb-pseudo}!--fallback-dir@\texttt{--fallback-dir}}A second pseudopotential source, consulted only for elements missing from \texttt{-p/\allowbreak{}-{}-pp-\allowbreak{}path} -- fills gaps automatically instead of just reporting them as missing.}
-\optitem{-{}-list-\allowbreak{}elements BANK}{\index{stb-pseudo@\texttt{stb-pseudo}!--list-elements@\texttt{--list-elements}}Print the elements available in a bundled bank and exit -- no structure or \texttt{-p/\allowbreak{}-{}-pp-\allowbreak{}path} needed.\optmeta{choices: dojo, virtual\_vault}}
+\optitem{-{}-list-\allowbreak{}elements BANK}{\index{stb-pseudo@\texttt{stb-pseudo}!--list-elements@\texttt{--list-elements}}Print the elements available in a bundled bank (any name \texttt{-p} accepts, e.g. \texttt{dojo-\allowbreak{}fr-\allowbreak{}pbesol}) and exit -- no structure or \texttt{-p/\allowbreak{}-{}-pp-\allowbreak{}path} needed.}
+\optitem{-{}-list-\allowbreak{}banks}{\index{stb-pseudo@\texttt{stb-pseudo}!--list-banks@\texttt{--list-banks}}Print every bundled bank (each PseudoDojo table with its relativity, functional, accuracy and element count) and exit.\optmeta{switch, off by default}}
 \optitem{-o, -{}-output OUTPUT}{\index{stb-pseudo@\texttt{stb-pseudo}!--output@\texttt{--output}}Directory to copy the resolved pseudopotentials into. Default: the current directory.}
 \optitem{-{}-dry-\allowbreak{}run}{\index{stb-pseudo@\texttt{stb-pseudo}!--dry-run@\texttt{--dry-run}}Only run the availability check and report -- do not copy any files.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-pseudo@\texttt{stb-pseudo}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{stb\_\allowbreak{}pseudo\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
@@ -3389,6 +3510,9 @@ Usage examples:
   stb-pseudo --species Fe O -p dojo --fallback-dir virtual_vault
   stb-pseudo -f structure.fdf -p dojo --dry-run
   stb-pseudo --list-elements dojo
+  stb-pseudo -f structure.fdf -p dojo-fr-pbesol --dry-run
+  stb-pseudo -f structure.fdf -p dojo-sr3plus --fallback-dir dojo
+  stb-pseudo --list-banks
 \end{helpblock}
 
 
@@ -24515,7 +24639,7 @@ usage: stb-strain [-h] -s STRUCTURE -c CALC
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-strain@\texttt{stb-strain}!--structure@\texttt{--structure}}Input \texttt{structure.\allowbreak{}fdf} -- lattice + atomic coordinates. Only this file's \%block LatticeVectors is rewritten per strain step; everything else is preserved verbatim. Atomic coordinates MUST be fractional (checked in [1] of the report -- Cartesian positions would not scale with the strained cell).\optmeta{required}}
 \optitem{-c, -{}-calc CALC}{\index{stb-strain@\texttt{stb-strain}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}' (the Geometry.Constraints block \texttt{-{}-relax-\allowbreak{}mode} builds, see [4] of the report) -- no other directive in this file is modified.\optmeta{required}}
 \optitem{-{}-relax-\allowbreak{}mode \{cell-\allowbreak{}fixed,\allowbreak{}stress-\allowbreak{}constrained\}}{\index{stb-strain@\texttt{stb-strain}!--relax-mode@\texttt{--relax-mode}}How the cell responds to the imposed strain, via a \%block Geometry.Constraints written to \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}: 'cell-fixed' fixes all 6 Voigt stress components (cell stays exactly at the imposed strain; atomic positions still relax, via whatever MD.TypeOfRun/MD.Steps is already in \texttt{-{}-calc}). 'stress-constrained' fixes only the imposed strain direction's own component(s) (plus anything touching a vacuum axis); every other periodic direction relaxes freely to zero stress. Either way, MD.VariableCell must be enabled in your own \texttt{-{}-calc} for Geometry.Constraints to have any effect -- checked (not forced) in [4] of the report.\optmeta{required; choices: cell-fixed, stress-constrained}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-strain@\texttt{stb-strain}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-strain@\texttt{stb-strain}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
 \optitem{-{}-stdir STDIR}{\index{stb-strain@\texttt{stb-strain}!--stdir@\texttt{--stdir}}Direction of strain: x, y, z for uniaxial; xy, xz, yz, etc. for biaxial.\optmeta{required}}
 \optitem{-{}-stmin STMIN}{\index{stb-strain@\texttt{stb-strain}!--stmin@\texttt{--stmin}}Minimum strain percentage (default: 0). Can be negative for compression.\optmeta{type: float}}
 \optitem{-{}-stmax STMAX}{\index{stb-strain@\texttt{stb-strain}!--stmax@\texttt{--stmax}}Maximum strain percentage (default: 25).\optmeta{type: float}}
@@ -25390,7 +25514,7 @@ usage: stb-elasticInputs [-h] -s STRUCTURE -c CALC [-p PSEUDO_DIR]
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--structure@\texttt{--structure}}Input \texttt{structure.\allowbreak{}fdf} -- lattice + atomic coordinates. Only this file's \%block LatticeVectors is rewritten per strain step; everything else is preserved verbatim. Atomic coordinates MUST be fractional (checked in [1] of the report -- Cartesian positions would not scale with the strained cell).\optmeta{required}}
 \optitem{-c, -{}-calc CALC}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}', prepended at the very top (see [4] of the report for why) -- this fixes the cell and sets what the atoms do (\texttt{-{}-ions}), regardless of what MD settings this template itself contains.\optmeta{required}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
 \optitem{-{}-method \{stress,\allowbreak{}energy\}}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--method@\texttt{--method}}Physical quantity the generated strains are meant to feed (default: stress). 'stress': single-component canonical Voigt strains, for \texttt{stb-\allowbreak{}elasticAnalysis's} stress-strain fit (\texttt{-{}-method} stress there too). 'energy': a point-group-selected set of pure AND combined (two Voigt components at once, e.g. 'xx+yy') strain patterns for an energy-strain (parabolic) fit -- combined patterns are physically required for off-diagonal constants there, since a pure single-component strain's energy curvature only ever determines its own diagonal constant. Always auto-selects (\texttt{-{}-dirs} must be left at its 'all' default); needs more DFT calculations than \texttt{-{}-method} stress for the same crystal system, since each pattern only yields one number (a curvature) instead of a full stress column.\optmeta{choices: stress, energy}}
 \optitem{-{}-dirs DIRS [DIRS .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--dirs@\texttt{--dirs}}List of directions to generate.\newline Options: [xx, yy, zz, xy, xz, yz, bi, hydro, all].\newline Example: \texttt{-{}-dirs} xx yy xy\newline 'all' auto-reduces to 1 representative direction per symmetry-\newline equivalent group (e.g. just 2 of the 6 for a cubic material) --\newline \texttt{stb-\allowbreak{}elasticAnalysis} reconstructs the rest by symmetry. Pass every\newline direction explicitly (not 'all') to run all 6 anyway, e.g. to get\newline \texttt{stb-\allowbreak{}elasticAnalysis's} diagnostic comparison across truly independent\newline DFT calculations instead.\optmeta{default: all}}
 \optitem{-{}-symmetry-\allowbreak{}method \{basic,\allowbreak{}full\}}{\index{stb-elasticInputs@\texttt{stb-elasticInputs}!--symmetry-method@\texttt{--symmetry-method}}How 'all' picks which directions to actually run (default: basic). 'basic': only reduces when a single point-group operation maps one canonical direction exactly onto another (e.g. cubic); misses reductions like hexagonal's C11=C22, which come from the full elastic tensor's symmetry, not a pairwise direction match. 'full': picks the minimal set of directions that fully determines the point group's independent elastic constants (greedy rank selection) -- catches hexagonal/trigonal reductions too. Must match the \texttt{-{}-symmetry-\allowbreak{}method} passed to \texttt{stb-\allowbreak{}elasticAnalysis} later.\optmeta{choices: basic, full}}
@@ -26256,7 +26380,7 @@ usage: stb-cohesive [-h] -s STRUCTURE [-p PP_PATH] [-c CALC] [-k K_DENSITY] [--s
 \optgroup{Options}
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-cohesive@\texttt{stb-cohesive}!--structure@\texttt{--structure}}Path to the initial \texttt{structure.\allowbreak{}fdf} file\optmeta{required}}
-\optitem{-p, -{}-pp-\allowbreak{}path PP\_\allowbreak{}PATH}{\index{stb-cohesive@\texttt{stb-cohesive}!--pp-path@\texttt{--pp-path}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path.}
+\optitem{-p, -{}-pp-\allowbreak{}path PP\_\allowbreak{}PATH}{\index{stb-cohesive@\texttt{stb-cohesive}!--pp-path@\texttt{--pp-path}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path.}
 \optitem{-c, -{}-calc CALC}{\index{stb-cohesive@\texttt{stb-cohesive}!--calc@\texttt{--calc}}Your own \texttt{calc.\allowbreak{}fdf} template (basis, PAO.EnergyShift, Mesh.Cutoff, XC, SCF ...), used for the full structure AND every atomic reference, so they share one level of theory. It must '\%include \texttt{structure.\allowbreak{}fdf}'. It is copied untouched into every folder; what the workflow has to impose goes into a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} included on top of it: for the atomic references Spin polarized, a Gamma-only k-grid and a single point; for the full structure \texttt{-{}-spin}, \texttt{-{}-dispersion} and the k-grid (only when the template has none or -k is given). Default: the built-in template (DZP, PAO.EnergyShift 0.02 Ry, Mesh.Cutoff 320 Ry, PBE).}
 \optitem{-k, -{}-k-\allowbreak{}density K\_\allowbreak{}DENSITY}{\index{stb-cohesive@\texttt{stb-cohesive}!--k-density@\texttt{--k-density}}K-point density in 1/Angstrom for the full structure (default: 0.2; with \texttt{-{}-calc}, the template's own k-grid when it has one)\optmeta{type: float}}
 \optitem{-{}-spin}{\index{stb-cohesive@\texttt{stb-cohesive}!--spin@\texttt{--spin}}Set the full structure calculation to spin polarized\optmeta{switch, off by default}}
@@ -27258,7 +27382,7 @@ usage: stb-phononsCreate [-h] [-dim DIM DIM DIM] [-d DISTANCE] [-s STRUCTURE]
 \optitem{-d, -{}-distance DISTANCE}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--distance@\texttt{--distance}}Displacement distance in Angstroms (default: 0.01)\optmeta{type: float}}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--structure@\texttt{--structure}}Input structure file containing the unit cell (default: \texttt{structure.\allowbreak{}fdf})}
 \optitem{-c, -{}-calc CALC}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--calc@\texttt{--calc}}Input calculation parameters file (default: \texttt{calc.\allowbreak{}fdf})}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (default: current directory).}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path (default: current directory).}
 \optitem{-{}-vacuum-\allowbreak{}gap VACUUM\_\allowbreak{}GAP}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--vacuum-gap@\texttt{--vacuum-gap}}Minimum gap (Ang) along an axis to consider it vacuum-padded, for the supercell-dimension advisory (default: 10.0)\optmeta{type: float}}
 \optitem{-{}-symprec SYMPREC}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--symprec@\texttt{--symprec}}Symmetry-detection tolerance (Ang) Phonopy uses internally to reduce how many displacements are actually needed (default: 0.01, pymatgen's own default -- matches the rest of the suite, and deliberately NOT Phonopy's own raw default of 1e-5, which is far too tight for a real DFT-relaxed structure and can misdetect the true space group: verified live on a real relaxed AlP zincblende structure, 1e-5 reports the wrong R3m while 0.01 correctly reports F-43m). Loosen further (e.g. 0.02-0.05) for a structure relaxed with a looser force tolerance.\optmeta{type: float}}
 \optitem{-{}-kgrid KGRID KGRID KGRID}{\index{stb-phononsCreate@\texttt{stb-phononsCreate}!--kgrid@\texttt{--kgrid}}Explicit Monkhorst-Pack k-grid 'X Y Z' for the SUPERCELL's own single-point SCF (e.g. \texttt{-{}-kgrid} 2 2 2). Overrides the automatic \texttt{-{}-kgrid-\allowbreak{}density} suggestion. Written into \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (see [1]) as the first directive, so it takes precedence over \texttt{-{}-calc's} own k-grid, which was tuned for the smaller unit cell.\optmeta{type: int}}
@@ -28064,7 +28188,7 @@ usage: stb-convergence [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR] --parameter
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-convergence@\texttt{stb-convergence}!--structure@\texttt{--structure}}Input \texttt{structure.\allowbreak{}fdf}, copied as '\texttt{structure.\allowbreak{}fdf}' into every generated folder (default: \texttt{structure.\allowbreak{}fdf}).}
 \optitem{-c, -{}-calc CALC}{\index{stb-convergence@\texttt{stb-convergence}!--calc@\texttt{--calc}}\texttt{calc.\allowbreak{}fdf} template (default: \texttt{calc.\allowbreak{}fdf}) -- SCF/basis/MD settings, normally \%including the structure file above by name. Copied into every generated folder with one line added: '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}', prepended at the very top (see [3] of the report) -- this forces full relaxation and the swept parameter's value, regardless of what this template itself contains.}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-convergence@\texttt{stb-convergence}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-convergence@\texttt{stb-convergence}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. If given, the required pseudopotential for every species in the structure is copied into every generated folder, so it's immediately ready for SIESTA.}
 \optitem{-{}-parameter PARAMETER [PARAMETER .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--parameter@\texttt{--parameter}}Which tag(s) to sweep: meshcutoff, energyshift, kgrid, or 'all' for all three (one independent sweep per parameter, each in its own subfolder). Or 'basis' (alone): the basis-set convergence by equations of state, see \texttt{-{}-basis-\allowbreak{}stage}.\optmeta{required}}
 \optitem{-{}-basis-\allowbreak{}stage \{mesh,\allowbreak{}range,\allowbreak{}size\}}{\index{stb-convergence@\texttt{stb-convergence}!--basis-stage@\texttt{--basis-stage}}\texttt{-{}-parameter} basis: which stage to write (default: mesh). Each stage is a set of\newline E(V) scans of single points, judged by the equilibrium volume (2D: area):\newline   mesh : Mesh.Cutoff 350, 500, 700, 1000 Ry at PAO.EnergyShift 0.002 Ry\newline   range: PAO.EnergyShift 0.02 ... 0.0005 Ry at \texttt{-{}-mesh-\allowbreak{}cutoff}\newline   size : the template's PAO.BasisSize and one step up (DZP -\textgreater{} TZP) at\newline          \texttt{-{}-mesh-\allowbreak{}cutoff} and \texttt{-{}-energyshift}\newline Run them in this order, each with the value the previous one found.\optmeta{choices: mesh, range, size}}
 \optitem{-{}-basis-\allowbreak{}values V [V .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-convergence@\texttt{stb-convergence}!--basis-values@\texttt{--basis-values}}\texttt{-{}-parameter} basis: the Mesh.Cutoff values (stage mesh) or PAO.EnergyShift values (stage range) to scan instead of the defaults.\optmeta{type: float}}
@@ -28982,7 +29106,7 @@ usage: stb-xrdsearch [-h] --species SPECIES [SPECIES ...] --num-ions NUM_IONS
 \optitem{-c, -{}-calc PATH}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--calc@\texttt{--calc}}Custom \texttt{calc.\allowbreak{}fdf} template, copied (as '\texttt{calc.\allowbreak{}fdf}') into every candidate folder -- should \%include '\texttt{structure.\allowbreak{}fdf}' by name. If omitted (default), the standard relaxation \texttt{calc.\allowbreak{}fdf} -- the same default \texttt{stb-\allowbreak{}inputfile} \texttt{-t} relax produces -- is auto-generated for every candidate instead (see \texttt{-{}-d3/\allowbreak{}-{}-spin-\allowbreak{}polarized}).}
 \optitem{-{}-d3}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--d3@\texttt{--d3}}Auto-generate mode only (\texttt{-{}-calc} not given): enable the DFT-D3 (Grimme) van der Waals correction in the generated \texttt{calc.\allowbreak{}fdf}. Rejected together with \texttt{-{}-calc}.\optmeta{switch, off by default}}
 \optitem{-s, -{}-spin-\allowbreak{}polarized}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--spin-polarized@\texttt{--spin-polarized}}Auto-generate mode only (\texttt{-{}-calc} not given): enable spin polarization in the generated \texttt{calc.\allowbreak{}fdf}. Rejected together with \texttt{-{}-calc}.\optmeta{switch, off by default}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PATH\_\allowbreak{}OR\_\allowbreak{}BANK}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (dojo, virtual\_vault) or a folder path. If given, the required pseudopotential for every species actually present in the cast candidates is copied into every candidate folder.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PATH\_\allowbreak{}OR\_\allowbreak{}BANK}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source (optional): a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. If given, the required pseudopotential for every species actually present in the cast candidates is copied into every candidate folder.}
 \optitem{-{}-view}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--view@\texttt{--view}}After generating, open one interactive 3D view (via ASE) paging through every candidate structure. Needs a display. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--save-report@\texttt{--save-report}}Also persist the report to \textless{}output-dir\textgreater{}/xrdsearch\_stage1.txt. Off by default.\optmeta{switch, off by default}}
 \optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-xrdsearch@\texttt{stb-xrdsearch}!--output-dir@\texttt{--output-dir}}Folder to write candidate structures into (default: xrd\_search); each candidate gets its own '\textless{}output-dir\textgreater{}/\textless{}name\textgreater{}/'. Created if it doesn't exist; refuses to run if it already has any content, to avoid mixing batches.}
@@ -29973,7 +30097,7 @@ usage: stb-hubbardu [-h] [-s STRUCTURE] [-c CALC] --species SPECIES [--atom-inde
 \optitem{-{}-atom-\allowbreak{}index N}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--atom-index@\texttt{--atom-index}}1-based index (counting ALL atoms in \texttt{-{}-structure's} coordinate block, in file order -- same convention as \texttt{stb-\allowbreak{}defect} \texttt{-{}-index}) of the specific atom to perturb. Required only if \texttt{-{}-species} appears more than once in \texttt{-{}-structure}; omit it when \texttt{-{}-species} matches a single atom.\optmeta{type: int}}
 \optitem{-{}-shell \{3d,\allowbreak{}4d,\allowbreak{}4f,\allowbreak{}5d,\allowbreak{}5f\}}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--shell@\texttt{--shell}}Correlated shell (3d/4d/5d/4f/5f). Default: the standard shell for \texttt{-{}-species} (transition metals -\textgreater{} (n)d, lanthanides -\textgreater{} 4f, actinides -\textgreater{} 5f).\optmeta{choices: 3d, 4d, 4f, 5d, 5f}}
 \optitem{-{}-j J}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--j@\texttt{--j}}Exchange J (eV), fixed across the whole workflow (default: 0.0).\optmeta{type: float}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir DIR}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--pseudo-dir@\texttt{--pseudo-dir}}Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- a bundled bank (dojo, virtual\_vault) or a folder path. Only the species actually present in \texttt{-{}-structure} are copied into 'reference/' now, and into every scf\_alpha\_*/frozen\_alpha\_* folder later by \texttt{stb-\allowbreak{}hubbarduAlphas}. If omitted, you must copy them into every run folder yourself.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir DIR}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--pseudo-dir@\texttt{--pseudo-dir}}Where to get the pseudopotential files (.psf/.psml) SIESTA needs -- a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. Only the species actually present in \texttt{-{}-structure} are copied into 'reference/' now, and into every scf\_alpha\_*/frozen\_alpha\_* folder later by \texttt{stb-\allowbreak{}hubbarduAlphas}. If omitted, you must copy them into every run folder yourself.}
 \optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--output-dir@\texttt{--output-dir}}Output directory for the run folders (default: hubbardu\_runs).}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-hubbardu@\texttt{stb-hubbardu}!--save-report@\texttt{--save-report}}Also persist the report to \textless{}output-dir\textgreater{}/hubbardu\_stage1.txt. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -33927,7 +34051,7 @@ usage: stb-raman [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR] [-dim DIM DIM DIM
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-raman@\texttt{stb-raman}!--structure@\texttt{--structure}}Input structure file containing the unit cell (default: \texttt{structure.\allowbreak{}fdf})}
 \optitem{-c, -{}-calc CALC}{\index{stb-raman@\texttt{stb-raman}!--calc@\texttt{--calc}}Input calculation parameters file (default: \texttt{calc.\allowbreak{}fdf})}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-raman@\texttt{stb-raman}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (default: current directory).}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-raman@\texttt{stb-raman}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path (default: current directory).}
 \optitem{-dim DIM DIM DIM}{Supercell dimensions for the phonon force-constant calculation (default: 2 2 2).\optmeta{type: int}}
 \optitem{-d, -{}-distance DISTANCE}{\index{stb-raman@\texttt{stb-raman}!--distance@\texttt{--distance}}Phonon displacement distance in Angstroms (default: 0.02).\optmeta{type: float}}
 \optitem{-{}-kgrid KGRID KGRID KGRID}{\index{stb-raman@\texttt{stb-raman}!--kgrid@\texttt{--kgrid}}Explicit Monkhorst-Pack grid for the supercell's forced single-point SCF (e.g. \texttt{-{}-kgrid} 2 2 2). Overrides the automatic \texttt{-{}-kgrid-\allowbreak{}density} suggestion. Written into \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (see [2]).\optmeta{type: int}}
@@ -34794,7 +34918,7 @@ usage: stb-ir [-h] [-s STRUCTURE] [-c CALC] [-p PSEUDO_DIR] [-dim DIM DIM DIM]
 \begin{optlist}
 \optitem{-s, -{}-structure STRUCTURE}{\index{stb-ir@\texttt{stb-ir}!--structure@\texttt{--structure}}Input structure file containing the unit cell (default: \texttt{structure.\allowbreak{}fdf})}
 \optitem{-c, -{}-calc CALC}{\index{stb-ir@\texttt{stb-ir}!--calc@\texttt{--calc}}Input calculation parameters file (default: \texttt{calc.\allowbreak{}fdf})}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-ir@\texttt{stb-ir}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (default: current directory).}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-ir@\texttt{stb-ir}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path (default: current directory).}
 \optitem{-dim DIM DIM DIM}{Supercell dimensions for the phonon force-constant calculation (default: 2 2 2).\optmeta{type: int}}
 \optitem{-d, -{}-distance DISTANCE}{\index{stb-ir@\texttt{stb-ir}!--distance@\texttt{--distance}}Phonon displacement distance in Angstroms (default: 0.02).\optmeta{type: float}}
 \optitem{-{}-kgrid KGRID KGRID KGRID}{\index{stb-ir@\texttt{stb-ir}!--kgrid@\texttt{--kgrid}}Explicit Monkhorst-Pack grid for the supercell's forced single-point SCF (e.g. \texttt{-{}-kgrid} 2 2 2). Overrides the automatic \texttt{-{}-kgrid-\allowbreak{}density} suggestion. Written into \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (see [2]).\optmeta{type: int}}
@@ -39131,7 +39255,7 @@ usage: stb-eosInputs [-h] -f FILE [-c FDF] [-p PSEUDO_DIR] [--n-volumes N_VOLUME
 \begin{optlist}
 \optitem{-f, -{}-file FILE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--file@\texttt{--file}}Input structure (.fdf), already relaxed. Atomic coordinates must be in fractional format (same requirement as \texttt{stb-\allowbreak{}strain}). It is written, scaled, under the same name into every folder, and your \texttt{calc.\allowbreak{}fdf} must \%include it.\optmeta{required}}
 \optitem{-c, -{}-calc FDF}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--calc@\texttt{--calc}}SIESTA input template (default: \texttt{calc.\allowbreak{}fdf}). Copied into every folder with '\%include \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}' prepended; not edited otherwise. If it does not exist and -c was not given, only the scaled structures are written (the earlier behavior). If it is the same file as \texttt{-{}-file} (a self-contained input), the scaled copy of it is the run input.}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotential source: a bundled bank (dojo, virtual\_vault) or a folder. The .psml/.psf of each species is copied into every folder.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotential source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder. The .psml/.psf of each species is copied into every folder.}
 \optitem{-{}-n-\allowbreak{}volumes N\_\allowbreak{}VOLUMES}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--n-volumes@\texttt{--n-volumes}}Number of volumes to scan (default: 9). At least 5 for the 4-parameter fit of \texttt{stb-\allowbreak{}eosAnalysis}; an odd number includes the input volume itself.\optmeta{type: int}}
 \optitem{-{}-strain-\allowbreak{}range STRAIN\_\allowbreak{}RANGE}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--strain-range@\texttt{--strain-range}}Max isotropic volume strain, \% (default: 5.0), spanning [-strain-range, +strain-range].\optmeta{type: float}}
 \optitem{-{}-relax-\allowbreak{}positions}{\index{stb-eosInputs@\texttt{stb-eosInputs}!--relax-positions@\texttt{--relax-positions}}Let the ions relax at every volume (cell fixed): needed for crystals with free internal coordinates. Default: single point (positions as given).\optmeta{switch, off by default}}
@@ -40393,7 +40517,7 @@ usage: stb-chargediffPrep [-h] [-s STRUCTURE]
 \optitem{-{}-fragment-\allowbreak{}species El\_\allowbreak{}a,\allowbreak{}El\_\allowbreak{}b;El\_\allowbreak{}c;...}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--fragment-species@\texttt{--fragment-species}}General split by CHEMICAL SPECIES, independent of atom order: ';'-separated groups, each a comma-separated list of element symbols belonging to that fragment (e.g. 'C;B,N' for a graphene/h-BN heterostructure). Every species present in the structure must appear in exactly one group. LIMITATION: cannot be used when two fragments physically share a species (e.g. MoS2 on WS2, sulfur in both layers) -- use \texttt{-{}-fragment-\allowbreak{}sizes} or \texttt{-{}-fragment-\allowbreak{}manifest} instead in that case.\optmeta{exclusive group 1}}
 \optitem{-{}-calc CALC}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--calc@\texttt{--calc}}SIESTA input template (.fdf) used for every fragment folder -- same basis/SCF/k-grid as the combined system (default: '\texttt{calc.\allowbreak{}fdf}').}
 \optitem{-{}-mesh-\allowbreak{}cutoff RY}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--mesh-cutoff@\texttt{--mesh-cutoff}}Explicit MeshCutoff (Ry) to force in every fragment folder -- the SAME value on all of them, never auto-detected from \texttt{-{}-calc}/the combined system's own \texttt{calc.\allowbreak{}fdf} (a per-run SIESTA default can silently differ between calculations with different atoms/pseudopotentials, which would corrupt the point-by-point subtraction). Default: 400 Ry -- raise it for a finer grid (recommended for a production CDD map) or type a different value here.\optmeta{default: 400; type: float}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path (same convention as \texttt{stb-\allowbreak{}adsorb}/\texttt{stb-\allowbreak{}her}/\texttt{stb-\allowbreak{}hubbardu}). Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path (same convention as \texttt{stb-\allowbreak{}adsorb}/\texttt{stb-\allowbreak{}her}/\texttt{stb-\allowbreak{}hubbardu}). Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
 \optitem{-{}-force-\allowbreak{}spin}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--force-spin@\texttt{--force-spin}}Force spin-polarized SCF in every fragment folder (default: inherited from the combined system's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, if any).\optmeta{switch, off by default}}
 \optitem{-{}-no-\allowbreak{}force-\allowbreak{}spin}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--no-force-spin@\texttt{--no-force-spin}}Force spin-restricted SCF, overriding the combined system's own setting.\optmeta{switch, off by default}}
 \optitem{-{}-force-\allowbreak{}dipole}{\index{stb-chargediffPrep@\texttt{stb-chargediffPrep}!--force-dipole@\texttt{--force-dipole}}Force the slab dipole correction (default: inherited from the combined system's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, if any).\optmeta{switch, off by default}}
@@ -41672,7 +41796,7 @@ usage: stb-hirshfeldPrep [-h] [-s STRUCTURE] [--calc CALC] [--mesh-cutoff RY]
 \optitem{-{}-calc CALC}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--calc@\texttt{--calc}}SIESTA input template (.fdf) -- same basis/XC/pseudopotential directives used for combined/ and every isolated-atom folder (default: '\texttt{calc.\allowbreak{}fdf}'). Cell, single-point/MD, MeshCutoff and SaveRho are all overridden by this tool's own \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} regardless of what's in this template; k-grid/Spin/dipole/vdW are left untouched for combined/, and forced Gamma-only + spin-polarized for every isolated-atom folder.}
 \optitem{-{}-mesh-\allowbreak{}cutoff RY}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--mesh-cutoff@\texttt{--mesh-cutoff}}Explicit MeshCutoff (Ry) to force in combined/ and every isolated-atom folder. Default: 400 Ry.\optmeta{type: float}}
 \optitem{-{}-vacuum ANG}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--vacuum@\texttt{--vacuum}}Cubic vacuum-box side (Ang) for every isolated atom -- must be large enough that the atom's own density has decayed to \textasciitilde{}0 well before the box edge. Default: 20 Ang.\optmeta{type: float}}
-\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder path. Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
+\optitem{-p, -{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder path. Default: reuse the directory \texttt{-{}-structure} lives in, which already has every pseudopotential the combined calculation needed.}
 \optitem{-O, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--output-dir@\texttt{--output-dir}}Root directory to write combined/ and neutral/\textless{}species\textgreater{}/ into (default: hirshfeld\_study).}
 \optitem{-{}-save-\allowbreak{}report}{\index{stb-hirshfeldPrep@\texttt{stb-hirshfeldPrep}!--save-report@\texttt{--save-report}}Also persist the report to \texttt{hirshfeld\_\allowbreak{}prep\_\allowbreak{}report.\allowbreak{}txt}. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -43739,7 +43863,7 @@ usage: stb-mlff [-h] [-s STRUCTURE] [-c CALC] [--file FILE] [--n-configs N_CONFI
 \optitem{-{}-n-\allowbreak{}configs N\_\allowbreak{}CONFIGS}{\index{stb-mlff@\texttt{stb-mlff}!--n-configs@\texttt{--n-configs}}Number of rattled configurations to generate (default: 10). Ignored if \texttt{-{}-from-\allowbreak{}aimd} is given without also wanting rattled configs (see \texttt{-{}-n-\allowbreak{}configs} 0 to disable rattling entirely).\optmeta{type: int}}
 \optitem{-{}-stdev STDEV [STDEV .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-mlff@\texttt{stb-mlff}!--stdev@\texttt{--stdev}}One or more rattling displacement standard deviations, in Angstrom (default: 0.05). Cycled round-robin across \texttt{-{}-n-\allowbreak{}configs}.\optmeta{type: float}}
 \optitem{-{}-volume-\allowbreak{}strains PCT [PCT .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-mlff@\texttt{stb-mlff}!--volume-strains@\texttt{--volume-strains}}Also write one configuration per volumetric strain, in \% (e.g. -5 -3 -1 1 3 5): the cell scaled isotropically by (1 + PCT/100)\textasciicircum{}(1/3), atoms rattled with \texttt{-{}-stdev}. Without them every configuration has the reference volume and the fitted model cannot learn the volume response (E(V), bulk modulus, pressure). Default: none. Bulk only -- in a slab this also scales the vacuum.\optmeta{type: float}}
-\optitem{-{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-mlff@\texttt{stb-mlff}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (dojo, virtual\_vault) or a folder with \textless{}element\textgreater{}.psf/.psml (default: current directory).}
+\optitem{-{}-pseudo-\allowbreak{}dir PSEUDO\_\allowbreak{}DIR}{\index{stb-mlff@\texttt{stb-mlff}!--pseudo-dir@\texttt{--pseudo-dir}}Pseudopotentials source: a bundled bank (\texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}, virtual\_vault) or a folder with \textless{}element\textgreater{}.psf/.psml (default: current directory).}
 \optitem{-{}-from-\allowbreak{}aimd LABEL}{\index{stb-mlff@\texttt{stb-mlff}!--from-aimd@\texttt{--from-aimd}}Also sample starting geometries from an existing AIMD trajectory ('\texttt{\textless{}LABEL\textgreater{}.\allowbreak{}ANI}' + '.out'), in addition to (or instead of, with \texttt{-{}-n-\allowbreak{}configs} 0) rattled configurations -- more physically realistic diversity than rattling alone.}
 \optitem{-{}-n-\allowbreak{}samples N\_\allowbreak{}SAMPLES}{\index{stb-mlff@\texttt{stb-mlff}!--n-samples@\texttt{--n-samples}}Number of evenly-spaced AIMD frames to sample when \texttt{-{}-from-\allowbreak{}aimd} is given (default: 5).\optmeta{type: int}}
 \optitem{-{}-n-\allowbreak{}test N\_\allowbreak{}TEST}{\index{stb-mlff@\texttt{stb-mlff}!--n-test@\texttt{--n-test}}Also write N held-out test configurations to mlff\_test/test\_NNN/ (default: 0): drawn like the training ones (each \texttt{-{}-stdev}, each \texttt{-{}-volume-\allowbreak{}strains} entry, cycled) with an independent seed, never trained on. Stage 3 (\texttt{stb-\allowbreak{}mlffValidate}) scores every round against them -- needed to know when to stop.\optmeta{type: int}}

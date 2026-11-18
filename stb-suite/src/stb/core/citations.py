@@ -179,6 +179,18 @@ PSEUDO_BANK_CITATIONS = {
 }
 
 
+def pseudo_bank_citation(bank):
+    """Bib entry of a bundled bank name -- every PseudoDojo table (dojo-sr-pbe-standard,
+    dojo-fr-pbesol-stringent, ...) cites the same paper. None for an unknown name."""
+    if not bank:
+        return None
+    if bank in PSEUDO_BANK_CITATIONS:
+        return PSEUDO_BANK_CITATIONS[bank]
+    if str(bank).lower().startswith("dojo"):
+        return PSEUDO_DOJO
+    return None
+
+
 def _read_existing_entries(bib_path):
     """Returns {key: full_entry_text} already in `bib_path`, or {} if the
     file doesn't exist -- parsed back from the same blank-line-separated

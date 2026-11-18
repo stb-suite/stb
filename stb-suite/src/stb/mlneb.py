@@ -593,7 +593,7 @@ def siesta_template(args, state, wf_base):
     reference calc.fdf, pseudopotentials and dispersion, the k-grid scaled to keep the reference's
     k x a; else --calc and --pseudo-dir, the calc's own k-grid (or --kgrid). Raises ValueError."""
     from stb.core.fdf_directives import parse_kgrid
-    from stb.core.pseudopotentials import BANKS, resolve_pseudo_source
+    from stb.core.pseudopotentials import is_bank, resolve_pseudo_source
     from stb.core import mlff_workflow
     ref_cell, extra = None, ""
     if state is not None:
@@ -609,7 +609,7 @@ def siesta_template(args, state, wf_base):
         ref = structure_io.read_fdf(ref_path)
         ref_cell = np.linalg.norm(np.array(structure_io.lattice_only(ref)), axis=1)
         pseudo_dir = rec.get("pseudo_dir") or "."
-        if pseudo_dir not in BANKS:
+        if not is_bank(pseudo_dir):
             pseudo_dir = mlff_workflow.resolve(pseudo_dir, wf_base)
         extra = mlff_workflow.dftd3_block(state)
         source = f"the workflow's reference ({rec['calc']}, pseudopotentials {rec.get('pseudo_dir')})"
@@ -651,7 +651,7 @@ def write_siesta_folder(folder, atoms, tpl, species_meta, kgrid_override=None):
     pseudopotentials, and the image's coordinates as a stamp to recognise it later."""
     from pymatgen.io.ase import AseAtomsAdaptor
     from ase.io import write as ase_write
-    from stb.core.pseudopotentials import get_required_pseudos
+    from stb.core.pseudopotentials import get_required_pseudos, note_pseudo_folder
     os.makedirs(folder, exist_ok=True)
     st = structure_io.from_pymatgen(AseAtomsAdaptor.get_structure(atoms), species_meta=species_meta,
                                     coord_format="fractional")
@@ -672,6 +672,7 @@ def write_siesta_folder(folder, atoms, tpl, species_meta, kgrid_override=None):
         raise ValueError(f"no pseudopotential for {', '.join(missing)} in '{tpl['pseudo_label']}'")
     for p in pseudos:
         shutil.copy(p, folder)
+    note_pseudo_folder(folder)
     ase_write(os.path.join(folder, IMAGE_STAMP), atoms.copy(), format="extxyz")
     return folder
 

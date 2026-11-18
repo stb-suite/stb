@@ -74,7 +74,7 @@ import argparse
 import numpy as np
 from stb.core import structure_io, kspace
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANKS, resolve_pseudo_source, get_required_pseudos, copy_pseudo
+from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import read_md_state, prepend_include
 
 REPORT_FILE = "convergence_stage1.txt"
@@ -406,7 +406,7 @@ def main():
                              "what this template itself contains.")
     parser.add_argument("-p", "--pseudo-dir", default="",
                         help="Pseudopotentials source (optional): a bundled bank "
-                             f"({', '.join(BANKS)}) or a folder path. If given, the required "
+                             f"({BANK_HELP}) or a folder path. If given, the required "
                              "pseudopotential for every species in the structure is copied into "
                              "every generated folder, so it's immediately ready for SIESTA.")
     parser.add_argument("--parameter", nargs='+', required=True,

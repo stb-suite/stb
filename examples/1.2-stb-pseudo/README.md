@@ -46,16 +46,23 @@ Two format notes that matter in practice:
 
 - **`.psf`** is SIESTA's older native pseudopotential format (the
   `virtual_vault` bank ships these). **`.psml`** is a newer,
-  code-agnostic exchange format that SIESTA also reads directly (the
-  `dojo` bank ships these). Numerically they describe the same kind of
+  code-agnostic exchange format that SIESTA also reads directly (every
+  `dojo` table ships these). Numerically they describe the same kind of
   object — `stb-pseudo` copies whichever is present, preferring `.psml`
   when both exist for a species.
 - A pseudopotential is generated for one specific **exchange-correlation
-  functional** (both bundled banks here are PBE). Using it in a
-  calculation set up for a *different* functional is a real, silent
-  correctness trap — `stb-pseudo` does not check this (it has no way to
-  know what functional your `calc.fdf` will use), so it's on you to keep
-  the two consistent.
+  functional** (PseudoDojo has PBE, PBEsol and LDA tables; the Virtual
+  Vault is PBE). Using it in a calculation set up for a *different*
+  functional is a silent correctness trap: SIESTA runs anyway. Every tool
+  that copies pseudopotentials into a run folder therefore reads the
+  functional (and the relativistic treatment) written in each file and
+  compares it with the folder's own `.fdf` (`XC.Functional`/`XC.Authors`,
+  `Spin spin-orbit`), printing a `[WARNING]` on a mismatch. It never
+  stops the tool: the decision stays with you.
+- **Spin-orbit coupling** needs *full-relativistic* pseudopotentials
+  (with `lj` projectors). With scalar-relativistic files SIESTA stops
+  with `The PSML file does not contain lj projs`; the `dojo-fr-*` tables
+  are the ones to use.
 
 ## When you'd reach for it
 
@@ -83,9 +90,10 @@ stb-suite
 ```
 
 `1.2` first asks what you want to do — resolve from a structure file
-**[1]**, resolve from an explicit element list **[2]**, or just browse a
-bundled bank's contents **[3]** — then walks through the same primary
-source / fallback source / output directory / dry-run / save-report
+**[1]**, resolve from an explicit element list **[2]**, browse a bundled
+bank's contents **[3]**, or list every bundled bank **[4]** — then walks
+through the same primary source (PseudoDojo: relativity, functional,
+accuracy) / fallback source / output directory / dry-run / save-report
 questions the CLI flags cover. `example_1.2.sh` proves the CLI and the
 menu agree.
 
@@ -112,16 +120,55 @@ menu agree.
 | `output/fallback/`     | `stb-pseudo --species Si At -p dojo --fallback-dir virtual_vault -o output/fallback` | filling a gap `dojo` can't cover |
 | `output/dry_run/`      | `stb-pseudo -f sic.fdf -p dojo -o output/dry_run --dry-run` | report only, nothing copied |
 
-### Bundled banks: what's actually inside `dojo` vs `virtual_vault`
+### Bundled banks: the PseudoDojo tables and `virtual_vault`
 
-`stb-pseudo --list-elements` (used above with no structure at all) is the
-quickest way to check whether a bank covers what you need *before*
-committing to it:
+The PseudoDojo bank holds eleven tables (norm-conserving ONCVPSP, `.psml`).
+You choose one by relativity, functional and accuracy, with a single name
+given to `-p` (here and in every other tool that takes pseudopotentials):
 
-- **`dojo`** — PseudoDojo v0.5, PBE, `.psml` format, 72 elements.
-- **`virtual_vault`** — the SIESTA Pseudopotentials Virtual Vault, PBE,
-  `.psf` format, a different (overlapping but not identical) element
-  coverage.
+```
+dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]
+```
+
+The words go in any order, and each missing word takes its default
+(`sr`, `pbe`, `standard`). `fr` can also be written `soc`, and `pw` can be
+written `lda`. `stb-pseudo --list-banks` prints the whole list:
+
+| `-p` name | PseudoDojo table | Relativity | Functional | Elements |
+|---|---|---|---|---|
+| `dojo` = `dojo-sr-pbe-standard` | nc-sr-05 pbe standard | scalar | PBE | 72 |
+| `dojo-stringent` | nc-sr-05 pbe stringent | scalar | PBE | 72 |
+| `dojo-pbesol`, `dojo-pbesol-stringent` | nc-sr-04 pbesol | scalar | PBEsol | 72 |
+| `dojo-pw`, `dojo-pw-stringent` | nc-sr-04 pw | scalar | LDA (PW92) | 70 |
+| `dojo-fr` | nc-fr-04 pbe standard | full (SOC) | PBE | 70 (no La, Lu) |
+| `dojo-fr-stringent` | nc-fr-04 pbe stringent | full (SOC) | PBE | 72 |
+| `dojo-fr-pbesol`, `dojo-fr-pbesol-stringent` | nc-fr-04 pbesol | full (SOC) | PBEsol | 71 (no Lu) |
+| `dojo-sr3plus` | nc-sr-04-3plus pbe standard | scalar | PBE | 14 (Ce-Lu) |
+| `virtual_vault` | SIESTA Virtual Vault (`.psf`) | — | PBE | 69 |
+
+- **Standard or stringent.** Standard is the usual choice. For groups
+  13–16 (Ga–Se, In–Te, Tl–Po), standard *already* has the d shell in the
+  valence; stringent adds the s and p shell below it (Ge and Sn go from
+  z = 14 to z = 22). For Hf and Ta, stringent adds the 4f shell (z 12 → 26
+  and 13 → 27). More electrons and more orbitals make the calculation more
+  expensive. The report shows each file's valence (`z=`).
+- **`fr`** tables are required for `Spin spin-orbit`. They also run
+  without SOC, but do not compare absolute energies from `fr` and `sr`
+  files. PseudoDojo has no full-relativistic LDA table.
+- **`sr3plus`** holds the lanthanides Ce–Lu with the 4f electrons frozen in
+  the core. Use it only for Ln3+ compounds: it does not describe f physics
+  (magnetism, 4f states). Give the other elements a fallback, for example
+  `-p dojo-sr3plus --fallback-dir dojo`.
+- `dojo` names exactly the files this bank held before it was split into
+  tables (PseudoDojo v0.5, PBE, standard), so old commands, scripts and
+  `mlff_workflow.json` files that say `dojo` give the same result.
+
+In the interactive menu, every question about the pseudopotential source
+offers *PseudoDojo* and then asks for the relativity, the functional and the
+accuracy (Enter keeps the default). Only combinations that exist are offered.
+
+`stb-pseudo --list-elements <name>` is the quickest way to check whether a
+table covers what you need *before* committing to it.
 
 Neither bank covers every element you might need — which is exactly why
 `--fallback-dir` exists, rather than forcing you to pick one bank and
@@ -148,6 +195,9 @@ proving the two paths produce identical output.
 ```bash
 stb-pseudo --species Fe O -p dojo -o out/          # a common oxide pair
 stb-pseudo --list-elements virtual_vault           # what's in the other bank?
+stb-pseudo --list-banks                            # every PseudoDojo table
+stb-pseudo --species Bi Se -p dojo-fr -o soc/      # full-relativistic, for spin-orbit
+stb-pseudo -f structure.fdf -p dojo-sr3plus --fallback-dir dojo   # Ln3+ with 4f in the core
 ```
 
 ## Flag reference
@@ -156,6 +206,7 @@ stb-pseudo --list-elements virtual_vault           # what's in the other bank?
 stb-pseudo (-f/--file <structure.fdf> | --species EL [EL ...]) -p/--pp-path <BANK_OR_PATH>
            [--fallback-dir <BANK_OR_PATH>] [-o/--output <dir>] [--dry-run] [--save-report]
 stb-pseudo --list-elements <BANK>
+stb-pseudo --list-banks
 ```
 
 - `-f/--file`: a SIESTA structure file (`.fdf`) to read the required
@@ -163,8 +214,8 @@ stb-pseudo --list-elements <BANK>
 - `--species`: element symbol(s) to resolve directly, instead of reading
   a structure file.
 - `-p/--pp-path` (required unless `--list-elements` is given): a bundled
-  bank name (`dojo`, `virtual_vault`) or a directory of your own
-  `.psf`/`.psml` files.
+  bank name (`dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]`,
+  `virtual_vault`) or a directory of your own `.psf`/`.psml` files.
 - `--fallback-dir` (optional): a second source, consulted only for
   elements missing from `-p/--pp-path`.
 - `-o/--output` (optional, default `.`): directory the resolved
@@ -172,7 +223,10 @@ stb-pseudo --list-elements <BANK>
 - `--dry-run` (optional): only run the availability check — copy
   nothing.
 - `--list-elements <BANK>`: print the elements available in a bundled
-  bank and exit — no structure or `-p/--pp-path` needed.
+  bank (any name `-p` accepts) and exit — no structure or `-p/--pp-path`
+  needed.
+- `--list-banks`: print every bundled table (relativity, functional,
+  accuracy, element count) and exit.
 - `--save-report` (optional): also persist the report to
   `stb_pseudo_report.txt`. Off by default.
 

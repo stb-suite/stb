@@ -57,7 +57,7 @@ from stb.core import structure_io, fdf_directives, kspace
 from stb.core import adsorption_sites
 from stb.core.bsse import make_ghost_variant
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import copy_pseudo, resolve_pseudo_source, pseudo_valence, BANKS
+from stb.core.pseudopotentials import BANK_HELP, copy_pseudo, resolve_pseudo_source, pseudo_valence
 from stb.core import citations
 
 DEFAULT_MESH_CUTOFF_RY = 400.0
@@ -533,7 +533,7 @@ def main():
                               "for a finer grid (recommended for a production CDD map) or type a "
                               "different value here.")
     parser.add_argument("-p", "--pseudo-dir", type=str, default="",
-                         help=f"Pseudopotentials source: a bundled bank ({', '.join(BANKS)}) or a "
+                         help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                               "folder path (same convention as stb-adsorb/stb-her/stb-hubbardu). "
                               "Default: reuse the directory --structure lives in, which already "
                               "has every pseudopotential the combined calculation needed.")

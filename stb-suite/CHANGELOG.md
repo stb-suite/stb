@@ -238,6 +238,14 @@ version before) and **Added** (new options and tools).
     50 points, so SIESTA computed a K -> U line that is not a high-symmetry line and the plot showed it
     as one. That point now gets 1, which starts a new line in `BandLines`.
 
+- `stb-coop --pair I J` summed only the image of J in the same cell: `geometry.o2a` gives supercell
+  atom indices and they were compared with J without folding. A bond across the cell edge came out
+  ~0 (the C-C bridge of XC8, 1.5 Ang: ICOOP 0.00005 instead of 0.22, while the bond order of the same
+  run was 0.88; on Sn3O4, Sn 0 - O 7 at 2.08 Ang: -0.0002 instead of 0.133), and `--pair-species` left
+  out every bond between cells. Every image of J within the orbital range is now summed, and the
+  report lists them, one row per image with its distance; the new `--image N1 N2 N3` selects one
+  (one bond). The bond order uses the same selection. `--pair I I` stays the on-site term.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -119,6 +119,30 @@ check_contains "COHP < 0 = bonding" log_cohp_bond.txt
 check_contains "integrated -COHP positive, bond order positive -> \[OK\] signs agree" log_cohp_bond.txt
 
 
+echo "Testing: a bond across the cell edge (Sn 0 - O 7, image +1 0 0, 2.08 Ang) is summed, not ~0"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 $OCCUPIED --bond-order -o image_out \
+    --no-intro > log_image.txt 2>&1
+check_exit_code $? 0
+check_contains "0-7  | .* | 1\.3[0-9]*e-01 (bonding)" log_image.txt
+check_contains "Image (N1 N2 N3)" log_image.txt
+check_contains "+1 +0 +0         | 2\.077" log_image.txt
+
+echo "Testing: --image 1 0 0 selects that one bond (label 0-7[1,0,0])"
+timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 7 --image 1 0 0 $OCCUPIED --bond-order \
+    -o image1_out --no-intro > log_image1.txt 2>&1
+check_exit_code $? 0
+check_contains "Selected pairs: \['0-7\[1,0,0\]'\]" log_image1.txt
+check_contains "0-7\[1,0,0\] | .* | 1\.3[0-9]*e-01 (bonding)" log_image1.txt
+
+echo "Testing: --image outside the Hamiltonian's supercell, and --image without --pair, are clean errors"
+stb-coop --label Sn3O4 --quantity coop --pair 0 7 --image 9 0 0 $COMMON --no-intro > log_image_bad.txt 2>&1
+check_exit_code $? 2
+check_contains "outside the auxiliary supercell" log_image_bad.txt
+stb-coop --label Sn3O4 --quantity coop --pair-species Sn O --image 1 0 0 $COMMON --no-intro > log_image_nopair.txt 2>&1
+check_exit_code $? 2
+check_contains "--image needs --pair" log_image_nopair.txt
+
+
 # --- 4. Multiple --pair given together ---
 echo -e "\n--- Testing multiple --pair (repeatable) ---"
 

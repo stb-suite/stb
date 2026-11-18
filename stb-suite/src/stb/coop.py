@@ -118,11 +118,17 @@ REPORT_FILE = "stb_coop_report.txt"
 BIB_FILE = "references.bib"
 
 
-def build_atom_pairs(geometry, pair_indices, pair_species):
-    """Returns a list of (label, atoms_i, atoms_j) triples. --pair gives a
+def build_atom_pairs(geometry, pair_indices, pair_species, image=None):
+    """Returns a list of (label, atoms_i, atoms_j, image) tuples. --pair gives a
     single-index-vs-single-index pair; --pair-species aggregates ALL
     atom-index pairs between the two species sets into one combined
     curve.
+
+    `image` (n1, n2, n3) or None selects which periodic images of atoms_j are
+    summed: None = every image within the orbital range (atoms_j folded back to
+    the unit cell), a tuple = that one image only (one bond). --image applies to
+    --pair only. A --pair I I with no --image is the on-site term (image 0, as
+    documented); I I with --image is I and its own periodic copy.
 
     Note: a same-species --pair-species (e.g. --pair-species Sn Sn) sets
     atoms_i == atoms_j, so the aggregate curve includes each atom's
@@ -133,10 +139,22 @@ def build_atom_pairs(geometry, pair_indices, pair_species):
     curve that isn't a mix of the two."""
     pairs = []
     na = geometry.na
+    if image is not None:
+        image = tuple(int(n) for n in image)
+        nsc = geometry.lattice.nsc
+        if any(abs(n) > (m - 1) // 2 for n, m in zip(image, nsc)):
+            raise ValueError(f"--image {' '.join(map(str, image))} is outside the auxiliary supercell "
+                             f"of the Hamiltonian (nsc = {' '.join(map(str, nsc))}): no orbital of that "
+                             "image interacts with the unit cell.")
     for i, j in pair_indices or []:
         if not (0 <= i < na) or not (0 <= j < na):
             raise ValueError(f"--pair {i} {j} out of range (0-{na - 1}).")
-        pairs.append((f"{i}-{j}", [i], [j]))
+        if image is not None:
+            pairs.append((f"{i}-{j}[{','.join(map(str, image))}]", [i], [j], image))
+        elif i == j:
+            pairs.append((f"{i}-{j}", [i], [j], (0, 0, 0)))
+        else:
+            pairs.append((f"{i}-{j}", [i], [j], None))
     for sp_a, sp_b in pair_species or []:
         idx_a = [ia for ia in range(na) if geometry.atoms[ia].symbol == sp_a]
         idx_b = [ia for ia in range(na) if geometry.atoms[ia].symbol == sp_b]
@@ -144,8 +162,52 @@ def build_atom_pairs(geometry, pair_indices, pair_species):
             raise ValueError(f"--pair-species: no atoms of species '{sp_a}' found.")
         if not idx_b:
             raise ValueError(f"--pair-species: no atoms of species '{sp_b}' found.")
-        pairs.append((f"{sp_a}-{sp_b}", idx_a, idx_b))
+        pairs.append((f"{sp_a}-{sp_b}", idx_a, idx_b, None))
     return pairs
+
+
+def pair_columns(geometry, atoms_j, image=None):
+    """Column indices (orbitals of the auxiliary supercell, no * n_s) of atoms_j: all of
+    their periodic images (image None) or the one image (n1, n2, n3). geometry.o2a gives
+    SUPERCELL atom indices (0 .. na*n_s - 1), so they are folded with asc2uc before the
+    comparison; before 2.0.1 they were not, and only image 0 of J was ever summed -- a bond
+    to a neighbouring cell (the C-C bridge of XC8, 1.5 Ang) came out ICOOP ~ 0 while its
+    bond order was 0.88."""
+    if image is not None:
+        isc = geometry.lattice.sc_index(image)
+        return np.asarray(geometry.a2o(atoms_j, all=True)) + isc * geometry.no
+    col_atoms = geometry.asc2uc(geometry.o2a(np.arange(geometry.no * geometry.n_s)))
+    return np.where(np.isin(col_atoms, atoms_j))[0]
+
+
+def bond_order_columns(geometry, atoms_j, image=None):
+    """The same selection as pair_columns, in supercell ATOM indices (for the bond-order matrix)."""
+    if image is not None:
+        isc = geometry.lattice.sc_index(image)
+        return np.asarray(atoms_j) + isc * geometry.na
+    col_atoms = geometry.asc2uc(np.arange(geometry.na * geometry.n_s))
+    return np.where(np.isin(col_atoms, atoms_j))[0]
+
+
+def image_breakdown(total_oplist, geometry, E, i, j, tol=1e-4):
+    """[(image, distance Ang, integrated value)] of every periodic image of atom j that
+    interacts with atom i, sorted by distance -- what a folded --pair I J sums, one image
+    at a time. Images whose integral is below `tol` in magnitude are left out."""
+    rows = []
+    orb_i = geometry.a2o([i], all=True)
+    xyz_i = geometry.xyz[i]
+    for isc, off in enumerate(geometry.lattice.sc_off):
+        cols = np.asarray(geometry.a2o([j], all=True)) + isc * geometry.no
+        if i == j and isc == 0:
+            continue
+        curve = np.array([np.real(m[orb_i, :][:, cols].sum()) for m in total_oplist])
+        value = float(np.trapezoid(curve, E))
+        if abs(value) < tol:
+            continue
+        r = geometry.xyz[j] + off @ geometry.cell - xyz_i
+        rows.append((tuple(int(n) for n in off), float(np.linalg.norm(r)), value))
+    rows.sort(key=lambda row: row[1])
+    return rows
 
 
 def bonding_character(quantity, integrated):
@@ -157,24 +219,20 @@ def bonding_character(quantity, integrated):
     return "bonding" if measure > 0 else "antibonding" if measure < 0 else "non-bonding"
 
 
-def extract_pair_curve(total_oplist, geometry, atoms_i, atoms_j):
+def extract_pair_curve(total_oplist, geometry, atoms_i, atoms_j, image=None):
     """Sums the accumulated orbital-pair-resolved sparse matrices' entries
-    whose row belongs to atoms_i and whose column (folded back to the unit
-    cell across the full auxiliary supercell) belongs to atoms_j.
+    whose row belongs to atoms_i and whose column belongs to atoms_j: every
+    periodic image of atoms_j (image None; folded back to the unit cell with
+    asc2uc, see pair_columns) or the one image given.
 
-    A single mat[orb_i, :][:, col_idx_j] sum is already the COMPLETE
-    bilateral interaction between atoms_i and atoms_j -- the (no, no*n_s)
-    matrix's column range already spans every periodic image of atoms_j,
-    including the direct (image-0) unit-cell-to-unit-cell bond, and that
-    submatrix is itself Hermitian/symmetric. Verified empirically: for
-    atoms_i != atoms_j, mat[orb_i,:][:,col_idx_j].sum() and
-    mat[orb_j,:][:,col_idx_i].sum() are numerically identical (ratio
+    A single mat[orb_i, :][:, col_idx_j] sum is the one-sided (i -> j) term of
+    the interaction; the j -> i term is numerically identical (ratio
     1.0000000007 on a real 8-k-point test), so adding both (an earlier,
-    incorrect version of this function did) doubles the true value rather
-    than adding a distinct contribution."""
+    incorrect version of this function did) doubled the value. The Mulliken
+    bond order counts both directions and both spins: for a spin-unpolarized
+    run, bond order = 4 x ICOOP integrated to E_F (checked on Sn3O4: 3.98)."""
     orb_i = geometry.a2o(atoms_i, all=True)
-    col_atoms = geometry.o2a(np.arange(geometry.no * geometry.n_s))
-    col_idx_j = np.where(np.isin(col_atoms, atoms_j))[0]
+    col_idx_j = pair_columns(geometry, atoms_j, image)
 
     curve = np.empty(len(total_oplist))
     for ie, mat in enumerate(total_oplist):
@@ -247,8 +305,15 @@ def main():
 
     parser.add_argument("--pair", type=int, nargs=2, action="append", default=None,
                         metavar=("I", "J"),
-                        help="0-based atom-index pair (repeatable). I == J is allowed "
-                             "(on-site term).")
+                        help="0-based atom-index pair (repeatable). Sums EVERY periodic image of "
+                             "J within the orbital range (the report lists each image with its "
+                             "distance); use --image for one bond. I == J is allowed (on-site "
+                             "term).")
+    parser.add_argument("--image", type=int, nargs=3, default=None, metavar=("N1", "N2", "N3"),
+                        help="With --pair: only the periodic image (N1, N2, N3) of J, i.e. the one "
+                             "bond between I in the unit cell and J in cell N1 a1 + N2 a2 + N3 a3 "
+                             "(e.g. --pair 4 5 --image 0 -1 0 for a bond across the cell edge). "
+                             "The report's image table gives the image of each neighbour.")
     parser.add_argument("--pair-species", type=str, nargs=2, action="append", default=None,
                         metavar=("A", "B"),
                         help="Species-pair (repeatable), e.g. --pair-species Sn O -- "
@@ -380,7 +445,9 @@ def main():
     geometry = H.geometry
 
     try:
-        pairs = build_atom_pairs(geometry, args.pair, args.pair_species)
+        if args.image is not None and not args.pair:
+            raise ValueError("--image needs --pair (it selects one periodic image of J).")
+        pairs = build_atom_pairs(geometry, args.pair, args.pair_species, args.image)
     except ValueError as e:
         parser.error(str(e))
     print(f"[INFO] Selected pairs: {[p[0] for p in pairs]}")
@@ -438,16 +505,18 @@ def main():
 
     print("[INFO] Reducing to selected atom pairs ...")
     curves = {}
-    for label, atoms_i, atoms_j in pairs:
-        curves[label] = extract_pair_curve(total, geometry, atoms_i, atoms_j)
+    breakdowns = {}
+    for label, atoms_i, atoms_j, image in pairs:
+        curves[label] = extract_pair_curve(total, geometry, atoms_i, atoms_j, image)
+        if image is None and len(atoms_i) == 1 and len(atoms_j) == 1:
+            breakdowns[label] = image_breakdown(total, geometry, E, atoms_i[0], atoms_j[0])
     pair_labels = list(curves.keys())
 
     bond_orders = {}
     if DM is not None:
         bo = DM.bond_order(method="mulliken", projection="atom")
-        col_atoms = geometry.asc2uc(np.arange(geometry.na * geometry.n_s))
-        for label, atoms_i, atoms_j in pairs:
-            col_idx = np.where(np.isin(col_atoms, atoms_j))[0]
+        for label, atoms_i, atoms_j, image in pairs:
+            col_idx = bond_order_columns(geometry, atoms_j, image)
             bond_orders[label] = float(sum(bo[i, :][col_idx].sum() for i in atoms_i))
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -522,6 +591,15 @@ def main():
         rows.append(([lbl, f"{curve[peak_idx]:.6e} at E={E[peak_idx]:.4f} eV",
                       f"{integrated:.6e} ({character})"], None))
     print_table(["Pair", "Largest |value|", "Integrated over --erange"], rows, f_out)
+    for lbl, rows_img in breakdowns.items():
+        if len(rows_img) < 1:
+            continue
+        print_dual(f"Pair {lbl}: every periodic image of atom {lbl.split('-')[1]} that interacts with "
+                   f"atom {lbl.split('-')[0]} (the curve above sums them all; --pair {lbl.replace('-', ' ')} "
+                   "--image N1 N2 N3 gives one):", f_out)
+        print_table(["Image (N1 N2 N3)", "Distance (Ang)", f"Integrated {args.quantity.upper()}"],
+                    [([" ".join(f"{n:+d}" for n in img), f"{dist:.3f}", f"{val:+.6e}"], None)
+                     for img, dist, val in rows_img], f_out)
     print_dual("(Integrated over --erange, NOT necessarily just the occupied states. Sign convention: "
                "COOP > 0 = bonding (Hughbanks-Hoffmann); COHP < 0 = bonding (Dronskowski-Bloechl), "
                "i.e. -ICOHP > 0 for a bond.)", f_out)

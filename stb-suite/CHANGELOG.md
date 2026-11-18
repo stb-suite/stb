@@ -366,6 +366,8 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-coop --image N1 N2 N3`: with `--pair I J`, only the periodic image (N1, N2, N3) of J, i.e. one bond
+  (e.g. a bond across the cell edge); the report lists every image of J with its distance and integral.
 - **PseudoDojo tables by relativity, functional and accuracy.** The bundled `dojo` bank now holds
   eleven PseudoDojo tables (PSML): scalar-relativistic PBE, PBEsol and LDA (PW92), full-relativistic
   PBE and PBEsol (for spin-orbit), each standard and stringent, plus the lanthanides with 4f in the core

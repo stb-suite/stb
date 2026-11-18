@@ -196,12 +196,21 @@ def image_breakdown(total_oplist, geometry, E, i, j, tol=1e-4):
     rows = []
     orb_i = geometry.a2o([i], all=True)
     xyz_i = geometry.xyz[i]
+    # Energy integral of every column summed over the rows of atom i, in one pass over the
+    # energy points (trapezoid weights), then one block of columns per image.
+    weights = np.zeros(len(E))
+    if len(E) > 1:
+        dE = np.diff(E)
+        weights[:-1] += dE / 2
+        weights[1:] += dE / 2
+    integrated_cols = np.zeros(geometry.no * geometry.n_s)
+    for w, m in zip(weights, total_oplist):
+        integrated_cols += w * np.real(np.asarray(m[orb_i, :].sum(axis=0))).ravel()
+    orb_j = np.asarray(geometry.a2o([j], all=True))
     for isc, off in enumerate(geometry.lattice.sc_off):
-        cols = np.asarray(geometry.a2o([j], all=True)) + isc * geometry.no
         if i == j and isc == 0:
             continue
-        curve = np.array([np.real(m[orb_i, :][:, cols].sum()) for m in total_oplist])
-        value = float(np.trapezoid(curve, E))
+        value = float(integrated_cols[orb_j + isc * geometry.no].sum())
         if abs(value) < tol:
             continue
         r = geometry.xyz[j] + off @ geometry.cell - xyz_i

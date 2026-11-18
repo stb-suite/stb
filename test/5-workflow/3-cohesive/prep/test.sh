@@ -516,6 +516,43 @@ rm -rf cutoff_run_k && mkdir -p cutoff_run_k
 stb-cohesive -s structure.fdf -c cutoff_calc.fdf -k 0.2 -O cutoff_run_k --no-bsse-correction --no-intro > log_cutoff_k.txt 2>&1
 check_contains "kgrid.MonkhorstPack" cutoff_run_k/structure/config_extra.fdf
 
+# --- 14c. --calc with a per-species block (LiF needs 'Li non-perturbative'): every folder gets
+#     it re-keyed to ITS species in config_extra.fdf -- dropped where there is no Li (SIESTA:
+#     'WRONG species symbol in PAO.PolarizationScheme: Li'), copied to Li_ghost where Li is a
+#     ghost (else the ghost's polarization orbital fails, or gets another basis). ---
+echo -e "\n--- Testing --calc per-species blocks re-keyed per folder (LiF, Li non-perturbative) ---"
+rm -rf lif_run && mkdir -p lif_run
+cat > lif.fdf <<'FDFEOF'
+NumberOfAtoms 2
+NumberOfSpecies 2
+%block ChemicalSpeciesLabel
+ 1 3 Li
+ 2 9 F
+%endblock ChemicalSpeciesLabel
+LatticeConstant 4.03 Ang
+%block LatticeVectors
+ 0.0 0.5 0.5
+ 0.5 0.0 0.5
+ 0.5 0.5 0.0
+%endblock LatticeVectors
+AtomicCoordinatesFormat Fractional
+%block AtomicCoordinatesAndAtomicSpecies
+ 0.0 0.0 0.0 1
+ 0.5 0.5 0.5 2
+%endblock AtomicCoordinatesAndAtomicSpecies
+FDFEOF
+printf '%%include structure.fdf\nSystemLabel siesta\nMesh.Cutoff 300 Ry\n%%block PAO.PolarizationScheme\n Li non-perturbative\n%%endblock PAO.PolarizationScheme\n' > lif_calc.fdf
+stb-cohesive -s lif.fdf -c lif_calc.fdf -p dojo --bsse-cutoff 2.5 -O lif_run --no-intro > log_lif.txt 2>&1
+check_exit_code $? 0
+echo "Testing: atoms/F (no Li at all) -> an empty PAO.PolarizationScheme block overrides the template's"
+check_contains "%block PAO.PolarizationScheme" lif_run/atoms/F/config_extra.fdf
+check_not_contains "Li non-perturbative" lif_run/atoms/F/config_extra.fdf
+echo "Testing: atoms_bsse/F (F + Li ghosts) -> Li_ghost gets Li's entry"
+check_contains "Li_ghost non-perturbative" lif_run/atoms_bsse/F/config_extra.fdf
+echo "Testing: atoms/Li and the full structure fit the template -> nothing re-keyed"
+check_not_contains "PAO.PolarizationScheme" lif_run/atoms/Li/config_extra.fdf
+check_not_contains "PAO.PolarizationScheme" lif_run/structure/config_extra.fdf
+
 popd > /dev/null
 
 # --- 15. Summary ---

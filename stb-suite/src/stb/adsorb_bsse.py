@@ -12,7 +12,7 @@ import os
 import sys
 import argparse
 from stb.core import structure_io
-from stb.core.bsse import make_ghost_variant, strip_config_extra_include
+from stb.core.bsse import make_ghost_variant, strip_config_extra_include, species_block_overrides
 from stb.core.siesta_log import report_quality_diagnostics
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table, capture_library_noise
 from stb.core.pseudopotentials import copy_pseudo
@@ -139,7 +139,8 @@ def write_bsse_folders(bsse_dir, site_fdf, calc_text, pp_path):
         os.makedirs(out_dir, exist_ok=True)
         structure_io.write_fdf(variant, os.path.join(out_dir, "structure.fdf"))
         with open(os.path.join(out_dir, CONFIG_EXTRA_FILE), "w") as f:
-            f.write(config_extra_content)
+            f.write(config_extra_content + species_block_overrides(
+                calc_text, structure_io.species_list(variant)))
         with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
             f.write(structure_io.prepend_include(calc_text, CONFIG_EXTRA_FILE))
         # pp_path (the site's own directory) already has a pseudopotential

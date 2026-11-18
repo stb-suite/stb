@@ -55,7 +55,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 
 from stb.core import structure_io, fdf_directives, kspace
 from stb.core import adsorption_sites
-from stb.core.bsse import make_ghost_variant
+from stb.core.bsse import make_ghost_variant, species_block_overrides
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.core.pseudopotentials import BANK_HELP, copy_pseudo, resolve_pseudo_source, pseudo_valence
 from stb.core import citations
@@ -448,6 +448,7 @@ def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutof
         config_extra += adsorption_sites.DIPOLE_CORRECTION_BLOCK
     if vdw_corrected:
         config_extra += adsorption_sites.VDW_CORRECTION_BLOCK
+    config_extra += species_block_overrides(calc_text, structure_io.species_list(fdf_structure))
     config_extra_path = os.path.join(out_dir, CONFIG_EXTRA_FILE)
     with open(config_extra_path, "w") as f:
         f.write(config_extra)

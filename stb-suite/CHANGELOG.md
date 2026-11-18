@@ -246,6 +246,15 @@ version before) and **Added** (new options and tools).
   report lists them, one row per image with its distance; the new `--image N1 N2 N3` selects one
   (one bond). The bond order uses the same selection. `--pair I I` stays the on-site term.
 
+- `stb-cohesive --calc`: a per-species block of the template (`PAO.PolarizationScheme` with
+  `Li non-perturbative`, which LiF needs; `PAO.Basis`, `PAO.BasisSizes`) was copied unchanged into
+  every folder, although the species differ from folder to folder. SIESTA stopped in the folders with
+  no Li (`atoms/F`: "WRONG species symbol in PAO.PolarizationScheme: Li"), and a ghost (`Li_ghost`)
+  had no entry, so its polarization orbital failed to generate or it got another basis than the real
+  atom. Each folder's `config_extra.fdf` now carries these blocks re-keyed to its own species: absent
+  species dropped, `X_ghost` given the entry of `X`. `stb-adsorbBsse` and `stb-chargediffPrep`, which
+  write ghost fragments from a template too, do the same.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -15,6 +15,7 @@ import shutil
 import argparse
 import numpy as np
 from stb.core import structure_io, kspace, symmetry
+from stb.core.bsse import species_block_overrides
 from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
 from stb.core.pseudopotentials import BANK_HELP, get_required_pseudos, resolve_pseudo_source, copy_pseudo
 
@@ -179,8 +180,9 @@ def write_isolated_calc(out_dir, dispersion):
         with open(os.path.join(out_dir, "calc.fdf"), 'w') as f:
             f.write(_isolated_atom_calc(dispersion))
         return
+    labels = structure_io.species_list(structure_io.read_fdf(os.path.join(out_dir, "structure.fdf")))
     with open(os.path.join(out_dir, EXTRA_FDF_FILE), 'w') as f:
-        f.write(isolated_extra_text(dispersion))
+        f.write(isolated_extra_text(dispersion) + species_block_overrides(USER_CALC["text"], labels))
     with open(os.path.join(out_dir, "calc.fdf"), 'w') as f:
         f.write(structure_io.prepend_include(USER_CALC["text"], EXTRA_FDF_FILE))
 

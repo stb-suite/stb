@@ -211,6 +211,13 @@ version before) and **Added** (new options and tools).
   The report is now written, Al 0 and P 8 e- as the Henkelman program gives, with the
   zero-population warning and no surface-distance column.
 
+- `stb-adsorb --ml-rank` with orientation sampling kept the same geometry twice when two
+  orientations relaxed to one H2O with its two H swapped ("8 orientation(s) sampled -> 8 unique
+  kept" on Ag(111), 32 SIESTA folders where 24 were distinct): the RMSD compared the atoms in file
+  order, so the swap read as 1.5 Ang. Equal atoms are now matched by the best permutation, and each
+  distance uses the nearest periodic image (an adsorbate atom wrapped to the opposite face of the
+  cell no longer counts as a jump of a lattice vector).
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

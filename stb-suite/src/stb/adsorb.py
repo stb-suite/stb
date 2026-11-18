@@ -398,7 +398,9 @@ def main():
                          help="With --ml-rank and orientation sampling: two relaxed orientations "
                               "at the same site are treated as duplicates (only the better-energy "
                               "one kept) when their adsorbate-atom RMSD is below this (Ang) AND "
-                              "their energy differs by less than 0.01 eV. Default 0.3.")
+                              "their energy differs by less than 0.01 eV. The RMSD matches equal "
+                              "atoms by the best permutation (H2O with its two H swapped is one "
+                              "geometry) and uses the nearest periodic image. Default 0.3.")
 
     parser.add_argument("-O", "--output-dir", type=str, default="adsorption_run",
                          help="Root directory (default: adsorption_run) for 'clean_slab', "

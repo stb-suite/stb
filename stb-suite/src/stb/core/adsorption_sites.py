@@ -699,6 +699,38 @@ def generate_systematic_orientations(mol, n_polar=1, n_azimuthal=1):
     return orientations
 
 
+def adsorbate_rmsd(positions_a, positions_b, symbols, cell=None, pbc=None):
+    """RMSD (Ang) between two geometries of the same adsorbate, invariant to a relabelling
+    of equal atoms and to periodic wrapping: within each element the atoms are matched by
+    the assignment that minimizes the summed squared distance (Hungarian algorithm), and
+    each distance is taken to the nearest periodic image along the axes where `pbc` is
+    True. Without the permutation, H2O with its two H swapped -- the same geometry --
+    reads as an RMSD above 1.5 Ang; without the minimum image, an atom wrapped to the
+    opposite face of the cell reads as a jump of a whole lattice vector."""
+    from scipy.optimize import linear_sum_assignment
+    a = np.asarray(positions_a, dtype=float)
+    b = np.asarray(positions_b, dtype=float)
+    symbols = list(symbols)
+    if cell is not None and pbc is not None and np.any(pbc):
+        cell = np.asarray(cell, dtype=float)
+        inv = np.linalg.inv(cell)
+        pbc_mask = np.asarray(pbc, dtype=bool)
+    else:
+        cell = inv = pbc_mask = None
+    total = 0.0
+    for el in sorted(set(symbols)):
+        idx = [k for k, sym in enumerate(symbols) if sym == el]
+        d = b[idx][None, :, :] - a[idx][:, None, :]        # (i in a, j in b, xyz)
+        if cell is not None:
+            frac = d @ inv
+            frac[..., pbc_mask] -= np.round(frac[..., pbc_mask])
+            d = frac @ cell
+        cost = np.sum(d ** 2, axis=2)
+        rows, cols = linear_sum_assignment(cost)
+        total += cost[rows, cols].sum()
+    return float(np.sqrt(total / len(symbols)))
+
+
 def deduplicate_orientations(entries, n_substrate, rmsd_tol=0.3, energy_tol=0.01):
     """Greedy duplicate filter for a list of relaxed orientation candidates
     at the SAME site: `entries` is a list of `(energy, ase.Atoms)` already
@@ -708,33 +740,30 @@ def deduplicate_orientations(entries, n_substrate, rmsd_tol=0.3, energy_tol=0.01
     RMSD is computed on the adsorbate atoms only (`atoms.positions[
     n_substrate:]`) -- the substrate is identical across every candidate at
     one site (same relaxation, same fixed atoms), so no Kabsch alignment is
-    needed, just a direct per-atom Cartesian distance (same atom count/
-    order across all candidates, guaranteed by construction: every
-    candidate here comes from the SAME `AdsorbateSiteFinder.add_adsorbate`
-    call shape, just a different pre-rotated molecule). A candidate is
-    dropped only if it's within BOTH `rmsd_tol` (Ang) of AND `energy_tol`
-    (eV) of an already-kept one -- requiring both avoids two failure modes
-    a single-metric check would have: merging two genuinely different local
-    minima that happen to share a similar energy by coincidence, or merging
-    two near-identical geometries whose energy differs only by MACE's own
-    numerical noise.
-
-    Does not correct for periodic wraparound (no minimum-image convention)
-    -- two candidates starting at the same site coordinate and relaxing
-    independently aren't expected to drift across a cell boundary
-    differently enough for this to matter in practice; documented as a
-    known simplification, not handled.
+    needed -- with `adsorbate_rmsd`: equal atoms matched by the best
+    permutation (H2O with H1 and H2 swapped is the same geometry; before
+    2.0.1 the file order was used and such pairs survived as "unique", each
+    one an extra SIESTA folder) and distances taken to the nearest periodic
+    image (each candidate is wrapped into the cell after its relaxation).
+    A candidate is dropped only if it's within BOTH `rmsd_tol` (Ang) of AND
+    `energy_tol` (eV) of an already-kept one -- requiring both avoids two
+    failure modes a single-metric check would have: merging two genuinely
+    different local minima that happen to share a similar energy by
+    coincidence, or merging two near-identical geometries whose energy
+    differs only by MACE's own numerical noise.
     """
     kept_indices = []
     kept_ads_positions = []
     kept_energies = []
     for i, (energy, atoms) in enumerate(entries):
         ads_positions = atoms.get_positions()[n_substrate:]
+        symbols = atoms.get_chemical_symbols()[n_substrate:]
         is_duplicate = False
         for other_energy, other_positions in zip(kept_energies, kept_ads_positions):
             if abs(energy - other_energy) >= energy_tol:
                 continue
-            rmsd = np.sqrt(np.mean(np.sum((ads_positions - other_positions) ** 2, axis=1)))
+            rmsd = adsorbate_rmsd(ads_positions, other_positions, symbols,
+                                  cell=atoms.get_cell()[:], pbc=atoms.get_pbc())
             if rmsd < rmsd_tol:
                 is_duplicate = True
                 break

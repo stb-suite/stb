@@ -1073,6 +1073,30 @@ check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_success $RUN/sites/orientation_trajectory.xyz
 
 
+# --- 8b. Orientation duplicates (no MACE needed): H2O with its two H swapped, or shifted by a
+#     lattice vector, is ONE geometry -- deduplicate_orientations must drop it; a genuinely
+#     rotated H2O must stay. Before 2.0.1 the RMSD used the file order (swap = 1.24 Ang). ---
+echo -e "\n--- Testing orientation dedup: permutation of equal atoms + minimum image ---"
+python3 - > log_dedup_perm.txt 2>&1 <<'PYEOF'
+import numpy as np
+from ase import Atoms
+from stb.core.adsorption_sites import deduplicate_orientations
+cell = [[8.6, 0, 0], [4.3, 7.45, 0], [0, 0, 25]]
+O = np.array([1.0, 1.0, 12.2])
+def mk(pos, shift=(0, 0, 0)):
+    a = Atoms('Ag', positions=[[0, 0, 10]]) + Atoms('OHH', positions=np.array(pos) + shift)
+    a.set_cell(cell); a.pbc = True
+    return a
+same = mk([O, O + [0.76, 0, 0.59], O + [-0.76, 0, 0.59]])
+swapped = mk([O, O + [-0.76, 0, 0.59], O + [0.76, 0, 0.59]])
+shifted = mk([O, O + [-0.76, 0, 0.59], O + [0.76, 0, 0.59]], shift=(8.6, 0, 0))
+rotated = mk([O, O + [0, 0.76, 0.59], O + [0, -0.76, 0.59]])
+kept = deduplicate_orientations([(-1.0, same), (-1.0, swapped), (-1.0, shifted), (-1.0, rotated)], 1)
+print("kept", kept)
+PYEOF
+check_contains "kept \[0, 3\]" log_dedup_perm.txt
+
+
 popd > /dev/null
 
 # --- 9. Summary ---

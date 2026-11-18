@@ -837,3 +837,24 @@ def reduce_to_unitcell(structure, mode, symprec=0.01, angle_tolerance=5.0):
     else:
         new_structure = sga.get_refined_structure()
     return new_structure, sga
+
+
+def symmetry_lost_to_noise(input_structure, relaxed_structure, tight=1e-3, loose=0.01):
+    """(input space group, relaxed space group at `tight`) when a relaxation lowered the
+    symmetry only by numerical noise: the relaxed structure has fewer symmetry operations
+    than the input at `tight` (Ang) but at least as many at `loose`. A variable-cell CG of an
+    fcc primitive cell ends at angles of 59.91-59.99 deg (stress noise, mesh), R-3m at 1e-3
+    Ang but still Fm-3m at 0.01; the distorted cell then misleads every later step (the
+    Bravais lattice of stb-kpath). None when nothing was lost, or when the loss is real."""
+    try:
+        n_in = len(SpacegroupAnalyzer(input_structure, symprec=tight).get_symmetry_operations())
+        sga_tight = SpacegroupAnalyzer(relaxed_structure, symprec=tight)
+        n_tight = len(sga_tight.get_symmetry_operations())
+        if n_tight >= n_in:
+            return None
+        n_loose = len(SpacegroupAnalyzer(relaxed_structure, symprec=loose).get_symmetry_operations())
+        if n_loose < n_in:
+            return None
+        return space_group_label(input_structure, symprec=tight), space_group_label(relaxed_structure, symprec=tight)
+    except Exception:
+        return None

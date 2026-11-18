@@ -272,6 +272,13 @@ version before) and **Added** (new options and tools).
   orbital without that scheme (or `PAO.Polarization.NonPerturbative true`). Other alkali metals are not
   verified.
 
+- `stb-convergenceAnalysis`: a variable-cell relaxation of a cubic crystal can end slightly
+  rhombohedral (fcc primitive cells at 59.91-59.99 deg: Cu, NaCl, Ag, GaAs, MgO, Ge, Pd), from the
+  stress noise, with every stop criterion met and no warning; the distorted cell then went into every
+  later step (`stb-kpath` saw another Bravais lattice). The report now warns when a relaxed cell has
+  lost the input symmetry at 0.001 Ang but keeps it at 0.01 Ang (e.g. Fm-3m in, R-3m out), and says to
+  symmetrize the structure before reuse or keep the angles fixed. The volumes are unchanged.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

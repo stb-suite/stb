@@ -315,6 +315,38 @@ check_contains "Ptol=1GPa" log_es_relax.txt
 check_contains "V=input" log_es_relax.txt
 check_contains "relaxation(s) ended with exactly the input cell" log_es_relax.txt
 
+# --- 10b2. A variable-cell relaxation of an fcc cell that ends at 59.91 deg (stress noise):
+#     R-3m at 0.001 Ang, still Fm-3m at 0.01 -> warning; a cell that keeps 60 deg -> none. ---
+echo -e "\n--- Testing: relaxed cell that lost the input symmetry to noise is flagged ---"
+rm -rf fcc_relax
+python3 - <<'PYEOF'
+import os
+from ase.cell import Cell
+def fdf_cell(c): return "\n".join("   ".join(f"{x:12.8f}" for x in r) for r in c)
+ideal = Cell.fromcellpar([2.55, 2.55, 2.55, 60, 60, 60])[:]
+for value, alpha, e in ((300, 59.91, -1500.90), (400, 59.92, -1500.95), (500, 59.92, -1500.96)):
+    d = f"fcc_relax/meshcutoff/convergence_meshcutoff_{value:.4f}"
+    os.makedirs(d, exist_ok=True)
+    open(f"{d}/structure.fdf", "w").write(
+        "NumberOfAtoms 1\nNumberOfSpecies 1\n%block ChemicalSpeciesLabel\n 1 29 Cu\n%endblock ChemicalSpeciesLabel\n"
+        "LatticeConstant 1.0 Ang\n%block LatticeVectors\n" + fdf_cell(ideal) + "\n%endblock LatticeVectors\n"
+        "AtomicCoordinatesFormat Fractional\n%block AtomicCoordinatesAndAtomicSpecies\n 0 0 0 1\n"
+        "%endblock AtomicCoordinatesAndAtomicSpecies\n")
+    open(f"{d}/config_extra.fdf", "w").write(f"Mesh.Cutoff {value} Ry\nMD.TypeOfRun CG\nMD.Steps 100\nMD.VariableCell true\n")
+    relaxed = Cell.fromcellpar([2.55, 2.55, 2.55, alpha, alpha, alpha])[:]
+    open(f"{d}/calc.out", "w").write(
+        "Begin CG opt. move =      3\nSCF cycle converged after 10 iterations\n"
+        f"siesta: FreeEng =    {e}\noutcell: Unit cell vectors (Ang):\n{fdf_cell(relaxed)}\n")
+PYEOF
+stb-convergenceAnalysis --dir fcc_relax --no-intro > log_fcc_relax.txt 2>&1
+check_contains "relaxed cell(s) lost the input symmetry to numerical noise: Fm-3m (No. 225) in, R-3m (No. 166) out" log_fcc_relax.txt
+echo "Testing: the earlier relaxations (cell unchanged) give no such warning"
+if grep -q "lost the input symmetry" log_es_relax.txt; then
+    echo -e "   -> ${RED}Failed:${NC} symmetry-loss warning for an unchanged cell"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no symmetry-loss warning for an unchanged cell"; PASS=$((PASS+1))
+fi
+
 # --- 10c. --parameter basis, 2D: area / a0 / N/m (N7), 'every tighter value' closing rule (N13),
 #     SIESTA 5.4.2 filter lines (N5), -p in the next-step command (N11). Synthetic E(A) parabolas. ---
 echo -e "\n--- Testing the basis analysis of a 2D range stage (synthetic, false plateau at 0.02-0.005 Ry) ---"

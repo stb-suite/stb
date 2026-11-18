@@ -66,6 +66,7 @@ import argparse
 import numpy as np
 from datetime import datetime
 from stb.core import structure_io, siesta_log
+from stb.core import symmetry as core_symmetry
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 from stb.convergence import PARAMETER_DEFAULTS, PARAMETER_ORDER, substitute_numeric_tag, substitute_kgrid_tag
 
@@ -280,6 +281,33 @@ def write_curve_plot(dat_path, parameter_name, rows):
 # Cutoff radii of the basis orbitals of each run, {(parameter, value): (min, max)} in Bohr,
 # filled by analyze_one_sweep for the PAO.EnergyShift table.
 ORBITAL_RADII = {}
+# parameter -> [(folder, input space group, relaxed space group at 1e-3 Ang, cell angles)]
+DISTORTED = {}
+
+
+def relaxed_symmetry_check(folder, structure, outcell):
+    """(input SG, relaxed SG, angles) when the relaxed cell lost symmetry to noise only (see
+    core.symmetry.symmetry_lost_to_noise), else None. The relaxed positions come from the
+    folder's *.XV when there is one (sisl), else the input fractional coordinates in the
+    relaxed cell."""
+    from pymatgen.core import Lattice, Structure
+    try:
+        pmg_in = structure_io.to_pymatgen(structure)
+        relaxed = None
+        xv = sorted(f for f in os.listdir(folder) if f.endswith(".XV"))
+        if xv:
+            import sisl
+            geom = sisl.get_sile(os.path.join(folder, xv[0])).read_geometry()
+            if len(geom) == len(pmg_in):
+                relaxed = Structure(Lattice(geom.cell), pmg_in.species, geom.xyz, coords_are_cartesian=True)
+        if relaxed is None:
+            relaxed = Structure(Lattice(outcell), pmg_in.species, pmg_in.frac_coords)
+        lost = core_symmetry.symmetry_lost_to_noise(pmg_in, relaxed)
+        if lost:
+            return lost[0], lost[1], relaxed.lattice.angles
+    except Exception:
+        return None
+    return None
 _RC_LINE_RE = re.compile(r"^\s*rc\s*=\s*([0-9]+\.[0-9]+)\s*$")
 
 
@@ -336,6 +364,10 @@ def analyze_one_sweep(parameter, folder_paths, out_filename, force_tolerance, f_
                                     and (loose or (stress_gpa is not None and stress_gpa > 0.05)))
             except Exception:
                 pass
+        if declared_steps and outcell is not None:
+            lost = relaxed_symmetry_check(folder, structure, outcell)
+            if lost:
+                DISTORTED.setdefault(parameter, []).append((name,) + lost)
         quality = quality_flag(scf_converged, max_force, force_tolerance, geometry_steps, declared_steps,
                                stress_gpa, stress_tol if stress_tol is not None else SIESTA_DEFAULT_STRESS_TOL_GPA,
                                volume_unchanged)
@@ -495,6 +527,17 @@ def print_sweep_section(section_label, parameter, rows, n_skipped, n_found, args
         recommended = energy_converged
     elif volume_converged is not None:
         recommended = volume_converged
+
+    distorted = DISTORTED.get(parameter, [])
+    if distorted:
+        name, sg_in, sg_out, angles = distorted[0]
+        print_dual(color_text(
+            f"[WARNING] {len(distorted)} relaxed cell(s) lost the input symmetry to numerical noise: {sg_in} "
+            f"in, {sg_out} out at 0.001 Ang (still {sg_in} at 0.01 Ang); e.g. {name}, angles {angles[0]:.4f} "
+            f"{angles[1]:.4f} {angles[2]:.4f} deg. The volume above is unaffected, but a structure taken from "
+            "these runs carries the distortion (stb-kpath then sees another Bravais lattice). Symmetrize it "
+            "before reuse, or keep the angles fixed in the relaxation (MD.Constraints / Geometry.Constraints "
+            "on the shear stress components).", 'yellow'), f_out)
 
     return energy_converged, volume_converged, recommended
 

@@ -218,6 +218,16 @@ version before) and **Added** (new options and tools).
   distance uses the nearest periodic image (an adsorbate atom wrapped to the opposite face of the
   cell no longer counts as a jump of a lattice vector).
 
+- `stb-cohesiveAnalysis`, three report points (no number changes):
+  - section [2] said "a positive Delta here is the expected direction", but its `Delta BSSE` column is
+    the atom with ghosts minus the isolated atom, negative in every run (Si -0.239 eV). The text now
+    says negative, and that it makes the cohesive energy less negative in [3];
+  - a BSSE reference with zero ghost atoms (`--bsse-cutoff` below the first neighbour, e.g. 2 Ang in
+    Ag) was warned about by `stb-cohesive` only; the analysis printed a "BSSE correction +0.0000" as a
+    result. Section [3] now repeats the warning, and the summary marks the value;
+  - with a cutoff scan, the summary [5] now also gives the value at the largest cutoff (Cu: up to
+    0.08 eV/atom from the base value), which appeared only in [3b].
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

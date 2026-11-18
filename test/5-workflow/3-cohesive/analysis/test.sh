@@ -234,6 +234,21 @@ check_contains "6.0 Ang.*-449.5111.*.0.1000" log_scan.txt
 check_contains "8.0 Ang.*-449.4735.*.0.1377" log_scan.txt
 check_contains "Last step change: .0.0377 eV/atom .cutoff 6.0 -> 8.0 Ang." log_scan.txt
 check_success cohesive_correction.png
+echo "Testing: the summary [5] also gives the largest-cutoff value, not only the base one"
+check_contains "Cohesive energy per atom (BSSE, largest cutoff 8.0 Ang): -449.4735 eV/atom (+0.1377 vs base" log_scan.txt
+echo "Testing: [2] states the expected sign of 'Delta BSSE' (negative: the ghosts lower the atom)"
+check_contains "a negative 'Delta BSSE' here is" log_scan.txt
+
+echo "Testing: a BSSE reference with ZERO ghost atoms is flagged in [3] (its correction is zero by construction)"
+printf 'NumberOfSpecies 1\n%%block ChemicalSpeciesLabel\n 1 6 C\n%%endblock ChemicalSpeciesLabel\n' > atoms_bsse/C/structure.fdf
+stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_zero_ghost.txt 2>&1
+check_exit_code $? 0
+check_contains "BSSE reference with ZERO ghost atoms: C" log_zero_ghost.txt
+check_contains "zero ghosts: see the warning in \[3\]" log_zero_ghost.txt
+printf 'NumberOfSpecies 2\n%%block ChemicalSpeciesLabel\n 1 6 C\n 2 -6 C_ghost\n%%endblock ChemicalSpeciesLabel\n' > atoms_bsse/C/structure.fdf
+stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_with_ghost.txt 2>&1
+check_not_contains "ZERO ghost atoms" log_with_ghost.txt
+rm -f atoms_bsse/C/structure.fdf
 
 echo "Testing: an incomplete scan point (missing calc.out) is skipped with a warning, others unaffected"
 rm -f atoms_bsse_check_8.0/C/calc.out

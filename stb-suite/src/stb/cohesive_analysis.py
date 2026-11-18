@@ -112,6 +112,29 @@ def read_bsse_energy(bsse_root, sym, out_file):
     return weighted_sum / total_weight, True
 
 
+def bsse_folders_without_ghosts(bsse_root, sym):
+    """The folders of species `sym` under `bsse_root` (flat, or one per site) whose
+    structure.fdf declares no ghost species (no '_ghost' label): stb-cohesive found no
+    neighbour within --bsse-cutoff there, so that 'BSSE-corrected' energy is the plain
+    isolated atom and the correction is zero by construction, not a result."""
+    sym_dir = os.path.join(bsse_root, sym)
+    if not os.path.isdir(sym_dir):
+        return []
+    folders = [sym_dir] if os.path.isfile(os.path.join(sym_dir, "structure.fdf")) else [
+        os.path.join(sym_dir, d) for d in sorted(os.listdir(sym_dir))
+        if _SITE_DIR_RE.match(d) and os.path.isdir(os.path.join(sym_dir, d))]
+    empty = []
+    for folder in folders:
+        try:
+            with open(os.path.join(folder, "structure.fdf")) as f:
+                text = f.read()
+        except OSError:
+            continue
+        if "_ghost" not in text:
+            empty.append(os.path.relpath(folder))
+    return empty
+
+
 def find_reference_cutoff(root_dir):
     """Best-effort recovery of the numeric BSSE cutoff (Ang) used to build
     the ghost-cluster reference(s) under `root_dir` (e.g. 'atoms_bsse/'),
@@ -494,7 +517,9 @@ def main():
         "sum below. The 'Delta' columns show the shift each correction introduces relative to "
         "the uncorrected reference -- BSSE removes an artificial over-stabilization of the "
         "isolated atom (it's computed with a smaller effective basis than it has inside the "
-        "solid), so a positive Delta here is the expected, physically correct direction.",
+        "solid): the ghost orbitals LOWER the atom's energy, so a negative 'Delta BSSE' here is "
+        "the expected direction; it makes the cohesive energy less negative ('Delta vs "
+        "Uncorrected' > 0 in [3]).",
         f_out)
     energy_rows = []
     for sym in used_species:
@@ -598,6 +623,19 @@ def main():
     print_table(["Method", "Total (eV)", "Per atom (eV/atom)", "Delta vs Uncorrected (eV/atom)"],
                 result_rows, f_out)
 
+    no_ghost = {}
+    if bsse_available:
+        for sym in used_species:
+            empty = bsse_folders_without_ghosts(atoms_bsse_dir, sym)
+            if empty:
+                no_ghost[sym] = empty
+    if no_ghost:
+        print_dual(color_text(
+            "[WARNING] BSSE reference with ZERO ghost atoms: "
+            + "; ".join(f"{sym} ({', '.join(folders)})" for sym, folders in no_ghost.items())
+            + ". stb-cohesive found no neighbour within --bsse-cutoff, so that 'BSSE-corrected' "
+            "energy is the plain isolated atom and its correction is zero by construction, not a "
+            "converged result. Re-run stb-cohesive with a larger --bsse-cutoff.", 'yellow'), f_out)
     if e_coh_per_atom_bsse is not None:
         print_dual(f"BSSE correction per atom: {delta_per_atom:+.4f} eV/atom (uncorrected LCAO "
                    "cohesive energies systematically over-bind -- expect this to make the "
@@ -682,7 +720,19 @@ def main():
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual(f"Cohesive energy per atom (uncorrected)  : {e_coh_per_atom:.4f} eV/atom", f_out)
     if e_coh_per_atom_bsse is not None:
-        print_dual(f"Cohesive energy per atom (BSSE-corrected): {e_coh_per_atom_bsse:.4f} eV/atom", f_out)
+        base_txt = ""
+        if scan_curve:
+            base_txt = f", base cutoff {scan_curve[0][0]:.1f} Ang" if scan_curve[0][1] == e_coh_per_atom_bsse else ""
+        print_dual(f"Cohesive energy per atom (BSSE-corrected): {e_coh_per_atom_bsse:.4f} eV/atom{base_txt}"
+                   + (" [zero ghosts: see the warning in [3]]" if no_ghost else ""), f_out)
+        if len(scan_curve) >= 2:
+            last_cutoff, last_e = scan_curve[-1]
+            print_dual(f"Cohesive energy per atom (BSSE, largest cutoff {last_cutoff:.1f} Ang): {last_e:.4f} "
+                       f"eV/atom ({last_e - e_coh_per_atom_bsse:+.4f} vs base; the converged value if [3b] "
+                       "has stopped changing)", f_out)
+        elif e_coh_per_atom_check is not None:
+            print_dual(f"Cohesive energy per atom (BSSE check, larger cutoff): {e_coh_per_atom_check:.4f} "
+                       f"eV/atom ({e_coh_per_atom_check - e_coh_per_atom_bsse:+.4f} vs base)", f_out)
     if report_path:
         print_dual(f"Report      : {report_path}", f_out)
     else:

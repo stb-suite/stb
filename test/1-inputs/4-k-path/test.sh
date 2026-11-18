@@ -149,10 +149,48 @@ stb-kpath --file example_3D_silicon.fdf --no-intro > log_3d.txt 2>&1
 check_contains "Dimensionality : 3D" log_3d.txt
 check_contains "CUB" log_3d.txt
 check_contains "Path : .*Gamma-X-M-.Gamma-R-X | M-R" log_3d.txt
-check_contains "Disjointed path detected" log_3d.txt
+check_contains "path jump X | M -- written as a new line" log_3d.txt
 check_contains "Space group :" log_3d.txt
 check_success kpath_bs.fdf
+echo "Testing: the jump point (M after X) is written with 1 point, not as an X-M segment of 50"
+check_contains "^1 .*  M$" kpath_bs.fdf
 mv kpath_bs.fdf kpath_3d.fdf
+
+# A relaxed fcc cell, angles 59.93 deg: ASE's eps 2e-4 sees RHL while the space group is
+# Fm-3m. The path must be the FCC one (with a warning); a genuinely rhombohedral cell
+# (Bi, R-3m, 57.23 deg) must keep the RHL path.
+python3 - <<'PYEOF'
+from ase.cell import Cell
+def write(name, cellpar, sym, Z, frac):
+    c = Cell.fromcellpar(cellpar)[:]
+    with open(name, 'w') as f:
+        f.write(f"NumberOfAtoms {len(frac)}\nNumberOfSpecies 1\n%block ChemicalSpeciesLabel\n 1 {Z} {sym}\n"
+                "%endblock ChemicalSpeciesLabel\nLatticeConstant 1.0 Ang\n%block LatticeVectors\n")
+        for v in c:
+            f.write(" %.10f %.10f %.10f\n" % tuple(v))
+        f.write("%endblock LatticeVectors\nAtomicCoordinatesFormat Fractional\n"
+                "%block AtomicCoordinatesAndAtomicSpecies\n")
+        for p in frac:
+            f.write(" %.6f %.6f %.6f 1\n" % tuple(p))
+        f.write("%endblock AtomicCoordinatesAndAtomicSpecies\n")
+write('ag_distorted.fdf', [2.93, 2.93, 2.93, 59.93, 59.93, 59.93], 'Ag', 47, [[0, 0, 0]])
+write('bi_rhl.fdf', [4.75, 4.75, 4.75, 57.23, 57.23, 57.23], 'Bi', 83,
+      [[0.234, 0.234, 0.234], [-0.234, -0.234, -0.234]])
+PYEOF
+echo "Testing: distorted fcc (59.93 deg) -> FCC path, with a warning naming the space group"
+stb-kpath --file ag_distorted.fdf -o kpath_ag.fdf --no-intro > log_ag_distorted.txt 2>&1
+check_contains "Bravais lattice : face-centred cubic (FCC)" log_ag_distorted.txt
+check_contains "WARNING. The cell's Bravais lattice at eps = 0.0002 is RHL, but the space group Fm-3m" log_ag_distorted.txt
+check_contains "Path : .*Gamma-X-W-K-.Gamma-L-U-W-L-K | U-X" log_ag_distorted.txt
+echo "Testing: genuinely rhombohedral Bi (R-3m) keeps the RHL path, no warning"
+stb-kpath --file bi_rhl.fdf -o kpath_bi.fdf --no-intro > log_bi.txt 2>&1
+check_contains "Bravais lattice : primitive rhombohedral (RHL)" log_bi.txt
+check_contains "Space group : R-3m (No. 166)" log_bi.txt
+if grep -q "WARNING. The cell's Bravais lattice" log_bi.txt; then
+    echo -e "   -> ${RED}Failed:${NC} unexpected Bravais-lattice warning for rhombohedral Bi"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no Bravais-lattice warning for rhombohedral Bi"; PASS=$((PASS+1))
+fi
 
 
 # --- 3. Content of the generated kpath_bs.fdf ---

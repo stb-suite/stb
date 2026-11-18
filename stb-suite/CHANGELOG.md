@@ -228,6 +228,16 @@ version before) and **Added** (new options and tools).
   - with a cutoff scan, the summary [5] now also gives the value at the largest cutoff (Cu: up to
     0.08 eV/atom from the base value), which appeared only in [3b].
 
+- `stb-kpath`, two problems on cells from a relaxation:
+  - fcc crystals whose relaxed cell had angles of 59.91-59.99 deg (Ag, Cu, Pd, Ge, GaAs, NaCl, MgO)
+    got the rhombohedral path (`\Gamma-L-B1 | B-Z-...`) while the same report gave Fm-3m/F-43m: the
+    Bravais lattice came from ASE at `eps` 2e-4, the space group from spglib at `symprec` 0.01. When the
+    two disagree, the smallest larger `eps` that gives the lattice of the space group is used, with a
+    warning that gives the angles. A genuinely rhombohedral cell (Bi, R-3m) keeps its RHL path;
+  - at each jump of the path (`K | U`), `kpath_bs.fdf` gave the first point of the new segment the full
+    50 points, so SIESTA computed a K -> U line that is not a high-symmetry line and the plot showed it
+    as one. That point now gets 1, which starts a new line in `BandLines`.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

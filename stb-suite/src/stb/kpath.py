@@ -37,119 +37,101 @@ _BIB_SETYAWAN_CURTAROLO = ("SetyawanCurtarolo2010", """@article{SetyawanCurtarol
 }""")
 
 
+# ASE Bravais-lattice names compatible with a crystal system and centering letter of the
+# space group (3D only).
+_BRAVAIS_FOR_SYSTEM = {
+    ("cubic", "P"): {"CUB"}, ("cubic", "F"): {"FCC"}, ("cubic", "I"): {"BCC"},
+    ("tetragonal", "P"): {"TET"}, ("tetragonal", "I"): {"BCT"},
+    ("orthorhombic", "P"): {"ORC"}, ("orthorhombic", "F"): {"ORCF"}, ("orthorhombic", "I"): {"ORCI"},
+    ("orthorhombic", "C"): {"ORCC"}, ("orthorhombic", "A"): {"ORCC"}, ("orthorhombic", "B"): {"ORCC"},
+    ("hexagonal", "P"): {"HEX"}, ("trigonal", "P"): {"HEX"}, ("trigonal", "R"): {"RHL"},
+    ("monoclinic", "P"): {"MCL"}, ("monoclinic", "C"): {"MCLC"}, ("monoclinic", "A"): {"MCLC"},
+    ("monoclinic", "B"): {"MCLC"}, ("monoclinic", "I"): {"MCLC"},
+    ("triclinic", "P"): {"TRI"},
+}
+# eps values tried, in order, when the Bravais lattice found at the user's eps disagrees with
+# the space group found at symprec.
+_EPS_LADDER = (0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05)
+
+
+def expected_bravais(crystal_sys, sg_symbol):
+    """The ASE Bravais-lattice names a 3D space group allows, or None when unknown."""
+    if not crystal_sys or not sg_symbol:
+        return None
+    return _BRAVAIS_FOR_SYSTEM.get((crystal_sys.lower(), sg_symbol[0].upper()))
+
+
+def bandlines_rows(path_segments):
+    """[(label, n_points)] for SIESTA's %block BandLines: the first point gets 1, every point
+    along a segment the line density, and the first point of a segment that does not start
+    where the previous one ended (a jump, 'K|U') gets 1 -- SIESTA then starts a new line
+    there instead of computing a K -> U segment that is no high-symmetry line. Before 2.0.1
+    the jump point got the full count and the bands showed that segment as if it were one."""
+    rows = []
+    for segment in path_segments:
+        if not segment:
+            continue
+        if not rows:
+            rows.append((segment[0], 1))
+        elif rows[-1][0] == segment[0]:
+            pass                                   # continuous: the shared point is already there
+        else:
+            rows.append((segment[0], 1))           # jump: a new line starts here
+        rows.extend((label, None) for label in segment[1:])
+    return rows
+
+
 def write_siesta_kpath_file(kpoints_dict, path_segments, num_points=50,
                              output_filename="kpath_bs.fdf", f_out=None):
     """
     Writes the k-path to a SIESTA-formatted FDF file for band structure.
-    Writes ALL suggested path segments, even if disjointed. Returns True on
-    success, False if the file could not be written (already reported).
+    Writes ALL suggested path segments; a jump between segments starts a new
+    line (1 point, see bandlines_rows). Returns True on success, False if the
+    file could not be written (already reported).
     """
     if not path_segments:
         print_dual(color_text("Warning: No k-path segments found. File will not be written.", 'yellow'), f_out)
         return False
 
-    # Rebuilds the 'path_sequence' based on the correct data structure
-    # (which is a list of paths, e.g: [['A', 'B', 'C'], ['D', 'E']])
-    path_sequence = []
-    for i, segment_list in enumerate(path_segments):  # ex: segment_list = ['\Gamma', 'Y', 'H']
-        if not segment_list:
-            continue
-
-        if i == 0:
-            path_sequence.extend(segment_list)
-        else:
-            last_point_in_sequence = path_sequence[-1]
-            first_point_of_new_segment = segment_list[0]
-
-            if last_point_in_sequence == first_point_of_new_segment:
-                # Continuous path (e.g., ends in Z, starts in Z) -- skip the duplicate.
-                path_sequence.extend(segment_list[1:])
-            else:
-                # Disjoint path (a "jump", e.g., ends in H_1, starts in M).
-                print_dual(color_text(
-                    f"Note: Disjointed path detected (jump from {last_point_in_sequence} "
-                    f"to {first_point_of_new_segment}). Including full segment.", 'cyan'), f_out)
-                path_sequence.extend(segment_list)
-
-    if not path_sequence:
+    rows = bandlines_rows(path_segments)
+    if not rows:
         print_dual(color_text("[ERROR] Could not determine path sequence.", 'red'), f_out)
         return False
+    for k in range(1, len(rows)):
+        if rows[k][1] == 1:
+            print_dual(color_text(
+                f"Note: path jump {rows[k - 1][0]} | {rows[k][0]} -- written as a new line in "
+                f"BandLines (1 point at {rows[k][0]}), not as a {rows[k - 1][0]}-{rows[k][0]} segment.",
+                'cyan'), f_out)
 
-    path_str_display = '-'.join([r'\Gamma' if p == 'GAMMA' else p for p in path_sequence])
-    print_dual(f"SIESTA path to be written : {path_str_display}", f_out)
+    def show(label):
+        return r'\Gamma' if label in ('GAMMA', r'\Gamma') else label
 
+    display = show(rows[0][0])
+    for label, n in rows[1:]:
+        display += (" | " if n == 1 else "-") + show(label)
+    print_dual(f"SIESTA path to be written : {display}", f_out)
+
+    missing = [label for label, _n in rows if label not in kpoints_dict]
+    if missing:
+        print_dual(color_text(
+            f"[ERROR] K-point label(s) {missing} found in path but not in k-points list.", 'red'), f_out)
+        print_dual(color_text(f"Available labels: {list(kpoints_dict.keys())}", 'red'), f_out)
+        return False
     try:
         with open(output_filename, 'w') as f:
             f.write("### BANDS\n")
             f.write(" BandLinesScale  ReciprocalLatticeVectors\n\n")
             f.write("%block BandLines\n")
-
-            first_label = path_sequence[0]
-            first_coords = kpoints_dict[first_label]
-            coord_str = " ".join([f"{c:14.10f}" for c in first_coords])
-            f_label = r'\Gamma' if first_label == 'GAMMA' else first_label
-            f.write(f"1   {coord_str}   {f_label}\n")
-
-            for label in path_sequence[1:]:
-                coords = kpoints_dict[label]
-                coord_str = " ".join([f"{c:14.10f}" for c in coords])
-                f_label = r'\Gamma' if label == 'GAMMA' else label
-                f.write(f"{num_points}   {coord_str}   {f_label}\n")
-
+            for label, n in rows:
+                coord_str = " ".join([f"{c:14.10f}" for c in kpoints_dict[label]])
+                f.write(f"{1 if n == 1 else num_points}   {coord_str}   {show(label)}\n")
             f.write("%endblock BandLines\n")
-
         print_dual(color_text(
             f"[OK] SIESTA file '{output_filename}' has been created.", 'green'), f_out)
         return True
-
-    except KeyError as e:
-        # A label in the path (e.g. '\Gamma') has a different name in the
-        # dictionary (e.g. 'GAMMA') -- retry once with that substitution.
-        if str(e) == r"'\Gamma'" and 'GAMMA' in kpoints_dict:
-            print_dual(color_text(
-                "Warning: Found '\\Gamma' label, attempting to use 'GAMMA' internally.", 'yellow'), f_out)
-            path_sequence_fixed = ['GAMMA' if label == r'\Gamma' else label for label in path_sequence]
-            return _write_siesta_kpath_file_fixed(
-                kpoints_dict, path_sequence_fixed, num_points, output_filename, f_out
-            )
-        print_dual(color_text(
-            f"[ERROR] K-point label {e} found in path but not in k-points list.", 'red'), f_out)
-        print_dual(color_text(f"Available labels: {list(kpoints_dict.keys())}", 'red'), f_out)
-        return False
-
     except Exception as e:
         print_dual(color_text(f"[ERROR] Writing {output_filename}: {e}", 'red'), f_out)
-        return False
-
-
-def _write_siesta_kpath_file_fixed(kpoints_dict, path_sequence, num_points, output_filename, f_out=None):
-    """Retries the write after substituting '\\Gamma' -> 'GAMMA' in the path sequence."""
-    print_dual(color_text("Retrying file write with 'GAMMA' label...", 'cyan'), f_out)
-    try:
-        with open(output_filename, 'w') as f:
-            f.write("### BANDS\n")
-            f.write(" BandLinesScale  ReciprocalLatticeVectors\n\n")
-            f.write("%block BandLines\n")
-
-            first_label = path_sequence[0]
-            first_coords = kpoints_dict[first_label]
-            coord_str = " ".join([f"{c:14.10f}" for c in first_coords])
-            f_label = r'\Gamma' if first_label == 'GAMMA' else first_label
-            f.write(f"1   {coord_str}   {f_label}\n")
-
-            for label in path_sequence[1:]:
-                coords = kpoints_dict[label]
-                coord_str = " ".join([f"{c:14.10f}" for c in coords])
-                f_label = r'\Gamma' if label == 'GAMMA' else label
-                f.write(f"{num_points}   {coord_str}   {f_label}\n")
-
-            f.write("%endblock BandLines\n")
-
-        print_dual(color_text(
-            f"[OK] SIESTA file '{output_filename}' has been created (with label fix).", 'green'), f_out)
-        return True
-    except Exception as e:
-        print_dual(color_text(f"[ERROR] During retry: {e}", 'red'), f_out)
         return False
 
 
@@ -201,6 +183,44 @@ def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filena
         pbc = tuple(not v for v in vacuum_axes)
         cell = Cell(lattice)
         bravais = cell.get_bravais_lattice(eps=eps, pbc=pbc)
+        sg_label = core_symmetry.space_group_label(pymatgen_structure, symprec=symprec)
+        crystal_sys, point_group = core_symmetry.crystal_system(
+            pymatgen_structure, symprec=symprec, angle_tolerance=angle_tolerance
+        )
+        eps_used = eps
+        bravais_note = None
+        allowed = expected_bravais(crystal_sys, sg_label.split()[0]) if dimension == 3 else None
+        if allowed and bravais.name not in allowed:
+            # A relaxed cubic cell with angles of 59.91-59.99 deg is RHL at eps 2e-4 while spglib
+            # (symprec 0.01) still finds Fm-3m: the path then follows the rhombohedral lattice.
+            # Use the smallest eps that agrees with the space group; the k-points stay
+            # fractional coordinates of the user's own cell.
+            found = None
+            for trial in _EPS_LADDER:
+                if trial <= eps:
+                    continue
+                try:
+                    candidate = cell.get_bravais_lattice(eps=trial, pbc=pbc)
+                except Exception:
+                    continue
+                if candidate.name in allowed:
+                    found = (trial, candidate)
+                    break
+            angles = cell.cellpar()[3:]
+            if found:
+                bravais_note = (
+                    f"The cell's Bravais lattice at eps = {eps} is {bravais.name}, but the space group "
+                    f"{sg_label} (symprec {symprec}) is {crystal_sys} ({'/'.join(sorted(allowed))}): the "
+                    f"cell is slightly distorted (angles {angles[0]:.4f}, {angles[1]:.4f}, {angles[2]:.4f} "
+                    f"deg). The path uses eps = {found[0]}, which gives {found[1].name}. Symmetrize the "
+                    "cell (or pass -p) to remove the distortion itself.")
+                eps_used, bravais = found
+            else:
+                bravais_note = (
+                    f"The cell's Bravais lattice ({bravais.name}) disagrees with the space group "
+                    f"{sg_label} (symprec {symprec}, {crystal_sys}) for every eps up to "
+                    f"{_EPS_LADDER[-1]}: the path follows {bravais.name}. Check the cell, or "
+                    "symmetrize it first.")
 
         dim_label = {1: "1D", 2: "2D", 3: "3D"}[dimension]
         print_dual(f"Dimensionality : {dim_label}", f_out)
@@ -209,11 +229,9 @@ def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filena
             print_dual(color_text(
                 "Note: the Bravais lattice above reflects only the periodic axes "
                 "(vacuum-padded axes excluded); it is not a 3D space group.", 'yellow'), f_out)
+        if bravais_note:
+            print_dual(color_text(f"[WARNING] {bravais_note}", 'yellow'), f_out)
 
-        sg_label = core_symmetry.space_group_label(pymatgen_structure, symprec=symprec)
-        crystal_sys, point_group = core_symmetry.crystal_system(
-            pymatgen_structure, symprec=symprec, angle_tolerance=angle_tolerance
-        )
         print_dual(f"Space group : {sg_label}", f_out)
         print_dual(f"Crystal system : {crystal_sys} (point group {point_group})", f_out)
         if dimension < 3:
@@ -223,7 +241,7 @@ def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filena
                 "Use stb-symmetry (code 2.5) for a dimension-aware layer-group/"
                 "point-group analysis.", 'yellow'), f_out)
 
-        bp = cell.bandpath(pbc=pbc, npoints=0, eps=eps)
+        bp = cell.bandpath(pbc=pbc, npoints=0, eps=eps_used)
 
         # ASE labels the Gamma point 'G'; translate to 'GAMMA' so the writer's
         # existing '\Gamma' display/formatting logic keeps working unchanged.

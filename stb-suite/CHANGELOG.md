@@ -231,9 +231,11 @@ version before) and **Added** (new options and tools).
 - `stb-kpath`, two problems on cells from a relaxation:
   - fcc crystals whose relaxed cell had angles of 59.91-59.99 deg (Ag, Cu, Pd, Ge, GaAs, NaCl, MgO)
     got the rhombohedral path (`\Gamma-L-B1 | B-Z-...`) while the same report gave Fm-3m/F-43m: the
-    Bravais lattice came from ASE at `eps` 2e-4, the space group from spglib at `symprec` 0.01. When the
-    two disagree, the smallest larger `eps` that gives the lattice of the space group is used, with a
-    warning that gives the angles. A genuinely rhombohedral cell (Bi, R-3m) keeps its RHL path;
+    Bravais lattice came from ASE at `eps` 2e-4, the space group from spglib at `symprec` 0.01. When a
+    primitive cell's lattice is less symmetric than its space group, the smallest larger `eps` that gives
+    the lattice of the space group is used, with a warning that gives the angles. A genuinely
+    rhombohedral cell (Bi, R-3m), a conventional cell and a lattice more symmetric than the crystal are
+    left as they were;
   - at each jump of the path (`K | U`), `kpath_bs.fdf` gave the first point of the new segment the full
     50 points, so SIESTA computed a K -> U line that is not a high-symmetry line and the plot showed it
     as one. That point now gets 1, which starts a new line in `BandLines`.

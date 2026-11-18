@@ -182,6 +182,12 @@ stb-kpath --file ag_distorted.fdf -o kpath_ag.fdf --no-intro > log_ag_distorted.
 check_contains "Bravais lattice : face-centred cubic (FCC)" log_ag_distorted.txt
 check_contains "WARNING. The cell's Bravais lattice at eps = 0.0002 is RHL, but the space group Fm-3m" log_ag_distorted.txt
 check_contains "Path : .*Gamma-X-W-K-.Gamma-L-U-W-L-K | U-X" log_ag_distorted.txt
+echo "Testing: a lattice MORE symmetric than the crystal (cubic vectors, trigonal atoms) is no mismatch"
+if grep -q "WARNING. The cell's Bravais lattice" log_3d.txt; then
+    echo -e "   -> ${RED}Failed:${NC} Bravais-lattice warning on the cubic-vector fixture"; FAIL=$((FAIL+1))
+else
+    echo -e "   -> ${GREEN}Verified:${NC} no Bravais-lattice warning on the cubic-vector fixture"; PASS=$((PASS+1))
+fi
 echo "Testing: genuinely rhombohedral Bi (R-3m) keeps the RHL path, no warning"
 stb-kpath --file bi_rhl.fdf -o kpath_bi.fdf --no-intro > log_bi.txt 2>&1
 check_contains "Bravais lattice : primitive rhombohedral (RHL)" log_bi.txt

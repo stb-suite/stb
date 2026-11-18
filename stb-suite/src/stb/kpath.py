@@ -49,6 +49,10 @@ _BRAVAIS_FOR_SYSTEM = {
     ("monoclinic", "B"): {"MCLC"}, ("monoclinic", "I"): {"MCLC"},
     ("triclinic", "P"): {"TRI"},
 }
+_SYSTEM_RANK = {"triclinic": 0, "monoclinic": 1, "orthorhombic": 2, "tetragonal": 3, "trigonal": 4,
+                "hexagonal": 5, "cubic": 6}
+_BRAVAIS_RANK = {"TRI": 0, "MCL": 1, "MCLC": 1, "ORC": 2, "ORCF": 2, "ORCI": 2, "ORCC": 2, "TET": 3,
+                 "BCT": 3, "RHL": 4, "HEX": 5, "CUB": 6, "FCC": 6, "BCC": 6}
 # eps values tried, in order, when the Bravais lattice found at the user's eps disagrees with
 # the space group found at symprec.
 _EPS_LADDER = (0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05)
@@ -190,6 +194,20 @@ def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filena
         eps_used = eps
         bravais_note = None
         allowed = expected_bravais(crystal_sys, sg_label.split()[0]) if dimension == 3 else None
+        if allowed:
+            # Only a PRIMITIVE cell's Bravais lattice must match the space group: a conventional
+            # cell (cubic Si with 8 atoms, Fd-3m) legitimately has another one (CUB).
+            try:
+                n_prim = len(core_symmetry.SpacegroupAnalyzer(
+                    pymatgen_structure, symprec=symprec, angle_tolerance=angle_tolerance).find_primitive())
+                if n_prim != len(pymatgen_structure):
+                    allowed = None
+            except Exception:
+                allowed = None
+        # Act only when the lattice found is LESS symmetric than the space group needs (RHL for
+        # Fm-3m): a lattice more symmetric than the crystal (cubic vectors, trigonal atoms) is legitimate.
+        if allowed and _BRAVAIS_RANK.get(bravais.name, 99) >= _SYSTEM_RANK.get(crystal_sys.lower(), -1):
+            allowed = None
         if allowed and bravais.name not in allowed:
             # A relaxed cubic cell with angles of 59.91-59.99 deg is RHL at eps 2e-4 while spglib
             # (symprec 0.01) still finds Fm-3m: the path then follows the rhombohedral lattice.

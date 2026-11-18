@@ -198,6 +198,13 @@ version before) and **Added** (new options and tools).
   model trained without D3, which reads as D3 on. It now says `DFT-D3 on` or `DFT-D3 off`, from the
   card's own `dftd3.on`.
 
+- `stb-coop --quantity cohp` called every bond "antibonding": the report applied the COOP rule
+  (positive = bonding) to the COHP too, while sisl's COHP uses the raw H(k), Dronskowski's convention,
+  in which a bond is NEGATIVE (-ICOHP > 0). On the Sn3O4 example a Sn-O bond (ICOHP -1.44 eV) was
+  labelled antibonding; on the X-C bonds of XC8, ICOHP -1.87 eV. The curve and `cohp.dat` were right;
+  the label, the sign-convention sentence and the plot title were not. The bond-order cross-check now
+  runs for COHP too, comparing -ICOHP with the bond order.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -110,6 +110,15 @@ check_contains "Selected pairs: \['Sn-O'\]" log_cohp.txt
 check_success cohp_out/cohp.dat
 
 
+echo "Testing: COHP sign convention -- a real Sn-O bond (0-6) is NEGATIVE and labelled bonding"
+timeout 120 stb-coop --label Sn3O4 --quantity cohp --pair 0 6 $OCCUPIED --bond-order -o cohp_bond_out \
+    --no-intro > log_cohp_bond.txt 2>&1
+check_exit_code $? 0
+check_contains "e+00 (bonding)" log_cohp_bond.txt
+check_contains "COHP < 0 = bonding" log_cohp_bond.txt
+check_contains "integrated -COHP positive, bond order positive -> \[OK\] signs agree" log_cohp_bond.txt
+
+
 # --- 4. Multiple --pair given together ---
 echo -e "\n--- Testing multiple --pair (repeatable) ---"
 

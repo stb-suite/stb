@@ -92,6 +92,11 @@ coefficients rather than the density matrix) agrees in sign with the
 fixed bond order for both pairs (+0.133 vs +0.527 for the bonded pair,
 -0.0008 vs -0.010 for the non-bonded one) -- confirming COOP > 0 really
 does mean bonding here, not just by convention/assertion.
+
+COHP sign: sisl's COHP() uses the raw H(k), i.e. Dronskowski-Bloechl's convention, in
+which a bonding interaction is NEGATIVE (-ICOHP > 0). The report labels each quantity by
+its own convention (bonding_character); before 2.0.1 the COOP rule was applied to COHP too,
+and every Sn-O/X-C bond came out "antibonding".
 """
 
 from stb import __version__ as VERSION
@@ -141,6 +146,15 @@ def build_atom_pairs(geometry, pair_indices, pair_species):
             raise ValueError(f"--pair-species: no atoms of species '{sp_b}' found.")
         pairs.append((f"{sp_a}-{sp_b}", idx_a, idx_b))
     return pairs
+
+
+def bonding_character(quantity, integrated):
+    """'bonding'/'antibonding'/'non-bonding' of an energy-integrated curve. COOP > 0 is
+    bonding (Hughbanks-Hoffmann); sisl's COHP is built from the raw H(k), Dronskowski's
+    convention, so COHP < 0 is bonding (-ICOHP > 0). The old label applied the COOP rule
+    to both and called every COHP bond 'antibonding'."""
+    measure = integrated if quantity == "coop" else -integrated
+    return "bonding" if measure > 0 else "antibonding" if measure < 0 else "non-bonding"
 
 
 def extract_pair_curve(total_oplist, geometry, atoms_i, atoms_j):
@@ -504,13 +518,13 @@ def main():
         curve = curves[lbl]
         peak_idx = int(np.argmax(np.abs(curve)))
         integrated = float(np.trapezoid(curve, E))
-        character = "bonding" if integrated > 0 else "antibonding" if integrated < 0 else "non-bonding"
+        character = bonding_character(args.quantity, integrated)
         rows.append(([lbl, f"{curve[peak_idx]:.6e} at E={E[peak_idx]:.4f} eV",
                       f"{integrated:.6e} ({character})"], None))
     print_table(["Pair", "Largest |value|", "Integrated over --erange"], rows, f_out)
-    print_dual("(Integrated over --erange, NOT necessarily just the occupied states -- a positive "
-               "integral means net bonding character over the requested window, by this suite's "
-               "sign convention: COOP/COHP > 0 = bonding.)", f_out)
+    print_dual("(Integrated over --erange, NOT necessarily just the occupied states. Sign convention: "
+               "COOP > 0 = bonding (Hughbanks-Hoffmann); COHP < 0 = bonding (Dronskowski-Bloechl), "
+               "i.e. -ICOHP > 0 for a bond.)", f_out)
 
     print_section("[4] BOND ORDER (Mulliken, energy-integrated cross-check)", f_out)
     if bond_orders:
@@ -518,15 +532,16 @@ def main():
             ([lbl, f"{bond_orders[lbl]:.4f}"], None) for lbl in pair_labels
         ], f_out)
         print_dual(f"Density matrix : {dm_source}", f_out)
-        if args.quantity == "coop":
-            print_dual("Cross-check against the integrated COOP above (same sign expected for a "
-                       "converged full-BZ mesh spanning the true occupied bandwidth):", f_out)
-            for lbl in pair_labels:
-                integrated = float(np.trapezoid(curves[lbl], E))
-                agree = (integrated > 0) == (bond_orders[lbl] > 0)
-                print_dual(f"  {lbl}: integrated COOP {'positive' if integrated > 0 else 'negative'}, "
-                           f"bond order {'positive' if bond_orders[lbl] > 0 else 'negative'} "
-                           f"-> {'[OK] signs agree' if agree else '[WARNING] signs disagree'}", f_out)
+        name = "COOP" if args.quantity == "coop" else "-COHP"
+        print_dual(f"Cross-check against the integrated {name} above (same sign expected for a "
+                   "converged full-BZ mesh spanning the true occupied bandwidth):", f_out)
+        for lbl in pair_labels:
+            integrated = float(np.trapezoid(curves[lbl], E))
+            bonding_measure = integrated if args.quantity == "coop" else -integrated
+            agree = (bonding_measure > 0) == (bond_orders[lbl] > 0)
+            print_dual(f"  {lbl}: integrated {name} {'positive' if bonding_measure > 0 else 'negative'}, "
+                       f"bond order {'positive' if bond_orders[lbl] > 0 else 'negative'} "
+                       f"-> {'[OK] signs agree' if agree else '[WARNING] signs disagree'}", f_out)
     elif args.bond_order:
         print_dual("Not computed (no usable density matrix -- see the error above).", f_out)
     else:
@@ -570,7 +585,8 @@ def main():
         plt.axhline(0, color="gray", linestyle="--", linewidth=1)
         plt.xlabel("Energy (eV)")
         plt.ylabel(f"{args.quantity.upper()} (arb. units)")
-        plt.title(f"{args.quantity.upper()} (positive = bonding, by convention)")
+        plt.title("COOP (positive = bonding)" if args.quantity == "coop"
+                  else "COHP (negative = bonding)")
         plt.legend()
         plt.grid(True)
         plt.tight_layout()

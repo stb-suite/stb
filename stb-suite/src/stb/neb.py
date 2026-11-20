@@ -325,6 +325,8 @@ def idpp_refine_images(pmg_images, fmax=0.1, steps=100, fixed_atoms=None):
     the working directory with idpp.traj/idpp.log.
     """
     from ase.mep.neb import NEB, idpp_interpolate
+    from stb.core import citations
+    citations.cite(citations.IDPP)
     ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
     if fixed_atoms:
         from ase.constraints import FixAtoms
@@ -568,8 +570,12 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
                 f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
             if force_dipole:
                 f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
+                from stb.core import citations as _citations
+                _citations.cite(_citations.DIPOLE_BENGTSSON)
             if force_vdw:
                 f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+                from stb.core import citations as _citations
+                _citations.cite(_citations.DFT_D3)
             if fixed_atoms:
                 f.write(adsorption_sites.fixed_atoms_block(
                     fixed_atoms, f"{len(fixed_atoms)} atom(s) held fixed along the NEB band"))

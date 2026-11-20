@@ -1051,6 +1051,9 @@ def main():
     d3 = mlff_workflow.dftd3_info(state)
     if d3.get("forced") or args.d3:
         extra_block += mlff_workflow.DFTD3_BLOCK
+        if True:
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
         print_dual("Dispersion        : DFT-D3 in every pick's config_extra.fdf ("
                    + ("as Stage 1 --d3 recorded in the workflow file" if d3.get("forced") else "--d3") + ")", f_out)
         if args.d3 and state is not None and d3 and not d3.get("on"):

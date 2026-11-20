@@ -146,7 +146,11 @@ def get_calculator(model="medium", device="cpu", dtype="float64", dispersion=Fal
             dispersion = False
         if card is not None:
             model_card.announce(model)
+    from stb.core import citations
+    if not os.path.isfile(model):
+        citations.cite(citations.MACE_MP)      # the MACE-MP-0 foundation checkpoint itself
     if dispersion:
+        citations.cite(citations.DFT_D3)
         return mace_mp(model=model, device=device, default_dtype=dtype, dispersion=True)
     if os.path.isfile(model):
         if card is not None:

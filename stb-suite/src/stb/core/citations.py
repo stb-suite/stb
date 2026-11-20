@@ -633,7 +633,7 @@ TOOL_CITATIONS = {
     "hubbardu": _S + [HUBBARD_LR], "hubbarduAlphas": _S + [HUBBARD_LR], "hubbarduAnalysis": _S + [HUBBARD_LR],
     "adsorb": _S + [DFT_D3, DIPOLE_BENGTSSON], "adsorbBsse": _S + [BSSE_BOYS], "adsorbAnalysis": _S + [BSSE_BOYS],
     "adsorbGibbs": _S,
-    "neb": _S + [CINEB, IDPP], "nebCycle": _S + [CINEB], "nebAnalysis": _S + [CINEB],
+    "neb": _S + [CINEB], "nebCycle": _S + [CINEB], "nebAnalysis": _S + [CINEB],
     "stackingfault": _S, "stackingfaultAnalysis": _S,
     "raman": _S + [POREZAG], "ramanModes": _S + [POREZAG], "ramanAnalysis": _S + [POREZAG],
     "ir": _S + [POREZAG], "irModes": _S + [POREZAG], "irAnalysis": _S + [POREZAG],
@@ -645,7 +645,7 @@ TOOL_CITATIONS = {
     "hirshfeldAnalysis": _S + [HIRSHFELD, HIRSHFELD_I],
     # 7 ML Simulations
     "mlff": _S + [MACE_MP], "mlffAnalysis": _S + [MACE_MP], "mlffValidate": _S, "mlffActiveLearning": _S,
-    "mlmd": [], "mlphonons": [], "mlelastic": [LEPAGE_SAXE, HILL, MOUHAT_COUDERT], "mlneb": [CINEB, IDPP],
+    "mlmd": [], "mlphonons": [], "mlelastic": [LEPAGE_SAXE, HILL, MOUHAT_COUDERT], "mlneb": [CINEB],
     "mladsorb": [],
 }
 

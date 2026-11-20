@@ -1173,8 +1173,12 @@ def main():
                     site_config_extra += SPIN_POLARIZED_BLOCK
                 if dipole_site:
                     site_config_extra += DIPOLE_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DIPOLE_BENGTSSON)
                 if vdw_site:
                     site_config_extra += VDW_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DFT_D3)
 
                 # read_original_calc_text (not a plain open().read()) strips the
                 # site's own '%include config_extra.fdf' prefix -- this stage writes
@@ -1209,6 +1213,8 @@ def main():
                 ads_config_extra = GIBBS_SINGLE_POINT_BLOCK + SPIN_POLARIZED_BLOCK
                 if vdw_ads:
                     ads_config_extra += VDW_CORRECTION_BLOCK
+                    from stb.core import citations as _citations
+                    _citations.cite(_citations.DFT_D3)
 
                 # Selected by fragment LABEL (ads_labels, from the site's own
                 # fragment_manifest.json), not an atom-count/index cut -- a
@@ -1301,8 +1307,12 @@ def main():
                         clean_config_extra += SPIN_POLARIZED_BLOCK
                     if dipole_clean:
                         clean_config_extra += DIPOLE_CORRECTION_BLOCK
+                        from stb.core import citations as _citations
+                        _citations.cite(_citations.DIPOLE_BENGTSSON)
                     if vdw_clean:
                         clean_config_extra += VDW_CORRECTION_BLOCK
+                        from stb.core import citations as _citations
+                        _citations.cite(_citations.DFT_D3)
                     clean_folders, _clean_yaml = write_displacement_folders(
                         gibbs_clean_dir, clean_phonon, clean_supercells, "structure.fdf",
                         os.path.join(clean_slab_dir, "calc.fdf"), [])

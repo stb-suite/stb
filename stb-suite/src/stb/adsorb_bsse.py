@@ -132,8 +132,12 @@ def write_bsse_folders(bsse_dir, site_fdf, calc_text, pp_path):
         config_extra_content += SPIN_POLARIZED_BLOCK
     if dipole_corrected:
         config_extra_content += DIPOLE_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DIPOLE_BENGTSSON)
     if vdw_corrected:
         config_extra_content += VDW_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
 
     for sub_dir, variant in [("bsse_slab", slab_variant), ("bsse_adsorbate", ads_variant)]:
         out_dir = os.path.join(bsse_dir, sub_dir)

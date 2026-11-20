@@ -834,6 +834,9 @@ def main():
         print_dual(f"{'Dispersion':<21}: none (no DFT-D3; --d3 adds it -- for layered or vdW-bonded systems)",
                    f_out)
     d3_block = mlff_workflow.DFTD3_BLOCK if args.d3 else ""
+    if args.d3:
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
 
     print_section("[3] SAMPLING PLAN", f_out)
     n_aimd = args.n_samples if args.from_aimd else 0

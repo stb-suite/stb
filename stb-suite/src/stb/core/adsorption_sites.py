@@ -663,8 +663,12 @@ def write_reference_folder(out_dir, pmg_structure, calc_text, species_meta, pp_p
             f.write(SPIN_POLARIZED_BLOCK)
         if force_dipole:
             f.write(DIPOLE_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DIPOLE_BENGTSSON)
         if force_vdw:
             f.write(VDW_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
         if fixed_atoms:
             f.write(fixed_atoms_block(fixed_atoms, fixed_note))
         if relax_block:

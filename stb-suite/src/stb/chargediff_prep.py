@@ -447,8 +447,12 @@ def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutof
         config_extra += adsorption_sites.SPIN_POLARIZED_BLOCK
     if dipole_corrected:
         config_extra += adsorption_sites.DIPOLE_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DIPOLE_BENGTSSON)
     if vdw_corrected:
         config_extra += adsorption_sites.VDW_CORRECTION_BLOCK
+        from stb.core import citations as _citations
+        _citations.cite(_citations.DFT_D3)
     config_extra += species_block_overrides(calc_text, structure_io.species_list(fdf_structure))
     config_extra_path = os.path.join(out_dir, CONFIG_EXTRA_FILE)
     with open(config_extra_path, "w") as f:

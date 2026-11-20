@@ -284,6 +284,8 @@ def write_grid_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
             f.write(adsorption_sites.SINGLE_POINT_BLOCK)
         if d3:
             f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+            from stb.core import citations as _citations
+            _citations.cite(_citations.DFT_D3)
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
     symbols = {site.specie.symbol for site in pmg_structure}

@@ -10,6 +10,7 @@ from stb import __version__ as VERSION
 
 import os
 import sys
+import glob
 import time
 import argparse
 from collections import Counter
@@ -23,7 +24,7 @@ from stb.core import adsorption_sites
 from stb.core import fdf_directives
 from stb.core.cli import (color_text, show_intro, print_dual, print_section,
                            print_progress_line, finish_progress_line, capture_library_noise)
-from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
+from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo, pseudo_source_name
 from stb.core.deps import require_mace
 
 REPORT_FILE = "neb_setup.txt"
@@ -356,7 +357,7 @@ def write_path_trajectory(pmg_images, out_path):
 
 def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
                         force_spin=False, force_vdw=False, force_dipole=False,
-                        fixed_atoms=None, config_extra_text=None):
+                        fixed_atoms=None, config_extra_text=None, atom_labels=None):
     """Writes structure.fdf + config_extra.fdf + calc.fdf + copied
     pseudopotentials for one image_NN/ folder. config_extra.fdf is always
     written and always %include'd at the very top of calc.fdf
@@ -379,10 +380,13 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
     constrained forces to <label>.FAC, and stb-nebCycle holds the same atoms fixed.
     `config_extra_text`, when given, is written verbatim instead (stb-nebCycle passes the
     previous cycle's file, so every forced directive and constraint carries over).
+    `atom_labels` (one species label per atom, in order) keeps labels such as 'Ag_slab'
+    through an ASE round trip; each species' pseudopotential is copied from `pp_path`
+    under its label ('Ag_slab.psml' when the folder has it, else 'Ag.psml').
     """
     os.makedirs(out_dir, exist_ok=True)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
-                                                coord_format="fractional")
+                                                coord_format="fractional", labels=atom_labels)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
     with open(os.path.join(out_dir, adsorption_sites.CONFIG_EXTRA_FILE), "w") as f:
         if config_extra_text is not None:
@@ -400,9 +404,9 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
                     fixed_atoms, f"{len(fixed_atoms)} atom(s) held fixed along the NEB band"))
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
-    symbols = {site.specie.symbol for site in pmg_structure}
-    for sym in sorted(symbols):
-        copy_pseudo(pp_path, sym, out_dir)
+    for label in fdf_structure.species:
+        copy_pseudo(pp_path, pseudo_source_name(pp_path, label, fdf_structure.species_meta),
+                    out_dir, dest_label=label)
 
 
 def parse_atom_spec(spec, n_atoms):
@@ -819,6 +823,16 @@ def main():
     if manifest_pair is not None:
         args.autosort_tol = 0.0
     species_meta = structure_io.species_dict(initial_structure)
+    # Species labels ('Ag_slab', 'O_ads' from stb-adsorb) are kept per atom: the images
+    # follow --initial's atom order, and ASE (MACE, IDPP) drops pymatgen's labels.
+    atom_labels = [label for label, _ in initial_structure.atoms]
+    pseudo_note = ""
+    if not args.pseudo_dir:
+        endpoint_folder = args.initial if os.path.isdir(args.initial) else os.path.dirname(
+            os.path.abspath(args.initial))
+        if glob.glob(os.path.join(endpoint_folder, "*.psml")) + glob.glob(os.path.join(endpoint_folder, "*.psf")):
+            args.pseudo_dir = endpoint_folder
+            pseudo_note = " (no -p: the --initial endpoint's folder, which holds pseudopotentials)"
 
     initial_pmg = structure_io.to_pymatgen(initial_structure)
     final_pmg = structure_io.to_pymatgen(final_structure)
@@ -879,7 +893,7 @@ def main():
                 "  [NOTE] Could not find a '%include ...struct....fdf'-style line in --calc to "
                 "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks "
                 "up the generated geometry.", 'yellow'), f_out)
-        print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}", f_out)
+        print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}{pseudo_note}", f_out)
         print_dual(f"  Fixed atoms       : {len(fixed_atoms)}"
                     + (f" ({_compact_ranges(fixed_atoms)})" if fixed_atoms else "")
                     + f" -- {fixed_source}", f_out)
@@ -1135,7 +1149,7 @@ def main():
             write_image_folder(image_dir, pmg_image, calc_text, species_meta,
                                 args.pseudo_dir, force_spin=args.force_spin,
                                 force_vdw=args.force_vdw, force_dipole=args.force_dipole,
-                                fixed_atoms=fixed_atoms)
+                                fixed_atoms=fixed_atoms, atom_labels=atom_labels)
             print_dual(f"  {color_text('[OK]', 'green')} {image_dir}", f_out)
             report_rows.append((label, i, reaction_coords[i], image_dir))
         print_dual(f"  {len(pmg_images)} image folder(s) written under '{images_root}'.", f_out)

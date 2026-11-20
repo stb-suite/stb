@@ -57,7 +57,8 @@ from stb.core import structure_io, fdf_directives, kspace
 from stb.core import adsorption_sites
 from stb.core.bsse import make_ghost_variant, species_block_overrides
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
-from stb.core.pseudopotentials import BANK_HELP, copy_pseudo, resolve_pseudo_source, pseudo_valence
+from stb.core.pseudopotentials import (BANK_HELP, copy_pseudo, resolve_pseudo_source, pseudo_valence,
+                                       pseudo_source_name)
 from stb.core import citations
 
 DEFAULT_MESH_CUTOFF_RY = 400.0
@@ -398,21 +399,6 @@ def write_chargediff_manifest(out_dir, fdf_structure, folder_names, suffixes, co
     }
     with open(os.path.join(out_dir, CHARGEDIFF_MANIFEST_FILE), "w") as f:
         json.dump(manifest, f, indent=2)
-
-
-def pseudo_source_name(pp_path, label, species_meta):
-    """The name (no extension) under `pp_path` whose .psml/.psf species `label` uses: the
-    label itself without a '_ghost' suffix when such a file exists (an stb-adsorb site
-    folder or a bsse/ folder holds 'Ag_slab.psml', 'O_ads.psml'), else its real element
-    ('Ag' -- a bank or a folder of bare-element files). Returns the element when neither
-    exists, so copy_pseudo's own warning names the file a user would add."""
-    base = label[:-len("_ghost")] if label.endswith("_ghost") else label
-    element = structure_io.real_element(label, species_meta)
-    if pp_path:
-        for name in dict.fromkeys((base, element)):
-            if any(os.path.exists(os.path.join(pp_path, f"{name}.{ext}")) for ext in ("psml", "psf")):
-                return name
-    return element
 
 
 def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutoff_value,

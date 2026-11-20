@@ -314,6 +314,22 @@ def copy_pseudo(pp_path, symbol, target_dir, dest_label=None):
     return
 
 
+def pseudo_source_name(pp_path, label, species_meta):
+    """The name (no extension) under `pp_path` whose .psml/.psf species `label` uses: the
+    label itself without a '_ghost' suffix when such a file exists (an stb-adsorb site
+    folder or a bsse/ folder holds 'Ag_slab.psml', 'O_ads.psml'), else its real element
+    ('Ag' -- a bank or a folder of bare-element files). Returns the element when neither
+    exists, so copy_pseudo's own warning names the file a user would add."""
+    base = label[:-len("_ghost")] if label.endswith("_ghost") else label
+    from stb.core import structure_io
+    element = structure_io.real_element(label, species_meta)
+    if pp_path:
+        for name in dict.fromkeys((base, element)):
+            if any(os.path.exists(os.path.join(pp_path, f"{name}.{ext}")) for ext in ("psml", "psf")):
+                return name
+    return element
+
+
 _PSML_ZVAL_RE = re.compile(r'z-pseudo\s*=\s*"([0-9.eE+-]+)"')
 
 

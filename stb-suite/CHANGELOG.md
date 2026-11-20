@@ -334,6 +334,16 @@ version before) and **Added** (new options and tools).
     SIESTA's `FreeEng` (the one the forces derive from with electronic smearing), not the `E_KS`
     of the adsorption workflow.
 
+- `stb-neb` stopped with `IndexError: list index out of range` (inside pymatgen) on endpoints with
+  species labels that are not element symbols, such as the `Ag_slab`, `O_ads`, `H_ads` of the
+  adsorption workflow: `structure_io.to_pymatgen`, used by most tools that read an `.fdf`, passed the
+  label as the element. The element now comes from the label's Z in `ChemicalSpeciesLabel` (a
+  ghost's Z < 0 gives its element) and the label is kept per atom, so `from_pymatgen` writes it back.
+  `stb-neb` and `stb-nebCycle` keep the labels in every image (also through the MACE and IDPP stages)
+  and copy each species' pseudopotential under its label (`Ag_slab.psml` when the source folder has
+  it, else `Ag.psml`); with no `-p`, the pseudopotentials of the `--initial` endpoint's folder are
+  used when it has any.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

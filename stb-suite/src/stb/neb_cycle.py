@@ -400,10 +400,10 @@ def main():
                 with open(extra_path) as f:
                     config_extra_text = f.read()
             pmg_new = AseAtomsAdaptor.get_structure(atoms)
-            species_meta = structure_io.species_dict(structure_io.read_fdf(
-                os.path.join(src_dir, "structure.fdf")))
-            write_image_folder(dst_dir, pmg_new, calc_text, species_meta, pp_path=None,
-                                config_extra_text=config_extra_text)
+            previous = structure_io.read_fdf(os.path.join(src_dir, "structure.fdf"))
+            write_image_folder(dst_dir, pmg_new, calc_text, structure_io.species_dict(previous),
+                                pp_path=None, config_extra_text=config_extra_text,
+                                atom_labels=[label for label, _ in previous.atoms])
             for pseudo in sorted(glob.glob(os.path.join(src_dir, "*.psml"))
                                  + glob.glob(os.path.join(src_dir, "*.psf"))):
                 target = os.path.join(dst_dir, os.path.basename(pseudo))

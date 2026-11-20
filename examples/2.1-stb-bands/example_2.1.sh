@@ -61,10 +61,8 @@ stb-bands parses this directly (no SIESTA re-run needed) and reports:
     whether the material is HALF-METALLIC
 
 Every run prints a numbered [0]...[7] report, the same style every
-1.x/2.x tool in this suite uses. --save-report additionally persists
-that report to stb_bands_report.txt -- off by default, so a plain run
-only ever writes the plot data (bands_gnuplot.dat/bands.gplot) and
-references.bib, no text report file.
+1.x/2.x tool in this suite uses, and it is always saved to
+stb_bands_report.txt in the current folder.
 EOF
 pause
 
@@ -176,22 +174,14 @@ B -- interactive stb-suite menu:
 
 Every run always writes bands_gnuplot.dat + bands.gplot (the actual
 plot data -- run gnuplot on the .gplot for a PDF) and references.bib
-(SIESTA). --save-report additionally persists the full numbered console
-report to stb_bands_report.txt -- off by default, so a plain run writes
-no text report file at all.
+(SIESTA). The report is always saved to stb_bands_report.txt in the current folder.
 EOF
 mkdir -p "$OUT/full-report"
 cp semiconductor.bands "$OUT/full-report/"
 echo
-echo "\$ stb-bands --file semiconductor.bands --shift fermi --no-intro   # default: no report file"
+echo "\$ stb-bands --file semiconductor.bands --shift fermi --no-intro"
 (cd "$OUT/full-report" && stb-bands --file semiconductor.bands --shift fermi \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.bands$\|console"
-echo "(no bands_analysis.txt, no stb_bands_report.txt -- only the plot data + references.bib)"
-echo
-echo "\$ stb-bands --file semiconductor.bands --shift fermi --save-report --no-intro"
-(cd "$OUT/full-report" && stb-bands --file semiconductor.bands --shift fermi \
-    --save-report --no-intro > console_saved.log 2>&1)
+    --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_bands_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_bands_report.txt"
 echo
@@ -229,7 +219,7 @@ Five self-contained folders were generated under output/:
   mesh-vs-line/       full-report/
 
 Each has bands_gnuplot.dat/bands.gplot/references.bib; full-report/
-additionally has stb_bands_report.txt (only from its --save-report run).
+additionally has stb_bands_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - what a .bands file is, and VBM/CBM/direct-vs-indirect gap physics on
@@ -241,7 +231,7 @@ Recap of what this walkthrough covered:
   - --eig-file/--kp-file: why a k-mesh can catch a true VBM/CBM a 1-D
     k-path misses, and why the comparison can only go one direction
   - bands_gnuplot.dat/bands.gplot/references.bib always written;
-    --save-report (opt-in) for the full numbered text report
+    the full numbered text report, always saved to stb_<tool>_report.txt
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): the interactive
@@ -250,6 +240,6 @@ yourself without MPLBACKEND=Agg:
   stb-bands --file semiconductor.bands --shift fermi
 
 As a next step, try on your own with a real SIESTA .bands file:
-  stb-bands --label <your_siesta_label> --shift fermi --save-report
+  stb-bands --label <your_siesta_label> --shift fermi
   stb-bands --file your.bands --eig-file your.EIG --shift fermi
 EOF

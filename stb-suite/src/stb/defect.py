@@ -151,7 +151,7 @@ automatically at every symmetrically distinct site.""",
                "  %(prog)s -f structure.fdf --type vacancy --nearest 0.5 0.5 0.5 --filter-species O\n"
                "  %(prog)s -f structure.fdf --type interstitial --position 0.5 0.5 0.5 --species N\n"
                "  %(prog)s -f structure.fdf --type vacancy --all-inequivalent-sites --filter-species O\n"
-               "  %(prog)s -f structure.fdf --type vacancy --index 5 --ml-relax --save-report --view\n"
+               "  %(prog)s -f structure.fdf --type vacancy --index 5 --ml-relax --view\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -220,9 +220,7 @@ automatically at every symmetrically distinct site.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_defect_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "structure and every output structure (page through frames in "
@@ -277,7 +275,7 @@ automatically at every symmetrically distinct site.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("defect") if args.save_report else None
+    report_path = new_report_path("defect")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

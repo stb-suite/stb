@@ -379,7 +379,7 @@ by more than 3 %; `--show` without a display.
 | `mladsorb_configs.dat` (every run), `mladsorb_minima.dat` (the minima), `mladsorb_binding_curve.dat`, `mladsorb_configs_foundation.dat` | `--save-data` |
 | `mladsorb_runs.xyz`, `mladsorb_minima.xyz`, `mladsorb_slab.xyz`, `mladsorb_binding_curve.xyz`: extended XYZ with energy, forces, fixed atoms, per-atom `adsorbate` and `layer`, and the run's data in each frame | `--save-xyz` |
 | `plot/`: `substrate.dat`, `sites.dat`, `minima_xy.dat`, `cell.dat`, `minima.dat`, `binding_curve.dat`, the `.gplot` scripts (`top_view`, `site_energies`, `binding_curve`) and their PDFs | `--save-gnuplot` (the PDFs when gnuplot is installed) |
-| `stb_mladsorb_report.txt` | `--save-report` |
+| `stb_mladsorb_report.txt` | always |
 
 Everything goes into `-o/--output-dir` (default `mladsorb_out`).
 
@@ -404,13 +404,13 @@ Everything goes into `-o/--output-dir` (default `mladsorb_out`).
 
 ```bash
 # a first look with the foundation model, substrate fixed (fast)
-stb-mladsorb --slab slab.fdf --adsorbate H --model medium --save-report
+stb-mladsorb --slab slab.fdf --adsorbate H --model medium
 
 # a fine-tuned model, the top layers relaxed, a bulk reference, every output
 stb-mladsorb --slab si111_2x2.fdf --adsorbate Si --relax-depth 4 --bulk-reference si_bulk.fdf \
              --custom-model best_model/mlff_model_compiled.model --custom-model-card best_model/mlff_model_card.json \
              --mlff-workflow mlff_runs/mlff_workflow.json --device cuda \
-             --save-data --save-gnuplot --save-xyz --save-report --show
+             --save-data --save-gnuplot --save-xyz --show
 
 # a molecule: random orientations; several adsorbates; binding curves
 stb-mladsorb --slab slab.fdf --adsorbate H2O --n-orientations 8 --seed 1
@@ -456,7 +456,7 @@ stb-mladsorb --slab si111_2x2.fdf --adsorbate Si --relax-depth 4 --bulk-referenc
              --custom-model ../7.5-mlneb/model_round3/mlff_model_compiled.model \
              --custom-model-card ../7.5-mlneb/model_round3/mlff_model_card.json \
              --mlff-workflow <4.17 run>/mlff_workflow.json --device cuda \
-             --save-data --save-gnuplot --save-xyz --save-report -o main
+             --save-data --save-gnuplot --save-xyz -o main
 ```
 
 ### 6.2 The clean slab and the references
@@ -774,7 +774,7 @@ shows the guard rails.
 STEP` · `--relax-depth Å` (0) · `--bulk-reference FILE...` · `--temperature K` (300) · `--n-orientations N` (1) ·
 `--seed N` · `--symprec` (0.01) · `--vacuum-gap Å` (10) · `--vacuum-box Å` (20) · `--fmax eV/Å` (0.05) · `--max-steps N`
 (300) · `--top-k N` · `--device {cpu,cuda}` · `-o/--output-dir DIR` (default `mladsorb_out`) · `--show` · `--save-data`
-· `--save-gnuplot` · `--save-xyz` · `--save-report` · `--no-intro` · `-v`.
+· `--save-gnuplot` · `--save-xyz` · `--no-intro` · `-v`.
 
 ## 15. What's next
 

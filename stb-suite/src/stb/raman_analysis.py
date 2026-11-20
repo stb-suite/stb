@@ -476,9 +476,7 @@ spectrum (.dat/.gplot).""",
                              "intensity, for --experimental's peak-finding (default: 0.01 -- "
                              "filters out sub-1%% noise bumps in both spectra).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_ramanAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also save the spectrum (and, with --experimental, the overlaid "
                              "measured spectrum) as gnuplot .dat + .gplot scripts, under "
@@ -554,7 +552,7 @@ spectrum (.dat/.gplot).""",
         sys.exit(1)
     modes = group_by_mode(rows)
 
-    report_path = new_report_path("ramanAnalysis") if args.save_report else None
+    report_path = new_report_path("ramanAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== RAMAN STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)

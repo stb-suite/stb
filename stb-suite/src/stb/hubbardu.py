@@ -287,7 +287,7 @@ REFERENCE_U sanity check, ...).""",
                "  %(prog)s --species Mn\n"
                "  %(prog)s --species Fe --shell 3d --j 0.5\n"
                "  %(prog)s --species Mn --pseudo-dir ./pseudos\n"
-               "  %(prog)s --species Mn --pseudo-dir dojo --save-report\n"
+               "  %(prog)s --species Mn --pseudo-dir dojo\n"
                "  %(prog)s --species Mn --atom-index 1  "
                "# Mn appears twice in structure.fdf\n"
     )
@@ -323,9 +323,7 @@ REFERENCE_U sanity check, ...).""",
     parser.add_argument("-o", "--output-dir", type=str, default="hubbardu_runs",
                         help="Output directory for the run folders (default: hubbardu_runs).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_hubbardu_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbardu {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -359,7 +357,7 @@ REFERENCE_U sanity check, ...).""",
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("hubbardu") if args.save_report else None
+    report_path = new_report_path("hubbardu")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

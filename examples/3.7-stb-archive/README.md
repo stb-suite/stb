@@ -422,7 +422,6 @@ It needs the `stb_suite` package (SIESTA only for case 4). It starts by wiping i
 | `-o`, `--output FILE` | `<folder>_archive.tar.gz` | the archive's name (not with a glob) |
 | `--force` | off | overwrite an existing archive of that name |
 | `--dry-run` | off | report only; nothing written |
-| `--save-report` | off | also write `stb_archive_report.txt` (current folder) |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

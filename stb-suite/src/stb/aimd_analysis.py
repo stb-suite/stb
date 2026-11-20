@@ -449,7 +449,7 @@ def main():
                "  stb-aimdAnalysis -l aimd --pair O-H --skip 50\n"
                "  stb-aimdAnalysis -l aimd --fit-start 5000 --fit-end 15000\n"
                "  stb-aimdAnalysis -l aimd --track-atom 0 --track-pair 0-1\n"
-               "  stb-aimdAnalysis -l aimd --save-report --save-gnuplot --view\n"
+               "  stb-aimdAnalysis -l aimd --save-gnuplot --view\n"
                "  stb-aimdAnalysis --trajectory si_bulk_md_traj.xyz --dt 10",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -510,9 +510,7 @@ def main():
                              f"{BIB_FILE} into (default: current directory; the report always goes to the current folder). "
                              "Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_aimdAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .dat + .gplot pair for every computed quantity "
                              "(RDF, MSD, VACF, VDOS, and the atom-displacement/pair-distance "
@@ -605,7 +603,7 @@ def main():
     print("-" * 60)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("aimdAnalysis") if args.save_report else None
+    report_path = new_report_path("aimdAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

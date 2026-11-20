@@ -55,7 +55,7 @@ section() {   # $1 = file, $2 = start of the title
 mlph() {
     local case=$1 file=$2; shift 2
     mkdir -p "$OUT/$case"
-    (cd "$OUT/$case" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --save-report --no-intro "$@" \
+    (cd "$OUT/$case" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --no-intro "$@" \
         < /dev/null > log.txt 2>&1)
 }
 report() { echo "$OUT/$1/stb_mlphonons_report.txt"; }
@@ -89,7 +89,7 @@ Report section [3]: the diamond structure has so much symmetry that ONE displace
 force constant -- 1 calculation instead of 384. The forces on the undisplaced supercell are subtracted, and the
 acoustic sum rule (a rigid translation costs no energy) is imposed.
 EOF
-echo "\$ stb-mlphonons --file si8.fdf $FT --dim 2 2 2 --save-data --save-gnuplot --save-report"
+echo "\$ stb-mlphonons --file si8.fdf $FT --dim 2 2 2 --save-data --save-gnuplot"
 mlph case1_first "$DIR/si8.fdf" $FT --dim 2 2 2 --save-data --save-gnuplot
 R1=$(report case1_first)
 section "$R1" "DISPLACEMENTS"
@@ -114,7 +114,7 @@ pause
 banner "Case 2: the optional outputs -- data files and gnuplot"
 cat <<'EOF'
 PNG figures (bands, DOS, thermal) are always written. --save-data adds the numbers behind them; --save-gnuplot
-writes .dat + .gplot into plot/ and runs gnuplot there (one PDF per figure) when it is installed; --save-report
+writes .dat + .gplot into plot/ and runs gnuplot there (one PDF per figure) when it is installed;
 writes the report; --show opens the figures on screen.
 EOF
 ls -1 "$OUT/case1_first" "$OUT/case1_first/plot" | sed 's/^/  /'
@@ -258,7 +258,7 @@ EOF
 mkdir -p "$OUT/case11_menu"
 cd "$OUT/case11_menu"
 rm -f stb_mlphonons_report*.txt    # the report goes to the folder the menu runs in
-printf '7.3\n%s\n%s\n\n\n\nmenu_out\n1\nn\nn\ny\n\n\n\n\n\n\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
+printf '7.3\n%s\n%s\n\n\n\nmenu_out\n1\nn\nn\ny\n\n\n\n\n\n\nn\nn\nn\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1 menu_out 2>/dev/null | sed 's/^/  /'
 strip_colors < stb_mlphonons_report.txt 2>/dev/null | grep -E "^Model  |^SHA-256|^Mode  |^Band index|^Status|^Results" | sed 's/^/  /'

@@ -159,7 +159,7 @@ def main():
                "  stb_bands --file siesta.bands --shift manual --manual-value 0.5\n"
                "  stb_bands --file siesta.bands --shift fermi --gap-tol 0.05\n"
                "  stb_bands --file siesta.bands --shift fermi --eig-file siesta.EIG\n"
-               "  stb_bands --file siesta.bands --shift fermi --save-report",
+               "  stb_bands --file siesta.bands --shift fermi",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -202,13 +202,11 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write bands_gnuplot.dat and bands.gplot into "
-                             "(and references.bib, with --save-report; the report itself goes to the current folder) "
+                             "(and references.bib; the report goes to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_bands_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
 
@@ -264,7 +262,7 @@ def main():
     result = cbm_vbm(fermi_energy, dic_bands, nspin, args.gap_tol)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("bands") if args.save_report else None
+    report_path = new_report_path("bands")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-BANDS REPORT =====", 'magenta'), f_out)

@@ -136,9 +136,7 @@ def main():
                              "residual forces -- from every displacement's, which a small relaxation residual "
                              "otherwise turns into errors of several THz at Gamma.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_phononsCreate_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -200,7 +198,7 @@ def main():
         sys.exit(1)
     os.makedirs(output_root, exist_ok=True)
 
-    report_path = new_report_path("phononsCreate") if args.save_report else None
+    report_path = new_report_path("phononsCreate")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== PHONON PREP REPORT =====', 'magenta')}", f_out)

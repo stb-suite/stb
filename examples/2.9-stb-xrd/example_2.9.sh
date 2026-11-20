@@ -104,7 +104,7 @@ Every run prints a numbered [0]...[6] report -- the full peak table is
 NOT part of it anymore (it used to be printed in full, which could run to
 hundreds of lines for a low-symmetry structure over a wide 2-theta range);
 [2] DIFFRACTION PATTERN instead prints just a compact summary (peak
-count, strongest peak, resolution). --save-report persists the report to
+count, strongest peak, resolution). The report is always saved to
 stb_xrd_report.txt -- off by default. --save-gnuplot writes the actual
 peak list to xrd_pattern.dat, now with a complete, human-readable header
 (structure/formula/space group/wavelength/range, not just pyxtal's own
@@ -229,26 +229,19 @@ awk '/\[3\] EXPERIMENTAL/{flag=1} /\[4\] OUTPUT/{flag=0} flag' "$OUT/self-check/
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_xrd_report.txt -- off by
-default, so a plain run only ever writes references.bib, no text report
+It is always saved to stb_xrd_report.txt in the current folder, so a plain run only ever writes references.bib, no text report
 file (and no data/gnuplot files either, without --save-gnuplot):
 EOF
 mkdir -p "$OUT/full-report"
 cp crs_structure.fdf "$OUT/full-report/"
 echo
-echo "\$ stb-xrd --file crs_structure.fdf --format fdf --no-intro   # default: no report, no data/gnuplot"
+echo "\$ stb-xrd --file crs_structure.fdf --format fdf --no-intro"
 (cd "$OUT/full-report" && stb-xrd --file crs_structure.fdf --format fdf \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "^crs_structure.fdf$\|console"
-echo "(no xrd_pattern.dat/.gplot, no stb_xrd_report.txt -- only references.bib)"
-echo
-echo "\$ stb-xrd --file crs_structure.fdf --format fdf --save-report --no-intro"
-(cd "$OUT/full-report" && stb-xrd --file crs_structure.fdf --format fdf \
-    --save-report --no-intro > console_saved.log 2>&1)
+    --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_xrd_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_xrd_report.txt"
 echo
@@ -272,7 +265,7 @@ EOF
 TMP="$(mktemp -d)"
 cp crs_structure.fdf "$TMP/"
 echo
-echo "\$ printf '2.9\\ncrs_structure.fdf\\n1\\n\\n\\n\\n\\n\\nn\\nn\\nn\\n' | stb-suite     # format fdf, defaults, no top/compare-to/save-report/gnuplot/view"
+echo "\$ printf '2.9\\ncrs_structure.fdf\\n1\\n\\n\\n\\n\\n\\nn\\nn\\nn\\n' | stb-suite     # format fdf, defaults, no top/compare-to/gnuplot/view"
 (cd "$TMP" && printf '2.9\ncrs_structure.fdf\n1\n\n\n\n\n\nn\nn\nn\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Space Group" "$OUT/basic/console.log" | head -1)
 MENU_LINE=$(grep "Space Group" "$TMP/session.log" | head -1)
@@ -310,7 +303,7 @@ Five self-contained folders were generated under output/:
 
 Each has references.bib; save-gnuplot/ and self-check/ additionally have
 xrd_pattern.dat/xrd_pattern.gplot, and full-report/ has
-stb_xrd_report.txt (only from its --save-report run).
+stb_xrd_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - Bragg's law and why symmetry can force some peaks to vanish
@@ -334,7 +327,7 @@ Recap of what this walkthrough covered:
   - the fixed --view: a real, verified bug (the plot window disappearing
     immediately) traced to pyxtal's own plot_pxrd(), not just this tool's
     code, and fixed by building the preview independently
-  - the numbered [0]...[6] report, --save-report, references.bib
+  - the numbered [0]...[6] report (always saved), references.bib
     (now including pyxtal's own citation, not just SIESTA's)
   - CLI and the interactive stb-suite menu building the same command
 

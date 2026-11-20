@@ -396,9 +396,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="Overwrite an existing archive of the same name.")
     parser.add_argument("--dry-run", action="store_true", help="Report what would go in; write nothing.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_archive_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-archive {VERSION}")
     args = parser.parse_args()
@@ -427,7 +425,7 @@ def main():
         parser.error(f"--output can't be used when --path matches {len(matches)} directories; each gets its own "
                      "auto-named archive.")
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
 
     sec = Sections(buf)
     warnings = []
@@ -470,9 +468,8 @@ def main():
         out(f"  - {r['archive']}")
     # Reserved only now, after the archives are written: an empty report file in a folder being
     # archived would end up in its own archive.
-    report_file = new_report_path("archive") if args.save_report else None
-    if args.save_report:
-        out(f"Report            : {report_file}")
+    report_file = new_report_path("archive")
+    out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     if warnings:

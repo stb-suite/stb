@@ -129,7 +129,7 @@ PY
 nc case6.txt --path nocharges
 section "$OUT/case6.txt" "RUN" | grep -E "Mulliken|Hirshfeld|Voronoi" | sed 's/^/  /'
 # path glob, no label, details n, no csv, no report, Enter, 0 = exit
-(cd "$OUT" && printf '2.19\nh2o_basis/*\n\nn\n\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case6_menu.txt") || true
+(cd "$OUT" && printf '2.19\nh2o_basis/*\n\nn\n\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case6_menu.txt") || true
 echo "  the menu (stb-suite, 2.19) on h2o_basis/*:"; grep -E "^h2o_basis/DZP .*O " "$OUT/case6_menu.txt" | sed 's/^/    /'
 cat <<'EOF'
   -> Each missing table names the fdf flag that makes SIESTA print it. The menu runs the same command.

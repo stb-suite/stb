@@ -249,7 +249,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-stm --label siesta --mode current --iso 0.001\n"
                "  stb-stm --label siesta --mode height --z 3.0\n"
-               "  stb-stm --label siesta --save-report --save-gnuplot --view\n",
+               "  stb-stm --label siesta --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -294,9 +294,7 @@ def main():
                              "Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_stm_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write stm_<mode>.dat + stm_<mode>.gplot together. Off by "
                              "default -- this tool used to write both unconditionally on every run.")
@@ -444,7 +442,7 @@ def main():
     out_gplot = os.path.join(args.output_dir, f"stm_{args.mode}.gplot")
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = new_report_path("stm") if args.save_report else None
+    report_path = new_report_path("stm")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-STM REPORT =====", 'magenta'), f_out)

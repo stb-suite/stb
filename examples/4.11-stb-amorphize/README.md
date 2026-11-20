@@ -176,7 +176,7 @@ output — `example_4.11.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[9] SUMMARY & FILES`) printed
-  to the console and, with `--save-report`, also saved to
+  to the console and saved to
   `stb_amorphize_report.txt`.
 - **Structure validation + bond-angle mean/std**, before and after the MD.
 - **Symmetry analysis before/after** (`[6]`) — expected to differ (often
@@ -197,7 +197,8 @@ output — `example_4.11.sh` proves this directly at the end.
 - **`--stride`** — sampling interval (in MD steps) shared by both exports
   above (default `10`).
 - **`--no-final-relax`** — skip the final static (position+cell) relax.
-- **`--save-report`** / **`--view`** — same as every other stb-suite tool.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
 ## Files in this folder
 
@@ -230,7 +231,7 @@ cases are generated:
 | `vacuum-rejected/`                | Rejected outright on a `stb-slab`-built (100) slab (bulk-only)         |
 | `save-data/`                      | `--save-data`: the `.dat`+`.gplot` pair, rendered to a real PDF if gnuplot is installed |
 | `save-traj/`                      | `--save-traj`: all 3 formats (xsf/pdb/xyz), read back and verified with ASE |
-| `full-report/`                    | `--save-report`, the symmetry `Fd-3m -> P-1` collapse, `references.bib` |
+| `full-report/`                    | the report, the symmetry `Fd-3m -> P-1` collapse, `references.bib` |
 
 ## Try it yourself
 
@@ -268,7 +269,6 @@ stb-amorphize -f si8.fdf --custom-model my_finetuned.model --custom-model-card m
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-sp/--symprec`       | Symmetry tolerance, Ang, for the before/after table (default `0.01`)    |
 | `-o/--output`         | Output `.fdf` file name (default `amorphous.fdf`)                       |
-| `--save-report`       | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`              | Open the input and final structure in ASE's interactive viewer          |
 
 ## What's next

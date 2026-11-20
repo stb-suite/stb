@@ -176,7 +176,7 @@ def main():
                "  stb-fatbands --label siesta --shift fermi --projection species --category O Sn\n"
                "  stb-fatbands --label siesta --shift fermi --projection species_l\n"
                "  stb-fatbands --file siesta.bands --wfsx siesta.bands.WFSX --hsx-file siesta.HSX \\\n"
-               "      --shift fermi --save-report --save-gnuplot --view",
+               "      --shift fermi --save-gnuplot --view",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -252,9 +252,7 @@ def main():
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_fatbands_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write fatbands_<category>.dat (one file per category, "
@@ -445,7 +443,7 @@ def main():
 
     # --- From here on: the numbered, save-able report -------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("fatbands") if args.save_report else None
+    report_path = new_report_path("fatbands")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-FATBANDS REPORT =====", 'magenta'), f_out)

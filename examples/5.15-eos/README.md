@@ -527,7 +527,7 @@ with a clear `[ERROR]`.
 ### 3.7 Running it both ways
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 stb-suite            # then: 5 (Workflow) -> 15 (Equation of State) -> 1 (Stage 1)  (or type 5.15.1)
 ```
 
@@ -617,7 +617,6 @@ Nothing is written unless asked for:
 | `--png` | `<output>_summary.png`, the same dashboard |
 | `--save-gnuplot` | `<output>.dat` (data block and fitted curve) + `<output>.gplot` (E(V) and P(V), `gnuplot <output>.gplot` renders `<output>.pdf`) |
 | `--save-data` | `<output>_table.csv` (one row per volume) + `<output>_results.json` (every fit, check and number) |
-| `--save-report` | `stb_eosAnalysis_report.txt` |
 
 The dashboard has six panels: `E(V)` with the data and every fit, the fit residuals, the pressure from the stress and from
 the fit, the bulk modulus along the curve `B(P)` (its slope at `P = 0` is `B0'`) with the stress-derived `B0` marked, `B0` by
@@ -632,7 +631,7 @@ one are each reported where they apply, in `[7]`, and in `[10]`.
 ### 4.9 Running it both ways
 
 ```bash
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 stb-eosAnalysis --dir eos_runs --target-pressure 0 5 10 --show
 stb-suite            # then: 5 -> 15 -> 2  (or type 5.15.2): it asks for the options above
 ```
@@ -654,9 +653,9 @@ the primitive vectors (`a_conventional / √2`); the conventional lattice consta
 ### 5.2 The base scan
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 ```
 
 The 11 energies (Section 4's report `[3]`, shortened) follow a smooth curve with a minimum between the −1.6 % and +0
@@ -851,9 +850,9 @@ bash make_reference.sh                 # ~30 minutes on 2 cores; writes referenc
 The single commands of the base setup are those of Case 1 of the script:
 
 ```bash
-stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report
+stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0
 for d in eos_runs/vol_*; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
-stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data --save-report
+stb-eosAnalysis --dir eos_runs --eos all --png --save-gnuplot --save-data
 ```
 
 Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), `mpirun -np 2` on a 2-core machine: 5–25 seconds
@@ -936,11 +935,11 @@ stb-eosAnalysis --dir reference_results/si/base --eos all --show --target-pressu
 given = scaled structures only; the same file as `-f` = self-contained input) · `-p PSEUDO` (bank or folder) ·
 `--n-volumes N` (default 9, ≥ 5) · `--strain-range %` (default 5.0) · `--relax-positions` · `--relax-steps N`
 (default 100) · `--kgrid NX NY NZ` · `--kgrid-density D` (1/Å) · `--vacuum-gap Å` (default 10) · `-o DIR`
-(default `eos_runs`) · `--save-report` · `--no-intro` · `-v`.
+(default `eos_runs`) · `--no-intro` · `-v`.
 
 **`stb-eosAnalysis`** — `--dir DIR` (default `eos_runs`) · `--file NAME` (default `calc.out`) ·
 `--eos {birchmurnaghan,vinet,murnaghan,sj,all}` · `--target-pressure GPA ...` · `-o NAME` (default `eos_curve`) ·
-`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

@@ -179,7 +179,7 @@ cp structure.fdf calc.fdf "$OUT/case4-interactive/"
 # output dir (blank -> convergence_runs), save report (n), then the "Press
 # Enter to continue" pause, then quit.
 (cd "$OUT/case4-interactive" && \
-    printf '5.5.1\n\n\n1\n\n\n\n1\nn\n\n\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.5.1\n\n\n1\n\n\n\n1\nn\n\n\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/case1-default/convergence_runs" "$OUT/case4-interactive/convergence_runs" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.5.1) produced byte-identical folders."
 else

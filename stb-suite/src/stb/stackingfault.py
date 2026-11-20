@@ -439,15 +439,13 @@ def main():
 
     parser.add_argument("-O", "--output-dir", type=str, default=".",
                          help=f"Root directory (default: current directory) -- everything lives "
-                              f"under its '{RUN_SUBDIR}/' subfolder (see --save-report): every "
-                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/', "
-                              f"the manifest, and the optional report directly under "
-                              f"'{RUN_SUBDIR}/' -- same self-contained-run-folder convention as "
+                              f"under its '{RUN_SUBDIR}/' subfolder: every "
+                              f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/' "
+                              f"and the manifest directly under "
+                              f"'{RUN_SUBDIR}/' (the report goes to the current folder) -- same self-contained-run-folder convention as "
                               "stb-adsorb's 'sites/' and stb-neb's 'neb_run/'.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_stackingfault_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-stackingfault {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -512,7 +510,7 @@ def main():
     run_root = os.path.join(output_root, RUN_SUBDIR)
     positions_root = os.path.join(run_root, POSITIONS_SUBDIR)
     os.makedirs(positions_root, exist_ok=True)
-    report_path = new_report_path("stackingfault") if args.save_report else None
+    report_path = new_report_path("stackingfault")
 
     f_out = open(report_path, 'w') if report_path else None
 
@@ -570,7 +568,6 @@ def main():
     print_dual(f"  max_area/max_strain/match_id: {args.max_area} / {args.max_strain} / {args.match_id}", f_out)
     print_dual(f"  ML pre-relax layers : {'yes' if args.ml_prerelax_layers else 'no'}", f_out)
     print_dual(f"  ML preview          : {'yes' if args.ml_preview else 'no'}", f_out)
-    print_dual(f"  Save report         : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
 
     library_warnings = []  # collected via capture_library_noise, reported in the last section
 

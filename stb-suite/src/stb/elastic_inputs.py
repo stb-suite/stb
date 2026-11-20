@@ -192,7 +192,7 @@ def main():
                     "yourself, then use stb-elasticAnalysis.",
         epilog="Example usage:\n"
                "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --dirs all\n"
-               "  stb-elasticInputs -s structure.fdf -c calc.fdf --dirs xx yy xy --max 1.5 --steps 6 --save-report\n"
+               "  stb-elasticInputs -s structure.fdf -c calc.fdf --dirs xx yy xy --max 1.5 --steps 6\n"
                "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions both      # relaxed/ and clamped/\n"
                "  stb-elasticInputs -s structure.fdf -c calc.fdf -p dojo --ions clamped   # single points, as 2.0.0\n",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -284,9 +284,7 @@ def main():
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                              "default), same use as --symprec.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_elasticInputs_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticInputs {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -328,7 +326,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("elasticInputs") if args.save_report else None
+    report_path = new_report_path("elasticInputs")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -355,7 +353,6 @@ def main():
     print_dual(f"Output dir        : {args.output_dir}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tol      : symprec={args.symprec}, angle-tolerance={args.angle_tolerance} deg", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

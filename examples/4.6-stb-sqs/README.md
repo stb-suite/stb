@@ -164,8 +164,7 @@ output — `example_4.6.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[11] SUMMARY & FILES` —
-  `[6]` only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_sqs_report.txt`. Earlier versions of
+  `[6]` only appears with `--ml-relax`) printed to the console and saved to `stb_sqs_report.txt`. Earlier versions of
   this tool always wrote a separate `sqs_report.txt`; that file is gone —
   everything it used to contain is now part of this same numbered report.
 - **Structure validation** — atom proximity, lattice handedness, atomic
@@ -193,8 +192,8 @@ output — `example_4.6.sh` proves this directly at the end.
   the search tries to match (default icet's own `2:3, 3:2, 4:1`).
 - **`--ml-relax`** (+ `--ml-relax-cell`, `--model`/`--custom-model`) —
   pre-relax the found SQS structure generically with MACE.
-- **`--save-report`** — also persist the full report to
-  `stb_sqs_report.txt`.
+- **Report** — always saved to `stb_sqs_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input structure and the final SQS structure in
   ASE's interactive 3D viewer (`ase-gui`), as pageable frames. Needs a
   local display. Never exercised by `example_4.6.sh` itself.
@@ -232,7 +231,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `instances/`           | Parallel independent searches, a second global-optimum cross-check     |
 | `sublattice-mgo/`      | (Mg,Ni)O: disordering only Mg, verifying O's bonding geometry survives |
 | `ml-relax/`            | Generic MACE pre-relaxation of the found SQS structure                 |
-| `full-report/`         | `--save-report` + the validation checklist + `references.bib`          |
+| `full-report/`         | the report + the validation checklist + `references.bib`          |
 
 ## Try it yourself
 
@@ -271,7 +270,6 @@ stb-sqs -f ni32.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `sqs.fdf`)                            |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and final SQS structure in ASE's interactive viewer     |
 
 ## What's next

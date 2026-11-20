@@ -159,7 +159,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-wfdensity --label siesta --k-index 0 --band 1\n"
                "  stb-wfdensity --label siesta --band vbm --fermi -4.2\n"
-               "  stb-wfdensity --label siesta --band cbm --save-report --save-gnuplot --view\n",
+               "  stb-wfdensity --label siesta --band cbm --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -237,9 +237,7 @@ def main():
                              "profile data + references.bib) into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_wfdensity_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a 2D-slice or (with --profile) 1D-profile .dat + .gplot "
                              "pair of the |psi|^2 density. Off by default -- this tool used to "
@@ -412,7 +410,7 @@ def main():
         plane_angle_deg = check_planar_orthogonality(lattice, args.axis)
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = new_report_path("wfdensity") if args.save_report else None
+    report_path = new_report_path("wfdensity")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-WFDENSITY REPORT =====", 'magenta'), f_out)

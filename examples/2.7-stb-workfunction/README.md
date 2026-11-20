@@ -124,7 +124,7 @@ of SIESTA version or how exactly that setting is logged.
   same-cell, different-atomic-position mismatch isn't detectable from
   these files alone.
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report to the console:
 
@@ -139,8 +139,8 @@ Every run prints a numbered report to the console:
 | `[6] REFERENCES` | writes `references.bib` (SIESTA) |
 | `[7] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_workfunction_report.txt`. Off by default.
+- **Report** — always saved to `stb_workfunction_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** — also writes `workfunction_data.dat` (the
   planar-averaged potential profile, with the detected vacuum level(s)/
   work function(s) noted in its header) and `workfunction.gplot` (an
@@ -210,13 +210,13 @@ by wiping its own `output/`. Self-contained cases are generated:
 |--------------------|-----------------------------------------------------------------------------|
 | `basic/`           | The full report on a real, converged DFT calculation: real Fermi energy, real work function |
 | `save-gnuplot/`    | `--save-gnuplot`: `workfunction_data.dat` + the annotated `workfunction.gplot` |
-| `full-report/`     | Default (no report file) vs. `--save-report` (`stb_workfunction_report.txt`), `references.bib` |
+| `full-report/`     | The report file (`stb_workfunction_report.txt`), `references.bib` |
 
 ## Try it yourself
 
 ```bash
 # Right after a slab calculation
-stb-workfunction --label my_slab --save-report
+stb-workfunction --label my_slab
 
 # Also get the annotated gnuplot script for a publication-ready plot
 stb-workfunction --label my_slab --save-gnuplot
@@ -236,7 +236,6 @@ stb-workfunction --label my_slab --file relax/my_slab.out
 | `--fermi`           | Manually force the Fermi energy (eV), instead of reading `.out`.       |
 | `--asymmetric-tol`  | Vacuum levels within this many eV are treated as one plateau (default `0.05`). |
 | `-o/--output-dir`   | Where `references.bib` (and the report/data+gnuplot, with their flags) land. |
-| `--save-report`     | Persist the full numbered report to `stb_workfunction_report.txt`.     |
 | `--save-gnuplot`    | Also write `workfunction_data.dat`/`workfunction.gplot`.               |
 | `--view`            | Show an interactive matplotlib preview of the potential profile.       |
 

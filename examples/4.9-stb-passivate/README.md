@@ -106,8 +106,7 @@ output — `example_4.9.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[9] SUMMARY & FILES` — `[4]`
-  only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_passivate_report.txt`.
+  only appears with `--ml-relax`) printed to the console and saved to `stb_passivate_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density (skipped for a vacuum-padded slab, since density isn't
   meaningful there) — run once before and once after passivation.
@@ -132,8 +131,8 @@ output — `example_4.9.sh` proves this directly at the end.
   pre-relax the passivated structure with MACE. Vacuum-aware: any
   vacuum-padded axis (the typical slab case) always stays exactly fixed
   under `--ml-relax-cell`, same convention as `stb-unitcell`/`stb-slab`.
-- **`--save-report`** — also persist the full report to
-  `stb_passivate_report.txt`.
+- **Report** — always saved to `stb_passivate_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input and passivated structures in ASE's
   interactive 3D viewer (`ase-gui`), as pageable frames. Needs a local
   display. Never exercised by `example_4.9.sh` itself.
@@ -168,7 +167,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `bond-length-override/`     | The default 1.35 Ang (atomic-radii-sum) approximation vs. a dialed-in real Si-H bond length |
 | `symmetry-preserved/`       | The full report + before/after symmetry table: identical space/layer/point group |
 | `ml-relax/`                 | MACE pre-relaxation of the passivated slab, vacuum axis provably fixed |
-| `full-report/`              | `--save-report` + `references.bib`                                    |
+| `full-report/`              | the report + `references.bib`                                    |
 
 ## Try it yourself
 
@@ -202,7 +201,6 @@ stb-passivate -f slab.fdf --ml-relax --ml-relax-cell
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `passivated.fdf`)                     |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input and passivated structures in ASE's interactive viewer   |
 
 ## What's next

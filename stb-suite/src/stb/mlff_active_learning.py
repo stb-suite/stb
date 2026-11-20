@@ -821,9 +821,7 @@ def main():
                              "'spread' and as the initial charge, so ASE's viewer colors by it: View > "
                              "Colors > By initial charge) and open them.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlffActiveLearning_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlffActiveLearning {VERSION}")
     args = parser.parse_args()
@@ -941,7 +939,7 @@ def main():
         train_pattern = f"{args.output_dir}/[configs_round_*/]mlff_config_*"
         train_dirs = mlff_workflow.find_config_dirs(args.output_dir)
 
-    report_path = new_report_path("mlffActiveLearning") if args.save_report else None
+    report_path = new_report_path("mlffActiveLearning")
     f_out = open(report_path, "w") if report_path else None
 
     # seeds of the committee, from the workflow when it lists them

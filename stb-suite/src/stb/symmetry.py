@@ -803,9 +803,7 @@ def main():
                              "the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_symmetry_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of the analyzed structure "
                              "-- or, if --write-refined/--compare-to is also given, both "
@@ -990,7 +988,7 @@ def main():
                 print(color_text(f"[WARNING] --write-refined failed: {e}", 'yellow'))
 
     print()
-    report_path = new_report_path("symmetry") if args.save_report else None
+    report_path = new_report_path("symmetry")
     f_out = open(report_path, "w") if report_path else None
 
     print_report(results, args, args.file, args.format, args.show_operations,

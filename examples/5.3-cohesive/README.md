@@ -401,7 +401,7 @@ backend like the `MPLBACKEND=Agg` this example's own script uses).
 ### 3.7 Running it both ways
 
 Both CLI and `stb-suite` → `5.3.2` (which now also prompts for
-`--save-report`/`--view`, not just the required filename/directory) produce
+`--view`, not just the required filename/directory) produce
 the identical report for identical answers.
 
 ## 4. Worked example: a real GaAs calculation, end-to-end
@@ -570,8 +570,8 @@ result (section 1.7) on a less trivial structure.
    if `[3b]`'s last step is still large, go back to step 2 with a larger
    cutoff/wider scan.
 
-7. **(Optional) persist or view**: `--save-report` writes
-   `stb_cohesiveAnalysis_report.txt`; `--view` opens `cohesive_correction.png`
+7. **(Optional) view** (the report is always saved to
+   `stb_cohesiveAnalysis_report.txt`): `--view` opens `cohesive_correction.png`
    interactively (it's always saved to disk regardless, section 3.6).
 
 ## 7. Files in this folder

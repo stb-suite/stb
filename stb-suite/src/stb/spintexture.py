@@ -101,7 +101,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-spintexture --label siesta --shift fermi --fermi -4.2\n"
                "  stb-spintexture --label siesta --shift fermi --fermi-file calc.out \\\n"
-               "      --save-report --save-gnuplot --view\n",
+               "--save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -148,9 +148,7 @@ def main():
                              "--save-gnuplot) and references.bib (the report goes to the current folder) "
                              "into (default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_spintexture_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write spintexture_S{x,y,z}.dat + spintexture.gplot. Off by "
                              "default -- this tool used to write both unconditionally on every "
@@ -262,7 +260,7 @@ def main():
 
     # --- From here on: the numbered, save-able report --------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("spintexture") if args.save_report else None
+    report_path = new_report_path("spintexture")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-SPINTEXTURE REPORT =====", 'magenta'), f_out)

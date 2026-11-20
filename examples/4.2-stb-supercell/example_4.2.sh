@@ -60,7 +60,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [9] SUMMARY
 structure-validation checklist (atom proximity/lattice handedness/atomic
 density) both before and after the transformation, a before/after symmetry
 comparison table, and references.bib (SIESTA, plus MACE if --ml-relax was
-used). A full text report (--save-report), MACE pre-relaxation
+used). A full text report (always written), MACE pre-relaxation
 (--ml-relax), and an interactive 3D view (--view) are all off by default.
 EOF
 pause
@@ -206,18 +206,17 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_supercell_report.txt with
---save-report) includes the structure-validation checklist for both the
+The full numbered report (always written to stb_supercell_report.txt) includes the structure-validation checklist for both the
 input structure and the final supercell, and a references.bib with SIESTA
 (the output is a .fdf).
 EOF
 mkdir -p "$OUT/full-report"
 cp si_bulk.fdf "$OUT/full-report/"
-echo "\$ stb-supercell -f si_bulk.fdf -d 2 2 2 --save-report --no-intro"
-(cd "$OUT/full-report" && stb-supercell -f si_bulk.fdf -d 2 2 2 --save-report --no-intro > console.log)
+echo "\$ stb-supercell -f si_bulk.fdf -d 2 2 2 --no-intro"
+(cd "$OUT/full-report" && stb-supercell -f si_bulk.fdf -d 2 2 2 --no-intro > console.log)
 echo
 echo "Report sections written to stb_supercell_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_supercell_report.txt"
@@ -237,8 +236,8 @@ echo "entry mode and checking it reaches the same construction step."
 TMP="$(mktemp -d)"
 cp si_bulk.fdf "$TMP/"
 echo
-echo "\$ printf '4.2\\nsi_bulk.fdf\\n2 2 2\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.2\nsi_bulk.fdf\n2 2 2\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.2\\nsi_bulk.fdf\\n2 2 2\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.2\nsi_bulk.fdf\n2 2 2\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Output atoms   : 64" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-supercell command as the CLI walkthrough above (64"
@@ -275,7 +274,7 @@ Recap of what this walkthrough covered:
     here (Si is centrosymmetric) but wouldn't be for a chiral crystal
   - --ml-relax/--ml-relax-cell -- MACE pre-relaxation of the built supercell
   - the structure-validation checklist (before AND after), references.bib,
-    and --save-report
+    and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

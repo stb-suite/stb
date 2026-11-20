@@ -141,7 +141,7 @@ possibly relabeled.
   caught and reported as "detection... failed" rather than crashing the
   whole run, but no point group is available for it either.
 
-## The report: console output, `--save-report`, `--view`
+## The report: console output, `--view`
 
 Every run prints a numbered report to the console:
 
@@ -160,12 +160,8 @@ Every run prints a numbered report to the console:
 | `[10] REFERENCES` | writes `references.bib` (SIESTA) |
 | `[11] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_symmetry_report.txt`. Off by default, so a plain run only ever
-  writes `references.bib` — no text report file at all (the old,
-  always-on `symmetry.dat` this tool used to write unconditionally is
-  gone; a stale one left by an older run is cleaned up automatically
-  instead of being mistaken for current output).
+- **Report** — always saved to `stb_symmetry_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens an interactive 3D view (via ASE) of the analyzed
   structure — or, if `--write-refined`/`--compare-to` is also given, both
   structures side by side (page through frames in ase-gui). Needs a
@@ -229,13 +225,13 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `layer-group/`        | Why a 2D slab needs LAYER GROUP instead of (or in addition to) SPACE GROUP |
 | `point-group/`        | An isolated water molecule's POINT GROUP (C2v) |
 | `limitation-wire/`    | The documented "no rod group" limitation for a 1D wire |
-| `full-report/`        | Default (no report file) vs. `--save-report` (`stb_symmetry_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_symmetry_report.txt`), `references.bib` |
 
 ## Try it yourself
 
 ```bash
 # A structure you just built or relaxed
-stb-symmetry --file my_calc.fdf --format fdf --save-report
+stb-symmetry --file my_calc.fdf --format fdf
 
 # Check symmetry survived a relaxation
 stb-symmetry --file my_calc.fdf --format fdf --compare-to my_relaxed.STRUCT_OUT --compare-format struct_out
@@ -257,8 +253,7 @@ stb-symmetry --file my_relaxed.STRUCT_OUT --format struct_out --scan-symprec
 | `--compare-to`       | Also analyze a second structure and compare symmetry.                  |
 | `--compare-format`   | File format of `--compare-to` (required if given).                     |
 | `--write-refined`    | Write the symmetry-refined structure as this filename, inside `--output-dir`, with a provenance header. |
-| `-o/--output-dir`    | Where to write `references.bib` (and the report, with `--save-report`). |
-| `--save-report`      | Persist the full numbered report to `stb_symmetry_report.txt`.         |
+| `-o/--output-dir`    | Where to write `references.bib`. |
 | `--view`             | Open an interactive 3D view (via ASE) after the report is written.     |
 
 ## What's next

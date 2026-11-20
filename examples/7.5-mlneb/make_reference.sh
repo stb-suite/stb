@@ -28,7 +28,7 @@ export MPLBACKEND=Agg
 r2=(--custom-model "$R2/mlff_model_compiled.model" --custom-model-card "$R2/mlff_model_card.json")
 r3=(--custom-model "$R3/mlff_model_compiled.model" --custom-model-card "$R3/mlff_model_card.json")
 ends=(--initial "$HERE/vac_initial.fdf" --final "$HERE/vac_final.fdf")
-common=(--no-intro --device "$DEVICE" --save-data --save-report)
+common=(--no-intro --device "$DEVICE" --save-data)
 
 run() {   # run <case> <args...>
     local case="$1"; shift

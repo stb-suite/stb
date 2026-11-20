@@ -126,7 +126,7 @@ def main():
                "  stb-sts --label siesta --xy 0 0 --height 3.0 --erange -3 3 --sigma 50\n"
                "  stb-sts --label siesta --point 1.2 0.7 12.0 --erange -5 5 --fwhm 100\n"
                "  stb-sts --label siesta --xy 0 0 --height 3.0 --erange -5 5 --sigma 50 "
-               "--shift fermi --fermi-file calc.out --save-report --save-gnuplot --view\n",
+               "--shift fermi --fermi-file calc.out --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -187,13 +187,11 @@ def main():
                         help="Gaussian broadening full width at half maximum, in meV.")
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write sts.dat (and, with --save-gnuplot/--save-report, "
+                        help="Directory to write sts.dat (and, with --save-gnuplot, "
                              "the .gplot script/references.bib) into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_sts_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a real .gplot script alongside sts.dat. Off by default -- "
                              "this tool used to write the .dat file unconditionally but never wrote "
@@ -398,7 +396,7 @@ def main():
             f.writelines(lines)
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = new_report_path("sts") if args.save_report else None
+    report_path = new_report_path("sts")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-STS REPORT =====", 'magenta'), f_out)

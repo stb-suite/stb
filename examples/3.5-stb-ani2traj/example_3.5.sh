@@ -146,7 +146,7 @@ pause
 banner "Case 7 -- The interactive menu (stb-suite, code 3.5)"
 rm -rf "$OUT/case7"; cp -a "$DIR/siesta_runs/si_npt" "$OUT/case7"
 # label (Enter: the only *.ANI), format 3 = xyz, skip 0, stride 1, no unwrap, default output, no dry run, no report
-(cd "$OUT/case7" && printf '3.5\n\n3\n0\n1\nn\n\nn\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > log.txt) || true
+(cd "$OUT/case7" && printf '3.5\n\n3\n0\n1\nn\n\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > log.txt) || true
 grep -E "^Input  |^Output  |^Read-back" "$OUT/case7/log.txt" | sed 's/^/  /'
 cat <<'EOF'
   -> The menu asks for the label (Enter for the only *.ANI), the format, the frames to keep, --unwrap, the output

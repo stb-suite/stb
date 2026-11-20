@@ -293,7 +293,7 @@ relax it first), a **fragment split** and your **template** (`--calc`, default `
     fragment2/     ...
     chargediff_manifest.json          the split, read by Stage 2
     chargediff_fragments.png          with --png: the system projected on xy/xz/yz, atoms coloured by fragment
-    (stb_chargediffPrep_report.txt, with --save-report, goes to the folder you run it from)
+    (stb_chargediffPrep_report.txt goes to the folder you run it from)
     references.bib
 ```
 
@@ -380,7 +380,7 @@ that share an element (sulfur in both layers of MoS₂/WS₂, hydrogen in both h
 ### 3.5 Running it both ways
 
 ```bash
-stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 --png --save-report
+stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 --png
 stb-suite            # then: 5 (Workflow) -> 16 (Charge Density Difference) -> 1 (Stage 1)   (or type 5.16.1)
 ```
 
@@ -452,7 +452,6 @@ chooses it:
 | `--show` / `--png` | the 4-panel dashboard on screen / `<dir>_chargediff_summary.png` (without a display `--show` saves the PNG) |
 | `--save-gnuplot` | a `.gplot` next to the `.dat` (`--contour` overlays contours, `--vmin/--vmax` fix the colour range) |
 | `--save-data` | `<dir>_chargediff_atoms.csv` (charge change per atom) + `<dir>_chargediff_results.json` (every number of the report) |
-| `--save-report` | `stb_chargediffAnalysis_report.txt` |
 
 The **dashboard**: the slice with the atoms near it (zoomed on the atoms of an isolated system); the planar integral
 `λ(z)` and the cumulative charge `ΔQ(z)` with every atom and the separating plane marked; the charge change by atom,
@@ -469,7 +468,7 @@ in `[9]`, and the analysis goes on.
 ### 4.7 Running it both ways
 
 ```bash
-stb-chargediffAnalysis --dir chargediff_run --png --save-data --save-report
+stb-chargediffAnalysis --dir chargediff_run --png --save-data
 stb-chargediffAnalysis --dir chargediff_run --profile --axis 2 --save-gnuplot --show
 stb-suite            # then: 5 -> 16 -> 2  (or type 5.16.2): it asks for the mode, axis, position and outputs
 ```
@@ -498,7 +497,7 @@ the microwave spectrum [19], Li 1.743 Å above a sheet that stays flat (0.003 Å
 ```bash
 stb-chargediffPrep -s water_dimer.fdf --fragment-sizes 3,3 --calc calc.fdf -p dojo --mesh-cutoff 320 -o water
 for d in water/*/; do (cd $d && mpirun -np 2 siesta calc.fdf > calc.out); done
-stb-chargediffAnalysis --dir water --png --save-data --save-report
+stb-chargediffAnalysis --dir water --png --save-data
 ```
 
 Every set also ran each fragment **without** its ghost atoms (`fragmentN_alone/`, `build_inputs.py alone`) — the
@@ -781,8 +780,7 @@ bash make_reference.sh                 # ~2 h on 2 cores; writes reference_run/ 
 ```
 
 It relaxes the three complexes and the monomers, runs `stb-chargediffPrep` for every set (the commands of Section 5),
-SIESTA in each folder, `build_inputs.py alone` for the fragments without ghosts, and `stb-chargediffAnalysis --save-data
---save-report`. Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), `mpirun -np 2`.
+SIESTA in each folder, `build_inputs.py alone` for the fragments without ghosts, and `stb-chargediffAnalysis --save-data`. Computed with SIESTA 5.4.2 (conda-forge build, GNU 14.3, MPI), `mpirun -np 2`.
 
 ## 7. Known, deliberate limitations
 
@@ -853,11 +851,11 @@ cp -r reference_results/water /tmp/w && xz -d /tmp/w/*/siesta.RHO.xz && stb-char
 `--fragment-species 'El,El;El'`, `--fragment-manifest [PATH]` · `--calc CALC` (default `calc.fdf`) · `--mesh-cutoff RY`
 (default 400) · `-p PSEUDO` (bank or folder; default: the structure's folder) · `--force-spin`/`--no-force-spin` ·
 `--force-dipole`/`--no-force-dipole` · `--force-vdw`/`--no-force-vdw` · `--output-dir DIR` (default `chargediff_run`) ·
-`--show` · `--png` · `--view` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--png` · `--view` · `--no-intro` · `-v`.
 
 **`stb-chargediffAnalysis`** — `--dir DIR` (default `chargediff_run`) · `-o OUTPUT_DIR` (default `.`) · `--profile` |
 `--3d` · `-a/--axis {0,1,2}` · `-p/--pos ANG` · `--spin` · `--iso-min RHO` · `--no-cube` · `--vmin`/`--vmax` · `--contour` ·
-`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--save-report` · `--no-intro` · `-v`.
+`--show` · `--png` · `--save-gnuplot` · `--save-data` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

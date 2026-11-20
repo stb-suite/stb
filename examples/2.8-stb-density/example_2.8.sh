@@ -43,8 +43,7 @@ you, why the spin-polarized case needed a real, verified fix (see the
 next section for a live demonstration), planar averaging, and the
 signed-vs-non-negative colorbar convention.
 
-Every run prints a numbered [0]...[5] report. --save-report persists it
-to stb_density_report.txt; --save-gnuplot writes the .dat+.gplot pair
+Every run prints a numbered [0]...[5] report. It is always savedstb_density_report.txt; --save-gnuplot writes the .dat+.gplot pair
 (off by default -- this tool used to write the gnuplot script
 UNCONDITIONALLY; that's no longer the case); --view shows a matplotlib
 preview (heatmap/line/3D scatter, matching the mode).
@@ -144,23 +143,18 @@ grep "Integrated Delta\|Blue -> White" "$OUT/rho2-diff/console.log" "$OUT/rho2-d
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (both off by default)"
+echo " output/full-report/  --  the report file + --save-gnuplot"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
-Without --save-report/--save-gnuplot, a plain run only ever writes the
-.dat file(s) and references.bib -- no .gplot script, no text report file:
+Without --save-gnuplot, a plain run writes the .dat file(s),
+references.bib and the report -- no .gplot script:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.RHO "$OUT/full-report/"
 echo
-echo "\$ stb-density --label Sn3O4 --no-intro   # default: no .gplot, no report"
-(cd "$OUT/full-report" && stb-density --label Sn3O4 --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.RHO$\|console"
-echo "(no .gplot, no stb_density_report.txt -- only Sn3O4_density.dat + references.bib)"
-echo
-echo "\$ stb-density --label Sn3O4 --save-report --save-gnuplot --no-intro"
-(cd "$OUT/full-report" && stb-density --label Sn3O4 --save-report --save-gnuplot --no-intro > console_saved.log 2>&1)
+echo "\$ stb-density --label Sn3O4 --save-gnuplot --no-intro"
+(cd "$OUT/full-report" && stb-density --label Sn3O4 --save-gnuplot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_density_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_density_report.txt"
 echo
@@ -184,8 +178,8 @@ EOF
 TMP="$(mktemp -d)"
 cp Sn3O4.RHO "$TMP/"
 echo
-echo "\$ printf '2.8\\nSn3O4\\n1\\n2\\n\\nn\\nn\\n\\nn\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite     # 2D slice, axis 2, center, defaults"
-(cd "$TMP" && printf '2.8\nSn3O4\n1\n2\n\nn\nn\n\nn\n\nn\nn\nn\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.8\\nSn3O4\\n1\\n2\\n\\nn\\nn\\n\\nn\\n\\nn\\nn\\n\\n0\\n' | stb-suite     # 2D slice, axis 2, center, defaults"
+(cd "$TMP" && printf '2.8\nSn3O4\n1\n2\n\nn\nn\n\nn\n\nn\nn\n\n0\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Integrated Charge Density" "$OUT/basic-slice/console.log" | head -1)
 MENU_LINE=$(grep "Integrated Charge Density" "$TMP/session.log" | head -1)
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -206,8 +200,7 @@ Four self-contained folders were generated under output/:
   rho2-diff/     full-report/
 
 Each has references.bib; full-report/ additionally has
-stb_density_report.txt and a .gplot script (only from its --save-report/
---save-gnuplot run).
+stb_density_report.txt and a .gplot script (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:
   - a live, hand-verified proof of the up/down-vs-total/spin fix, using a
@@ -215,7 +208,7 @@ Recap of what this walkthrough covered:
   - auto-detection: no --spin flag needed to notice/process a
     spin-polarized .RHO correctly
   - the non-negative-vs-signed colorbar convention (--rho2 diff)
-  - the numbered [0]...[5] report, --save-report, --save-gnuplot,
+  - the numbered [0]...[5] report (always saved), --save-gnuplot,
     references.bib
   - CLI and the interactive stb-suite menu building the same command
 

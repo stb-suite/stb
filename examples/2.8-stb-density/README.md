@@ -100,7 +100,7 @@ would center white at `(min+max)/2`, which is only 0 by coincidence.
   is the same filter used for the exported point cloud; a tighter value
   gives a clearer preview too.
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report to the console:
 
@@ -113,7 +113,8 @@ Every run prints a numbered report to the console:
 | `[4] REFERENCES` | writes `references.bib` (SIESTA) |
 | `[5] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — persist the full report to `stb_density_report.txt`.
+- **Report** — always saved to `stb_density_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** — also write a `.gplot` script next to each `.dat`
   file (off by default — this tool used to write the `.gplot` script
   **unconditionally** on every run; that's no longer the case, matching
@@ -176,7 +177,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `basic-slice/`        | A 2D slice of Sn₃O₄'s total charge density |
 | `spin-auto/`          | The O₂ spin-polarization auto-detection: correct total (12 e) and net moment (2 e) |
 | `rho2-diff/`          | `--rho2`: an (admittedly trivial, self-subtracted) charge-transfer difference, symmetric colorbar |
-| `full-report/`        | Default (no report/gnuplot files) vs. `--save-report --save-gnuplot`, `references.bib` |
+| `full-report/`        | `--save-gnuplot`, the report, `references.bib` |
 
 ## Try it yourself
 
@@ -209,7 +210,6 @@ stb-density --label my_calc --cube
 | `--cube`            | Also write a Gaussian `.cube` file.                                     |
 | `--vmin/--vmax`     | Fix the colorbar range manually (primary quantity only).               |
 | `--contour`         | Overlay contour lines (2D slice only).                                 |
-| `--save-report`     | Persist the full report to `stb_density_report.txt`.                   |
 | `--save-gnuplot`    | Also write `.gplot` script(s).                                          |
 | `--view`            | Show an interactive matplotlib preview.                                 |
 

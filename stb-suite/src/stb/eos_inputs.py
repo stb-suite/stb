@@ -162,9 +162,7 @@ def main():
                              "--strain-range is an AREA strain; with vacuum along two (wire), only the "
                              "periodic one and it is a LENGTH strain. A molecule (three) is rejected.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_eosInputs_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-eosInputs {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -242,7 +240,7 @@ def main():
     fixed_extent = float(abs(np.linalg.det(lattice))) / scan_measure0
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("eosInputs") if args.save_report else None
+    report_path = new_report_path("eosInputs")
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 

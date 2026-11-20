@@ -272,7 +272,7 @@ elements) and writes
     combined/        structure.fdf, calc.fdf, config_extra.fdf, the pseudopotentials
     neutral/<El>/    one isolated atom per element, in a cubic box of side --vacuum
     hirshfeld_manifest.json            what Stage 2 reads (paths RELATIVE to the study: copy or move it freely)
-    (stb_hirshfeldPrep_report.txt, with --save-report, goes to the folder you run it from)
+    (stb_hirshfeldPrep_report.txt goes to the folder you run it from)
 ```
 
 Every `calc.fdf` is `%include config_extra.fdf` above your template, untouched; SIESTA's fdf reader is
@@ -309,9 +309,9 @@ to SIESTA's own, and counts how many atoms of each element lean positive or nega
 ### 3.3 Running them
 
 ```bash
-stb-hirshfeldPrep -s structure.fdf --calc calc.fdf -p dojo --save-report         # Stage 1
+stb-hirshfeldPrep -s structure.fdf --calc calc.fdf -p dojo         # Stage 1
 for d in hirshfeld_study/combined hirshfeld_study/neutral/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
-stb-hirshfeldIons -O hirshfeld_study -p dojo --save-report                        # Stage 2
+stb-hirshfeldIons -O hirshfeld_study -p dojo                        # Stage 2
 for d in hirshfeld_study/ions/*/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
 stb-suite            # or: 5 (Workflow) -> 17 (Hirshfeld-I) -> 1 / 2   (5.17.1, 5.17.2)
 ```
@@ -366,12 +366,11 @@ A missing reference `.RHO` stops it with an `[ERROR]` naming the folder: a refer
 |---|---|
 | `--save-data` | `hirshfeld_charges.dat` (per atom: every method, population, reference), `hirshfeld_iterations.dat` (every atom's charge per round), `hirshfeld_charges.xyz` (extended XYZ with the charges as per-atom columns; `ase gui` colours atoms by them) |
 | `--png` / `--show` | the 6-panel dashboard `hirshfeld_analysis.png`: convergence with the tolerance and the estimated error, each atom's charge per round, the mean charge per element by method, Hirshfeld-I vs simple Hirshfeld per atom, the reference profiles `4πr²ρ(r)`, the structure coloured by charge (`--show` without a display saves the PNG) |
-| `--save-report` | `stb_hirshfeldAnalysis_report.txt` |
 
 ### 4.5 Running it both ways
 
 ```bash
-stb-hirshfeldAnalysis -O hirshfeld_study --save-data --png --save-report
+stb-hirshfeldAnalysis -O hirshfeld_study --save-data --png
 stb-hirshfeldAnalysis -O hirshfeld_study --tol 1e-4 --max-iter 100          # tighter, seconds more
 stb-suite            # then: 5 -> 17 -> 3  (5.17.3): it asks for the folder, tolerance and outputs
 ```
@@ -396,11 +395,11 @@ template (the molecules at fixed cell, 0.01 eV/Å; the crystals with the cell, 0
 atoms sit in 20 Å boxes (the default).
 
 ```bash
-stb-hirshfeldPrep -s relaxed.fdf --calc calc.fdf -p dojo -O h2o --mesh-cutoff 400 --save-report
+stb-hirshfeldPrep -s relaxed.fdf --calc calc.fdf -p dojo -O h2o --mesh-cutoff 400
 for d in h2o/combined h2o/neutral/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
-stb-hirshfeldIons -O h2o -p dojo --save-report
+stb-hirshfeldIons -O h2o -p dojo
 for d in h2o/ions/*/*; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
-stb-hirshfeldAnalysis -O h2o --save-data --png --save-report
+stb-hirshfeldAnalysis -O h2o --save-data --png
 ```
 
 ### 5.2 Water: the three stages
@@ -766,13 +765,13 @@ cp -r reference_results/h2o /tmp/h2o && find /tmp/h2o -name '*.xz' -exec xz -d {
 
 **`stb-hirshfeldPrep`** — `-s/--structure` (default `structure.fdf`) · `--calc` (default `calc.fdf`) · `--mesh-cutoff RY`
 (default 400) · `--vacuum ANG` (isolated-atom box, default 20) · `-p/--pseudo-dir` (bank or folder; default: the structure's
-folder) · `-O/--output-dir` (default `hirshfeld_study`) · `--save-report` · `--no-intro` · `-v`.
+folder) · `-O/--output-dir` (default `hirshfeld_study`) · `--no-intro` · `-v`.
 
 **`stb-hirshfeldIons`** — `-O/--output-dir` (the study, default `hirshfeld_study`) · `-p/--pseudo-dir` · `--ref OUT` (the log
-to read `Z_val` from) · `--save-report` · `--no-intro` · `-v`.
+to read `Z_val` from) · `--no-intro` · `-v`.
 
 **`stb-hirshfeldAnalysis`** — `-O/--output-dir` (the study) · `--tol E` (default 0.005 e) · `--max-iter N` (default 20) ·
-`--ref OUT` · `--save-data` · `--png` · `--show` · `--save-report` · `--no-intro` · `-v`.
+`--ref OUT` · `--save-data` · `--png` · `--show` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

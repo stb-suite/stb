@@ -29,7 +29,7 @@ case_() {
     case "$file" in /*) ;; *) file="$HERE/$file" ;; esac
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M:%S))"
-    (cd "$WORK/$name" && stb-mlelastic --file "$file" --device "$DEVICE" -o . --save-report --save-data \
+    (cd "$WORK/$name" && stb-mlelastic --file "$file" --device "$DEVICE" -o . --save-data \
         --no-intro "$@" < /dev/null > log.txt 2>&1) || echo "$name: FAILED (see $WORK/$name/log.txt)"
 }
 

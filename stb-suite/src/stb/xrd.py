@@ -83,7 +83,7 @@ already needed by stb-crystalcast covers this too.""",
                "  %(prog)s --file relaxed.STRUCT_OUT --format struct_out \\\n"
                "      --two-theta-range 10 80 --view\n"
                "  %(prog)s --file structure.fdf --format fdf \\\n"
-               "      --compare-to experimental.dat --view --save-report --save-gnuplot\n"
+               "      --compare-to experimental.dat --view --save-gnuplot\n"
     )
 
     parser.add_argument("--file", required=True, help="Path to structure file.")
@@ -125,9 +125,7 @@ already needed by stb-crystalcast covers this too.""",
                              "files, with --save-gnuplot; the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_xrd_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write xrd_pattern.dat (all peaks, pyxtal's own format) and "
                              "xrd_pattern.gplot (a stick-pattern plot script) together. Off by "
@@ -226,7 +224,7 @@ already needed by stb-crystalcast covers this too.""",
         xrd_core.write_xrd_gnuplot(dat_path, gplot_path, structure.composition.reduced_formula,
                                     wavelength_label)
 
-    report_path = new_report_path("xrd") if args.save_report else None
+    report_path = new_report_path("xrd")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-XRD REPORT =====", 'magenta'), f_out)

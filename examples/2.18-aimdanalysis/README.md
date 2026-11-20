@@ -291,7 +291,7 @@ Or try the tool directly:
 
 ```bash
 stb-aimdAnalysis --label aimd --track-atom 0 --track-pair 0-1 \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 10. What's next

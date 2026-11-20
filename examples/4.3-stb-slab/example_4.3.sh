@@ -58,7 +58,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [7] SUMMARY
 & FILES -- [4] ML PRE-RELAXATION only appears with --ml-relax), a
 structure-validation checklist both before and after the cut, a
 before/after symmetry comparison table, and references.bib. A full text
-report (--save-report), MACE pre-relaxation (--ml-relax), and an
+report (always written), MACE pre-relaxation (--ml-relax), and an
 interactive 3D view (--view) are all off by default.
 EOF
 pause
@@ -215,17 +215,16 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_slab_report.txt with
---save-report) includes the structure-validation checklist for the bulk
+The full numbered report (always written to stb_slab_report.txt) includes the structure-validation checklist for the bulk
 input and every written slab, and a references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_bulk.fdf "$OUT/full-report/"
-echo "\$ stb-slab -f si_bulk.fdf --hkl 1 0 0 --save-report --no-intro"
-(cd "$OUT/full-report" && stb-slab -f si_bulk.fdf --hkl 1 0 0 --save-report --no-intro > console.log)
+echo "\$ stb-slab -f si_bulk.fdf --hkl 1 0 0 --no-intro"
+(cd "$OUT/full-report" && stb-slab -f si_bulk.fdf --hkl 1 0 0 --no-intro > console.log)
 echo
 echo "Report sections written to stb_slab_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_slab_report.txt"
@@ -279,7 +278,7 @@ Recap of what this walkthrough covered:
   - --passivate genuinely resolving 8 dangling bonds on a Si(111) surface
   - --ml-relax measuring real surface relaxation with MACE
   - the structure-validation checklist (bulk AND slab), references.bib,
-    and --save-report
+    and
   - the Layer Group column appearing only on the (2D-periodic) slab side,
     never the (3D) bulk side
   - CLI and the interactive stb-suite menu building the same command

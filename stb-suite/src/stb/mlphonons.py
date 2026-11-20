@@ -1310,9 +1310,7 @@ def build_parser():
     parser.add_argument("--save-data", action="store_true",
                         help="Also write the raw numeric data (.dat) behind each plot. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlphonons_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlphonons {VERSION}")
     return parser
@@ -1358,7 +1356,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("mlphonons") if args.save_report else None
+    report_path = new_report_path("mlphonons")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -1493,7 +1491,7 @@ def main():
         if report_path:
             print_dual(f"Report            : {report_path}", f_out)
         not_asked = [f for f, on in (("--save-gnuplot", args.save_gnuplot), ("--save-data", args.save_data),
-                                     ("--show", args.show), ("--save-report", args.save_report)) if not on]
+                                     ("--show", args.show)) if not on]
         if not_asked:
             print_dual(f"Also available    : {' '.join(not_asked)}", f_out)
         print_dual(f"Wall time         : {time.monotonic() - t_start:.1f} s", f_out)

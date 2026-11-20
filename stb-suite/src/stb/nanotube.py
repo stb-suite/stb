@@ -320,7 +320,7 @@ hexagonal (no gcd/(n-m)%3d hexagonal-only shortcut is used).""",
                "  %(prog)s -f graphene.fdf --chirality 6 0 --mode tube\n"
                "  %(prog)s -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 4\n"
                "  %(prog)s -f graphene.fdf --chirality 6 0 --mode ribbon --repeats 4 --passivate\n"
-               "  %(prog)s -f graphene.fdf --chirality 6 0 --ml-relax --save-report --view\n"
+               "  %(prog)s -f graphene.fdf --chirality 6 0 --ml-relax --view\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -384,9 +384,7 @@ hexagonal (no gcd/(n-m)%3d hexagonal-only shortcut is used).""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_nanotube_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "monolayer and the final tube/ribbon (page through frames in "
@@ -431,7 +429,7 @@ hexagonal (no gcd/(n-m)%3d hexagonal-only shortcut is used).""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("nanotube") if args.save_report else None
+    report_path = new_report_path("nanotube")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

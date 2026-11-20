@@ -82,7 +82,7 @@ structure-validation checklist (atom proximity/lattice handedness/atomic
 density) for every heterostructure it builds, a symmetry table that
 includes the physically correct LAYER GROUP (not just the 3D space group
 of the vacuum-padded cell), and references.bib (SIESTA + the ZSL algorithm
-paper). A full text report (--save-report), MACE pre-relaxation
+paper). A full text report (always written), MACE pre-relaxation
 (--ml-relax), and an interactive 3D view of the final structure(s)
 (--view) are all off by default.
 EOF
@@ -260,19 +260,18 @@ grep "Layer Group" "$OUT/custom-shift/console.log"
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_2Dstacking_report.txt with
---save-report) includes the structure-validation checklist -- atom
+The full numbered report (always written to stb_2Dstacking_report.txt) includes the structure-validation checklist -- atom
 proximity, lattice handedness, atomic density -- for every heterostructure
 built, and a references.bib with SIESTA plus the ZSL algorithm paper
 (Zur & McGill, 1984), the citation this tool's method itself is built on.
 EOF
 mkdir -p "$OUT/full-report"
 cp graphene.fdf hbn.fdf "$OUT/full-report/"
-echo "\$ stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --save-report --no-intro"
-(cd "$OUT/full-report" && stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --save-report --no-intro > console.log)
+echo "\$ stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --no-intro"
+(cd "$OUT/full-report" && stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --no-intro > console.log)
 echo
 echo "Report sections written to stb_2Dstacking_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_2Dstacking_report.txt"
@@ -335,8 +334,8 @@ echo "builds/launches the exact same command, not the nested prompt itself."
 TMP="$(mktemp -d)"
 cp graphene.fdf hbn.fdf "$TMP/"
 echo
-echo "\$ printf '4.1\\ngraphene.fdf\\nhbn.fdf\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.1\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '4.1\\ngraphene.fdf\\nhbn.fdf\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.1\ngraphene.fdf\nhbn.fdf\n\n\n\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1)
 if grep -q "Searching for commensurate supercells" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-2Dstacking command as the CLI walkthrough above."
@@ -377,7 +376,7 @@ Recap of what this walkthrough covered:
     -symmetry Moire cell
   - -tx/-ty for an arbitrary fractional shift and --vacuum to override the
     inherited vacuum thickness
-  - the structure-validation checklist, references.bib, and --save-report
+  - the structure-validation checklist, references.bib, and
   - the Layer Group row in the symmetry table -- the physically correct
     classification for a 2D-periodic structure, alongside the 3D space
     group of the vacuum-padded cell

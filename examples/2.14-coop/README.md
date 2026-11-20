@@ -175,8 +175,8 @@ and, with `--bond-order`, compares the magnitude, not only the sign.
 - **Numbered `[0]`...`[7]` report** (`RUN METADATA`, `INPUT DATA`,
   `PAIR SELECTION`, `COOP/COHP CURVE`, `BOND ORDER`, `OUTPUT DATA & PLOTS`,
   `REFERENCES`, `SUMMARY & FILES`), matching `stb-wfdensity`/`stb-sts`.
-- **`--save-report`** persists the report to `stb_coop_report.txt` (off by
-  default).
+- **Report** — always saved to `stb_coop_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** writes `coop.dat`/`cohp.dat` and a real multi-pair
   gnuplot script (one curve per selected pair, via `columnheader()`),
   together behind one off-by-default flag.
@@ -227,7 +227,7 @@ Or try the tool directly:
 ```bash
 stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
     --erange -25 -3.204 --sigma 300 --bond-order \
-    --save-report --save-gnuplot --view
+    --save-gnuplot --view
 ```
 
 ## 6. What's next

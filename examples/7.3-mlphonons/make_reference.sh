@@ -29,7 +29,7 @@ case_() {
     case "$file" in /*) ;; *) file="$HERE/$file" ;; esac
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M:%S))"
-    (cd "$WORK/$name" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --save-report --save-data \
+    (cd "$WORK/$name" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --save-data \
         --no-intro "$@" < /dev/null > log.txt 2>&1) || echo "$name: FAILED (see $WORK/$name/log.txt)"
 }
 
@@ -67,7 +67,7 @@ run_all() {
     if [ ! -s "$WORK/elastic/stb_mlelastic_report.txt" ]; then
         mkdir -p "$WORK/elastic"
         echo "elastic: running ($(date +%H:%M:%S))"
-        (cd "$WORK/elastic" && stb-mlelastic --file "$HERE/si8.fdf" $FT --device "$DEVICE" -o . --save-report \
+        (cd "$WORK/elastic" && stb-mlelastic --file "$HERE/si8.fdf" $FT --device "$DEVICE" -o . \
             --no-intro < /dev/null > log.txt 2>&1) || echo "elastic: FAILED (see $WORK/elastic/log.txt)"
     else
         echo "elastic: done"

@@ -539,7 +539,7 @@ missing dipole correction) rather than being genuinely flat.""",
         epilog="Example usage:\n"
                "  stb-workfunction -l graphene\n"
                "  stb-workfunction -l slab --axis 2\n"
-               "  stb-workfunction -l slab --fermi -4.5 --save-report --save-gnuplot",
+               "  stb-workfunction -l slab --fermi -4.5 --save-gnuplot",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -561,9 +561,7 @@ missing dipole correction) rather than being genuinely flat.""",
                               "files, with --save-gnuplot; the report goes to the current folder) (default: current "
                               "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_workfunction_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also write workfunction_data.dat and workfunction.gplot (the planar"
                               "-averaged potential profile, annotated with the detected vacuum "
@@ -700,7 +698,7 @@ missing dipole correction) rather than being genuinely flat.""",
         data_path, gplot_path = write_gnuplot_wf(z_vals, v_planar, E_f, plateaus, args.label, args.output_dir)
 
     # --- 7. Report ---
-    report_path = new_report_path("workfunction") if args.save_report else None
+    report_path = new_report_path("workfunction")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-WORKFUNCTION REPORT =====", 'magenta'), f_out)

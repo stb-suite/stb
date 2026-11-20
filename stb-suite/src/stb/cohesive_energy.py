@@ -422,9 +422,7 @@ def main():
                              "dispersion pair with, so D3 contributes ~0 there regardless.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_cohesive_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-cohesive {VERSION}")
 
@@ -485,7 +483,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("cohesive") if args.save_report else None
+    report_path = new_report_path("cohesive")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-COHESIVE STAGE 1 REPORT (COHESIVE ENERGY PREP) =====", 'magenta'), f_out)
@@ -535,7 +533,6 @@ def main():
     else:
         print_dual("BSSE correction       : OFF", f_out)
     print_dual(f"Output directory      : {args.output_dir}", f_out)
-    print_dual(f"Save report           : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file           : {report_path}", f_out)
 

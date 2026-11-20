@@ -1403,7 +1403,7 @@ def emit_elastic_report(args, C_sym, unit_label, filled_by_symmetry, missing_dir
     `report_path` defaults to this module's own REPORT_FILE (elastic_
     analysis.py's own two call sites always write there unconditionally,
     unchanged behavior) -- a caller whose report is opt-in (e.g.
-    stb-mlelastic's --save-report) should pass its own path, or None to
+    stb-mlelastic's) should pass its own path, or None to
     omit the "Full report" line entirely rather than claim a file exists
     when nothing was written.
     """
@@ -1774,9 +1774,7 @@ def main():
                              "pattern overlaid with its own fit) before finishing. Never saved to "
                              "disk -- pass --save-gnuplot for that. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_elasticAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -1964,7 +1962,7 @@ def main():
               "group and reference volume/area -- none was found.")
         sys.exit(1)
 
-    report_path = new_report_path("elasticAnalysis") if args.save_report else None
+    report_path = new_report_path("elasticAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)

@@ -6,7 +6,7 @@
 #      monomers H2O, NH3, BH3 (for the deformation energy);
 #   2. one charge-density-difference set per case: stb-chargediffPrep, SIESTA in combined/ and every
 #      fragment folder, the fragments once more WITHOUT ghost atoms (build_inputs.py alone: the uncorrected,
-#      BSSE-affected energy), stb-chargediffAnalysis --save-data --save-report;
+#      BSSE-affected energy), stb-chargediffAnalysis --save-data;
 #   3. the water-dimer studies: MeshCutoff 150-600 Ry, basis DZP/TZP x PAO.EnergyShift, O...O distance 2.5-5 Ang.
 #
 # About 1.5 h on 2 cores (mpirun -np 2), most of it the Li/graphene relaxation.
@@ -44,7 +44,7 @@ cdd() {   # $1 = set name, $2 = structure, $3 = fragment sizes, $4 = template, $
     if [ ! -f "$d/chargediff_manifest.json" ]; then
         rm -f stb_chargediffPrep_report*.txt     # the report goes to the current folder: moved into the set
         stb-chargediffPrep -s "$2" --fragment-sizes "$3" --calc "$4" --mesh-cutoff "$5" -p dojo -o "$d" \
-            "${@:6}" --save-report --no-intro < /dev/null > /dev/null
+            "${@:6}" --no-intro < /dev/null > /dev/null
         mv stb_chargediffPrep_report.txt "$d/"
     fi
     for f in "$d"/combined "$d"/fragment[0-9]; do siesta_in "$f"; done
@@ -52,7 +52,7 @@ cdd() {   # $1 = set name, $2 = structure, $3 = fragment sizes, $4 = template, $
         [ -d "${f}_alone" ] || python3 "$HERE/build_inputs.py" alone "$f" "${f}_alone"
         siesta_in "${f}_alone"
     done
-    (cd "$d" && stb-chargediffAnalysis --dir . -o analysis --save-data --save-report --no-intro < /dev/null > /dev/null)
+    (cd "$d" && stb-chargediffAnalysis --dir . -o analysis --save-data --no-intro < /dev/null > /dev/null)
     echo "cdd $1: done"
 }
 

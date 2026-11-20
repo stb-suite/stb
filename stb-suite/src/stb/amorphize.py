@@ -214,7 +214,7 @@ vacuum-padded axis is detected.""",
         epilog="Usage examples:\n"
                "  %(prog)s -f bulk_supercell.fdf\n"
                "  %(prog)s -f bulk_supercell.fdf --melt-temp 4000 --quench-steps 2000\n"
-               "  %(prog)s -f bulk_supercell.fdf --save-report --view\n"
+               "  %(prog)s -f bulk_supercell.fdf --view\n"
                "  %(prog)s -f bulk_supercell.fdf --save-data --save-traj --traj-format xsf\n"
                "\n"
                "Notes:\n"
@@ -285,9 +285,7 @@ vacuum-padded axis is detected.""",
                         help="Symmetry tolerance in Angstroms for the before/after "
                              "symmetry analysis (default: 0.01).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_amorphize_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "crystalline structure and the final amorphized structure "
@@ -312,7 +310,7 @@ vacuum-padded axis is detected.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("amorphize") if args.save_report else None
+    report_path = new_report_path("amorphize")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-AMORPHIZE REPORT =====", 'magenta'), f_out)

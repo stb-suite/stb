@@ -170,7 +170,7 @@ def main():
                "  stb-effmass --label siesta --band vbm --fermi -4.2\n"
                "  stb-effmass --label siesta --k-index 0 --band 1\n"
                "  stb-effmass --label siesta --band vbm --fermi-file calc.out \\\n"
-               "      --save-report --save-gnuplot --view\n",
+               "--save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -220,9 +220,7 @@ def main():
                              "and references.bib into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_effmass_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write effmass.dat/velocity.dat + a real .gplot bar-chart "
                              "script. Off by default.")
@@ -377,7 +375,7 @@ def main():
 
     # --- From here on: the numbered, save-able report --------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("effmass") if args.save_report else None
+    report_path = new_report_path("effmass")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-EFFMASS REPORT =====", 'magenta'), f_out)

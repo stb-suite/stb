@@ -308,7 +308,7 @@ cp structure.fdf calc.fdf "$OUT/case6-interactive/"
 # settings (n -> skip, output-dir stays elastic_runs), save report (n),
 # "Press Enter to continue", quit.
 (cd "$OUT/case6-interactive" && \
-    printf '5.2.1\nstructure.fdf\n\n2\n\n5\n\n2\nn\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.2.1\nstructure.fdf\n\n2\n\n5\n\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/case1-precedence/elastic_runs/xx" "$OUT/case6-interactive/elastic_runs/xx" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.2.1) produced byte-identical folders."
 else

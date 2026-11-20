@@ -51,7 +51,7 @@ site), not a bug in any one method. See the README for the exact
 formula and limitation of every single method/metric below.
 
 Every run prints a numbered [0]...[11] report, the same style every
-newer tool in this suite uses. --save-report additionally persists that
+newer tool in this suite uses. additionally persists that
 report to stb_structural_report.txt -- off by default, so a plain run
 only ever writes rdf.dat (unless --no-rdf) and references.bib, no text
 report file. The tool used to always write structural_information.dat
@@ -146,26 +146,19 @@ print('independent cross-check between two completely different methods.')
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[11] report to the console.
---save-report additionally persists it to stb_structural_report.txt --
-off by default, so a plain run only ever writes rdf.dat and
-references.bib, no text report file at all:
+It is always saved to stb_structural_report.txt in the current folder; a plain run also
+writes rdf.dat and references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp structure.fdf "$OUT/full-report/"
 echo
-echo "\$ stb-structural --file structure.fdf --format fdf --mode mean --no-intro   # default: no report file"
+echo "\$ stb-structural --file structure.fdf --format fdf --mode mean --no-intro"
 (cd "$OUT/full-report" && stb-structural --file structure.fdf --format fdf --mode mean \
-    --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.fdf$\|console"
-echo "(no structural_information.dat, no stb_structural_report.txt -- only rdf.dat + references.bib)"
-echo
-echo "\$ stb-structural --file structure.fdf --format fdf --mode mean --save-report --no-intro"
-(cd "$OUT/full-report" && stb-structural --file structure.fdf --format fdf --mode mean \
-    --save-report --no-intro > console_saved.log 2>&1)
+    --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_structural_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_structural_report.txt"
 echo
@@ -189,8 +182,8 @@ EOF
 TMP="$(mktemp -d)"
 cp structure.fdf "$TMP/"
 echo
-echo "\$ printf '2.4\\nstructure.fdf\\n1\\n1\\n\\n\\n\\n\\n' | stb-suite     # format=fdf, mode=mean, defaults"
-(cd "$TMP" && printf '2.4\nstructure.fdf\n1\n1\n\n\n\n\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.4\\nstructure.fdf\\n1\\n1\\n\\n\\n\\n' | stb-suite     # format=fdf, mode=mean, defaults"
+(cd "$TMP" && printf '2.4\nstructure.fdf\n1\n1\n\n\n\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "CrystalNN" "$OUT/mode-mean/console.log" | head -1)
 MENU_LINE=$(grep "CrystalNN" "$TMP/session.log" | head -1)
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -211,7 +204,7 @@ Four self-contained folders were generated under output/:
   rdf/         full-report/
 
 Each has rdf.dat/references.bib; full-report/ additionally has
-stb_structural_report.txt (only from its --save-report run).
+stb_structural_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - what stb-structural computes, and why 4 ECN methods are reported
@@ -225,10 +218,10 @@ Recap of what this walkthrough covered:
   - g(r) and its first-peak integral independently recovering the same
     coordination number the ECN section reports, a real physics
     cross-check, not just a plausibility check
-  - the numbered [0]...[11] report, --save-report, references.bib
+  - the numbered [0]...[11] report (always saved), references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA structure:
-  stb-structural --file my_calc.fdf --format fdf --mode mean --save-report
+  stb-structural --file my_calc.fdf --format fdf --mode mean
   stb-structural --file my_calc.fdf --format fdf --mode list --list 12,45
 EOF

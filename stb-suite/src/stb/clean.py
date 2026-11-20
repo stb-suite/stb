@@ -375,9 +375,7 @@ def build_parser():
     parser.add_argument('--no-confirm', '-n', action='store_true',
                         help="Don't ask for confirmation before deleting.")
     parser.add_argument('--save-report', action='store_true',
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_clean_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-clean {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     return parser
@@ -408,7 +406,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None   # name reserved after the cleaning (new_report_path)
+    report_path = REPORT_FILE   # name reserved after the cleaning (new_report_path)
     # Buffered in memory and written only after every folder is cleaned: the report goes into the current folder,
     # which may be one this run cleans, and a .txt is not kept by default -- the tool would delete its own report.
     f_out = io.StringIO() if report_path else None

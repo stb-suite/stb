@@ -153,8 +153,8 @@ echo "output folder is kept for this, it's just a check."
 TMP="$(mktemp -d)"
 cp structure.fdf "$TMP/"
 echo
-echo "\$ printf '1.1\\nstructure.fdf\\n2\\nn\\nn\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.1\nstructure.fdf\n2\nn\nn\n\nn\nn\n\n0\n' | stb-suite > /dev/null 2>&1)
+echo "\$ printf '1.1\\nstructure.fdf\\n2\\nn\\nn\\n\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.1\nstructure.fdf\n2\nn\nn\n\nn\n\n0\n' | stb-suite > /dev/null 2>&1)
 if diff -q "$OUT/relax/calc.fdf" "$TMP/calc.fdf" > /dev/null; then
     echo "Confirmed: identical to output/relax/calc.fdf."
 else

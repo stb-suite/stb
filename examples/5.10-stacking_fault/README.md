@@ -156,8 +156,8 @@ DFT grid. Both need the optional `ml` extra.
 
 Every run always writes `sf_manifest.json` (grid shape + per-point
 shift/gap, machine-readable) under `sf_run/` — the primary source Stage
-2 reads, independent of whether `--save-report`'s narrative
-`stb_stackingfault_report.txt` was also requested.
+2 reads; the narrative report `stb_stackingfault_report.txt` (current folder)
+is only for reading.
 
 ## 3. Stage 2: analyzing the results (`stb-stackingfaultAnalysis`, code `5.10.2`)
 
@@ -340,7 +340,7 @@ comparison.
    `--scan x/y/xy -n` (1D) depending on whether you need the full 2D map
    or a cheaper profile first.
 3. Run SIESTA in every `sf_run/positions/shift_II_JJ/` folder.
-4. `stb-stackingfaultAnalysis --dir sf_run --save-report --save-gnuplot
+4. `stb-stackingfaultAnalysis --dir sf_run --save-gnuplot
    --view` — inspect `[1]`'s `GapFinal(A)` column for the smoothness
    issue in Section 5.1 before trusting the corrugation number if you
    used `--mode 1`.

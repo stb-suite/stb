@@ -457,7 +457,6 @@ touches `siesta_runs/`, and takes about 20 seconds (the Fe file is 84 MB).
 | `-f`, `--fermi-level E` | none | Fermi level for the header (eV), instead of `-o` |
 | `--dry-run` | off | report only; nothing written |
 | `--no-check` | off | skip the read-back check |
-| `--save-report` | off | also write `stb_siesta2wtb_report.txt` (current folder) |
 | `-q`, `--quiet` | off | no banner |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 

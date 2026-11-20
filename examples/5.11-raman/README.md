@@ -205,7 +205,7 @@ For silicon: 3 modes × 12 folders = 36 single points become 12 with `--use-symm
 | `[1] READING RUNS` | per mode: R (diagonal, and off-diagonal with the full tensor), activity, ρ; SCF and missing-folder warnings; degenerate partners reuse their representative (`[derived]`) |
 | `[2] RAMAN-ACTIVE MODES SUMMARY` | one row per mode; whether the activity is exact (full tensor) or approximate (diagonal only) |
 | `[3] SPECTRUM` | Lorentzian sum (`--linewidth`, default 10 cm⁻¹), optional Stokes factor n+1 (`--temperature`), peaks; `--experimental FILE` overlays a measured spectrum and matches peaks |
-| `[4] SUMMARY & FILES` | what was written (`--save-gnuplot`: `plot/raman_spectrum.dat` + `.gplot`; `--save-report`) |
+| `[4] SUMMARY & FILES` | what was written (`--save-gnuplot`: `plot/raman_spectrum.dat` + `.gplot`; the report) |
 
 ### 6.2 The diagonal-only warning
 

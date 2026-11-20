@@ -30,7 +30,7 @@ export MPLBACKEND=Agg
 
 r2=(--custom-model "$R2/mlff_model_compiled.model" --custom-model-card "$R2/mlff_model_card.json")
 r3=(--custom-model "$R3/mlff_model_compiled.model" --custom-model-card "$R3/mlff_model_card.json")
-common=(--no-intro --device "$DEVICE" --adsorbate Si --bulk-reference "$HERE/si_bulk.fdf" --save-data --save-report)
+common=(--no-intro --device "$DEVICE" --adsorbate Si --bulk-reference "$HERE/si_bulk.fdf" --save-data)
 quick=(--skip-foundation-comparison --no-committee)
 committee=(--no-committee)
 if [ -n "$MLFF_RUN" ] && [ -f "$MLFF_RUN/mlff_workflow.json" ]; then

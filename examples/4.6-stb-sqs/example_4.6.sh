@@ -70,10 +70,10 @@ Every run always writes a numbered report ([0] RUN METADATA ... [11]
 SUMMARY & FILES -- [6] only appears with --ml-relax), a structure
 -validation checklist both before and after, and a before/after symmetry
 comparison table (ordered input vs. final SQS structure). A full text
-report (--save-report), MACE pre-relaxation (--ml-relax), and an
+report (always written), MACE pre-relaxation (--ml-relax), and an
 interactive 3D view (--view) are all off by default. Unlike earlier
 versions of this tool, no report file is EVER written unless you ask for
-it with --save-report -- everything it used to contain is now in this
+it with -- everything it used to contain is now in this
 same numbered console report.
 EOF
 pause
@@ -277,19 +277,18 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_sqs_report.txt with
---save-report) includes the structure-validation checklist for the input
+The full numbered report (always written to stb_sqs_report.txt) includes the structure-validation checklist for the input
 and the SQS output, and a references.bib -- SIESTA plus icet, the library
 behind the SQS search itself:
 EOF
 mkdir -p "$OUT/full-report"
 cp fcc_ni.fdf "$OUT/full-report/"
-echo "\$ stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 8 --mc-steps 2000 --save-report --no-intro"
+echo "\$ stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 --scaling 8 --mc-steps 2000 --no-intro"
 (cd "$OUT/full-report" && stb-sqs -f fcc_ni.fdf --sublattice Ni --composition Ni:0.5,Fe:0.5 \
-    --scaling 8 --mc-steps 2000 --save-report --no-intro > console.log)
+    --scaling 8 --mc-steps 2000 --no-intro > console.log)
 echo
 echo "Report sections written to stb_sqs_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_sqs_report.txt"
@@ -309,8 +308,8 @@ echo "entry mode and checking it reaches the same atom count."
 TMP="$(mktemp -d)"
 cp fcc_ni.fdf "$TMP/"
 echo
-echo "\$ printf '4.6\\ndoes_not_exist.fdf\\nfcc_ni.fdf\\nNi\\nNi:0.5,Fe:0.5\\n8\\n1\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.6\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n8\n1\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.6\\ndoes_not_exist.fdf\\nfcc_ni.fdf\\nNi\\nNi:0.5,Fe:0.5\\n8\\n1\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.6\ndoes_not_exist.fdf\nfcc_ni.fdf\nNi\nNi:0.5,Fe:0.5\n8\n1\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Output atoms       : 8" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-sqs command as the CLI walkthrough above (8 atoms out,"
@@ -353,7 +352,7 @@ Recap of what this walkthrough covered:
   - --ml-relax pre-optimizing an SQS cell's inherently irregular local
     environment
   - the structure-validation checklist, references.bib (now including
-    icet), and --save-report
+    icet), and
   - CLI and the interactive stb-suite menu building the same command
   - stb_sqs_report.txt is no longer written unless you ask for it
 

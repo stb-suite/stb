@@ -278,9 +278,7 @@ alongside their individual (basis-dependent) values.""",
                              "through the MODE_TABLE's 6-decimal text format, comfortably below "
                              "any real frequency splitting between genuinely distinct modes).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_irAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also save the spectrum (and, with --experimental, the overlaid "
                              "measured spectrum) as gnuplot .dat + .gplot scripts, under "
@@ -372,7 +370,7 @@ alongside their individual (basis-dependent) values.""",
     born_charge_root = os.path.join(args.directory, "born_charge_disp")
     born_charges_cache = None  # (atom_labels, Z_star), read once, shared by every BULK mode
 
-    report_path = new_report_path("irAnalysis") if args.save_report else None
+    report_path = new_report_path("irAnalysis")
     f_out = open(report_path, "w") if report_path else None
     print_dual(f"{color_text('===== IR STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 

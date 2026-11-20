@@ -350,7 +350,7 @@ pass `--pseudo-dir` a second time.
 [5] SUMMARY & NEXT STEPS
 ```
 
-`--save-report` persists this exact text to
+This exact text is always saved to
 `stb_hubbardu_report.txt` in the current folder (`_1`, `_2`, ... when taken); no `references.bib` is written by any
 of the three tools in this workflow (unlike `stb-inputfile`/`stb-kgrid`/
 `stb-kpath`) — the Cococcioni & de Gironcoli citation is instead printed
@@ -570,7 +570,7 @@ stb-suite
 
 `5.7.3` asks for the stage-1/2 directory, the SIESTA output filename
 inside each folder, the R² tolerance, an optional output filename, then
-three yes/no questions (`--save-gnuplot`, `--view`, `--save-report`).
+two yes/no questions (`--save-gnuplot`, `--view`).
 `example_5.7.sh` proves both paths agree.
 
 ## 6. Worked example: a known analytic ground truth, end-to-end
@@ -695,7 +695,7 @@ unconditionally.
 5. Run SIESTA yourself inside every generated `scf_alpha_*/` and
    `frozen_alpha_*/` folder.
 6. Run Stage 3: `stb-hubbarduAnalysis --dir hubbardu_runs [--save-gnuplot]
-   [--view] [--save-report]`. Read `[2]`/`[3]` for any `[WARNING]` before
+   [--view]`. Read `[2]`/`[3]` for any `[WARNING]` before
    trusting the computed `U` — don't just read the final number.
 7. Copy the `%block LDAU.proj` from the written `<species>_LDAU.fdf` into
    your **production** `calc.fdf` (this file has no

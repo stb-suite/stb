@@ -191,9 +191,9 @@ cp structure.fdf calc.fdf "$OUT/interactive/"
 # source (blank -> skip), advanced settings (n -> skip), direction menu
 # (1 -- 'x', the first of 5 entries on this cubic structure: x, xy, ALL
 # UNIAXIAL, ALL BIAXIAL, ALL -- see Case 7 below), stmin, stmax, step,
-# save-report (n), "Press Enter to continue", quit.
+# "Press Enter to continue", quit.
 (cd "$OUT/interactive" && \
-    printf '5.1.1\n\n\n1\n\nn\n1\n0\n2\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.1.1\n\n\n1\n\nn\n1\n0\n2\n2\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/cell-fixed/strain_runs/x" "$OUT/interactive/strain_runs/x" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.1.1) produced byte-identical folders."
 else
@@ -222,10 +222,10 @@ cp structure.fdf calc.fdf "$OUT/all-directions/"
 # default), relax mode (1 -> cell-fixed), pseudo source (blank -> skip),
 # advanced settings (n -> skip), direction menu (5 -- 'ALL independent
 # directions -- uniaxial + biaxial', the last of 5 entries: x, xy, ALL
-# UNIAXIAL, ALL BIAXIAL, ALL), stmin, stmax, step, save-report (n), "Press
+# UNIAXIAL, ALL BIAXIAL, ALL), stmin, stmax, step, "Press
 # Enter to continue", quit.
 (cd "$OUT/all-directions" && \
-    printf '5.1.1\n\n\n1\n\nn\n5\n0\n2\n2\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.1.1\n\n\n1\n\nn\n5\n0\n2\n2\n\n0\n' | stb-suite > menu.log 2>&1)
 echo "\$ find strain_runs -maxdepth 2 -type d | sort"
 (cd "$OUT/all-directions" && find strain_runs -maxdepth 2 -type d | sort)
 pause
@@ -277,9 +277,9 @@ outcell: Unit cell vectors (Ang):
 siesta: Stress tensor Voigt (kbar):     ${kbar}.00      0.00      0.00      0.00      0.00      0.00
 EOF
 done
-echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot --no-intro"
+echo "\$ stb-strainAnalysis --file calc.out --dir strain_runs --save-gnuplot --no-intro"
 (cd "$OUT/stage2-single" && stb-strainAnalysis --file calc.out --dir strain_runs \
-    --save-report --save-gnuplot --no-intro | sed -n '/\[2\] DIMENSIONALITY/,/\[4\] OUTPUT FILES/p')
+    --save-gnuplot --no-intro | sed -n '/\[2\] DIMENSIONALITY/,/\[4\] OUTPUT FILES/p')
 pause
 
 

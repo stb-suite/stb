@@ -346,8 +346,8 @@ the same inputs and `diff -rq`-ing the result.
 [5] SUMMARY & FILES                   -- one glanceable results table + file paths
 ```
 
-`--save-report` persists the exact same report to `stb_elasticAnalysis_report.txt`
-(matching `elastic_inputs.py`'s own `stb_elasticInputs_report.txt` naming logic).
+The exact same report is always saved to `stb_elasticAnalysis_report.txt` in the current folder
+(Stage 1's is `stb_elasticInputs_report.txt`).
 
 ### 3.2 `-d/--dir` and dimensionality — both auto-detected, no `cd` required
 
@@ -573,8 +573,8 @@ Reading this the way sections 1 and 3 set up:
    FILES`** for the same numbers in one glanceable table plus where
    everything ended up on disk.
 
-7. **(Optional) persist or plot**: `--save-report` writes
-   `stb_elasticAnalysis_report.txt`; `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
+7. **(Optional) plot** (the report is always saved to
+   `stb_elasticAnalysis_report.txt`): `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
    into `--plot-dir` (section 3.4); `--view` opens the same fits
    interactively in matplotlib instead.
 

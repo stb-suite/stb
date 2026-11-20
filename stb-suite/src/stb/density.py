@@ -109,9 +109,7 @@ compare several slices on the same scale.""",
                         help="Overlay contour lines on a 2D slice map/preview (ignored for --3d/--profile)")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_density_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .gplot script next to each .dat file this run "
                              "generates. Off by default.")
@@ -230,7 +228,7 @@ compare several slices on the same scale.""",
             "[WARNING] --pos has no effect in --profile mode -- the profile covers the "
             "whole axis.", 'yellow'))
 
-    report_path = new_report_path("density") if args.save_report else None
+    report_path = new_report_path("density")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-DENSITY REPORT =====", 'magenta'), f_out)

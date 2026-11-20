@@ -130,9 +130,7 @@ machinery is shared, via core/phonon_workflow.py).""",
                              "forces -- from every displacement's; left in, a small relaxation residual adds up over "
                              "the supercell and shifts the Gamma-point modes by up to several THz.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_raman_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-raman {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -185,7 +183,7 @@ machinery is shared, via core/phonon_workflow.py).""",
         sys.exit(1)
     os.makedirs(phonon_disp_dir, exist_ok=True)
 
-    report_path = new_report_path("raman") if args.save_report else None
+    report_path = new_report_path("raman")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== RAMAN STAGE 1 REPORT (PHONON DISPLACEMENTS) =====', 'magenta')}", f_out)
@@ -200,7 +198,6 @@ machinery is shared, via core/phonon_workflow.py).""",
     print_dual(f"Output root       : {output_root}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tolerance: symprec={args.symprec:g} Ang", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

@@ -340,9 +340,7 @@ def main():
                               "(which assumes that log was left with a .out extension; use "
                               "--ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_hirshfeldAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-data", action="store_true",
                          help=f"Write {DATA_FILE} (per-atom charges by every method, populations, "
                               f"reference used), {HISTORY_FILE} (every atom's charge per iteration) "
@@ -370,7 +368,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("hirshfeldAnalysis") if args.save_report else None
+    report_path = new_report_path("hirshfeldAnalysis")
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 
@@ -869,7 +867,7 @@ def main():
             written.append(produced)
     if report_path:
         written.append(report_path)
-    print_dual(f"Files written   : {', '.join(written) if written else 'none (add --save-report, --save-data, --png)'}",
+    print_dual(f"Files written   : {', '.join(written) if written else 'none (add --save-data, --png)'}",
                f_out)
 
     # ---------------------------------------------------------------- [10]

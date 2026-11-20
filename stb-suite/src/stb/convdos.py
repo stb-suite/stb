@@ -264,9 +264,7 @@ def main():
                              "plotted regardless of this flag's default; --no-plot turns that "
                              "single plot off too.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_convdos_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-convdos {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -361,7 +359,7 @@ def main():
                          r["sigma_mev"], r["sigma_samples"], r["size"])
             written_files.append(out_path)
 
-    report_path = new_report_path("convdos") if args.save_report else None
+    report_path = new_report_path("convdos")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-CONVDOS REPORT =====", 'magenta'), f_out)

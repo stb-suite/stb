@@ -386,7 +386,7 @@ With `--check-convergence`: `RUN METADATA`, `STRUCTURE`, `MODEL`, `STRAIN-AMPLIT
 | `strain_convergence.png` | `--check-convergence` |
 | `stress_strain.dat`, `elastic_tensor.dat` (`C`, its projection, `S`), `directional.dat` / `strain_convergence.dat` | `--save-data` |
 | `plot/*.dat`, `plot/*.gplot`, and `plot/*.pdf` when gnuplot is installed | `--save-gnuplot` |
-| `stb_mlelastic_report.txt` | `--save-report` |
+| `stb_mlelastic_report.txt` | always |
 | the figures on screen | `--show` (needs a display; without one it is a warning) |
 
 Everything goes into `-o/--output-dir` (default `mlelastic_out`).
@@ -417,7 +417,7 @@ Everything goes into `-o/--output-dir` (default `mlelastic_out`).
 ```bash
 stb-mlelastic --file si8.fdf \
               --custom-model model/mlff_model_compiled.model --custom-model-card model/mlff_model_card.json \
-              --device cuda --steps 7 --save-data --save-gnuplot --save-report
+              --device cuda --steps 7 --save-data --save-gnuplot
 stb-mlelastic --file si8.fdf --custom-model ... --custom-model-card ... --check-convergence --convergence-strains 0.25 0.5 1 2 3
 stb-mlelastic --file graphene.fdf --model medium --max 0.5
 ```
@@ -461,7 +461,7 @@ Experimental references: silicon's constants by ultrasound at 298 K [15]; Mg [16
 ```bash
 stb-mlelastic --file si8.fdf --custom-model ../7.2-mlmd/model/mlff_model_compiled.model \
               --custom-model-card ../7.2-mlmd/model/mlff_model_card.json --device cuda --steps 7 \
-              --save-data --save-gnuplot --save-report
+              --save-data --save-gnuplot
 ```
 
 Report sections `REFERENCE STATE` and `STRESS-STRAIN FITS` (`reference_results/base/`), abridged:
@@ -880,7 +880,7 @@ steps and internal shift of every run), the two `stb-elasticAnalysis` reports an
    stiffness is what they teach.
 2. **Start from a relaxed, symmetric structure.** The pre-relax finds the model's own minimum; `STRUCTURE` and
    `STIFFNESS TENSOR` say which symmetry it found. If it is lower than expected, symmetrize first (`stb-unitcell`).
-3. **Run the reference fit** with `--save-report --save-data`, 5–7 strains in ±1 % (±0.5 % for soft or 2D materials).
+3. **Run the reference fit** with `--save-data`, 5–7 strains in ±1 % (±0.5 % for soft or 2D materials).
 4. **Read the report from the bottom**: `WARNINGS`, then `STRESS-STRAIN FITS` (R², intercepts), `TRAINED RANGE`,
    `STIFFNESS TENSOR` (projection deviation), `MECHANICAL STABILITY`, then the moduli.
 5. **Check the amplitude** with `--check-convergence` and two or three amplitudes.
@@ -924,7 +924,7 @@ first use. Cases 12 and 13 need no MACE: they only read `reference_results/` (Ca
 default 0.001) · `--max-steps N` (default 200) · `--max %` (default 1.0) · `--steps N` (default 5, ≥ 2) ·
 `--check-convergence` · `--convergence-strains PCT...` · `--dimensionality {auto,3d,2d,1d}` · `--vacuum-gap Å`
 (default 10) · `--fit-quality-tolerance R²` (default 0.995) · `--skip-anisotropy-surface` · `--device {cpu,cuda}` ·
-`-o/--output-dir DIR` (default `mlelastic_out`) · `--show` · `--save-gnuplot` · `--save-data` · `--save-report` ·
+`-o/--output-dir DIR` (default `mlelastic_out`) · `--show` · `--save-gnuplot` · `--save-data` ·
 `--no-intro` · `-v`.
 
 ## 12. What's next

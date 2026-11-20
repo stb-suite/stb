@@ -48,7 +48,7 @@ Needs the real overlap matrix (spin_moment() calls Sk()) -- the same
 those two, no companion .bands file is needed at all: the x-axis is a
 plain k-INDEX, not a physical k-path arc length.
 
-Every run prints a numbered [0]...[6] report. --save-report persists it;
+Every run prints a numbered [0]...[6] report. It is always saved;
 --save-gnuplot writes spintexture_S{x,y,z}.dat + a real .gplot script
 (off by default -- this tool used to write both unconditionally); --view
 shows the same as a matplotlib preview (off by default -- this tool
@@ -135,12 +135,11 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_spintexture_report.txt,
-and --save-gnuplot writes spintexture_S{x,y,z}.dat + a real .gplot
+It is always saved to stb_spintexture_report.txt; --save-gnuplot writes spintexture_S{x,y,z}.dat + a real .gplot
 script -- both off by default, so a plain run only ever writes
 references.bib:
 EOF
@@ -153,9 +152,9 @@ echo "\$ stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX
 echo "(only references.bib -- no spintexture_S{x,y,z}.dat/.gplot, no stb_spintexture_report.txt)"
 echo
 echo "\$ stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX \\"
-echo "      --save-report --save-gnuplot --no-intro"
+echo "      --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX \
-    --save-report --save-gnuplot --no-intro > console_saved.log 2>&1)
+    --save-gnuplot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_spintexture_report.txt:"
 grep -o "^\[[0-9]\] [A-Za-z& ]*" "$OUT/full-report/stb_spintexture_report.txt" | sort -u
 echo
@@ -180,7 +179,7 @@ B -- interactive stb-suite menu:
 Both paths call the exact same underlying tool -- proven directly below.
 The menu asks for the label and the .HSX path SEPARATELY (default
 suggested if <label>.HSX exists), gained a Fermi-source submenu for
-fermi/vbm/cbm, and save-report/save-gnuplot/view prompts.
+fermi/vbm/cbm, and save-gnuplot/view prompts.
 EOF
 TMP="$(mktemp -d)"
 cp IsolatedO.HSX IsolatedO.selected.WFSX "$TMP/"
@@ -189,8 +188,8 @@ echo "\$ stb-spintexture --label IsolatedO --shift fermi --fermi -12.0 --no-intr
 (cd "$TMP" && stb-spintexture --label IsolatedO --shift fermi --fermi -12.0 \
     --no-intro > cli.log 2>&1)
 echo
-echo "\$ printf '2.17\\nIsolatedO\\n\\n4\\n1\\n-12.0\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.17\nIsolatedO\n\n4\n1\n-12.0\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.17\\nIsolatedO\\n\\n4\\n1\\n-12.0\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.17\nIsolatedO\n\n4\n1\n-12.0\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Most spin-polarized state" "$TMP/cli.log")
 MENU_LINE=$(grep "Most spin-polarized state" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -224,7 +223,7 @@ Recap of what this walkthrough covered:
     the same way as stb-wfdensity/stb-sts/stb-coop/stb-effmass
   - --shift fermi/vbm/cbm's Fermi-source hierarchy, shared with
     stb-effmass
-  - the numbered [0]...[6] report, --save-report, --save-gnuplot (now
+  - the numbered [0]...[6] report (always saved), --save-gnuplot (now
     opt-in, previously unconditional), --view (now opt-in, previously
     always shown with no way to skip)
   - CLI and the interactive stb-suite menu building the same command

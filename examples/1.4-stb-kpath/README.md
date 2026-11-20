@@ -108,7 +108,7 @@ behind a single `[y/N]` question so the essential flow stays short.
 ./example_1.4.sh
 ```
 
-Every successful case is generated with `--save-report`, each into its own
+Every successful case is generated each into its own
 folder under `output/` — `stb_kpath_report.txt`, `references.bib` (SIESTA +
 Setyawan-Curtarolo citations), and `kpath_bs.fdf`:
 
@@ -151,7 +151,7 @@ stb-kpath --file structure_chain.fdf -o my_path.fdf
 ```
 stb-kpath --file <structure.fdf> [-p/--prec <eps>] [--vacuum-gap <Ang>]
           [--symprec <tol>] [--angle-tolerance <deg>] [-o/--output <file>]
-          [--save-report]
+         
 ```
 
 - `-f/--file` (required): path to a SIESTA structure file (`.fdf` only).
@@ -162,8 +162,8 @@ stb-kpath --file <structure.fdf> [-p/--prec <eps>] [--vacuum-gap <Ang>]
 - `--symprec`/`--angle-tolerance` (optional, defaults `0.001`/`5.0`):
   tolerances for the crystallographic space-group analysis.
 - `-o/--output` (optional, default `kpath_bs.fdf`): output filename.
-- `--save-report` (optional): also persist the report to
-  `stb_kpath_report.txt`. Off by default.
+- **Report** — always saved to `stb_kpath_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
 `references.bib` (SIESTA + Setyawan-Curtarolo citations) is always written
 whenever a path is actually generated — there's no flag for it.

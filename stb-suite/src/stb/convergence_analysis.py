@@ -722,7 +722,7 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage examples:\n"
                "  %(prog)s --dir convergence_runs\n"
-               "  %(prog)s --dir convergence_runs --tolerance 0.005 --save-report --save-gnuplot --view\n"
+               "  %(prog)s --dir convergence_runs --tolerance 0.005 --save-gnuplot --view\n"
                "  %(prog)s --dir convergence_runs --apply calc.fdf\n"
     )
 
@@ -758,9 +758,7 @@ def main():
                         help="--apply with a kgrid sweep only: vacuum-axis detection threshold in "
                              "Angstrom, same meaning as stb-kgrid's --vacuum-gap (default: 10.0).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_convergenceAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write, per discovered parameter, curve data + a companion "
                              ".gplot script (2-panel: energy + relaxed volume). Off by default.")
@@ -781,7 +779,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("convergenceAnalysis") if args.save_report else None
+    report_path = new_report_path("convergenceAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -801,7 +799,6 @@ def main():
     print_dual(f"Volume tolerance  : {args.volume_tolerance} %", f_out)
     print_dual(f"Force tolerance   : {args.force_tolerance} eV/Ang (data-quality flag only)", f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     print_dual(f"Save gnuplot      : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib) : {'yes' if args.view else 'no'}", f_out)
     if report_path:

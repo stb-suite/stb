@@ -684,9 +684,7 @@ def main():
                              "Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_dos_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .gplot gnuplot script next to every .dat file "
@@ -746,7 +744,7 @@ def main():
         print(f"Error: Could not create output directory '{args.output_dir}': {e}", file=sys.stderr)
         sys.exit(1)
 
-    report_path = new_report_path("dos") if args.save_report else None
+    report_path = new_report_path("dos")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-DOS REPORT =====", 'magenta'), f_out)

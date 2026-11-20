@@ -82,9 +82,9 @@ lengths and shortest bond at every point).
 EOF
 mkdir -p "$OUT/case1-si"
 cp structure.fdf calc.fdf "$OUT/case1-si/"
-echo "\$ stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --save-report --no-intro"
+echo "\$ stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 --no-intro"
 (cd "$OUT/case1-si" && stb-eosInputs -f structure.fdf -p dojo --n-volumes 11 --strain-range 8.0 \
-    --save-report --no-intro > stage1.log 2>&1)
+    --no-intro > stage1.log 2>&1)
 section "$OUT/case1-si/stage1.log" 1 | cut -c1-150
 section "$OUT/case1-si/stage1.log" 2 | cut -c1-150
 section "$OUT/case1-si/stage1.log" 3 | cut -c1-150
@@ -237,8 +237,8 @@ run the planned cells?), [3] (the data, with the pressure from each run's own st
 (the fit, its uncertainty and its sensitivity to the fitted window).
 EOF
 mkdir -p "$OUT/case6-fit"
-echo "\$ stb-eosAnalysis --dir reference_results/si/base --eos all --save-report --no-intro"
-(cd "$OUT/case6-fit" && stb-eosAnalysis --dir "$REF/base" --eos all --save-report --no-intro > stage2.log 2>&1)
+echo "\$ stb-eosAnalysis --dir reference_results/si/base --eos all --no-intro"
+(cd "$OUT/case6-fit" && stb-eosAnalysis --dir "$REF/base" --eos all --no-intro > stage2.log 2>&1)
 section "$OUT/case6-fit/stage2.log" 1 | cut -c1-150
 section "$OUT/case6-fit/stage2.log" 3 | cut -c1-175
 section "$OUT/case6-fit/stage2.log" 4 | cut -c1-175

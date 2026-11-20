@@ -100,7 +100,7 @@ reference (e.g. for stb-cohesive) or a quick starting structure.""",
         epilog="Usage examples:\n"
                "  %(prog)s --name H2O\n"
                "  %(prog)s --name CH3OH --vacuum 12 -o methanol.fdf\n"
-               "  %(prog)s --name H2O --ml-relax --save-report --view\n"
+               "  %(prog)s --name H2O --ml-relax --view\n"
                "  %(prog)s --list\n"
     )
 
@@ -131,9 +131,7 @@ reference (e.g. for stb-cohesive) or a quick starting structure.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_molecule_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the "
                              "as-built and final molecule (page through frames in "
@@ -172,7 +170,7 @@ reference (e.g. for stb-cohesive) or a quick starting structure.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("molecule") if args.save_report else None
+    report_path = new_report_path("molecule")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-MOLECULE REPORT =====", 'magenta'), f_out)

@@ -67,7 +67,7 @@ stb-hubbarduAnalysis.""",
         epilog="Usage example:\n"
                "  %(prog)s --dir hubbardu_runs\n"
                "  %(prog)s --dir hubbardu_runs --alphas -0.2 -0.1 0.1 0.2\n"
-               "  %(prog)s --dir hubbardu_runs --save-report\n"
+               "  %(prog)s --dir hubbardu_runs\n"
     )
 
     parser.add_argument("--dir", type=str, default="hubbardu_runs",
@@ -82,9 +82,7 @@ stb-hubbarduAnalysis.""",
                              f"{DEFAULT_FROZEN_ITERATIONS}; raise this only if "
                              "stb-hubbarduAnalysis finds nothing to parse in those folders).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_hubbarduAlphas_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAlphas {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -124,7 +122,7 @@ stb-hubbarduAnalysis.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("hubbarduAlphas") if args.save_report else None
+    report_path = new_report_path("hubbarduAlphas")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

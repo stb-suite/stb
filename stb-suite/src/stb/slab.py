@@ -289,7 +289,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 -i\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 --all -o surface.fdf\n"
                "  %(prog)s -f bulk.fdf --hkl 1 1 1 --passivate\n"
-               "  %(prog)s -f bulk.fdf --hkl 1 1 1 --ml-relax --save-report --view\n"
+               "  %(prog)s -f bulk.fdf --hkl 1 1 1 --ml-relax --view\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -363,9 +363,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_slab_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of the bulk structure and "
                              "every written slab (page through frames in ase-gui) after writing "
@@ -417,7 +415,7 @@ Adds vacuum along the surface normal; the vacuum axis lands on c.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("slab") if args.save_report else None
+    report_path = new_report_path("slab")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

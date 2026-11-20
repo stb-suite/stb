@@ -221,7 +221,7 @@ visually instead of trusting R^2 alone.""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --dir hubbardu_runs --file calc.out\n"
-               "  %(prog)s --dir hubbardu_runs --save-gnuplot --view --save-report\n"
+               "  %(prog)s --dir hubbardu_runs --save-gnuplot --view\n"
     )
 
     parser.add_argument("--dir", type=str, default="hubbardu_runs",
@@ -245,9 +245,7 @@ visually instead of trusting R^2 alone.""",
                         help="Show an interactive matplotlib preview of the response curve "
                              "(both branches + fitted lines) before finishing. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_hubbarduAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -277,7 +275,7 @@ visually instead of trusting R^2 alone.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("hubbarduAnalysis") if args.save_report else None
+    report_path = new_report_path("hubbarduAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

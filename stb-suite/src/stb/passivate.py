@@ -88,7 +88,7 @@ alone and are reported instead of guessed.""",
         epilog="Usage examples:\n"
                "  %(prog)s -f slab.fdf\n"
                "  %(prog)s -f slab.fdf --passivant F --bond-length 1.4 -o slab_F.fdf\n"
-               "  %(prog)s -f slab.fdf --ml-relax --save-report --view\n"
+               "  %(prog)s -f slab.fdf --ml-relax --view\n"
     )
 
     parser.add_argument("-f", "--file", dest="filename", type=str, required=True,
@@ -127,9 +127,7 @@ alone and are reported instead of guessed.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_passivate_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "structure and the passivated structure (page through frames "
@@ -166,7 +164,7 @@ alone and are reported instead of guessed.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("passivate") if args.save_report else None
+    report_path = new_report_path("passivate")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-PASSIVATE REPORT =====", 'magenta'), f_out)

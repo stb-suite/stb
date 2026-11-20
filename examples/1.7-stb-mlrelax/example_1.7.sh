@@ -133,9 +133,9 @@ B -- interactive stb-suite menu:
 
 Every run always writes a structure-validation section (atom-proximity,
 left-handed-cell, density, space-group checks -- the same ones
-stb-inputfile/stb-fetch already run) and references.bib. A full text report
-(--save-report), the raw convergence trace (--save-data), and an
-interactive before/after 3D view (--view) are all off by default.
+stb-inputfile/stb-fetch already run), references.bib and the full text report
+(stb_mlrelax_report.txt). The raw convergence trace (--save-data) and an
+interactive before/after 3D view (--view) are off by default.
 EOF
 pause
 
@@ -305,7 +305,7 @@ EOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, --save-data, references.bib"
+echo " output/full-report/  --  the report, --save-data, references.bib"
 echo "=================================================================="
 cat <<'EOF'
 Two extra physical quantities show up in [5] BEFORE/AFTER COMPARISON that
@@ -330,8 +330,8 @@ criterion.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_defect.fdf "$OUT/full-report/"
-echo "\$ stb-mlrelax -f si_defect.fdf --save-report --save-data --no-intro"
-(cd "$OUT/full-report" && stb-mlrelax -f si_defect.fdf --save-report --save-data --no-intro > console.log)
+echo "\$ stb-mlrelax -f si_defect.fdf --save-data --no-intro"
+(cd "$OUT/full-report" && stb-mlrelax -f si_defect.fdf --save-data --no-intro > console.log)
 echo
 awk '/\[5\] BEFORE \/ AFTER COMPARISON/,/^$/' "$OUT/full-report/console.log"
 echo
@@ -354,8 +354,8 @@ echo "manual entry mode and diffing the energy/displacement lines."
 TMP="$(mktemp -d)"
 cp si_defect.fdf "$TMP/"
 echo
-echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\nn\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_LINE=$(grep "^Energy" "$OUT/positions-only/console.log")
 MENU_LINE=$(grep "^Energy" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -389,7 +389,7 @@ Recap of what this walkthrough covered:
     malformed input, and why the repulsive energy there is so large
   - the small/medium/large speed-vs-accuracy tradeoff, with real numbers
   - space group and stress as extra physical diagnostics in the report
-  - references.bib and --save-report/--save-data
+  - references.bib, the report file and --save-data
   - CLI and the interactive stb-suite menu producing identical results
 
 Not exercised by this script (needs a display): --view opens an interactive

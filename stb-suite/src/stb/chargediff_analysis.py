@@ -472,9 +472,7 @@ combined system and every fragment are spin-polarized).""",
                         help="Also write <name>_atoms.csv (charge change per atom) and <name>_results.json (every number "
                              "of the report). Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_chargediffAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-chargediffAnalysis {VERSION}")
 
@@ -565,7 +563,7 @@ combined system and every fragment are spin-polarized).""",
     stem = f"{os.path.basename(os.path.abspath(args.dir)) or 'chargediff'}_chargediff"
     base = os.path.join(args.output_dir, stem)
 
-    report_path = new_report_path("chargediffAnalysis") if args.save_report else None
+    report_path = new_report_path("chargediffAnalysis")
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 

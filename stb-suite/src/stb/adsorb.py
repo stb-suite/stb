@@ -448,9 +448,7 @@ def main():
                               "'adsorbate' and 'sites' -- everything this study needs lives under "
                               "one folder, same convention as stb-hubbardu's hubbardu_runs.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_adsorb_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                          help="Open every generated structure (clean_slab, isolated adsorbate(s), "
                               "and every written site) in ASE's interactive 3D viewer as a multi-"
@@ -582,7 +580,7 @@ def main():
     sites_root = os.path.join(output_root, "sites")
     os.makedirs(sites_root, exist_ok=True)
     site_table_path = os.path.join(sites_root, SITE_TABLE_FILE)
-    report_path = new_report_path("adsorb") if args.save_report else None
+    report_path = new_report_path("adsorb")
     f_out = open(report_path, 'w') if report_path else None
 
     library_warnings = []  # collected via capture_library_noise, reported in [6]
@@ -652,7 +650,6 @@ def main():
                 "not the isolated ref)", f_out)
     print_dual("  van der Waals   : yes -> DFTD3 T (clean_slab/, isolated ref, and site folders, "
                 "always on)", f_out)
-    print_dual(f"  Save report     : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
 
     # --- [1] REFERENCE FOLDERS: clean slab (once) + one isolated-adsorbate
     # reference per requested adsorbate. ---

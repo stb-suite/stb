@@ -39,7 +39,7 @@ stb-suite
 ```
 
 `1.6` walks you through picking a source/provider, an exact id or a formula
-search, an optional unit-cell reduction, and the save-report/`--view`
+search, an optional unit-cell reduction, and the `--view`
 prompts — the same choices the CLI flags below control directly.
 `example_1.6.sh` proves the CLI and the menu agree.
 
@@ -67,7 +67,7 @@ prompts — the same choices the CLI flags below control directly.
 | `output/formula-search/`     | `--formula MoS2` with no exact id — multiple candidates, informative error      |
 | `output/merged-citations/`   | two fetches (COD + OPTIMADE) into the same folder — `references.bib` merges     |
 
-Every case that generates a structure is run with `--save-report`, each
+Every case that generates a structure is run each
 into its own `stb_fetch_report.txt` + `references.bib`.
 
 ### Structure validation (always on, every fetch)
@@ -147,7 +147,7 @@ stb-fetch --source <cod|materials-project|optimade>
           (--material-id <id> | --cod-id <id> | --optimade-id <id> | --formula <formula>)
           [--most-stable] [--api-key <key>] [--provider <alias|url>]
           [--unitcell <primitive|conventional|refined>] [--symprec <val>] [--angle-tolerance <deg>]
-          [-o/--output <file>] [--save-report] [--view]
+          [-o/--output <file>] [--view]
 ```
 
 - `--source` (required unless `--list-providers`): which database to query.
@@ -158,8 +158,8 @@ stb-fetch --source <cod|materials-project|optimade>
 - `--unitcell` (optional): also reduce to the primitive/conventional/
   refined cell (same logic as `stb-unitcell`) before writing.
 - `-o/--output` (default `fetched.fdf`).
-- `--save-report` (optional): also persist the report to
-  `stb_fetch_report.txt`. Off by default.
+- **Report** — always saved to `stb_fetch_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - `--view` (optional): open the structure in ASE's interactive 3D viewer
   after writing. Off by default; needs a display.
 

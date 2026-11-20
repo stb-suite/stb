@@ -104,8 +104,7 @@ output — `example_4.3.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[7] SUMMARY & FILES` — `[4]`
-  only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_slab_report.txt`.
+  only appears with `--ml-relax`) printed to the console and saved to `stb_slab_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, each an explicit `[OK]`/`[WARNING]`/`[SKIPPED]` row — run once on
   the bulk input and once per written slab.
@@ -143,8 +142,8 @@ output — `example_4.3.sh` proves this directly at the end.
   in-plane cell — the vacuum axis always stays exactly fixed.
   `--model small/medium/large` (default `small`) or `--custom-model PATH`
   picks which MACE potential to use.
-- **`--save-report`** — also persists the full report to
-  `stb_slab_report.txt`.
+- **Report** — always saved to `stb_slab_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the bulk structure and every written slab in ASE's
   interactive 3D viewer (`ase-gui`), as pageable frames. Needs a local
   display. Never exercised by `example_4.3.sh` itself.
@@ -180,7 +179,7 @@ installed):
 | `polar-caveat/`      | NaCl(100)/(111) both report `Polar: No` through stb-slab — the oxidation-state gotcha, proven live |
 | `passivate/`         | Si(111), `--passivate` — 8/8 dangling bonds genuinely resolved with H  |
 | `ml-relax/`          | Si(111), `--ml-relax` — measured surface relaxation                    |
-| `full-report/`       | `--save-report` + the validation checklist + `references.bib`         |
+| `full-report/`       | the report + the validation checklist + `references.bib`         |
 
 ## Try it yourself
 
@@ -226,7 +225,6 @@ stb-slab -f nacl_bulk.fdf --hkl 1 1 1 --min-slab-size 20 --symmetrize --all
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the bulk structure and every written slab in ASE's interactive viewer |
 
 ## What's next

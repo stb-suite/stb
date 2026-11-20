@@ -108,8 +108,8 @@ the accuracy warning is worth heeding whenever a real `.HSX` is available.
   `REFERENCES`, `SUMMARY & FILES`) — the `IPR ANALYSIS` section reports
   per-series mean/min/max IPR AND which exact (k, energy) state is the
   most localized/most extended.
-- **`--save-report`**, **`--save-gnuplot`** (writes `ipr.dat`/`ipr.gplot`)
-  and **`--view`** (matplotlib preview) are all off by default.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--label` can be combined with `--hsx-file`/`--geometry-file`**: an
   explicit `--hsx-file` is preferred over `<label>.HSX`. Only `--label` +
   `--file`/`--wfsx` is rejected (ambiguous).
@@ -188,7 +188,7 @@ Or try the tool directly:
 
 ```bash
 stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
-    --shift fermi --q 4 --save-report --save-gnuplot --view
+    --shift fermi --q 4 --save-gnuplot --view
 ```
 
 ## 7. What's next

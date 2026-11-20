@@ -363,7 +363,7 @@ folder per requested direction:
 
 ```
 optical_study/
-├── (the Stage 1 report, with --save-report, is stb_optical_report.txt in the folder you ran it from)
+├── (the Stage 1 report is stb_optical_report.txt in the folder you ran it from)
 ├── dir_xx/ dir_yy/ dir_zz/   <- diagonal components (Optical.Vector = x, y, z)
 └── dir_xy/ dir_xz/ dir_yz/   <- biaxial bisectors (for eps_ij, Section 1.6)
         structure.fdf  calc.fdf  config_extra.fdf  <pseudopotentials>
@@ -975,14 +975,14 @@ stb-opticalAnalysis --directory reference_results/si/optical_study --show --scis
 `-p PSEUDO` (bank or folder) · `--directions {xx,yy,zz,xy,xz,yz} ...` (default `xx yy zz`) ·
 `--kgrid NX NY NZ` · `--kgrid-density D` (1/Å) · `--optical-mesh NX NY NZ` (default 10 10 10) ·
 `--optical-broaden EV` (default 0.2) · `--optical-nbands N` · `--vacuum-gap Å` (default 10) ·
-`-O DIR` (default `optical_study`) · `--save-report` · `--no-intro` · `-v`.
+`-O DIR` (default `optical_study`) · `--no-intro` · `-v`.
 
 **`stb-opticalAnalysis`** — `--directory DIR` (default `optical_study`) · `--file NAME`
 (default `calc.out`) · `-l LABEL` · `--energy-min/--energy-max EV` (trim the data) ·
 `--plot-quantity {eps,n_k,alpha,R,L,sigma1,all}` · `--experimental PATH` (+
 `--peak-prominence F`) · `--dimensionality-correction` (+ `--thickness Å` for 2D) ·
 `--energies EV ...` · `--n-peaks N` · `--smoothing EV` · `--scissor EV` · `--show` ·
-`--png` · `--plot-emax EV` · `-o NAME` · `--save-report` · `--no-intro` · `-v`.
+`--png` · `--plot-emax EV` · `-o NAME` · `--no-intro` · `-v`.
 
 ## 12. What's next
 

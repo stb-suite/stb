@@ -180,12 +180,11 @@ ls "$OUT/label-shorthand" | grep -v console
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report/--save-gnuplot (both off by default)"
+echo " output/full-report/  --  --save-gnuplot (off by default)"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
---save-report additionally persists it to stb_dos_report.txt, and
---save-gnuplot writes ONE .gplot script per output category (total,
+It is always saved to stb_dos_report.txt; --save-gnuplot writes ONE .gplot script per output category (total,
 atom, species) -- one overlay plot per category instead of one file per
 individual atom/species -- both off by default, so a plain run only ever
 writes the .dat files and references.bib:
@@ -193,13 +192,8 @@ EOF
 mkdir -p "$OUT/full-report"
 cp example.PDOS.xml "$OUT/full-report/"
 echo
-echo "\$ stb-dos example.PDOS.xml --shift fermi --no-intro   # default: no report file, no .gplot"
-(cd "$OUT/full-report" && stb-dos example.PDOS.xml --shift fermi --no-intro > console_default.log 2>&1)
-ls "$OUT/full-report/" | grep -v "\.PDOS\.xml$\|console"
-echo "(no stb_dos_report.txt, no .gplot files -- only the .dat files + references.bib)"
-echo
-echo "\$ stb-dos example.PDOS.xml --shift fermi --save-report --save-gnuplot --no-intro"
-(cd "$OUT/full-report" && stb-dos example.PDOS.xml --shift fermi --save-report --save-gnuplot \
+echo "\$ stb-dos example.PDOS.xml --shift fermi --save-gnuplot --no-intro"
+(cd "$OUT/full-report" && stb-dos example.PDOS.xml --shift fermi --save-gnuplot \
     --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_dos_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_dos_report.txt"
@@ -282,14 +276,14 @@ B -- interactive stb-suite menu:
 Both paths call the exact same underlying tool -- proven directly below.
 The menu additionally offers --shift as a NUMBERED menu (1 Fermi / 2 VBM
 / 3 CBM / 4 Custom value) instead of typing the keyword, re-prompting on
-an invalid choice, plus separate y/N prompts for --save-report/
+an invalid choice, plus separate y/N prompts for
 --save-gnuplot/--view -- the printf sequence below drives '2' for VBM.
 EOF
 TMP="$(mktemp -d)"
 cp example.PDOS.xml example.bands example.EIG "$TMP/"
 echo
-echo "\$ printf '2.2\\nexample\\n\\n2\\n\\n\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift menu choice 2 = VBM"
-(cd "$TMP" && printf '2.2\nexample\n\n2\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.2\\nexample\\n\\n2\\n\\n\\n\\n\\n0\\n' | stb-suite     # label 'example', shift menu choice 2 = VBM"
+(cd "$TMP" && printf '2.2\nexample\n\n2\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Using VBM shift" "$OUT/vbm-hierarchy/console_bands.log")
 MENU_LINE=$(grep "Using VBM shift" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -317,7 +311,7 @@ Recap of what this walkthrough covered:
   - why the DOS-estimate fallback needs an explicit --estimate-from-dos
     opt-in, and prints an explicit approximation warning
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
-  - the numbered [0]...[5] report, --save-report, and references.bib
+  - the numbered [0]...[5] report (always saved), and references.bib
   - --save-gnuplot/--view are PER OUTPUT CATEGORY (total/atom/species),
     not per individual .dat file, but NEVER sum orbitals together: on a
     3-atom/2-species/2-orbital fixture, ONE script/figure per category
@@ -325,7 +319,7 @@ Recap of what this walkthrough covered:
     curves (e.g. "Si_1: s", "Si_1: p"), rendered live with a real gnuplot
   - CLI and the interactive stb-suite menu building the same command
     (the menu's --shift is a numbered 1-4 retry-on-invalid menu, and it
-    also offers --save-report/--save-gnuplot/--view as y/N prompts)
+    also offers --save-gnuplot/--view as y/N prompts)
 
 Not exercised by this script (needs a display): the interactive
 matplotlib preview (--view, one figure per category) -- try it yourself
@@ -333,6 +327,6 @@ without MPLBACKEND=Agg:
   stb-dos example.PDOS.xml --shift fermi --view
 
 As a next step, try on your own with a real SIESTA calculation:
-  stb-dos --label my_calc --shift vbm --save-report
+  stb-dos --label my_calc --shift vbm
   stb-dos --label my_calc --shift cbm --estimate-from-dos   # no .bands/.EIG
 EOF

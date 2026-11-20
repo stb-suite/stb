@@ -143,9 +143,8 @@ output — `example_2.1.sh` proves this directly at the end.
 
 ## Optional (off by default)
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_bands_report.txt`. Without it, only the plot data and
-  `references.bib` are written — no text report file at all.
+- **Report** — always saved to `stb_bands_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--eig-file`** (+ `--kp-file`) — k-mesh vs. k-path gap comparison.
 - **`--gap-tol`** — the Metallic/Indirect-or-Direct threshold (default
   `0.01` eV).
@@ -187,13 +186,13 @@ by wiping its own `output/`. Five self-contained cases are generated:
 | `metallic-threshold/`    | The same real gap classified Indirect vs. Metallic, only `--gap-tol` changes |
 | `half-metallic/`         | One spin channel metallic, the other with a 2 eV gap                   |
 | `mesh-vs-line/`          | `--eig-file`/`--kp-file`: the k-mesh catching what the k-path missed    |
-| `full-report/`           | Default (no report file) vs. `--save-report` (`stb_bands_report.txt`), `references.bib` |
+| `full-report/`           | The report file (`stb_bands_report.txt`), `references.bib` |
 
 ## Try it yourself
 
 ```bash
 # Your own finished SIESTA calculation
-stb-bands --label my_calc --shift fermi --save-report
+stb-bands --label my_calc --shift fermi
 
 # Cross-check the path-based gap against the full SCF mesh
 stb-bands --file my_calc.bands --eig-file my_calc.EIG --shift fermi
@@ -210,8 +209,7 @@ stb-bands --file my_calc.bands --eig-file my_calc.EIG --shift fermi
 | `--gap-tol`        | Metallic-classification threshold, eV (default `0.01`)                 |
 | `--eig-file`       | Full SCF k-mesh eigenvalues, for the mesh-vs-line gap comparison        |
 | `--kp-file`        | Cartesian k-points matching `--eig-file` (requires `--eig-file`)        |
-| `-o/--output-dir`  | Where to write the plot data (and report, with `--save-report`)        |
-| `--save-report`    | Persist the full numbered report to `stb_bands_report.txt`             |
+| `-o/--output-dir`  | Where to write the plot data        |
 
 ## What's next
 

@@ -110,8 +110,7 @@ output — `example_4.10.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[8] SUMMARY & FILES` —
-  `[3]` only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_molecule_report.txt`.
+  `[3]` only appears with `--ml-relax`) printed to the console and saved to `stb_molecule_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness (atomic
   density skipped: always vacuum-padded on all 3 axes by construction) —
   run once before and once after any ML relax.
@@ -132,8 +131,8 @@ output — `example_4.10.sh` proves this directly at the end.
   molecule's geometry with MACE. Positions only — there is no
   `--ml-relax-cell` option here at all (not just a no-op): an isolated
   molecule's vacuum box has no physically meaningful cell to relax.
-- **`--save-report`** — also persist the full report to
-  `stb_molecule_report.txt`.
+- **Report** — always saved to `stb_molecule_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the as-built and final molecule in ASE's
   interactive 3D viewer (`ase-gui`), as pageable frames. Needs a local
   display. Never exercised by `example_4.10.sh` itself.
@@ -165,7 +164,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `unknown-name-suggestions/`    | `--list`, a case-insensitive "did you mean", and a genuine typo suggestion |
 | `vacuum-and-dimensionality/`   | The real pitfall: `--vacuum` below the detection threshold fools the dimensionality check |
 | `ml-relax-symmetry-preserved/` | MACE pre-relaxation of methane, with `Td` proven unchanged before/after |
-| `full-report/`                 | `--save-report` + `references.bib`                                     |
+| `full-report/`                 | the report + `references.bib`                                     |
 
 ## Try it yourself
 
@@ -192,7 +191,6 @@ stb-molecule --name CH3OH --ml-relax --custom-model my_finetuned.model --custom-
 | `--custom-model`     | Path to a custom fine-tuned `.model` file                              |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
 | `-o/--output`        | Output `.fdf` file name (default `molecule.fdf`)                       |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the as-built and final molecule in ASE's interactive viewer       |
 
 ## What's next

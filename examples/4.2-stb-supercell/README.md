@@ -117,8 +117,7 @@ output — `example_4.2.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[9] SUMMARY & FILES` — `[4]`
-  only appears with `--ml-relax`) printed to the console and, with
-  `--save-report`, also saved to `stb_supercell_report.txt`.
+  only appears with `--ml-relax`) printed to the console and saved to `stb_supercell_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, each an explicit `[OK]`/`[WARNING]`/`[SKIPPED]` row — run once on
   the input structure and once on the final (possibly ML-relaxed)
@@ -149,9 +148,8 @@ output — `example_4.2.sh` proves this directly at the end.
   `stb-mlrelax`/`stb-2dstacking` use. `--model small/medium/large` (default
   `small`) or `--custom-model PATH` picks which MACE potential to use. A
   fast heuristic, not a substitute for a real DFT relaxation.
-- **`--save-report`** — also persists the full report (validation, the
-  symmetry table, and, with `--ml-relax`, the full MACE simulation detail)
-  to `stb_supercell_report.txt`.
+- **Report** — always saved to `stb_supercell_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens the input structure and the final supercell side by
   side in ASE's interactive 3D viewer (`ase-gui`), as pageable frames. Needs
   a local display (or `ssh -X`/`-Y`). Never exercised by `example_4.2.sh`
@@ -189,7 +187,7 @@ installed):
 | `reconstruction/`    | Full row-major 3×3 matrix — graphene's √3×√3 R30° reconstruction cell |
 | `mirrored/`          | A negative-determinant (mirrored) cell — still valid, and physically identical here since Si is centrosymmetric |
 | `ml-relax/`          | `--ml-relax`/`--ml-relax-cell` — MACE pre-relaxation of the built supercell |
-| `full-report/`       | `--save-report` + the validation checklist + `references.bib`        |
+| `full-report/`       | the report + the validation checklist + `references.bib`        |
 
 ## Try it yourself
 
@@ -220,7 +218,6 @@ stb-supercell -f si_bulk.fdf -d 2 2 2 -sp 0.1
 | `--model`            | MACE-MP-0 size for `--ml-relax`: `small`/`medium`/`large` (default `small`) |
 | `--custom-model`     | Path to a custom fine-tuned `.model` file for `--ml-relax`             |
 | `--custom-model-card` | Model card (`mlff_model_card.json`, written by `stb-mlffAnalysis` next to the model) -- **required** with `--custom-model` |
-| `--save-report`      | Persist the full report (incl. symmetry table) to disk                 |
 | `--view`             | Open the input structure and final supercell in ASE's interactive viewer |
 
 ## What's next

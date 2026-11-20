@@ -93,7 +93,7 @@ stb-suite
 **[1]**, resolve from an explicit element list **[2]**, browse a bundled
 bank's contents **[3]**, or list every bundled bank **[4]** — then walks
 through the same primary source (PseudoDojo: relativity, functional,
-accuracy) / fallback source / output directory / dry-run / save-report
+accuracy) / fallback source / output directory / dry-run
 questions the CLI flags cover. `example_1.2.sh` proves the CLI and the
 menu agree.
 
@@ -204,7 +204,7 @@ stb-pseudo -f structure.fdf -p dojo-sr3plus --fallback-dir dojo   # Ln3+ with 4f
 
 ```
 stb-pseudo (-f/--file <structure.fdf> | --species EL [EL ...]) -p/--pp-path <BANK_OR_PATH>
-           [--fallback-dir <BANK_OR_PATH>] [-o/--output <dir>] [--dry-run] [--save-report]
+           [--fallback-dir <BANK_OR_PATH>] [-o/--output <dir>] [--dry-run]
 stb-pseudo --list-elements <BANK>
 stb-pseudo --list-banks
 ```
@@ -227,8 +227,8 @@ stb-pseudo --list-banks
   needed.
 - `--list-banks`: print every bundled table (relativity, functional,
   accuracy, element count) and exit.
-- `--save-report` (optional): also persist the report to
-  `stb_pseudo_report.txt`. Off by default.
+- **Report** — always saved to `stb_pseudo_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
 `references.bib` (SIESTA plus a citation for every bank actually used) is
 always written — there's no flag for it.

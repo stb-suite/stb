@@ -89,8 +89,8 @@ EOF
 mkdir -p "$OUT/case1-water"
 cp "$REF/relax/h2o/relaxed.fdf" "$OUT/case1-water/h2o.fdf"
 cp calc.fdf "$OUT/case1-water/"
-echo "\$ stb-hirshfeldPrep -s h2o.fdf --calc calc.fdf -p dojo --mesh-cutoff 400 --save-report --no-intro"
-(cd "$OUT/case1-water" && stb-hirshfeldPrep -s h2o.fdf --calc calc.fdf -p dojo --mesh-cutoff 400 --save-report \
+echo "\$ stb-hirshfeldPrep -s h2o.fdf --calc calc.fdf -p dojo --mesh-cutoff 400 --no-intro"
+(cd "$OUT/case1-water" && stb-hirshfeldPrep -s h2o.fdf --calc calc.fdf -p dojo --mesh-cutoff 400 \
     --no-intro > stage1.log 2>&1)
 section "$OUT/case1-water/stage1.log" 2 | cut -c1-150
 section "$OUT/case1-water/stage1.log" 3 | cut -c1-200
@@ -118,8 +118,8 @@ EOF
 mkdir -p "$OUT/case2-ions"
 unpack h2o "$OUT/case2-ions/h2o"
 rm -rf "$OUT/case2-ions/h2o/ions" "$OUT/case2-ions/h2o/hirshfeld_ions_manifest.json"
-echo "\$ stb-hirshfeldIons -O h2o -p dojo --save-report --no-intro"
-(cd "$OUT/case2-ions" && stb-hirshfeldIons -O h2o -p dojo --save-report --no-intro > stage2.log 2>&1)
+echo "\$ stb-hirshfeldIons -O h2o -p dojo --no-intro"
+(cd "$OUT/case2-ions" && stb-hirshfeldIons -O h2o -p dojo --no-intro > stage2.log 2>&1)
 section "$OUT/case2-ions/stage2.log" 1 | sed -n '/^Species/,$p' | cut -c1-150
 section "$OUT/case2-ions/stage2.log" 4 | sed -n '/^Idx/,/^$/p' | cut -c1-150
 section "$OUT/case2-ions/stage2.log" 5 | cut -c1-220
@@ -138,8 +138,8 @@ charges are not -- at that ratio they are still ~2x the last step from the fixed
 EOF
 mkdir -p "$OUT/case3-water"
 unpack h2o "$OUT/case3-water/h2o"
-echo "\$ stb-hirshfeldAnalysis -O h2o --save-data --png --save-report --no-intro"
-(cd "$OUT/case3-water" && stb-hirshfeldAnalysis -O h2o --save-data --png --save-report --no-intro > stage3.log 2>&1)
+echo "\$ stb-hirshfeldAnalysis -O h2o --save-data --png --no-intro"
+(cd "$OUT/case3-water" && stb-hirshfeldAnalysis -O h2o --save-data --png --no-intro > stage3.log 2>&1)
 section "$OUT/case3-water/stage3.log" 2 | sed -n '/^Elem/,$p' | cut -c1-150
 section "$OUT/case3-water/stage3.log" 4 | cut -c1-150
 section "$OUT/case3-water/stage3.log" 10 | cut -c1-220
@@ -155,7 +155,7 @@ EOF
 section "$OUT/case3-water/stage3.log" 5 | cut -c1-175
 section "$OUT/case3-water/stage3.log" 7 | cut -c1-175
 section "$OUT/case3-water/stage3.log" 8 | cut -c1-150
-echo "\$ ls    # --save-data, --png, --save-report"
+echo "\$ ls    # --save-data, --png,"
 ls -1 "$OUT/case3-water" | grep -v "^h2o$\|stage3.log" | sed 's/^/  /'
 cp "$OUT/case3-water/hirshfeld_analysis.png" "$DIR/figures/h2o_dashboard.png"
 echo "  (figures/h2o_dashboard.png is this dashboard; hirshfeld_charges.xyz opens in 'ase gui' coloured by charge)"

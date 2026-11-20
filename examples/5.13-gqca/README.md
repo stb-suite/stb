@@ -692,7 +692,6 @@ search, which always reports "fully miscible" by Section 1.7-iii.
 | `--plot-temp T` | temperature of the single-T panels (nearest sampled T) |
 | `--view` | each relaxed structure in ASE's 3D viewer, one after the other |
 | `--export-relaxed [cif\|xsf\|xyz\|vasp]` | the 3 relaxed structures (positions **and** cell, from `.XV`) in `<dir>/relaxed/` |
-| `--save-report` | the text report as `stb_gqcaAnalysis_report.txt` in the current folder |
 | `-o NAME` | base name of the `.csv/.dat/.gplot/.png` outputs |
 
 Always written: `gqca_results.csv` (every (x, T) point), `gqca_results_clusters.csv`
@@ -991,7 +990,7 @@ stb-gqcaAnalysis --directory reference_results/ingaas --show --view
 `--temp T` or `--temp-min/--temp-max/--temp-points` (default sweep 300–1500 K, 5
 points) · `--force-tolerance eV/Å` · `-o NAME` · `--png` · `--show` ·
 `--plot-temp T` · `--view` · `--export-relaxed [cif|xsf|xyz|vasp]` ·
-`--save-report` · `--no-intro` · `-v`.
+`--no-intro` · `-v`.
 
 ## 12. What's next
 

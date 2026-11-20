@@ -906,7 +906,7 @@ def build_parser():
                "  stb-mlneb --initial initial.fdf --final final.fdf\n"
                "  stb-mlneb --initial initial.fdf --final final.fdf --custom-model mlff_model.model "
                "--custom-model-card mlff_model_card.json --device cuda --n-images 9 --show --save-gnuplot\n"
-               "  stb-mlneb --initial initial.fdf --final final.fdf --freeze-substrate --save-images --save-report\n"
+               "  stb-mlneb --initial initial.fdf --final final.fdf --freeze-substrate --save-images\n"
                "  stb-mlneb --initial i.fdf --final f.fdf --custom-model best_model/mlff_model_compiled.model "
                "--custom-model-card best_model/mlff_model_card.json --mlff-workflow mlff_runs/mlff_workflow.json "
                "--siesta-check            # then run SIESTA, run it again, and add --to-mlff\n",
@@ -1013,9 +1013,7 @@ def build_parser():
                         help="Also write each relaxed image as image_NN.fdf (bare structure, no calc or "
                              "pseudopotentials) -- e.g. to start a SIESTA NEB (stb-neb) from this band. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlneb_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlneb {VERSION}")
     return parser
@@ -1043,7 +1041,7 @@ def main():
                     "Developed by Dr. Carlos M. O. Bastos"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("mlneb") if args.save_report else None
+    report_path = new_report_path("mlneb")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -1350,7 +1348,7 @@ def main():
         print_dual(f"Report            : {report_path}", f_out)
     not_asked = [f for f, on in (("--show", args.show), ("--save-gnuplot", args.save_gnuplot),
                                  ("--save-data", args.save_data), ("--save-images", args.save_images),
-                                 ("--save-report", args.save_report), ("--siesta-check", args.siesta_check),
+                                 ("--siesta-check", args.siesta_check),
                                  ("--to-mlff", args.to_mlff)) if not on]
     if not_asked:
         print_dual(f"Also available    : {' '.join(not_asked)}", f_out)

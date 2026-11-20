@@ -350,7 +350,6 @@ takes a few seconds.
 | `-l`, `--label LABEL` | from each folder's `.fdf` | SystemLabel override |
 | `--details` | off | with several folders, also the full report of each |
 | `--csv FILE` | none | every atom's charges (all folders, all methods) as CSV |
-| `--save-report` | off | also write `stb_nativecharges_report.txt` (current folder) |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

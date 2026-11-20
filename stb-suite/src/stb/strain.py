@@ -371,7 +371,7 @@ def main():
                    "then use stb-strainAnalysis.",
         epilog="Example usage:\n"
                "  stb-strain -s structure.fdf -c calc.fdf -p dojo --relax-mode cell-fixed --stdir x --stmin -2 --stmax 2 --step 1\n"
-               "  stb-strain -s structure.fdf -c calc.fdf --relax-mode stress-constrained --stdir xy --stmax 5 --save-report\n",
+               "  stb-strain -s structure.fdf -c calc.fdf --relax-mode stress-constrained --stdir xy --stmax 5\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("-s", "--structure", required=True,
@@ -434,9 +434,7 @@ def main():
                        help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                             "default), same use as --symprec.")
     parser.add_argument("--save-report", action="store_true",
-                       help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_strain_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                       help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-strain {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -481,7 +479,7 @@ def main():
     # --save-report file.
     direction_dir = os.path.join(args.output_dir, norm_dir)
     os.makedirs(direction_dir, exist_ok=True)
-    report_path = new_report_path("strain") if args.save_report else None
+    report_path = new_report_path("strain")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -502,7 +500,6 @@ def main():
     print_dual(f"Output dir        : {args.output_dir}", f_out)
     print_dual(f"Vacuum-gap        : {args.vacuum_gap} Ang", f_out)
     print_dual(f"Symmetry tol      : symprec={args.symprec}, angle-tolerance={args.angle_tolerance} deg", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

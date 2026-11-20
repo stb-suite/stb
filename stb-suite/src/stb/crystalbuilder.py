@@ -98,7 +98,7 @@ monolayer.""",
                "      --site Fe 0.125 0.125 0.125 --site Fe 0.5 0.5 0.5 \\\n"
                "      --site O 0.2548 0.2548 0.2548\n"
                "  %(prog)s --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 \\\n"
-               "      --reduce primitive --ml-relax --save-report --view\n"
+               "      --reduce primitive --ml-relax --view\n"
                "\n"
                "Notes:\n"
                "  - Bulk (3D) crystals only -- see the description above for how to get\n"
@@ -151,9 +151,7 @@ monolayer.""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_crystalbuilder_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the raw "
                              "space-group-expanded structure and the final structure "
@@ -185,7 +183,7 @@ monolayer.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("crystalbuilder") if args.save_report else None
+    report_path = new_report_path("crystalbuilder")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-CRYSTALBUILDER REPORT =====", 'magenta'), f_out)

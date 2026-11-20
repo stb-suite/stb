@@ -81,11 +81,11 @@ echo "The most common case: a real 3D bulk crystal."
 mkdir -p "$OUT/silicon"
 cp structure.fdf "$OUT/silicon/"
 echo
-echo "\$ stb-kgrid --file structure.fdf --density 0.2 --save-report --no-intro"
-(cd "$OUT/silicon" && stb-kgrid --file structure.fdf --density 0.2 --save-report --no-intro > console.log)
+echo "\$ stb-kgrid --file structure.fdf --density 0.2 --no-intro"
+(cd "$OUT/silicon" && stb-kgrid --file structure.fdf --density 0.2 --no-intro > console.log)
 grep -E "Dimensionality|Suggested Monkhorst-Pack" "$OUT/silicon/console.log"
 echo
-echo "Folder contents (report + citations, saved via --save-report):"
+echo "Folder contents (report + citations, always written):"
 ls "$OUT/silicon"
 pause
 
@@ -133,8 +133,8 @@ for case in molecule chain graphene; do
     echo "=================================================================="
     mkdir -p "$OUT/$case"
     cp "$struct" "$OUT/$case/"
-    echo "\$ stb-kgrid --file $struct --density 0.2 --save-report --no-intro"
-    (cd "$OUT/$case" && stb-kgrid --file "$struct" --density 0.2 --save-report --no-intro > console.log)
+    echo "\$ stb-kgrid --file $struct --density 0.2 --no-intro"
+    (cd "$OUT/$case" && stb-kgrid --file "$struct" --density 0.2 --no-intro > console.log)
     grep -E "Dimensionality|Suggested Monkhorst-Pack" "$OUT/$case/console.log"
     pause
 done

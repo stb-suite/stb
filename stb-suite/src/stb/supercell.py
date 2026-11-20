@@ -91,7 +91,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
         epilog="Usage examples:\n"
                "  %(prog)s -f structure.fdf -d 2 2 2\n"
                "  %(prog)s -f structure.fdf -d 2 0 0 0 2 0 0 0 1 -o big_cell.fdf\n"
-               "  %(prog)s -f structure.fdf -d 2 2 2 --ml-relax --save-report --view\n"
+               "  %(prog)s -f structure.fdf -d 2 2 2 --ml-relax --view\n"
     )
 
     parser.add_argument(
@@ -130,9 +130,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_supercell_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "structure and the final supercell (page through frames in "
@@ -162,7 +160,7 @@ Give -d 3 numbers for a diagonal supercell, or 9 for a full row-major matrix."""
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("supercell") if args.save_report else None
+    report_path = new_report_path("supercell")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-SUPERCELL REPORT =====", 'magenta'), f_out)

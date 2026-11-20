@@ -302,11 +302,11 @@ can show them on screen:
   --png / --show        6-panel dashboard (saved / opened with matplotlib)
   --view                the 3 relaxed structures in ASE's 3D viewer
   --export-relaxed FMT  the 3 relaxed structures (cif|xsf|xyz|vasp) to files
-  --save-report         the text report as stb_gqcaAnalysis_report.txt
+          the text report as stb_gqcaAnalysis_report.txt
 Here the headless-safe ones (--show/--view need a display, see the README):
 EOF
-echo "\$ stb-gqcaAnalysis --directory output/ingaas --png --export-relaxed cif --save-report --no-intro"
-stb-gqcaAnalysis --directory "$OUT/ingaas" --png --export-relaxed cif --save-report \
+echo "\$ stb-gqcaAnalysis --directory output/ingaas --png --export-relaxed cif --no-intro"
+stb-gqcaAnalysis --directory "$OUT/ingaas" --png --export-relaxed cif \
     --no-intro 2>&1 | strip_colors | sed -n '/\[8\] SUMMARY/,/UNVERIFIED/p' | sed '$d' | sed "s#$DIR/##g"
 echo
 echo "gqca_results_clusters.csv (one row per cluster):"
@@ -354,7 +354,7 @@ Stage 2 through stb-suite -> 5.13.2: directory, default output name, option 1
 optional extras except saving the report, no advanced settings.
 EOF
 cp -r reference_results/ingaas "$OUT/menu_study"
-(cd "$OUT" && printf '5.13.2\nmenu_study\n\n1\n500\n\n\n\n\n\ny\n\n\n0\n' | stb-suite > menu_stage2.log 2>&1)
+(cd "$OUT" && printf '5.13.2\nmenu_study\n\n1\n500\n\n\n\n\n\n\n\n0\n' | stb-suite > menu_stage2.log 2>&1)
 stb-gqcaAnalysis --directory "$OUT/ingaas" --temp 500 -o cli_check --no-intro > /dev/null 2>&1
 if diff -q "$OUT/menu_study/gqca_results.csv" "$OUT/ingaas/cli_check.csv" > /dev/null; then
     echo "CLI and interactive menu (5.13.2) produced an identical results CSV."

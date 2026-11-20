@@ -91,8 +91,8 @@ echo " output/silicon/  --  bulk silicon (3D)"
 echo "=================================================================="
 mkdir -p "$OUT/silicon"
 cp structure.fdf "$OUT/silicon/"
-echo "\$ stb-kpath --file structure.fdf --save-report --no-intro"
-(cd "$OUT/silicon" && stb-kpath --file structure.fdf --save-report --no-intro > console.log)
+echo "\$ stb-kpath --file structure.fdf --no-intro"
+(cd "$OUT/silicon" && stb-kpath --file structure.fdf --no-intro > console.log)
 grep -E "Bravais lattice|Space group|Crystal system|^Path :" "$OUT/silicon/console.log"
 echo
 echo "Notice the mismatch: the Bravais lattice (CUB) comes from the plain"
@@ -112,8 +112,8 @@ for case in chain graphene; do
     echo "=================================================================="
     mkdir -p "$OUT/$case"
     cp "$struct" "$OUT/$case/"
-    echo "\$ stb-kpath --file $struct --save-report --no-intro"
-    (cd "$OUT/$case" && stb-kpath --file "$struct" --save-report --no-intro > console.log)
+    echo "\$ stb-kpath --file $struct --no-intro"
+    (cd "$OUT/$case" && stb-kpath --file "$struct" --no-intro > console.log)
     grep -E "Dimensionality|Bravais lattice|Space group|may not reflect|^Path :" "$OUT/$case/console.log"
     pause
 done

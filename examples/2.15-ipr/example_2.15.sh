@@ -50,7 +50,7 @@ really just a different reduction of the same numbers, which is why it
 shares stb-fatbands' entire .bands/.WFSX loading, cross-check, and
 .HSX-accurate/.fdf-approximate machinery.
 
-Every run prints a numbered [0]...[6] report. --save-report persists it;
+Every run prints a numbered [0]...[6] report. It is always saved;
 --save-gnuplot writes ipr.dat + a real .gplot script (off by default --
 this tool used to write both unconditionally); --view shows a matplotlib
 preview (off by default -- this tool previously ALWAYS showed it, with
@@ -189,12 +189,11 @@ pause
 
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report / --save-gnuplot (off by default)"
+echo " output/full-report/  --  the report file --save-gnuplot "
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
---save-report additionally persists it to stb_ipr_report.txt, and
---save-gnuplot writes ipr.dat + a real .gplot script -- both off by
+It is always saved to stb_ipr_report.txt; --save-gnuplot writes ipr.dat + a real .gplot script -- both off by
 default, so a plain run only ever writes references.bib:
 EOF
 mkdir -p "$OUT/full-report"
@@ -206,9 +205,9 @@ echo "\$ stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX
 echo "(only references.bib -- no ipr.dat/.gplot, no stb_ipr_report.txt)"
 echo
 echo "\$ stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX --shift fermi \\"
-echo "      --save-report --save-gnuplot --no-intro"
+echo "      --save-gnuplot --no-intro"
 (cd "$OUT/full-report" && stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
-    --shift fermi --save-report --save-gnuplot --no-intro > console_saved.log 2>&1)
+    --shift fermi --save-gnuplot --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_ipr_report.txt:"
 grep -o '\[[0-9]\] [A-Za-z& ()-]*' "$OUT/full-report/stb_ipr_report.txt" | sort -u
 echo
@@ -232,7 +231,7 @@ B -- interactive stb-suite menu:
 
 Both paths call the exact same underlying tool -- proven directly below.
 The menu asks for the label and the .HSX path SEPARATELY (default
-suggested if <label>.HSX exists), and gained save-report/save-gnuplot/
+suggested if <label>.HSX exists), and gained save-gnuplot/
 view prompts.
 EOF
 TMP="$(mktemp -d)"
@@ -243,8 +242,8 @@ echo "\$ stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX
 (cd "$TMP" && stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX --shift fermi \
     --no-intro > cli.log 2>&1)
 echo
-echo "\$ printf '2.15\\nSn3O4\\n\\n3\\n\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '2.15\nSn3O4\n\n3\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.15\\nSn3O4\\n\\n3\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '2.15\nSn3O4\n\n3\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Best (indirect) gap" "$TMP/cli.log")
 MENU_LINE=$(grep "Best (indirect) gap" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -265,8 +264,7 @@ Seven self-contained folders were generated under output/:
   q-validation/    nspin-fix/        full-report/
 
 Each has references.bib; full-report/ additionally has ipr.dat/ipr.gplot/
-ipr.pdf and stb_ipr_report.txt (only from its --save-report/
---save-gnuplot run).
+ipr.pdf and stb_ipr_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:
   - IPR theory: sum_i |psi_i|^(2q), the Anderson-localization
@@ -287,11 +285,11 @@ Recap of what this walkthrough covered:
     one series (the same bug already found and fixed in stb-fatbands),
     verified live on a real spin-polarized oxygen atom: ipr_up mean
     0.9515 vs ipr_down mean 1.0870
-  - the numbered [0]...[6] report, --save-report, --save-gnuplot (now
+  - the numbered [0]...[6] report (always saved), --save-gnuplot (now
     opt-in, previously unconditional), --view (now opt-in, previously
     always shown with no way to skip)
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA calculation:
-  stb-ipr --label my_calc --shift fermi --q 4 --save-report --save-gnuplot --view
+  stb-ipr --label my_calc --shift fermi --q 4 --save-gnuplot --view
 EOF

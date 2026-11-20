@@ -241,7 +241,7 @@ def run_basis_mode(args, parser):
                     f"Version {VERSION} | University of Brasilia - 2026", "Developed by Dr. Carlos M. O. Bastos"])
     base = os.path.join(args.output_dir, "basis")
     os.makedirs(base, exist_ok=True)
-    report_path = new_report_path("convergence") if args.save_report else None
+    report_path = new_report_path("convergence")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -392,7 +392,7 @@ def main():
                "  %(prog)s -s structure.fdf -c calc.fdf -p dojo --parameter all "
                "--meshcutoff-range 150 350 50\n"
                "  %(prog)s -s structure.fdf -c calc.fdf -p dojo --parameter kgrid "
-               "--relax-steps 200 --save-report\n"
+               "--relax-steps 200\n"
     )
 
     parser.add_argument("-s", "--structure", type=str, default="structure.fdf",
@@ -482,9 +482,7 @@ def main():
                              "into its own '<output-dir>/<parameter>/convergence_<parameter>_"
                              "<value>/' subfolder, one tree per swept parameter.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_convergence_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-convergence {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -573,7 +571,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("convergence") if args.save_report else None
+    report_path = new_report_path("convergence")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -593,7 +591,6 @@ def main():
     print_dual(f"Geometry          : " + ("single point at the input geometry (--single-point)" if args.single_point
                                           else f"full relaxation, positions + cell, up to {args.relax_steps} steps"), f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file       : {report_path}", f_out)
 

@@ -180,7 +180,6 @@ def run_phonon_postprocessing() -> None:
                 "Target max atomic displacement for the frozen mode, Ang "
                 "(default: 0.05): ", 0.05)
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
     save_gnuplot = get_input(
         "Also save gnuplot .dat + .gplot scripts for every computed quantity? (y/N): "
     ).strip().lower() == 'y'
@@ -209,8 +208,6 @@ def run_phonon_postprocessing() -> None:
         args.append("--thermal-displacements")
     if want_freeze:
         args += ["--freeze-unstable-mode", "--freeze-amplitude", str(freeze_amplitude)]
-    if save_report:
-        args.append("--save-report")
     if save_gnuplot:
         args.append("--save-gnuplot")
     if view_plots:
@@ -339,7 +336,6 @@ def run_phonon_generator() -> None:
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
 
     # 7. Preparar e executar o script
     args = [
@@ -357,8 +353,6 @@ def run_phonon_generator() -> None:
     if ml_prerelax:
         args += ["--ml-prerelax", "--ml-model", ml_model, "--ml-device", ml_device,
                   "--ml-fmax", str(ml_fmax)]
-    if save_report:
-        args.append("--save-report")
 
     print(color_text("\nGenerating phonon displacement folders...", 'green'))
     run_tool("stb-phononsCreate", args)
@@ -465,7 +459,6 @@ def run_cohesive_setup() -> None:
                         print(color_text("Invalid input, using default (2.0).", 'red'))
                         bsse_convergence_increment = [2.0]
 
-    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
 
     args = [
         "-s", struct_file,
@@ -492,8 +485,6 @@ def run_cohesive_setup() -> None:
         args.extend(["-p", pp_path])
     if spin_choice in ['y', 'yes']:
         args.append("--spin")
-    if save_report:
-        args.append("--save-report")
 
     # Recap -- always shown, no confirmation gate
     bsse_desc = "OFF"
@@ -514,7 +505,6 @@ def run_cohesive_setup() -> None:
         summary_rows.append(("BSSE convergence check", f"ON ({incs} Ang)"))
     summary_rows.append(("Vacuum-gap threshold", f"{vacuum_gap} Ang"))
     summary_rows.append(("Output directory", output_dir))
-    summary_rows.append(("Save report", "yes" if save_report else "no"))
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
     run_tool("stb-cohesive", args)
@@ -545,7 +535,6 @@ def run_cohesive_analysis() -> None:
         "(default: 0.05): ", 0.05)
 
     # Save report / view plot?
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
     view = get_input(
         "Show an interactive matplotlib plot before finishing? (y/N): ").strip().lower() == 'y'
 
@@ -556,8 +545,6 @@ def run_cohesive_analysis() -> None:
     ]
     if dir_path:
         args.extend(["-d", dir_path])
-    if save_report:
-        args.append("--save-report")
     if view:
         args.append("--view")
 
@@ -566,7 +553,6 @@ def run_cohesive_analysis() -> None:
         ("SIESTA output filename", out_file),
         ("Results directory", dir_path or "cohesive_runs (default)"),
         ("Force tolerance", f"{force_tolerance} eV/Ang"),
-        ("Save report", "yes" if save_report else "no"),
         ("View (matplotlib)", "yes" if view else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
@@ -805,7 +791,6 @@ def run_adsorb_setup() -> None:
             ml_steps = get_int_input(
                 "  Max MACE optimizer steps per relax [default: 200]: ", 200)
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
     view_choice = get_input(
         "View every generated structure interactively via ASE before finishing? "
         "(y/N): ").strip().lower()
@@ -828,8 +813,6 @@ def run_adsorb_setup() -> None:
         "--no-intro",
         "--force-spin" if force_spin else "--no-force-spin",
     ])
-    if save_report:
-        args.append("--save-report")
     if view_choice == 'y':
         args.append("--view")
     if view_plots_choice == 'y':
@@ -896,7 +879,6 @@ def run_adsorb_setup() -> None:
                      if uses_mace else "N/A"),
         ("ML max steps", str(ml_steps) if uses_mace else "N/A"),
         ("Output directory", output_dir),
-        ("Save report", "yes" if save_report else "no"),
         ("View interactively", "yes" if view_choice == 'y' else "no"),
         ("Show plots on screen", "yes" if view_plots_choice == 'y' else "no"),
     ]
@@ -934,9 +916,6 @@ def run_adsorb_bsse() -> None:
     args = ["--dir", dir_path, "--file", out_file,
             "--force-tolerance", str(force_tolerance), "--no-intro"]
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-adsorbBsse", args)
 
@@ -974,15 +953,12 @@ def run_adsorb_analysis() -> None:
     if apply_target:
         args.extend(["--apply", apply_target])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
     view_choice = get_input(
         "View every folder's structure (clean_slab, adsorbate(s), every site) interactively "
         "via ASE before finishing? (y/N): ").strip().lower()
     view_plots_choice = get_input(
         "Show the matplotlib adsorption-ranking plot on screen before finishing? (y/N): "
     ).strip().lower()
-    if save_report:
-        args.append("--save-report")
     if view_choice == 'y':
         args.append("--view")
     if view_plots_choice == 'y':
@@ -1035,11 +1011,8 @@ def run_adsorb_gibbs() -> None:
     args = ["--dir", dir_path, "--file", out_file, "--tmin", str(tmin), "--tmax", str(tmax),
             "--tstep", str(tstep), "--no-intro"]
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
     view_plots_choice = get_input(
         "Show the DG-vs-T plot on screen before finishing? (y/N): ").strip().lower()
-    if save_report:
-        args.append("--save-report")
     if view_plots_choice == 'y':
         args.append("--view-plots")
 
@@ -1438,8 +1411,6 @@ def run_stackingfault_setup() -> None:
                                       "the tool will report a clear error when it runs unless you "
                                       "switch back to cpu.", 'yellow'))
 
-    save_report = get_input(
-        "\nAlso save a text report to file (under 'sf_run/')? (y/N): ").strip().lower() == 'y'
 
     args = [
         "-l1", layer1_file,
@@ -1481,8 +1452,6 @@ def run_stackingfault_setup() -> None:
             args.extend(["--ml-custom-model-card", prompt_model_card(ml_custom_model)])
         else:
             args.extend(["--ml-model", ml_model])
-    if save_report:
-        args.append("--save-report")
 
     summary_rows = [
         ("Layer 1", layer1_file),
@@ -1498,7 +1467,6 @@ def run_stackingfault_setup() -> None:
         ("ML pre-relax layers", "ON" if ml_prerelax_layers else "OFF"),
         ("ML preview", "ON" if ml_preview else "OFF"),
         ("Output directory", f"{output_dir} (run folder: {output_dir}/sf_run)"),
-        ("Save report", "yes" if save_report else "no"),
     ]
     if uses_mace:
         summary_rows.insert(-3, ("ML model",
@@ -1541,9 +1509,6 @@ def run_stackingfault_analysis() -> None:
     if apply_target:
         args.extend(["--apply", apply_target])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
     save_gnuplot = get_input(
         "Also save the gamma-surface (or line-scan) data as gnuplot .dat + .gplot scripts, "
         "under '<dir>/plot/'? (y/N): ").strip().lower() == 'y'
@@ -1701,9 +1666,6 @@ def run_2d_stacker() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -1765,7 +1727,6 @@ def run_grid_to_cube() -> None:
                       else f"{stem}_{selected_type}_{selected_spin}.cube")
     output = get_input(f"Output filename (default: {default_output}): ").strip()
     dry_run = get_input("Report only, write no cube (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_cube_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--type", selected_type, "--spin", selected_spin, "--no-intro"]
     if label:
@@ -1776,8 +1737,6 @@ def run_grid_to_cube() -> None:
         args.extend(["--output", output])
     if dry_run:
         args.append("--dry-run")
-    if save_report:
-        args.append("--save-report")
 
     print(color_text("\nConverting to Cube format...", 'green'))
     run_tool("stb-cube", args)
@@ -1815,7 +1774,6 @@ def run_ani2traj_converter() -> None:
     default_output = f"{label or '<label>'}_traj{ext_map[selected_format]}"
     output = get_input(f"Output filename (default: {default_output}): ").strip()
     dry_run = get_input("Report only, write no file (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_ani2traj_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--out-format", selected_format, "--stride", str(stride), "--skip", str(skip), "--no-intro"]
     if label:
@@ -1826,8 +1784,6 @@ def run_ani2traj_converter() -> None:
         args.extend(["--output", output])
     if dry_run:
         args.append("--dry-run")
-    if save_report:
-        args.append("--save-report")
 
     print(color_text("\nConverting AIMD trajectory...", 'green'))
     run_tool("stb-ani2traj", args)
@@ -1901,7 +1857,6 @@ def run_aimd_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
     save_gnuplot = get_input("Also save the data + gnuplot scripts? (y/N): ").strip().lower()
     view_choice = get_input("Show the matplotlib plot before finishing? (y/N): ").strip().lower()
 
@@ -1912,8 +1867,6 @@ def run_aimd_analyzer() -> None:
         args.extend(["--track-atom", track_atom])
     if track_pair:
         args.extend(["--track-pair", track_pair])
-    if save_report == 'y':
-        args.append("--save-report")
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
     if view_choice == 'y':
@@ -1946,7 +1899,6 @@ def run_status_checker() -> None:
         recursive = get_input("Also every run folder below it (recursive)? (y/N): ").strip().lower() == 'y'
     label = get_input("SystemLabel override (leave blank to auto-detect): ").strip()
     csv_file = get_input("Save the summary table as CSV (file name, blank = no): ").strip()
-    save_report = get_input("Save the report to stb_status_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--no-intro"]
     if recursive:
@@ -1955,8 +1907,6 @@ def run_status_checker() -> None:
         args.extend(["--label", label])
     if csv_file:
         args.extend(["--csv", csv_file])
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-status", args)
 
@@ -1984,7 +1934,6 @@ def run_native_charges_checker() -> None:
     if is_glob:
         details = get_input("Also the full report of each folder? (y/N): ").strip().lower() == 'y'
     csv_file = get_input("Save every atom's charges as CSV (file name, blank = no): ").strip()
-    save_report = get_input("Save the report to stb_nativecharges_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--no-intro"]
     if label:
@@ -1993,8 +1942,6 @@ def run_native_charges_checker() -> None:
         args.append("--details")
     if csv_file:
         args.extend(["--csv", csv_file])
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-nativecharges", args)
 
@@ -2028,7 +1975,6 @@ def run_archive_packager() -> None:
     extra_exclude = get_input(
         "Suffixes to leave out, space-separated, or Enter to skip: ").strip()
     dry_run = get_input("Report only, write no archive (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_archive_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--mode", mode, "--no-intro"]
     if recursive:
@@ -2039,8 +1985,6 @@ def run_archive_packager() -> None:
         args.extend(["--exclude"] + extra_exclude.split())
     if dry_run:
         args.append("--dry-run")
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-archive", args)
 
@@ -2150,9 +2094,6 @@ def run_density_plotter() -> None:
     if output_dir:
         args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     save_gnuplot = get_input("Also save the data + gnuplot script(s)? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
@@ -2216,9 +2157,6 @@ def run_stm_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2328,9 +2266,6 @@ def run_wfdensity_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the slice/profile data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2440,9 +2375,6 @@ def run_sts_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the sts.dat data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2553,9 +2485,6 @@ def run_coop_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the coop/cohp.dat data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2639,9 +2568,6 @@ def run_ipr_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2713,9 +2639,6 @@ def run_effmass_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2797,9 +2720,6 @@ def run_spintexture_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -2863,9 +2783,6 @@ def run_workfunction_calculator() -> None:
         # Nota: O workfunction.py usa --fdf para ler o arquivo de saída (Fermi)
         args.extend(["--file", fermi_file])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
@@ -2923,7 +2840,6 @@ def run_bader_calculator() -> None:
         "Export each atom's Bader volume as its own .cube file, for VESTA/VMD? (y/N): ", 'green'
     ).strip().lower()
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
 
     # Argumentos básicos
     args = ["--label", label, "--speed", speed_mode, "--output-dir", output_dir, "--no-intro"]
@@ -2940,8 +2856,6 @@ def run_bader_calculator() -> None:
         args.append("--no-cube")
     if export_volumes_choice == 'y':
         args.append("--export-volumes")
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-bader", args)
     
@@ -3074,7 +2988,6 @@ def run_elastic_generator() -> None:
         if not output_dir:
             output_dir = "elastic_runs"
 
-    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
 
     args = [
         "--structure", input_file,
@@ -3093,8 +3006,6 @@ def run_elastic_generator() -> None:
         args.extend(["-p", pseudo_dir])
     if symmetry_method is not None:
         args.extend(["--symmetry-method", symmetry_method])
-    if save_report:
-        args.append("--save-report")
 
     # 6. Recap -- always shown, no confirmation gate
     summary_rows = [
@@ -3108,7 +3019,6 @@ def run_elastic_generator() -> None:
         ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
         ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
         ("Output directory", output_dir),
-        ("Save report", "yes" if save_report else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
@@ -3198,7 +3108,6 @@ def run_elastic_analyzer() -> None:
         dimensionality_summary = f"auto-detect (vacuum-gap={vacuum_gap} Ang)"
 
     # 8. Save report?
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
 
     # 9. Save the raw fitting data + gnuplot scripts, and/or preview on screen?
     save_gnuplot = get_input(
@@ -3225,8 +3134,6 @@ def run_elastic_analyzer() -> None:
     if method == "stress":
         args.extend(["--eggbox-tolerance", str(eggbox_tolerance),
                      "--fit-quality-tolerance", str(fit_quality_tolerance)])
-    if save_report:
-        args.append("--save-report")
     if save_gnuplot:
         args.append("--save-gnuplot")
     if view:
@@ -3247,7 +3154,6 @@ def run_elastic_analyzer() -> None:
         summary_rows.append(("Quality diagnostics", f"eggbox={eggbox_tolerance}%, "
                               f"fit-quality R^2={fit_quality_tolerance}"))
     summary_rows.append(("Plot data directory", plot_dir))
-    summary_rows.append(("Save report", "yes" if save_report else "no"))
     summary_rows.append(("Save gnuplot", "yes" if save_gnuplot else "no"))
     summary_rows.append(("View (matplotlib)", "yes" if view else "no"))
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
@@ -3312,9 +3218,6 @@ def run_input_generator() -> None:
     else:
         print(color_text("Skipping pseudopotential path.", 'yellow'))
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -3408,9 +3311,6 @@ def run_pseudo_generator() -> None:
     if dry_run == 'y':
         args.append("--dry-run")
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-pseudo", args)
 
@@ -3523,9 +3423,6 @@ def run_supercell_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -3662,9 +3559,6 @@ def run_slab_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -3785,9 +3679,6 @@ def run_nanotube_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -3915,9 +3806,6 @@ def run_defect_generator() -> None:
                                       "switch back to cpu.", 'yellow'))
             args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4010,9 +3898,6 @@ def run_sqs_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4094,9 +3979,6 @@ def run_unitcell_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4203,9 +4085,6 @@ def run_crystalbuilder_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4246,9 +4125,6 @@ def run_crystalcast_generator() -> None:
             print(color_text("No substitutions given -- aborting.", 'red'))
             return
         args = ["--substitute", *subs, "-f", input_file]
-        save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-        if save_report == 'y':
-            args.append("--save-report")
         view_choice = get_input("View the input and final structure interactively via ASE before finishing? (y/N): ").strip().lower()
         if view_choice == 'y':
             args.append("--view")
@@ -4292,9 +4168,6 @@ def run_crystalcast_generator() -> None:
             args.extend(["--eps", str(eps)])
         count = get_int_input("Number of candidates to keep [default: 1]: ", 1)
         args.extend(["--count", str(count)])
-        save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-        if save_report == 'y':
-            args.append("--save-report")
         view_choice = get_input("View the input and final structure(s) interactively via ASE before finishing? (y/N): ").strip().lower()
         if view_choice == 'y':
             args.append("--view")
@@ -4431,9 +4304,6 @@ def run_crystalcast_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the final structure(s) interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4532,9 +4402,6 @@ def run_fetch_generator() -> None:
         output_file = "fetched.fdf"
     args.extend(["--output", output_file])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4610,9 +4477,6 @@ def run_passivate_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4677,9 +4541,6 @@ def run_molecule_generator() -> None:
                                   "switch back to cpu.", 'yellow'))
         args.extend(["--device", device])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the molecule interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4756,9 +4617,6 @@ def run_mlrelax_generator() -> None:
     if relax_cell in ('y', 'yes'):
         args.append("--relax-cell")
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4849,9 +4707,6 @@ def run_amorphize_generator() -> None:
                               "switch back to cpu.", 'yellow'))
     args.extend(["--device", device])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the input and final structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -4959,7 +4814,6 @@ def run_convergence_generator() -> None:
     if not output_dir:
         output_dir = "convergence_runs"
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
 
     args = [
         "--structure", struct_file,
@@ -4973,8 +4827,6 @@ def run_convergence_generator() -> None:
         args += ["--pseudo-dir", pseudo_source]
     if vacuum_gap is not None:
         args += ["--vacuum-gap", str(vacuum_gap)]
-    if save_report:
-        args.append("--save-report")
     for p, (mn, mx, st) in custom_ranges.items():
         args += [range_flag[p], str(mn), str(mx), str(st)]
 
@@ -5022,9 +4874,6 @@ def run_convergence_analyzer() -> None:
     if output_dir:
         args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input(
         "Also save, per parameter, the curve data + a gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
@@ -5091,9 +4940,6 @@ def run_hubbardu_prep() -> None:
         output_dir = "hubbardu_runs"
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-hubbardu", args)
 
@@ -5122,9 +4968,6 @@ def run_hubbardu_alphas() -> None:
     )
     args.extend(["--frozen-iterations", str(frozen_iter)])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-hubbarduAlphas", args)
 
@@ -5162,9 +5005,6 @@ def run_hubbardu_analysis() -> None:
     view_choice = get_input("Show the matplotlib preview before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
         args.append("--view")
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-hubbarduAnalysis", args)
 
@@ -5783,8 +5623,6 @@ def run_gqca_analysis() -> None:
                             "[default: none]: ").strip().lower()
     if export_fmt in ("cif", "xsf", "xyz", "vasp"):
         args.extend(["--export-relaxed", export_fmt])
-    if get_input("  Save the text report (stb_gqcaAnalysis_report.txt, current folder)? [y/N]: ").strip().lower() == 'y':
-        args.append("--save-report")
 
     show_advanced = get_input(
         "\nConfigure advanced settings (composition grid/force tolerance/output name)? "
@@ -6020,9 +5858,6 @@ def run_mlff_prep() -> None:
         print(color_text(f"  The next stages find '{output_dir}/mlff_workflow.json' when run from "
                          "inside that folder.", 'yellow'))
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     ml_screen = get_input("Screen every config with a MACE-MP foundation model before SIESTA "
                           "(flags unphysical geometries; needs the 'ml' extra)? (y/N): ").strip().lower()
     if ml_screen == 'y':
@@ -6130,9 +5965,6 @@ def run_mlff_analysis() -> None:
     save_data = get_input("Also write the per-config errors (.dat)? (y/N): ").strip().lower()
     if save_data == 'y':
         args.append("--save-data")
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     print(color_text("\nFine-tuning the model (this can take a while)...", 'green'))
     run_tool("stb-mlffAnalysis", args)
@@ -6247,9 +6079,6 @@ def run_mlff_validate() -> None:
             if len(cell) == 3 and all(c.isdigit() and int(c) > 0 for c in cell):
                 args.extend(["--md-check-supercell", *cell])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     print(color_text("\nScoring the rounds...", 'green'))
     run_tool("stb-mlffValidate", args)
@@ -6386,9 +6215,6 @@ def run_mlff_active_learning() -> None:
     if get_input("Open the picks in ASE's viewer, colored by uncertainty? (y/N): ").strip().lower() == 'y':
         args.append("--view-picks")
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     print(color_text("\nScreening candidate configurations...", 'green'))
     run_tool("stb-mlffActiveLearning", args)
@@ -6448,9 +6274,6 @@ def run_eos_inputs_generator() -> None:
                 args.extend(["--kgrid", *kgrid_vals])
             else:
                 print(color_text("Expected 3 integers -- keeping the template's grid.", 'yellow'))
-    save_report = get_input("\nSave the report to stb_eosInputs_report.txt (current folder)? [y/N]: ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     print(color_text("\nWriting the volume folders...", 'green'))
     run_tool("stb-eosInputs", args)
@@ -6488,9 +6311,6 @@ def run_eos_analysis_generator() -> None:
     data = get_input("Write the data files (CSV + JSON)? [y/N]: ").strip().lower()
     if data == 'y':
         args.append("--save-data")
-    save_report = get_input("Save the report to stb_eosAnalysis_report.txt (current folder)? [y/N]: ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     print(color_text("\nFitting the equation of state...", 'green'))
     run_tool("stb-eosAnalysis", args)
@@ -6574,9 +6394,6 @@ def run_chargediff_prep() -> None:
     if view_fragments:
         args.append("--view")
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-chargediffPrep", args)
 
@@ -6626,9 +6443,6 @@ def run_chargediff_analysis() -> None:
         args.append("--save-gnuplot")
     if get_input("Save per-atom CSV and results JSON? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-chargediffAnalysis", args)
 
@@ -6673,9 +6487,6 @@ def run_hirshfeld_prep() -> None:
     output_dir = get_input("Output directory [default: hirshfeld_study]: ").strip() or "hirshfeld_study"
     args.extend(["--output-dir", output_dir, "--no-intro"])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-hirshfeldPrep", args)
 
@@ -6710,9 +6521,6 @@ def run_hirshfeld_ions() -> None:
     if ref_file:
         args.extend(["--ref", ref_file])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     run_tool("stb-hirshfeldIons", args)
 
@@ -6749,9 +6557,6 @@ def run_hirshfeld_analysis() -> None:
     if ref_file:
         args.extend(["--ref", ref_file])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y'
-    if save_report:
-        args.append("--save-report")
 
     print(f"\n{color_text('Optional outputs:', 'cyan')}")
     if get_input("Save data files (per-atom charges .dat, per-iteration charges, .xyz with "
@@ -6863,8 +6668,6 @@ def run_mlmd_generator() -> None:
         args.append("--save-gnuplot")
     elif get_input("Write the data files only (.dat: time series, g(r), MSD)? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
-    if get_input("Save the report to stb_mlmd_report.txt (current folder)? (y/N): ").strip().lower() == 'y':
-        args.append("--save-report")
 
     run_tool("stb-mlmd", args)
 
@@ -6996,8 +6799,6 @@ def run_mlphonons_generator() -> None:
         args.append("--save-gnuplot")
     if get_input("Also save the raw plot data (.dat files) in the output folder? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
-    if get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y':
-        args.append("--save-report")
 
     print(color_text("\nComputing ML phonons...", 'green'))
     run_tool("stb-mlphonons", args)
@@ -7095,8 +6896,6 @@ def run_mlelastic_generator() -> None:
         args.append("--save-gnuplot")
     if get_input("Also save the data (stress-strain, tensor, directional .dat files)? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
-    if get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y':
-        args.append("--save-report")
 
     print(color_text("\nComputing ML elastic constants...", 'green'))
     run_tool("stb-mlelastic", args)
@@ -7195,8 +6994,6 @@ def run_mlneb_generator() -> None:
         args.append("--save-data")
     if get_input("Also save each relaxed image as its own .fdf? (y/N): ").strip().lower() == 'y':
         args.append("--save-images")
-    if get_input("Also save a text report to file? (y/N): ").strip().lower() == 'y':
-        args.append("--save-report")
 
     print(color_text("\nRunning ML NEB...", 'green'))
     run_tool("stb-mlneb", args)
@@ -7290,8 +7087,7 @@ def run_mladsorb_generator() -> None:
     for flag, question in (("--show", "Show the figure on screen at the end?"),
                            ("--save-data", "Save the tables as data files (.dat)?"),
                            ("--save-gnuplot", "Save gnuplot scripts + data (and PDFs)?"),
-                           ("--save-xyz", "Save the structures as extended XYZ?"),
-                           ("--save-report", "Save the text report to a file?")):
+                           ("--save-xyz", "Save the structures as extended XYZ?")):
         if get_input(f"{question} (y/N): ").strip().lower() == 'y':
             args.append(flag)
 
@@ -7320,9 +7116,6 @@ def run_dftu_generator() -> None:
         output = get_input("\nAlso save the block to a file? [optional, press Enter to skip]: ").strip()
         if output:
             args.extend(["--output", output])
-        save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-        if save_report == 'y':
-            args.append("--save-report")
         run_tool("stb-dftu", args)
         return
 
@@ -7359,9 +7152,6 @@ def run_dftu_generator() -> None:
     if output:
         args.extend(["--output", output])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-dftu", args)
 
@@ -7508,7 +7298,6 @@ def run_dos_parser() -> None:
     if not output_dir:
         output_dir = "."
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
     save_gnuplot = get_input(
         "Also save a gnuplot (.gplot) script for each output category "
         "(total/atom/species)? (y/N): "
@@ -7528,8 +7317,6 @@ def run_dos_parser() -> None:
     args.extend(["--output-dir", output_dir])
     if estimate_from_dos:
         args.append("--estimate-from-dos")
-    if save_report == 'y':
-        args.append("--save-report")
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
     if view_plot == 'y':
@@ -7700,7 +7487,6 @@ def run_strain_generator() -> None:
         print(color_text("Step must be positive!", 'red'))
         step = get_float_input("Step % (default 1): ", 1.0)
 
-    save_report = get_input("\nAlso save a report to file? [y/N]: ").strip().lower() == 'y'
 
     # Recap -- always shown, no confirmation gate
     summary_rows = [
@@ -7714,7 +7500,6 @@ def run_strain_generator() -> None:
         ("Output directory", output_dir),
         ("Vacuum-gap threshold", f"{vacuum_gap} Ang"),
         ("Symmetry tolerance", f"symprec={symprec}, angle={angle_tolerance} deg"),
-        ("Save report", "yes" if save_report else "no"),
     ]
     _print_config_summary("CONFIGURATION SUMMARY", summary_rows)
 
@@ -7735,8 +7520,6 @@ def run_strain_generator() -> None:
         ]
         if pseudo_dir:
             args.extend(["-p", pseudo_dir])
-        if save_report:
-            args.append("--save-report")
         run_tool("stb-strain", args, pause=(d == directions_to_run[-1]))
 
 def run_strain_post_processor() -> None:
@@ -7801,9 +7584,6 @@ def run_strain_post_processor() -> None:
     if output_dir:
         args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input(
         "Also save the curve data + a gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
@@ -7859,9 +7639,6 @@ def run_bands_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-bands", args)
 
@@ -7938,9 +7715,6 @@ def run_fatbands_analyzer() -> None:
     output_dir = get_input("Output directory (default: '.'): ") or "."
     args.extend(["--output-dir", output_dir])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -8010,9 +7784,6 @@ def run_dos_convolution() -> None:
     if plot_choice in ['n', 'no']:
         args.append("--no-plot")
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     args.append("--no-intro")
 
@@ -8071,9 +7842,6 @@ def run_structure_analyzer() -> None:
             rdf_rmax = get_float_input("RDF cutoff radius in Ang (default: 10.0): ", 10.0)
         args.extend(["--rdf-rmax", str(rdf_rmax)])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-structural", args)
 
@@ -8139,9 +7907,6 @@ def run_xrd_analyzer() -> None:
         if raw_experimental:
             args.append("--raw-experimental")
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input("Also save the data + gnuplot script? (y/N): ").strip().lower()
     if save_gnuplot == 'y':
         args.append("--save-gnuplot")
@@ -8226,7 +7991,6 @@ def run_xrdsearch_generator() -> None:
     view_choice = get_input(
         "\nView the generated candidate structures interactively via ASE when done? (y/N): "
     ).strip().lower()
-    save_report = get_input("Also save a text report to file? (y/N): ").strip().lower()
 
     args = [
         "--species", *species,
@@ -8255,8 +8019,6 @@ def run_xrdsearch_generator() -> None:
         args.extend(["--pseudo-dir", pseudo_source])
     if view_choice == 'y':
         args.append("--view")
-    if save_report == 'y':
-        args.append("--save-report")
 
     run_tool("stb-xrdsearch", args)
 
@@ -8298,9 +8060,6 @@ def run_xrdrank_analyzer() -> None:
     if top_str:
         args.extend(["--top", top_str])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
     save_gnuplot = get_input(
         "Also save the ranking + best-match overlay as data + gnuplot scripts? (y/N): "
     ).strip().lower()
@@ -8439,9 +8198,6 @@ def run_file_translator() -> None:
     # ##### FIM DO NOVO BLOCO #####
 
     # ##### NOVO BLOCO: Salvar relatório em arquivo (opcional) #####
-    report_choice = get_input("\nSave the report to a file? (y/N): ").strip().lower()
-    if report_choice == "y":
-        args.append("--save-report")
     # ##### FIM DO NOVO BLOCO #####
 
     run_tool("stb-translate", args)
@@ -8493,8 +8249,6 @@ def run_clean_tool() -> None:
         confirm_choice = get_input("Skip confirmation and delete directly? [y/N]: ").strip().lower()
         no_confirm = confirm_choice == 'y'
 
-    report_choice = get_input("Save the report to a file? [y/N]: ").strip().lower()
-    save_report = report_choice == 'y'
 
     args = ["--path", path, "--keep"] + extensions
     if recursive:
@@ -8505,8 +8259,6 @@ def run_clean_tool() -> None:
         args.append("--no-archive")
     if no_confirm:
         args.append("--no-confirm")
-    if save_report:
-        args.append("--save-report")
 
     args.append("--no-intro")
 
@@ -8572,9 +8324,6 @@ def run_symmetry_analyzer() -> None:
     if write_refined_path:
         args.extend(["--write-refined", write_refined_path])
 
-    save_report = get_input("\nAlso save a text report to file? (y/N): ").strip().lower()
-    if save_report == 'y':
-        args.append("--save-report")
 
     view_choice = get_input("View the structure interactively via ASE before finishing? (y/N): ").strip().lower()
     if view_choice == 'y':
@@ -8604,7 +8353,6 @@ def run_wantibexos_interface() -> None:
     check = True
     if not dry_run:
         check = get_input("Check the written file by rebuilding the bands from it? (Y/n): ").strip().lower() != 'n'
-    save_report = get_input("Save the report to stb_siesta2wtb_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--input", input_file]
     if output_file:
@@ -8619,8 +8367,6 @@ def run_wantibexos_interface() -> None:
         args.append("--dry-run")
     if not check:
         args.append("--no-check")
-    if save_report:
-        args.append("--save-report")
 
     args.append("--no-intro")
 

@@ -939,7 +939,7 @@ def build_parser():
         epilog="Example usage:\n"
                "  stb-mlelastic --file structure.fdf\n"
                "  stb-mlelastic --file structure.fdf --custom-model mlff_model.model --custom-model-card mlff_model_card.json "
-               "--device cuda --steps 7 --save-report\n"
+               "--device cuda --steps 7\n"
                "  stb-mlelastic --file structure.fdf --check-convergence --convergence-strains 0.25 0.5 1 2 3\n",
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--file", required=True, help="Input structure (.fdf).")
@@ -1008,9 +1008,7 @@ def build_parser():
                         help="Write the data behind the report: stress_strain.dat (every strained cell's stress), "
                              "elastic_tensor.dat (C, its projection, S), directional.dat. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlelastic_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlelastic {VERSION}")
     return parser
@@ -1040,7 +1038,7 @@ def main():
                     "Developed by Dr. Carlos M. O. Bastos"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("mlelastic") if args.save_report else None
+    report_path = new_report_path("mlelastic")
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()
@@ -1175,7 +1173,7 @@ def main():
         if report_path:
             print_dual(f"Report            : {report_path}", f_out)
         not_asked = [f for f, on in (("--save-gnuplot", args.save_gnuplot), ("--save-data", args.save_data),
-                                     ("--show", args.show), ("--save-report", args.save_report)) if not on]
+                                     ("--show", args.show)) if not on]
         if not_asked:
             print_dual(f"Also available    : {' '.join(not_asked)}", f_out)
         print_dual(f"Wall time         : {time.monotonic() - t_start:.1f} s", f_out)

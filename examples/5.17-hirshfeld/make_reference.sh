@@ -5,7 +5,7 @@
 #   1. relaxations: H2O and N2O (CG, fixed cell), NaCl and MgO (CG, variable cell);
 #   2. one Hirshfeld-I study per system: stb-hirshfeldPrep, SIESTA in combined/ and every neutral/<El>/,
 #      stb-hirshfeldIons, SIESTA in every ions/<El>/<cation|anion>/, stb-hirshfeldAnalysis --save-data
-#      --save-report --png (into <study>/analysis/), and stb-bader on combined/ (into <study>/bader/);
+#      --png (into <study>/analysis/), and stb-bader on combined/ (into <study>/bader/);
 #   3. the H2O studies: MeshCutoff 200-600 Ry, the isolated-atom box 10-28 Ang, the basis (DZP/TZP x
 #      PAO.EnergyShift) -- each a complete study of its own.
 #
@@ -58,15 +58,15 @@ study() {   # $1 = study name, $2 = structure, $3 = template, $4 = MeshCutoff (R
     mkdir -p "$d"
     if [ ! -f "$d/hirshfeld_manifest.json" ]; then
         (cd "$d" && rm -f stb_hirshfeldPrep_report*.txt && stb-hirshfeldPrep -s "$2" --calc "$3" -p dojo -O . --mesh-cutoff "$4" --vacuum "$5" \
-            --save-report --no-intro < /dev/null > prep.log 2>&1)
+            --no-intro < /dev/null > prep.log 2>&1)
     fi
     siesta_all "$d/combined" "$d"/neutral/*
     if [ ! -f "$d/hirshfeld_ions_manifest.json" ]; then
-        (cd "$d" && rm -f stb_hirshfeldIons_report*.txt && stb-hirshfeldIons -O . -p dojo --save-report --no-intro < /dev/null > ions.log 2>&1)
+        (cd "$d" && rm -f stb_hirshfeldIons_report*.txt && stb-hirshfeldIons -O . -p dojo --no-intro < /dev/null > ions.log 2>&1)
     fi
     siesta_all "$d"/ions/*/*
     mkdir -p "$d/analysis"
-    (cd "$d/analysis" && rm -f stb_hirshfeldAnalysis_report*.txt && stb-hirshfeldAnalysis -O .. --save-data --save-report --png --no-intro \
+    (cd "$d/analysis" && rm -f stb_hirshfeldAnalysis_report*.txt && stb-hirshfeldAnalysis -O .. --save-data --png --no-intro \
         < /dev/null > analysis.log 2>&1)
     echo "study $1: $(grep -m1 -o 'Converged *: [a-z]*' "$d/analysis/stb_hirshfeldAnalysis_report.txt")"
 }
@@ -74,7 +74,7 @@ study() {   # $1 = study name, $2 = structure, $3 = template, $4 = MeshCutoff (R
 bader() {   # $1 = study name: Bader charges of the same combined/ density
     local d="$WORK/$1"
     [ -f "$d/bader/stb_bader_report.txt" ] && return 0
-    (cd "$d/combined" && rm -f stb_bader_report*.txt && stb-bader -l siesta --ref calc.out -o ../bader --save-report \
+    (cd "$d/combined" && rm -f stb_bader_report*.txt && stb-bader -l siesta --ref calc.out -o ../bader \
         --no-cube --no-intro < /dev/null > ../bader/bader.log 2>&1 && mv stb_bader_report.txt ../bader/) \
         || mkdir -p "$d/bader"
 }
@@ -96,7 +96,7 @@ for s in h2o n2o nacl mgo; do
     # the same analysis converged to 1e-6 e: the reference the remaining-error estimate is checked against
     mkdir -p "$WORK/$s/analysis_tight"
     (cd "$WORK/$s/analysis_tight" && rm -f stb_hirshfeldAnalysis_report*.txt && stb-hirshfeldAnalysis -O .. --tol 1e-6 --max-iter 300 --save-data \
-        --save-report --no-intro < /dev/null > analysis.log 2>&1)
+        --no-intro < /dev/null > analysis.log 2>&1)
 done
 
 # ---- 3. H2O studies ------------------------------------------------------------------------------------------

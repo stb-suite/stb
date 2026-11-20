@@ -159,7 +159,7 @@ pause
 
 banner "Case 8 -- The interactive menu (stb-suite, code 3.6)"
 # path, recursive y, no label, no csv, no report, Enter, 0 = exit
-(cd "$OUT" && printf '3.6\nproject\ny\n\n\nn\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case8.txt") || true
+(cd "$OUT" && printf '3.6\nproject\ny\n\n\n\n0\n' | stb-suite 2>&1 | strip_colors > "$OUT/case8.txt") || true
 grep -E "^Target|^States" "$OUT/case8.txt" | sed 's/^/  /'
 cat <<'EOF'
   -> The menu asks for the folder or glob, recursive, a label, the CSV and the report, and runs the same command.

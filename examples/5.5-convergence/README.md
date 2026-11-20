@@ -307,7 +307,7 @@ Case 3 of `example_5.5.sh` reproduces all three.
 | Path | What it is |
 |---|---|
 | `convergence_runs/<parameter>/convergence_<parameter>_<value>/` | One fully-relaxed SIESTA folder per swept value |
-| `stb_convergence_report.txt` | Persisted report, only with `--save-report` |
+| `stb_convergence_report.txt` | The report, always written to the current folder |
 
 Both CLI and interactive menu (`stb-suite` -> `5.5.1`) produce **byte
 -identical** output for identical answers — verified directly (`diff -rq`,

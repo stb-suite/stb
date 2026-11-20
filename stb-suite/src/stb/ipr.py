@@ -115,7 +115,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-ipr --label siesta --shift fermi\n"
                "  stb-ipr --label siesta --shift fermi --q 4\n"
-               "  stb-ipr --label siesta --shift fermi --save-report --save-gnuplot --view\n",
+               "  stb-ipr --label siesta --shift fermi --save-gnuplot --view\n",
         formatter_class=argparse.RawTextHelpFormatter
     )
 
@@ -165,9 +165,7 @@ def main():
                              "references.bib into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_ipr_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write ipr.dat (or ipr_up.dat/ipr_down.dat for a spin-"
                              "polarized run) + ipr.gplot. Off by default -- this tool used to "
@@ -322,7 +320,7 @@ def main():
 
     # --- From here on: the numbered, save-able report --------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("ipr") if args.save_report else None
+    report_path = new_report_path("ipr")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-IPR REPORT =====", 'magenta'), f_out)

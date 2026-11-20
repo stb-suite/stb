@@ -615,9 +615,7 @@ def main():
                               "equilibrium geometry rather than the true adsorption minimum. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_adsorbAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                          help="Open clean_slab, every adsorbate reference and every site "
                               "(preferring each folder's own <label>.XV -- the actual relaxed "
@@ -688,7 +686,7 @@ def main():
 
     # Every file of this stage goes into --dir (as stb-adsorbGibbs does), so two analyses
     # of different runs called from the same folder never overwrite each other.
-    report_path = new_report_path("adsorbAnalysis") if args.save_report else None
+    report_path = new_report_path("adsorbAnalysis")
     if args.output is None:
         args.output = os.path.join(args.dir, "adsorption_curve.dat")
     f_out = open(report_path, "w") if report_path else None

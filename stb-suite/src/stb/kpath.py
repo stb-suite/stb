@@ -368,9 +368,7 @@ def main():
         help="Output .fdf file name (default: kpath_bs.fdf)."
     )
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_kpath_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-kpath {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -386,7 +384,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("kpath") if args.save_report else None
+    report_path = new_report_path("kpath")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-KPATH REPORT =====", 'magenta'), f_out)

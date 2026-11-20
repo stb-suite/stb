@@ -165,8 +165,8 @@ EOF
 mkdir -p "$OUT/symmetry-preserved"
 cp "$OUT/_setup/term_term0.fdf" "$OUT/symmetry-preserved/slab.fdf"
 echo
-echo "\$ stb-passivate -f slab.fdf --save-report -o passivated.fdf --no-intro"
-(cd "$OUT/symmetry-preserved" && stb-passivate -f slab.fdf --save-report -o passivated.fdf --no-intro > console.log)
+echo "\$ stb-passivate -f slab.fdf -o passivated.fdf --no-intro"
+(cd "$OUT/symmetry-preserved" && stb-passivate -f slab.fdf -o passivated.fdf --no-intro > console.log)
 strip_ansi "$OUT/symmetry-preserved/stb_passivate_report.txt" | awk '/\[6\] SYMMETRY ANALYSIS/{flag=1} /\[7\] WRITING OUTPUT/{flag=0} flag'
 pause
 
@@ -208,17 +208,16 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_passivate_report.txt with
---save-report) includes the structure-validation checklist and a
+The full numbered report (always written to stb_passivate_report.txt) includes the structure-validation checklist and a
 references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
 cp "$OUT/_setup/term_term0.fdf" "$OUT/full-report/slab.fdf"
-echo "\$ stb-passivate -f slab.fdf --save-report --no-intro"
-(cd "$OUT/full-report" && stb-passivate -f slab.fdf --save-report --no-intro > console.log)
+echo "\$ stb-passivate -f slab.fdf --no-intro"
+(cd "$OUT/full-report" && stb-passivate -f slab.fdf --no-intro > console.log)
 echo
 echo "Report sections written to stb_passivate_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_passivate_report.txt"
@@ -273,7 +272,7 @@ Recap of what this walkthrough covered:
     preserves the crystal's full symmetry in the clean case
   - --ml-relax correcting the geometric heuristic, with the vacuum axis
     provably unchanged
-  - the structure-validation checklist, references.bib, and --save-report
+  - the structure-validation checklist, references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

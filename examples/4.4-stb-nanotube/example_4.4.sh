@@ -55,7 +55,7 @@ B -- interactive stb-suite menu:
 Every run always writes a numbered report ([0] RUN METADATA ... [9] SUMMARY
 & FILES -- [4] ML PRE-RELAXATION only appears with --ml-relax), a
 structure-validation checklist both before and after, and a before/after
-symmetry comparison table. A full text report (--save-report), MACE
+symmetry comparison table. A full text report (always written), MACE
 pre-relaxation (--ml-relax), and an interactive 3D view (--view) are all
 off by default.
 EOF
@@ -279,17 +279,16 @@ PYEOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_nanotube_report.txt with
---save-report) includes the structure-validation checklist for the input
+The full numbered report (always written to stb_nanotube_report.txt) includes the structure-validation checklist for the input
 monolayer and the output tube/ribbon, and a references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp graphene.fdf "$OUT/full-report/"
-echo "\$ stb-nanotube -f graphene.fdf --chirality 6 0 --save-report --no-intro"
-(cd "$OUT/full-report" && stb-nanotube -f graphene.fdf --chirality 6 0 --save-report --no-intro > console.log)
+echo "\$ stb-nanotube -f graphene.fdf --chirality 6 0 --no-intro"
+(cd "$OUT/full-report" && stb-nanotube -f graphene.fdf --chirality 6 0 --no-intro > console.log)
 echo
 echo "Report sections written to stb_nanotube_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_nanotube_report.txt"
@@ -309,8 +308,8 @@ echo "entry mode and checking it reaches the same atom count."
 TMP="$(mktemp -d)"
 cp graphene.fdf "$TMP/"
 echo
-echo "\$ printf '4.4\\ngraphene.fdf\\n6 0\\n1\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '4.4\ngraphene.fdf\n6 0\n1\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
+echo "\$ printf '4.4\\ngraphene.fdf\\n6 0\\n1\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '4.4\ngraphene.fdf\n6 0\n1\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1) || true
 if grep -q "Output atoms     : 24" "$TMP/session.log"; then
     echo "Confirmed: the interactive menu built and launched the exact same"
     echo "underlying stb-nanotube command as the CLI walkthrough above (24"

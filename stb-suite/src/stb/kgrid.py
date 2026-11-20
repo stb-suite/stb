@@ -50,9 +50,7 @@ def main():
              "a single k-point there regardless of density. Default: 10.0"
     )
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_kgrid_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-kgrid {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -68,7 +66,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("kgrid") if args.save_report else None
+    report_path = new_report_path("kgrid")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-KGRID REPORT =====", 'magenta'), f_out)

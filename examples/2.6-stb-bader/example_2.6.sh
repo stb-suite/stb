@@ -55,9 +55,8 @@ documented limitation (non-nuclear attractors, Z_val accuracy, the
 near-zero-population red flag, --speed fast's tradeoff).
 
 Every run prints a numbered [0]...[7] report, the same style every newer
-tool in this suite uses. --save-report additionally persists that report
-to stb_bader_report.txt -- off by default, so a plain run only ever
-writes the .cube file(s) and references.bib, no text report file. The
+tool in this suite uses, and it is always saved to stb_bader_report.txt in the
+current folder. The
 tool used to always write <label>_BADER.txt unconditionally; that's gone
 now (a stale one from an older run is cleaned up automatically instead).
 EOF
@@ -125,13 +124,12 @@ echo "Bader-atoms-<N>.cube files (one per atom)."
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  --save-report (off by default)"
+echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
---save-report additionally persists it to stb_bader_report.txt -- off by
-default, so a plain run only ever writes the .cube file and
-references.bib, no text report file at all:
+It is always saved to stb_bader_report.txt in the current folder; a plain run also
+writes the .cube file and references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.out Sn3O4.RHO Sn3O4.XV "$OUT/full-report/"
@@ -141,8 +139,8 @@ echo "\$ stb-bader --label Sn3O4 --no-intro   # default: no report file"
 ls "$OUT/full-report/" | grep -v "\.out$\|\.RHO$\|\.XV$\|\.cube$\|console"
 echo "(no <label>_BADER.txt, no stb_bader_report.txt -- only references.bib)"
 echo
-echo "\$ stb-bader --label Sn3O4 --save-report --no-intro"
-(cd "$OUT/full-report" && timeout 120 stb-bader --label Sn3O4 --save-report --no-intro > console_saved.log 2>&1)
+echo "\$ stb-bader --label Sn3O4 --no-intro"
+(cd "$OUT/full-report" && timeout 120 stb-bader --label Sn3O4 --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_bader_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_bader_report.txt"
 echo
@@ -166,8 +164,8 @@ EOF
 TMP="$(mktemp -d)"
 cp Sn3O4.out Sn3O4.RHO Sn3O4.XV "$TMP/"
 echo
-echo "\$ printf '2.6\\nSn3O4\\n\\n\\n1\\n\\n\\ny\\nn\\nn\\n\\n0\\n' | stb-suite     # default output dir, default ref, speed=normal, no vacuum-tol/threads, keep cube, no export, no report"
-(cd "$TMP" && printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\nn\n\n0\n' | timeout 120 stb-suite > session.log 2>&1) || true
+echo "\$ printf '2.6\\nSn3O4\\n\\n\\n1\\n\\n\\ny\\nn\\n\\n0\\n' | stb-suite     # default output dir, default ref, speed=normal, no vacuum-tol/threads, keep cube, no export, no report"
+(cd "$TMP" && printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > session.log 2>&1) || true
 CLI_LINE=$(grep "Total Integrated" "$OUT/basic/console.log" | head -1)
 MENU_LINE=$(grep "Total Integrated" "$TMP/session.log" | head -1)
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then
@@ -188,7 +186,7 @@ Four self-contained folders were generated under output/:
   export-volumes/   full-report/
 
 Each has references.bib and the .cube file(s); full-report/ additionally
-has stb_bader_report.txt (only from its --save-report run).
+has stb_bader_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
   - Bader's Atoms-in-Molecules theory and the grid-based algorithm's own
@@ -198,10 +196,10 @@ Recap of what this walkthrough covered:
   - a real near-zero-population red flag on this fixture's own Sn #1/#2
   - --speed fast's on-grid vs. the default near-grid method
   - --export-volumes for per-atom VESTA/VMD visualization
-  - the numbered [0]...[7] report, --save-report, references.bib
+  - the numbered [0]...[7] report (always saved), references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a finished SIESTA calculation:
-  stb-bader --label my_calc --save-report
+  stb-bader --label my_calc
   stb-bader --label my_calc --ref relax/my_calc.out --export-volumes
 EOF

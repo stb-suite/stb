@@ -1025,9 +1025,7 @@ def main():
                         help="Move the finished MD-check frames into the training set (they are already "
                              "SIESTA-labeled): the next stb-mlffAnalysis trains on them.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlffValidate_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlffValidate {VERSION}")
     args = parser.parse_args()
@@ -1070,7 +1068,7 @@ def main():
     out_base = wf_base if os.path.isdir(wf_base) else os.getcwd()
     near_wf = lambda name: name if os.path.isabs(name) else os.path.relpath(os.path.join(out_base, name))
 
-    report_path = new_report_path("mlffValidate") if args.save_report else None
+    report_path = new_report_path("mlffValidate")
     f_out = open(report_path, "w") if report_path else None
 
     # ---- what to score

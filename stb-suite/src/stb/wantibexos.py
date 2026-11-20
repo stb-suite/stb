@@ -61,9 +61,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--dry-run', action='store_true',
                         help='Report only: read the Hamiltonian and say what would be written; write nothing.')
     parser.add_argument('--save-report', action='store_true',
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_siesta2wtb_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument('-q', '--quiet', action='store_false',
                         help='Suppress terminal animations and colors')
     parser.add_argument("-v", "--version", action="version",
@@ -408,9 +406,9 @@ def main():
         print("\n" + color_text("SIESTA-WANTIBEXOS Interface:", 'bold'))
         print("-"*60)
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
 
-    report_file = new_report_path("siesta2wtb") if args.save_report else None
+    report_file = new_report_path("siesta2wtb")
     sec = Sections(buf)
     warnings = []
 

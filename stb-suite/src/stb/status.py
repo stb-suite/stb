@@ -557,9 +557,7 @@ def main():
                         help="With several folders, also print the full report of each one.")
     parser.add_argument("--csv", default=None, help="Also write the summary table to this CSV file.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_status_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-status {VERSION}")
     args = parser.parse_args()
@@ -587,9 +585,9 @@ def main():
         parser.error(f"No run folder matched '{args.path}'.")
     batch = len(matches) > 1
 
-    buf = io.StringIO() if args.save_report else None
+    buf = io.StringIO()
 
-    report_file = new_report_path("status") if args.save_report else None
+    report_file = new_report_path("status")
     sec = Sections(buf)
 
     def out(text=""):
@@ -673,8 +671,7 @@ def main():
             verdict += " -- " + ("but see the warnings" if problems else "result usable")
         out(f"Verdict           : {verdict}")
     out(f"Folders inspected : {len(results)}")
-    if args.save_report:
-        out(f"Report            : {report_file}")
+    out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     all_w = [(r["path"], w) for r in results for w in r["warnings"]]

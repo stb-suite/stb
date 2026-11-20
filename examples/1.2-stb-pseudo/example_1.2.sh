@@ -58,8 +58,8 @@ echo "=================================================================="
 echo "sic.fdf is a 2-atom SiC cell -- both Si and C are covered by 'dojo'."
 mkdir -p "$OUT/sic"
 echo
-echo "\$ stb-pseudo -f sic.fdf -p dojo -o output/sic --save-report --no-intro"
-stb-pseudo -f sic.fdf -p dojo -o "$OUT/sic" --save-report --no-intro > "$OUT/sic_console.log"
+echo "\$ stb-pseudo -f sic.fdf -p dojo -o output/sic --no-intro"
+stb-pseudo -f sic.fdf -p dojo -o "$OUT/sic" --no-intro > "$OUT/sic_console.log"
 grep -E "Species found|Resolved" "$OUT/sic_console.log"
 echo
 echo "Copied into output/sic/:"
@@ -122,8 +122,8 @@ echo "'Resolved : N/N' line against the direct CLI run above."
 TMP="$(mktemp -d)"
 cp sic.fdf "$TMP/"
 echo
-echo "\$ printf '1.2\\n1\\nsic.fdf\\n1\\n\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.2\n1\nsic.fdf\n1\n\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.2\\n1\\nsic.fdf\\n1\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.2\n1\nsic.fdf\n1\n\n\n\n\n\n\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_RESOLVED=$(grep "Resolved :" "$OUT/sic_console.log" | head -1)
 MENU_RESOLVED=$(grep "Resolved :" "$TMP/session.log" | head -1)
 if [ "$CLI_RESOLVED" = "$MENU_RESOLVED" ]; then
@@ -143,7 +143,7 @@ Three self-contained folders were generated under output/:
 
 output/sic/ and output/fallback/ each hold the actual pseudopotential
 files, ready to reference from a calc.fdf; sic/ also has stb_pseudo_
-report.txt (via --save-report) and this folder's own references.bib
+report.txt (via) and this folder's own references.bib
 (SIESTA + PseudoDojo citations).
 
 As a next step, try on your own:

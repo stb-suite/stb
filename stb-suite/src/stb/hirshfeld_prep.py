@@ -276,9 +276,7 @@ def main():
                          help="Root directory to write combined/ and neutral/<species>/ into "
                               "(default: hirshfeld_study).")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_hirshfeldPrep_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false",
                          help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hirshfeldPrep {VERSION}")
@@ -293,7 +291,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("hirshfeldPrep") if args.save_report else None
+    report_path = new_report_path("hirshfeldPrep")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-HIRSHFELDPREP REPORT =====", 'magenta'), f_out)

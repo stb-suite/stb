@@ -218,9 +218,7 @@ def main():
                               "site's relaxation is flagged as possibly incomplete -- advisory "
                               "only, never blocks BSSE folder generation.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_adsorbBsse_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-adsorbBsse {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -247,7 +245,7 @@ def main():
         print(color_text(f"[ERROR] '{clean_slab_fdf_path}' not found. Did you run stb-adsorb?", 'red'))
         sys.exit(1)
 
-    report_path = new_report_path("adsorbBsse") if args.save_report else None
+    report_path = new_report_path("adsorbBsse")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== ADSORPTION BSSE (POST-RELAXATION) REPORT =====", 'magenta'), f_out)
@@ -256,7 +254,6 @@ def main():
     print_section("[0] RUN METADATA", f_out)
     print_dual(f"  Directory       : {args.dir}", f_out)
     print_dual(f"  Output file     : {args.file}", f_out)
-    print_dual(f"  Save report     : {'yes -> ' + report_path if args.save_report else 'no'}", f_out)
     print_dual(color_text(
         "\n  [WHY THIS STAGE EXISTS] A Boys-Bernardi counterpoise (BSSE) correction is only "
         "valid if every fragment is evaluated at the SAME geometry as the real, relaxed site -- "

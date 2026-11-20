@@ -415,9 +415,7 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
                          help="Write the 3 relaxed structures (positions + relaxed cell) to "
                               "<directory>/relaxed/ as cif (default), xsf, xyz or vasp.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_gqcaAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version", version=f"stb-gqcaAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -465,7 +463,7 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
     N = 2
     g = gqca_solver.degeneracies(N)
 
-    report_path = new_report_path("gqcaAnalysis") if args.save_report else None
+    report_path = new_report_path("gqcaAnalysis")
     f_out = open(report_path, 'w') if report_path else None
 
     def abort(msg):

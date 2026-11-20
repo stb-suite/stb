@@ -356,7 +356,7 @@ Every direction gets its own `<output-dir>/<direction>/` subfolder —
 — rather than everything flat directly under `strain_runs/`. Run a second
 direction (`y`) into the same `--output-dir` and it gets its own
 `strain_runs/y/` alongside, with no collision and no risk of one
-direction's `--save-report` file overwriting another's. This is exactly
+direction's files overwriting another's. This is exactly
 the layout Stage 2 (section 3) expects: point `--dir` at `strain_runs`
 itself and every direction found underneath is read and compared
 automatically.
@@ -454,11 +454,11 @@ interactive matplotlib plot of the same curve instead — shown on screen
 only, never written to disk. Both draw the stress/force-strain data as
 connected points-and-line (not bare scatter points), the small-strain fit
 line (dashed, clipped to its own fit window — section 3.4), and the peak
-point. `--save-report` persists the numbered report itself to
-`stb_strainAnalysis_report.txt`. All three default off.
+point. The numbered report itself is always saved to
+`stb_strainAnalysis_report.txt`; the plots default off.
 
 ```
-$ stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot
+$ stb-strainAnalysis --file calc.out --dir strain_runs --save-gnuplot
 ...
 [3] MECHANICAL PROPERTIES
 ------------------------------------------------------------
@@ -479,7 +479,7 @@ Direction       : X
 
 Same as Stage 1 (section 2.7): `stb-suite` → `5.1.2` asks the same
 questions (directory, output filename, dimensionality — `auto`/`3d`/`2d`/
-`1d`, advanced settings, yield, output directory, save-report/
+`1d`, advanced settings, yield, output directory,
 save-gnuplot/view) instead of flags, and calls the exact same
 `stb-strainAnalysis` underneath.
 
@@ -619,8 +619,8 @@ verified result.
    biaxial direction only ever reports its first-axis component, not a
    true biaxial modulus (section 5).
 
-7. **(Optional) persist or plot the result**: `--save-report` writes the
-   full report to `stb_strainAnalysis_report.txt`; `--save-gnuplot` writes
+7. **(Optional) plot the result** (the full report is always saved to
+   `stb_strainAnalysis_report.txt`): `--save-gnuplot` writes
    `<direction>_curve.dat`/`.gplot` (render with `cd <output-dir> &&
    gnuplot <script>.gplot`, section 3.5); `--view` opens the same curve
    interactively in matplotlib instead.

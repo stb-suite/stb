@@ -631,7 +631,7 @@ def main():
         description="Mechanical Properties from Stress-Strain Data (Stage 2 of stb-strain).",
         epilog="Example usage:\n"
                "  stb-strainAnalysis --file calc.out\n"
-               "  stb-strainAnalysis --file calc.out --dir strain_runs --save-report --save-gnuplot --view\n"
+               "  stb-strainAnalysis --file calc.out --dir strain_runs --save-gnuplot --view\n"
                "  stb-strainAnalysis --file calc.out --dimensionality 1d --cross-section 45.2\n",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -674,9 +674,7 @@ def main():
                              "--save-gnuplot (the report goes to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_strainAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the curve data + a companion .gplot script (single "
                              "direction: <direction>_curve.dat/.gplot; multiple directions: "
@@ -702,7 +700,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("strainAnalysis") if args.save_report else None
+    report_path = new_report_path("strainAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -719,7 +717,6 @@ def main():
     print_dual(f"Output filename   : {args.file}", f_out)
     print_dual(f"Dimensionality    : {args.dimensionality}", f_out)
     print_dual(f"Output dir        : {args.output_dir}", f_out)
-    print_dual(f"Save report       : {'yes' if args.save_report else 'no'}", f_out)
     print_dual(f"Save gnuplot      : {'yes' if args.save_gnuplot else 'no'}", f_out)
     print_dual(f"View (matplotlib) : {'yes' if args.view else 'no'}", f_out)
     if report_path:
@@ -885,10 +882,7 @@ def main():
 
     print_section("[5] SUMMARY & NEXT STEPS", f_out)
     print_dual(color_text("[OK] Analysis complete.", 'green'), f_out)
-    if report_path:
-        print_dual(f"Report saved to   : {report_path}", f_out)
-    else:
-        print_dual("Pass --save-report to persist this report to a file.", f_out)
+    print_dual(f"Report saved to   : {report_path}", f_out)
     if not args.save_gnuplot:
         print_dual("Pass --save-gnuplot to also write the curve data + a gnuplot script.", f_out)
     if not args.view:

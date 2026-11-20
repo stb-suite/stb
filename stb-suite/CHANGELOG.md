@@ -382,9 +382,11 @@ version before) and **Added** (new options and tools).
   `elastic_stage2.txt` in the current folder, `neb_setup.txt` inside `neb_run/`,
   `gqca_stage1.txt` inside the output folder, `stb_bands_report.txt` inside `--output-dir`, ...), so
   a second run, of the same tool on another folder or of a tool with the same file name, silently
-  replaced the first report. Tools that write their report only with `--save-report` still do; the
-  ones that always wrote one (`stb-neb`, `stb-gqca`, `stb-irModes`, `stb-ramanModes`) still do.
-  `stb-clean` never removes an `stb_*_report*.txt`.
+  replaced the first report. `stb-clean` never removes an `stb_*_report*.txt`.
+- **Every command always writes its report**: `--save-report` is gone from the help, the menu no
+  longer asks about it, and the documentation no longer mentions it. The option is still accepted and
+  ignored, so scripts that pass it keep working. Scripts that answer the menu through a pipe must
+  drop the answer they gave to the report question (the examples were updated).
 - **No stage reads a report any more.** A report is only for you to read; what a later stage needs
   goes into a JSON file of the run folder: `sites/adsorption_sites.json` (stb-adsorb, read by
   stb-adsorbBsse/Analysis/Gibbs, was the `# SITE_TABLE` of `sites/adsorption_sites.txt`),

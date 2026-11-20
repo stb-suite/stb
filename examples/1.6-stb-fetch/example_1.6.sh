@@ -59,7 +59,7 @@ B -- interactive stb-suite menu:
   Select an option (0-7, or a tool code like 5.1.2): 1.6
 
 "1.6" walks you through picking a source/provider, an exact id or a formula
-search, an optional unit-cell reduction, and the save-report/--view prompts
+search, an optional unit-cell reduction, and the --view prompt
 -- the same choices the CLI flags below control directly.
 EOF
 pause
@@ -74,8 +74,8 @@ note in [2], and [3] STRUCTURE VALIDATION reporting a plain 3D space group
 (no vacuum axis, so no layer/point group applies here).
 EOF
 mkdir -p "$OUT/cod-by-id"
-echo "\$ stb-fetch --source cod --cod-id 1010369 --save-report --no-intro -o fe3o4.fdf"
-(cd "$OUT/cod-by-id" && stb-fetch --source cod --cod-id 1010369 --save-report --no-intro -o fe3o4.fdf > console.log)
+echo "\$ stb-fetch --source cod --cod-id 1010369 --no-intro -o fe3o4.fdf"
+(cd "$OUT/cod-by-id" && stb-fetch --source cod --cod-id 1010369 --no-intro -o fe3o4.fdf > console.log)
 grep -E "disorder|Dimensionality|Space group|Layer group|Point group" "$OUT/cod-by-id/console.log"
 pause
 
@@ -83,8 +83,8 @@ echo "=================================================================="
 echo " output/cod-primitive/  --  same entry, reduced to its primitive cell"
 echo "=================================================================="
 mkdir -p "$OUT/cod-primitive"
-echo "\$ stb-fetch --source cod --cod-id 1010369 --unitcell primitive --save-report --no-intro -o fe3o4_prim.fdf"
-(cd "$OUT/cod-primitive" && stb-fetch --source cod --cod-id 1010369 --unitcell primitive --save-report --no-intro -o fe3o4_prim.fdf > console.log)
+echo "\$ stb-fetch --source cod --cod-id 1010369 --unitcell primitive --no-intro -o fe3o4_prim.fdf"
+(cd "$OUT/cod-primitive" && stb-fetch --source cod --cod-id 1010369 --unitcell primitive --no-intro -o fe3o4_prim.fdf > console.log)
 grep -E "^Atoms|Unit cell mode|Output atoms" "$OUT/cod-primitive/console.log"
 echo
 echo "56 conventional-cell atoms reduced down to the primitive cell above."
@@ -105,8 +105,8 @@ twodmatpedia (an OPTIMADE provider, no API key needed) entry 2dm-3150 is a
 monolayer MoS2 -- exactly one vacuum-padded axis.
 EOF
 mkdir -p "$OUT/optimade-2d"
-echo "\$ stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 --save-report --no-intro -o mos2.fdf"
-(cd "$OUT/optimade-2d" && stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 --save-report --no-intro -o mos2.fdf > console.log)
+echo "\$ stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 --no-intro -o mos2.fdf"
+(cd "$OUT/optimade-2d" && stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 --no-intro -o mos2.fdf > console.log)
 grep -E "Dimensionality|Space group|Layer group" "$OUT/optimade-2d/console.log"
 pause
 
@@ -155,12 +155,12 @@ echo "=================================================================="
 echo " Proof: CLI and the interactive stb-suite menu agree"
 echo "=================================================================="
 echo "Driving the same COD-by-id (1010369) case through the interactive"
-echo "menu (main prompt -> '1.6' -> defaults -> save-report) and comparing"
+echo "menu (main prompt -> '1.6' -> defaults) and comparing"
 echo "its report against output/cod-by-id/'s."
 TMP="$(mktemp -d)"
 echo
-echo "\$ printf '1.6\\n\\n\\n1010369\\n\\nfetched_menu.fdf\\ny\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.6\n\n\n1010369\n\nfetched_menu.fdf\ny\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.6\\n\\n\\n1010369\\n\\nfetched_menu.fdf\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.6\n\n\n1010369\n\nfetched_menu.fdf\nn\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_LINES=$(grep -E "^Formula|^Space group" "$OUT/cod-by-id/console.log")
 MENU_LINES=$(grep -E "^Formula|^Space group" "$TMP/stb_fetch_report.txt")
 if [ "$CLI_LINES" = "$MENU_LINES" ]; then

@@ -122,7 +122,7 @@ continuous scan is correctly left un-broadened.
   kind of `(001)` low-angle artifact. Worth knowing before reading too much
   into a low-angle peak from a slab/monolayer structure.
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report to the console:
 
@@ -137,11 +137,12 @@ Every run prints a numbered report to the console:
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
 
 **The full peak-by-peak table is not printed anywhere** (console or
-`--save-report`'s file) — it used to be, in full, which could run to
+the report file) — it used to be, in full, which could run to
 hundreds of lines for a low-symmetry structure over a wide 2-theta range.
 It only ever lives in `xrd_pattern.dat`.
 
-- **`--save-report`** — persist the (table-free) report to `stb_xrd_report.txt`.
+- **Report** — always saved to `stb_xrd_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** — write `xrd_pattern.dat` (the actual peak list —
   2theta, d, h, k, l, intensity — with a complete, human-readable header:
   structure/formula/space group/wavelength/range, not just pyxtal's own
@@ -230,7 +231,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `save-gnuplot/`       | `--save-gnuplot`: the stick-pattern `.dat`/`.gplot` pair, only with the flag |
 | `compare/`            | `--compare-to` a synthetic mock-experimental pattern, similarity score |
 | `self-check/`         | `--compare-to` the structure's OWN `xrd_pattern.dat` — the fixed column/peak-list-broadening bug, and `--raw-experimental` to see the old (wrong) score |
-| `full-report/`        | Default (no report/gnuplot files) vs. `--save-report`, `references.bib` |
+| `full-report/`        | The report file, `references.bib` |
 
 ## Try it yourself
 
@@ -256,7 +257,6 @@ stb-xrd --file structure.fdf --format fdf --compare-to experimental.dat --view
 | `--compare-to`      | Experimental pattern file (2-theta first column, intensity last column); prints a similarity score. |
 | `--raw-experimental` | With `--compare-to`, never auto-broaden a peak-list-looking experimental file — compare it exactly as read. |
 | `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
-| `--save-report`     | Persist the full report to `stb_xrd_report.txt`.                       |
 | `--save-gnuplot`    | Also write `xrd_pattern.dat`/`xrd_pattern.gplot`.                      |
 | `--view`            | Show an interactive matplotlib preview.                                |
 

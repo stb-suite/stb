@@ -718,8 +718,8 @@ does not.
    silently drops imaginary modes from those sums, so they'd be wrong, not
    just absent).
 
-7. **(Optional) persist or view**: `--save-report` writes
-   `stb_phononsPos_report.txt`; `--save-gnuplot` writes `.dat`/`.gplot` pairs
+7. **(Optional) plots** (the report is always saved to
+   `stb_phononsPos_report.txt`): `--save-gnuplot` writes `.dat`/`.gplot` pairs
    (off by default, Section 4.7); `--view` pops up the computed plots
    live.
 

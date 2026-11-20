@@ -74,7 +74,7 @@ stb-suite
 
 `1.5` itself offers two sub-modes: **[1]** read species off a structure
 file and auto-fill `U` from the reference table, or **[2]** enter species
-one at a time by hand. Both end with the same save-block/save-report
+one at a time by hand. Both end with the same save-block
 prompts. `example_1.5.sh` proves the CLI and the menu agree.
 
 ## Files in this folder
@@ -93,7 +93,7 @@ prompts. `example_1.5.sh` proves the CLI and the menu agree.
 ./example_1.5.sh
 ```
 
-Every case is generated with `--save-report`, each into its own folder
+Every case is generated each into its own folder
 under `output/` — `stb_dftu_report.txt` + `references.bib`:
 
 | Folder                    | Command (conceptually)                                          |
@@ -141,7 +141,7 @@ stb-dftu --species Cr --u 3.7 --shell 3d
 ```
 stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
          [--j <eV>...] [--shell <3d|4d|5d|4f|5f>...] [-o/--output <file>]
-         [--list-reference] [--suggest <element>] [--save-report]
+         [--list-reference] [--suggest <element>]
 ```
 
 - `--species`/`--fdf` — one is required (unless `--list-reference`/
@@ -154,8 +154,8 @@ stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
 - `-o/--output` — also save the block to a file.
 - `--list-reference`/`--suggest <element>` — print the reference table (or
   one value) and exit; no block generated.
-- `--save-report` (optional): also persist the report to
-  `stb_dftu_report.txt`. Off by default.
+- **Report** — always saved to `stb_dftu_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
 `references.bib` is always written — there's no flag for it.
 

@@ -37,7 +37,7 @@ case_() {
     [ -s "$WORK/$name/stb_mlmd_report.txt" ] && { echo "$name: done"; return; }
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M))"
-    (cd "$WORK/$name" && stb-mlmd --file "$WORK/$file" --device cuda --save-report --save-gnuplot --png \
+    (cd "$WORK/$name" && stb-mlmd --file "$WORK/$file" --device cuda --save-gnuplot --png \
         -o traj.xsf --no-intro "$@" < /dev/null > mlmd.log 2>&1) || echo "$name: FAILED (see $WORK/$name/mlmd.log)"
 }
 

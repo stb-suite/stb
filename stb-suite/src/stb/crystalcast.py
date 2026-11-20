@@ -478,7 +478,7 @@ stb-symmetry or stb-unitcell.)""",
                "  %(prog)s --substitute Cl:F -f rocksalt.fdf -o rocksalt_f.fdf\n"
                "  %(prog)s --subgroup -f spinel_1.fdf --count 5 -o distorted.fdf\n"
                "  %(prog)s --supergroup --target-group 225 -f distorted_1.fdf -o parent.fdf\n"
-               "  %(prog)s --group 225 --species Ni O --num-ions 4 8 --save-report --view\n"
+               "  %(prog)s --group 225 --species Ni O --num-ions 4 8 --view\n"
     )
 
     parser.add_argument("--substitute", nargs="+", default=None, metavar="OLD:NEW",
@@ -611,9 +611,7 @@ stb-symmetry or stb-unitcell.)""",
                              "matches stb-symmetry/stb-unitcell).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_crystalcast_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) of every structure written "
                              "by this run (for --substitute/--subgroup/--supergroup, the input "
@@ -683,7 +681,7 @@ stb-symmetry or stb-unitcell.)""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("crystalcast") if args.save_report else None
+    report_path = new_report_path("crystalcast")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-CRYSTALCAST REPORT =====", 'magenta'), f_out)

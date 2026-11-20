@@ -160,8 +160,8 @@ one extra first choice (single file vs. a whole folder) before the usual
 
 ## Optional (off by default)
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_convdos_report.txt`.
+- **Report** — always saved to `stb_convdos_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--size`** — explicit kernel width in samples (must be odd), instead
   of the automatic 3-sigma sizing.
 - **`--output-dir`** (`--dir` mode only) — where the broadened tree goes;
@@ -201,7 +201,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `basic-broadening/`    | Sharp spikes -> smooth peaks, the numbered report, the conservation check |
 | `sigma-vs-fwhm/`       | `--sigma 50` and the equivalent `--fwhm 117.741` give the identical broadening |
 | `dir-mode/`            | A real `stb-dos` output tree broadened in one `--dir` command, mirrored structure, one skipped-file example |
-| `full-report/`         | Default (no report file) vs. `--save-report` (`stb_convdos_report.txt`), `references.bib` |
+| `full-report/`         | The report file (`stb_convdos_report.txt`), `references.bib` |
 
 ## Try it yourself
 
@@ -210,7 +210,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 stb-convdos --file dos_total.dat --sigma 50 --out dos_total_filtered.dat
 
 # Broaden an entire stb-dos output folder in one command
-stb-convdos --dir my_calc_dos/ --sigma 50 --save-report
+stb-convdos --dir my_calc_dos/ --sigma 50
 ```
 
 ## Flag reference
@@ -225,7 +225,6 @@ stb-convdos --dir my_calc_dos/ --sigma 50 --save-report
 | `--out`            | Output file. Required with `--file`, invalid with `--dir`.             |
 | `-o/--output-dir`  | Output tree root for `--dir` (default `<dir>_filtered`). Invalid with `--file`. |
 | `--no-plot`        | Skip the before/after plot.                                            |
-| `--save-report`    | Persist the full numbered report to `stb_convdos_report.txt`.          |
 
 ## What's next
 

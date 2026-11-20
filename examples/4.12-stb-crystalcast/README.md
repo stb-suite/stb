@@ -129,7 +129,7 @@ output — `example_4.12.sh` proves this directly at the end.
 ## What every run does (always on)
 
 - **A numbered report** (`[0] RUN METADATA` … `[8] SUMMARY & FILES`)
-  printed to the console and, with `--save-report`, also saved to
+  printed to the console and saved to
   `stb_crystalcast_report.txt`.
 - **Structure validation** (atom proximity, lattice handedness, atomic
   density) on every candidate written.
@@ -154,7 +154,8 @@ output — `example_4.12.sh` proves this directly at the end.
   random.
 - **`--ml-rank`** (+ `--model`/`--custom-model`) — MACE relaxed-energy
   screening of generated candidates.
-- **`--save-report`** / **`--view`** — same as every other stb-suite tool.
+- **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 
 ## Files in this folder
 
@@ -182,7 +183,7 @@ extra isn't installed):
 | Folder                      | What it shows                                                          |
 |-------------------------------|-------------------------------------------------------------------------|
 | `vs-crystalbuilder/`          | The exact same real NiO built two opposite ways — live proof of the comparison table above |
-| `generate/`                   | Rock-salt NiO from `--group 225` + composition; `--save-report`, provenance header, `references.bib` |
+| `generate/`                   | Rock-salt NiO from `--group 225` + composition; the report, provenance header, `references.bib` |
 | `count-and-seed/`              | `--count 3 --seed 7`: distinct candidates, reproducible batches         |
 | `molecular-and-clusters/`      | `--molecular` (water in group 19) and `--dim 0` (isolated point-group cluster) |
 | `substitute/`                  | `O:S` substitution on the NiO structure, symmetry framework preserved   |
@@ -221,7 +222,6 @@ stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --count 10 \
 | `--ml-rank`           | Rank generated candidates by MACE relaxed energy                        |
 | `--model`/`--custom-model` | MACE model for `--ml-rank` (only valid together with it)          |
 | `-o/--output`         | Output `.fdf` file name (default `crystalcast.fdf`)                     |
-| `--save-report`       | Persist the full report to disk                                         |
 | `--view`              | Open the written structure(s) in ASE's interactive viewer                |
 
 ## What's next

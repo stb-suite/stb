@@ -66,7 +66,7 @@ that distribution.""",
                "  %(prog)s -f defect.fdf\n"
                "  %(prog)s -f bulk.fdf --relax-cell -o bulk_relaxed.fdf\n"
                "  %(prog)s -f slab2d.fdf --relax-cell -o slab2d_relaxed.fdf\n"
-               "  %(prog)s -f defect.fdf --save-report --save-data --view\n"
+               "  %(prog)s -f defect.fdf --save-data --view\n"
                "\n"
                "Note: an initial guess that's very far from equilibrium (e.g. a lattice "
                "constant off by 15-20%% or more) can occasionally lead a universal MLIP to "
@@ -107,9 +107,7 @@ that distribution.""",
     parser.add_argument("-o", "--output", type=str, default="relaxed.fdf",
                         help="Output .fdf file name (default: relaxed.fdf).")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_mlrelax_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("--save-data", action="store_true",
                         help="Also write the raw per-step relaxation convergence trace "
                              "(<stem>_relax_convergence.dat). Off by default.")
@@ -131,7 +129,7 @@ that distribution.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = new_report_path("mlrelax") if args.save_report else None
+    report_path = new_report_path("mlrelax")
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

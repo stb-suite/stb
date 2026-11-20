@@ -586,9 +586,7 @@ def main():
                               "calc.out is flagged as possibly not relaxed. Advisory only, never "
                               "blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_nebAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also save the energy-profile curve as gnuplot .dat + .gplot "
                               "scripts, under '<dir>/plot/'. Off by default.")
@@ -674,7 +672,7 @@ def main():
     image_rows_sorted = sorted(image_rows, key=lambda r: r[1])
     band_structures = read_band_structures(images_root, image_rows_sorted)
 
-    report_path = new_report_path("nebAnalysis") if args.save_report else None
+    report_path = new_report_path("nebAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== NEB ENERGY PROFILE REPORT =====', 'magenta')}", f_out)

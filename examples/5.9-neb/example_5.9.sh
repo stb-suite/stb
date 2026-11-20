@@ -259,8 +259,8 @@ write_freeeng "$OUT/mode3/neb_run/cycle_00/image_01/calc.out" "-299.700000" "0.0
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_02/calc.out" "-299.500000" "0.400000"
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_03/calc.out" "-299.700000" "0.015000"
 write_freeeng "$OUT/mode3/neb_run/cycle_00/image_04/calc.out" "-300.000000" "0.010000"
-echo "\$ stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz"
-(cd "$OUT/mode3" && stb-nebAnalysis --dir neb_run --save-report --save-gnuplot \
+echo "\$ stb-nebAnalysis --dir neb_run --save-gnuplot --save-path-xyz"
+(cd "$OUT/mode3" && stb-nebAnalysis --dir neb_run --save-gnuplot \
     --save-path-xyz --no-intro > "$OUT/mode3_analysis.log")
 sed -n '/\[1\] IMAGE ENERGIES/,/\[2\] CONSISTENCY/p' "$OUT/mode3_analysis.log" | head -n -1
 sed -n '/\[3\] BARRIER ANALYSIS/,/\[3b\]/p' "$OUT/mode3_analysis.log" | head -n -1
@@ -406,5 +406,5 @@ As a next step, on your OWN already-relaxed endpoints:
   # run SIESTA in every neb_run/cycle_00/image_NN/ folder, then loop:
   stb-nebCycle --dir neb_run --fmax 0.05 --climb-after 0
   # run SIESTA in the newly-written cycle_NN/, repeat until NEB_CONVERGED
-  stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz
+  stb-nebAnalysis --dir neb_run --save-gnuplot --save-path-xyz
 EOF

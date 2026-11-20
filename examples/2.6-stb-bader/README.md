@@ -153,7 +153,7 @@ looking at any single atom's row on its own.
   crash) — unrelated to the up/down fix above, and outside this suite's
   own code to fix (it's inside the third-party `pybader` package).
 
-## The report: console output, `--save-report`
+## The report: console output
 
 Every run prints a numbered report to the console:
 
@@ -168,12 +168,8 @@ Every run prints a numbered report to the console:
 | `[6] REFERENCES` | writes `references.bib` (SIESTA); names the Bader/PyBader theory papers |
 | `[7] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — also persists the full numbered report to
-  `stb_bader_report.txt`. Off by default, so a plain run only ever writes
-  the `.cube` file(s) and `references.bib` — no text report file at all
-  (the old, always-on `<label>_BADER.txt` this tool used to write
-  unconditionally is gone; a stale one left by an older run is cleaned up
-  automatically instead of being mistaken for current output).
+- **Report** — always saved to `stb_bader_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--output-dir`** — where the `.cube` file(s), `references.bib`, the
   report, and any `--export-volumes` files all land (default: current
   directory).
@@ -235,16 +231,16 @@ charge-density grid):
 | `basic/`              | Z_val detection, the per-atom population/net-charge table, per-species summary |
 | `speed-fast/`         | `--speed fast`'s on-grid method vs. the default near-grid method |
 | `export-volumes/`     | `--export-volumes`: one `.cube` per atom, for VESTA/VMD |
-| `full-report/`        | Default (no report file) vs. `--save-report` (`stb_bader_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_bader_report.txt`), `references.bib` |
 
 ## Try it yourself
 
 ```bash
 # A finished SIESTA calculation of your own
-stb-bader --label my_calc --save-report
+stb-bader --label my_calc
 
 # Point at a specific .out if <label>.out isn't the right one
-stb-bader --label my_calc --ref relax/my_calc.out --save-report
+stb-bader --label my_calc --ref relax/my_calc.out
 
 # Visualize individual atomic volumes in VESTA/VMD
 stb-bader --label my_calc --export-volumes -o bader_out
@@ -255,8 +251,7 @@ stb-bader --label my_calc --export-volumes -o bader_out
 | Flag                 | Meaning                                                                |
 |-----------------------|-------------------------------------------------------------------------|
 | `-l/--label`         | SystemLabel used in SIESTA.                                            |
-| `-o/--output-dir`    | Where the `.cube` file(s)/`references.bib` (and the report, with `--save-report`) land. |
-| `--save-report`      | Persist the full numbered report to `stb_bader_report.txt`.            |
+| `-o/--output-dir`    | Where the `.cube` file(s)/`references.bib` land. |
 | `--ref`              | Path to a specific `.out` file to read `Z_val` from.                   |
 | `--speed`            | `normal` (near-grid, default) or `fast` (on-grid, less precise edges). |
 | `--threads`          | Worker threads for PyBader.                                            |

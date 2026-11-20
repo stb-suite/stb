@@ -578,9 +578,7 @@ def main():
     parser.add_argument("--png", action="store_true",
                          help="Save that figure as <output-dir>/chargediff_fragments.png. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                         help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_chargediffPrep_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                         help=argparse.SUPPRESS)
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-chargediffPrep {VERSION}")
 
@@ -595,7 +593,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = new_report_path("chargediffPrep") if args.save_report else None
+    report_path = new_report_path("chargediffPrep")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== CHARGE DENSITY DIFFERENCE -- STAGE 1: PREP =====", 'magenta'), f_out)

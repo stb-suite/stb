@@ -34,7 +34,7 @@ fresh_copy "$WORK/si_run"
 report dry_run stb-clean --no-intro --path si_run --dry-run
 
 echo "== 2. The real clean: archive, check, remove; then restore from the archive"
-report clean stb-clean --no-intro --path si_run -n --save-report
+report clean stb-clean --no-intro --path si_run -n
 listing clean si_run
 tar -tzf "$WORK"/si_run_backup_*.tar.gz | sort > "$REF/clean/archive_contents.txt"
 mkdir "$WORK/restored" && cp -a "$WORK/si_run/." "$WORK/restored/" && tar -xzf "$WORK"/si_run_backup_*.tar.gz -C "$WORK/restored"

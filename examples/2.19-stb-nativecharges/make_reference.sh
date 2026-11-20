@@ -47,6 +47,6 @@ report guard_nocharges --path nocharges
 echo "== 6. The interactive menu (stb-suite, code 2.19)"
 mkdir -p "$REF/menu"
 # path glob, no label, details n, no csv, no report, Enter, 0 = exit
-(cd "$WORK" && printf '2.19\nh2o_basis/*\n\nn\n\nn\n\n0\n' | stb-suite 2>&1) | clean \
+(cd "$WORK" && printf '2.19\nh2o_basis/*\n\nn\n\n\n0\n' | stb-suite 2>&1) | clean \
     | sed -n '/STB-NATIVECHARGES REPORT/,/report complete/p' > "$REF/menu/report.txt"
 echo "done -- reference_results/<case>/"

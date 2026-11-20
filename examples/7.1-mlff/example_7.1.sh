@@ -111,10 +111,10 @@ mkdir -p "$OUT/run"
 cp structure.fdf calc.fdf "$OUT/run/"
 cd "$OUT/run"
 echo "\$ stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault --n-configs 16 \\"
-echo "      --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9 --save-report"
+echo "      --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9"
 stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault --n-configs 16 \
     --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9 \
-    --save-report --no-intro > stage1.log 2>&1
+    --no-intro > stage1.log 2>&1
 section mlff_runs/stb_mlff_report.txt 2 | grep -E "k-grid|Run type|Dispersion"
 section mlff_runs/stb_mlff_report.txt 3
 cat <<'EOF'
@@ -156,7 +156,7 @@ pause
 
 banner "Case 4 (reference): Stage 2, round 1 -- a committee of 3 fine-tuned models"
 cat <<'EOF'
-$ stb-mlffAnalysis --committee 3 --device cpu --save-data --save-report     (~25 min on 2 cores)
+$ stb-mlffAnalysis --committee 3 --device cpu --save-data     (~25 min on 2 cores)
 Every folder on one level of theory, the per-element E0 fitted on SIESTA's energy scale, three
 members fine-tuned from MACE-MP medium (seeds 123-125, own train/valid split each), every model
 evaluated on every config, and a short MD with each model (stability + speed):
@@ -169,7 +169,7 @@ pause
 
 banner "Case 5 (reference): Stage 3, round 1 -- test set, phonons against SIESTA, verdict"
 cat <<'EOF'
-$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data --save-report
+$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --save-data
 The 9 test configs were never trained on; +/- is a bootstrap over them. --phonon-ref runs the
 model on the SAME displaced 5x5 supercells as a finished SIESTA phonon calculation (5.4).
 EOF
@@ -182,7 +182,7 @@ pause
 
 banner "Case 6 (reference): Stage 4 -- molecular dynamics with the model, the committee picks"
 cat <<'EOF'
-$ stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data --save-report
+$ stb-mlffActiveLearning --sampling-method md --auto-sampling --top-k 6 --save-data
 NVT trajectories run WITH THE MODEL (minutes, no SIESTA); every frame scored by the committee's
 force spread; the unphysical, the ones above the energy cap and the already-known (novelty)
 dropped; a diverse batch of 6 written to configs_round_02/. Each energy is also a temperature.
@@ -196,7 +196,7 @@ pause
 banner "Case 7 (reference): round 2 and the MD check -- STOP"
 cat <<'EOF'
 SIESTA on the 6 picks; stb-mlffAnalysis --init-from previous (round 2); then
-$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2 --save-report
+$ stb-mlffValidate --phonon-ref phonons/phonon_runs --target-force 30 --compare 1 2
 and an MD check: 2 ps at 600 K run with round 2's model, 6 frames labelled by SIESTA.
 EOF
 section "$G3/stb_mlffValidate_report.txt" 3 | sed -n '3,7p'
@@ -278,7 +278,7 @@ figure.
 EOF
 mkdir -p "$OUT/menu"
 cp structure.fdf calc.fdf "$OUT/menu/"
-(cd "$OUT/menu" && printf '7.1.1\n\n\n2\n16\n0.015 0.03 0.045 0.06\n-3 -1.5 1.5 3 4.5\n9\nn\nn\nmenu_runs\nn\nn\n\nn\nn\n\n0\n' \
+(cd "$OUT/menu" && printf '7.1.1\n\n\n2\n16\n0.015 0.03 0.045 0.06\n-3 -1.5 1.5 3 4.5\n9\nn\nn\nmenu_runs\nn\n\nn\nn\n\n0\n' \
     | stb-suite > menu.log 2>&1) || true
 n_same=0; n_diff=0
 for d in mlff_runs/configs_round_01/mlff_config_* mlff_runs/mlff_test/test_*; do

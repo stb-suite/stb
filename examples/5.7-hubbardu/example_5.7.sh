@@ -211,14 +211,14 @@ echo "final computed U against output/workflow/'s direct-CLI run."
 TMP="$(mktemp -d)"
 cp structure.fdf calc.fdf "$TMP/"
 echo
-echo "\$ printf '5.7.1\\nstructure.fdf\\ncalc.fdf\\nMn\\n\\n\\n\\n\\nhubbardu_runs\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '5.7.1\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\nhubbardu_runs\nn\n\n0\n' | stb-suite > menu1.log 2>&1)
+echo "\$ printf '5.7.1\\nstructure.fdf\\ncalc.fdf\\nMn\\n\\n\\n\\n\\nhubbardu_runs\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '5.7.1\nstructure.fdf\ncalc.fdf\nMn\n\n\n\n\nhubbardu_runs\n\n0\n' | stb-suite > menu1.log 2>&1)
 echo "placeholder" > "$TMP/hubbardu_runs/reference/siesta.DM"
-echo "\$ printf '5.7.2\\nhubbardu_runs\\n\\n\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '5.7.2\nhubbardu_runs\n\n\nn\n\n0\n' | stb-suite > menu2.log 2>&1)
+echo "\$ printf '5.7.2\\nhubbardu_runs\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '5.7.2\nhubbardu_runs\n\n\n\n0\n' | stb-suite > menu2.log 2>&1)
 populate_synthetic_response "$TMP/hubbardu_runs" 0.30 0.20 5.0
-echo "\$ printf '5.7.3\\nhubbardu_runs\\n\\n\\n\\nn\\nn\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '5.7.3\nhubbardu_runs\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > menu3.log 2>&1)
+echo "\$ printf '5.7.3\\nhubbardu_runs\\n\\n\\n\\nn\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '5.7.3\nhubbardu_runs\n\n\n\nn\nn\n\n0\n' | stb-suite > menu3.log 2>&1)
 CLI_U=$(grep "Computed U" "$OUT/workflow_stage3.log" | head -1)
 MENU_U=$(grep "Computed U" "$TMP/menu3.log" | head -1)
 if [ "$CLI_U" = "$MENU_U" ]; then

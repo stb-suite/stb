@@ -304,9 +304,7 @@ def main():
                              "'zero': (E_KS + FreeEng)/2, the T -> 0 extrapolation used for smeared metals.\n"
                              "Section [2b] lists E_KS, FreeEng and -T*S of every run in any case.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_cohesiveAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
 
     parser.add_argument("--view", action="store_true",
                         help="Show an interactive matplotlib preview of the BSSE-correction "
@@ -344,7 +342,7 @@ def main():
     scan_points = discover_scan_points(root_dir)
     scan_available = len(scan_points) > 0
 
-    report_path = new_report_path("cohesiveAnalysis") if args.save_report else None
+    report_path = new_report_path("cohesiveAnalysis")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-COHESIVEANALYSIS REPORT (COHESIVE ENERGY) =====", 'magenta'), f_out)
@@ -359,7 +357,6 @@ def main():
     if scan_available:
         cuts = ", ".join(f"{c:.1f}" for c, _d in scan_points)
         print_dual(f"BSSE cutoff scan        : found, {len(scan_points)} point(s) ({cuts} Ang)", f_out)
-    print_dual(f"Save report             : {'yes' if args.save_report else 'no'}", f_out)
     print_dual(f"View (matplotlib)       : {'yes' if args.view else 'no'}", f_out)
     if report_path:
         print_dual(f"Report file             : {report_path}", f_out)
@@ -736,10 +733,7 @@ def main():
         elif e_coh_per_atom_check is not None:
             print_dual(f"Cohesive energy per atom (BSSE check, larger cutoff): {e_coh_per_atom_check:.4f} "
                        f"eV/atom ({e_coh_per_atom_check - e_coh_per_atom_bsse:+.4f} vs base)", f_out)
-    if report_path:
-        print_dual(f"Report      : {report_path}", f_out)
-    else:
-        print_dual("Pass --save-report to persist this report to a file.", f_out)
+    print_dual(f"Report      : {report_path}", f_out)
     if plot_path:
         print_dual(f"Plot        : {plot_path}", f_out)
 

@@ -118,7 +118,7 @@ output — `example_4.1.sh` proves this directly at the end.
 
 - **A numbered report** (`[0] RUN METADATA` … `[6] SUMMARY & FILES` — `[3]`
   only appears with `--ml-relax`, see below) printed to the console and,
-  with `--save-report`, also saved to `stb_2Dstacking_report.txt`.
+  always saved to `stb_2Dstacking_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, each an explicit `[OK]`/`[WARNING]`/`[SKIPPED]` row — run for
   **every** heterostructure the invocation builds (not just one), even in
@@ -157,9 +157,8 @@ output — `example_4.1.sh` proves this directly at the end.
   protect.
 - **`--vacuum`** — overrides the vacuum thickness instead of inheriting
   layer 1's own.
-- **`--save-report`** — also persists the full report (structure
-  validation, the symmetry table, and, with `--ml-relax`, the full MACE
-  simulation detail) to `stb_2Dstacking_report.txt`.
+- **Report** — always saved to `stb_2Dstacking_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--view`** — opens every generated heterostructure in ASE's
   interactive 3D viewer (`ase-gui`), as separate, pageable frames. Needs a
   local display (or `ssh -X`/`-Y`). Never exercised by `example_4.1.sh`
@@ -210,7 +209,7 @@ installed):
 | `strain-modes/`      | `-sm top/bottom/sym` side by side                            |
 | `twist/`             | `--twist` — a genuine 21.8° Moiré cell vs. the naive, silently-untwisted `-id 0` pick|
 | `custom-shift/`      | `-tx`/`-ty` + `--vacuum` — an arbitrary registry point, contrasted with `--batch_sym`'s symmetry-protected ones|
-| `full-report/`       | `--save-report` + the validation checklist + `references.bib`|
+| `full-report/`       | the report + the validation checklist + `references.bib`|
 | `ml-relax/`          | `--ml-relax`/`--ml-relax-cell` — MACE pre-relaxation, vacuum axis fixed|
 
 ## Try it yourself
@@ -250,7 +249,6 @@ stb-2Dstacking -l1 graphene.fdf -l2 graphene.fdf -id 70 -a 50 -t 21.8
 | `-sm/--strain_mode`           | `top` (default) / `bottom` / `sym` — which layer absorbs strain    |
 | `-o/--output`                 | Output `.fdf` base name (default `stacked_structure.fdf`)          |
 | `-sp/--symprec`               | Symmetry tolerance, Å (default 0.01)                               |
-| `--save-report`               | Persist the full report (incl. symmetry table) to disk            |
 | `--view`                      | Open every result in ASE's interactive 3D viewer                   |
 | `--ml-relax`                  | Pre-relax with a MACE potential before writing (positions only)    |
 | `--ml-relax-cell`             | With `--ml-relax`, also relax `a`/`b` (vacuum axis `c` stays fixed) |

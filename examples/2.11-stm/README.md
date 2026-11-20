@@ -154,7 +154,7 @@ vacuum-padded axis at all (unlike `stb-workfunction`, which can degrade to
 an assumed axis — an STM image without a genuine, confirmed surface is
 meaningless, not just less precise).
 
-## The report: console output, `--save-report`, `--save-gnuplot`, `--view`
+## The report: console output, `--save-gnuplot`, `--view`
 
 Every run prints a numbered report, the same `[0]...[5]` style every newer
 tool in this suite uses:
@@ -168,8 +168,8 @@ tool in this suite uses:
 | `[4] REFERENCES` | writes `references.bib` (SIESTA + Tersoff-Hamann) |
 | `[5] SUMMARY & FILES` | status and a recap of every file written |
 
-- **`--save-report`** — persist the report to `stb_stm_report.txt`. Off by
-  default.
+- **Report** — always saved to `stb_stm_report.txt` in the current folder (`_1`, `_2`, ... when
+  that name is taken); there is no option for it.
 - **`--save-gnuplot`** — write `stm_<mode>.dat` (a pm3d-blocked X/Y/value
   file) + `stm_<mode>.gplot` together. Off by default — this tool used to
   write both **unconditionally** on every run. The `.gplot` script's own
@@ -209,7 +209,7 @@ Select an option (0-7, or a tool code like 5.1.2): 2.11
 Both paths call the exact same underlying tool and produce the exact same
 output — `example_2.11.sh` proves this directly at the end. The menu
 defaults `--iso`/`--z` the same way the CLI does (just press Enter), plus
-separate `y/N` prompts for `--save-report`/`--save-gnuplot`/`--view`.
+separate `y/N` prompts for `--save-gnuplot`/`--view`.
 
 ## Files in this folder
 
@@ -241,13 +241,13 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `constant-current/`      | The default mode with default `--iso`: the real STM feedback-loop image, corrugation reported |
 | `constant-height/`       | `--mode height` at the default `--z` going flat (LDOS already decayed to ~0 there) vs. a closer `--z` recovering real contrast |
 | `iso-sensitivity/`       | The same structure at three `--iso` values -- too high (mostly NaN), sensible (default), and very low |
-| `full-report/`           | Default (no report/data files) vs. `--save-report --save-gnuplot`, `references.bib` |
+| `full-report/`           | `--save-gnuplot`, the report, `references.bib` |
 
 ## Try it yourself
 
 ```bash
 # Your own finished SIESTA slab calculation (needs %block LocalDensityOfStates -- see above)
-stb-stm --label my_slab --mode current --save-report --save-gnuplot
+stb-stm --label my_slab --mode current --save-gnuplot
 
 # A shallower/deeper occupied-states window, or an empty-states one, needs a NEW SIESTA run
 # (the bias window is baked into the .LDOS file itself, not a stb-stm option)
@@ -268,7 +268,6 @@ stb-stm --label my_slab --mode height --z 4.0 --view
 | `--iso`             | LDOS threshold for `--mode current` (default `0.001` e/Bohr^3).       |
 | `--z-max`           | Upper bound of the search/plot window (default: half the detected vacuum gap). |
 | `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
-| `--save-report`     | Persist the full report to `stb_stm_report.txt`.                       |
 | `--save-gnuplot`    | Also write `stm_<mode>.dat`/`stm_<mode>.gplot`.                        |
 | `--view`            | Show an interactive matplotlib preview.                                |
 

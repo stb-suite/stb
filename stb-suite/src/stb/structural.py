@@ -610,7 +610,7 @@ def main():
         epilog="Example usage:\n"
                "  stb-structural --file structure.fdf --format fdf --mode mean\n"
                "  stb-structural --file siesta.STRUCT_OUT --format struct_out --mode list --list 1,4,5\n"
-               "  stb-structural --file structure.fdf --format fdf --mode mean --save-report",
+               "  stb-structural --file structure.fdf --format fdf --mode mean",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--file", required=True, help="Path to structure file.")
@@ -630,9 +630,7 @@ def main():
                         help="Cutoff radius for g(r), in Å (default: 10.0). Larger values capture "
                              "more coordination shells but take longer for large structures.")
     parser.add_argument("--save-report", action="store_true",
-                        help="Also write the report (for you to read; the later stages never read it) to "
-                             "stb_structural_report.txt in the current folder (_1, _2, ... when that name is "
-                             "taken, so no report is overwritten). Off by default.")
+                        help=argparse.SUPPRESS)
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -708,7 +706,7 @@ def main():
         if os.path.exists(stale_rdf):
             os.remove(stale_rdf)
 
-    report_path = new_report_path("structural") if args.save_report else None
+    report_path = new_report_path("structural")
     f_out = open(report_path, "w") if report_path else None
 
     print_report(results, args.file, args.format, args, rdf_summary, report_path, f_out)

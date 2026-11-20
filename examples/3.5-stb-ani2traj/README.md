@@ -462,7 +462,6 @@ It needs the `stb_suite` package only (no SIESTA). It starts by wiping its own `
 | `--fdf FILE` | `<label>.fdf`, or the `.fdf` with that `SystemLabel` | input `.fdf` (MD settings, fallback cell) |
 | `--log FILE` | `<label>.out`, or the only `*.out` | SIESTA log (per-step cell, MD settings) |
 | `--dry-run` | off | report only |
-| `--save-report` | off | also write `stb_ani2traj_report.txt` next to the `.ANI` |
 | `--no-intro`, `-v` | | skip the banner; print the version |
 
 ## 14. What's next

@@ -407,10 +407,10 @@ looser `--fmax`, convergence (`NEB_CONVERGED` written).
 ## 7. Stage 2 mechanics, live (`stb-nebAnalysis`, code `5.9.2`)
 
 ```
-$ stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz
+$ stb-nebAnalysis --dir neb_run --save-gnuplot --save-path-xyz
 ```
 
-Report structure (`[0]`–`[7]`, `--save-report` persists it to
+Report structure (`[0]`–`[7]` persists it to
 `stb_nebAnalysis_report.txt` in the current folder):
 
 ```
@@ -574,7 +574,7 @@ the number too far.
    ready to paste into a real submission script), running SIESTA in each
    newly-written `cycle_{N+1}/image_NN/` in between, until
    `neb_run/NEB_CONVERGED` appears.
-5. Run Stage 2: `stb-nebAnalysis --dir neb_run --save-report
+5. Run Stage 2: `stb-nebAnalysis --dir neb_run
    --save-gnuplot --save-path-xyz`. Read `[2]` for the re-validated
    consistency checks and `[3]` for the barrier — both the discrete and
    spline-fitted estimates. For modes 2/3, check `[3b]`'s convergence

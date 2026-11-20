@@ -114,9 +114,10 @@ Several conventions recur across the newer input-generating tools (see
 re-discovering per example:
 
 - **A numbered, sectioned report** (`[0] RUN METADATA`, `[1] ...`, ...)
-  printed to the console and, with `--save-report`, also saved to
-  `stb_<tool>_report.txt` — the same report either way, `--save-report`
-  just also persists it to disk.
+  printed to the console and always saved to `stb_<tool>_report.txt` in the
+  folder you run the command from (`_1`, `_2`, ... when that name is taken, so
+  no report is overwritten). It is only for reading: what a later stage needs
+  goes into a JSON file of the run folder.
 - **`references.bib`** — written automatically, no flag needed, whenever a
   tool's output depends on a citable method (SIESTA itself, a specific
   correction/potential, a database it queried, ...). Merges with whatever

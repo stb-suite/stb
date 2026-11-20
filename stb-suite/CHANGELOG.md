@@ -281,6 +281,13 @@ version before) and **Added** (new options and tools).
   lost the input symmetry at 0.001 Ang but keeps it at 0.01 Ang (e.g. Fm-3m in, R-3m out), and says to
   symmetrize the structure before reuse or keep the angles fixed. The volumes are unchanged.
 
+- `stb-adsorbGibbs --help` said the isolated-reference term was vibrational only, with no
+  translational or rotational entropy, while the tool treats the reference as an ideal gas at 1 bar
+  (`ase.thermochemistry.IdealGasThermo`, as the report says): H2O, C2v, gives Delta S = -127 J/(mol K),
+  a value only the gas's translation and rotation give. The help now describes what is computed and
+  the real limitation: the adsorbed side is harmonic, with hindered translations and rotations
+  treated as vibrations. The numbers are unchanged.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

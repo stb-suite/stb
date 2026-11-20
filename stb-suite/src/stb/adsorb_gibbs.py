@@ -511,21 +511,21 @@ def main():
         description=f"""{color_text("Stage 4 of the Adsorption workflow: combines the vibrational "
         "Hessian/phonon folders stb-adsorbAnalysis --compute-gibbs (Stage 3) wrote into a Gibbs "
         "free energy of adsorption, DG = E_ads(BSSE if available) + DZPE - T*DS.", 'bold')}
-DZPE/DS = [ZPE/S(site) - ZPE/S(isolated adsorbate reference)], both computed with the SAME method
-(local partial-Hessian, or full Phonopy for the site side when Stage 3 used --zpe-mode full) --
-the isolated reference always uses the local, full-molecule Hessian (there's no periodic substrate
-phonon to subtract for a molecule in a vacuum box, so Phonopy's supercell machinery buys nothing
-there; for a single-atom adsorbate this correctly gives ZPE=S=0, since a free atom has no
-vibrational modes at all once its 3 translational modes are excluded).
+DZPE/DS = [ZPE/S(site) - ZPE/S(isolated adsorbate reference)].
 
-KNOWN LIMITATION, always printed in the report: the isolated-reference term above is
-VIBRATIONAL/HARMONIC ONLY -- it does NOT include the translational/rotational entropy a real gas
-molecule has from being free to move/rotate in 3D (an ideal-gas partition-function term this tool
-does not compute). For a single-atom adsorbate this is exact (no rotation/translation to begin
-with beyond the excluded trivial modes); for a polyatomic adsorbate it is an approximation, in the
-same spirit as (though computed differently from) stb-herRefs/stb-oerRefs' own use of a FIXED
-literature entropy for their H2/H2O gas-phase references -- generalized here since there is no
-literature table for an arbitrary adsorbate.""",
+Isolated reference: an IDEAL GAS molecule (ase.thermochemistry.IdealGasThermo, reference pressure
+1 bar) -- translational + rotational + vibrational ZPE/entropy. Its vibrations come from the local,
+full-molecule Hessian; exactly 3N-6 (nonlinear), 3N-5 (linear) or 0 (single atom) modes are kept,
+the highest ones, so finite-difference noise in the rigid-body modes is never counted as a
+vibration. Geometry class and rotational symmetry number come from the point group of the relaxed
+reference. A single atom gets its translational (Sackur-Tetrode) entropy.
+
+Adsorbed side: HARMONIC only -- every real mode of the local partial Hessian (imaginary ones are
+excluded and listed), or of the full Phonopy calculation, site minus clean slab, when Stage 3 used
+--zpe-mode full, is a vibration. Hindered
+translations and rotations of the adsorbate are treated as harmonic modes too; there is no
+free-translator/hindered-rotor model, so a weakly bound adsorbate with very soft modes gets an
+entropy that depends on those soft frequencies (see the mode list in the report).""",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="Usage example:\n"
                "  %(prog)s --dir adsorption_run --tmin 100 --tmax 500\n"

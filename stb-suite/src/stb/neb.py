@@ -378,6 +378,82 @@ def check_path_quality(pmg_images, reaction_coords, f_out, manifest_proven=False
                 f"({step:.4f} Ang vs. a mean step of {mean_step:.4f} Ang) -- {hint}.", 'yellow'), f_out)
 
 
+ANGLE_MARGIN_DEG = 15.0     # an interior image's bond angle beyond the endpoints' range by more than this
+BOND_MARGIN = 0.15          # ... or a bond length beyond it by more than this fraction
+
+
+def intramolecular_outliers(pmg_images, bond_scale=1.2):
+    """Bonds and bond angles among non-metal atoms (a molecule, an adsorbate) bonded in BOTH endpoints
+    (d < bond_scale x the sum of covalent radii) whose value in an interior image lies outside the range
+    the two endpoints span by more than BOND_MARGIN (relative) or ANGLE_MARGIN_DEG. A loosely converged
+    IDPP leaves a molecule distorted in the middle of the band (H-O-H 169 deg on H2O/Ag(111)), and a
+    plain linear interpolation of a rotating molecule shortens its bonds; both cost the NEB many steps
+    or give a wrong first barrier. Returns [(image, 'O1-H2' or 'H2-O1-H3', value, lo, hi, unit)]."""
+    from pymatgen.core.periodic_table import Element
+    from pymatgen.analysis.molecule_structure_comparator import CovalentRadius
+    ends = (pmg_images[0], pmg_images[-1])
+    radii = CovalentRadius.radius
+    nonmetal = [i for i, site in enumerate(ends[0])
+                if not Element(site.specie.symbol).is_metal and not Element(site.specie.symbol).is_metalloid]
+    if len(nonmetal) < 2:
+        return []
+
+    def bonded(st):
+        out = {i: set() for i in nonmetal}
+        for a_i, i in enumerate(nonmetal):
+            for j in nonmetal[a_i + 1:]:
+                cut = bond_scale * (radii[st[i].specie.symbol] + radii[st[j].specie.symbol])
+                if st.get_distance(i, j) < cut:
+                    out[i].add(j)
+                    out[j].add(i)
+        return out
+
+    b0, b1 = bonded(ends[0]), bonded(ends[1])
+    common = {i: b0[i] & b1[i] for i in nonmetal}
+    pairs = [(i, j) for i in nonmetal for j in sorted(common[i]) if i < j]
+    triples = [(a, center, c) for center in nonmetal
+               for a in sorted(common[center]) for c in sorted(common[center]) if a < c]
+    sym = lambda st, i: f"{st[i].specie.symbol}{i + 1}"
+    outliers = []
+    for i, j in pairs:
+        lo, hi = sorted(st.get_distance(i, j) for st in ends)
+        for k, st in enumerate(pmg_images[1:-1], start=1):
+            d = st.get_distance(i, j)
+            if d < lo * (1 - BOND_MARGIN) or d > hi * (1 + BOND_MARGIN):
+                outliers.append((k, f"{sym(st, i)}-{sym(st, j)}", d, lo, hi, "Ang"))
+    for a, center, c in triples:
+        lo, hi = sorted(st.get_angle(a, center, c) for st in ends)
+        for k, st in enumerate(pmg_images[1:-1], start=1):
+            with np.errstate(invalid="ignore"):
+                angle = st.get_angle(a, center, c)
+            # NaN: two atoms on top of each other in that image -- a distortion too.
+            if not np.isfinite(angle) or angle < lo - ANGLE_MARGIN_DEG or angle > hi + ANGLE_MARGIN_DEG:
+                outliers.append((k, f"{sym(st, a)}-{sym(st, center)}-{sym(st, c)}", angle, lo, hi, "deg"))
+    return outliers
+
+
+def report_intramolecular_outliers(outliers, idpp_used, warn_line):
+    """One warning (through `warn_line(text)`) summarizing intramolecular_outliers."""
+    if not outliers:
+        return
+
+    def badness(o):
+        value, lo, hi, unit = o[2], o[3], o[4], o[5]
+        if not np.isfinite(value):
+            return np.inf
+        excess = max(lo - value, value - hi)
+        return excess / max(lo, 1e-6) if unit == "Ang" else excess / 90.0
+
+    k, name, value, lo, hi, unit = max(outliers, key=badness)
+    images = sorted({o[0] for o in outliers})
+    warn_line(f"a molecule is distorted along the starting path: {len(outliers)} bond length(s)/angle(s) leave the "
+              f"range of the endpoints by more than {BOND_MARGIN:.0%} / {ANGLE_MARGIN_DEG:g} deg in image(s) "
+              + ", ".join(f"{i:02d}" for i in images)
+              + f" (worst: {name} = {value:.2f} {unit} in image {k:02d}, endpoints {lo:.2f}-{hi:.2f} {unit})"
+              + (": converge IDPP further (e.g. --idpp-fmax 0.01 --idpp-steps 2000)." if idpp_used else
+                 ": use --idpp (with --idpp-fmax 0.01 --idpp-steps 2000 for a molecular adsorbate)."))
+
+
 def write_path_trajectory(pmg_images, out_path):
     """Writes every image (in order) to a single multi-frame extended-XYZ
     file, viewable directly in VESTA/OVITO/ASE-GUI -- a structural
@@ -737,8 +813,10 @@ def main():
                          help="Refine the interior images with ASE's IDPP method after linear "
                               "interpolation -- a better initial guess than plain linear, no "
                               "MACE needed.")
-    parser.add_argument("--idpp-fmax", type=float, default=0.1)
-    parser.add_argument("--idpp-steps", type=int, default=100)
+    parser.add_argument("--idpp-fmax", type=float, default=0.1,
+                         help="IDPP force convergence (default: 0.1, ASE's own). Loose for a molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle image (DFT: +1.3 eV, 1.37 eV/Ang there); --idpp-fmax 0.01 --idpp-steps 2000 gave 112.7 deg. The report warns when an bond or angle inside a molecule leaves the endpoints' range.")
+    parser.add_argument("--idpp-steps", type=int, default=100,
+                         help="IDPP maximum steps (default: 100). See --idpp-fmax.")
 
     parser.add_argument("--mode", type=int, choices=[1, 2, 3], default=2,
                          help="How to build the path and what to write (default: 2). A pure "
@@ -1177,6 +1255,10 @@ def main():
                     f"(cumulative Cartesian displacement, image_00 to image_{len(pmg_images) - 1:02d})",
                     f_out)
         check_path_quality(pmg_images, reaction_coords, f_out, manifest_proven=(manifest_pair is not None))
+        if not ml_neb_used:
+            report_intramolecular_outliers(
+                intramolecular_outliers(pmg_images), args.idpp,
+                lambda text: print_dual(color_text(f"  [WARNING] {text}", 'yellow'), f_out))
 
         trajectory_path = os.path.join(run_root, "neb_path.xyz")
         write_path_trajectory(pmg_images, trajectory_path)

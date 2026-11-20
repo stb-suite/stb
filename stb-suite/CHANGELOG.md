@@ -458,6 +458,12 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-neb` and `stb-mlneb` warn when a molecule is distorted along the starting path: a bond or bond
+  angle between non-metal atoms, bonded in both endpoints, that leaves the endpoints' range by more
+  than 15 % or 15 deg in an interior image. IDPP's default `--idpp-fmax 0.1` (ASE's) is loose for a
+  molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle
+  image (SIESTA: +1.3 eV above the endpoint, 1.37 eV/Ang); `--idpp-fmax 0.01 --idpp-steps 2000` gave
+  112.7 deg. The `--help` of both options says so. Defaults are unchanged.
 - `stb-neb --fix-atoms LIST` (1-based, e.g. `1-32`, or `none`): atoms held fixed along the whole
   band (see Fixed).
 - `stb-coop --image N1 N2 N3`: with `--pair I J`, only the periodic image (N1, N2, N3) of J, i.e. one bond

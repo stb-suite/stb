@@ -395,6 +395,9 @@ def report_guess(res, args, f_out, warn):
     if mean and any(s > 3 * mean for s in steps):
         warn(f"{res['label']}: one step of the starting path is more than 3x the mean step -- often a wrong atom "
              "correspondence between --initial and --final (see --autosort-tol) rather than a real feature.")
+    from stb.neb import intramolecular_outliers, report_intramolecular_outliers
+    report_intramolecular_outliers(intramolecular_outliers(res["guess"]), args.idpp,
+                          lambda text: warn(f"{res['label']}: {text}"))
     if res["frozen"]:
         print_dual(f"Frozen atoms      : {len(res['frozen'])}/{len(res['images'][0])} (move < {args.freeze_threshold} "
                    "Ang between the endpoints; --freeze-substrate)", f_out)
@@ -974,8 +977,9 @@ def build_parser():
                         help="Skip the IDPP (Image Dependent Pair Potential) refinement of the interior images before "
                              "the NEB. On by default: a geometric smoothing that usually gives a much better start "
                              "than linear interpolation.")
-    parser.add_argument("--idpp-fmax", type=float, default=0.1, help="Force convergence for IDPP (default: 0.1).")
-    parser.add_argument("--idpp-steps", type=int, default=100, help="Max steps for IDPP (default: 100).")
+    parser.add_argument("--idpp-fmax", type=float, default=0.1,
+                        help="IDPP force convergence (default: 0.1, ASE's own). Loose for a molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle image (DFT: +1.3 eV, 1.37 eV/Ang there); --idpp-fmax 0.01 --idpp-steps 2000 gave 112.7 deg. The report warns when an bond or angle inside a molecule leaves the endpoints' range.")
+    parser.add_argument("--idpp-steps", type=int, default=100, help="Max steps for IDPP (default: 100). See --idpp-fmax.")
     parser.add_argument("--no-pre-relax-endpoints", dest="pre_relax_endpoints", action="store_false",
                         help="Skip the relaxation (positions only) of both endpoints with the model. On by default, "
                              "so the barrier is measured from the model's own minima.")

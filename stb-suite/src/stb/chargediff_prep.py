@@ -400,6 +400,21 @@ def write_chargediff_manifest(out_dir, fdf_structure, folder_names, suffixes, co
         json.dump(manifest, f, indent=2)
 
 
+def pseudo_source_name(pp_path, label, species_meta):
+    """The name (no extension) under `pp_path` whose .psml/.psf species `label` uses: the
+    label itself without a '_ghost' suffix when such a file exists (an stb-adsorb site
+    folder or a bsse/ folder holds 'Ag_slab.psml', 'O_ads.psml'), else its real element
+    ('Ag' -- a bank or a folder of bare-element files). Returns the element when neither
+    exists, so copy_pseudo's own warning names the file a user would add."""
+    base = label[:-len("_ghost")] if label.endswith("_ghost") else label
+    element = structure_io.real_element(label, species_meta)
+    if pp_path:
+        for name in dict.fromkeys((base, element)):
+            if any(os.path.exists(os.path.join(pp_path, f"{name}.{ext}")) for ext in ("psml", "psf")):
+                return name
+    return element
+
+
 def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutoff_value,
                           spin_polarized, dipole_corrected, vdw_corrected, strip_ghost_only):
     """Writes one fragment's structure.fdf + config_extra.fdf + calc.fdf +
@@ -462,7 +477,7 @@ def write_fragment_folder(out_dir, fdf_structure, calc_text, pp_path, mesh_cutof
         if strip_ghost_only:
             source_label = label[:-len("_ghost")] if label.endswith("_ghost") else label
         else:
-            source_label = structure_io.real_element(label, fdf_structure.species_meta)
+            source_label = pseudo_source_name(pp_path, label, fdf_structure.species_meta)
         copy_pseudo(pp_path, source_label, out_dir, dest_label=label)
         pseudo_labels.append(label)
 
@@ -537,7 +552,10 @@ def main():
                          help=f"Pseudopotentials source: a bundled bank ({BANK_HELP}) or a "
                               "folder path (same convention as stb-adsorb/stb-her/stb-hubbardu). "
                               "Default: reuse the directory --structure lives in, which already "
-                              "has every pseudopotential the combined calculation needed.")
+                              "has every pseudopotential the combined calculation needed. For "
+                              "each species label the file named after the label (without a "
+                              "'_ghost' suffix: 'Ag_slab.psml' for Ag_slab and Ag_slab_ghost) is "
+                              "used when the folder has one, else the element's ('Ag.psml').")
 
     parser.add_argument("--force-spin", dest="force_spin", action="store_true", default=None,
                          help="Force spin-polarized SCF in every fragment folder (default: "
@@ -731,10 +749,15 @@ def main():
         elements = [structure_io.real_element(labeled_structure.atoms[i][0], labeled_structure.species_meta) for i in idx]
         formula = "".join(f"{el}{elements.count(el) if elements.count(el) > 1 else ''}" for el in sorted(set(elements)))
         valence = 0.0
-        for el in set(elements):
-            zval, _src = pseudo_valence(el, pseudo_source or combined_dir)
+        fragment_labels = [labeled_structure.atoms[i][0] for i in idx]
+        for lab in set(fragment_labels):
+            zval, _src = pseudo_valence(
+                pseudo_source_name(pp_path, lab, labeled_structure.species_meta), pp_path)
+            if zval is None:
+                zval, _src = pseudo_valence(
+                    structure_io.real_element(lab, labeled_structure.species_meta), pp_path)
             if zval is not None:
-                valence += zval * elements.count(el)
+                valence += zval * fragment_labels.count(lab)
         total_valence += valence
         rows.append(([name + "/", formula, str(len(idx)), f"{idx[0] + 1}-{idx[-1] + 1}" if idx == list(range(idx[0], idx[-1] + 1)) else "non-contiguous",
                       ", ".join(sorted(labels)), f"{valence:g}"], None))

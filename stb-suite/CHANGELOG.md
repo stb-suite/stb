@@ -302,6 +302,14 @@ version before) and **Added** (new options and tools).
   site, ML energy, convergence, model), `sites/orientation_map.txt` lists every folder, and the
   ranking table of `[3]` has a `Sampled #` column. Folder names are unchanged.
 
+- `stb-chargediffPrep -p <folder>` looked only for element-named files (`Ag.psml`), so with `-p`
+  pointing at an `stb-adsorb` site folder, which holds `Ag_slab.psml`, `O_ads.psml`, `H_ads.psml`,
+  every folder came out with no pseudopotential (9 warnings, `combined/Ag_slab` included). For each
+  species label it now copies the file named after the label when the folder has one (a `_ghost`
+  label uses the label without the suffix, as `stb-adsorbBsse` does), else the element's. The
+  valence electrons of the report are read from the same files (a semicore Ag pseudopotential
+  counted 11 electrons from the textbook value instead of its own).
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

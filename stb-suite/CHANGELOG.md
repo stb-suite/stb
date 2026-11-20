@@ -294,6 +294,14 @@ version before) and **Added** (new options and tools).
   now go into `--dir`, as the files of `stb-adsorbGibbs` do; `-o` still names another curve file
   (the plots follow it).
 
+- `stb-adsorb --ml-rank` with orientation sampling: the `_orientN` of a site folder is the rank of
+  that orientation by ML energy within the site, so two runs with different models (fine-tuned,
+  foundation, `--ml-steps 0`) gave the same folder name to different orientations, and the index in
+  the orientation grid, which is the same in every run, was only in `orientation_trajectory.xyz`.
+  Each folder's `fragment_manifest.json` now has an `ml_rank` entry (sampling index, rank within the
+  site, ML energy, convergence, model), `sites/orientation_map.txt` lists every folder, and the
+  ranking table of `[3]` has a `Sampled #` column. Folder names are unchanged.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

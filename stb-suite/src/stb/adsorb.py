@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import shutil
+import json
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -150,6 +151,48 @@ def plot_ml_ranking(scored, ads_name, out_path, show=False):
     if show:
         plt.show()
     plt.close(fig)
+
+
+ORIENTATION_MAP_FILE = "orientation_map.txt"
+
+
+def record_ml_rank(site_dir, record, model_label):
+    """Adds an 'ml_rank' entry (sampling index, rank within the site, ML energy) to the
+    fragment_manifest.json write_reference_folder just wrote in `site_dir`, so the folder
+    says which orientation of the deterministic grid it holds: its _orient<N> suffix is
+    the rank by ML energy, which changes with the model."""
+    path = os.path.join(site_dir, "fragment_manifest.json")
+    try:
+        with open(path) as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        return
+    manifest["ml_rank"] = dict(record, model=model_label)
+    with open(path, "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def write_orientation_map(sites_root, ml_records, model_label):
+    """sites/orientation_map.txt: one line per --ml-rank site folder -- site, sampling
+    index in the orientation grid (stable between runs), rank by ML energy within the
+    site (the _orient<N> of the folder name), ML energy. Returns its path."""
+    path = os.path.join(sites_root, ORIENTATION_MAP_FILE)
+    with open(path, "w") as f:
+        f.write("# stb-adsorb --ml-rank: what each site folder holds\n")
+        f.write(f"# model: {model_label}\n")
+        f.write("# 'sampled' = index in the deterministic orientation grid (the same in every run "
+                "with the same\n# --n-orientations-polar/--n-orientations-azimuthal); "
+                "'rank' = position by ML energy within the site\n# (the _orient<N> suffix, "
+                "model-dependent); '--' = no orientation sampling.\n")
+        f.write(f"# {'folder':<40}{'adsorbate':<12}{'site':>5} {'type':<10}{'height':>8}"
+                f"{'sampled':>9}{'of':>5}{'rank':>6}{'E_ML (eV)':>16}{'converged':>11}\n")
+        for label, r in ml_records.items():
+            sampled = str(r["sampling_index"]) if r["sampling_index"] is not None else "--"
+            rank = str(r["rank_in_site"]) if r["rank_in_site"] is not None else "--"
+            f.write(f"  {label:<40}{r['adsorbate']:<12}{r['site']:>5} {r['site_type']:<10}"
+                    f"{r['height']:>8.3f}{sampled:>9}{r['n_sampled']:>5}{rank:>6}"
+                    f"{r['energy_eV']:>16.6f}{'yes' if r['converged'] else 'no':>11}\n")
+    return path
 
 
 def min_adsorbate_slab_distance(pmg_structure, n_substrate):
@@ -1006,6 +1049,10 @@ def main():
     # SIESTA folder is written, since it decides (with --top-k) which
     # candidates are worth writing at all. ---
     print_section("[3] ML PRE-SCREENING", f_out)
+    ml_info = {}  # name -> {(slot, h, orientation): sampling index, ML energy, ...}
+    ml_records = {}  # site folder label -> its ml_info entry, filled in [4]
+    ml_model_label = (os.path.abspath(args.ml_custom_model) if args.ml_custom_model
+                      else f"MACE-MP-0 {args.ml_model}")
     ranked_by_adsorbate = {}  # name -> list of (slot, h, st, energy, relaxed_struct, relaxed_dist,
                               # orientation), post-top_k (orientation: 0 = sampling not used, else
                               # 1-based rank among that site's unique orientations)
@@ -1036,13 +1083,14 @@ def main():
             print_dual(f"  {color_text('Relaxing candidates for', 'cyan')} '{name}' with MACE-MP-0 "
                         f"(substrate fixed, {len(variants)} candidate(s){orient_note}) ...", f_out)
             scored = []
+            ml_info[name] = {}  # (slot, h, orient_id) -> sampling index, ML energy, convergence
             orientation_frames = []  # every relaxed orientation, every site (before dedup/top-k) --
                                       # only populated when orientation_sampling, written to a .xyz
                                       # trajectory below for visual inspection (e.g. in VMD).
             for i, (slot, h, st, coord) in enumerate(variants, start=1):
                 orientations = generate_systematic_orientations(
                     mol, args.n_orientations_polar, args.n_orientations_azimuthal)
-                orient_results = []  # (energy, ase_atoms, converged, steps)
+                orient_results = []  # (energy, ase_atoms, converged, steps, sampling index)
                 for orient_j, orient_mol in enumerate(orientations, start=1):
                     ads_struct = finder.add_adsorbate(orient_mol, coord)
                     ase_atoms = AseAtomsAdaptor.get_atoms(ads_struct)
@@ -1063,7 +1111,7 @@ def main():
                     # wrap_into_cell() does via pymatgen, just in place on the Atoms object
                     # these downstream consumers already hold a reference to.
                     ase_atoms.wrap()
-                    orient_results.append((energy, ase_atoms, converged, steps))
+                    orient_results.append((energy, ase_atoms, converged, steps, orient_j))
                     if orientation_sampling:
                         # Succinct, self-overwriting counter (or periodic full lines when not
                         # a tty, e.g. output redirected to a log) -- the per-orientation MACE
@@ -1091,7 +1139,7 @@ def main():
 
                 if orientation_sampling:
                     kept = deduplicate_orientations(
-                        [(e, a) for e, a, _c, _s in orient_results], n_substrate,
+                        [(e, a) for e, a, _c, _s, _j in orient_results], n_substrate,
                         rmsd_tol=args.orientation_rmsd_tol)
                     if args.orientation_top_k is not None:
                         kept = kept[:args.orientation_top_k]
@@ -1099,14 +1147,24 @@ def main():
                     kept = [0]
 
                 for rank, idx in enumerate(kept, start=1):
-                    energy, ase_atoms, converged, steps = orient_results[idx]
+                    energy, ase_atoms, converged, steps, sample_j = orient_results[idx]
                     # Already wrapped right after relaxing, above -- ase_atoms.wrap() was
                     # called in place before this same object was stored in orient_results.
                     relaxed_struct = AseAtomsAdaptor.get_structure(ase_atoms)
                     relaxed_dist = min_adsorbate_slab_distance(relaxed_struct, n_substrate)
                     orient_id = rank if orientation_sampling else 0
                     scored.append((slot, h, st, energy, relaxed_struct, relaxed_dist, orient_id))
-                    orient_str = f", orientation {rank}/{len(kept)}" if orientation_sampling else ""
+                    ml_info[name][(slot, h, orient_id)] = {
+                        "sampling_index": sample_j if orientation_sampling else None,
+                        "n_sampled": len(orientations),
+                        "rank_in_site": orient_id if orientation_sampling else None,
+                        "n_kept_in_site": len(kept),
+                        "energy_eV": float(energy),
+                        "converged": bool(converged),
+                        "steps": int(steps),
+                    }
+                    orient_str = (f", orientation {rank}/{len(kept)} (sampled #{sample_j})"
+                                  if orientation_sampling else "")
                     print_dual(f"    [{i}/{len(variants)}{orient_str}] site {slot} ({st}, h={h:.2f}): "
                                 f"E = {energy:.4f} eV ({'converged' if converged else 'hit step cap'}, "
                                 f"{steps} step(s)), relaxed distance = {relaxed_dist:.3f} Ang", f_out)
@@ -1117,12 +1175,16 @@ def main():
                                    if args.orientation_top_k is not None else ""), f_out)
             scored.sort(key=lambda r: r[3])
             e_min = scored[0][3]
-            rows = [([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st,
-                      (str(orient) if orient else "--"), f"{energy:.4f}", f"{energy - e_min:.4f}"],
-                     'green' if rank == 1 else None)
-                    for rank, (slot, h, st, energy, _s, dist, orient) in enumerate(scored, start=1)]
+            rows = []
+            for rank, (slot, h, st, energy, _s, dist, orient) in enumerate(scored, start=1):
+                sample_j = ml_info[name][(slot, h, orient)]["sampling_index"]
+                rows.append(([str(rank), str(slot), f"{h:.2f}", f"{dist:.3f}", st,
+                              (str(orient) if orient else "--"),
+                              (str(sample_j) if sample_j is not None else "--"),
+                              f"{energy:.4f}", f"{energy - e_min:.4f}"],
+                             'green' if rank == 1 else None))
             print_table(["Rank", "Site", "Init. h (Ang)", "Relaxed dist (Ang)", "Type",
-                         "Orientation", "Energy (eV)", "dE (eV)"], rows, f_out)
+                         "Orientation", "Sampled #", "Energy (eV)", "dE (eV)"], rows, f_out)
             print_dual(color_text(
                 "  Note: a relative comparison from a fast ML potential, not an absolute DFT "
                 "adsorption energy -- use it to prioritize which site(s) to relax with SIESTA "
@@ -1133,7 +1195,12 @@ def main():
                 "the SIESTA folders in [4] below. 'Orientation' is '--' when orientation sampling "
                 "wasn't requested (--n-orientations-polar/--n-orientations-azimuthal both 1, the "
                 "default); otherwise it's the 1-based rank (by energy) among that site's unique, "
-                "post-deduplication orientations -- each becomes its own SIESTA folder in [4].",
+                "post-deduplication orientations -- each becomes its own SIESTA folder in [4], "
+                "named _orient<rank>. That rank depends on the model, so two runs with different "
+                "models can give the same folder name to different orientations; 'Sampled #' is "
+                "the index in the deterministic orientation grid (the same in every run with the "
+                "same --n-orientations-polar/--n-orientations-azimuthal), recorded in each "
+                "folder's fragment_manifest.json and in sites/orientation_map.txt.",
                 'yellow'), f_out)
 
             plot_path = os.path.join(sites_root, f"ml_rank_ranking{ads_suffix}.png")
@@ -1249,11 +1316,20 @@ def main():
                     label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "") \
                         + (f"_orient{orient}" if orient else "")
                     site_records.append((label, relaxed_struct, name, h))
+                    ml_records[label] = dict(ml_info[name][(slot, h, orient)], site=slot,
+                                             site_type=st, height=round(float(h), 4),
+                                             adsorbate=name)
             else:
                 for slot, h, st, coord in variants:
                     ads_struct = finder.add_adsorbate(mol, coord)
                     label = f"site_{slot}_{st}{ads_suffix}" + (f"_h{h:.2f}" if multi_height else "")
                     site_records.append((label, ads_struct, name, h))
+
+    if ml_records:
+        map_path = write_orientation_map(sites_root, ml_records, ml_model_label)
+        print_dual(f"  {color_text('[Saved]', 'cyan')} {map_path} (folder -> sampling index, rank "
+                    "by ML energy within the site, ML energy; also in each folder's "
+                    "fragment_manifest.json)", f_out)
 
     report_rows = []  # (label, adsorbate_name, height, dir)
     for label, ads_struct, ads_name, height in site_records:
@@ -1285,6 +1361,8 @@ def main():
                                 force_spin=args.force_spin, force_dipole=True, force_vdw=True,
                                 n_substrate=n_substrate, fixed_atoms=fixed_atoms, fixed_note=fixed_note,
                                 relax_block=relax_block)
+        if label in ml_records:
+            record_ml_rank(site_dir, ml_records[label], ml_model_label)
         print_dual(f"  {color_text('[OK]', 'green')} {site_dir}", f_out)
         report_rows.append((label, ads_name, height, site_dir))
         view_frames.append((label, AseAtomsAdaptor.get_atoms(ads_struct)))

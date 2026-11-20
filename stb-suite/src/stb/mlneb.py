@@ -965,9 +965,11 @@ def build_parser():
                         help="Random seed of --to-mlff-rattle (default: 7).")
     parser.add_argument("--n-images", type=int, default=7,
                         help="Total images including both endpoints (default: 7, at least 3).")
-    parser.add_argument("--autosort-tol", type=float, default=0.5,
-                        help="Atom-correspondence tolerance between --initial/--final, Ang (default: 0.5, pymatgen's "
-                             "own documented value).")
+    parser.add_argument("--autosort-tol", type=float, default=None,
+                        help="Atom-correspondence tolerance between --initial/--final, Ang. Default: 0 (the files' "
+                             "own atom order, no matching) when both list the same species in the same order -- "
+                             "as two minima written by one tool do (stb-mladsorb, stb-adsorb): a hop longer than "
+                             "0.5 Ang cannot be matched by distance --, else 0.5 (pymatgen's own documented value).")
     parser.add_argument("--no-idpp", dest="idpp", action="store_false",
                         help="Skip the IDPP (Image Dependent Pair Potential) refinement of the interior images before "
                              "the NEB. On by default: a geometric smoothing that usually gives a much better start "
@@ -1082,7 +1084,7 @@ def main():
     print_dual(f"Device            : {dev_label}", f_out)
     print_dual(f"Endpoints         : {args.initial} -> {args.final}", f_out)
     print_dual(f"Band              : {args.n_images} images (endpoints included), linear interpolation"
-               f"{' + IDPP' if args.idpp else ''}, atoms matched within --autosort-tol {args.autosort_tol} Ang", f_out)
+               f"{' + IDPP' if args.idpp else ''}", f_out)
     print_dual(f"NEB               : improved tangent, spring k {args.k} eV/Ang^2, FIRE; shaping to "
                f"{max(2 * args.fmax, 0.1):g} then climbing image to --fmax {args.fmax} eV/Ang, --max-steps "
                f"{args.max_steps} in total" + ("; substrate frozen below "
@@ -1112,6 +1114,16 @@ def main():
     except SystemExit:
         fail("--initial and --final have a different composition: a NEB needs the same atoms at both ends.")
     species_meta = structure_io.species_dict(initial_structure)
+    same_order = [lab for lab, _ in initial_structure.atoms] == [lab for lab, _ in final_structure.atoms]
+    if args.autosort_tol is None:
+        args.autosort_tol = 0.0 if same_order else 0.5
+        print_dual("Atom matching     : " + (
+            "by index (--autosort-tol 0, default: both files list the same species in the same order)"
+            if same_order else
+            "by distance within 0.5 Ang (default: the files list their species in different orders)"), f_out)
+    else:
+        print_dual(f"Atom matching     : " + (f"by distance within --autosort-tol {args.autosort_tol} Ang"
+                                             if args.autosort_tol else "by index (--autosort-tol 0)"), f_out)
 
     # The workflow and the SIESTA template are checked here, before any model is run: a missing calc.fdf, a template
     # without a structure %include or a missing pseudopotential must not cost a whole band first.
@@ -1186,7 +1198,15 @@ def main():
     try:
         series = [neb_band(initial_pmg, final_pmg, calc, args, noise, label_main)]
     except ValueError as error:
-        fail(str(error)[0].upper() + str(error)[1:])
+        message = str(error)[0].upper() + str(error)[1:]
+        if args.autosort_tol and "match" in message.lower():
+            message += (f". Atoms that move more than --autosort-tol ({args.autosort_tol} Ang) between the endpoints "
+                        "cannot be matched by distance (an adsorbate hop, a vacancy jump). "
+                        + ("Both files list the same species in the same order: rerun with --autosort-tol 0 to use "
+                           "that order." if same_order else
+                           "The files list their species in different orders: write both with the same atom order "
+                           "and use --autosort-tol 0, or raise --autosort-tol."))
+        fail(message)
     if compare:
         print(f"  ... MACE-MP-0 {args.model}: the same NEB", flush=True)
         with capture_library_noise(noise, "foundation model"):

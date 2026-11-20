@@ -365,6 +365,14 @@ version before) and **Added** (new options and tools).
   folder; the calc file is written as `calc.fdf` (the reference's own name). `stb-mlffAnalysis`'s
   level-of-theory check across training folders now also compares `Slab.DipoleCorrection`.
 
+- `stb-mlneb`: with the default `--autosort-tol 0.5`, any atom that moves more than 0.5 Ang between
+  the endpoints (an O hopping 1.24 Ang from bridge to fcc hollow) stopped the run with pymatgen's
+  "Unable to reliably match structures with autosort_tol = 0.5", and nothing said that
+  `--autosort-tol 0` is the answer, though `stb-mladsorb` prints that very option and `stb-neb` gives
+  that advice. The default is now 0 (the files' own atom order) when both `.fdf` list the same
+  species in the same order, 0.5 otherwise (reported as "Atom matching"); a matching failure says
+  which of the two applies.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -130,10 +130,13 @@ def find_analysis_cycle(root_dir, out_filename):
             key=lambda m: int(m.group(1)), reverse=True)
         for m in candidates:
             cycle_dir = os.path.join(root_dir, m.group(0))
+            # The endpoints are copied into every new cycle WITH their results (the NEB
+            # never moves them), so a cycle counts only once an interior image has one.
+            images = sorted(d for d in os.listdir(cycle_dir)
+                            if os.path.isdir(os.path.join(cycle_dir, d)) and d.startswith("image_"))
             has_results = any(
                 os.path.isfile(os.path.join(cycle_dir, d, out_filename))
-                for d in os.listdir(cycle_dir)
-                if os.path.isdir(os.path.join(cycle_dir, d)) and d.startswith("image_"))
+                for d in (images[1:-1] if len(images) > 2 else images))
             if has_results:
                 return cycle_dir, converged
         # No cycle has any results at all (e.g. cycle_00 fresh out of
@@ -720,6 +723,9 @@ def main():
     print_dual(f"Directory  : {args.dir}", f_out)
     print_dual(f"Output file: {args.file}", f_out)
     print_dual(f"Mode       : {mode} ({MODE_DESCRIPTIONS[mode]})", f_out)
+    print_dual("Energy     : SIESTA's FreeEng ('siesta: FreeEng'), the energy the NEB forces derive from "
+               "with electronic smearing (E_KS minus T*S of the smearing; the adsorption workflow's "
+               "E_ads use E_KS)", f_out)
     if band_structures and band_structures[0][1] is not None:
         counts = Counter(str(s.specie) for s in band_structures[0][1])
         formula = " ".join(f"{sym}{n}" for sym, n in sorted(counts.items()))

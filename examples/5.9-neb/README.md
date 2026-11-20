@@ -360,12 +360,33 @@ not from an interactive session. Each call:
    restart mechanism), since each call is a separate, short-lived process
    with no live optimizer to keep running in memory between real SIESTA
    jobs that may finish hours apart.
-3. Either writes `cycle_{N+1}/` (the next geometry — `structure.fdf`/
-   `calc.fdf` only, no `calc.out` yet, waiting for you to run SIESTA
-   there) or, once the max residual force drops below `--fmax`, writes a
+3. Either writes `cycle_{N+1}/` (the next geometry of the interior images —
+   `structure.fdf`/`calc.fdf`/`config_extra.fdf`, the last copied verbatim from
+   the previous cycle so the forced Spin/dipole/D3 directives and the
+   constraints carry over, no `calc.out` yet, waiting for you to run SIESTA
+   there; the two endpoints, which the NEB never moves, are copied with their
+   results and the printed loop skips them) or, once the max residual force drops below `--fmax`, writes a
    `NEB_CONVERGED` sentinel file and stops — your submission-script loop
    should check for this file and break out (the printed snippet already
    does).
+
+**Fixed atoms.** `stb-neb` writes a `Geometry.Constraints` block into every
+image's `config_extra.fdf`: the atoms of `--fix-atoms`, else those the endpoints
+were relaxed with (the `config_extra.fdf`/`calc.fdf` next to `--initial`/`--final`,
+where `stb-adsorb --fix-layers` puts them), else the `--calc` template's own block.
+`stb-nebCycle` holds those atoms fixed (ASE `FixAtoms`) and reads the constrained
+forces from `<SystemLabel>.FAC` when SIESTA wrote it (SIESTA 5's `.FA` has the
+unconstrained ones). The MACE stages and `--idpp` keep them fixed too.
+
+**Energy.** The NEB uses SIESTA's `FreeEng`, the energy whose derivative the forces
+are under electronic smearing; it differs from `E_KS` (what the adsorption workflow
+reports) by `-T*S` of the smearing.
+
+**Running the images in parallel.** The printed loop has `PARALLEL=yes`: the
+interior images of a cycle run at the same time (each SIESTA must get its own cores,
+so the job needs that many times the cores of one run); `PARALLEL=no` runs them one
+after the other. Finished images (a `calc.out` with `Job completed`) are skipped, so a
+resubmitted job picks up where the last one stopped.
 
 `--climb-after N` only enables the climbing-image correction once the
 **current** cycle number is `>= N` — `0` (mode 2's suggestion) is safe

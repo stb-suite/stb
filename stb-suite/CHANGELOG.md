@@ -310,6 +310,30 @@ version before) and **Added** (new options and tools).
   valence electrons of the report are read from the same files (a semicore Ag pseudopotential
   counted 11 electrons from the textbook value instead of its own).
 
+- NEB in DFT (`stb-neb --mode 2/3` + `stb-nebCycle`):
+  - Every atom moved: `stb-nebCycle` had no constraint, and the image folders did not inherit the
+    fixed layers the endpoints were relaxed with (`stb-adsorb --fix-layers`). A
+    `Geometry.Constraints` in `--calc` did not help either: the forces were read from `.FA`, which
+    SIESTA 5.4.2 writes without the constraints (the constrained ones are in `.FAC`). `stb-neb` now
+    writes the fixed atoms into every image's `config_extra.fdf` (`--fix-atoms`, else the
+    `Geometry.Constraints` next to `--initial`/`--final`, else the one of `--calc`), and
+    `stb-nebCycle` holds them fixed (`FixAtoms`) and reads `.FAC` when it exists. The MACE stages
+    and `--idpp` of `stb-neb` keep them fixed too, and the report warns when a fixed atom is not at
+    the same place in both endpoints.
+  - From `cycle_01` on, the images lost the directives `stb-neb` forces (Spin polarized, slab dipole
+    correction, DFT-D3; on by default): `stb-nebCycle` rewrote `config_extra.fdf` with the
+    single-point block only. It now copies the previous cycle's file verbatim. A band run with
+    2.0.0 ran every cycle after the first one at another level of theory unless `--calc` itself
+    had those settings.
+  - The two endpoints were written as new folders in every cycle and the printed loop ran SIESTA
+    in them again, although the NEB never moves them (2 single points wasted per cycle). They are
+    now copied with their results; the loop skips finished folders and runs the interior images in
+    parallel (`PARALLEL=yes`, or `no` for one at a time). `stb-nebAnalysis` analyzes a cycle only
+    once an interior image has results.
+  - The reports of `stb-neb`, `stb-nebCycle` and `stb-nebAnalysis` say which energy they use:
+    SIESTA's `FreeEng` (the one the forces derive from with electronic smearing), not the `E_KS`
+    of the adsorption workflow.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,
@@ -395,6 +419,8 @@ version before) and **Added** (new options and tools).
 
 ### Added
 
+- `stb-neb --fix-atoms LIST` (1-based, e.g. `1-32`, or `none`): atoms held fixed along the whole
+  band (see Fixed).
 - `stb-coop --image N1 N2 N3`: with `--pair I J`, only the periodic image (N1, N2, N3) of J, i.e. one bond
   (e.g. a bond across the cell edge); the report lists every image of J with its distance and integral.
 - **PseudoDojo tables by relativity, functional and accuracy.** The bundled `dojo` bank now holds

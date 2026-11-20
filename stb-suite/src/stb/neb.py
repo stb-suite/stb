@@ -20,6 +20,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io
 from stb.core import neb_manifest
 from stb.core import adsorption_sites
+from stb.core import fdf_directives
 from stb.core.cli import (color_text, show_intro, print_dual, print_section,
                            print_progress_line, finish_progress_line, capture_library_noise)
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
@@ -210,7 +211,7 @@ def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort
                                     autosort_tol=autosort_tol)
 
 
-def idpp_refine_images(pmg_images, fmax=0.1, steps=100):
+def idpp_refine_images(pmg_images, fmax=0.1, steps=100, fixed_atoms=None):
     """Refines the interior images of `pmg_images` (endpoints untouched)
     with ASE's Image Dependent Pair Potential method -- a purely
     classical/geometric smoothing (no MACE/chemistry needed) that usually
@@ -227,6 +228,10 @@ def idpp_refine_images(pmg_images, fmax=0.1, steps=100):
     """
     from ase.mep.neb import NEB, idpp_interpolate
     ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
+    if fixed_atoms:
+        from ase.constraints import FixAtoms
+        for atoms in ase_images:
+            atoms.set_constraint(FixAtoms(indices=fixed_atoms))
     neb = NEB(ase_images, method="improvedtangent")
     idpp_interpolate(neb, traj=None, log=None, fmax=fmax, steps=steps)
     return [AseAtomsAdaptor.get_structure(a) for a in ase_images]
@@ -350,7 +355,8 @@ def write_path_trajectory(pmg_images, out_path):
 
 
 def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
-                        force_spin=False, force_vdw=False, force_dipole=False):
+                        force_spin=False, force_vdw=False, force_dipole=False,
+                        fixed_atoms=None, config_extra_text=None):
     """Writes structure.fdf + config_extra.fdf + calc.fdf + copied
     pseudopotentials for one image_NN/ folder. config_extra.fdf is always
     written and always %include'd at the very top of calc.fdf
@@ -368,24 +374,139 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
     -- caught the calc.fdf template's OWN MD.TypeOfRun/MD.Steps
     always losing to config_extra.fdf's (first-occurrence-wins), so
     `calc_text` here is the caller's ORIGINAL --calc text, unmodified.
+
+    `fixed_atoms` (0-based) adds a Geometry.Constraints block: SIESTA then writes the
+    constrained forces to <label>.FAC, and stb-nebCycle holds the same atoms fixed.
+    `config_extra_text`, when given, is written verbatim instead (stb-nebCycle passes the
+    previous cycle's file, so every forced directive and constraint carries over).
     """
     os.makedirs(out_dir, exist_ok=True)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
                                                 coord_format="fractional")
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
     with open(os.path.join(out_dir, adsorption_sites.CONFIG_EXTRA_FILE), "w") as f:
-        f.write(adsorption_sites.SINGLE_POINT_BLOCK)
-        if force_spin:
-            f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
-        if force_dipole:
-            f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
-        if force_vdw:
-            f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+        if config_extra_text is not None:
+            f.write(config_extra_text)
+        else:
+            f.write(adsorption_sites.SINGLE_POINT_BLOCK)
+            if force_spin:
+                f.write(adsorption_sites.SPIN_POLARIZED_BLOCK)
+            if force_dipole:
+                f.write(adsorption_sites.DIPOLE_CORRECTION_BLOCK)
+            if force_vdw:
+                f.write(adsorption_sites.VDW_CORRECTION_BLOCK)
+            if fixed_atoms:
+                f.write(adsorption_sites.fixed_atoms_block(
+                    fixed_atoms, f"{len(fixed_atoms)} atom(s) held fixed along the NEB band"))
     with open(os.path.join(out_dir, "calc.fdf"), "w") as f:
         f.write(structure_io.prepend_include(calc_text, adsorption_sites.CONFIG_EXTRA_FILE))
     symbols = {site.specie.symbol for site in pmg_structure}
     for sym in sorted(symbols):
         copy_pseudo(pp_path, sym, out_dir)
+
+
+def parse_atom_spec(spec, n_atoms):
+    """0-based indices of a 1-based atom list such as '1-32,40,45-48'. Raises ValueError."""
+    indices = set()
+    for part in spec.replace(" ", "").split(","):
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        first, last = int(a), int(b or a)
+        if first < 1 or last > n_atoms or first > last:
+            raise ValueError(f"atom range '{part}' outside 1..{n_atoms}")
+        indices.update(range(first - 1, last))
+    if not indices:
+        raise ValueError(f"no atom in '{spec}'")
+    return sorted(indices)
+
+
+def _endpoint_folder_texts(path):
+    """(folder, [config_extra.fdf text, calc.fdf text]) of the run folder an endpoint
+    comes from (the folder itself, or the folder of the .fdf file given), in SIESTA's
+    reading order (config_extra.fdf is %include'd on top of calc.fdf). Missing files are
+    left out."""
+    folder = path if os.path.isdir(path) else (os.path.dirname(os.path.abspath(path)))
+    texts = []
+    for name in (adsorption_sites.CONFIG_EXTRA_FILE, "calc.fdf"):
+        candidate = os.path.join(folder, name)
+        if os.path.isfile(candidate) and os.path.abspath(candidate) != os.path.abspath(path):
+            with open(candidate, errors="ignore") as f:
+                texts.append(f.read())
+    return folder, texts
+
+
+def resolve_fixed_atoms(fix_atoms_arg, initial_path, final_path, calc_text, n_atoms):
+    """Atoms the NEB holds fixed. Returns (indices or [], source description, notes)
+    where notes are (level, text) pairs for the report. Order: --fix-atoms; else the
+    Geometry.Constraints the endpoints were relaxed with (config_extra.fdf/calc.fdf next
+    to --initial/--final -- stb-adsorb --fix-layers writes it there); else the --calc
+    template's own block. Raises ValueError on a bad --fix-atoms."""
+    notes = []
+    if fix_atoms_arg is not None:
+        if fix_atoms_arg.strip().lower() == "none":
+            return [], "none (--fix-atoms none)", notes
+        return parse_atom_spec(fix_atoms_arg, n_atoms), "--fix-atoms", notes
+    found = []
+    for role, path in (("initial", initial_path), ("final", final_path)):
+        folder, texts = _endpoint_folder_texts(path)
+        indices, unsupported = fdf_directives.constrained_atoms(*texts, n_atoms=n_atoms)
+        if unsupported:
+            notes.append(("warning", f"{role} endpoint folder '{folder}': Geometry.Constraints line(s) "
+                                     f"not applied by the NEB: {'; '.join(unsupported)}"))
+        if indices is not None:
+            found.append((role, folder, indices))
+    if found:
+        sets = {tuple(ind) for _r, _f, ind in found}
+        union = sorted(set().union(*[set(ind) for _r, _f, ind in found]))
+        if len(sets) > 1:
+            notes.append(("warning", "the two endpoints were relaxed with different fixed atoms ("
+                          + ", ".join(f"{r}: {len(ind)}" for r, _f, ind in found)
+                          + f"); the NEB holds the union ({len(union)} atoms) fixed. Pass --fix-atoms "
+                          "to choose."))
+        elif len(found) == 1:
+            notes.append(("note", f"only the {found[0][0]} endpoint's folder has a Geometry.Constraints "
+                                  "block; it is used for the whole band."))
+        source = "Geometry.Constraints of the endpoint folder(s): " + ", ".join(
+            dict.fromkeys(f for _r, f, _i in found))
+        return union, source, notes
+    indices, unsupported = fdf_directives.constrained_atoms(calc_text, n_atoms=n_atoms)
+    if unsupported:
+        notes.append(("warning", "--calc Geometry.Constraints line(s) not applied by the NEB: "
+                                 + "; ".join(unsupported)))
+    if indices:
+        return indices, "Geometry.Constraints of --calc", notes
+    return [], "none (no --fix-atoms, no Geometry.Constraints next to the endpoints or in --calc)", notes
+
+
+def _compact_ranges(indices):
+    """'1-32, 40' for 0-based indices [0..31, 39]."""
+    numbers = sorted(i + 1 for i in indices)
+    runs, start, previous = [], numbers[0], numbers[0]
+    for n in numbers[1:]:
+        if n != previous + 1:
+            runs.append((start, previous))
+            start = n
+        previous = n
+    runs.append((start, previous))
+    return ", ".join(f"{a}-{b}" if b > a else f"{a}" for a, b in runs)
+
+
+def check_fixed_atoms_agree(initial_pmg, final_pmg, fixed, f_out, tol=0.01):
+    """Warns when an atom the NEB holds fixed is not at the same place in both endpoints:
+    the band would then hold it at its interpolated position, which neither endpoint has."""
+    if not fixed:
+        return
+    delta = final_pmg.frac_coords[fixed] - initial_pmg.frac_coords[fixed]
+    delta -= np.round(delta)
+    moved = np.linalg.norm(delta @ initial_pmg.lattice.matrix, axis=1)
+    bad = [(fixed[i] + 1, d) for i, d in enumerate(moved) if d > tol]
+    if bad:
+        listing = ", ".join(f"{a} ({d:.3f} Ang)" for a, d in bad[:8]) + (" ..." if len(bad) > 8 else "")
+        print_dual(color_text(
+            f"  [WARNING] {len(bad)} fixed atom(s) are not at the same position in the two endpoints "
+            f"(> {tol} Ang): {listing}. They stay at their interpolated positions along the band; "
+            "check that both endpoints were relaxed with the same constraints.", 'yellow'), f_out)
 
 
 def write_ml_preview_plot(ase_images, out_path):
@@ -469,15 +590,28 @@ def _print_cluster_submission_snippet(f_out, mode, run_root, max_cycles, siesta_
 
     snippet = f"""
 {conda_block}
+# PARALLEL=yes runs every image of a cycle at the same time: the job needs (number of images
+# that run) x {mpirun_np or 'the cores of one SIESTA run'} cores, and each SIESTA must get its own
+# cores (srun --exclusive, or a host file per image). PARALLEL=no runs them one at a time.
+PARALLEL=yes
+finished() {{ [ -f "$1/calc.out" ] && grep -q "Job completed" "$1/calc.out"; }}
 cd "{run_root}"
 for cyc in $(seq 0 {max_cycles - 1}); do
     cycle=$(printf "%02d" "$cyc")
     cdir="cycle_${{cycle}}"
     [ -d "$cdir" ] || break
     for img in "$cdir"/image_*; do
-        (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out)
+        # The endpoints never move: stb-nebCycle copies them with their results, so only
+        # cycle_00 runs them. A finished image is skipped (also when a job is resubmitted).
+        finished "$img" && continue
+        if [ "$PARALLEL" = yes ]; then
+            (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out) &
+        else
+            (cd "$img" && {mpirun_prefix}{siesta_exe} calc.fdf --out calc.out)
+        fi
     done
-    stb-nebCycle --dir . --fmax {cycle_fmax} --climb-after {climb_after} --no-intro
+    wait
+    stb-nebCycle --dir . --fmax {cycle_fmax} --climb-after {climb_after} --no-intro || break
     [ -f NEB_CONVERGED ] && {{ echo "NEB converged at cycle $cycle"; break; }}
 done
 """
@@ -533,6 +667,16 @@ def main():
                               "zero) otherwise.")
     parser.add_argument("--no-force-dipole", dest="force_dipole", action="store_false",
                          help="Leave --calc's own dipole settings untouched.")
+
+    parser.add_argument("--fix-atoms", type=str, default=None, metavar="LIST",
+                         help="Atoms held fixed along the whole band, 1-based (e.g. '1-32' or "
+                              "'1-16,33'), or 'none'. Default: the Geometry.Constraints the "
+                              "endpoints were relaxed with (config_extra.fdf/calc.fdf next to "
+                              "--initial/--final -- stb-adsorb --fix-layers writes it there), "
+                              "else the --calc template's own block. Written into every image's "
+                              "config_extra.fdf; stb-nebCycle then keeps them fixed (FixAtoms) and "
+                              "reads the constrained forces (<label>.FAC), and the MACE stages "
+                              "(--mode 1/2, --ml-prerelax-endpoints) and --idpp keep them fixed too.")
 
     parser.add_argument("-n", "--n-images", type=int, default=7,
                          help="Total images along the band, endpoints included (default: 7).")
@@ -683,6 +827,13 @@ def main():
         calc_text = f.read()
     calc_text, include_status, old_include_name = structure_io.fix_structure_include(calc_text)
 
+    try:
+        fixed_atoms, fixed_source, fixed_notes = resolve_fixed_atoms(
+            args.fix_atoms, args.initial, args.final, calc_text, len(initial_structure.atoms))
+    except ValueError as e:
+        print(color_text(f"[ERROR] --fix-atoms: {e}", 'red'))
+        sys.exit(1)
+
     output_root = args.output_dir
     run_root = os.path.join(output_root, RUN_SUBDIR)
     os.makedirs(run_root, exist_ok=True)
@@ -729,6 +880,16 @@ def main():
                 "auto-correct -- make sure it '%include structure.fdf' itself so SIESTA picks "
                 "up the generated geometry.", 'yellow'), f_out)
         print_dual(f"  Pseudo dir        : {args.pseudo_dir or '(none)'}", f_out)
+        print_dual(f"  Fixed atoms       : {len(fixed_atoms)}"
+                    + (f" ({_compact_ranges(fixed_atoms)})" if fixed_atoms else "")
+                    + f" -- {fixed_source}", f_out)
+        for level, text in fixed_notes:
+            print_dual(color_text(f"  [{level.upper()}] {text}",
+                                  'yellow' if level == "warning" else 'cyan'), f_out)
+        print_dual("  Energy            : SIESTA's FreeEng (siesta: FreeEng, the energy the forces are the "
+                    "derivative of with electronic smearing); stb-nebCycle and stb-nebAnalysis use it. "
+                    "It differs from E_KS (siesta: Etot, used by the adsorption workflow) by -T*S of the "
+                    "smearing.", f_out)
         print_dual(f"  Output dir        : {output_root}", f_out)
         print_dual(f"  Run folder        : {run_root} (every generated file/folder lives here)", f_out)
         print_dual(f"  N images          : {args.n_images}", f_out)
@@ -767,6 +928,9 @@ def main():
             for label, pmg in (("initial", initial_pmg), ("final", final_pmg)):
                 print_dual(f"  Relaxing the {label} endpoint (positions only, MACE-MP-0) ...", f_out)
                 ase_atoms = AseAtomsAdaptor.get_atoms(pmg)
+                if fixed_atoms:
+                    from ase.constraints import FixAtoms
+                    ase_atoms.set_constraint(FixAtoms(indices=fixed_atoms))
 
                 def _on_step(step, energy, max_force, _label=label):
                     print_progress_line(
@@ -797,6 +961,7 @@ def main():
 
         check_endpoint_displacement(initial_pmg, final_pmg_matched, f_out,
                                      threshold=args.ml_freeze_threshold, idpp_used=args.idpp)
+        check_fixed_atoms_agree(initial_pmg, final_pmg_matched, fixed_atoms, f_out)
 
         if manifest_pair is not None:
             _manifest_i, _manifest_f, pair_ids_match = manifest_pair
@@ -876,7 +1041,8 @@ def main():
             print_dual(f"  Refining interior images with ASE's IDPP method "
                         f"(fmax={args.idpp_fmax}, max {args.idpp_steps} steps) ...", f_out)
             with capture_library_noise(library_warnings, "IDPP refinement"):
-                pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps)
+                pmg_images = idpp_refine_images(pmg_images, fmax=args.idpp_fmax, steps=args.idpp_steps,
+                                                fixed_atoms=fixed_atoms)
             print_dual("  [OK] IDPP refinement applied to interior images.", f_out)
 
         ml_neb_used = False
@@ -892,14 +1058,19 @@ def main():
             print_dual(f"  Spring constant k : {args.ml_k} eV/Ang^2", f_out)
             print_dual(f"  Target fmax       : {args.ml_fmax} eV/Ang (max {args.ml_max_steps} steps)", f_out)
             ase_images = [AseAtomsAdaptor.get_atoms(s) for s in pmg_images]
+            frozen_indices = list(fixed_atoms)
             if args.ml_freeze_substrate:
-                frozen_indices = compute_frozen_indices(pmg_images, threshold=args.ml_freeze_threshold)
-                if frozen_indices:
-                    from ase.constraints import FixAtoms
-                    for atoms in ase_images:
-                        atoms.set_constraint(FixAtoms(indices=frozen_indices))
-                print_dual(f"  Freezing {len(frozen_indices)}/{len(ase_images[0])} atom(s) with "
-                            f"< {args.ml_freeze_threshold} Ang displacement between endpoints.", f_out)
+                spectators = compute_frozen_indices(pmg_images, threshold=args.ml_freeze_threshold)
+                frozen_indices = sorted(set(frozen_indices) | set(spectators))
+                print_dual(f"  Freezing {len(frozen_indices)}/{len(ase_images[0])} atom(s): "
+                            f"{len(spectators)} with < {args.ml_freeze_threshold} Ang displacement "
+                            f"between endpoints, {len(fixed_atoms)} fixed along the band.", f_out)
+            elif fixed_atoms:
+                print_dual(f"  Freezing the {len(fixed_atoms)} atom(s) fixed along the band.", f_out)
+            if frozen_indices:
+                from ase.constraints import FixAtoms
+                for atoms in ase_images:
+                    atoms.set_constraint(FixAtoms(indices=frozen_indices))
 
             with capture_library_noise(library_warnings, "MACE calculator setup"):
                 # dispersion=args.force_vdw: same level-of-theory-matching
@@ -963,7 +1134,8 @@ def main():
             image_dir = os.path.join(images_root, label)
             write_image_folder(image_dir, pmg_image, calc_text, species_meta,
                                 args.pseudo_dir, force_spin=args.force_spin,
-                                force_vdw=args.force_vdw, force_dipole=args.force_dipole)
+                                force_vdw=args.force_vdw, force_dipole=args.force_dipole,
+                                fixed_atoms=fixed_atoms)
             print_dual(f"  {color_text('[OK]', 'green')} {image_dir}", f_out)
             report_rows.append((label, i, reaction_coords[i], image_dir))
         print_dual(f"  {len(pmg_images)} image folder(s) written under '{images_root}'.", f_out)

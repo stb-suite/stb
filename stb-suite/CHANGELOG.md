@@ -354,6 +354,17 @@ version before) and **Added** (new options and tools).
   endpoint displacement, the path length, the spectator atoms frozen in the MACE stage and the path
   length of `stb-nebAnalysis` are measured through the nearest image.
 
+- `stb-mlneb --to-mlff` (and `--siesta-check`) with both `--calc` and `--mlff-workflow`: the folders
+  took `--calc`, written under its own name (`calc_neb.fdf`, not `calc.fdf` like the rest of the
+  workflow), and in the E16 run without the `Spin polarized` and `Slab.DipoleCorrection` of the
+  round-1 labels, with no warning -- new training labels on another Hamiltonian, although the help
+  promised "the workflow's level of theory". Now `--to-mlff` always uses the workflow's reference
+  calc.fdf (`--calc` is ignored for it, with a warning listing where they differ); `--siesta-check`
+  alone still honours `--calc` but warns the same way; a finished check folder is copied into the
+  training set only when its level of theory matches the workflow's, else the image gets a new
+  folder; the calc file is written as `calc.fdf` (the reference's own name). `stb-mlffAnalysis`'s
+  level-of-theory check across training folders now also compares `Slab.DipoleCorrection`.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

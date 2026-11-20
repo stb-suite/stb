@@ -588,14 +588,55 @@ SINGLE_POINT_EXTRA = ("# stb-mlneb: single-point evaluation of a NEB image (no r
                       "MD.VariableCell       false\n")
 
 
+def theory_settings(*texts):
+    """{setting: value} of the level-of-theory settings stb-mlffAnalysis compares between training
+    folders (XC, basis, mesh, smearing, spin, D3, dipole correction, SCF tolerance), from fdf texts in
+    SIESTA's reading order; 'default' when absent."""
+    from stb.core.fdf_directives import parse_directives
+    from stb.mlff_analysis import _THEORY_KEYS
+    d = parse_directives(*texts)
+    out = {}
+    for label, keys in _THEORY_KEYS:
+        v = " ".join(next((d[k] for k in keys if k in d), "default").split())
+        out[label] = re.sub(r"(\d)[dD]([+-]?\d)", r"\1e\2", v).lower()
+    return out
+
+
+def template_settings(tpl):
+    """theory_settings of the folders write_siesta_folder writes from `tpl`."""
+    with open(tpl["calc"], errors="replace") as f:
+        return theory_settings(tpl["extra"] + SINGLE_POINT_EXTRA, f.read())
+
+
+def folder_settings(folder):
+    """theory_settings of a written SIESTA folder: config_extra.fdf (read first), then the other .fdf."""
+    import glob
+    files = sorted(glob.glob(os.path.join(folder, "*.fdf")))
+    files.sort(key=lambda p: os.path.basename(p) != "config_extra.fdf")
+    texts = []
+    for path in files:
+        with open(path, errors="replace") as f:
+            texts.append(f.read())
+    return theory_settings(*texts)
+
+
+def settings_differences(a, b):
+    """[(setting, value in a, value in b)] where two theory_settings dicts differ."""
+    return [(k, a.get(k, "default"), b.get(k, "default")) for k in a if a.get(k, "default") != b.get(k, "default")]
+
+
 def siesta_template(args, state, wf_base):
     """The SIESTA inputs every check/export folder starts from. With --mlff-workflow: the workflow's
     reference calc.fdf, pseudopotentials and dispersion, the k-grid scaled to keep the reference's
-    k x a; else --calc and --pseudo-dir, the calc's own k-grid (or --kgrid). Raises ValueError."""
+    k x a; else --calc and --pseudo-dir, the calc's own k-grid (or --kgrid). With both, --calc is used
+    for --siesta-check alone, but --to-mlff always takes the workflow's reference (its folders become
+    training labels, which must share round 1's level of theory); the returned 'notes' list the
+    settings in which --calc differs from the reference. The calc file is always written as the
+    reference's name (calc.fdf). Raises ValueError."""
     from stb.core.fdf_directives import parse_kgrid
     from stb.core.pseudopotentials import is_bank, resolve_pseudo_source
     from stb.core import mlff_workflow
-    ref_cell, extra = None, ""
+    ref_cell, extra, notes = None, "", []
     if state is not None:
         rec = state.get("reference") or {}
         if not rec.get("calc"):
@@ -619,8 +660,26 @@ def siesta_template(args, state, wf_base):
         calc, pseudo_dir = args.calc, args.pseudo_dir
         source = f"--calc {args.calc}, pseudopotentials {args.pseudo_dir}"
     if args.calc and state is not None:
-        calc = args.calc
-        source = f"--calc {args.calc} (k-grid scaled from the workflow's reference cell)"
+        if not os.path.isfile(args.calc):
+            raise ValueError(f"calc template '{args.calc}' not found")
+        with open(calc, errors="replace") as f:
+            ref_settings = theory_settings(extra + SINGLE_POINT_EXTRA, f.read())
+        with open(args.calc, errors="replace") as f:
+            own_settings = theory_settings(extra + SINGLE_POINT_EXTRA, f.read())
+        diffs = settings_differences(ref_settings, own_settings)
+        listing = ", ".join(f"{k} '{b}' instead of '{a}'" for k, a, b in diffs)
+        if args.to_mlff:
+            if diffs:
+                notes.append(f"--calc {args.calc} differs from the workflow's reference calc.fdf ({listing}): "
+                             "--to-mlff (and --siesta-check, whose folders it reuses) uses the reference, so the new "
+                             "labels share the level of theory of the training set; --calc is ignored.")
+        else:
+            calc = args.calc
+            source = f"--calc {args.calc} (k-grid scaled from the workflow's reference cell)"
+            if diffs:
+                notes.append(f"--calc {args.calc} differs from the workflow's reference calc.fdf ({listing}): the "
+                             "SIESTA check is then not at the training set's level of theory, and its folders are "
+                             "not reused by a later --to-mlff.")
     if not os.path.isfile(calc):
         raise ValueError(f"calc template '{calc}' not found")
     with open(calc) as f:
@@ -630,7 +689,9 @@ def siesta_template(args, state, wf_base):
         raise ValueError(f"'{calc}' does not %include a structure file: the images need a calc.fdf without geometry "
                          "that %includes one (the suite's structure.fdf + calc.fdf pair)")
     return {"calc": calc, "struct": inc[0], "pseudo": resolve_pseudo_source(pseudo_dir), "pseudo_label": pseudo_dir,
-            "kgrid": parse_kgrid(text), "ref_cell": ref_cell, "extra": extra, "source": source}
+            "kgrid": parse_kgrid(text), "ref_cell": ref_cell, "extra": extra, "source": source, "notes": notes,
+            "calc_name": (os.path.basename(mlff_workflow.resolve(state["reference"]["calc"], wf_base))
+                          if state is not None else "calc.fdf")}
 
 
 def image_kgrid(tpl, atoms, override):
@@ -665,7 +726,7 @@ def write_siesta_folder(folder, atoms, tpl, species_meta, kgrid_override=None):
         f.write(extra)
     with open(tpl["calc"]) as f:
         text = f.read()
-    with open(os.path.join(folder, os.path.basename(tpl["calc"])), "w") as f:
+    with open(os.path.join(folder, tpl.get("calc_name", "calc.fdf")), "w") as f:
         f.write(structure_io.prepend_include(text, "config_extra.fdf"))
     pseudos, missing = get_required_pseudos(sorted(set(atoms.get_chemical_symbols())), tpl["pseudo"])
     if missing:
@@ -763,6 +824,8 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
     root = os.path.join(mlff_workflow.configs_dir(base, latest + 1), tag if tag.startswith("neb") else f"neb_{tag}")
     known = {c["folder"] for c in state["configs"]}
     entries, pending, copied, skipped = [], [], 0, 0
+    wanted = template_settings(tpl)
+    not_reused = []
     rng = np.random.default_rng(args.to_mlff_seed)
     for i, image in enumerate(res["images"]):
         jobs = [(f"image_{i:02d}", image, "neb", f"NEB image {i} of {len(res['images']) - 1}, {res['label']} band")]
@@ -779,6 +842,11 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
                 continue
             r = results.get(i) if kind == "neb" else None
             if isinstance(r, dict):
+                diffs = settings_differences(wanted, folder_settings(os.path.dirname(r["out"])))
+                if diffs:
+                    not_reused.append((os.path.dirname(r["out"]), diffs))
+                    r = None
+            if isinstance(r, dict):
                 shutil.copytree(os.path.dirname(r["out"]), dest, dirs_exist_ok=True)
                 copied += 1
             else:
@@ -789,6 +857,10 @@ def export_to_mlff(args, state, wf_path, res, tpl, species_meta, results, warn, 
                             "neb": {"image": i, "initial": args.initial, "final": args.final,
                                     "model": res["label"], "E_rel_model_eV": round(float(
                                         res["energies"][i] - res["energies"][0]), 5)}})
+    for folder, diffs in not_reused:
+        warn(f"--to-mlff: {folder} was run at another level of theory than the training set ("
+             + ", ".join(f"{k} '{b}' instead of '{a}'" for k, a, b in diffs)
+             + "): not copied as a label; the image gets a new folder with the workflow's settings.")
     if entries:
         mlff_workflow.backup(wf_path)
         mlff_workflow.add_configs(state, entries, base)
@@ -870,7 +942,10 @@ def build_parser():
     parser.add_argument("--calc", default=None,
                         help="calc.fdf template for --siesta-check/--to-mlff (no geometry; it must %%include the "
                              "structure file, which each folder gets). Default with --mlff-workflow: its reference "
-                             "calc.fdf.")
+                             "calc.fdf. With --mlff-workflow, --calc applies to --siesta-check alone: --to-mlff always "
+                             "uses the workflow's reference (training labels must share its level of theory), and "
+                             "any setting in which --calc differs from it is reported. The calc file is written as "
+                             "calc.fdf (or the reference's own name).")
     parser.add_argument("--pseudo-dir", default=".",
                         help="Pseudopotentials for --siesta-check with --calc: a folder or a bank name (default: .).")
     parser.add_argument("--kgrid", type=int, nargs=3, default=None, metavar=("KA", "KB", "KC"),
@@ -1058,6 +1133,8 @@ def main():
         _, missing = get_required_pseudos(elements, tpl["pseudo"])
         if missing:
             fail(f"--siesta-check/--to-mlff: no pseudopotential for {', '.join(missing)} in '{tpl['pseudo_label']}'")
+        for note in tpl["notes"]:
+            warn(note)
     initial_pmg = wrap_into_cell(structure_io.to_pymatgen(initial_structure))
     final_pmg = resolve_lattice_mismatch(initial_pmg, wrap_into_cell(structure_io.to_pymatgen(final_structure)),
                                          warn=warn)
@@ -1182,7 +1259,7 @@ def main():
             print_dual(f"Written           : {written} single-point folder(s) in {args.output_dir}/{SIESTA_DIR}/ -- run "
                        "SIESTA in them, then this command again:", f_out)
             print_dual(f"  for d in {args.output_dir}/{SIESTA_DIR}/image_*/; do (cd $d && mpirun -np 4 siesta < "
-                       f"{os.path.basename(tpl['calc'])} > siesta.out); done", f_out)
+                       f"{tpl['calc_name']} > siesta.out); done", f_out)
         report_siesta(main_res, results, f_out, warn, args)
     if args.to_mlff:
         sections("EXPORT TO THE MLFF WORKFLOW")

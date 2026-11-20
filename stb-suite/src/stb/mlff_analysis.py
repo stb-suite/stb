@@ -500,6 +500,7 @@ _THEORY_KEYS = [("XC.functional", ("xcfunctional",)), ("XC.authors", ("xcauthors
                 ("PAO.BasisSize", ("paobasissize",)), ("PAO.EnergyShift", ("paoenergyshift",)),
                 ("Mesh.Cutoff", ("meshcutoff",)), ("ElectronicTemperature", ("electronictemperature",)),
                 ("Spin", ("spin", "spinpolarized")), ("DFTD3", ("dftd3",)),
+                ("Slab.DipoleCorrection", ("slabdipolecorrection",)),
                 ("SCF tolerance", ("scfdmtolerance", "dmtolerance"))]
 
 

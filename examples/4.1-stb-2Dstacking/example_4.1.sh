@@ -263,7 +263,7 @@ echo "=================================================================="
 echo " output/full-report/  --  --save-report, validation, references.bib"
 echo "=================================================================="
 cat <<'EOF'
-The full numbered report (also written to stb_2dstacking_report.txt with
+The full numbered report (also written to stb_2Dstacking_report.txt with
 --save-report) includes the structure-validation checklist -- atom
 proximity, lattice handedness, atomic density -- for every heterostructure
 built, and a references.bib with SIESTA plus the ZSL algorithm paper
@@ -274,8 +274,8 @@ cp graphene.fdf hbn.fdf "$OUT/full-report/"
 echo "\$ stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --save-report --no-intro"
 (cd "$OUT/full-report" && stb-2Dstacking -l1 graphene.fdf -l2 hbn.fdf -id 0 --save-report --no-intro > console.log)
 echo
-echo "Report sections written to stb_2dstacking_report.txt:"
-grep -E "^\[[0-9]\]" "$OUT/full-report/stb_2dstacking_report.txt"
+echo "Report sections written to stb_2Dstacking_report.txt:"
+grep -E "^\[[0-9]\]" "$OUT/full-report/stb_2Dstacking_report.txt"
 echo
 echo "Validation checklist (one row shown):"
 grep "Atom proximity" "$OUT/full-report/console.log"
@@ -356,7 +356,7 @@ skipped if the optional 'ml' extra isn't installed):
   twist/       custom-shift/  full-report/   ml-relax/
 
 Each has references.bib; full-report/ additionally has
-stb_2dstacking_report.txt; ml-relax/'s references.bib also cites the MACE
+stb_2Dstacking_report.txt; ml-relax/'s references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:

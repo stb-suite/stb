@@ -42,8 +42,10 @@ relax() {   # $1 = name, $2 = start structure, $3 = template, $4.. = species; ex
 cdd() {   # $1 = set name, $2 = structure, $3 = fragment sizes, $4 = template, $5 = MeshCutoff (Ry), $6.. = prep flags
     local d="$WORK/$1"
     if [ ! -f "$d/chargediff_manifest.json" ]; then
+        rm -f stb_chargediffPrep_report*.txt     # the report goes to the current folder: moved into the set
         stb-chargediffPrep -s "$2" --fragment-sizes "$3" --calc "$4" --mesh-cutoff "$5" -p dojo -o "$d" \
             "${@:6}" --save-report --no-intro < /dev/null > /dev/null
+        mv stb_chargediffPrep_report.txt "$d/"
     fi
     for f in "$d"/combined "$d"/fragment[0-9]; do siesta_in "$f"; done
     for f in "$d"/fragment[0-9]; do
@@ -107,7 +109,7 @@ done
 mkdir -p "$OUT/graphene_flat"; cp "$G"/{calc.fdf,template.fdf,structure.fdf,calc.out} "$OUT/graphene_flat/"
 for d in "$WORK"/water* "$WORK"/nh3bh3 "$WORK"/li_graphene; do
     n=$(basename "$d"); mkdir -p "$OUT/$n"
-    cp "$d"/chargediff_manifest.json "$d"/chargediff_prep_report.txt "$OUT/$n/"
+    cp "$d"/chargediff_manifest.json "$d"/stb_chargediffPrep_report.txt "$OUT/$n/"
     mkdir -p "$OUT/$n/analysis"; cp "$d"/analysis/*results.json "$d"/analysis/*atoms.csv "$d"/analysis/*report.txt "$OUT/$n/analysis/"
     for f in "$d"/combined "$d"/fragment*; do
         b=$(basename "$f"); mkdir -p "$OUT/$n/$b"

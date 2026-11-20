@@ -351,7 +351,7 @@ pass `--pseudo-dir` a second time.
 ```
 
 `--save-report` persists this exact text to
-`hubbardu_runs/hubbardu_stage1.txt`; no `references.bib` is written by any
+`stb_hubbardu_report.txt` in the current folder (`_1`, `_2`, ... when taken); no `references.bib` is written by any
 of the three tools in this workflow (unlike `stb-inputfile`/`stb-kgrid`/
 `stb-kpath`) — the Cococcioni & de Gironcoli citation is instead printed
 directly in Stage 3's `[3] COMPUTED U` section, right next to the number

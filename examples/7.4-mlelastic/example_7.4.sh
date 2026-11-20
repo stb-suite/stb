@@ -233,10 +233,11 @@ foundation comparison, keep the anisotropy surface, no display, no gnuplot, no d
 EOF
 mkdir -p "$OUT/case11_menu"
 cd "$OUT/case11_menu"
+rm -f stb_mlelastic_report*.txt    # the report goes to the folder the menu runs in
 printf '7.4\n%s\n%s\n\ncpu\n1.0\n5\n\nmenu_out\nn\nn\nn\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1 menu_out 2>/dev/null | sed 's/^/  /'
-strip_colors < menu_out/stb_mlelastic_report.txt 2>/dev/null | grep -E "^Device|^SHA-256|^Status|^Results" | sed 's/^/  /'
+strip_colors < stb_mlelastic_report.txt 2>/dev/null | grep -E "^Device|^SHA-256|^Status|^Results" | sed 's/^/  /'
 cd "$DIR"
 pause
 

@@ -293,7 +293,7 @@ relax it first), a **fragment split** and your **template** (`--calc`, default `
     fragment2/     ...
     chargediff_manifest.json          the split, read by Stage 2
     chargediff_fragments.png          with --png: the system projected on xy/xz/yz, atoms coloured by fragment
-    chargediff_prep_report.txt        with --save-report
+    (stb_chargediffPrep_report.txt, with --save-report, goes to the folder you run it from)
     references.bib
 ```
 
@@ -452,7 +452,7 @@ chooses it:
 | `--show` / `--png` | the 4-panel dashboard on screen / `<dir>_chargediff_summary.png` (without a display `--show` saves the PNG) |
 | `--save-gnuplot` | a `.gplot` next to the `.dat` (`--contour` overlays contours, `--vmin/--vmax` fix the colour range) |
 | `--save-data` | `<dir>_chargediff_atoms.csv` (charge change per atom) + `<dir>_chargediff_results.json` (every number of the report) |
-| `--save-report` | `chargediff_analysis_report.txt` |
+| `--save-report` | `stb_chargediffAnalysis_report.txt` |
 
 The **dashboard**: the slice with the atoms near it (zoomed on the atoms of an isolated system); the planar integral
 `λ(z)` and the cumulative charge `ΔQ(z)` with every atom and the separating plane marked; the charge change by atom,

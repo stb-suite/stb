@@ -1,2 +1,3 @@
 output/
 reference_run/
+/stb_*_report*.txt

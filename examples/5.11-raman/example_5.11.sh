@@ -167,7 +167,7 @@ symmetry shortcut, so the rules can be checked rather than assumed): ZO (out of 
 E2g partners (the G line) must have the same activity.
 EOF
 copy_run graphene "$OUT/case6"
-section "$OUT/case6/raman_study/raman_stage2.txt" "[1] PHONON MODES" | grep -E "mode" | sed 's/^/ /'
+section "$(ls "$OUT/case6/raman_study"/stb_ramanModes_report.txt "$OUT/case6"/stb_ramanModes_report.txt 2>/dev/null | head -1)" "[1] PHONON MODES" | grep -E "mode" | sed 's/^/ /'
 run "$OUT/case6/stage3.txt" "$OUT/case6" stb-ramanAnalysis --directory raman_study --save-gnuplot
 section "$OUT/case6/stage3.txt" "[2] RAMAN-ACTIVE" | grep -E "Mode|^  [123] "
 grep -E "^\[WARNING\] Degenerate" "$OUT/case6/stage3.txt" | fold -s -w 116 | sed 's/^/  /'

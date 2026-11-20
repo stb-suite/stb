@@ -363,7 +363,7 @@ folder per requested direction:
 
 ```
 optical_study/
-├── optical_stage1.txt        <- the Stage 1 report (with --save-report)
+├── (the Stage 1 report, with --save-report, is stb_optical_report.txt in the folder you ran it from)
 ├── dir_xx/ dir_yy/ dir_zz/   <- diagonal components (Optical.Vector = x, y, z)
 └── dir_xy/ dir_xz/ dir_yz/   <- biaxial bisectors (for eps_ij, Section 1.6)
         structure.fdf  calc.fdf  config_extra.fdf  <pseudopotentials>

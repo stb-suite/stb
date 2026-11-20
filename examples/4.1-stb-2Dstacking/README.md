@@ -118,7 +118,7 @@ output — `example_4.1.sh` proves this directly at the end.
 
 - **A numbered report** (`[0] RUN METADATA` … `[6] SUMMARY & FILES` — `[3]`
   only appears with `--ml-relax`, see below) printed to the console and,
-  with `--save-report`, also saved to `stb_2dstacking_report.txt`.
+  with `--save-report`, also saved to `stb_2Dstacking_report.txt`.
 - **Structure validation** — atom proximity, lattice handedness, atomic
   density, each an explicit `[OK]`/`[WARNING]`/`[SKIPPED]` row — run for
   **every** heterostructure the invocation builds (not just one), even in
@@ -159,7 +159,7 @@ output — `example_4.1.sh` proves this directly at the end.
   layer 1's own.
 - **`--save-report`** — also persists the full report (structure
   validation, the symmetry table, and, with `--ml-relax`, the full MACE
-  simulation detail) to `stb_2dstacking_report.txt`.
+  simulation detail) to `stb_2Dstacking_report.txt`.
 - **`--view`** — opens every generated heterostructure in ASE's
   interactive 3D viewer (`ase-gui`), as separate, pageable frames. Needs a
   local display (or `ssh -X`/`-Y`). Never exercised by `example_4.1.sh`
@@ -188,7 +188,7 @@ output — `example_4.1.sh` proves this directly at the end.
   as both layers).
 - `example_4.1.sh` — the guided walkthrough (see below).
 - `.gitignore` — excludes `output/`, `references.bib`, and
-  `stb_2dstacking_report.txt`.
+  `stb_2Dstacking_report.txt`.
 
 ## Running the walkthrough
 

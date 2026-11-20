@@ -4,3 +4,4 @@ stb_density_report.txt
 *_density*.dat
 *_density*.gplot
 *_density*.cube
+stb_*_report*.txt

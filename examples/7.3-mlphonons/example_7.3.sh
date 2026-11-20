@@ -257,10 +257,11 @@ display, no gnuplot, no data, save the report.
 EOF
 mkdir -p "$OUT/case11_menu"
 cd "$OUT/case11_menu"
+rm -f stb_mlphonons_report*.txt    # the report goes to the folder the menu runs in
 printf '7.3\n%s\n%s\n\n\n\nmenu_out\n1\nn\nn\ny\n\n\n\n\n\n\nn\nn\nn\ny\n\n0\n' "$DIR/si8.fdf" "$MODEL" | \
     stb-suite > menu_log.txt 2>&1 || true
 ls -1 menu_out 2>/dev/null | sed 's/^/  /'
-strip_colors < menu_out/stb_mlphonons_report.txt 2>/dev/null | grep -E "^Model  |^SHA-256|^Mode  |^Band index|^Status|^Results" | sed 's/^/  /'
+strip_colors < stb_mlphonons_report.txt 2>/dev/null | grep -E "^Model  |^SHA-256|^Mode  |^Band index|^Status|^Results" | sed 's/^/  /'
 cd "$DIR"
 pause
 

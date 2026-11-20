@@ -157,7 +157,7 @@ DFT grid. Both need the optional `ml` extra.
 Every run always writes `sf_manifest.json` (grid shape + per-point
 shift/gap, machine-readable) under `sf_run/` — the primary source Stage
 2 reads, independent of whether `--save-report`'s narrative
-`stackingfault_setup.txt` was also requested.
+`stb_stackingfault_report.txt` was also requested.
 
 ## 3. Stage 2: analyzing the results (`stb-stackingfaultAnalysis`, code `5.10.2`)
 

@@ -212,12 +212,12 @@ cp structure.fdf calc.fdf "$OUT/case6-interactive/"
 (cd "$OUT/case6-interactive" && \
     printf '5.13.1\nstructure.fdf\nGa\nIn\n\n1\n\n\n\n\n\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq -x '*.psml' "$OUT/case1-stage1/gqca_study" "$OUT/case6-interactive/gqca_study" 2>&1 \
-        | grep -v "gqca_stage1.txt" | grep -q .; then
+        | grep -q .; then
     echo "UNEXPECTED: CLI and interactive menu folders differ -- see"
     echo "  diff -rq -x '*.psml' '$OUT/case1-stage1/gqca_study' '$OUT/case6-interactive/gqca_study'"
 else
     echo "CLI (Case 1) and interactive menu (5.13.1) produced identical cluster folders"
-    echo "(the Stage 1 report differs only by its own timestamp)."
+    echo "(the Stage 1 report itself is in each case folder, not in gqca_study/)."
 fi
 pause
 
@@ -302,7 +302,7 @@ can show them on screen:
   --png / --show        6-panel dashboard (saved / opened with matplotlib)
   --view                the 3 relaxed structures in ASE's 3D viewer
   --export-relaxed FMT  the 3 relaxed structures (cif|xsf|xyz|vasp) to files
-  --save-report         the text report as gqca_stage2.txt
+  --save-report         the text report as stb_gqcaAnalysis_report.txt
 Here the headless-safe ones (--show/--view need a display, see the README):
 EOF
 echo "\$ stb-gqcaAnalysis --directory output/ingaas --png --export-relaxed cif --save-report --no-intro"

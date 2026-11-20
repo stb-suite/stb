@@ -346,8 +346,8 @@ the same inputs and `diff -rq`-ing the result.
 [5] SUMMARY & FILES                   -- one glanceable results table + file paths
 ```
 
-`--save-report` persists the exact same report to `elastic_stage2.txt`
-(matching `elastic_inputs.py`'s own `elastic_stage1.txt` naming logic).
+`--save-report` persists the exact same report to `stb_elasticAnalysis_report.txt`
+(matching `elastic_inputs.py`'s own `stb_elasticInputs_report.txt` naming logic).
 
 ### 3.2 `-d/--dir` and dimensionality — both auto-detected, no `cd` required
 
@@ -574,7 +574,7 @@ Reading this the way sections 1 and 3 set up:
    everything ended up on disk.
 
 7. **(Optional) persist or plot**: `--save-report` writes
-   `elastic_stage2.txt`; `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
+   `stb_elasticAnalysis_report.txt`; `--save-gnuplot` writes `<mode>_fit.dat`/`.gplot`
    into `--plot-dir` (section 3.4); `--view` opens the same fits
    interactively in matplotlib instead.
 

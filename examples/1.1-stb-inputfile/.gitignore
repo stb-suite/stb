@@ -3,3 +3,4 @@ calc.fdf
 references.bib
 *.psml
 *.psf
+/stb_*_report*.txt

@@ -297,10 +297,11 @@ if [ "$DEVICE" != "cuda" ]; then
 EOF
 else
     mkdir -p "$OUT/case10"
+    rm -f "$OUT/case10"/stb_mlneb_report*.txt    # the report goes to the folder the menu runs in
     printf '7.5\n%s\n%s\n%s\n\nmedium\ncuda\n7\nn\nn\n%s\ny\nn\nn\nmenu_out\nn\ny\ny\nn\ny\n\n0\n' \
         "$DIR/vac_initial.fdf" "$DIR/vac_final.fdf" "$R3/mlff_model_compiled.model" "$WF" \
         | (cd "$OUT/case10" && stb-suite > log.txt 2>&1) || true
-    R="$OUT/case10/menu_out/stb_mlneb_report.txt"
+    R="$OUT/case10/stb_mlneb_report.txt"
     if [ -f "$R" ]; then
         section "$R" "RUN METADATA"
         section "$R" "SIESTA CHECK" | head -6

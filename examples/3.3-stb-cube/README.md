@@ -464,7 +464,7 @@ unpolarized Si (`guard_spin/`): the total is written instead, with a warning. Tw
 ### 6.7 Labels and folders (Case 7)
 
 `-l` may include a folder: `stb-cube -l si/si -t VT` reads `si/si.VT`, finds `si/calc.out`, and writes `si/si_VT.cube`
-(and with `--save-report`, `si/stb_cube_report.txt`) next to the input (`reference_results/label_path/`). Without `-l`,
+(and with `--save-report`, `stb_cube_report.txt` in the current folder) next to the input (`reference_results/label_path/`). Without `-l`,
 the only file of that type in the current folder is used:
 
 ```

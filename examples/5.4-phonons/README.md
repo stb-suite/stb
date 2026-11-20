@@ -719,7 +719,7 @@ does not.
    just absent).
 
 7. **(Optional) persist or view**: `--save-report` writes
-   `phonon_properties.txt`; `--save-gnuplot` writes `.dat`/`.gplot` pairs
+   `stb_phononsPos_report.txt`; `--save-gnuplot` writes `.dat`/`.gplot` pairs
    (off by default, Section 4.7); `--view` pops up the computed plots
    live.
 

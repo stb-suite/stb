@@ -57,25 +57,26 @@ study() {   # $1 = study name, $2 = structure, $3 = template, $4 = MeshCutoff (R
     local d="$WORK/$1"
     mkdir -p "$d"
     if [ ! -f "$d/hirshfeld_manifest.json" ]; then
-        (cd "$d" && stb-hirshfeldPrep -s "$2" --calc "$3" -p dojo -O . --mesh-cutoff "$4" --vacuum "$5" \
+        (cd "$d" && rm -f stb_hirshfeldPrep_report*.txt && stb-hirshfeldPrep -s "$2" --calc "$3" -p dojo -O . --mesh-cutoff "$4" --vacuum "$5" \
             --save-report --no-intro < /dev/null > prep.log 2>&1)
     fi
     siesta_all "$d/combined" "$d"/neutral/*
     if [ ! -f "$d/hirshfeld_ions_manifest.json" ]; then
-        (cd "$d" && stb-hirshfeldIons -O . -p dojo --save-report --no-intro < /dev/null > ions.log 2>&1)
+        (cd "$d" && rm -f stb_hirshfeldIons_report*.txt && stb-hirshfeldIons -O . -p dojo --save-report --no-intro < /dev/null > ions.log 2>&1)
     fi
     siesta_all "$d"/ions/*/*
     mkdir -p "$d/analysis"
-    (cd "$d/analysis" && stb-hirshfeldAnalysis -O .. --save-data --save-report --png --no-intro \
+    (cd "$d/analysis" && rm -f stb_hirshfeldAnalysis_report*.txt && stb-hirshfeldAnalysis -O .. --save-data --save-report --png --no-intro \
         < /dev/null > analysis.log 2>&1)
-    echo "study $1: $(grep -m1 -o 'Converged *: [a-z]*' "$d/analysis/hirshfeld_analysis_report.txt")"
+    echo "study $1: $(grep -m1 -o 'Converged *: [a-z]*' "$d/analysis/stb_hirshfeldAnalysis_report.txt")"
 }
 
 bader() {   # $1 = study name: Bader charges of the same combined/ density
     local d="$WORK/$1"
     [ -f "$d/bader/stb_bader_report.txt" ] && return 0
-    (cd "$d/combined" && stb-bader -l siesta --ref calc.out -o ../bader --save-report --no-cube --no-intro \
-        < /dev/null > ../bader/bader.log 2>&1) || mkdir -p "$d/bader"
+    (cd "$d/combined" && rm -f stb_bader_report*.txt && stb-bader -l siesta --ref calc.out -o ../bader --save-report \
+        --no-cube --no-intro < /dev/null > ../bader/bader.log 2>&1 && mv stb_bader_report.txt ../bader/) \
+        || mkdir -p "$d/bader"
 }
 
 # ---- 1. relaxations ------------------------------------------------------------------------------------------
@@ -94,7 +95,7 @@ for s in h2o n2o nacl mgo; do
     mkdir -p "$WORK/$s/bader"; bader $s
     # the same analysis converged to 1e-6 e: the reference the remaining-error estimate is checked against
     mkdir -p "$WORK/$s/analysis_tight"
-    (cd "$WORK/$s/analysis_tight" && stb-hirshfeldAnalysis -O .. --tol 1e-6 --max-iter 300 --save-data \
+    (cd "$WORK/$s/analysis_tight" && rm -f stb_hirshfeldAnalysis_report*.txt && stb-hirshfeldAnalysis -O .. --tol 1e-6 --max-iter 300 --save-data \
         --save-report --no-intro < /dev/null > analysis.log 2>&1)
 done
 
@@ -120,11 +121,11 @@ done
 for d in "$WORK"/h2o* "$WORK"/n2o "$WORK"/nacl "$WORK"/mgo; do
     [ -d "$d/combined" ] || continue
     n=$(basename "$d"); mkdir -p "$OUT/$n/analysis"
-    cp "$d"/hirshfeld_manifest.json "$d"/hirshfeld_ions_manifest.json "$d"/hirshfeld_prep_report.txt \
-       "$d"/hirshfeld_ions_report.txt "$OUT/$n/"
-    cp "$d"/analysis/hirshfeld_* "$OUT/$n/analysis/"
+    cp "$d"/hirshfeld_manifest.json "$d"/hirshfeld_ions_manifest.json "$d"/stb_hirshfeldPrep_report.txt \
+       "$d"/stb_hirshfeldIons_report.txt "$OUT/$n/"
+    cp "$d"/analysis/hirshfeld_* "$d"/analysis/stb_hirshfeldAnalysis_report.txt "$OUT/$n/analysis/"
     [ -d "$d/analysis_tight" ] && { mkdir -p "$OUT/$n/analysis_tight"; cp "$d"/analysis_tight/hirshfeld_*.dat \
-        "$d"/analysis_tight/hirshfeld_analysis_report.txt "$OUT/$n/analysis_tight/"; }
+        "$d"/analysis_tight/stb_hirshfeldAnalysis_report.txt "$OUT/$n/analysis_tight/"; }
     [ -f "$d/bader/stb_bader_report.txt" ] && { mkdir -p "$OUT/$n/bader"; cp "$d/bader/stb_bader_report.txt" "$OUT/$n/bader/"; }
     for f in "$d"/combined "$d"/neutral/* "$d"/ions/*/*; do
         r=${f#"$d"/}; mkdir -p "$OUT/$n/$r"

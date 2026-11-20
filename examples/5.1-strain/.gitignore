@@ -1,2 +1,3 @@
 output/
 strain_runs/
+/stb_*_report*.txt

@@ -311,7 +311,8 @@ must point at `<output-dir>/neb_run`, not `<output-dir>` itself (both
 default to exactly that, so most of the time you never need to think
 about it).
 
-Report structure (`[0]`–`[9]`, always saved to `neb_run/neb_setup.txt`):
+Report structure (`[0]`–`[9]`, always saved to `stb_neb_report.txt` in the current folder; the band itself is
+recorded in `neb_run/neb_setup.json`, which `stb-nebCycle`/`stb-nebAnalysis` read):
 
 ```
 [0] RUN METADATA
@@ -410,7 +411,7 @@ $ stb-nebAnalysis --dir neb_run --save-report --save-gnuplot --save-path-xyz
 ```
 
 Report structure (`[0]`–`[7]`, `--save-report` persists it to
-`neb_run/neb_report.txt`):
+`stb_nebAnalysis_report.txt` in the current folder):
 
 ```
 [0] RUN METADATA
@@ -442,7 +443,7 @@ converged one.
 right now** — not just what Stage 1 reported at prep time: declared vs.
 found image count, reaction-coordinate monotonicity, cross-image
 composition, a recomputed path length cross-checked against Stage 1's own
-`neb_setup.txt` record, and a plausibility check on the spline-fitted
+`neb_setup.json` record, and a plausibility check on the spline-fitted
 transition state (warns if it sits within 5% of either endpoint). `[3]`
 reports both the discrete highest-energy image's barrier and a
 cubic-spline-fitted one (needs >= 4 images with distinct reaction

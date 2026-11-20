@@ -571,7 +571,7 @@ result (section 1.7) on a less trivial structure.
    cutoff/wider scan.
 
 7. **(Optional) persist or view**: `--save-report` writes
-   `cohesive_results.dat`; `--view` opens `cohesive_correction.png`
+   `stb_cohesiveAnalysis_report.txt`; `--view` opens `cohesive_correction.png`
    interactively (it's always saved to disk regardless, section 3.6).
 
 ## 7. Files in this folder

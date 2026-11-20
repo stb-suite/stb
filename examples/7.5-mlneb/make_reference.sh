@@ -37,7 +37,9 @@ run() {   # run <case> <args...>
     fi
     echo "  [run]  $case: stb-mlneb $*"
     local t0=$SECONDS
-    (cd "$RUN" && stb-mlneb "${ends[@]}" "${common[@]}" -o "$case" "$@" > "$case.log" 2>&1) || {
+    # Run inside the case folder: the report goes to the current folder.
+    mkdir -p "$RUN/$case"; rm -f "$RUN/$case"/stb_mlneb_report*.txt
+    (cd "$RUN/$case" && stb-mlneb "${ends[@]}" "${common[@]}" -o . "$@" > "../$case.log" 2>&1) || {
         echo "  [FAIL] $case -- see $RUN/$case.log"; exit 1; }
     echo "         $((SECONDS - t0)) s"
 }

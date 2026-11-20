@@ -398,8 +398,8 @@ Folders generated under output/:
   stage1_bothsides/        workflow/
 
 output/workflow/adsorption_run/ has the full chain: clean_slab/, adsorbate/,
-sites/site_*/, bsse/site_*/, gibbs/, adsorption_report.txt,
-adsorption_bsse_report.txt, adsorption_gibbs_report.txt, adsorption_ranking.png,
+sites/site_*/, bsse/site_*/, gibbs/, stb_adsorbAnalysis_report.txt,
+stb_adsorbBsse_report.txt, stb_adsorbGibbs_report.txt, adsorption_ranking.png,
 adsorption_gibbs.png, adsorption_mode_spectrum.png, and best_production.fdf
 (the BSSE-corrected winner).
 

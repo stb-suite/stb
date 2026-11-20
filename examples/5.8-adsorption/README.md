@@ -277,7 +277,7 @@ Spin                polarized
 ```
 
 Report structure (`[0]`–`[6]`, `--save-report` persists it to
-`adsorption_prep_report.txt`):
+`stb_adsorb_report.txt`):
 
 ```
 [0] RUN METADATA
@@ -319,7 +319,7 @@ Three options for a real slab (since 2.0.1):
 **A caution worth knowing before you script this yourself:** calling
 `stb-adsorb` twice into the *same* `-O` output directory with two
 different single `--site-type` values (e.g. once for `ontop`, once for
-`bridge`) overwrites `sites/adsorption_sites.txt` — the machine-readable
+`bridge`) overwrites `sites/adsorption_sites.json` — the
 site table `stb-adsorbAnalysis` reads for each site's adsorbate/height —
 silently dropping the first call's row. Use a single `--site-type all
 --all-sites` call instead (as Section 4 below does) if you want more than
@@ -335,7 +335,7 @@ $ stb-adsorbBsse --dir adsorption_run --save-report
 ```
 
 Report structure (`[0]`–`[4]`, `--save-report` persists it to
-`adsorption_bsse_report.txt`):
+`stb_adsorbBsse_report.txt`):
 
 ```
 [0] RUN METADATA
@@ -361,8 +361,8 @@ $ stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
 ```
 
 Report structure (`[0]`–`[5]`, `--save-report` persists it to
-`<--dir>/adsorption_report.txt`; the curve data, gnuplot script and ranking plot also go into
-`--dir`, unless `-o` names another file):
+`stb_adsorbAnalysis_report.txt` in the current folder, `_1`, `_2`, ... when taken; the curve data,
+gnuplot script and ranking plot go into `--dir`, unless `-o` names another file):
 
 ```
 [0] RUN METADATA
@@ -656,7 +656,7 @@ rises, exactly the trend Section 13.4's worked example below shows numerically.
 | `--file` | SIESTA output filename inside each folder (default `calc.out`). |
 | `--tmin`/`--tmax`/`--tstep` | Temperature sweep, in K (defaults 200/400/25) — `DG`/`DS` are recomputed at every step (vibrational entropy is temperature-dependent even though `ZPE` itself isn't); the sweep's first point (`--tmin`) is also what `[FINAL RESULT]`/`D0` report. |
 | `--force-tolerance` | Residual atomic force, eV/Ang (default 0.05), above which a folder is flagged as possibly not fully converged/relaxed. Advisory only. |
-| `--save-report` | Persists the full report to `adsorption_gibbs_report.txt`. Off by default. |
+| `--save-report` | Persists the full report to `stb_adsorbGibbs_report.txt`. Off by default. |
 | `--view-plots` | Also shows the `DG`/`D0`/`DS` plot on screen instead of only saving it as a PNG. |
 
 ### 13.3 Interpreting the output

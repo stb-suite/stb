@@ -272,7 +272,7 @@ elements) and writes
     combined/        structure.fdf, calc.fdf, config_extra.fdf, the pseudopotentials
     neutral/<El>/    one isolated atom per element, in a cubic box of side --vacuum
     hirshfeld_manifest.json            what Stage 2 reads (paths RELATIVE to the study: copy or move it freely)
-    hirshfeld_prep_report.txt          with --save-report
+    (stb_hirshfeldPrep_report.txt, with --save-report, goes to the folder you run it from)
 ```
 
 Every `calc.fdf` is `%include config_extra.fdf` above your template, untouched; SIESTA's fdf reader is
@@ -366,7 +366,7 @@ A missing reference `.RHO` stops it with an `[ERROR]` naming the folder: a refer
 |---|---|
 | `--save-data` | `hirshfeld_charges.dat` (per atom: every method, population, reference), `hirshfeld_iterations.dat` (every atom's charge per round), `hirshfeld_charges.xyz` (extended XYZ with the charges as per-atom columns; `ase gui` colours atoms by them) |
 | `--png` / `--show` | the 6-panel dashboard `hirshfeld_analysis.png`: convergence with the tolerance and the estimated error, each atom's charge per round, the mean charge per element by method, Hirshfeld-I vs simple Hirshfeld per atom, the reference profiles `4πr²ρ(r)`, the structure coloured by charge (`--show` without a display saves the PNG) |
-| `--save-report` | `hirshfeld_analysis_report.txt` |
+| `--save-report` | `stb_hirshfeldAnalysis_report.txt` |
 
 ### 4.5 Running it both ways
 

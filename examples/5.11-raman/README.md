@@ -129,8 +129,8 @@ cross sections.
 | Stage | Command | Reads | Writes | Then |
 |---|---|---|---|---|
 | 1 | `stb-raman` | `structure.fdf`, `calc.fdf` | `raman_study/phonon_disp/disp-*/`, `perfect_supercell/` | SIESTA in each (forces) |
-| 2 | `stb-ramanModes` | the finished `disp-*` runs, a `calc.fdf` for the optical runs | `raman_study/optical_disp/mode_NN_{plus,minus}_<dir>/`, `raman_stage2.txt` | SIESTA in each (ε₂) |
-| 3 | `stb-ramanAnalysis` | the finished optical runs, `raman_stage2.txt` | the report, `plot/raman_spectrum.{dat,gplot}` | — |
+| 2 | `stb-ramanModes` | the finished `disp-*` runs, a `calc.fdf` for the optical runs | `raman_study/optical_disp/mode_NN_{plus,minus}_<dir>/`, `raman_study/raman_modes.json` | SIESTA in each (ε₂) |
+| 3 | `stb-ramanAnalysis` | the finished optical runs, `raman_modes.json` | the report, `plot/raman_spectrum.{dat,gplot}` | — |
 
 ## 3. Libraries and external dependencies used
 

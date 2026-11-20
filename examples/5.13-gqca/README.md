@@ -413,7 +413,8 @@ Reads the host structure (`-f`, `.fdf`) and the `calc.fdf` template (`-c`,
 
 ```
 gqca_study/
-├── gqca_stage1.txt        <- the full Stage 1 report (also printed on screen)
+├── gqca_setup.json        <- what Stage 2 reads (sublattice, species B, AB deviation); the Stage 1
+│                              report is stb_gqca_report.txt in the folder you ran it from
 ├── cluster_n0/            <- AA: the whole sublattice set to species A
 ├── cluster_n1/            <- AB: the ordered 50:50 structure (Section 1.6)
 └── cluster_n2/            <- BB: the whole sublattice set to species B
@@ -691,7 +692,7 @@ search, which always reports "fully miscible" by Section 1.7-iii.
 | `--plot-temp T` | temperature of the single-T panels (nearest sampled T) |
 | `--view` | each relaxed structure in ASE's 3D viewer, one after the other |
 | `--export-relaxed [cif\|xsf\|xyz\|vasp]` | the 3 relaxed structures (positions **and** cell, from `.XV`) in `<dir>/relaxed/` |
-| `--save-report` | the text report as `<dir>/gqca_stage2.txt` |
+| `--save-report` | the text report as `stb_gqcaAnalysis_report.txt` in the current folder |
 | `-o NAME` | base name of the `.csv/.dat/.gplot/.png` outputs |
 
 Always written: `gqca_results.csv` (every (x, T) point), `gqca_results_clusters.csv`

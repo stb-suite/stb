@@ -288,6 +288,12 @@ version before) and **Added** (new options and tools).
   the real limitation: the adsorbed side is harmonic, with hindered translations and rotations
   treated as vibrations. The numbers are unchanged.
 
+- `stb-adsorbAnalysis --save-report` wrote `adsorption_report.txt`, and every run wrote
+  `adsorption_curve.dat`/`.gplot` and `adsorption_ranking.png`, into the current folder instead of
+  `--dir`, so a second analysis of another run called from the same place overwrote the first. They
+  now go into `--dir`, as the files of `stb-adsorbGibbs` do; `-o` still names another curve file
+  (the plots follow it).
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

@@ -629,8 +629,10 @@ def main():
                               "the common case).")
     parser.add_argument("--file", type=str, default="calc.out",
                          help="SIESTA output filename inside each folder (default: calc.out).")
-    parser.add_argument("-o", "--output", type=str, default="adsorption_curve.dat",
-                         help="Output data file name (default: adsorption_curve.dat).")
+    parser.add_argument("-o", "--output", type=str, default=None,
+                         help="Output data file name (default: <--dir>/adsorption_curve.dat). "
+                              "The gnuplot script, the height curves and adsorption_ranking.png "
+                              "go into the same folder.")
     parser.add_argument("--apply", type=str, default=None, metavar="STRUCTURE_FDF",
                          help="Copy the most stable site's structure.fdf (BSSE-corrected ranking "
                              "when available for every site, else the uncorrected ranking) to "
@@ -642,7 +644,7 @@ def main():
                               "equilibrium geometry rather than the true adsorption minimum. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help=f"Also persist the report to <--dir>/{REPORT_FILE}. Off by default.")
     parser.add_argument("--view", action="store_true",
                          help="Open clean_slab, every adsorbate reference and every site "
                               "(preferring each folder's own <label>.XV -- the actual relaxed "
@@ -711,7 +713,11 @@ def main():
     library_warnings = []  # collected via capture_library_noise, reported in [5]
     view_frames = []  # (label, ase.Atoms), only populated when --view is given
 
-    report_path = REPORT_FILE if args.save_report else None
+    # Every file of this stage goes into --dir (as stb-adsorbGibbs does), so two analyses
+    # of different runs called from the same folder never overwrite each other.
+    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    if args.output is None:
+        args.output = os.path.join(args.dir, "adsorption_curve.dat")
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== ADSORPTION ENERGY REPORT =====', 'magenta')}", f_out)

@@ -361,7 +361,8 @@ $ stb-adsorbAnalysis --dir adsorption_run --save-report --apply production.fdf
 ```
 
 Report structure (`[0]`–`[5]`, `--save-report` persists it to
-`adsorption_report.txt`):
+`<--dir>/adsorption_report.txt`; the curve data, gnuplot script and ranking plot also go into
+`--dir`, unless `-o` names another file):
 
 ```
 [0] RUN METADATA

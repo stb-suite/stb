@@ -34,7 +34,6 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.deps import require_pyxtal, require_mace
 
 REPORT_FILE = "stb_crystalcast_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-unitcell/stb-supercell/stb-fetch/
 # stb-kgrid/stb-mlrelax (core/kspace.py's other callers) -- used to detect
@@ -842,17 +841,17 @@ stb-symmetry or stb-unitcell.)""",
 
         print_section("[7] REFERENCES", f_out)
         bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.PYXTAL]
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         print_section("[8] SUMMARY & FILES", f_out)
         print_dual(f"Status         : {'OK' if len(written) == len(names) else 'PARTIAL'}", f_out)
         print_dual(f"Structures     : {len(written)} of {len(names)} written", f_out)
         print_dual(f"Input file     : {args.file}", f_out)
         print_dual(f"Output file(s) : {', '.join(written)}", f_out)
-        print_dual(f"References     : {BIB_FILE}", f_out)
+        print_dual(f"References     : {citations.run_references_path()}", f_out)
         if report_path:
             print_dual(f"Report         : {report_path}", f_out)
 
@@ -1093,16 +1092,16 @@ stb-symmetry or stb-unitcell.)""",
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[8] SUMMARY & FILES", f_out)
     print_dual(f"Status         : {'OK' if len(written) == args.count else 'PARTIAL'}", f_out)
     print_dual(f"Structures     : {len(written)} of {args.count} written", f_out)
     print_dual(f"Output file(s) : {', '.join(written)}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

@@ -30,7 +30,6 @@ from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_sect
 from stb.core.deps import require_mace
 
 REPORT_FILE = "stb_amorphize_report.txt"
-BIB_FILE = "references.bib"
 
 # Same 3-format trajectory choice as stb-ani2traj/stb-mlmd, for OVITO/VMD
 # viewer consistency: xsf (multi-frame AXSF, native to OVITO/VMD's xsf
@@ -563,16 +562,16 @@ vacuum-padded axis is detected.""",
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.MACE]
     if not args.custom_model:
         bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Input file     : {args.filename}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
     print_dual(color_text(

@@ -94,7 +94,6 @@ from stb.core.deps import require_sisl, read_sisl_geometry_xv_or_fdf
 from stb.core import kspace
 
 REPORT_FILE = "stb_stm_report.txt"
-BIB_FILE = "references.bib"
 
 VACUUM_GAP_ANG = 10.0  # same threshold used by stb-workfunction/stb-mlrelax
 
@@ -290,7 +289,7 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write stm_<mode>.dat/.gplot into (with --save-gnuplot) "
-                             "and references.bib (the report goes to the current folder) (default: current directory). "
+                             "(the report and its references file go to the current folder) (default: current directory). "
                              "Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
@@ -523,16 +522,16 @@ def main():
 
     print_section("[4] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.TERSOFF_HAMANN]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     if args.mode == "current" and "corrugation" in image_stats:
         print_dual(f"Corrugation    : {image_stats['corrugation']:.3f} Ang", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if args.save_gnuplot:
         print_dual(f"Data           : {out_data}", f_out)
         print_dual(f"Gnuplot script : {out_gplot}", f_out)

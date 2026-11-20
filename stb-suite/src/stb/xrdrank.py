@@ -244,7 +244,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
     parser.add_argument("-o", "--output", type=str, default="xrd_rank.txt",
                         help="Output ranking table file name (default: xrd_rank.txt). Always "
                              "lists every candidate, regardless of --top. Gnuplot files "
-                             "(--save-gnuplot) are written alongside it (the report goes to the current folder), in the "
+                             "(--save-gnuplot) are written alongside it (the report and its references file go to the current folder), in the "
                              "same directory.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the ranking as a gnuplot bar chart (xrd_rank.dat + "

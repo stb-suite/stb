@@ -34,7 +34,6 @@ require_mace()
 OPTIMIZERS = ["FIRE", "BFGS", "LBFGS"]
 
 REPORT_FILE = "stb_mlrelax_report.txt"
-BIB_FILE = "references.bib"
 
 
 def _structure_validation(pmg_structure, vacuum_axes, f_out):
@@ -379,10 +378,10 @@ that distribution.""",
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, citations.MACE]
     if not args.custom_model:
         bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -390,7 +389,7 @@ that distribution.""",
     print_dual(f"Output file    : {args.output}", f_out)
     if conv_plot_path:
         print_dual(f"Convergence plot: {conv_plot_path}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

@@ -442,7 +442,7 @@ def main():
                               f"under its '{RUN_SUBDIR}/' subfolder: every "
                               f"'shift_II_JJ/' grid folder under '{RUN_SUBDIR}/{POSITIONS_SUBDIR}/' "
                               f"and the manifest directly under "
-                              f"'{RUN_SUBDIR}/' (the report goes to the current folder) -- same self-contained-run-folder convention as "
+                              f"'{RUN_SUBDIR}/' (the report and its references file go to the current folder) -- same self-contained-run-folder convention as "
                               "stb-adsorb's 'sites/' and stb-neb's 'neb_run/'.")
     parser.add_argument("--save-report", action="store_true",
                          help=argparse.SUPPRESS)

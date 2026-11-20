@@ -142,7 +142,6 @@ from stb.core.md_traj import read_frame_lattices, read_md_timestep_fs, unwrap_tr
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_aimdAnalysis_report.txt"
-BIB_FILE = "references.bib"
 
 
 def cell_min_perpendicular_width(cell):
@@ -507,7 +506,7 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write <stem>_*.dat/.gplot (with --save-gnuplot) and "
-                             f"{BIB_FILE} into (default: current directory; the report always goes to the current folder). "
+                             f"{citations.run_references_path()} into (default: current directory; the report always goes to the current folder). "
                              "Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
                         help=argparse.SUPPRESS)
@@ -1059,12 +1058,12 @@ def main():
     print_section("[9] REFERENCES", f_out)
     bib_path = None
     if args.label:
-        bib_path = os.path.join(args.output_dir, BIB_FILE)
+        bib_path = citations.run_references_path()
         bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-        citations.write_bib_file(bib_path, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{bib_path}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
     else:
         print_dual("No SIESTA-specific references for a generic --trajectory input -- cite "
                    "whichever tool produced it instead (e.g. stb-mlmd's own MACE/foundation-"
@@ -1097,7 +1096,7 @@ def main():
     for path in written_files:
         print_dual(f"  - {path}", f_out)
     if bib_path:
-        print_dual(f"References        : {bib_path}", f_out)
+        print_dual(f"References        : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report            : {report_path}", f_out)
 

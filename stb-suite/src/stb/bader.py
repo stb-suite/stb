@@ -40,7 +40,6 @@ from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_secti
 from stb.core.siesta_log import FALLBACK_VALENCE, get_zval_from_output
 
 REPORT_FILE = "stb_bader_report.txt"
-BIB_FILE = "references.bib"
 
 # Below this raw Bader population (electrons), an atom is flagged as suspicious rather
 # than reported at face value. A real atom essentially never integrates to exactly/near
@@ -780,10 +779,10 @@ def print_bader_report(results, args, report_path, f_out):
 
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
     print_dual("Bader charge partitioning via PyBader, implementing the grid-based algorithm "
                "of Tang, Sanville & Henkelman (2009); underlying theory: Bader's Atoms-in-"
                "Molecules (AIM) quantum theory (1990) -- see the example README for both.", f_out)
@@ -797,7 +796,7 @@ def print_bader_report(results, args, report_path, f_out):
     if results['export_volumes']:
         print_dual(f"Exported vols. : {results['n_exported']} Bader-atoms-<N>.cube file(s) in "
                    f"{results['output_dir']}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 
@@ -830,7 +829,7 @@ low (near-zero) population.""",
     )
     parser.add_argument("-l", "--label", required=True, help="SystemLabel used in Siesta")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the .cube file(s)/references.bib into (and "
+                        help="Directory to write the .cube file(s) into (and "
                              "any --export-volumes "
                              "files) (default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",

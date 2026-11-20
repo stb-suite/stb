@@ -30,7 +30,6 @@ from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_secti
 from stb.core.deps import require_mace
 
 REPORT_FILE = "stb_unitcell_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid/stb-mlrelax/
 # stb-supercell/stb-sqs (core/kspace.py's other callers).
@@ -358,16 +357,16 @@ unit cell, which may be much smaller than the literal input cell (e.g. a
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[10] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Input file     : {args.filename}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

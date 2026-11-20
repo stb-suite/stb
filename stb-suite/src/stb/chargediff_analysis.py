@@ -48,7 +48,6 @@ from stb.core.grid_export import (write_data_file, write_profile_data_file, writ
 
 REPORT_FILE = "stb_chargediffAnalysis_report.txt"
 BOHR_TO_ANG = 0.529177210903
-BIB_FILE = "references.bib"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
 EV_TO_KCAL = 23.0605
 EV_TO_KJ = 96.4853
@@ -422,8 +421,8 @@ combined system and every fragment are spin-polarized).""",
                               "subfolders it lists, each already run in SIESTA. Default: "
                               "chargediff_run (stb-chargediffPrep's own default --output-dir).")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the data/gnuplot/cube files (the report goes to the current folder) and "
-                             "references.bib into (default: current directory). Created if "
+                        help="Directory to write the data/gnuplot/cube files (the report and its references file go to the current folder) and "
+                             "into (default: current directory). Created if "
                              "it doesn't exist.")
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--3d", action="store_true", dest="full_3d", help="Export full 3D volume")
@@ -917,9 +916,9 @@ combined system and every fragment are spin-polarized).""",
     # ------------------------------------------------------------------ [7]
     print_section("[7] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(f"[OK] Citations for the methods used in this run written to "
-                          f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+                          f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     # ------------------------------------------------------------------ [8]
     print_section("[8] SUMMARY & FILES", f_out)
@@ -934,7 +933,7 @@ combined system and every fragment are spin-polarized).""",
     if planar is not None and planar["vacuum_gap"] >= VACUUM_GAP_ANG:
         print_dual(f"Induced dipole : {planar['dipole'] * E_ANG_TO_DEBYE:+.3f} D"
                    + (f"; work-function shift {planar['dphi_plus']:+.3f} eV" if "dphi_plus" in planar else ""), f_out)
-    for p in files + [os.path.join(args.output_dir, BIB_FILE)]:
+    for p in files + [citations.run_references_path()]:
         print_dual(f"File           : {p}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)

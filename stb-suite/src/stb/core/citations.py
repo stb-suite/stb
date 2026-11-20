@@ -179,6 +179,361 @@ PSEUDO_BANK_CITATIONS = {
 }
 
 
+
+# ---- Entries copied verbatim from the verified bibliography of the STB-SUITE paper. ----
+PYMATGEN = ("Ong2013pymatgen", """@article{Ong2013pymatgen,
+  author  = {Ong, Shyue Ping and Richards, William Davidson and Jain, Anubhav and others},
+  title   = {{Python Materials Genomics (pymatgen): A robust, open-source python library for materials analysis}},
+  journal = {Computational Materials Science},
+  year    = {2013},
+  volume  = {68},
+  pages   = {314--319},
+  doi     = {10.1016/j.commatsci.2012.10.028}
+}""")
+ASE = ("Larsen2017ase", """@article{Larsen2017ase,
+  author  = {Larsen, Ask Hjorth and Mortensen, Jens J{\\o}rgen and Blomqvist, Jakob and others},
+  title   = {{The atomic simulation environment---a Python library for working with atoms}},
+  journal = {Journal of Physics: Condensed Matter},
+  year    = {2017},
+  volume  = {29},
+  number  = {27},
+  pages   = {273002},
+  doi     = {10.1088/1361-648X/aa680e}
+}""")
+PHONOPY = ("Togo2015phonopy", """@article{Togo2015phonopy,
+  author  = {Togo, Atsushi and Tanaka, Isao},
+  title   = {{First principles phonon calculations in materials science}},
+  journal = {Scripta Materialia},
+  year    = {2015},
+  volume  = {108},
+  pages   = {1--5},
+  doi     = {10.1016/j.scriptamat.2015.07.021}
+}""")
+PHONOPY_IMPL = ("Togo2023phonopy", """@article{Togo2023phonopy,
+  author  = {Togo, Atsushi and Chaput, Laurent and Tadano, Terumasa and Tanaka, Isao},
+  title   = {{Implementation strategies in phonopy and phono3py}},
+  journal = {Journal of Physics: Condensed Matter},
+  year    = {2023},
+  volume  = {35},
+  number  = {35},
+  pages   = {353001},
+  doi     = {10.1088/1361-648X/acd831}
+}""")
+SPGLIB = ("Togo2024spglib", """@article{Togo2024spglib,
+  author  = {Togo, Atsushi and Shinohara, Kohei and Tanaka, Isao},
+  title   = {{Spglib: a software library for crystal symmetry search}},
+  journal = {Science and Technology of Advanced Materials: Methods},
+  year    = {2024},
+  volume  = {4},
+  number  = {1},
+  pages   = {2384822},
+  doi     = {10.1080/27660400.2024.2384822}
+}""")
+SEEKPATH = ("Hinuma2017seekpath", """@article{Hinuma2017seekpath,
+  author  = {Hinuma, Yoyo and Pizzi, Giovanni and Kumagai, Yu and Oba, Fumiyasu and Tanaka, Isao},
+  title   = {{Band structure diagram paths based on crystallography}},
+  journal = {Computational Materials Science},
+  year    = {2017},
+  volume  = {128},
+  pages   = {140--184},
+  doi     = {10.1016/j.commatsci.2016.10.015}
+}""")
+SISL = ("Papior2017sisl", """@misc{Papior2017sisl,
+  author    = {Papior, Nick and Febrer Calabozo, Pol},
+  title     = {sisl},
+  year      = {2026},
+  publisher = {Zenodo},
+  note      = {Software, concept DOI (year of the latest release); cite the release used},
+  doi       = {10.5281/zenodo.597181}
+}""")
+BADER_HENKELMAN = ("Henkelman2006bader", """@article{Henkelman2006bader,
+  author  = {Henkelman, Graeme and Arnaldsson, Andri and J{\\'o}nsson, Hannes},
+  title   = {{A fast and robust algorithm for Bader decomposition of charge density}},
+  journal = {Computational Materials Science},
+  year    = {2006},
+  volume  = {36},
+  number  = {3},
+  pages   = {354--360},
+  doi     = {10.1016/j.commatsci.2005.04.010}
+}""")
+BADER_TANG = ("Tang2009bader", """@article{Tang2009bader,
+  author  = {Tang, W and Sanville, E and Henkelman, G},
+  title   = {{A grid-based Bader analysis algorithm without lattice bias}},
+  journal = {Journal of Physics: Condensed Matter},
+  year    = {2009},
+  volume  = {21},
+  number  = {8},
+  pages   = {084204},
+  doi     = {10.1088/0953-8984/21/8/084204}
+}""")
+CINEB = ("Henkelman2000cineb", """@article{Henkelman2000cineb,
+  author  = {Henkelman, Graeme and Uberuaga, Blas P. and J{\\'o}nsson, Hannes},
+  title   = {{A climbing image nudged elastic band method for finding saddle points and minimum energy paths}},
+  journal = {The Journal of Chemical Physics},
+  year    = {2000},
+  volume  = {113},
+  number  = {22},
+  pages   = {9901--9904},
+  doi     = {10.1063/1.1329672}
+}""")
+IDPP = ("Smidstrup2014idpp", """@article{Smidstrup2014idpp,
+  author  = {Smidstrup, S{\\o}ren and Pedersen, Andreas and Stokbro, Kurt and J{\\'o}nsson, Hannes},
+  title   = {{Improved initial guess for minimum energy path calculations}},
+  journal = {The Journal of Chemical Physics},
+  year    = {2014},
+  volume  = {140},
+  number  = {21},
+  pages   = {214106},
+  doi     = {10.1063/1.4878664}
+}""")
+DFT_D3 = ("Grimme2010d3", """@article{Grimme2010d3,
+  author  = {Grimme, Stefan and Antony, Jens and Ehrlich, Stephan and Krieg, Helge},
+  title   = {{A consistent and accurate ab initio parametrization of density functional dispersion correction (DFT-D) for the 94 elements H-Pu}},
+  journal = {The Journal of Chemical Physics},
+  year    = {2010},
+  volume  = {132},
+  number  = {15},
+  pages   = {154104},
+  doi     = {10.1063/1.3382344}
+}""")
+BSSE_BOYS = ("Boys1970bsse", """@article{Boys1970bsse,
+  author  = {Boys, S.F. and Bernardi, F.},
+  title   = {{The calculation of small molecular interactions by the differences of separate total energies. Some procedures with reduced errors}},
+  journal = {Molecular Physics},
+  year    = {1970},
+  volume  = {19},
+  number  = {4},
+  pages   = {553--566},
+  doi     = {10.1080/00268977000101561}
+}""")
+BIRCH = ("Birch1947eos", """@article{Birch1947eos,
+  author  = {Birch, Francis},
+  title   = {{Finite Elastic Strain of Cubic Crystals}},
+  journal = {Physical Review},
+  year    = {1947},
+  volume  = {71},
+  number  = {11},
+  pages   = {809--824},
+  doi     = {10.1103/physrev.71.809}
+}""")
+HIRSHFELD = ("Hirshfeld1977", """@article{Hirshfeld1977,
+  author  = {Hirshfeld, F. L.},
+  title   = {{Bonded-atom fragments for describing molecular charge densities}},
+  journal = {Theoretica Chimica Acta},
+  year    = {1977},
+  volume  = {44},
+  number  = {2},
+  pages   = {129--138},
+  doi     = {10.1007/bf00549096}
+}""")
+HIRSHFELD_I = ("Bultinck2007hirshfeldI", """@article{Bultinck2007hirshfeldI,
+  author  = {Bultinck, Patrick and Van Alsenoy, Christian and Ayers, Paul W. and Carb{\\'o}-Dorca, Ramon},
+  title   = {{Critical analysis and extension of the Hirshfeld atoms in molecules}},
+  journal = {The Journal of Chemical Physics},
+  year    = {2007},
+  volume  = {126},
+  number  = {14},
+  pages   = {144111},
+  doi     = {10.1063/1.2715563}
+}""")
+HUBBARD_LR = ("Cococcioni2005hubbard", """@article{Cococcioni2005hubbard,
+  author  = {Cococcioni, Matteo and de Gironcoli, Stefano},
+  title   = {{Linear response approach to the calculation of the effective interaction parameters in the LDA + U method}},
+  journal = {Physical Review B},
+  year    = {2005},
+  volume  = {71},
+  number  = {3},
+  pages   = {035105},
+  doi     = {10.1103/PhysRevB.71.035105}
+}""")
+SQS = ("Zunger1990sqs", """@article{Zunger1990sqs,
+  author  = {Zunger, Alex and Wei, S.-H. and Ferreira, L. G. and Bernard, James E.},
+  title   = {{Special quasirandom structures}},
+  journal = {Physical Review Letters},
+  year    = {1990},
+  volume  = {65},
+  number  = {3},
+  pages   = {353--356},
+  doi     = {10.1103/PhysRevLett.65.353}
+}""")
+ZSL = ("Zur1984zsl", """@article{Zur1984zsl,
+  author  = {Zur, A. and McGill, T. C.},
+  title   = {{Lattice match: An application to heteroepitaxy}},
+  journal = {Journal of Applied Physics},
+  year    = {1984},
+  volume  = {55},
+  number  = {2},
+  pages   = {378--386},
+  doi     = {10.1063/1.333084}
+}""")
+SETYAWAN = ("Setyawan2010kpath", """@article{Setyawan2010kpath,
+  author  = {Setyawan, Wahyu and Curtarolo, Stefano},
+  title   = {{High-throughput electronic band structure calculations: Challenges and tools}},
+  journal = {Computational Materials Science},
+  year    = {2010},
+  volume  = {49},
+  number  = {2},
+  pages   = {299--312},
+  doi     = {10.1016/j.commatsci.2010.05.010}
+}""")
+MATPROJ = ("Jain2013matproj", """@article{Jain2013matproj,
+  author  = {Jain, Anubhav and Ong, Shyue Ping and Hautier, Geoffroy and others},
+  title   = {{Commentary: The Materials Project: A materials genome approach to accelerating materials innovation}},
+  journal = {APL Materials},
+  year    = {2013},
+  volume  = {1},
+  number  = {1},
+  pages   = {011002},
+  doi     = {10.1063/1.4812323}
+}""")
+OPTIMADE = ("Andersen2021optimade", """@article{Andersen2021optimade,
+  author  = {Andersen, Casper W. and Armiento, Rickard and Blokhin, Evgeny and others},
+  title   = {{OPTIMADE, an API for exchanging materials data}},
+  journal = {Scientific Data},
+  year    = {2021},
+  volume  = {8},
+  number  = {1},
+  pages   = {217},
+  doi     = {10.1038/s41597-021-00974-z}
+}""")
+COD = ("Grazulis2012cod", """@article{Grazulis2012cod,
+  author  = {Gra{\\v z}ulis, Saulius and Da{\\v s}kevi{\\v c}, Adriana and Merkys, Andrius and others},
+  title   = {{Crystallography Open Database (COD): an open-access collection of crystal structures and platform for world-wide collaboration}},
+  journal = {Nucleic Acids Research},
+  year    = {2011},
+  volume  = {40},
+  number  = {D1},
+  pages   = {D420--D427},
+  doi     = {10.1093/nar/gkr900}
+}""")
+PSML = ("Garcia2018psml", """@article{Garcia2018psml,
+  author  = {Garc{\\'\\i}a, Alberto and Verstraete, Matthieu J. and Pouillon, Yann and Junquera, Javier},
+  title   = {{The psml format and library for norm-conserving pseudopotential data curation and interoperability}},
+  journal = {Computer Physics Communications},
+  year    = {2018},
+  volume  = {227},
+  pages   = {51--71},
+  doi     = {10.1016/j.cpc.2018.02.011}
+}""")
+WANTIBEXOS = ("Dias2023wantibexos", """@article{Dias2023wantibexos,
+  author  = {Dias, Alexandre C. and Silveira, Julian F.R.V. and Qu, Fanyao},
+  title   = {{WanTiBEXOS: A Wannier based Tight Binding code for electronic band structure, excitonic and optoelectronic properties of solids}},
+  journal = {Computer Physics Communications},
+  year    = {2023},
+  volume  = {285},
+  pages   = {108636},
+  doi     = {10.1016/j.cpc.2022.108636}
+}""")
+
+# ---- Further standard references (library and method papers). ----
+NUMPY = ("Harris2020numpy", """@article{Harris2020numpy,
+  author  = {Harris, Charles R. and Millman, K. Jarrod and van der Walt, St{\\'e}fan J. and others},
+  title   = {{Array programming with NumPy}},
+  journal = {Nature},
+  year    = {2020},
+  volume  = {585},
+  pages   = {357--362},
+  doi     = {10.1038/s41586-020-2649-2}
+}""")
+SCIPY = ("Virtanen2020scipy", """@article{Virtanen2020scipy,
+  author  = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and others},
+  title   = {{SciPy 1.0: fundamental algorithms for scientific computing in Python}},
+  journal = {Nature Methods},
+  year    = {2020},
+  volume  = {17},
+  pages   = {261--272},
+  doi     = {10.1038/s41592-019-0686-2}
+}""")
+MATPLOTLIB = ("Hunter2007matplotlib", """@article{Hunter2007matplotlib,
+  author  = {Hunter, John D.},
+  title   = {{Matplotlib: A 2D graphics environment}},
+  journal = {Computing in Science \\& Engineering},
+  year    = {2007},
+  volume  = {9},
+  number  = {3},
+  pages   = {90--95},
+  doi     = {10.1109/MCSE.2007.55}
+}""")
+PYTORCH = ("Paszke2019pytorch", """@inproceedings{Paszke2019pytorch,
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and others},
+  title     = {{PyTorch: An Imperative Style, High-Performance Deep Learning Library}},
+  booktitle = {Advances in Neural Information Processing Systems 32 (NeurIPS 2019)},
+  year      = {2019},
+  pages     = {8024--8035},
+  eprint    = {1912.01703},
+  archivePrefix = {arXiv}
+}""")
+GQCA_SHER = ("Sher1987gqca", """@article{Sher1987gqca,
+  author  = {Sher, A. and van Schilfgaarde, M. and Chen, A.-B. and Chen, W.},
+  title   = {{Quasichemical approximation in binary alloys}},
+  journal = {Physical Review B},
+  year    = {1987},
+  volume  = {36},
+  number  = {8},
+  pages   = {4279--4295},
+  doi     = {10.1103/PhysRevB.36.4279}
+}""")
+MURNAGHAN = ("Murnaghan1944", """@article{Murnaghan1944,
+  author  = {Murnaghan, F. D.},
+  title   = {{The Compressibility of Media under Extreme Pressures}},
+  journal = {Proceedings of the National Academy of Sciences},
+  year    = {1944},
+  volume  = {30},
+  number  = {9},
+  pages   = {244--247},
+  doi     = {10.1073/pnas.30.9.244}
+}""")
+POREZAG = ("Porezag1996", """@article{Porezag1996,
+  author  = {Porezag, Dirk and Pederson, Mark R.},
+  title   = {{Infrared intensities and Raman-scattering activities within density-functional theory}},
+  journal = {Physical Review B},
+  year    = {1996},
+  volume  = {54},
+  number  = {11},
+  pages   = {7830--7836},
+  doi     = {10.1103/PhysRevB.54.7830}
+}""")
+LEPAGE_SAXE = ("LePage2002", """@article{LePage2002,
+  author  = {Le Page, Yvon and Saxe, Paul},
+  title   = {{Symmetry-general least-squares extraction of elastic data for strained materials from ab initio calculations of stress}},
+  journal = {Physical Review B},
+  year    = {2002},
+  volume  = {65},
+  number  = {10},
+  pages   = {104104},
+  doi     = {10.1103/PhysRevB.65.104104}
+}""")
+HILL = ("Hill1952", """@article{Hill1952,
+  author  = {Hill, R.},
+  title   = {{The Elastic Behaviour of a Crystalline Aggregate}},
+  journal = {Proceedings of the Physical Society. Section A},
+  year    = {1952},
+  volume  = {65},
+  number  = {5},
+  pages   = {349--354},
+  doi     = {10.1088/0370-1298/65/5/307}
+}""")
+MOUHAT_COUDERT = ("Mouhat2014", """@article{Mouhat2014,
+  author  = {Mouhat, F{\\'e}lix and Coudert, Fran{\\c{c}}ois-Xavier},
+  title   = {{Necessary and sufficient elastic stability conditions in various crystal systems}},
+  journal = {Physical Review B},
+  year    = {2014},
+  volume  = {90},
+  number  = {22},
+  pages   = {224104},
+  doi     = {10.1103/PhysRevB.90.224104}
+}""")
+DIPOLE_BENGTSSON = ("Bengtsson1999", """@article{Bengtsson1999,
+  author  = {Bengtsson, Lennart},
+  title   = {{Dipole correction for surface supercell calculations}},
+  journal = {Physical Review B},
+  year    = {1999},
+  volume  = {59},
+  number  = {19},
+  pages   = {12301--12304},
+  doi     = {10.1103/PhysRevB.59.12301}
+}""")
+
 def pseudo_bank_citation(bank):
     """Bib entry of a bundled bank name -- every PseudoDojo table (dojo-sr-pbe-standard,
     dojo-fr-pbesol-stringent, ...) cites the same paper. None for an unknown name."""
@@ -230,3 +585,133 @@ def write_bib_file(bib_path, entries):
         f_bib.write("% Cite these alongside the SIESTA code itself.\n\n")
         for entry in combined.values():
             f_bib.write(entry + "\n\n")
+
+
+# ---- One references file per run, always written (suite rule) -----------------------------
+#
+# Every command writes, next to its report and with the same number, the BibTeX file of the
+# run: stb_<tool>_references.bib in the folder it runs from (stb_<tool>_references_1.bib, ...
+# when the report is stb_<tool>_report_1.txt), never overwritten. It holds
+#   - what the tool cites for its method (TOOL_CITATIONS below),
+#   - what the run itself cited (cite(): an XC functional, a pseudopotential bank, D3, ...),
+#   - every library the run actually loaded (LIBRARY_CITATIONS, read from sys.modules at exit).
+# core.cli.new_report_path registers the run; the file is written when the process exits.
+
+# Python module (top-level name) -> entries to cite when the run loaded it.
+LIBRARY_CITATIONS = {
+    "numpy": [NUMPY], "scipy": [SCIPY], "matplotlib": [MATPLOTLIB],
+    "pymatgen": [PYMATGEN], "ase": [ASE], "spglib": [SPGLIB], "seekpath": [SEEKPATH],
+    "sisl": [SISL], "phonopy": [PHONOPY, PHONOPY_IMPL], "pybader": [BADER_HENKELMAN, BADER_TANG],
+    "icet": [ICET], "pyxtal": [PYXTAL], "mace": [MACE], "torch": [PYTORCH],
+}
+
+# Methods each command implements or relies on, cited on every run of it (its libraries come
+# from LIBRARY_CITATIONS; run-dependent ones -- functional, bank, D3 when forced -- via cite()).
+_S = [SIESTA, SIESTA_RECENT]
+TOOL_CITATIONS = {
+    # 1 Inputs
+    "inputfile": _S, "pseudo": _S, "kgrid": _S + [MONKHORST_PACK], "kpath": _S + [SETYAWAN],
+    "dftu": _S, "fetch": [], "mlrelax": [],
+    # 2 Analysis
+    "bands": _S, "dos": _S, "convdos": _S, "structural": [], "symmetry": [], "bader": _S + [BADER_HENKELMAN, BADER_TANG],
+    "workfunction": _S + [DIPOLE_BENGTSSON], "density": _S, "xrd": [], "fatbands": _S, "stm": _S + [TERSOFF_HAMANN],
+    "wfdensity": _S, "sts": _S + [TERSOFF_HAMANN], "coop": _S + [COOP_HUGHBANKS, COHP_DRONSKOWSKI],
+    "ipr": _S + [IPR_MURPHY], "effmass": _S, "spintexture": _S, "aimdAnalysis": _S, "nativecharges": _S + [HIRSHFELD],
+    # 3 Utils
+    "translate": [], "clean": _S, "cube": _S, "siesta2wtb": _S + [WANTIBEXOS], "ani2traj": _S, "status": _S,
+    "archive": _S,
+    # 4 Structures
+    "2Dstacking": [ZSL], "supercell": [], "slab": [], "nanotube": [], "defect": [], "sqs": [SQS], "unitcell": [],
+    "crystalbuilder": [], "passivate": [], "molecule": [], "amorphize": [], "crystalcast": [],
+    # 5 Workflow
+    "strain": _S, "strainAnalysis": _S,
+    "elasticInputs": _S + [LEPAGE_SAXE], "elasticAnalysis": _S + [LEPAGE_SAXE, HILL, MOUHAT_COUDERT],
+    "cohesive": _S + [BSSE_BOYS], "cohesiveAnalysis": _S + [BSSE_BOYS],
+    "phononsCreate": _S, "phononsPos": _S,
+    "convergence": _S, "convergenceAnalysis": _S,
+    "xrdsearch": [], "xrdrank": [],
+    "hubbardu": _S + [HUBBARD_LR], "hubbarduAlphas": _S + [HUBBARD_LR], "hubbarduAnalysis": _S + [HUBBARD_LR],
+    "adsorb": _S + [DFT_D3, DIPOLE_BENGTSSON], "adsorbBsse": _S + [BSSE_BOYS], "adsorbAnalysis": _S + [BSSE_BOYS],
+    "adsorbGibbs": _S,
+    "neb": _S + [CINEB, IDPP], "nebCycle": _S + [CINEB], "nebAnalysis": _S + [CINEB],
+    "stackingfault": _S, "stackingfaultAnalysis": _S,
+    "raman": _S + [POREZAG], "ramanModes": _S + [POREZAG], "ramanAnalysis": _S + [POREZAG],
+    "ir": _S + [POREZAG], "irModes": _S + [POREZAG], "irAnalysis": _S + [POREZAG],
+    "gqca": _S + [GQCA_SHER], "gqcaAnalysis": _S + [GQCA_SHER],
+    "optical": _S, "opticalAnalysis": _S,
+    "eosInputs": _S + [BIRCH, MURNAGHAN], "eosAnalysis": _S + [BIRCH, MURNAGHAN],
+    "chargediffPrep": _S + [BSSE_BOYS], "chargediffAnalysis": _S + [BSSE_BOYS],
+    "hirshfeldPrep": _S + [HIRSHFELD, HIRSHFELD_I], "hirshfeldIons": _S + [HIRSHFELD, HIRSHFELD_I],
+    "hirshfeldAnalysis": _S + [HIRSHFELD, HIRSHFELD_I],
+    # 7 ML Simulations
+    "mlff": _S + [MACE_MP], "mlffAnalysis": _S + [MACE_MP], "mlffValidate": _S, "mlffActiveLearning": _S,
+    "mlmd": [], "mlphonons": [], "mlelastic": [LEPAGE_SAXE, HILL, MOUHAT_COUDERT], "mlneb": [CINEB, IDPP],
+    "mladsorb": [],
+}
+
+_RUN = {"tool": None, "path": None, "entries": {}, "written": False, "announced": False}
+
+
+def references_name(tool, n=0):
+    """stb_<tool>_references.bib (n=0) or stb_<tool>_references_<n>.bib."""
+    tool = tool[4:] if tool.startswith("stb-") else tool
+    return f"stb_{tool}_references.bib" if n == 0 else f"stb_{tool}_references_{n}.bib"
+
+
+def register_run(tool, path):
+    """Called by core.cli.new_report_path: the references file of this run and its tool. The
+    file is written when the process exits (also after an error, with what the run used)."""
+    import atexit
+    first = _RUN["path"] is None
+    _RUN.update(tool=tool[4:] if tool.startswith("stb-") else tool, path=path)
+    if first:
+        atexit.register(write_run_references)
+
+
+def cite(entries):
+    """Adds (key, bibtex) entries this run uses to its references file. Accepts one entry or a
+    list. Returns the path of the run's references file (None before the run is registered)."""
+    if entries and isinstance(entries, tuple) and isinstance(entries[0], str):
+        entries = [entries]
+    for key, text in entries or []:
+        _RUN["entries"].setdefault(key, text)
+    return _RUN["path"]
+
+
+def run_references_path():
+    """Path of this run's references file (stb_<tool>_references[_N].bib), or None. A tool that
+    shows it in its report need not be told again at exit."""
+    _RUN["announced"] = True
+    return _RUN["path"]
+
+
+def loaded_library_entries():
+    """Entries of the libraries in LIBRARY_CITATIONS that this process has imported."""
+    import sys
+    out = []
+    for module, entries in LIBRARY_CITATIONS.items():
+        if module in sys.modules:
+            out.extend(entries)
+    return out
+
+
+def write_run_references():
+    """Writes the run's references file: the tool's method entries, the run's own cite()s and
+    the loaded libraries, without duplicates (by key), in that order."""
+    if _RUN["path"] is None or _RUN["written"]:
+        return
+    tool = _RUN["tool"]
+    ordered = {}
+    for key, text in list(TOOL_CITATIONS.get(tool, [])) + list(_RUN["entries"].items()) + loaded_library_entries():
+        ordered.setdefault(key, text)
+    try:
+        with open(_RUN["path"], "w") as f_bib:
+            f_bib.write(f"% References of this run of stb-{tool} (STB-SUITE): the methods it uses and the\n")
+            f_bib.write("% libraries it loaded. One file per run, never overwritten; cite them in your work.\n\n")
+            for text in ordered.values():
+                f_bib.write(text + "\n\n")
+        _RUN["written"] = True
+        if not _RUN["announced"]:
+            print(f"References: {_RUN['path']}")
+    except OSError:
+        pass

@@ -23,7 +23,6 @@ from stb.core import citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_convdos_report.txt"
-BIB_FILE = "references.bib"
 
 # FWHM = 2*sqrt(2*ln2) * sigma, for a Gaussian.
 FWHM_TO_SIGMA = 2 * np.sqrt(2 * np.log(2))
@@ -438,13 +437,11 @@ def main():
         print_dual(color_text(f"[OK] Filtered data written to {path}", 'green'), f_out)
 
     print_section("[5] REFERENCES", f_out)
-    bib_dir = output_dir if mode == "dir" else (os.path.dirname(args.outfile) or ".")
-    bib_path = os.path.join(bib_dir, BIB_FILE)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(bib_path, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{bib_path}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -453,7 +450,7 @@ def main():
                                "file(s) (see [1] INPUT DATA)", 'yellow'), f_out)
     for path in written_files:
         print_dual(f"Data file      : {path}", f_out)
-    print_dual(f"References     : {bib_path}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

@@ -118,20 +118,31 @@ def new_report_path(tool: str) -> str:
     name, never overwriting -- 'stb_<tool>_report.txt', else '_1', '_2', ... The file is
     created empty here (exclusive create), so two runs started together never share a name.
 
+    Its references file, stb_<tool>_references.bib with the same number, is registered here and
+    written when the process exits (core.citations).
+
     Suite rule: a report is for the user to read. Nothing a later stage needs is ever read
     back from a report: data that flows between stages goes into a JSON file of the run
     folder, written and read by the tools."""
+    from stb.core import citations
     base = report_name(tool)
     stem, ext = os.path.splitext(base)
     n = 0
     while True:
         candidate = base if n == 0 else f"{stem}_{n}{ext}"
+        bib = citations.references_name(tool, n)
+        if os.path.exists(bib):          # keep the report and its references paired by number
+            n += 1
+            continue
         try:
             with open(candidate, "x"):
                 pass
-            return candidate
         except FileExistsError:
             n += 1
+            continue
+        # The references file of the run: same number, written when the process exits.
+        citations.register_run(tool, bib)
+        return candidate
 
 
 def print_dual(text: str, file_handle=None) -> None:

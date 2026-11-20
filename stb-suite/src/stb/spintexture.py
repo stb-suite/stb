@@ -89,7 +89,6 @@ from stb.core.siesta_wfsx import resolve_wfsx_path, load_parent, read_wfsx_state
 from stb.core.band_scatter import write_scalar_data, write_scalar_gplot, plot_scalar_on_bands
 
 REPORT_FILE = "stb_spintexture_report.txt"
-BIB_FILE = "references.bib"
 
 COMPONENT_NAMES = ("Sx", "Sy", "Sz")
 
@@ -145,7 +144,7 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write spintexture_S{x,y,z}.dat/.gplot (with "
-                             "--save-gnuplot) and references.bib (the report goes to the current folder) "
+                             "--save-gnuplot) (the report and its references file go to the current folder) "
                              "into (default: current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
                         help=argparse.SUPPRESS)
@@ -340,10 +339,10 @@ def main():
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -351,7 +350,7 @@ def main():
         print_dual(f"Data           : {path}", f_out)
     if gplot_path:
         print_dual(f"Gnuplot script : {gplot_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

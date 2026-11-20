@@ -21,7 +21,6 @@ import os
 import argparse
 
 REPORT_FILE = "stb_kpath_report.txt"
-BIB_FILE = "references.bib"
 
 # The actual band-path convention ASE's Cell.bandpath implements (extended to
 # 1D/2D via its periodic-axes mask) -- kept local since this is currently the
@@ -293,16 +292,16 @@ def run_kpath(filename, vacuum_gap, eps, symprec, angle_tolerance, output_filena
 
         print_section("[5] REFERENCES", f_out)
         bib_entries = [citations.SIESTA, citations.SIESTA_RECENT, _BIB_SETYAWAN_CURTAROLO]
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         print_section("[6] SUMMARY & FILES", f_out)
         print_dual("Status         : OK", f_out)
         print_dual(f"Path           : {path_str}", f_out)
         print_dual(f"Output file    : {output_filename}", f_out)
-        print_dual(f"References     : {BIB_FILE}", f_out)
+        print_dual(f"References     : {citations.run_references_path()}", f_out)
         return True
 
     except Exception as e:

@@ -18,7 +18,6 @@ from stb.core.structure_io import read_fdf, species_list
 from stb.core import citations
 
 REPORT_FILE = "stb_dftu_report.txt"
-BIB_FILE = "references.bib"
 
 # The literature GGA+U reference table this tool tabulates (see
 # core/dftu_data.py::REFERENCE_U) -- cited whenever it's actually shown or
@@ -140,9 +139,9 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
             "depends on your functional, pseudopotential, and basis set.", 'yellow'), f_out)
 
         print_section("[1] REFERENCES", f_out)
-        citations.write_bib_file(BIB_FILE, [_BIB_WANG_MAXISCH_CEDER])
+        citations.cite([_BIB_WANG_MAXISCH_CEDER])
         print_dual(color_text(
-            f"[OK] Citation for this reference table written to '{BIB_FILE}'.", 'green'), f_out)
+            f"[OK] Citation for this reference table written to '{citations.run_references_path()}'.", 'green'), f_out)
 
         if report_path:
             print_dual(f"Report : {report_path}", f_out)
@@ -163,9 +162,9 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
             "own value explicitly.", 'cyan'), f_out)
 
         print_section("[1] REFERENCES", f_out)
-        citations.write_bib_file(BIB_FILE, [_BIB_WANG_MAXISCH_CEDER])
+        citations.cite([_BIB_WANG_MAXISCH_CEDER])
         print_dual(color_text(
-            f"[OK] Citation for this reference value written to '{BIB_FILE}'.", 'green'), f_out)
+            f"[OK] Citation for this reference value written to '{citations.run_references_path()}'.", 'green'), f_out)
 
         if report_path:
             print_dual(f"Report : {report_path}", f_out)
@@ -280,16 +279,16 @@ Response)" entry (stb-hubbardu / stb-hubbarduAnalysis) instead.""",
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
     if used_reference_table:
         bib_entries.append(_BIB_WANG_MAXISCH_CEDER)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Species        : {', '.join(resolved_species)}", f_out)
     print_dual(f"Output file    : {args.output if args.output else '(not saved -- pass -o/--output)'}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

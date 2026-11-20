@@ -22,7 +22,6 @@ from stb.core.pseudopotentials import (
 from stb.core import citations
 
 REPORT_FILE = "stb_pseudo_report.txt"
-BIB_FILE = "references.bib"
 
 
 def _fail(message, f_out, report_path):
@@ -288,17 +287,17 @@ The table's functional must match the calculation's XC.Functional/XC.Authors."""
             entry = citations.pseudo_bank_citation(bank)
             if entry and entry not in bib_entries:
                 bib_entries.append(entry)
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         print_section("[6] SUMMARY & NEXT STEPS", f_out)
         print_dual(f"Status     : {'OK' if ok else 'INCOMPLETE (missing elements)'}", f_out)
         print_dual(f"Resolved   : {len(resolved)}/{len(species)}", f_out)
         if not args.dry_run:
             print_dual(f"Copied to  : {os.path.abspath(os.path.expanduser(args.output))}", f_out)
-        print_dual(f"References : {BIB_FILE}", f_out)
+        print_dual(f"References : {citations.run_references_path()}", f_out)
         if level_warnings:
             print_dual(color_text(f"Warnings   : {len(level_warnings)} (level of theory, see above)", 'yellow'), f_out)
         if report_path:

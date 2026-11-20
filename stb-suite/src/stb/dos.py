@@ -24,7 +24,6 @@ from stb.core.orbitals import ORBITAL_MAP, ORBITAL_ORDER, get_orbital_name, get_
 from stb.core.siesta_bands import read_data as read_bands_data, read_eig_mesh, cbm_vbm
 
 REPORT_FILE = "stb_dos_report.txt"
-BIB_FILE = "references.bib"
 
 
 def parse_data_string(data_str):
@@ -827,10 +826,10 @@ def main():
 
     print_section("[4] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[5] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -838,7 +837,7 @@ def main():
         print_dual(f"Data file      : {path}", f_out)
     for path in gplot_files:
         print_dual(f"Gnuplot script : {path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

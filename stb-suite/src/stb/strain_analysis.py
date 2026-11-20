@@ -671,7 +671,7 @@ def main():
     parser.add_argument("-o", "--output-dir", default=".",
                         help="Directory to write <direction>_curve.dat/.gplot (single direction) or "
                              "comparison_curve.dat/.gplot (multiple directions) into with "
-                             "--save-gnuplot (the report goes to the current folder) (default: "
+                             "--save-gnuplot (the report and its references file go to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
                         help=argparse.SUPPRESS)

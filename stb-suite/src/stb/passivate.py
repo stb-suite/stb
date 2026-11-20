@@ -31,7 +31,6 @@ from stb.core.deps import require_mace
 from stb.core.passivation import passivate_dangling_bonds
 
 REPORT_FILE = "stb_passivate_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-unitcell/stb-supercell/stb-fetch/
 # stb-kgrid/stb-mlrelax (core/kspace.py's other callers) -- passivate's usual
@@ -328,16 +327,16 @@ alone and are reported instead of guessed.""",
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[9] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Input file     : {args.filename}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

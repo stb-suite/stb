@@ -22,7 +22,6 @@ from stb.core import structure_io, citations
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
 REPORT_FILE = "stb_structural_report.txt"
-BIB_FILE = "references.bib"
 
 def warn_handler(message, category, filename, lineno, file=None, line=None):
     """Prints any warning that reaches here directly to the console -- no
@@ -585,10 +584,10 @@ def print_report(results, source_file, fmt, args, rdf_summary, report_path, f_ou
 
     print_section("[10] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
     print_dual("Coordination-number/distortion methods used above (see the example README", f_out)
     print_dual("for the full theory/formula and limitations of each): Hoppe (1979) for ECoN;", f_out)
     print_dual("Baur (1974) for BLD; Robinson et al. (1971) for BAV (modified here, see [5]);", f_out)
@@ -599,7 +598,7 @@ def print_report(results, source_file, fmt, args, rdf_summary, report_path, f_ou
     print_dual("Status         : OK", f_out)
     if rdf_summary is not None:
         print_dual(f"RDF data       : {rdf_summary['rdf_file']}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 
@@ -621,8 +620,8 @@ def main():
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write rdf.dat and references.bib into ("
-                             "the report goes to the current folder) (default: current "
+                        help="Directory to write rdf.dat into ("
+                             "the report and its references file go to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--no-rdf", dest="rdf", action="store_false",
                         help="Skip the radial distribution function g(r) (rdf.dat is not written).")

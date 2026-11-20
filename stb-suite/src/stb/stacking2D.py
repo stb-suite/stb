@@ -37,7 +37,6 @@ warnings.filterwarnings("ignore")
 from stb.core.cli import COLORS, color_text, print_dual, print_section, print_table, show_intro
 
 REPORT_FILE = "stb_2Dstacking_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid (core/kspace.py's
 # other callers) -- used to detect the out-of-plane vacuum axis for the
@@ -390,10 +389,10 @@ def main():
         bib_entries.append(citations.MACE)
         if not args.custom_model:
             bib_entries.append(citations.MACE_MP)
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status                    : OK", f_out)
@@ -403,7 +402,7 @@ def main():
         print_dual(f"Output file               : {of}", f_out)
     if len(output_files) > len(shown_files):
         print_dual(f"                            ... and {len(output_files) - len(shown_files)} more", f_out)
-    print_dual(f"References                : {BIB_FILE}", f_out)
+    print_dual(f"References                : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report                    : {report_path}", f_out)
 

@@ -73,7 +73,6 @@ DEFAULT_MESH_CUTOFF_RY = 400.0
 GHOST_OCCUPANCY_FRACTION = 0.15
 
 REPORT_FILE = "stb_chargediffPrep_report.txt"
-BIB_FILE = "references.bib"
 CONFIG_EXTRA_FILE = "config_extra.fdf"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
 
@@ -897,9 +896,9 @@ def main():
     # --- [6] REFERENCES. ---
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations written to '{os.path.join(args.output_dir, BIB_FILE)}'.", 'green'), f_out)
+        f"[OK] Citations written to '{citations.run_references_path()}'.", 'green'), f_out)
 
     # --- [7] SUMMARY & NEXT STEPS. ---
     print_section("[7] SUMMARY & NEXT STEPS", f_out)

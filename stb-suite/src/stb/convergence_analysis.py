@@ -748,7 +748,7 @@ def main():
                              "relaxation may not have reached a genuine minimum.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write <parameter>_convergence.dat/.gplot into with "
-                             "--save-gnuplot (the report goes to the current folder) (default: "
+                             "--save-gnuplot (the report and its references file go to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--apply", type=str, default=None, metavar="CALC_FDF",
                         help="Writes every parameter's converged (recommended) value into this "

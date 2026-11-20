@@ -18,7 +18,6 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.siesta_bands import _is_gamma, read_data, shift_bands, cbm_vbm, read_eig_mesh
 
 REPORT_FILE = "stb_bands_report.txt"
-BIB_FILE = "references.bib"
 
 
 def plot_gnuplot(high_sym, nspin, output_dir="."):
@@ -202,7 +201,7 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write bands_gnuplot.dat and bands.gplot into "
-                             "(and references.bib; the report goes to the current folder) "
+                             "(the report and its references file go to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
@@ -361,10 +360,10 @@ def main():
 
     print_section("[6] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     if mesh_result is not None:
         best_indirect, best_type = mesh_result["combined"][4], mesh_result["combined"][5]
@@ -384,7 +383,7 @@ def main():
             'green'), f_out)
     print_dual(f"Gnuplot data   : {os.path.join(args.output_dir, 'bands_gnuplot.dat')}", f_out)
     print_dual(f"Gnuplot script : {os.path.join(args.output_dir, 'bands.gplot')}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

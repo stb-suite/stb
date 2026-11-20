@@ -1464,7 +1464,7 @@ def build_parser():
                         help="Output directory in batch mode: each output is named after its input with the output "
                              "format's extension.")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Read and report only (structure, symmetry, checks); write nothing.")
+                        help="Read and report only (structure, symmetry, checks); write no structure file (the report and its references are always written).")
     parser.add_argument("--save-report", action="store_true",
                         help=argparse.SUPPRESS)
     parser.add_argument("-cf", "--coord-format", choices=['direct', 'cartesian'], default=None,
@@ -1537,9 +1537,7 @@ def main():
                              f"({', '.join(sorted(OUTPUT_FORMATS))}).")
             out_how = f"auto, from the name '{os.path.basename(args.out_file)}'"
 
-    report_path = None
-    if not args.dry_run:
-        report_path = new_report_path("translate")
+    report_path = new_report_path("translate")
     f_out = open(report_path, "w") if report_path else None
     warns = []
     sections = Sections(f_out)

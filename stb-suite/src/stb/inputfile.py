@@ -857,7 +857,6 @@ WriteMDXmol             .true.
 
 VACUUM_GAP_ANG = 10.0  # min empty span (wrapped) along an axis to treat it as vacuum-padded
 
-BIB_FILE = "references.bib"
 
 # Method/tool references, keyed the same way the generated calc.fdf actually
 # exercises them: SIESTA, Monkhorst-Pack, and the PBE (XC.Functional GGA /
@@ -1211,12 +1210,12 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[5] REFERENCES", f_out)
         pseudo_bank = detect_pseudo_bank(pp_path)
         bib_entries = build_bib_entries(chosen_mode, d3_flag == ".true.", pseudo_bank)
-        citations.write_bib_file(BIB_FILE, bib_entries)
+        citations.cite(bib_entries)
         if pseudo_bank:
             print_dual(f"Pseudopotential source : bundled bank '{pseudo_bank}'", f_out)
         print_dual(color_text(
-            f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-            f"({len(bib_entries)} entries).", 'green'), f_out)
+            f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+            f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
         # --- 5. Copy Pseudopotentials ---
         pp_warnings = []
@@ -1232,7 +1231,7 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
         print_section("[7] SUMMARY & FILES", f_out)
         print_dual("Status       : OK", f_out)
         print_dual(f"Input file   : {output_file}", f_out)
-        print_dual(f"References   : {BIB_FILE}", f_out)
+        print_dual(f"References   : {citations.run_references_path()}", f_out)
         return True
 
     except Exception as e:

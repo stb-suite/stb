@@ -60,7 +60,6 @@ CURATED_OPTIMADE_PROVIDERS = [
 ]
 
 REPORT_FILE = "stb_fetch_report.txt"
-BIB_FILE = "references.bib"
 
 # Same default as stb-kgrid/stb-symmetry/etc. (core/kspace.py's other callers).
 VACUUM_GAP_ANG = 10.0
@@ -585,16 +584,16 @@ Look it up by exact id, or search by formula and pick a candidate.""",
         "materials-project": _BIB_MATERIALS_PROJECT,
         "optimade": _BIB_OPTIMADE,
     }[args.source])
-    citations.write_bib_file(BIB_FILE, bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
-        f"[OK] Citations for the methods used in this run written to '{BIB_FILE}' "
-        f"({len(bib_entries)} entries).", 'green'), f_out)
+        f"[OK] Citations for the methods used in this run written to '{citations.run_references_path()}' "
+        f" (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[7] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
     print_dual(f"Fetched        : {args.source} {fetched_id}", f_out)
     print_dual(f"Output file    : {args.output}", f_out)
-    print_dual(f"References     : {BIB_FILE}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

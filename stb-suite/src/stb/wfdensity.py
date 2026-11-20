@@ -119,7 +119,6 @@ from stb.core.grid_export import (
 )
 
 REPORT_FILE = "stb_wfdensity_report.txt"
-BIB_FILE = "references.bib"
 
 DENSITY_UNITS = "1/Ang^3"  # |psi|^2 is a probability density (sum*dvol ~ 1), not a charge
                             # density in e/Ang^3 like stb-density's own .RHO-based quantity.
@@ -234,7 +233,7 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write the .cube (and, with --save-gnuplot, the slice/"
-                             "profile data + references.bib) into (the report goes to the current folder) (default: current "
+                             "profile data) into (the report and its references file go to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
                         help=argparse.SUPPRESS)
@@ -489,10 +488,10 @@ def main():
 
     print_section("[5] REFERENCES", f_out)
     bib_entries = [citations.SIESTA, citations.SIESTA_RECENT]
-    citations.write_bib_file(os.path.join(args.output_dir, BIB_FILE), bib_entries)
+    citations.cite(bib_entries)
     print_dual(color_text(
         f"[OK] Citations for the methods used in this run written to "
-        f"'{os.path.join(args.output_dir, BIB_FILE)}' ({len(bib_entries)} entries).", 'green'), f_out)
+        f"'{citations.run_references_path()}' (with the libraries the run loads; written when it ends).", 'green'), f_out)
 
     print_section("[6] SUMMARY & FILES", f_out)
     print_dual("Status         : OK", f_out)
@@ -500,7 +499,7 @@ def main():
     if dat_path:
         print_dual(f"Data           : {dat_path}", f_out)
         print_dual(f"Gnuplot script : {gplot_path}", f_out)
-    print_dual(f"References     : {os.path.join(args.output_dir, BIB_FILE)}", f_out)
+    print_dual(f"References     : {citations.run_references_path()}", f_out)
     if report_path:
         print_dual(f"Report         : {report_path}", f_out)
 

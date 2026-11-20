@@ -98,11 +98,11 @@ newer tool in this suite uses:
   vbm/cbm` hierarchy messages above live here).
 - `[3] WRITING OUTPUT FILES` — one `[OK]` line per `.dat`/directory
   actually written.
-- `[4] REFERENCES` — SIESTA citations, written to `references.bib`.
+- `[4] REFERENCES` — SIESTA citations, written to `stb_dos_references.bib`.
 - `[5] SUMMARY & FILES` — every file this run produced.
 
 That exact report is always saved to `stb_dos_report.txt` in the current folder;
-a plain run also writes the `.dat` files and `references.bib`.
+a plain run also writes the `.dat` files and `stb_dos_references.bib`.
 
 `--save-gnuplot` writes one `.gplot` script **per output category** — off
 by default. Every column is plotted as its **own curve, never summed**

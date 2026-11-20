@@ -65,10 +65,10 @@ prompts — the same choices the CLI flags below control directly.
 | `output/cod-primitive/`      | same, + `--unitcell primitive`                                                  |
 | `output/optimade-2d/`        | `stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150` (monolayer MoS2, 2D) |
 | `output/formula-search/`     | `--formula MoS2` with no exact id — multiple candidates, informative error      |
-| `output/merged-citations/`   | two fetches (COD + OPTIMADE) into the same folder — `references.bib` merges     |
+| `output/merged-citations/`   | two fetches (COD + OPTIMADE) into the same folder — one references file per run     |
 
 Every case that generates a structure is run each
-into its own `stb_fetch_report.txt` + `references.bib`.
+into its own `stb_fetch_report.txt` + `stb_fetch_references.bib`.
 
 ### Structure validation (always on, every fetch)
 
@@ -113,14 +113,14 @@ job):
   crystal-structure databases — so this case is implemented for
   completeness/robustness but isn't reachable through the walkthrough.
 
-### `references.bib` — always written, and it merges
+### `stb_fetch_references.bib` — always written, one per run
 
-`references.bib` is always written — there's no flag for it. Citations
-always include SIESTA, spglib (symmetry detection now always runs), and
-one entry for whichever database the structure came from (COD/Materials
-Project/OPTIMADE). Fetching from two different sources into the same
-output folder merges citations by BibTeX key instead of the second run
-erasing the first's — see `output/merged-citations/`.
+`stb_fetch_references.bib` is always written — there's no flag for it — next to
+the report and with its number. It holds the entry for whichever database the
+structure came from (COD/Materials Project/OPTIMADE), what the tool cites itself,
+and every library the run loaded (pymatgen, spglib, ...). Fetching from two
+different sources in the same folder gives two files, `stb_fetch_references.bib`
+and `stb_fetch_references_1.bib`, one per run — see `output/merged-citations/`.
 
 ### `--view` (optional, off by default)
 
@@ -165,7 +165,7 @@ stb-fetch --source <cod|materials-project|optimade>
 
 Structure validation and the dimension-aware group label (see above) always
 run before writing — there's no flag for either, they're always on.
-`references.bib` is always written too.
+`stb_fetch_references.bib` is always written too.
 
 Run `stb-fetch --help` for the full list of options.
 

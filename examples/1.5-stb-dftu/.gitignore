@@ -1,5 +1,5 @@
 output/
-references.bib
+stb_*_references*.bib
 stb_dftu_report.txt
 *.fdf.block
 ldau_*.fdf

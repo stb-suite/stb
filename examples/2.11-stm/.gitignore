@@ -3,5 +3,5 @@ stm_*.dat
 stm_*.gplot
 stm_*.pdf
 stb_stm_report.txt
-references.bib
+stb_*_references*.bib
 stb_*_report*.txt

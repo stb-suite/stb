@@ -5,6 +5,6 @@ ipr_down.dat
 ipr.gplot
 ipr.pdf
 stb_ipr_report.txt
-references.bib
+stb_*_references*.bib
 calc.HSX
 stb_*_report*.txt

@@ -165,12 +165,12 @@ Every run prints a numbered report to the console:
 | `[3] PER-ATOM BADER POPULATIONS` | the main per-atom table (population, Z_val, net charge, state, volume/surface distance, spin) |
 | `[4] PER-SPECIES SUMMARY` | mean/std net charge per species |
 | `[5] DIAGNOSTICS & WARNINGS` | unit-correction factor, near-zero-population atoms, symmetry-inconsistent groups, general limitations |
-| `[6] REFERENCES` | writes `references.bib` (SIESTA); names the Bader/PyBader theory papers |
+| `[6] REFERENCES` | writes `stb_bader_references.bib` (SIESTA); names the Bader/PyBader theory papers |
 | `[7] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_bader_report.txt` in the current folder (`_1`, `_2`, ... when
   that name is taken); there is no option for it.
-- **`--output-dir`** — where the `.cube` file(s), `references.bib`, the
+- **`--output-dir`** — where the `.cube` file(s), `stb_bader_references.bib`, the
   report, and any `--export-volumes` files all land (default: current
   directory).
 
@@ -211,7 +211,7 @@ output — `example_2.6.sh` proves this directly at the end.
   and enough symmetry for the equivalent-atom cross-check to run.
 - `example_2.6.sh` — the guided walkthrough (**not** an automated test —
   see `test/2-analysis/6-bader/test.sh` for that).
-- `.gitignore` — excludes generated `.cube` files, `references.bib`,
+- `.gitignore` — excludes generated `.cube` files, `stb_bader_references.bib`,
   the report, and `output/`.
 
 ## Running the walkthrough
@@ -231,7 +231,7 @@ charge-density grid):
 | `basic/`              | Z_val detection, the per-atom population/net-charge table, per-species summary |
 | `speed-fast/`         | `--speed fast`'s on-grid method vs. the default near-grid method |
 | `export-volumes/`     | `--export-volumes`: one `.cube` per atom, for VESTA/VMD |
-| `full-report/`        | The report file (`stb_bader_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_bader_report.txt`), `stb_bader_references.bib` |
 
 ## Try it yourself
 
@@ -251,7 +251,7 @@ stb-bader --label my_calc --export-volumes -o bader_out
 | Flag                 | Meaning                                                                |
 |-----------------------|-------------------------------------------------------------------------|
 | `-l/--label`         | SystemLabel used in SIESTA.                                            |
-| `-o/--output-dir`    | Where the `.cube` file(s)/`references.bib` land. |
+| `-o/--output-dir`    | Where the `.cube` file(s)/`stb_bader_references.bib` land. |
 | `--ref`              | Path to a specific `.out` file to read `Z_val` from.                   |
 | `--speed`            | `normal` (near-grid, default) or `fast` (on-grid, less precise edges). |
 | `--threads`          | Worker threads for PyBader.                                            |

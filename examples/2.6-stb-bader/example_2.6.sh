@@ -129,7 +129,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
 It is always saved to stb_bader_report.txt in the current folder; a plain run also
-writes the .cube file and references.bib:
+writes the .cube file and stb_bader_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.out Sn3O4.RHO Sn3O4.XV "$OUT/full-report/"
@@ -137,15 +137,15 @@ echo
 echo "\$ stb-bader --label Sn3O4 --no-intro   # default: no report file"
 (cd "$OUT/full-report" && timeout 120 stb-bader --label Sn3O4 --no-intro > console_default.log 2>&1)
 ls "$OUT/full-report/" | grep -v "\.out$\|\.RHO$\|\.XV$\|\.cube$\|console"
-echo "(no <label>_BADER.txt, no stb_bader_report.txt -- only references.bib)"
+echo "(no <label>_BADER.txt, no stb_bader_report.txt -- only stb_bader_references.bib)"
 echo
 echo "\$ stb-bader --label Sn3O4 --no-intro"
 (cd "$OUT/full-report" && timeout 120 stb-bader --label Sn3O4 --no-intro > console_saved.log 2>&1)
 echo "Report sections written to stb_bader_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_bader_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-bader run analyzes a finished SIESTA calculation):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_bader_references.bib -- SIESTA (every stb-bader run analyzes a finished SIESTA calculation):"
+grep "^@" "$OUT/full-report/stb_bader_references.bib"
 pause
 
 echo "=================================================================="
@@ -185,7 +185,7 @@ Four self-contained folders were generated under output/:
   basic/            speed-fast/
   export-volumes/   full-report/
 
-Each has references.bib and the .cube file(s); full-report/ additionally
+Each has stb_bader_references.bib and the .cube file(s); full-report/ additionally
 has stb_bader_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
@@ -196,7 +196,7 @@ Recap of what this walkthrough covered:
   - a real near-zero-population red flag on this fixture's own Sn #1/#2
   - --speed fast's on-grid vs. the default near-grid method
   - --export-volumes for per-atom VESTA/VMD visualization
-  - the numbered [0]...[7] report (always saved), references.bib
+  - the numbered [0]...[7] report (always saved), stb_bader_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a finished SIESTA calculation:

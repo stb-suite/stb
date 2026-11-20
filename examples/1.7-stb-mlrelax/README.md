@@ -150,10 +150,10 @@ stb-suite
   Every check that ran is listed explicitly -- not just a summary line --
   so it's always clear exactly what was verified, in both the console
   output and the report file.
-- **`references.bib`** — always written, no flag: SIESTA (the output is a
+- **`stb_mlrelax_references.bib`** — always written, no flag: SIESTA (the output is a
   `.fdf`), the MACE architecture paper, and (unless `--custom-model`) the
   MACE-MP-0 foundation-model paper. Merges with an existing
-  `references.bib` in the same folder instead of overwriting it.
+  `stb_mlrelax_references.bib` in the same folder instead of overwriting it.
 - **A detailed before/after comparison table** (`[5]`, `Quantity | Before |
   After | Change`) — energy (total and per-atom), max force, full cell
   parameters + volume + density (if `--relax-cell`), mean/RMS/max atomic
@@ -265,7 +265,7 @@ entirely with your own fine-tuned model.
 | `output/bad-structure/`      | `stb-mlrelax -f si_too_close.fdf`                               | pre-relax `[WARNING]`, clean post-relax check     |
 | `output/model-comparison/`   | `stb-mlrelax -f si_defect.fdf --model {small,medium,large}`     | the speed/accuracy table above, measured live     |
 | `output/optimizer-comparison/` | `stb-mlrelax -f si_defect.fdf --optimizer {FIRE,BFGS,LBFGS}`  | the FIRE/BFGS/LBFGS table above, measured live    |
-| `output/full-report/`        | `stb-mlrelax -f si_defect.fdf --save-data`        | full report, `references.bib`, convergence files  |
+| `output/full-report/`        | `stb-mlrelax -f si_defect.fdf --save-data`        | full report, `stb_mlrelax_references.bib`, convergence files  |
 
 ### `bad-structure/` — the structure check catching a real problem
 
@@ -319,7 +319,7 @@ stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
 - **Report** — always saved to `stb_<tool>_report.txt` in the current folder (`_1`, `_2`, ... when
   that name is taken); there is no option for it.
 
-`references.bib` is always written — there's no flag for it. Structure
+`stb_mlrelax_references.bib` is always written — there's no flag for it. Structure
 validation (before and after relaxation) always runs too — there's no flag
 for it either.
 

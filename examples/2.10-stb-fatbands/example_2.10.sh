@@ -197,7 +197,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_fatbands_report.txt; --save-gnuplot writes fatbands_<category>.dat/fatbands.gplot -- both off
-by default, so a plain run only ever writes references.bib:
+by default, so a plain run only ever writes stb_fatbands_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.bands Sn3O4.bands.WFSX Sn3O4.HSX "$OUT/full-report/"
@@ -210,8 +210,8 @@ echo "      --shift fermi --save-gnuplot --no-intro"
 echo "Report sections written to stb_fatbands_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_fatbands_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_fatbands_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_fatbands_references.bib"
 pause
 
 echo "=================================================================="
@@ -268,7 +268,7 @@ Six self-contained folders were generated under output/:
   species-l-default/   projection-modes/   category-filter/
   accuracy-fallback/    spin-polarized/      full-report/
 
-Each has references.bib; the --save-gnuplot runs additionally have
+Each has stb_fatbands_references.bib; the --save-gnuplot runs additionally have
 fatbands_<category>.dat/fatbands.gplot, and full-report/ has
 stb_fatbands_report.txt (every run writes one).
 
@@ -288,7 +288,7 @@ Recap of what this walkthrough covered:
     bug (both spin channels silently merged into one series) while
     building this tool
   - the numbered [0]...[6] report (always saved), --save-gnuplot,
-    references.bib
+    stb_fatbands_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA calculation (remember

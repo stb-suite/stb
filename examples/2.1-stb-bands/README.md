@@ -139,7 +139,7 @@ output — `example_2.1.sh` proves this directly at the end.
   printed to the console.
 - **`bands_gnuplot.dat` + `bands.gplot`** — the actual plot data (run
   `gnuplot bands.gplot` for a PDF).
-- **`references.bib`** — SIESTA (every `.bands` file is SIESTA output).
+- **`stb_bands_references.bib`** — SIESTA (every `.bands` file is SIESTA output).
 
 ## Optional (off by default)
 
@@ -168,7 +168,7 @@ output — `example_2.1.sh` proves this directly at the end.
   skips).
 - `.gitignore` — excludes `output/` and every file this tool itself
   generates on a run (`bands_gnuplot.dat`, `bands.gplot`,
-  `references.bib`, `stb_bands_report.txt`).
+  `stb_bands_references.bib`, `stb_bands_report.txt`).
 
 ## Running the walkthrough
 
@@ -186,7 +186,7 @@ by wiping its own `output/`. Five self-contained cases are generated:
 | `metallic-threshold/`    | The same real gap classified Indirect vs. Metallic, only `--gap-tol` changes |
 | `half-metallic/`         | One spin channel metallic, the other with a 2 eV gap                   |
 | `mesh-vs-line/`          | `--eig-file`/`--kp-file`: the k-mesh catching what the k-path missed    |
-| `full-report/`           | The report file (`stb_bands_report.txt`), `references.bib` |
+| `full-report/`           | The report file (`stb_bands_report.txt`), `stb_bands_references.bib` |
 
 ## Try it yourself
 

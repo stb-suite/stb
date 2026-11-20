@@ -156,7 +156,7 @@ newer tool in this suite uses:
 | `[2] STATE SELECTION` | k-index/vector, spin, band, eigenvalue -- and the VBM/CBM search details if used |
 | `[3] WAVEFUNCTION DENSITY` | grid shape, the normalization check (and its `[OK]`/`[WARNING]`) |
 | `[4] OUTPUT DATA & PLOTS` | the `.cube` file (always), and whether the slice/profile `.dat`/`.gplot` were written |
-| `[5] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[5] REFERENCES` | writes `stb_wfdensity_references.bib` (SIESTA) |
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_wfdensity_report.txt` in the current folder (`_1`, `_2`, ... when
@@ -240,7 +240,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `vbm-cbm/`               | `--band vbm`/`cbm` searching the whole k-mesh, Fermi energy from `--fermi-file` |
 | `slice-position/`        | The real bug: default (auto-detected `\|psi\|^2` peak, right at the atoms) vs. `--pos` at the old geometric center (near-empty vacuum) |
 | `grid-resolution/`       | `--spacing 0.3` (normalization warning fires) vs. `0.2` (passes) -- the same real state |
-| `full-report/`           | `--save-gnuplot`, the report, `references.bib`, a real gnuplot render |
+| `full-report/`           | `--save-gnuplot`, the report, `stb_wfdensity_references.bib`, a real gnuplot render |
 
 ## Try it yourself
 
@@ -270,7 +270,7 @@ stb-wfdensity --label my_calc --k-point 0.0 0.0 0.0 --band 5 --spacing 0.2
 | `--axis`            | Axis for the optional slice/profile (default `2`).                    |
 | `--profile`         | 1D planar-averaged profile instead of a 2D slice.                     |
 | `--pos`             | Slice position, Ang along `--axis` (default: auto-detected `\|psi\|^2` peak). |
-| `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
+| `-o/--output-dir`   | Where all generated files (and `stb_wfdensity_references.bib`) land.                 |
 | `--save-gnuplot`    | Also write the slice/profile `.dat`/`.gplot`.                          |
 | `--view`            | Show an interactive matplotlib preview.                                |
 

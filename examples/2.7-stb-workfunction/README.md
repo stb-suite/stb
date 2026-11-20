@@ -136,7 +136,7 @@ Every run prints a numbered report to the console:
 | `[3] VACUUM PLATEAU DETECTION` | table of detected plateaus (position, mean potential, noise), with warnings (atoms projecting in, systematic slope) |
 | `[4] WORK FUNCTION RESULTS` | vacuum size/slab thickness, Φ per plateau, average + `dV` if asymmetric |
 | `[5] OUTPUT DATA & PLOTS` | whether `workfunction_data.dat`/`.gplot` were written (only with `--save-gnuplot`) |
-| `[6] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[6] REFERENCES` | writes `stb_workfunction_references.bib` (SIESTA) |
 | `[7] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_workfunction_report.txt` in the current folder (`_1`, `_2`, ... when
@@ -210,7 +210,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 |--------------------|-----------------------------------------------------------------------------|
 | `basic/`           | The full report on a real, converged DFT calculation: real Fermi energy, real work function |
 | `save-gnuplot/`    | `--save-gnuplot`: `workfunction_data.dat` + the annotated `workfunction.gplot` |
-| `full-report/`     | The report file (`stb_workfunction_report.txt`), `references.bib` |
+| `full-report/`     | The report file (`stb_workfunction_report.txt`), `stb_workfunction_references.bib` |
 
 ## Try it yourself
 
@@ -235,7 +235,7 @@ stb-workfunction --label my_slab --file relax/my_slab.out
 | `-z/--axis`         | Axis normal to the surface, `0`/`1`/`2` (default: auto-detected).      |
 | `--fermi`           | Manually force the Fermi energy (eV), instead of reading `.out`.       |
 | `--asymmetric-tol`  | Vacuum levels within this many eV are treated as one plateau (default `0.05`). |
-| `-o/--output-dir`   | Where `references.bib` (and the report/data+gnuplot, with their flags) land. |
+| `-o/--output-dir`   | Where `stb_workfunction_references.bib` (and the report/data+gnuplot, with their flags) land. |
 | `--save-gnuplot`    | Also write `workfunction_data.dat`/`workfunction.gplot`.               |
 | `--view`            | Show an interactive matplotlib preview of the potential profile.       |
 

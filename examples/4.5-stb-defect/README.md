@@ -119,7 +119,7 @@ output — `example_4.5.sh` proves this directly at the end.
   structure.
 - **A before/after symmetry comparison table** per output structure —
   crystal system, 3D space group, layer group, point group, Hall symbol.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_defect_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax`/`--ml-rank` was used.
 - **A provenance header** written into every output `.fdf`: the defect
   type, which atom(s)/site were involved, and MACE convergence/energy
@@ -152,7 +152,7 @@ output — `example_4.5.sh` proves this directly at the end.
   (No. 227) — Fe on two genuinely distinct sites (tetrahedral,
   octahedral), O on one.
 - `example_4.5.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_defect_references.bib`, and
   `stb_defect_report.txt`.
 
 ## Running the walkthrough
@@ -175,7 +175,7 @@ are skipped, with a hint, if the optional `ml` extra isn't installed):
 | `all-inequivalent-sites/`     | Magnetite's 2 distinct Fe sites, found automatically                |
 | `ml-rank/`                    | Ranking those 2 Fe sites by MACE-relaxed energy (octahedral wins)   |
 | `ml-relax/`                   | Generic MACE pre-relaxation of a single chosen vacancy               |
-| `full-report/`                | the report + the validation checklist + `references.bib`       |
+| `full-report/`                | the report + the validation checklist + `stb_defect_references.bib`       |
 
 ## Try it yourself
 

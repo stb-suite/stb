@@ -151,7 +151,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_convdos_report.txt in the current folder; a plain run also
-writes the filtered .dat file(s) and references.bib:
+writes the filtered .dat file(s) and stb_convdos_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp dos_total.dat "$OUT/full-report/"
@@ -162,8 +162,8 @@ echo "\$ stb-convdos --file dos_total.dat --sigma 100 --out dos_filtered.dat --n
 echo "Report sections written to stb_convdos_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_convdos_report.txt"
 echo
-echo "references.bib -- SIESTA (every DOS file here is ultimately SIESTA-derived):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_convdos_references.bib -- SIESTA (every DOS file here is ultimately SIESTA-derived):"
+grep "^@" "$OUT/full-report/stb_convdos_references.bib"
 pause
 
 echo "=================================================================="
@@ -217,7 +217,7 @@ Recap of what this walkthrough covered:
   - --dir: broadening an entire stb-dos output tree in one command,
     mirroring its folder structure, skipping an invalid file without
     aborting the batch
-  - the numbered [0]...[6] report (always saved), references.bib
+  - the numbered [0]...[6] report (always saved), stb_convdos_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): the interactive

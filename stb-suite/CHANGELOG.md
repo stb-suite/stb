@@ -387,6 +387,18 @@ version before) and **Added** (new options and tools).
   longer asks about it, and the documentation no longer mentions it. The option is still accepted and
   ignored, so scripts that pass it keep working. Scripts that answer the menu through a pipe must
   drop the answer they gave to the report question (the examples were updated).
+- **References**: every run of every command writes `stb_<tool>_references.bib` in the folder it runs
+  from, next to its report and with the same number (`stb_bands_report_2.txt` and
+  `stb_bands_references_2.bib` are one run), never overwritten. Before, 39 of the 95 commands wrote a
+  `references.bib`, in the current folder or in `--output-dir`, merged by key with whatever was
+  there, so it could not say which run cited what, and the other commands wrote none. The file now
+  holds the methods the tool relies on (SIESTA, Monkhorst-Pack, CI-NEB/IDPP, Bader, Hirshfeld and
+  Hirshfeld-I, Boys-Bernardi, Cococcioni-de Gironcoli, Birch/Murnaghan, Le Page-Saxe, Hill,
+  Mouhat-Coudert, Porezag-Pederson, the GQCA of Sher et al., ...), what the run itself used (XC
+  functional, pseudopotential bank, D3, MACE-MP-0, the database a structure came from) and every
+  library the run loaded (numpy, SciPy, matplotlib, pymatgen, ASE, spglib, seekpath, sisl, phonopy,
+  pybader, icet, PyXtal, MACE, PyTorch), without duplicates. It is written also when a run stops
+  with an error.
 - **No stage reads a report any more.** A report is only for you to read; what a later stage needs
   goes into a JSON file of the run folder: `sites/adsorption_sites.json` (stb-adsorb, read by
   stb-adsorbBsse/Analysis/Gibbs, was the `# SITE_TABLE` of `sites/adsorption_sites.txt`),

@@ -133,7 +133,7 @@ it's the first thing you see even if you never read `--help`.
   symmetry. No `Layer Group` row here (unlike `stb-unitcell`/`stb-slab`):
   every space group this tool builds from is inherently 3D-periodic, so
   it would always read `N/A (not 2D-periodic)`, never real information.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_crystalbuilder_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: requested vs.
   detected space group, lattice, sites, reduce mode and MACE convergence
@@ -163,7 +163,7 @@ it's the first thing you see even if you never read `--help`.
   fixtures are needed — unlike most `2-structures` tools,
   `stb-crystalbuilder` builds everything from `--spacegroup`/`--site`
   flags, not from a structure file.
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_crystalbuilder_references.bib`, and
   `stb_crystalbuilder_report.txt`.
 
 ## Running the walkthrough
@@ -185,7 +185,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `reduce-to-primitive/`          | `--reduce primitive` on magnetite: 56 -> 14 atoms, one command         |
 | `out-of-range-error/`           | The fixed bug: `--spacegroup 255` now gives a clear error message      |
 | `ml-relax/`                     | MACE pre-relaxation of the built + reduced structure                   |
-| `full-report/`                  | the report + the validation checklist + `references.bib`          |
+| `full-report/`                  | the report + the validation checklist + `stb_crystalbuilder_references.bib`          |
 | `bulk-graphite-to-slab/`        | **The 3D-only answer, proven**: bulk graphite -> a real 2D slab via `stb-slab` |
 
 ## Try it yourself

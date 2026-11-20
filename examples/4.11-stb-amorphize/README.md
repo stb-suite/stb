@@ -181,7 +181,7 @@ output — `example_4.11.sh` proves this directly at the end.
 - **Structure validation + bond-angle mean/std**, before and after the MD.
 - **Symmetry analysis before/after** (`[6]`) — expected to differ (often
   down to `P1`/`P-1`), unlike most other stb-suite before/after tables.
-- **`references.bib`** — SIESTA + MACE (+ MACE-MP if a foundation model
+- **`stb_amorphize_references.bib`** — SIESTA + MACE (+ MACE-MP if a foundation model
   was used, not a custom fine-tuned one).
 - **A provenance header** written into the output `.fdf`: input file,
   melt/quench protocol, bond-angle before/after, final-relax summary.
@@ -209,7 +209,7 @@ output — `example_4.11.sh` proves this directly at the end.
 - `example_4.11.sh` — the guided walkthrough (**not** an automated test —
   see `test/4-structures/11-amorphize/test.sh` for that). Pauses between
   sections so you can read before moving on; safe to re-run any time.
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_amorphize_references.bib`, and
   `stb_amorphize_report.txt`.
 
 ## Running the walkthrough
@@ -231,7 +231,7 @@ cases are generated:
 | `vacuum-rejected/`                | Rejected outright on a `stb-slab`-built (100) slab (bulk-only)         |
 | `save-data/`                      | `--save-data`: the `.dat`+`.gplot` pair, rendered to a real PDF if gnuplot is installed |
 | `save-traj/`                      | `--save-traj`: all 3 formats (xsf/pdb/xyz), read back and verified with ASE |
-| `full-report/`                    | the report, the symmetry `Fd-3m -> P-1` collapse, `references.bib` |
+| `full-report/`                    | the report, the symmetry `Fd-3m -> P-1` collapse, `stb_amorphize_references.bib` |
 
 ## Try it yourself
 

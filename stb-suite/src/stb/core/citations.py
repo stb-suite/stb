@@ -611,7 +611,7 @@ _S = [SIESTA, SIESTA_RECENT]
 TOOL_CITATIONS = {
     # 1 Inputs
     "inputfile": _S, "pseudo": _S, "kgrid": _S + [MONKHORST_PACK], "kpath": _S + [SETYAWAN],
-    "dftu": _S, "fetch": [], "mlrelax": [],
+    "dftu": [], "fetch": [], "mlrelax": [],   # dftu cites SIESTA itself, only when it writes a block
     # 2 Analysis
     "bands": _S, "dos": _S, "convdos": _S, "structural": [], "symmetry": [], "bader": _S + [BADER_HENKELMAN, BADER_TANG],
     "workfunction": _S + [DIPOLE_BENGTSSON], "density": _S, "xrd": [], "fatbands": _S, "stm": _S + [TERSOFF_HAMANN],

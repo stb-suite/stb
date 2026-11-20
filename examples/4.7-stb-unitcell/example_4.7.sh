@@ -246,11 +246,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_unitcell_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_unitcell_report.txt) includes the structure-validation checklist for the input
-and the reduced cell, and a references.bib with SIESTA:
+and the reduced cell, and a stb_unitcell_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
 cp fcc_ni.fdf "$OUT/full-report/"
@@ -263,8 +263,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_unitcell_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_unitcell_references.bib"
 pause
 
 echo "=================================================================="
@@ -297,8 +297,8 @@ skipped if the optional 'ml' extra isn't installed):
   refined-noise/       symprec-sensitivity/   vacuum-warning/
   ml-relax/            full-report/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_unitcell_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_unitcell_references.bib (SIESTA, always); full-report/ additionally has
+stb_unitcell_report.txt; ml-relax/'s stb_unitcell_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -320,7 +320,7 @@ Recap of what this walkthrough covered:
     different origin/lattice-vector choice" caveat this suite documents
     elsewhere (core/symmetry.py)
   - --ml-relax pre-optimizing the reduced cell
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_unitcell_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
   - stb_unitcell_report.txt is no longer written unless you ask for it
 

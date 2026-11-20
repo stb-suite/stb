@@ -209,7 +209,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
 It is always saved to stb_coop_report.txt; --save-gnuplot writes coop.dat + a real .gplot script -- both off by
-default, so a plain run only ever writes coop.dat + references.bib:
+default, so a plain run only ever writes coop.dat + stb_coop_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.HSX Sn3O4.selected.WFSX "$OUT/full-report/"
@@ -217,7 +217,7 @@ echo "\$ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 --erange -
 (cd "$OUT/full-report" && stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 \
     --erange -10 5 --npoints 25 --sigma 300 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only coop.dat + references.bib -- no .gplot, no stb_coop_report.txt)"
+echo "(only coop.dat + stb_coop_references.bib -- no .gplot, no stb_coop_report.txt)"
 echo
 echo "\$ stb-coop --label Sn3O4 --quantity coop --pair 0 6 --pair 0 1 --erange -10 5 --npoints 25 --sigma 300 \\"
 echo "      --save-gnuplot --no-intro"
@@ -279,7 +279,7 @@ Seven self-contained folders were generated under output/:
   cohp/                label-plus-hsx/    fermi-shift/
   full-report/
 
-Each has references.bib and coop.dat/cohp.dat; full-report/ additionally
+Each has stb_coop_references.bib and coop.dat/cohp.dat; full-report/ additionally
 has coop.gplot/coop.pdf and stb_coop_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:

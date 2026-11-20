@@ -169,11 +169,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_molecule_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_molecule_report.txt) includes the structure-validation checklist and a
-references.bib with SIESTA:
+stb_molecule_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
 echo "\$ stb-molecule --name H2O --no-intro"
@@ -185,8 +185,8 @@ echo
 echo "Provenance header written into the output .fdf:"
 head -3 "$OUT/full-report/molecule.fdf"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_molecule_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_molecule_references.bib"
 pause
 
 echo "=================================================================="
@@ -218,8 +218,8 @@ symmetry-preserved/ skipped if the optional 'ml' extra isn't installed):
   vacuum-and-dimensionality/     ml-relax-symmetry-preserved/
   full-report/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_molecule_report.txt; ml-relax-symmetry-preserved/'s references.bib
+Each has stb_molecule_references.bib (SIESTA, always); full-report/ additionally has
+stb_molecule_report.txt; ml-relax-symmetry-preserved/'s stb_molecule_references.bib
 also cites the MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -233,7 +233,7 @@ Recap of what this walkthrough covered:
     group, which stays correct regardless)
   - --ml-relax correcting the G2 geometry while providably preserving the
     molecule's point group
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_molecule_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the as-built

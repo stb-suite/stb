@@ -57,7 +57,7 @@ B -- interactive stb-suite menu:
 Every run always writes a numbered report ([0] RUN METADATA ... [7] SUMMARY
 & FILES -- [4] ML PRE-RELAXATION only appears with --ml-relax), a
 structure-validation checklist both before and after the cut, a
-before/after symmetry comparison table, and references.bib. A full text
+before/after symmetry comparison table, and stb_slab_references.bib. A full text
 report (always written), MACE pre-relaxation (--ml-relax), and an
 interactive 3D view (--view) are all off by default.
 EOF
@@ -215,11 +215,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_slab_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_slab_report.txt) includes the structure-validation checklist for the bulk
-input and every written slab, and a references.bib with SIESTA.
+input and every written slab, and a stb_slab_references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_bulk.fdf "$OUT/full-report/"
@@ -232,8 +232,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_slab_references.bib always written -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_slab_references.bib"
 pause
 
 echo "=================================================================="
@@ -264,8 +264,8 @@ skipped if the optional 'ml' extra isn't installed):
   basic/         symmetrize/    polar-caveat/
   passivate/     ml-relax/      full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_slab_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_slab_references.bib; full-report/ additionally has
+stb_slab_report.txt; ml-relax/'s stb_slab_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -277,7 +277,7 @@ Recap of what this walkthrough covered:
     real dipole is still there, recovered directly once decorated
   - --passivate genuinely resolving 8 dangling bonds on a Si(111) surface
   - --ml-relax measuring real surface relaxation with MACE
-  - the structure-validation checklist (bulk AND slab), references.bib,
+  - the structure-validation checklist (bulk AND slab), stb_slab_references.bib,
     and
   - the Layer Group column appearing only on the (2D-periodic) slab side,
     never the (3D) bulk side

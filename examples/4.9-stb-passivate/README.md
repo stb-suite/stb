@@ -114,7 +114,7 @@ output — `example_4.9.sh` proves this directly at the end.
   crystal system, 3D space group, **layer group** (meaningful here, since
   a typical input is a genuinely 2D-periodic slab), point group, Hall
   symbol.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_passivate_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: the passivant,
   how many dangling bonds were found/auto-passivated/left unresolved, and
@@ -146,7 +146,7 @@ output — `example_4.9.sh` proves this directly at the end.
   itself, live, at the start of the script — the exact same 2-step
   pipeline (`4.8` -> `4.3`) a real user would run before ever reaching
   for `stb-passivate`.
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_passivate_references.bib`, and
   `stb_passivate_report.txt`.
 
 ## Running the walkthrough
@@ -167,7 +167,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `bond-length-override/`     | The default 1.35 Ang (atomic-radii-sum) approximation vs. a dialed-in real Si-H bond length |
 | `symmetry-preserved/`       | The full report + before/after symmetry table: identical space/layer/point group |
 | `ml-relax/`                 | MACE pre-relaxation of the passivated slab, vacuum axis provably fixed |
-| `full-report/`              | the report + `references.bib`                                    |
+| `full-report/`              | the report + `stb_passivate_references.bib`                                    |
 
 ## Try it yourself
 

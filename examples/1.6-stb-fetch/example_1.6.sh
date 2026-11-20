@@ -131,23 +131,28 @@ fi
 pause
 
 echo "=================================================================="
-echo " references.bib merges across runs in the same folder"
+echo " One references file per run, never overwritten"
 echo "=================================================================="
 cat <<'EOF'
-references.bib is always written -- there's no flag for it. If you fetch
-from two different sources into the SAME output folder, the citations
-merge (by BibTeX key) instead of the second run erasing the first's.
+Every run writes its own references file next to its report, with the same
+number -- there's no flag for it. Two fetches from two different sources in the
+SAME folder give stb_fetch_references.bib (the first run) and
+stb_fetch_references_1.bib (the second), each with the database that run used.
 EOF
 mkdir -p "$OUT/merged-citations"
+rm -f "$OUT/merged-citations"/stb_fetch_re*
 echo "\$ stb-fetch --source cod --cod-id 1010369 -o fe3o4.fdf --no-intro"
 (cd "$OUT/merged-citations" && stb-fetch --source cod --cod-id 1010369 -o fe3o4.fdf --no-intro > /dev/null)
 echo "\$ stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 -o mos2.fdf --no-intro"
 (cd "$OUT/merged-citations" && stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-3150 -o mos2.fdf --no-intro > /dev/null)
 echo
-echo "Citation keys present after both runs:"
-grep "^@" "$OUT/merged-citations/references.bib"
-if grep -q "Grazulis2009" "$OUT/merged-citations/references.bib" && grep -q "Andersen2021" "$OUT/merged-citations/references.bib"; then
-    echo "Confirmed: both the COD and the OPTIMADE citation are present -- merged, not overwritten."
+ls "$OUT/merged-citations" | grep "^stb_fetch_"
+for f in stb_fetch_references.bib stb_fetch_references_1.bib; do
+    echo "Citation keys in $f:"
+    grep "^@" "$OUT/merged-citations/$f" | sed 's/^/  /'
+done
+if grep -q "Grazulis2009" "$OUT/merged-citations/stb_fetch_references.bib" && grep -q "Andersen2021" "$OUT/merged-citations/stb_fetch_references_1.bib"; then
+    echo "Confirmed: each run kept its own database citation -- nothing overwritten."
 fi
 pause
 

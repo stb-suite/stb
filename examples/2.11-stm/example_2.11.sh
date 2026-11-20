@@ -195,7 +195,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
 It is always saved to stb_stm_report.txt; --save-gnuplot writes stm_<mode>.dat/stm_<mode>.gplot -- both off by
-default, so a plain run only ever writes references.bib:
+default, so a plain run only ever writes stb_stm_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp siesta.LDOS siesta.XV "$OUT/full-report/"
@@ -206,8 +206,8 @@ echo "\$ stb-stm --file siesta.LDOS --geometry-file siesta.XV --save-gnuplot --n
 echo "Report sections written to stb_stm_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_stm_report.txt"
 echo
-echo "references.bib -- SIESTA + Tersoff-Hamann (the STM simulation method itself):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_stm_references.bib -- SIESTA + Tersoff-Hamann (the STM simulation method itself):"
+grep "^@" "$OUT/full-report/stb_stm_references.bib"
 echo
 echo "The .gplot script's own filenames are bare basenames -- no --output-dir"
 echo "prefix (a real, verified bug fixed while rewriting this tool):"
@@ -256,7 +256,7 @@ cat <<EOF
 Four self-contained folders were generated under output/:
   constant-current/   constant-height/   iso-sensitivity/   full-report/
 
-Each has references.bib; the --save-gnuplot runs additionally have
+Each has stb_stm_references.bib; the --save-gnuplot runs additionally have
 stm_<mode>.dat/stm_<mode>.gplot, and full-report/ has stb_stm_report.txt
 (every run writes one).
 
@@ -280,7 +280,7 @@ Recap of what this walkthrough covered:
     warning), the default gives full coverage and sensible corrugation,
     very low shifts the whole image farther into vacuum
   - the numbered [0]...[5] report (always saved), --save-gnuplot,
-    references.bib (now including the Tersoff-Hamann citation)
+    stb_stm_references.bib (now including the Tersoff-Hamann citation)
   - the fixed .gplot path bug: set output/splot always use bare
     basenames now, verified with a real gnuplot run from inside the
     output folder

@@ -2000,9 +2000,8 @@ predictable.
   (\texttt{[UNVERIFIED]}, \texttt{[EXTRAPOLATED]}); unphysical inputs are refused
   with a clear \texttt{[ERROR]} instead of being "fixed" silently.
 \item[Every result can be cited.]
-  Whenever an output depends on a citable method, code or database, a
-  \file{references.bib} is written next to it; an existing file in the same folder
-  is merged, not overwritten.
+  Every run writes, next to its report, \file{stb\_<tool>\_references.bib}: the
+  methods, codes and databases it used and every library it loaded; never overwritten.
 \item[Level of theory is propagated, not assumed.]
   A stage that builds new calculations from a previous stage's relaxed geometry
   reads the settings that stage \emph{actually} used (from its
@@ -2029,8 +2028,8 @@ code to its command.
 \section{Citing STB-SUITE and the methods it uses}
 
 Please cite SIESTA \cite{Soler2002,Garcia2020} for any calculation, and the
-methods, libraries and databases listed in the \file{references.bib} written by each
-tool. The main libraries the suite is built on are pymatgen \cite{Ong2013pymatgen},
+methods, libraries and databases listed in the \file{stb\_<tool>\_references.bib} written by
+each run. The main libraries the suite is built on are pymatgen \cite{Ong2013pymatgen},
 ASE \cite{Larsen2017ase}, spglib \cite{Togo2024spglib}, sisl \cite{Papior2017sisl},
 phonopy \cite{Togo2015phonopy,Togo2023phonopy}, icet \cite{Angqvist2019icet},
 PyXtal \cite{Fredericks2021pyxtal} and, for the ML tools, MACE
@@ -2208,7 +2207,8 @@ tool's reference.
     (\file{<tool>} is the command without \texttt{stb-}), never overwritten
     (\file{\_1}, \file{\_2}, \ldots{} when the name is taken). There is no option for it
     (\texttt{-\/-\allowbreak{}save-\allowbreak{}report} is still accepted, and ignored). The report is identical to the
-    console, and no stage ever reads a report back: what a later stage needs is in a JSON
+    console, and no stage ever reads a report back: the run's references are in
+    \file{stb\_<tool>\_references.bib}, with the same number; what a later stage needs is in a JSON
     file of the run folder (\file{sites/adsorption\_sites.json}, \file{neb\_run/neb\_setup.json},
     \file{gqca\_setup.json}, \file{ir\_modes.json}, \file{raman\_modes.json}, the
     \file{*\_manifest.json} of the other workflows).}
@@ -2263,12 +2263,15 @@ vacuum-padded cells, whose volume is mostly vacuum by design).
 
 \section{Bibliography files}
 
-Whenever an output depends on a citable method, code or database (SIESTA itself,
-Monkhorst--Pack, a k-path convention, a pseudopotential bank, MACE, a dispersion
-correction, a database a structure came from, \dots), the tool writes a
-\file{references.bib} next to its output, with no flag needed. A
-\file{references.bib} already present in the folder is merged entry by entry, so
-running several tools in one working folder builds one combined bibliography.
+Every run of every command writes \file{stb\_<tool>\_references.bib} in the folder it runs
+from, with the number of its report (\file{stb\_<tool>\_report\_2.txt} and
+\file{stb\_<tool>\_references\_2.bib} belong to the same run), never overwritten. It holds
+the methods the tool implements or relies on (SIESTA, Monkhorst--Pack, a k-path convention,
+CI-NEB, Bader, Hirshfeld, \dots), what the run itself used (a pseudopotential bank, an XC
+functional, MACE-MP-0, a dispersion correction, the database a structure came from) and
+every library the run loaded (numpy, SciPy, matplotlib, pymatgen, ASE, spglib, sisl, phonopy,
+MACE, \dots), without duplicates. There is no option for it, and it is written also when a
+run stops with an error (with what that run used).
 
 \section{Plots}\label{sec-plots}
 
@@ -3039,7 +3042,7 @@ finishes, \texttt{stb-\allowbreak{}status} gives you a quick summary of what hap
 
 \paragraph{What is written.}
 \cmd{stb-inputfile} always writes a file named \file{calc.fdf} in the
-\emph{current folder} (the name is fixed), plus \file{references.bib}, and copies one
+\emph{current folder} (the name is fixed), plus \file{stb\_<tool>\_references.bib}, and copies one
 pseudopotential per species when \opt{-p} is given. It does not rewrite the structure
 file: \file{calc.fdf} contains \fdf{\%include <structure file name>}, so keep the two
 files together. The steps, which are also the sections of the report, are:
@@ -3100,7 +3103,7 @@ species label of \fdf{ChemicalSpeciesLabel} (\file{Si.psml}, \file{Si.psf}); whe
 more control (fallback bank, dry run).
 
 \paragraph{Citations.}
-The \file{references.bib} contains exactly what the generated calculation uses:
+The \file{stb\_<tool>\_references.bib} contains exactly what the generated calculation uses:
 SIESTA, PBE, Monkhorst--Pack (except AIMD), DFT-D3 if \opt{-d3}, the Nos\'e
 thermostat for AIMD, and the pseudopotential bank when a bundled one was used.
 
@@ -3434,7 +3437,7 @@ stb-pseudo --list-banks
   (\texttt{\_1}, \texttt{\_2}, \ldots{} when that name is taken); there is no option for it.
 \end{itemize}
 
-\texttt{references.\allowbreak{}bib} (SIESTA plus a citation for every bank actually used) is
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA plus a citation for every bank actually used) is
 always written --- there\textquotesingle s no flag for it.
 
 Run \texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbreak{}help} for the full list of options.
@@ -3556,7 +3559,7 @@ of sampled k-points: too few, and the result is a poor approximation that
 keeps changing as you add more; enough, and it converges to a stable value.
 
 \textbf{Monkhorst-Pack} (Monkhorst \& Pack, 1976 --- the exact reference
-\texttt{stb-\allowbreak{}kgrid} writes to \texttt{references.\allowbreak{}bib}, see below) is the standard
+\texttt{stb-\allowbreak{}kgrid} writes to \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, see below) is the standard
 convention for \emph{how} to lay out that finite set: a uniform mesh of
 \texttt{N1\ x\ N2\ x\ N3} points along the three reciprocal lattice directions,
 instead of picking points ad hoc.
@@ -3642,7 +3645,7 @@ command underneath. \texttt{example\_\allowbreak{}1.\allowbreak{}3.\allowbreak{}
 
 Every case below is generated each into its own
 folder under \texttt{output/} --- \texttt{stb\_\allowbreak{}kgrid\_\allowbreak{}report.\allowbreak{}txt} (the exact console report)
-plus \texttt{references.\allowbreak{}bib} (SIESTA + Monkhorst-Pack citations):
+plus \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA + Monkhorst-Pack citations):
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1827}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3880}}>{\centering\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1151}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3141}}@{}}
@@ -3732,7 +3735,7 @@ stb-kgrid --file <structure.fdf> --density <value> [--vacuum-gap <Ang>]
   (\texttt{\_1}, \texttt{\_2}, \ldots{} when that name is taken); there is no option for it.
 \end{itemize}
 
-\texttt{references.\allowbreak{}bib} (SIESTA + Monkhorst-Pack citations) is always written ---
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA + Monkhorst-Pack citations) is always written ---
 there\textquotesingle s no flag for it.
 
 Run \texttt{stb-\allowbreak{}kgrid\ -\allowbreak{}\/-\allowbreak{}help} for the full list of options.
@@ -3860,7 +3863,7 @@ points and the segments between them.
 Which points count as "high-symmetry", and in what order to connect them,
 isn\textquotesingle t arbitrary --- it depends on the shape of the BZ, which in turn depends
 on the crystal\textquotesingle s \textbf{Bravais lattice}. \textbf{Setyawan \& Curtarolo (2010)} --- the
-exact reference \texttt{stb-\allowbreak{}kpath} writes to \texttt{references.\allowbreak{}bib} --- standardized this
+exact reference \texttt{stb-\allowbreak{}kpath} writes to \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} --- standardized this
 into one path convention per Bravais lattice type, now used across
 essentially every DFT code for reproducible band-structure plots. ASE
 implements that exact convention (\texttt{Cell.\allowbreak{}bandpath}) and extends it to 1D/2D
@@ -3958,7 +3961,7 @@ behind a single \texttt{{[}y/\allowbreak{}N{]}} question so the essential flow s
 \end{codeblock}
 
 Every successful case is generated each into its own
-folder under \texttt{output/} --- \texttt{stb\_\allowbreak{}kpath\_\allowbreak{}report.\allowbreak{}txt}, \texttt{references.\allowbreak{}bib} (SIESTA +
+folder under \texttt{output/} --- \texttt{stb\_\allowbreak{}kpath\_\allowbreak{}report.\allowbreak{}txt}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA +
 Setyawan-Curtarolo citations), and \texttt{kpath\_\allowbreak{}bs.\allowbreak{}fdf}:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
@@ -4031,7 +4034,7 @@ stb-kpath --file <structure.fdf> [-p/--prec <eps>] [--vacuum-gap <Ang>]
   (\texttt{\_1}, \texttt{\_2}, \ldots{} when that name is taken); there is no option for it.
 \end{itemize}
 
-\texttt{references.\allowbreak{}bib} (SIESTA + Setyawan-Curtarolo citations) is always written
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA + Setyawan-Curtarolo citations) is always written
 whenever a path is actually generated --- there\textquotesingle s no flag for it.
 
 Run \texttt{stb-\allowbreak{}kpath\ -\allowbreak{}\/-\allowbreak{}help} for the full list of options.
@@ -4087,7 +4090,7 @@ lattice of the space group, and warns with the cell angles. A genuinely rhombohe
 \fdf{\%include kpath\_bs.fdf}. A band structure must be computed on the
 \emph{same} cell orientation used to generate the path; if you reduce or rotate the
 cell afterwards, generate the path again. \cmd{stb-kpath} references SIESTA and
-Setyawan--Curtarolo in \file{references.bib}; see also the more recent
+Setyawan--Curtarolo in \file{stb\_<tool>\_references.bib}; see also the more recent
 crystallography-based convention of Hinuma \emph{et al.} \cite{Hinuma2017seekpath} if
 you need paths that are invariant to the choice of cell.
 
@@ -4175,7 +4178,7 @@ pseudopotential, and the basis set (screening, hybridization with
 neighboring ligands all shift it). \texttt{stb-\allowbreak{}dftu} bundles one literature table
 --- \textbf{Wang, Maxisch \& Ceder, Phys. Rev. B 73, 195107 (2006)}, the Materials
 Project\textquotesingle s own GGA+U oxide calibration, and the exact reference this tool
-writes to \texttt{references.\allowbreak{}bib} --- purely as a starting-point \emph{sanity check},
+writes to \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} --- purely as a starting-point \emph{sanity check},
 never a validated value. You always have to pass \texttt{-\/-\allowbreak{}u} explicitly, or opt
 in with \texttt{-\/-\allowbreak{}use-\allowbreak{}reference}.
 
@@ -4234,7 +4237,7 @@ prompts. \texttt{example\_\allowbreak{}1.\allowbreak{}5.\allowbreak{}sh} proves 
 \end{codeblock}
 
 Every case is generated each into its own folder
-under \texttt{output/} --- \texttt{stb\_\allowbreak{}dftu\_\allowbreak{}report.\allowbreak{}txt} + \texttt{references.\allowbreak{}bib}:
+under \texttt{output/} --- \texttt{stb\_\allowbreak{}dftu\_\allowbreak{}report.\allowbreak{}txt} + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2373}}>{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.7627}}@{}}
@@ -4273,7 +4276,7 @@ reference), \textbf{Fe} (a metal \emph{with} one), and \textbf{O} (a non-metal).
 
 \paragraph{\texorpdfstring{\texttt{list-\allowbreak{}reference/}/\texttt{suggest/} --- lookups only}{list-reference//suggest/ --- lookups only}}\label{g1.5-list-referencesuggest--lookups-only}
 
-Neither generates a block, so neither\textquotesingle s \texttt{references.\allowbreak{}bib} gets a SIESTA
+Neither generates a block, so neither\textquotesingle s \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} gets a SIESTA
 citation (nothing SIESTA-bound was produced) --- just the Wang/Maxisch/Ceder
 reference-table citation.
 
@@ -4321,7 +4324,7 @@ stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
   (\texttt{\_1}, \texttt{\_2}, \ldots{} when that name is taken); there is no option for it.
 \end{itemize}
 
-\texttt{references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it.
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it.
 
 Run \texttt{stb-\allowbreak{}dftu\ -\allowbreak{}\/-\allowbreak{}help} for the full list of options.
 
@@ -4514,12 +4517,12 @@ Folder & Command (conceptually) \\
 \texttt{output/\allowbreak{}cod-\allowbreak{}primitive/} & same, + \texttt{-\/-\allowbreak{}unitcell\ primitive} \\
 \texttt{output/\allowbreak{}optimade-\allowbreak{}2d/} & \texttt{stb-\allowbreak{}fetch\ -\allowbreak{}\/-\allowbreak{}source\ optimade\ -\allowbreak{}\/-\allowbreak{}provider\ twodmatpedia\ -\allowbreak{}\/-\allowbreak{}optimade-\allowbreak{}id\ 2dm-\allowbreak{}3150} (monolayer MoS2, 2D) \\
 \texttt{output/\allowbreak{}formula-\allowbreak{}search/} & \texttt{-\/-\allowbreak{}formula\ MoS2} with no exact id --- multiple candidates, informative error \\
-\texttt{output/\allowbreak{}merged-\allowbreak{}citations/} & two fetches (COD + OPTIMADE) into the same folder --- \texttt{references.\allowbreak{}bib} merges \\
+\texttt{output/\allowbreak{}merged-\allowbreak{}citations/} & two fetches (COD + OPTIMADE) into the same folder --- one references file per run \\
 \end{longtable}
 \endgroup
 
 Every case that generates a structure is run each
-into its own \texttt{stb\_\allowbreak{}fetch\_\allowbreak{}report.\allowbreak{}txt} + \texttt{references.\allowbreak{}bib}.
+into its own \texttt{stb\_\allowbreak{}fetch\_\allowbreak{}report.\allowbreak{}txt} + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}.
 
 \paragraph{Structure validation (always on, every fetch)}\label{g1.6-structure-validation-always-on-every-fetch}
 
@@ -4578,14 +4581,13 @@ job):
   completeness/robustness but isn\textquotesingle t reachable through the walkthrough.
 \end{itemize}
 
-\paragraph{\texorpdfstring{\texttt{references.\allowbreak{}bib} --- always written, and it merges}{references.bib --- always written, and it merges}}\label{g1.6-referencesbib--always-written-and-it-merges}
+\paragraph{\texorpdfstring{\texttt{stb\_\allowbreak{}fetch\_\allowbreak{}references.\allowbreak{}bib} --- always written, one per run}{stb\_fetch\_references.bib --- always written, one per run}}\label{g1.6-referencesbib--always-written-and-it-merges}
 
-\texttt{references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it. Citations
-always include SIESTA, spglib (symmetry detection now always runs), and
-one entry for whichever database the structure came from (COD/Materials
-Project/OPTIMADE). Fetching from two different sources into the same
-output folder merges citations by BibTeX key instead of the second run
-erasing the first\textquotesingle s --- see \texttt{output/\allowbreak{}merged-\allowbreak{}citations/}.
+\texttt{stb\_\allowbreak{}fetch\_\allowbreak{}references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it --- next to the report and with its
+number. It holds the entry for whichever database the structure came from (COD/Materials
+Project/OPTIMADE), what the tool cites itself, and every library the run loaded. Fetching from
+two different sources in the same folder gives two files, one per run --- see
+\texttt{output/\allowbreak{}merged-\allowbreak{}citations/}.
 
 \paragraph{\texorpdfstring{\texttt{-\/-\allowbreak{}view} (optional, off by default)}{-\/-view (optional, off by default)}}\label{g1.6---view-optional-off-by-default}
 
@@ -4640,7 +4642,7 @@ stb-fetch --source <cod|materials-project|optimade>
 
 Structure validation and the dimension-aware group label (see above) always
 run before writing --- there\textquotesingle s no flag for either, they\textquotesingle re always on.
-\texttt{references.\allowbreak{}bib} is always written too.
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} is always written too.
 
 Run \texttt{stb-\allowbreak{}fetch\ -\allowbreak{}\/-\allowbreak{}help} for the full list of options.
 
@@ -4700,7 +4702,7 @@ The structure goes through the checklist of Section~\ref{sec-reports}, its space
 group is printed (and its layer group when one axis is vacuum-padded), and
 \opt{--unitcell primitive|conventional|refined} reduces it with the same code as
 \cmd{stb-unitcell} before it is written (default output \file{fetched.fdf}). The
-database's citation and spglib's are added to \file{references.bib}.
+database's citation and spglib's are added to \file{stb\_<tool>\_references.bib}.
 
 \begin{notebox}[Experimental versus computed structures]
 COD holds experimental structures (lattice constants at the measurement temperature,
@@ -4948,10 +4950,10 @@ Atomic density     | 0.0500 atoms/Ang^3 (within [0.01, 0.15])          | [OK]
   so it\textquotesingle s always clear exactly what was verified, in both the console
   output and the report file.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- always written, no flag: SIESTA (the output is a
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- always written, no flag: SIESTA (the output is a
   \texttt{.\allowbreak{}fdf}), the MACE architecture paper, and (unless \texttt{-\/-\allowbreak{}custom-\allowbreak{}model}) the
   MACE-MP-0 foundation-model paper. Merges with an existing
-  \texttt{references.\allowbreak{}bib} in the same folder instead of overwriting it.
+  \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} in the same folder instead of overwriting it.
 \item
   \textbf{A detailed before/after comparison table} (\texttt{{[}5{]}}, \texttt{Quantity\ \textbar{}\ Before\ \textbar{}\ After\ \textbar{}\ Change}) --- energy (total and per-atom), max force, full cell
   parameters + volume + density (if \texttt{-\/-\allowbreak{}relax-\allowbreak{}cell}), mean/RMS/max atomic
@@ -5097,7 +5099,7 @@ Folder & Command (conceptually) & What it shows \\
 \texttt{output/\allowbreak{}bad-\allowbreak{}structure/} & \texttt{stb-\allowbreak{}mlrelax\ -\allowbreak{}f\ si\_\allowbreak{}too\_\allowbreak{}close.\allowbreak{}fdf} & pre-relax \texttt{{[}WARNING{]}}, clean post-relax check \\
 \texttt{output/\allowbreak{}model-\allowbreak{}comparison/} & \texttt{stb-\allowbreak{}mlrelax\ -\allowbreak{}f\ si\_\allowbreak{}defect.\allowbreak{}fdf\ -\allowbreak{}\/-\allowbreak{}model\ \{small,\allowbreak{}medium,\allowbreak{}large\}} & the speed/accuracy table above, measured live \\
 \texttt{output/\allowbreak{}optimizer-\allowbreak{}comparison/} & \texttt{stb-\allowbreak{}mlrelax\ -\allowbreak{}f\ si\_\allowbreak{}defect.\allowbreak{}fdf\ -\allowbreak{}\/-\allowbreak{}optimizer\ \{FIRE,\allowbreak{}BFGS,\allowbreak{}LBFGS\}} & the FIRE/BFGS/LBFGS table above, measured live \\
-\texttt{output/\allowbreak{}full-\allowbreak{}report/} & \texttt{stb-\allowbreak{}mlrelax\ -\allowbreak{}f\ si\_\allowbreak{}defect.\allowbreak{}fdf\ -\allowbreak{}\/-\allowbreak{}save-\allowbreak{}data} & full report, \texttt{references.\allowbreak{}bib}, convergence files \\
+\texttt{output/\allowbreak{}full-\allowbreak{}report/} & \texttt{stb-\allowbreak{}mlrelax\ -\allowbreak{}f\ si\_\allowbreak{}defect.\allowbreak{}fdf\ -\allowbreak{}\/-\allowbreak{}save-\allowbreak{}data} & full report, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, convergence files \\
 \end{longtable}
 \endgroup
 
@@ -5162,7 +5164,7 @@ stb-mlrelax -f <structure.fdf> [--relax-cell] [--vacuum-gap <Ang>]
   \texttt{-\/-\allowbreak{}save-\allowbreak{}data}/\texttt{-\/-\allowbreak{}view} --- all optional, off by default.
 \end{itemize}
 
-\texttt{references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it. Structure
+\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} is always written --- there\textquotesingle s no flag for it. Structure
 validation (before and after relaxation) always runs too --- there\textquotesingle s no flag
 for it either.
 
@@ -5197,7 +5199,7 @@ note. The optimizer's trace (energy and max force per step) is recorded.
   \item \file{<stem>\_relax\_convergence.png}: energy and maximum force (log scale)
     per optimizer step, with the \opt{--fmax} target; with \opt{--save-data} also the
     numbers in \file{<stem>\_relax\_convergence.dat};
-  \item \file{references.bib} (MACE, and MACE-MP-0 when the foundation model was
+  \item \file{stb\_<tool>\_references.bib} (MACE, and MACE-MP-0 when the foundation model was
     used);
   \item the report, with sections for the input structure, validation before and
     after, the model, the relaxation, and a before/after table: energy (total and per
@@ -5528,7 +5530,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}1.\allowbreak{}sh} prove
   \textbf{\texttt{bands\_\allowbreak{}gnuplot.\allowbreak{}dat} + \texttt{bands.\allowbreak{}gplot}} --- the actual plot data (run
   \texttt{gnuplot\ bands.\allowbreak{}gplot} for a PDF).
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA (every \texttt{.\allowbreak{}bands} file is SIESTA output).
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA (every \texttt{.\allowbreak{}bands} file is SIESTA output).
 \end{itemize}
 
 \subsubsection{Optional (off by default)}\label{g2.1-optional-off-by-default}
@@ -5572,7 +5574,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}1.\allowbreak{}sh} prove
 \item
   \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/} and every file this tool itself
   generates on a run (\texttt{bands\_\allowbreak{}gnuplot.\allowbreak{}dat}, \texttt{bands.\allowbreak{}gplot},
-  \texttt{references.\allowbreak{}bib}, \texttt{stb\_\allowbreak{}bands\_\allowbreak{}report.\allowbreak{}txt}).
+  \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, \texttt{stb\_\allowbreak{}bands\_\allowbreak{}report.\allowbreak{}txt}).
 \end{itemize}
 
 \subsubsection{Running the walkthrough}\label{g2.1-running-the-walkthrough}
@@ -5597,7 +5599,7 @@ Folder & What it shows \\
 \texttt{metallic-\allowbreak{}threshold/} & The same real gap classified Indirect vs. Metallic, only \texttt{-\/-\allowbreak{}gap-\allowbreak{}tol} changes \\
 \texttt{half-\allowbreak{}metallic/} & One spin channel metallic, the other with a 2 eV gap \\
 \texttt{mesh-\allowbreak{}vs-\allowbreak{}line/} & \texttt{-\/-\allowbreak{}eig-\allowbreak{}file}/\texttt{-\/-\allowbreak{}kp-\allowbreak{}file}: the k-mesh catching what the k-path missed \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}bands\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}bands\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -5711,7 +5713,7 @@ usage: stb-bands [-h] [--label LABEL] [--file INPUT_FILE]
 \optitem{-{}-gap-\allowbreak{}tol GAP\_\allowbreak{}TOL}{\index{stb-bands@\texttt{stb-bands}!--gap-tol@\texttt{--gap-tol}}Energy tolerance in eV below which a gap is classified as Metallic (default: 0.01).\optmeta{type: float}}
 \optitem{-{}-eig-\allowbreak{}file EIG\_\allowbreak{}FILE}{\index{stb-bands@\texttt{stb-bands}!--eig-file@\texttt{--eig-file}}Optional SIESTA .EIG file (full k-mesh eigenvalues from the SCF run). When given, compares the k-mesh gap against the k-path gap from \texttt{-{}-file} -- the high-symmetry path may not pass through the true VBM/CBM. Requires sisl.}
 \optitem{-{}-kp-\allowbreak{}file KP\_\allowbreak{}FILE}{\index{stb-bands@\texttt{stb-bands}!--kp-file@\texttt{--kp-file}}Optional SIESTA .KP file matching \texttt{-{}-eig-\allowbreak{}file's} k-mesh (Cartesian kx,ky,kz in 1/Ang). When given, mesh VBM/CBM/direct-gap k-points are reported as (kx, ky, kz) instead of a bare mesh index. Requires \texttt{-{}-eig-\allowbreak{}file}.}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-bands@\texttt{stb-bands}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{bands\_\allowbreak{}gnuplot.\allowbreak{}dat} and \texttt{bands.\allowbreak{}gplot} into (and references.bib; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-bands@\texttt{stb-bands}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{bands\_\allowbreak{}gnuplot.\allowbreak{}dat} and \texttt{bands.\allowbreak{}gplot} into (and stb\_<tool>\_references.bib; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
 \paragraph{From the built-in help}
@@ -5863,7 +5865,7 @@ newer tool in this suite uses:
   \texttt{{[}3{]}\ WRITING\ OUTPUT\ FILES} --- one \texttt{{[}OK{]}} line per \texttt{.\allowbreak{}dat}/directory
   actually written.
 \item
-  \texttt{{[}4{]}\ REFERENCES} --- SIESTA citations, written to \texttt{references.\allowbreak{}bib}.
+  \texttt{{[}4{]}\ REFERENCES} --- SIESTA citations, written to \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}.
 \item
   \texttt{{[}5{]}\ SUMMARY\ \&\ FILES} --- every file this run produced.
 \end{itemize}
@@ -6317,7 +6319,7 @@ one extra first choice (single file vs. a whole folder) before the usual
   \textbf{The filtered \texttt{.\allowbreak{}dat} file(s)} --- one for \texttt{-\/-\allowbreak{}file}, a mirrored tree for
   \texttt{-\/-\allowbreak{}dir}.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA (every DOS file processed here, directly
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA (every DOS file processed here, directly
   or via \texttt{stb-\allowbreak{}dos}, is ultimately derived from a SIESTA calculation).
 \end{itemize}
 
@@ -6384,7 +6386,7 @@ Folder & What it shows \\
 \texttt{basic-\allowbreak{}broadening/} & Sharp spikes -\textgreater{} smooth peaks, the numbered report, the conservation check \\
 \texttt{sigma-\allowbreak{}vs-\allowbreak{}fwhm/} & \texttt{-\/-\allowbreak{}sigma\ 50} and the equivalent \texttt{-\/-\allowbreak{}fwhm\ 117.\allowbreak{}741} give the identical broadening \\
 \texttt{dir-\allowbreak{}mode/} & A real \texttt{stb-\allowbreak{}dos} output tree broadened in one \texttt{-\/-\allowbreak{}dir} command, mirrored structure, one skipped-file example \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}convdos\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}convdos\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -6830,7 +6832,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}4.\allowbreak{}sh} prove
 \item
   \textbf{\texttt{rdf.\allowbreak{}dat}} --- the full g(r) curve, unless \texttt{-\/-\allowbreak{}no-\allowbreak{}rdf} is given.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA (every structure file analyzed here is
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA (every structure file analyzed here is
   SIESTA input/output).
 \end{itemize}
 
@@ -6889,7 +6891,7 @@ Folder & What it shows \\
 \texttt{mode-\allowbreak{}mean/} & Full-structure analysis: ECN (4 methods) per species, bond distances/angles, distortion, connectivity \\
 \texttt{mode-\allowbreak{}list/} & \texttt{-\/-\allowbreak{}mode\ list\ -\allowbreak{}\/-\allowbreak{}list\ 1,\allowbreak{}7}: ECN/distortion scoped to 2 atoms, same-species distance/connectivity still whole-structure \\
 \texttt{rdf/} & g(r), and hand-integrating its first O-Sn peak to independently recover the ECN section\textquotesingle s coordination number \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}structural\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}structural\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -6917,7 +6919,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}format} & \texttt{fdf} (SIESTA input) or \texttt{struct\_\allowbreak{}out} (post-relaxation \texttt{.\allowbreak{}STRUCT\_\allowbreak{}OUT}). \\
 \texttt{-\/-\allowbreak{}mode} & \texttt{mean} (whole structure, per species) or \texttt{list} (specific atoms). \\
 \texttt{-\/-\allowbreak{}list} & Comma-separated 1-based atom indices. Required with \texttt{-\/-\allowbreak{}mode\ list}. \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where to write \texttt{rdf.\allowbreak{}dat}/\texttt{references.\allowbreak{}bib}. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where to write \texttt{rdf.\allowbreak{}dat}/\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}. \\
 \texttt{-\/-\allowbreak{}no-\allowbreak{}rdf} & Skip the radial distribution function (\texttt{rdf.\allowbreak{}dat} not written). \\
 \texttt{-\/-\allowbreak{}rdf-\allowbreak{}rmax} & g(r) cutoff radius, Å (default \texttt{10.\allowbreak{}0}). \\
 \end{longtable}
@@ -6993,7 +6995,7 @@ usage: stb-structural [-h] --file FILE --format {fdf,struct_out} --mode {list,me
 \optitem{-{}-format \{fdf,\allowbreak{}struct\_\allowbreak{}out\}}{\index{stb-structural@\texttt{stb-structural}!--format@\texttt{--format}}Input file format:\newline fdf:        SIESTA structure input (\%block LatticeVectors etc.)\newline struct\_out: SIESTA post-relaxation output (.STRUCT\_OUT)\optmeta{required; choices: fdf, struct\_out}}
 \optitem{-{}-mode \{list,\allowbreak{}mean\}}{\index{stb-structural@\texttt{stb-structural}!--mode@\texttt{--mode}}Calculation mode: list or mean\optmeta{required; choices: list, mean}}
 \optitem{-{}-list LIST}{\index{stb-structural@\texttt{stb-structural}!--list@\texttt{--list}}List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-structural@\texttt{stb-structural}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{rdf.\allowbreak{}dat} and \texttt{references.\allowbreak{}bib} into (the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-structural@\texttt{stb-structural}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{rdf.\allowbreak{}dat} and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} into (the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-no-\allowbreak{}rdf}{\index{stb-structural@\texttt{stb-structural}!--no-rdf@\texttt{--no-rdf}}Skip the radial distribution function g(r) (\texttt{rdf.\allowbreak{}dat} is not written).\optmeta{switch}}
 \optitem{-{}-rdf-\allowbreak{}rmax RDF\_\allowbreak{}RMAX}{\index{stb-structural@\texttt{stb-structural}!--rdf-rmax@\texttt{--rdf-rmax}}Cutoff radius for g(r), in Å (default: 10.0). Larger values capture more coordination shells but take longer for large structures.\optmeta{type: float}}
 \end{optlist}
@@ -7140,7 +7142,7 @@ symmetry, same reduction \texttt{stb-\allowbreak{}unitcell\ -\allowbreak{}\/-\al
 against whichever classification is physically meaningful for the
 structure\textquotesingle s dimensionality (3D space group / layer group / point group).
 The file is written \textbf{inside \texttt{-\/-\allowbreak{}output-\allowbreak{}dir}} (a plain filename, not a
-path of its own) alongside \texttt{references.\allowbreak{}bib}/the report, and carries a
+path of its own) alongside \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}/the report, and carries a
 header documenting exactly how it was generated --- source file/format,
 \texttt{-\/-\allowbreak{}symprec}/\texttt{-\/-\allowbreak{}angle-\allowbreak{}tolerance}, and which group (space/layer/point) it
 was refined against --- so the file is self-describing even opened on its
@@ -7207,7 +7209,7 @@ Section & Content \\
 \texttt{{[}7{]}\ ATOMIC\ SITES} & per-atom fractional coordinates + distortion \\
 \texttt{{[}8{]}\ SYMMETRY\ OPERATIONS} & (conditional, on unless \texttt{-\/-\allowbreak{}no-\allowbreak{}operations}) the full x,y,z-notation list \\
 \texttt{{[}9{]}\ SYMMETRY\ COMPARISON} & (conditional, \texttt{-\/-\allowbreak{}compare-\allowbreak{}to}) space/layer/point group comparison between two structures \\
-\texttt{{[}10{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA) \\
+\texttt{{[}10{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA) \\
 \texttt{{[}11{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -7309,7 +7311,7 @@ Folder & What it shows \\
 \texttt{layer-\allowbreak{}group/} & Why a 2D slab needs LAYER GROUP instead of (or in addition to) SPACE GROUP \\
 \texttt{point-\allowbreak{}group/} & An isolated water molecule\textquotesingle s POINT GROUP (C2v) \\
 \texttt{limitation-\allowbreak{}wire/} & The documented "no rod group" limitation for a 1D wire \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}symmetry\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}symmetry\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -7345,7 +7347,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}compare-\allowbreak{}to} & Also analyze a second structure and compare symmetry. \\
 \texttt{-\/-\allowbreak{}compare-\allowbreak{}format} & File format of \texttt{-\/-\allowbreak{}compare-\allowbreak{}to} (required if given). \\
 \texttt{-\/-\allowbreak{}write-\allowbreak{}refined} & Write the symmetry-refined structure as this filename, inside \texttt{-\/-\allowbreak{}output-\allowbreak{}dir}, with a provenance header. \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where to write \texttt{references.\allowbreak{}bib}. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where to write \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}. \\
 \texttt{-\/-\allowbreak{}view} & Open an interactive 3D view (via ASE) after the report is written. \\
 \end{longtable}
 \endgroup
@@ -7417,7 +7419,7 @@ usage: stb-symmetry [-h] --file FILE --format {fdf,struct_out} [--symprec SYMPRE
 \optitem{-{}-compare-\allowbreak{}to PATH}{\index{stb-symmetry@\texttt{stb-symmetry}!--compare-to@\texttt{--compare-to}}Also analyze a second structure file and report whether it shares the same space group -- e.g. compare a pre-relaxation .fdf against its post-relaxation .STRUCT\_OUT to check whether symmetry survived. Analyzed with the same \texttt{-{}-symprec/\allowbreak{}-{}-angle-\allowbreak{}tolerance} as \texttt{-{}-file}. If both structures have a detected layer group (e.g. comparing a 2D slab) or point group (e.g. comparing an isolated molecule), that's compared too.}
 \optitem{-{}-compare-\allowbreak{}format \{fdf,\allowbreak{}struct\_\allowbreak{}out\}}{\index{stb-symmetry@\texttt{stb-symmetry}!--compare-format@\texttt{--compare-format}}File format of \texttt{-{}-compare-\allowbreak{}to} (required if \texttt{-{}-compare-\allowbreak{}to} is given).\optmeta{choices: fdf, struct\_out}}
 \optitem{-{}-write-\allowbreak{}refined FILENAME}{\index{stb-symmetry@\texttt{stb-symmetry}!--write-refined@\texttt{--write-refined}}Also write the symmetry-refined structure (conventional cell, positions snapped to the detected symmetry) as this .fdf file inside \texttt{-{}-output-\allowbreak{}dir}, with a header documenting the source file, tolerances, and which group it was refined against -- the same reduction \texttt{stb-\allowbreak{}unitcell} \texttt{-{}-mode} refined uses. For a structure with exactly one vacuum axis, refines against the layer group instead; for one with all 3 axes vacuum-padded (an isolated molecule), symmetrizes it as a molecule instead (both physically meaningful there, unlike the 3D space group) -- skipped with an error for a wire (2 vacuum axes, no rod-group equivalent exists) or if the applicable detection failed.}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-symmetry@\texttt{stb-symmetry}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{references.\allowbreak{}bib} into (the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-symmetry@\texttt{stb-symmetry}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} into (the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-view}{\index{stb-symmetry@\texttt{stb-symmetry}!--view@\texttt{--view}}Open an interactive 3D view (via ASE) of the analyzed structure -- or, if \texttt{-{}-write-\allowbreak{}refined/\allowbreak{}-{}-compare-\allowbreak{}to} is also given, both structures side by side (page through frames in ase-gui) -- after the report is written. Needs a display. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
 {\footnotesize\color{black!60} Like every STB command it also accepts \opt{-h}/\opt{--help}, \opt{-v}/\opt{--version} and \opt{--no-intro} (Section~\ref{sec-common-flags}).}
@@ -7632,7 +7634,7 @@ Section & Content \\
 \texttt{{[}3{]}\ PER-\allowbreak{}ATOM\ BADER\ POPULATIONS} & the main per-atom table (population, Z\_val, net charge, state, volume/surface distance, spin) \\
 \texttt{{[}4{]}\ PER-\allowbreak{}SPECIES\ SUMMARY} & mean/std net charge per species \\
 \texttt{{[}5{]}\ DIAGNOSTICS\ \&\ WARNINGS} & unit-correction factor, near-zero-population atoms, symmetry-inconsistent groups, general limitations \\
-\texttt{{[}6{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA); names the Bader/PyBader theory papers \\
+\texttt{{[}6{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA); names the Bader/PyBader theory papers \\
 \texttt{{[}7{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -7643,7 +7645,7 @@ Section & Content \\
   \textbf{Report} --- always saved to \texttt{stb\_bader\_report.txt} in the current folder
   (\texttt{\_1}, \texttt{\_2}, \ldots{} when that name is taken); there is no option for it.
 \item
-  \textbf{\texttt{-\/-\allowbreak{}output-\allowbreak{}dir}} --- where the \texttt{.\allowbreak{}cube} file(s), \texttt{references.\allowbreak{}bib}, the
+  \textbf{\texttt{-\/-\allowbreak{}output-\allowbreak{}dir}} --- where the \texttt{.\allowbreak{}cube} file(s), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, the
   report, and any \texttt{-\/-\allowbreak{}export-\allowbreak{}volumes} files all land (default: current
   directory).
 \end{itemize}
@@ -7700,7 +7702,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}6.\allowbreak{}sh} prove
   \texttt{example\_\allowbreak{}2.\allowbreak{}6.\allowbreak{}sh} --- the guided walkthrough (\textbf{not} an automated test ---
   see \texttt{test/\allowbreak{}2-\allowbreak{}analysis/\allowbreak{}6-\allowbreak{}bader/\allowbreak{}test.\allowbreak{}sh} for that).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes generated \texttt{.\allowbreak{}cube} files, \texttt{references.\allowbreak{}bib},
+  \texttt{.\allowbreak{}gitignore} --- excludes generated \texttt{.\allowbreak{}cube} files, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib},
   the report, and \texttt{output/}.
 \end{itemize}
 
@@ -7727,7 +7729,7 @@ Folder & What it shows \\
 \texttt{basic/} & Z\_val detection, the per-atom population/net-charge table, per-species summary \\
 \texttt{speed-\allowbreak{}fast/} & \texttt{-\/-\allowbreak{}speed\ fast}\textquotesingle s on-grid method vs. the default near-grid method \\
 \texttt{export-\allowbreak{}volumes/} & \texttt{-\/-\allowbreak{}export-\allowbreak{}volumes}: one \texttt{.\allowbreak{}cube} per atom, for VESTA/VMD \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}bader\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}bader\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -7755,7 +7757,7 @@ Flag & Meaning \\
 \bottomrule\noalign{}
 \endlastfoot
 \texttt{-l/\allowbreak{}-\allowbreak{}\/-\allowbreak{}label} & SystemLabel used in SIESTA. \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where the \texttt{.\allowbreak{}cube} file(s)/\texttt{references.\allowbreak{}bib} land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where the \texttt{.\allowbreak{}cube} file(s)/\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} land. \\
 \texttt{-\/-\allowbreak{}ref} & Path to a specific \texttt{.\allowbreak{}out} file to read \texttt{Z\_\allowbreak{}val} from. \\
 \texttt{-\/-\allowbreak{}speed} & \texttt{normal} (near-grid, default) or \texttt{fast} (on-grid, less precise edges). \\
 \texttt{-\/-\allowbreak{}threads} & Worker threads for PyBader. \\
@@ -7838,7 +7840,7 @@ usage: stb-bader [-h] -l LABEL [-o OUTPUT_DIR] [--ref REF]
 \optgroup{Options}
 \begin{optlist}
 \optitem{-l, -{}-label LABEL}{\index{stb-bader@\texttt{stb-bader}!--label@\texttt{--label}}SystemLabel used in Siesta\optmeta{required}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-bader@\texttt{stb-bader}!--output-dir@\texttt{--output-dir}}Directory to write the .cube file(s)/references.bib into (and any \texttt{-{}-export-\allowbreak{}volumes} files) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-bader@\texttt{stb-bader}!--output-dir@\texttt{--output-dir}}Directory to write the .cube file(s)/stb\_<tool>\_references.bib into (and any \texttt{-{}-export-\allowbreak{}volumes} files) (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-ref REF}{\index{stb-bader@\texttt{stb-bader}!--ref@\texttt{--ref}}Path to a specific .out file to read Z\_val from (overrides \texttt{\textless{}label\textgreater{}.\allowbreak{}out})}
 \optitem{-{}-speed \{normal,\allowbreak{}fast\}}{\index{stb-bader@\texttt{stb-bader}!--speed@\texttt{--speed}}'fast' uses PyBader's own bundled speed profile (on-grid charge assignment instead of near-grid) -- quicker, less precise basin boundaries (default: normal)\optmeta{choices: normal, fast}}
 \optitem{-{}-threads N}{\index{stb-bader@\texttt{stb-bader}!--threads@\texttt{--threads}}Worker threads for PyBader, \textgreater{}= 1 (default: \$SLURM\_CPUS\_PER\_TASK if set, else every CPU core -- multiprocessing.cpu\_count() can overcount under a job scheduler's cgroup limits)\optmeta{type: int}}
@@ -8029,7 +8031,7 @@ Section & Content \\
 \texttt{{[}3{]}\ VACUUM\ PLATEAU\ DETECTION} & table of detected plateaus (position, mean potential, noise), with warnings (atoms projecting in, systematic slope) \\
 \texttt{{[}4{]}\ WORK\ FUNCTION\ RESULTS} & vacuum size/slab thickness, Φ per plateau, average + \texttt{dV} if asymmetric \\
 \texttt{{[}5{]}\ OUTPUT\ DATA\ \&\ PLOTS} & whether \texttt{workfunction\_\allowbreak{}data.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} were written (only with \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}) \\
-\texttt{{[}6{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA) \\
+\texttt{{[}6{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA) \\
 \texttt{{[}7{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -8132,7 +8134,7 @@ Folder & What it shows \\
 \endlastfoot
 \texttt{basic/} & The full report on a real, converged DFT calculation: real Fermi energy, real work function \\
 \texttt{save-\allowbreak{}gnuplot/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}: \texttt{workfunction\_\allowbreak{}data.\allowbreak{}dat} + the annotated \texttt{workfunction.\allowbreak{}gplot} \\
-\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}workfunction\_\allowbreak{}report.\allowbreak{}txt}), \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file (\texttt{stb\_\allowbreak{}workfunction\_\allowbreak{}report.\allowbreak{}txt}), \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -8165,7 +8167,7 @@ Flag & Meaning \\
 \texttt{-z/\allowbreak{}-\allowbreak{}\/-\allowbreak{}axis} & Axis normal to the surface, \texttt{0}/\texttt{1}/\texttt{2} (default: auto-detected). \\
 \texttt{-\/-\allowbreak{}fermi} & Manually force the Fermi energy (eV), instead of reading \texttt{.\allowbreak{}out}. \\
 \texttt{-\/-\allowbreak{}asymmetric-\allowbreak{}tol} & Vacuum levels within this many eV are treated as one plateau (default \texttt{0.\allowbreak{}05}). \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where \texttt{references.\allowbreak{}bib} (and the report/data+gnuplot, with their flags) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (and the report/data+gnuplot, with their flags) land. \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & Also write \texttt{workfunction\_\allowbreak{}data.\allowbreak{}dat}/\texttt{workfunction.\allowbreak{}gplot}. \\
 \texttt{-\/-\allowbreak{}view} & Show an interactive matplotlib preview of the potential profile. \\
 \end{longtable}
@@ -8253,7 +8255,7 @@ usage: stb-workfunction [-h] -l LABEL [-f FILE] [-g GRID] [-z {0,1,2}] [--fermi 
 \optitem{-z, -{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-workfunction@\texttt{stb-workfunction}!--axis@\texttt{--axis}}Axis normal to surface (0=x, 1=y, 2=z). Default: auto-detected from label.XV/label.fdf if available and matching label.VT's cell, else z (2)\optmeta{choices: 0, 1, 2; type: int}}
 \optitem{-{}-fermi FERMI}{\index{stb-workfunction@\texttt{stb-workfunction}!--fermi@\texttt{--fermi}}Manually force Fermi Energy (eV).\optmeta{type: float}}
 \optitem{-{}-asymmetric-\allowbreak{}tol EV}{\index{stb-workfunction@\texttt{stb-workfunction}!--asymmetric-tol@\texttt{--asymmetric-tol}}Vacuum levels within this many eV of each other are treated as the same physical plateau rather than a genuinely asymmetric slab (default: 0.05)\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-workfunction@\texttt{stb-workfunction}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{references.\allowbreak{}bib} into (and the data+gnuplot files, with \texttt{-{}-save-\allowbreak{}gnuplot}; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-workfunction@\texttt{stb-workfunction}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} into (and the data+gnuplot files, with \texttt{-{}-save-\allowbreak{}gnuplot}; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-workfunction@\texttt{stb-workfunction}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \texttt{workfunction\_\allowbreak{}data.\allowbreak{}dat} and \texttt{workfunction.\allowbreak{}gplot} (the planar-averaged potential profile, annotated with the detected vacuum level(s)/work function(s)). Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-workfunction@\texttt{stb-workfunction}!--view@\texttt{--view}}Show an interactive matplotlib preview of the potential profile before exiting. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -8413,7 +8415,7 @@ Section & Content \\
 \texttt{{[}1{]}\ CHARGE\ DENSITY} & integrated total charge (sanity check), mode-specific details, files written \\
 \texttt{{[}2{]}\ SPIN\ DENSITY} & (conditional --- auto-detected, or \texttt{-\/-\allowbreak{}spin}) integrated net moment, mode-specific details, files written \\
 \texttt{{[}3{]}\ CUBE\ FILE} & (conditional, \texttt{-\/-\allowbreak{}cube}) \\
-\texttt{{[}4{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA) \\
+\texttt{{[}4{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA) \\
 \texttt{{[}5{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -8488,7 +8490,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}8.\allowbreak{}sh} prove
   see \texttt{test/\allowbreak{}2-\allowbreak{}analysis/\allowbreak{}8-\allowbreak{}density/\allowbreak{}test.\allowbreak{}sh} for that).
 \item
   \texttt{.\allowbreak{}gitignore} --- excludes generated \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot}/\texttt{.\allowbreak{}cube} files,
-  \texttt{references.\allowbreak{}bib}, the report, and \texttt{output/}.
+  \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, the report, and \texttt{output/}.
 \end{itemize}
 
 \subsubsection{Running the walkthrough}\label{g2.8-running-the-walkthrough}
@@ -8512,7 +8514,7 @@ Folder & What it shows \\
 \texttt{basic-\allowbreak{}slice/} & A 2D slice of Sn₃O₄\textquotesingle s total charge density \\
 \texttt{spin-\allowbreak{}auto/} & The O₂ spin-polarization auto-detection: correct total (12 e) and net moment (2 e) \\
 \texttt{rho2-\allowbreak{}diff/} & \texttt{-\/-\allowbreak{}rho2}: an (admittedly trivial, self-subtracted) charge-transfer difference, symmetric colorbar \\
-\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -8543,7 +8545,7 @@ Flag & Meaning \\
 \bottomrule\noalign{}
 \endlastfoot
 \texttt{-l/\allowbreak{}-\allowbreak{}\/-\allowbreak{}label} & SystemLabel (looks for \texttt{\textless{}label\textgreater{}.\allowbreak{}RHO}). \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{references.\allowbreak{}bib}) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}) land. \\
 \texttt{-\/-\allowbreak{}3d}/\texttt{-\/-\allowbreak{}profile} & 3D point cloud / 1D planar-averaged profile (default: 2D slice). \\
 \texttt{-a/\allowbreak{}-\allowbreak{}\/-\allowbreak{}axis} & Axis normal to the cut plane, or the profile axis (0/1/2). \\
 \texttt{-p/\allowbreak{}-\allowbreak{}\/-\allowbreak{}pos} & Slice position in Å (default: cell center). \\
@@ -8612,7 +8614,7 @@ usage: stb-density [-h] -l LABEL [-o OUTPUT_DIR] [--3d | --profile] [-a {0,1,2}]
 \optgroup{Options}
 \begin{optlist}
 \optitem{-l, -{}-label LABEL}{\index{stb-density@\texttt{stb-density}!--label@\texttt{--label}}System Label (looks for .RHO file)\optmeta{required}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-density@\texttt{stb-density}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and \texttt{references.\allowbreak{}bib} into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-density@\texttt{stb-density}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-3d}{\index{stb-density@\texttt{stb-density}!--3d@\texttt{--3d}}Export full 3D volume\optmeta{switch, off by default; exclusive group 1}}
 \optitem{-{}-profile}{\index{stb-density@\texttt{stb-density}!--profile@\texttt{--profile}}Write the planar average of the density along \texttt{-{}-axis} as a 1D profile (average taken over the other two axes) instead of a 2D/3D map -- useful for slabs, interfaces, and superlattices\optmeta{switch, off by default; exclusive group 1}}
 \optitem{-a, -{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-density@\texttt{stb-density}!--axis@\texttt{--axis}}For a slice/profile: the axis normal to the cut plane (slice) or the axis the profile varies along (profile) (0=X, 1=Y, 2=Z)\optmeta{default: 2; choices: 0, 1, 2; type: int}}
@@ -8805,7 +8807,7 @@ Section & Content \\
 \texttt{{[}2{]}\ DIFFRACTION\ PATTERN} & peak count, strongest peak, resolution (min d-spacing) --- a compact summary only, no peak-by-peak table \\
 \texttt{{[}3{]}\ EXPERIMENTAL\ COMPARISON} & (conditional --- \texttt{-\/-\allowbreak{}compare-\allowbreak{}to}) file used, point count, whether a peak list was detected/auto-broadened, similarity score \\
 \texttt{{[}4{]}\ OUTPUT\ DATA\ \&\ PLOTS} & whether \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} were written \\
-\texttt{{[}5{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA + pyxtal) \\
+\texttt{{[}5{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA + pyxtal) \\
 \texttt{{[}6{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -8892,7 +8894,7 @@ output --- \texttt{example\_\allowbreak{}2.\allowbreak{}9.\allowbreak{}sh} prove
   \texttt{crs\_\allowbreak{}structure.\allowbreak{}fdf} itself, up front (see the note below).
 \item
   \texttt{.\allowbreak{}gitignore} --- excludes \texttt{crs\_\allowbreak{}structure.\allowbreak{}fdf} (regenerated by the script),
-  generated \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot}/\texttt{.\allowbreak{}pdf} files, \texttt{references.\allowbreak{}bib}, the report,
+  generated \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot}/\texttt{.\allowbreak{}pdf} files, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, the report,
   and \texttt{output/}.
 \end{itemize}
 
@@ -8933,7 +8935,7 @@ Folder & What it shows \\
 \texttt{save-\allowbreak{}gnuplot/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}: the stick-pattern \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} pair, only with the flag \\
 \texttt{compare/} & \texttt{-\/-\allowbreak{}compare-\allowbreak{}to} a synthetic mock-experimental pattern, similarity score \\
 \texttt{self-\allowbreak{}check/} & \texttt{-\/-\allowbreak{}compare-\allowbreak{}to} the structure\textquotesingle s OWN \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}dat} --- the fixed column/peak-list-broadening bug, and \texttt{-\/-\allowbreak{}raw-\allowbreak{}experimental} to see the old (wrong) score \\
-\texttt{full-\allowbreak{}report/} & The report file, \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & The report file, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -8966,7 +8968,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}top} & Only include the N strongest peaks in the saved data file (\texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}). \\
 \texttt{-\/-\allowbreak{}compare-\allowbreak{}to} & Experimental pattern file (2-theta first column, intensity last column); prints a similarity score. \\
 \texttt{-\/-\allowbreak{}raw-\allowbreak{}experimental} & With \texttt{-\/-\allowbreak{}compare-\allowbreak{}to}, never auto-broaden a peak-list-looking experimental file --- compare it exactly as read. \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{references.\allowbreak{}bib}) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}) land. \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & Also write \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}dat}/\texttt{xrd\_\allowbreak{}pattern.\allowbreak{}gplot}. \\
 \texttt{-\/-\allowbreak{}view} & Show an interactive matplotlib preview. \\
 \end{longtable}
@@ -9032,7 +9034,7 @@ usage: stb-xrd [-h] --file FILE --format {fdf,struct_out} [--wavelength WAVELENG
 \optitem{-{}-top TOP}{\index{stb-xrd@\texttt{stb-xrd}!--top@\texttt{--top}}Only include the N strongest peaks in the saved data file (\texttt{-{}-save-\allowbreak{}gnuplot}); default: include all of them. No effect without \texttt{-{}-save-\allowbreak{}gnuplot} -- there's no console/report peak table anymore, see [2] DIFFRACTION PATTERN for a summary instead.\optmeta{type: int}}
 \optitem{-{}-compare-\allowbreak{}to PATH}{\index{stb-xrd@\texttt{stb-xrd}!--compare-to@\texttt{--compare-to}}Compare the simulated pattern against an experimental one: a text file with 2-theta in the first column and intensity in the LAST column (any columns in between, e.g. d/h/k/l, are ignored -- so \texttt{stb-\allowbreak{}xrd's} own \texttt{-{}-save-\allowbreak{}gnuplot} \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}dat} is a valid input too), whitespace- or comma-separated, '\#' comments and blank lines allowed. If the file looks like a sparse list of discrete peaks rather than a continuous scan (e.g. a literature peak table, or this tool's own stick-pattern output), it is automatically Gaussian-broadened before comparing -- pass \texttt{-{}-raw-\allowbreak{}experimental} to disable this and compare it unbroadened instead. Prints a similarity score (pyxtal's cosine-weighted metric, 0-1, higher is more similar); combine with \texttt{-{}-view} for a visual overlay.}
 \optitem{-{}-raw-\allowbreak{}experimental}{\index{stb-xrd@\texttt{stb-xrd}!--raw-experimental@\texttt{--raw-experimental}}With \texttt{-{}-compare-\allowbreak{}to}, never auto-broaden a peak-list-looking experimental file -- compare it exactly as read. Off by default (auto-detection normally handles this correctly).\optmeta{switch, off by default}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-xrd@\texttt{stb-xrd}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{references.\allowbreak{}bib} into (and the data+gnuplot files, with \texttt{-{}-save-\allowbreak{}gnuplot}; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-xrd@\texttt{stb-xrd}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} into (and the data+gnuplot files, with \texttt{-{}-save-\allowbreak{}gnuplot}; the report goes to the current folder) (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-xrd@\texttt{stb-xrd}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}dat} (all peaks, pyxtal's own format) and \texttt{xrd\_\allowbreak{}pattern.\allowbreak{}gplot} (a stick-pattern plot script) together. Off by default -- this tool used to write the data file unconditionally on every run; that's no longer the case.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-xrd@\texttt{stb-xrd}!--view@\texttt{--view}}Show an interactive matplotlib preview of the pattern (or, with \texttt{-{}-compare-\allowbreak{}to}, an overlay of both patterns) before finishing. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -9248,7 +9250,7 @@ Section & Content \\
 \texttt{{[}2{]}\ BAND\ GAP\ ANALYSIS\ (k-\allowbreak{}path)} & VBM/CBM, direct/indirect gap, gap type --- spin-resolved (+ half-metallic flag) for \texttt{nspin=\allowbreak{}2} \\
 \texttt{{[}3{]}\ ORBITAL\ PROJECTION} & categories found/used, \texttt{l\ \textgreater{}\ 3} exclusions (if any), spin-split note, and a per-category table (orbital count, mean/max weight) \\
 \texttt{{[}4{]}\ WRITING\ OUTPUT\ FILES} & whether \texttt{fatbands\_\allowbreak{}\textless{}category\textgreater{}.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} were written \\
-\texttt{{[}5{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA) \\
+\texttt{{[}5{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA) \\
 \texttt{{[}6{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -9371,7 +9373,7 @@ Folder & What it shows \\
 \texttt{category-\allowbreak{}filter/} & \texttt{-\/-\allowbreak{}category} restricting the output to specific species/orbital combinations \\
 \texttt{accuracy-\allowbreak{}fallback/} & No \texttt{.\allowbreak{}HSX} available: the approximate (\texttt{\textbar{}c\textbar{}\^{}2}) fallback, via \texttt{-\/-\allowbreak{}geometry-\allowbreak{}file} \\
 \texttt{spin-\allowbreak{}polarized/} & The real spin-polarized fixture: spin-resolved gap analysis AND \texttt{\textless{}category\textgreater{}\_\allowbreak{}up}/\texttt{\textless{}category\textgreater{}\_\allowbreak{}down} splitting \\
-\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -9408,7 +9410,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}projection} & \texttt{l} / \texttt{ml} / \texttt{atom} / \texttt{species} / \texttt{species\_\allowbreak{}l} (default). \\
 \texttt{-\/-\allowbreak{}category} & Restrict output to specific category values (default: all found). \\
 \texttt{-\/-\allowbreak{}k-\allowbreak{}tol} & \texttt{.\allowbreak{}bands}/\texttt{.\allowbreak{}WFSX} eigenvalue cross-check tolerance, eV (default \texttt{0.\allowbreak{}001}). \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{references.\allowbreak{}bib}) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}) land. \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & Also write \texttt{fatbands\_\allowbreak{}\textless{}category\textgreater{}.\allowbreak{}dat}/\texttt{fatbands.\allowbreak{}gplot}. \\
 \texttt{-\/-\allowbreak{}view} & Show an interactive matplotlib preview. \\
 \end{longtable}
@@ -9490,7 +9492,7 @@ usage: stb-fatbands [-h] [--label LABEL] [--file INPUT_FILE] [--wfsx WFSX]
 \optitem{-{}-projection \{l,\allowbreak{}ml,\allowbreak{}atom,\allowbreak{}species,\allowbreak{}species\_\allowbreak{}l\}}{\index{stb-fatbands@\texttt{stb-fatbands}!--projection@\texttt{--projection}}Category to color/size markers by (default: species\_l):\newline l:         aggregate by angular momentum (s, p, d, f)\newline ml:        detailed orbital (s, px, py, pz, dxy, ...)\newline atom:      per atom index\newline species:   per chemical species\newline species\_l: chemical species AND angular momentum combined\newline (e.g. 'Sn-s', 'Sn-p', 'O-s', 'O-p') -- shows which\newline orbital character within a species dominates a band,\newline which plain 'species' or plain 'l' cannot on their own\newline Single choice only -- unlike \texttt{stb-\allowbreak{}dos's} \texttt{-{}-type}, the plot needs one weight per marker; run again for another projection.\optmeta{choices: l, ml, atom, species, species\_l}}
 \optitem{-{}-category CATEGORY [CATEGORY .\allowbreak{}.\allowbreak{}.\allowbreak{}]}{\index{stb-fatbands@\texttt{stb-fatbands}!--category@\texttt{--category}}Restrict output to specific category values (e.g. \texttt{-{}-projection} species \texttt{-{}-category} O Sn, or \texttt{-{}-projection} species\_l \texttt{-{}-category} Sn-s O-p). Default: all categories found.}
 \optitem{-{}-k-\allowbreak{}tol K\_\allowbreak{}TOL}{\index{stb-fatbands@\texttt{stb-fatbands}!--k-tol@\texttt{--k-tol}}Cross-check tolerance (eV) between WFSX-stored eigenvalues and .bands eigenvalues at sampled k-points (default: 0.001). This is a file-order sanity guard, not a physics tolerance like \texttt{-{}-gap-\allowbreak{}tol} -- raising it only weakens the check that .bands/.WFSX truly correspond to the same calculation.\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-fatbands@\texttt{stb-fatbands}!--output-dir@\texttt{--output-dir}}Directory to write fatbands\_\textless{}category\textgreater{}.dat/fatbands.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_fatbands\_report.txt/references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-fatbands@\texttt{stb-fatbands}!--output-dir@\texttt{--output-dir}}Directory to write fatbands\_\textless{}category\textgreater{}.dat/fatbands.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_fatbands\_report.txt/stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-fatbands@\texttt{stb-fatbands}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \texttt{fatbands\_\allowbreak{}\textless{}category\textgreater{}.\allowbreak{}dat} (one file per category, k\_position/energy(eV)/value columns) and \texttt{fatbands.\allowbreak{}gplot} together. Off by default -- this tool used to write both unconditionally on every run; that's no longer the case.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-fatbands@\texttt{stb-fatbands}!--view@\texttt{--view}}Show an interactive matplotlib preview of the fatbands plot before finishing. Off by default -- this tool used to always show it, with no way to skip.\optmeta{switch, off by default}}
 \end{optlist}
@@ -9697,7 +9699,7 @@ Section & Content \\
 \texttt{{[}1{]}\ INPUT\ DATA} & grid shape, LDOS range, surface-normal axis, vacuum-padded axes, topmost atom height, axis length \\
 \texttt{{[}2{]}\ STM\ IMAGE} & mode-specific results: actual height used + LDOS stats (\texttt{height}), or iso/coverage/height-map stats + corrugation (\texttt{current}) \\
 \texttt{{[}3{]}\ OUTPUT\ DATA\ \&\ PLOTS} & whether \texttt{stm\_\allowbreak{}\textless{}mode\textgreater{}.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} were written \\
-\texttt{{[}4{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA + Tersoff-Hamann) \\
+\texttt{{[}4{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA + Tersoff-Hamann) \\
 \texttt{{[}5{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -9800,7 +9802,7 @@ Folder & What it shows \\
 \texttt{constant-\allowbreak{}current/} & The default mode with default \texttt{-\/-\allowbreak{}iso}: the real STM feedback-loop image, corrugation reported \\
 \texttt{constant-\allowbreak{}height/} & \texttt{-\/-\allowbreak{}mode\ height} at the default \texttt{-\/-\allowbreak{}z} going flat (LDOS already decayed to \textasciitilde0 there) vs. a closer \texttt{-\/-\allowbreak{}z} recovering real contrast \\
 \texttt{iso-\allowbreak{}sensitivity/} & The same structure at three \texttt{-\/-\allowbreak{}iso} values -\/- too high (mostly NaN), sensible (default), and very low \\
-\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -9834,7 +9836,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}z} & Height above the topmost atom for \texttt{-\/-\allowbreak{}mode\ height} (default \texttt{3.\allowbreak{}0} Ang). \\
 \texttt{-\/-\allowbreak{}iso} & LDOS threshold for \texttt{-\/-\allowbreak{}mode\ current} (default \texttt{0.\allowbreak{}001} e/Bohr\^{}3). \\
 \texttt{-\/-\allowbreak{}z-\allowbreak{}max} & Upper bound of the search/plot window (default: half the detected vacuum gap). \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{references.\allowbreak{}bib}) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}) land. \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & Also write \texttt{stm\_\allowbreak{}\textless{}mode\textgreater{}.\allowbreak{}dat}/\texttt{stm\_\allowbreak{}\textless{}mode\textgreater{}.\allowbreak{}gplot}. \\
 \texttt{-\/-\allowbreak{}view} & Show an interactive matplotlib preview. \\
 \end{longtable}
@@ -9910,7 +9912,7 @@ usage: stb-stm [-h] [--label LABEL] [--file LDOS_FILE] [--geometry-file GEOMETRY
 \optitem{-{}-z Z}{\index{stb-stm@\texttt{stb-stm}!--z@\texttt{--z}}Height (Ang) above the topmost surface atom for \texttt{-{}-mode} height (default: 3.0, a commonly used representative constant-height tip-sample separation).\optmeta{type: float}}
 \optitem{-{}-iso ISO}{\index{stb-stm@\texttt{stb-stm}!--iso@\texttt{--iso}}LDOS threshold (same units as the .LDOS file, e/Bohr\textasciicircum{}3) defining the constant-current contour for \texttt{-{}-mode} current (default: 0.001 -- a relative threshold, not a calibrated absolute current; tune it for your own system's LDOS magnitude if the default leaves too many/few points reaching it, see [3] in the report).\optmeta{type: float}}
 \optitem{-{}-z-\allowbreak{}max Z\_\allowbreak{}MAX}{\index{stb-stm@\texttt{stb-stm}!--z-max@\texttt{--z-max}}Upper bound (Ang above the topmost atom) of the search/plot window along \texttt{-{}-axis}. Default: distance to the cell boundary.\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-stm@\texttt{stb-stm}!--output-dir@\texttt{--output-dir}}Directory to write stm\_\textless{}mode\textgreater{}.dat/.gplot into (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_stm\_report.txt/references.bib (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-stm@\texttt{stb-stm}!--output-dir@\texttt{--output-dir}}Directory to write stm\_\textless{}mode\textgreater{}.dat/.gplot into (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_stm\_report.txt/stb\_<tool>\_references.bib (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-stm@\texttt{stb-stm}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \texttt{stm\_\allowbreak{}\textless{}mode\textgreater{}.\allowbreak{}dat} + \texttt{stm\_\allowbreak{}\textless{}mode\textgreater{}.\allowbreak{}gplot} together. Off by default -- this tool used to write both unconditionally on every run.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-stm@\texttt{stb-stm}!--view@\texttt{--view}}Show an interactive matplotlib preview of the STM image before finishing. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -10100,7 +10102,7 @@ Section & Content \\
 \texttt{{[}2{]}\ STATE\ SELECTION} & k-index/vector, spin, band, eigenvalue -\/- and the VBM/CBM search details if used \\
 \texttt{{[}3{]}\ WAVEFUNCTION\ DENSITY} & grid shape, the normalization check (and its \texttt{{[}OK{]}}/\texttt{{[}WARNING{]}}) \\
 \texttt{{[}4{]}\ OUTPUT\ DATA\ \&\ PLOTS} & the \texttt{.\allowbreak{}cube} file (always), and whether the slice/profile \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot} were written \\
-\texttt{{[}5{]}\ REFERENCES} & writes \texttt{references.\allowbreak{}bib} (SIESTA) \\
+\texttt{{[}5{]}\ REFERENCES} & writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} (SIESTA) \\
 \texttt{{[}6{]}\ SUMMARY\ \&\ FILES} & status and a recap of every file written \\
 \end{longtable}
 \endgroup
@@ -10215,7 +10217,7 @@ Folder & What it shows \\
 \texttt{vbm-\allowbreak{}cbm/} & \texttt{-\/-\allowbreak{}band\ vbm}/\texttt{cbm} searching the whole k-mesh, Fermi energy from \texttt{-\/-\allowbreak{}fermi-\allowbreak{}file} \\
 \texttt{slice-\allowbreak{}position/} & The real bug: default (auto-detected \texttt{\textbar{}psi\textbar{}\^{}2} peak, right at the atoms) vs. \texttt{-\/-\allowbreak{}pos} at the old geometric center (near-empty vacuum) \\
 \texttt{grid-\allowbreak{}resolution/} & \texttt{-\/-\allowbreak{}spacing\ 0.\allowbreak{}3} (normalization warning fires) vs. \texttt{0.\allowbreak{}2} (passes) -\/- the same real state \\
-\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{references.\allowbreak{}bib}, a real gnuplot render \\
+\texttt{full-\allowbreak{}report/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot}, the report, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, a real gnuplot render \\
 \end{longtable}
 \endgroup
 
@@ -10253,7 +10255,7 @@ Flag & Meaning \\
 \texttt{-\/-\allowbreak{}axis} & Axis for the optional slice/profile (default \texttt{2}). \\
 \texttt{-\/-\allowbreak{}profile} & 1D planar-averaged profile instead of a 2D slice. \\
 \texttt{-\/-\allowbreak{}pos} & Slice position, Ang along \texttt{-\/-\allowbreak{}axis} (default: auto-detected \texttt{\textbar{}psi\textbar{}\^{}2} peak). \\
-\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{references.\allowbreak{}bib}) land. \\
+\texttt{-o/\allowbreak{}-\allowbreak{}\/-\allowbreak{}output-\allowbreak{}dir} & Where all generated files (and \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}) land. \\
 \texttt{-\/-\allowbreak{}save-\allowbreak{}gnuplot} & Also write the slice/profile \texttt{.\allowbreak{}dat}/\texttt{.\allowbreak{}gplot}. \\
 \texttt{-\/-\allowbreak{}view} & Show an interactive matplotlib preview. \\
 \end{longtable}
@@ -10337,7 +10339,7 @@ usage: stb-wfdensity [-h] [--label LABEL] [--wfsx WFSX]
 \optitem{-{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--axis@\texttt{--axis}}Axis for the optional \texttt{-{}-save-\allowbreak{}gnuplot} slice/profile (default: 2).\optmeta{choices: 0, 1, 2; type: int}}
 \optitem{-{}-profile}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--profile@\texttt{--profile}}Write a planar-averaged 1D profile instead of a 2D slice, for the optional \texttt{-{}-save-\allowbreak{}gnuplot} output.\optmeta{switch, off by default}}
 \optitem{-p, -{}-pos POS}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--pos@\texttt{--pos}}Position (Angstrom) along \texttt{-{}-axis} of the 2D slice (ignored in \texttt{-{}-profile} mode). Default: auto-detected at the plane where the planar-averaged \textbar{}psi\textbar{}\textasciicircum{}2 is largest -- NOT the geometric center of the cell, which can land in empty vacuum for a structure whose atoms aren't centered along \texttt{-{}-axis} (verified live: a real structure with atoms clustered near the cell boundary and vacuum in the middle had its default slice land on a point with \textasciitilde{}1000x less density than the real peak, right at the atoms).\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--output-dir@\texttt{--output-dir}}Directory to write the .cube (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the slice/profile data + report/references.bib) into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--output-dir@\texttt{--output-dir}}Directory to write the .cube (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the slice/profile data + report/stb\_<tool>\_references.bib) into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--save-gnuplot@\texttt{--save-gnuplot}}Also write a 2D-slice or (with \texttt{-{}-profile}) 1D-profile .dat + .gplot pair of the \textbar{}psi\textbar{}\textasciicircum{}2 density. Off by default -- this tool used to write the .dat file (but never a .gplot script) unconditionally, opted out of via the old \texttt{-{}-cube-\allowbreak{}only} flag (now removed).\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-wfdensity@\texttt{stb-wfdensity}!--view@\texttt{--view}}Show an interactive matplotlib preview (2D slice or 1D profile, matching \texttt{-{}-profile}) before finishing. Off by default -- this tool previously had no matplotlib option at all.\optmeta{switch, off by default}}
 \end{optlist}
@@ -10728,7 +10730,7 @@ usage: stb-sts [-h] [--label LABEL] [--wfsx WFSX] [--geometry-file GEOMETRY_FILE
 \optitem{-{}-manual-\allowbreak{}value MANUAL\_\allowbreak{}VALUE}{\index{stb-sts@\texttt{stb-sts}!--manual-value@\texttt{--manual-value}}Custom shift value (eV), required if \texttt{-{}-shift} manual.\optmeta{type: float}}
 \optitem{-{}-sigma SIGMA}{\index{stb-sts@\texttt{stb-sts}!--sigma@\texttt{--sigma}}Gaussian broadening standard deviation, in meV.\optmeta{type: float; exclusive group 2}}
 \optitem{-{}-fwhm FWHM}{\index{stb-sts@\texttt{stb-sts}!--fwhm@\texttt{--fwhm}}Gaussian broadening full width at half maximum, in meV.\optmeta{type: float; exclusive group 2}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-sts@\texttt{stb-sts}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{sts.\allowbreak{}dat} (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the .gplot script/references.bib; the report goes to the current folder) into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-sts@\texttt{stb-sts}!--output-dir@\texttt{--output-dir}}Directory to write \texttt{sts.\allowbreak{}dat} (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the .gplot script/stb\_<tool>\_references.bib; the report goes to the current folder) into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-sts@\texttt{stb-sts}!--save-gnuplot@\texttt{--save-gnuplot}}Also write a real .gplot script alongside \texttt{sts.\allowbreak{}dat}. Off by default -- this tool used to write the .dat file unconditionally but never wrote a .gplot script at all.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-sts@\texttt{stb-sts}!--view@\texttt{--view}}Show an interactive matplotlib preview before finishing. Off by default (replaces the old \texttt{-{}-no-\allowbreak{}plot}, which was on by default).\optmeta{switch, off by default}}
 \end{optlist}
@@ -11149,7 +11151,7 @@ usage: stb-coop [-h] [--label LABEL] [--wfsx WFSX] [--hsx-file HSX_FILE]
 \optitem{-{}-atol ATOL}{\index{stb-coop@\texttt{stb-coop}!--atol@\texttt{--atol}}Per-state energy-window cutoff passed straight to sisl's COOP/COHP (default: 1e-10) -- a performance knob, not a physics tolerance.\optmeta{type: float}}
 \optitem{-{}-bond-\allowbreak{}order}{\index{stb-coop@\texttt{stb-coop}!--bond-order@\texttt{--bond-order}}Also compute Hamiltonian.bond\_order(method='mulliken', projection='atom') per pair from a REAL density matrix -- a cheap, energy-INTEGRATED complementary sanity check, not a substitute for the curve. Needs \texttt{-{}-dm-\allowbreak{}file} or an auto-detected \texttt{\textless{}label\textgreater{}.\allowbreak{}DM} (see below).\optmeta{switch, off by default}}
 \optitem{-{}-dm-\allowbreak{}file DM\_\allowbreak{}FILE}{\index{stb-coop@\texttt{stb-coop}!--dm-file@\texttt{--dm-file}}Explicit .DM density-matrix path, for \texttt{-{}-bond-\allowbreak{}order}. Falls back to an auto-detected \texttt{\textless{}label\textgreater{}.\allowbreak{}DM} if omitted. SIESTA's .DM format doesn't store the overlap matrix -- it's spliced in from the already-loaded Hamiltonian, so the .DM must be from the same calculation as the .HSX/--hsx-file.}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-coop@\texttt{stb-coop}!--output-dir@\texttt{--output-dir}}Directory to write coop.dat/cohp.dat (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the .gplot script/references.bib; the report goes to the current folder) into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-coop@\texttt{stb-coop}!--output-dir@\texttt{--output-dir}}Directory to write coop.dat/cohp.dat (and, with \texttt{-{}-save-\allowbreak{}gnuplot}, the .gplot script/stb\_<tool>\_references.bib; the report goes to the current folder) into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-coop@\texttt{stb-coop}!--save-gnuplot@\texttt{--save-gnuplot}}Also write a real .gplot script alongside coop.dat/cohp.dat. Off by default -- this tool used to write the .dat file unconditionally but never wrote a .gplot script at all.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-coop@\texttt{stb-coop}!--view@\texttt{--view}}Show an interactive matplotlib preview before finishing. Off by default (replaces the old \texttt{-{}-no-\allowbreak{}plot}, which was on by default).\optmeta{switch, off by default}}
 \end{optlist}
@@ -11480,7 +11482,7 @@ usage: stb-ipr [-h] [--label LABEL] [--file INPUT_FILE] [--wfsx WFSX]
 \optitem{-{}-gap-\allowbreak{}tol GAP\_\allowbreak{}TOL}{\index{stb-ipr@\texttt{stb-ipr}!--gap-tol@\texttt{--gap-tol}}Energy tolerance in eV for VBM/CBM classification when \texttt{-{}-shift} is vbm/cbm (default: 0.01).\optmeta{type: float}}
 \optitem{-{}-q Q}{\index{stb-ipr@\texttt{stb-ipr}!--q@\texttt{--q}}IPR order parameter (default: 2, the standard choice). Passed straight to sisl's EigenstateElectron.ipr(q=...), which requires q \textgreater{}= 2. Higher q emphasizes localization more strongly.\optmeta{type: int}}
 \optitem{-{}-k-\allowbreak{}tol K\_\allowbreak{}TOL}{\index{stb-ipr@\texttt{stb-ipr}!--k-tol@\texttt{--k-tol}}Cross-check tolerance (eV) between WFSX-stored eigenvalues and .bands eigenvalues at sampled k-points (default: 0.001). Same file-order sanity guard as \texttt{stb-\allowbreak{}fatbands}.\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-ipr@\texttt{stb-ipr}!--output-dir@\texttt{--output-dir}}Directory to write ipr.dat/ipr.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_ipr\_report.txt/references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-ipr@\texttt{stb-ipr}!--output-dir@\texttt{--output-dir}}Directory to write ipr.dat/ipr.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_ipr\_report.txt/stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-ipr@\texttt{stb-ipr}!--save-gnuplot@\texttt{--save-gnuplot}}Also write \texttt{ipr.\allowbreak{}dat} (or ipr\_up.dat/ipr\_down.dat for a spin-polarized run) + \texttt{ipr.\allowbreak{}gplot}. Off by default -- this tool used to write both unconditionally on every run.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-ipr@\texttt{stb-ipr}!--view@\texttt{--view}}Show an interactive matplotlib preview before finishing. Off by default -- this tool previously always showed it, with no way to skip.\optmeta{switch, off by default}}
 \end{optlist}
@@ -11857,7 +11859,7 @@ usage: stb-effmass [-h] [--label LABEL] [--wfsx WFSX] [--hsx-file HSX_FILE]
 \optitem{-{}-bands-\allowbreak{}file BANDS\_\allowbreak{}FILE}{\index{stb-effmass@\texttt{stb-effmass}!--bands-file@\texttt{--bands-file}}Companion .bands file to read the Fermi energy from, for \texttt{-{}-band} vbm/cbm.}
 \optitem{-{}-fermi-\allowbreak{}file FERMI\_\allowbreak{}FILE}{\index{stb-effmass@\texttt{stb-effmass}!--fermi-file@\texttt{--fermi-file}}Explicit SIESTA .out log to read the Fermi energy from, for \texttt{-{}-band} vbm/cbm -- an alternative to \texttt{-{}-bands-\allowbreak{}file} for a run with no saved .bands file. Not assumed to be named after \texttt{-{}-label}.}
 \optitem{-{}-gap-\allowbreak{}tol GAP\_\allowbreak{}TOL}{\index{stb-effmass@\texttt{stb-effmass}!--gap-tol@\texttt{--gap-tol}}Energy tolerance in eV for VBM/CBM classification (default: 0.01). Same meaning as \texttt{stb-\allowbreak{}bands/\allowbreak{}stb-\allowbreak{}fatbands/\allowbreak{}stb-\allowbreak{}wfdensity}.\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-effmass@\texttt{stb-effmass}!--output-dir@\texttt{--output-dir}}Directory to write effmass.dat/velocity.dat (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_effmass\_report.txt/references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-effmass@\texttt{stb-effmass}!--output-dir@\texttt{--output-dir}}Directory to write effmass.dat/velocity.dat (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_effmass\_report.txt/stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-effmass@\texttt{stb-effmass}!--save-gnuplot@\texttt{--save-gnuplot}}Also write effmass.dat/velocity.dat + a real .gplot bar-chart script. Off by default.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-effmass@\texttt{stb-effmass}!--view@\texttt{--view}}Show a matplotlib bar-chart preview (effective mass + velocity components) before finishing. Off by default.\optmeta{switch, off by default}}
 \end{optlist}
@@ -12136,7 +12138,7 @@ usage: stb-spintexture [-h] [--label LABEL] [--wfsx WFSX] [--hsx-file HSX_FILE]
 \optitem{-{}-bands-\allowbreak{}file BANDS\_\allowbreak{}FILE}{\index{stb-spintexture@\texttt{stb-spintexture}!--bands-file@\texttt{--bands-file}}Companion .bands file to read the Fermi energy from, for \texttt{-{}-shift} fermi/vbm/cbm.}
 \optitem{-{}-fermi-\allowbreak{}file FERMI\_\allowbreak{}FILE}{\index{stb-spintexture@\texttt{stb-spintexture}!--fermi-file@\texttt{--fermi-file}}Explicit SIESTA .out log to read the Fermi energy from, for \texttt{-{}-shift} fermi/vbm/cbm -- an alternative to \texttt{-{}-bands-\allowbreak{}file} for a run with no saved .bands file. Not assumed to be named after \texttt{-{}-label}.}
 \optitem{-{}-gap-\allowbreak{}tol GAP\_\allowbreak{}TOL}{\index{stb-spintexture@\texttt{stb-spintexture}!--gap-tol@\texttt{--gap-tol}}Energy tolerance in eV for VBM/CBM classification when \texttt{-{}-shift} is vbm/cbm (default: 0.01).\optmeta{type: float}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-spintexture@\texttt{stb-spintexture}!--output-dir@\texttt{--output-dir}}Directory to write spintexture\_S\{x,y,z\}.dat/.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_spintexture\_report.txt/references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-spintexture@\texttt{stb-spintexture}!--output-dir@\texttt{--output-dir}}Directory to write spintexture\_S\{x,y,z\}.dat/.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_spintexture\_report.txt/stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-spintexture@\texttt{stb-spintexture}!--save-gnuplot@\texttt{--save-gnuplot}}Also write spintexture\_S\{x,y,z\}.dat + \texttt{spintexture.\allowbreak{}gplot}. Off by default -- this tool used to write both unconditionally on every run.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-spintexture@\texttt{stb-spintexture}!--view@\texttt{--view}}Show an interactive matplotlib preview before finishing. Off by default -- this tool previously always showed it, with no way to skip.\optmeta{switch, off by default}}
 \end{optlist}
@@ -12338,7 +12340,7 @@ instead of only seeing it blurred into a population-averaged RDF.
   \textbf{\texttt{-o}/\texttt{-\/-\allowbreak{}output-\allowbreak{}dir}} selects where every output file is written
   (default: the current directory).
 \item
-  \textbf{\texttt{{[}9{]}\ REFERENCES}} writes \texttt{references.\allowbreak{}bib} citing SIESTA for a
+  \textbf{\texttt{{[}9{]}\ REFERENCES}} writes \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} citing SIESTA for a
   \texttt{-\/-\allowbreak{}label} run; correctly prints a note instead for a generic
   \texttt{-\/-\allowbreak{}trajectory} input, since that path isn\textquotesingle t guaranteed to be a SIESTA
   run at all (section 6).
@@ -12574,7 +12576,7 @@ usage: stb-aimdAnalysis [-h] [-l LABEL] [--geometry-file PATH] [--trajectory PAT
 \optitem{-{}-track-\allowbreak{}atom N}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--track-atom@\texttt{--track-atom}}0-based atom index whose own Cartesian displacement (from its initial position, PBC-unwrapped -- same convention as the MSD) is tracked and reported over time (optional).\optmeta{type: int}}
 \optitem{-{}-track-\allowbreak{}pair I-\allowbreak{}J}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--track-pair@\texttt{--track-pair}}Two 0-based atom indices, e.g. '0-5', whose relative distance (minimum-image convention, same as the RDF) is tracked and reported over time (optional).}
 \optitem{-{}-list-\allowbreak{}atoms}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--list-atoms@\texttt{--list-atoms}}Print a table of every atom's 0-based index, species, and Cartesian coordinates (Ang, from the first frame only) to help pick \texttt{-{}-track-\allowbreak{}atom/\allowbreak{}-{}-track-\allowbreak{}pair} indices, then exit immediately -- no RDF/MSD/VDOS/report is computed. Off by default (a large structure can have hundreds of atoms).\optmeta{switch, off by default}}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write \textless{}stem\textgreater{}\_*.dat/.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_aimdAnalysis\_report.txt/references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write \textless{}stem\textgreater{}\_*.dat/.gplot (with \texttt{-{}-save-\allowbreak{}gnuplot}) and stb\_aimdAnalysis\_report.txt/stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-save-\allowbreak{}gnuplot}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--save-gnuplot@\texttt{--save-gnuplot}}Also write a .dat + .gplot pair for every computed quantity (RDF, MSD, VACF, VDOS, and the atom-displacement/pair-distance series if \texttt{-{}-track-\allowbreak{}atom/\allowbreak{}-{}-track-\allowbreak{}pair} are used). Off by default -- this tool previously wrote matplotlib PNGs unconditionally on every run with no gnuplot output at all.\optmeta{switch, off by default}}
 \optitem{-{}-view}{\index{stb-aimdAnalysis@\texttt{stb-aimdAnalysis}!--view@\texttt{--view}}Show an interactive matplotlib preview before finishing. Off by default -- this tool previously always generated (and saved) the matplotlib plots, with no way to skip it.\optmeta{switch, off by default}}
 \end{optlist}
@@ -18865,7 +18867,7 @@ Two independent 2D crystals almost never share an exact lattice. Even a
 differ by \textasciitilde1.8\% --- enough that neither lattice tiles the other exactly at
 any size. Two chemically unrelated 2D materials can differ far more.
 
-The \textbf{ZSL algorithm} (Zur \& McGill, 1984 --- see \texttt{references.\allowbreak{}bib} after any
+The \textbf{ZSL algorithm} (Zur \& McGill, 1984 --- see \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} after any
 run) solves this by searching, up to a maximum supercell area
 (\texttt{-\/-\allowbreak{}max\_\allowbreak{}area}), over integer supercell transformation matrices for layer 1
 and layer 2, looking for a pair whose resulting lattice vectors match each
@@ -19000,9 +19002,8 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}1.\allowbreak{}sh} prove
   --- there used to be a \texttt{-\/-\allowbreak{}sym\_\allowbreak{}out\ symmetry\_\allowbreak{}report.\allowbreak{}txt}, removed once this
   table moved into the report itself).
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA (the output is a \texttt{.\allowbreak{}fdf}) plus the ZSL
-  algorithm paper. Merges with whatever \texttt{references.\allowbreak{}bib} is already in the
-  working directory instead of overwriting it.
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA (the output is a \texttt{.\allowbreak{}fdf}) plus the ZSL
+  algorithm paper. One file per run, never overwritten; it also lists every library the run loaded.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf} itself: which two
   layer files were used, the stacking configuration name, twist angle,
@@ -19070,7 +19071,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}1.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}1.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_2Dstacking\_report.txt}.
 \end{itemize}
 
@@ -19100,7 +19101,7 @@ Folder & What it shows \\
 \texttt{strain-\allowbreak{}modes/} & \texttt{-sm\ top/\allowbreak{}bottom/\allowbreak{}sym} side by side \\
 \texttt{twist/} & \texttt{-\/-\allowbreak{}twist} --- a genuine 21.8° Moiré cell vs. the naive, silently-untwisted \texttt{-id\ 0} pick \\
 \texttt{custom-\allowbreak{}shift/} & \texttt{-tx}/\texttt{-ty} + \texttt{-\/-\allowbreak{}vacuum} --- an arbitrary registry point, contrasted with \texttt{-\/-\allowbreak{}batch\_\allowbreak{}sym}\textquotesingle s symmetry-protected ones \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \texttt{ml-\allowbreak{}relax/} & \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax}/\texttt{-\/-\allowbreak{}ml-\allowbreak{}relax-\allowbreak{}cell} --- MACE pre-relaxation, vacuum axis fixed \\
 \end{longtable}
 \endgroup
@@ -19446,9 +19447,9 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}2.\allowbreak{}sh} prove
   use), point group, and Hall symbol, for the input structure vs. the final
   supercell.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always (the output is a \texttt{.\allowbreak{}fdf}), plus the
-  MACE papers if \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used. Merges with whatever
-  \texttt{references.\allowbreak{}bib} is already in the working directory.
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always (the output is a \texttt{.\allowbreak{}fdf}), plus the
+  MACE papers if \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used. One file per run, never
+  overwritten; it also lists every library the run loaded.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf} itself: the input
   file, the transformation matrix and its determinant, the atom-count
@@ -19497,7 +19498,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}2.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}2.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}supercell\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -19526,7 +19527,7 @@ Folder & What it shows \\
 \texttt{reconstruction/} & Full row-major 3×3 matrix --- graphene\textquotesingle s √3×√3 R30° reconstruction cell \\
 \texttt{mirrored/} & A negative-determinant (mirrored) cell --- still valid, and physically identical here since Si is centrosymmetric \\
 \texttt{ml-\allowbreak{}relax/} & \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax}/\texttt{-\/-\allowbreak{}ml-\allowbreak{}relax-\allowbreak{}cell} --- MACE pre-relaxation of the built supercell \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -19796,9 +19797,8 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}3.\allowbreak{}sh} prove
   bulk structure vs. that slab. The bulk always reports \texttt{Layer\ Group:\allowbreak{}\ N/\allowbreak{}A\ (not\ 2D-\allowbreak{}periodic)}; the slab (always genuinely 2D-periodic by
   construction) always gets a real one --- see \texttt{basic/} below.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
-  \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used. Merges with whatever \texttt{references.\allowbreak{}bib} is already
-  in the working directory.
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used. One file per run, never overwritten; it also lists every library the run loaded.
 \item
   \textbf{A provenance header} written into every output \texttt{.\allowbreak{}fdf}: the input file,
   Miller index, termination index (polar/non-polar, symmetric/asymmetric),
@@ -19860,7 +19860,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}3.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}3.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}slab\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -19889,7 +19889,7 @@ Folder & What it shows \\
 \texttt{polar-\allowbreak{}caveat/} & NaCl(100)/(111) both report \texttt{Polar:\allowbreak{}\ No} through stb-slab --- the oxidation-state gotcha, proven live \\
 \texttt{passivate/} & Si(111), \texttt{-\/-\allowbreak{}passivate} --- 8/8 dangling bonds genuinely resolved with H \\
 \texttt{ml-\allowbreak{}relax/} & Si(111), \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} --- measured surface relaxation \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -20235,7 +20235,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}4.\allowbreak{}sh} prove
   the opposite contrast from \texttt{4.\allowbreak{}3-\allowbreak{}stb-\allowbreak{}slab/}, where it\textquotesingle s the \emph{bulk} input
   that lacks one.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: chirality, mode,
@@ -20285,7 +20285,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}4.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}4.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}nanotube\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -20316,7 +20316,7 @@ Folder & What it shows \\
 \texttt{passivate/} & A closed tube has 0 dangling bonds; a ribbon\textquotesingle s two edges genuinely do \\
 \texttt{ml-\allowbreak{}relax/} & MACE pre-relaxation measurably releasing curvature strain \\
 \texttt{corrugated/} & A buckled (silicene-like) sheet rolls into a genuinely corrugated tube \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -20643,7 +20643,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}5.\allowbreak{}sh} prove
   \textbf{A before/after symmetry comparison table} per output structure ---
   crystal system, 3D space group, layer group, point group, Hall symbol.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax}/\texttt{-\/-\allowbreak{}ml-\allowbreak{}rank} was used.
 \item
   \textbf{A provenance header} written into every output \texttt{.\allowbreak{}fdf}: the defect
@@ -20692,7 +20692,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}5.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}5.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}defect\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -20722,7 +20722,7 @@ Folder & What it shows \\
 \texttt{all-\allowbreak{}inequivalent-\allowbreak{}sites/} & Magnetite\textquotesingle s 2 distinct Fe sites, found automatically \\
 \texttt{ml-\allowbreak{}rank/} & Ranking those 2 Fe sites by MACE-relaxed energy (octahedral wins) \\
 \texttt{ml-\allowbreak{}relax/} & Generic MACE pre-relaxation of a single chosen vacancy \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -21094,7 +21094,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}6.\allowbreak{}sh} prove
   group, layer group, point group, Hall symbol --- comparing the ordered
   input structure against the final (disordered) SQS structure.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus icet (the SQS search
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus icet (the SQS search
   library itself), plus the MACE papers if \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: the disordered
@@ -21148,7 +21148,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}6.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}6.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}sqs\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -21178,7 +21178,7 @@ Folder & What it shows \\
 \texttt{instances/} & Parallel independent searches, a second global-optimum cross-check \\
 \texttt{sublattice-\allowbreak{}mgo/} & (Mg,Ni)O: disordering only Mg, verifying O\textquotesingle s bonding geometry survives \\
 \texttt{ml-\allowbreak{}relax/} & Generic MACE pre-relaxation of the found SQS structure \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -21509,7 +21509,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}7.\allowbreak{}sh} prove
   group, layer group, point group, Hall symbol --- expected (and verified)
   to match exactly, since cell reduction doesn\textquotesingle t change the crystal.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: the mode used,
@@ -21563,7 +21563,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}7.\allowbreak{}sh} prove
 \item
   \texttt{example\_\allowbreak{}4.\allowbreak{}7.\allowbreak{}sh} --- the guided walkthrough (see below).
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}unitcell\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -21593,7 +21593,7 @@ Folder & What it shows \\
 \texttt{symprec-\allowbreak{}sensitivity/} & The same noisy structure at two tolerances: Fm-3m vs. P1 \\
 \texttt{vacuum-\allowbreak{}warning/} & The vacuum-axis caveat and the origin/relabeling caveat on graphene \\
 \texttt{ml-\allowbreak{}relax/} & Generic MACE pre-relaxation of the reduced cell \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -21894,7 +21894,7 @@ it\textquotesingle s the first thing you see even if you never read \texttt{-\/-
   every space group this tool builds from is inherently 3D-periodic, so
   it would always read \texttt{N/\allowbreak{}A\ (not\ 2D-\allowbreak{}periodic)}, never real information.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: requested vs.
@@ -21938,7 +21938,7 @@ it\textquotesingle s the first thing you see even if you never read \texttt{-\/-
   \texttt{stb-\allowbreak{}crystalbuilder} builds everything from \texttt{-\/-\allowbreak{}spacegroup}/\texttt{-\/-\allowbreak{}site}
   flags, not from a structure file.
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}crystalbuilder\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -21967,7 +21967,7 @@ Folder & What it shows \\
 \texttt{reduce-\allowbreak{}to-\allowbreak{}primitive/} & \texttt{-\/-\allowbreak{}reduce\ primitive} on magnetite: 56 -\textgreater{} 14 atoms, one command \\
 \texttt{out-\allowbreak{}of-\allowbreak{}range-\allowbreak{}error/} & The fixed bug: \texttt{-\/-\allowbreak{}spacegroup\ 255} now gives a clear error message \\
 \texttt{ml-\allowbreak{}relax/} & MACE pre-relaxation of the built + reduced structure \\
-\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + the validation checklist + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \texttt{bulk-\allowbreak{}graphite-\allowbreak{}to-\allowbreak{}slab/} & \textbf{The 3D-only answer, proven}: bulk graphite -\textgreater{} a real 2D slab via \texttt{stb-\allowbreak{}slab} \\
 \end{longtable}
 \endgroup
@@ -22259,7 +22259,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}9.\allowbreak{}sh} prove
   a typical input is a genuinely 2D-periodic slab), point group, Hall
   symbol.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: the passivant,
@@ -22306,7 +22306,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}9.\allowbreak{}sh} prove
   pipeline (\texttt{4.\allowbreak{}8} -\textgreater{} \texttt{4.\allowbreak{}3}) a real user would run before ever reaching
   for \texttt{stb-\allowbreak{}passivate}.
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}passivate\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -22334,7 +22334,7 @@ Folder & What it shows \\
 \texttt{bond-\allowbreak{}length-\allowbreak{}override/} & The default 1.35 Ang (atomic-radii-sum) approximation vs. a dialed-in real Si-H bond length \\
 \texttt{symmetry-\allowbreak{}preserved/} & The full report + before/after symmetry table: identical space/layer/point group \\
 \texttt{ml-\allowbreak{}relax/} & MACE pre-relaxation of the passivated slab, vacuum axis provably fixed \\
-\texttt{full-\allowbreak{}report/} & the report + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -22614,7 +22614,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}10.\allowbreak{}sh} prov
   \texttt{{[}5{]}\ SYMMETRY\ ANALYSIS} table (see the theory above for why this is a
   point group, not a space group).
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA always, plus the MACE papers if
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}relax} was used.
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: the molecule
@@ -22655,7 +22655,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}10.\allowbreak{}sh} prov
   fixtures needed --- like \texttt{4.\allowbreak{}8-\allowbreak{}stb-\allowbreak{}crystalbuilder/}, everything is built
   from \texttt{-\/-\allowbreak{}name}/\texttt{-\/-\allowbreak{}vacuum} flags, not read from a structure file.
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}molecule\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -22682,7 +22682,7 @@ Folder & What it shows \\
 \texttt{unknown-\allowbreak{}name-\allowbreak{}suggestions/} & \texttt{-\/-\allowbreak{}list}, a case-insensitive "did you mean", and a genuine typo suggestion \\
 \texttt{vacuum-\allowbreak{}and-\allowbreak{}dimensionality/} & The real pitfall: \texttt{-\/-\allowbreak{}vacuum} below the detection threshold fools the dimensionality check \\
 \texttt{ml-\allowbreak{}relax-\allowbreak{}symmetry-\allowbreak{}preserved/} & MACE pre-relaxation of methane, with \texttt{Td} proven unchanged before/after \\
-\texttt{full-\allowbreak{}report/} & the report + \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report + \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -23031,7 +23031,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}11.\allowbreak{}sh} prov
   \textbf{Symmetry analysis before/after} (\texttt{{[}6{]}}) --- expected to differ (often
   down to \texttt{P1}/\texttt{P-\allowbreak{}1}), unlike most other stb-suite before/after tables.
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA + MACE (+ MACE-MP if a foundation model
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA + MACE (+ MACE-MP if a foundation model
   was used, not a custom fine-tuned one).
 \item
   \textbf{A provenance header} written into the output \texttt{.\allowbreak{}fdf}: input file,
@@ -23073,7 +23073,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}11.\allowbreak{}sh} prov
   see \texttt{test/\allowbreak{}4-\allowbreak{}structures/\allowbreak{}11-\allowbreak{}amorphize/\allowbreak{}test.\allowbreak{}sh} for that). Pauses between
   sections so you can read before moving on; safe to re-run any time.
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}amorphize\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -23102,7 +23102,7 @@ Folder & What it shows \\
 \texttt{vacuum-\allowbreak{}rejected/} & Rejected outright on a \texttt{stb-\allowbreak{}slab}-built (100) slab (bulk-only) \\
 \texttt{save-\allowbreak{}data/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}data}: the \texttt{.\allowbreak{}dat}+\texttt{.\allowbreak{}gplot} pair, rendered to a real PDF if gnuplot is installed \\
 \texttt{save-\allowbreak{}traj/} & \texttt{-\/-\allowbreak{}save-\allowbreak{}traj}: all 3 formats (xsf/pdb/xyz), read back and verified with ASE \\
-\texttt{full-\allowbreak{}report/} & the report, the symmetry \texttt{Fd-\allowbreak{}3m\ -\allowbreak{}\textgreater{}\ P-\allowbreak{}1} collapse, \texttt{references.\allowbreak{}bib} \\
+\texttt{full-\allowbreak{}report/} & the report, the symmetry \texttt{Fd-\allowbreak{}3m\ -\allowbreak{}\textgreater{}\ P-\allowbreak{}1} collapse, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \end{longtable}
 \endgroup
 
@@ -23446,7 +23446,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}12.\allowbreak{}sh} prov
   \textbf{A symmetry table} --- before/after (\texttt{-\/-\allowbreak{}substitute}/\texttt{-\/-\allowbreak{}subgroup}/
   \texttt{-\/-\allowbreak{}supergroup}) or requested-vs-detected (\texttt{generate}).
 \item
-  \textbf{\texttt{references.\allowbreak{}bib}} --- SIESTA + PyXtal always; + MACE/MACE-MP with
+  \textbf{\texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}} --- SIESTA + PyXtal always; + MACE/MACE-MP with
   \texttt{-\/-\allowbreak{}ml-\allowbreak{}rank}. Previously never written at all in any mode.
 \item
   \textbf{A provenance header} written into every output \texttt{.\allowbreak{}fdf}: requested
@@ -23491,7 +23491,7 @@ output --- \texttt{example\_\allowbreak{}4.\allowbreak{}12.\allowbreak{}sh} prov
   \texttt{-\/-\allowbreak{}substitute}/\texttt{-\/-\allowbreak{}subgroup}/\texttt{-\/-\allowbreak{}supergroup} need is generated by this
   script\textquotesingle s own first case, not checked in.
 \item
-  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{references.\allowbreak{}bib}, and
+  \texttt{.\allowbreak{}gitignore} --- excludes \texttt{output/}, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib}, and
   \texttt{stb\_\allowbreak{}crystalcast\_\allowbreak{}report.\allowbreak{}txt}.
 \end{itemize}
 
@@ -23516,7 +23516,7 @@ Folder & What it shows \\
 \bottomrule\noalign{}
 \endlastfoot
 \texttt{vs-\allowbreak{}crystalbuilder/} & The exact same real NiO built two opposite ways --- live proof of the comparison table above \\
-\texttt{generate/} & Rock-salt NiO from \texttt{-\/-\allowbreak{}group\ 225} + composition; the report, provenance header, \texttt{references.\allowbreak{}bib} \\
+\texttt{generate/} & Rock-salt NiO from \texttt{-\/-\allowbreak{}group\ 225} + composition; the report, provenance header, \texttt{stb\_\allowbreak{}<tool>\_\allowbreak{}references.\allowbreak{}bib} \\
 \texttt{count-\allowbreak{}and-\allowbreak{}seed/} & \texttt{-\/-\allowbreak{}count\ 3\ -\allowbreak{}\/-\allowbreak{}seed\ 7}: distinct candidates, reproducible batches \\
 \texttt{molecular-\allowbreak{}and-\allowbreak{}clusters/} & \texttt{-\/-\allowbreak{}molecular} (water in group 19) and \texttt{-\/-\allowbreak{}dim\ 0} (isolated point-group cluster) \\
 \texttt{substitute/} & \texttt{O:\allowbreak{}S} substitution on the NiO structure, symmetry framework preserved \\
@@ -39596,7 +39596,7 @@ relax it first), a \textbf{fragment split} and your \textbf{template} (\texttt{-
     chargediff_manifest.json          the split, read by Stage 2
     chargediff_fragments.png          with --png: the system projected on xy/xz/yz, atoms coloured by fragment
     (stb_chargediffPrep_report.txt goes to the current folder)
-    references.bib
+    (its references, stb_chargediffPrep_references.bib, too)
 \end{codeblock}
 
 Three ways to split:
@@ -40477,7 +40477,7 @@ usage: stb-chargediffAnalysis [-h] [--dir DIR] [-o OUTPUT_DIR] [--3d | --profile
 \optgroup{Options}
 \begin{optlist}
 \optitem{-{}-dir DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--dir@\texttt{--dir}}Directory \texttt{stb-\allowbreak{}chargediffPrep} wrote into -- must contain '\texttt{chargediff\_\allowbreak{}manifest.\allowbreak{}json}' plus the 'combined/' and fragment subfolders it lists, each already run in SIESTA. Default: chargediff\_run (\texttt{stb-\allowbreak{}chargediffPrep}'s own default \texttt{-{}-output-\allowbreak{}dir}).}
-\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and references.bib into (default: current directory). Created if it doesn't exist.}
+\optitem{-o, -{}-output-\allowbreak{}dir OUTPUT\_\allowbreak{}DIR}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--output-dir@\texttt{--output-dir}}Directory to write the data/gnuplot/cube/report files and stb\_<tool>\_references.bib into (default: current directory). Created if it doesn't exist.}
 \optitem{-{}-3d}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--3d@\texttt{--3d}}Export full 3D volume\optmeta{switch, off by default; exclusive group 1}}
 \optitem{-{}-profile}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--profile@\texttt{--profile}}Write the planar average of Delta rho along \texttt{-{}-axis} as a 1D profile (average taken over the other two axes) instead of a 2D/3D map -- useful for bilayers, slabs, and interfaces\optmeta{switch, off by default; exclusive group 1}}
 \optitem{-a, -{}-axis \{0,\allowbreak{}1,\allowbreak{}2\}}{\index{stb-chargediffAnalysis@\texttt{stb-chargediffAnalysis}!--axis@\texttt{--axis}}For a slice/profile: the axis normal to the cut plane (slice) or the axis the profile varies along (profile) (0=X, 1=Y, 2=Z). Default: Z for the slice; for the profile (and the dashboard's profile panel) the lattice axis along which the fragments are farthest apart.\optmeta{choices: 0, 1, 2; type: int; default: automatic}}

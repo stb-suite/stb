@@ -175,7 +175,7 @@ echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[11] report to the console.
-It is always saved to stb_symmetry_report.txt in the current folder, so a plain run only ever writes references.bib, no text
+It is always saved to stb_symmetry_report.txt in the current folder, so a plain run only ever writes stb_symmetry_references.bib, no text
 report file at all:
 EOF
 mkdir -p "$OUT/full-report"
@@ -187,8 +187,8 @@ echo "\$ stb-symmetry --file nacl.fdf --format fdf --no-intro"
 echo "Report sections written to stb_symmetry_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_symmetry_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-symmetry run analyzes a SIESTA structure file):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_symmetry_references.bib -- SIESTA (every stb-symmetry run analyzes a SIESTA structure file):"
+grep "^@" "$OUT/full-report/stb_symmetry_references.bib"
 pause
 
 echo "=================================================================="
@@ -241,7 +241,7 @@ Six self-contained folders were generated under output/:
   bulk-nacl/       scan-symprec/    layer-group/
   point-group/     limitation-wire/ full-report/
 
-Each has references.bib; full-report/ additionally has
+Each has stb_symmetry_references.bib; full-report/ additionally has
 stb_symmetry_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
@@ -252,7 +252,7 @@ Recap of what this walkthrough covered:
     GROUP instead of trusting the plain 3D SPACE GROUP (see the README
     for the theory behind each)
   - the documented "no rod group" limitation for a 1D wire
-  - the numbered [0]...[11] report (always saved), references.bib
+  - the numbered [0]...[11] report (always saved), stb_symmetry_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA structure:

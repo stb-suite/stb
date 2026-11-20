@@ -148,7 +148,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[5] report to the console.
 Without --save-gnuplot, a plain run writes the .dat file(s),
-references.bib and the report -- no .gplot script:
+stb_density_references.bib and the report -- no .gplot script:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.RHO "$OUT/full-report/"
@@ -158,8 +158,8 @@ echo "\$ stb-density --label Sn3O4 --save-gnuplot --no-intro"
 echo "Report sections written to stb_density_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_density_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-density run analyzes a SIESTA structure file):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_density_references.bib -- SIESTA (every stb-density run analyzes a SIESTA structure file):"
+grep "^@" "$OUT/full-report/stb_density_references.bib"
 pause
 
 echo "=================================================================="
@@ -199,7 +199,7 @@ Four self-contained folders were generated under output/:
   basic-slice/   spin-auto/
   rho2-diff/     full-report/
 
-Each has references.bib; full-report/ additionally has
+Each has stb_density_references.bib; full-report/ additionally has
 stb_density_report.txt and a .gplot script (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:
@@ -209,7 +209,7 @@ Recap of what this walkthrough covered:
     spin-polarized .RHO correctly
   - the non-negative-vs-signed colorbar convention (--rho2 diff)
   - the numbered [0]...[5] report (always saved), --save-gnuplot,
-    references.bib
+    stb_density_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a finished SIESTA calculation:

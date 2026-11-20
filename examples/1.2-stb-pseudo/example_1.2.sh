@@ -143,7 +143,7 @@ Three self-contained folders were generated under output/:
 
 output/sic/ and output/fallback/ each hold the actual pseudopotential
 files, ready to reference from a calc.fdf; sic/ also has stb_pseudo_
-report.txt (via) and this folder's own references.bib
+report.txt (via) and this folder's own stb_pseudo_references.bib
 (SIESTA + PseudoDojo citations).
 
 As a next step, try on your own:

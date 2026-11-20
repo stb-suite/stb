@@ -203,7 +203,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_sts_report.txt; --save-gnuplot writes sts.dat + a real .gplot script -- both off by
-default, so a plain run only ever writes sts.dat + references.bib:
+default, so a plain run only ever writes sts.dat + stb_sts_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp calc.fdf structure.fdf C.ion C.ion.xml Graphene.selected.WFSX "$OUT/full-report/"
@@ -211,7 +211,7 @@ echo "\$ stb-sts --label Graphene --geometry-file calc.fdf --xy 0 0 --height 1.5
 (cd "$OUT/full-report" && stb-sts --label Graphene --geometry-file calc.fdf \
     --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only sts.dat + references.bib -- no .gplot, no stb_sts_report.txt)"
+echo "(only sts.dat + stb_sts_references.bib -- no .gplot, no stb_sts_report.txt)"
 echo
 echo "\$ stb-sts --label Graphene --geometry-file calc.fdf --xy 0 0 --height 1.5 --erange -5 5 --sigma 50 \\"
 echo "      --save-gnuplot --no-intro"
@@ -269,7 +269,7 @@ Six self-contained folders were generated under output/:
   basic-run/            label-plus-geometry/   cutoff-radius/
   periodic-wraparound/  fermi-shift/           full-report/
 
-Each has references.bib and sts.dat; full-report/ additionally has
+Each has stb_sts_references.bib and sts.dat; full-report/ additionally has
 sts.gplot/sts.pdf and stb_sts_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:

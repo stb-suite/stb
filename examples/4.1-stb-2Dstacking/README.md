@@ -17,7 +17,7 @@ Two independent 2D crystals almost never share an exact lattice. Even a
 differ by ~1.8% — enough that neither lattice tiles the other exactly at
 any size. Two chemically unrelated 2D materials can differ far more.
 
-The **ZSL algorithm** (Zur & McGill, 1984 — see `references.bib` after any
+The **ZSL algorithm** (Zur & McGill, 1984 — see `stb_2Dstacking_references.bib` after any
 run) solves this by searching, up to a maximum supercell area
 (`--max_area`), over integer supercell transformation matrices for layer 1
 and layer 2, looking for a pair whose resulting lattice vectors match each
@@ -131,9 +131,8 @@ output — `example_4.1.sh` proves this directly at the end.
   and Hall symbol. Folded directly into the main report (no separate file
   — there used to be a `--sym_out symmetry_report.txt`, removed once this
   table moved into the report itself).
-- **`references.bib`** — SIESTA (the output is a `.fdf`) plus the ZSL
-  algorithm paper. Merges with whatever `references.bib` is already in the
-  working directory instead of overwriting it.
+- **`stb_2Dstacking_references.bib`** — SIESTA (the output is a `.fdf`) plus the ZSL
+  algorithm paper. One file per run, never overwritten; it also lists every library the run loaded.
 - **A provenance header** written into the output `.fdf` itself: which two
   layer files were used, the stacking configuration name, twist angle,
   strain mode, the max applied linear strain for that structure, and (with
@@ -186,7 +185,7 @@ output — `example_4.1.sh` proves this directly at the end.
   heterostructure test case, also used for the `--twist` demo (with itself
   as both layers).
 - `example_4.1.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_2Dstacking_references.bib`, and
   `stb_2Dstacking_report.txt`.
 
 ## Running the walkthrough
@@ -209,7 +208,7 @@ installed):
 | `strain-modes/`      | `-sm top/bottom/sym` side by side                            |
 | `twist/`             | `--twist` — a genuine 21.8° Moiré cell vs. the naive, silently-untwisted `-id 0` pick|
 | `custom-shift/`      | `-tx`/`-ty` + `--vacuum` — an arbitrary registry point, contrasted with `--batch_sym`'s symmetry-protected ones|
-| `full-report/`       | the report + the validation checklist + `references.bib`|
+| `full-report/`       | the report + the validation checklist + `stb_2Dstacking_references.bib`|
 | `ml-relax/`          | `--ml-relax`/`--ml-relax-cell` — MACE pre-relaxation, vacuum axis fixed|
 
 ## Try it yourself

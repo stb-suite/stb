@@ -209,7 +209,7 @@ echo "\$ stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm 
 (cd "$OUT/full-report" && stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
     --band vbm --fermi -3.200055 --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only references.bib -- no effmass.dat/velocity.dat/.gplot, no stb_effmass_report.txt)"
+echo "(only stb_effmass_references.bib -- no effmass.dat/velocity.dat/.gplot, no stb_effmass_report.txt)"
 echo
 echo "\$ stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX --band vbm --fermi -3.200055 \\"
 echo "      --save-gnuplot --no-intro"
@@ -269,7 +269,7 @@ Eight self-contained folders were generated under output/:
   basic-run/       vbm/            cbm/             nspin-fix/
   nspin4/          label-plus-hsx/ fermi-shift/     full-report/
 
-Each has references.bib; full-report/ additionally has effmass.dat/
+Each has stb_effmass_references.bib; full-report/ additionally has effmass.dat/
 velocity.dat/effmass.gplot/effmass.pdf and stb_effmass_report.txt.
 
 Recap of what this walkthrough covered:

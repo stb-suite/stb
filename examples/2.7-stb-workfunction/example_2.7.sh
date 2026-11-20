@@ -111,7 +111,7 @@ echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[7] report to the console.
-It is always saved to stb_workfunction_report.txt in the current folder, so a plain run only ever writes references.bib, no text
+It is always saved to stb_workfunction_report.txt in the current folder, so a plain run only ever writes stb_workfunction_references.bib, no text
 report file (and no data/gnuplot files either, without --save-gnuplot):
 EOF
 mkdir -p "$OUT/full-report"
@@ -123,8 +123,8 @@ echo "\$ stb-workfunction --label siesta --file calc.out --no-intro"
 echo "Report sections written to stb_workfunction_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_workfunction_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-workfunction run analyzes a finished SIESTA calculation):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_workfunction_references.bib -- SIESTA (every stb-workfunction run analyzes a finished SIESTA calculation):"
+grep "^@" "$OUT/full-report/stb_workfunction_references.bib"
 pause
 
 echo "=================================================================="
@@ -175,7 +175,7 @@ cat <<EOF
 Three self-contained folders were generated under output/:
   basic/          save-gnuplot/   full-report/
 
-Each has references.bib; save-gnuplot/ additionally has
+Each has stb_workfunction_references.bib; save-gnuplot/ additionally has
 workfunction_data.dat/workfunction.gplot, and full-report/ has
 stb_workfunction_report.txt (every run writes one).
 
@@ -187,7 +187,7 @@ Recap of what this walkthrough covered:
     vacuum gap
   - --save-gnuplot's annotated gnuplot script vs. the default (nothing
     written unconditionally anymore)
-  - the numbered [0]...[7] report (always saved), references.bib
+  - the numbered [0]...[7] report (always saved), stb_workfunction_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own right after a slab calculation:

@@ -37,7 +37,7 @@ well-chosen points and the segments between them.
 Which points are "high-symmetry", and in what order to connect them, is
 NOT arbitrary -- it depends on the shape of the Brillouin zone, which in
 turn depends on the crystal's Bravais lattice. Setyawan & Curtarolo (2010)
--- the exact reference stb-kpath writes to references.bib -- standardized
+-- the exact reference stb-kpath writes to stb_kpath_references.bib -- standardized
 this into one path convention per Bravais lattice type, now used across
 essentially every DFT code for reproducible band-structure plots. ASE
 implements that exact convention (Cell.bandpath) and extends it to 1D/2D
@@ -214,7 +214,7 @@ echo "=================================================================="
 cat <<EOF
 Three self-contained folders were generated under output/ (silicon/,
 chain/, graphene/), each with kpath_bs.fdf, stb_kpath_report.txt, and
-references.bib (SIESTA + Setyawan-Curtarolo citations). output/molecule/
+stb_kpath_references.bib (SIESTA + Setyawan-Curtarolo citations). output/molecule/
 deliberately has none of those -- 0D is a hard error.
 
 As a next step, try on your own:

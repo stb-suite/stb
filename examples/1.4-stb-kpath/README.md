@@ -24,7 +24,7 @@ points and the segments between them.
 Which points count as "high-symmetry", and in what order to connect them,
 isn't arbitrary — it depends on the shape of the BZ, which in turn depends
 on the crystal's **Bravais lattice**. **Setyawan & Curtarolo (2010)** — the
-exact reference `stb-kpath` writes to `references.bib` — standardized this
+exact reference `stb-kpath` writes to `stb_kpath_references.bib` — standardized this
 into one path convention per Bravais lattice type, now used across
 essentially every DFT code for reproducible band-structure plots. ASE
 implements that exact convention (`Cell.bandpath`) and extends it to 1D/2D
@@ -109,7 +109,7 @@ behind a single `[y/N]` question so the essential flow stays short.
 ```
 
 Every successful case is generated each into its own
-folder under `output/` — `stb_kpath_report.txt`, `references.bib` (SIESTA +
+folder under `output/` — `stb_kpath_report.txt`, `stb_kpath_references.bib` (SIESTA +
 Setyawan-Curtarolo citations), and `kpath_bs.fdf`:
 
 | Folder             | Structure                           | Dimensionality | Bravais lattice | Path |
@@ -165,7 +165,7 @@ stb-kpath --file <structure.fdf> [-p/--prec <eps>] [--vacuum-gap <Ang>]
 - **Report** — always saved to `stb_kpath_report.txt` in the current folder (`_1`, `_2`, ... when
   that name is taken); there is no option for it.
 
-`references.bib` (SIESTA + Setyawan-Curtarolo citations) is always written
+`stb_kpath_references.bib` (SIESTA + Setyawan-Curtarolo citations) is always written
 whenever a path is actually generated — there's no flag for it.
 
 Run `stb-kpath --help` for the full list of options.

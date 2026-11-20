@@ -230,7 +230,7 @@ stb-pseudo --list-banks
 - **Report** — always saved to `stb_pseudo_report.txt` in the current folder (`_1`, `_2`, ... when
   that name is taken); there is no option for it.
 
-`references.bib` (SIESTA plus a citation for every bank actually used) is
+`stb_pseudo_references.bib` (SIESTA plus a citation for every bank actually used) is
 always written — there's no flag for it.
 
 Run `stb-pseudo --help` for the full list of options.

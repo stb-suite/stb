@@ -213,11 +213,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_defect_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_defect_report.txt) includes the structure-validation checklist for the input
-and the output structure, and a references.bib with SIESTA.
+and the output structure, and a stb_defect_references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp si_bulk.fdf "$OUT/full-report/"
@@ -230,8 +230,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_defect_references.bib always written -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_defect_references.bib"
 pause
 
 echo "=================================================================="
@@ -264,8 +264,8 @@ and ml-relax/ skipped if the optional 'ml' extra isn't installed):
   nearest-position/       all-inequivalent-sites/
   ml-rank/                ml-relax/           full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_defect_report.txt; ml-rank/'s and ml-relax/'s references.bib also cite
+Each has stb_defect_references.bib; full-report/ additionally has
+stb_defect_report.txt; ml-rank/'s and ml-relax/'s stb_defect_references.bib also cite
 the MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -282,7 +282,7 @@ Recap of what this walkthrough covered:
     sites (octahedral ~0.06 eV more stable for a vacancy)
   - --ml-relax vs. --ml-rank: generic pre-relaxation of whatever you're
     writing, vs. relax-and-compare across candidate sites
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_defect_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

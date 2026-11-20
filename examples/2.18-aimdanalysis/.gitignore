@@ -10,5 +10,5 @@ siesta_*.dat
 siesta_*.gplot
 siesta_*.pdf
 stb_aimdAnalysis_report.txt
-references.bib
+stb_*_references*.bib
 stb_*_report*.txt

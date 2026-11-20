@@ -59,7 +59,7 @@ it depends on the material, the functional, the pseudopotential, and the
 basis set (screening, hybridization with neighboring ligands all shift
 it). stb-dftu bundles one literature table (Wang, Maxisch & Ceder, Phys.
 Rev. B 73, 195107 (2006) -- the Materials Project's own GGA+U oxide
-calibration, and the exact reference this tool writes to references.bib)
+calibration, and the exact reference this tool writes to stb_dftu_references.bib)
 purely as a starting-point SANITY CHECK, never a validated value -- you
 always have to pass --u explicitly, or opt in with --use-reference.
 
@@ -140,7 +140,7 @@ pause
 echo "=================================================================="
 echo " output/list-reference/ and output/suggest/  --  pure lookups"
 echo "=================================================================="
-echo "Neither generates a block -- both still write references.bib (just the"
+echo "Neither generates a block -- both still write stb_dftu_references.bib (just the"
 echo "reference-table citation, no SIESTA entries, since nothing SIESTA-bound"
 echo "was produced)."
 mkdir -p "$OUT/list-reference" "$OUT/suggest"
@@ -155,10 +155,10 @@ echo "\$ stb-dftu --suggest Ni --no-intro"
 grep "Ni:" "$OUT/suggest/console.log"
 echo
 for case in list-reference suggest; do
-    if grep -q "@article{Soler2002," "$OUT/$case/references.bib"; then
-        echo "Unexpected: $case/references.bib has a SIESTA entry it shouldn't."
+    if grep -q "@article{Soler2002," "$OUT/$case/stb_dftu_references.bib"; then
+        echo "Unexpected: $case/stb_dftu_references.bib has a SIESTA entry it shouldn't."
     else
-        echo "Confirmed: $case/references.bib has no SIESTA entry (nothing SIESTA-bound was generated)."
+        echo "Confirmed: $case/stb_dftu_references.bib has no SIESTA entry (nothing SIESTA-bound was generated)."
     fi
 done
 pause
@@ -209,7 +209,7 @@ cat <<EOF
 Five self-contained folders were generated under output/:
   single/   multi/   from-structure/   list-reference/   suggest/
 
-Each has stb_dftu_report.txt and references.bib (SIESTA citations for the
+Each has stb_dftu_report.txt and stb_dftu_references.bib (SIESTA citations for the
 3 block-generating cases; just the reference-table citation for the 2
 lookup-only ones).
 

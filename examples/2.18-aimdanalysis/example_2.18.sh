@@ -85,7 +85,7 @@ mkdir -p "$OUT/basic-run"
 cp aimd.ANI aimd.fdf aimd.out aimd.XV "$OUT/basic-run/"
 cat <<'EOF'
 A plain run with no flags: the report prints to the console, but nothing
-is written to disk except references.bib (this IS a real SIESTA run, so
+is written to disk except stb_aimdAnalysis_references.bib (this IS a real SIESTA run, so
 the SIESTA citation is always written, unlike the --trajectory case
 further down).
 EOF
@@ -95,7 +95,7 @@ echo "\$ stb-aimdAnalysis --label aimd --no-intro"
 echo
 echo "Files written:"
 (cd "$OUT/basic-run" && ls)
-echo "(only references.bib -- no .dat/.gplot without --save-gnuplot; the report is always written)"
+echo "(only stb_aimdAnalysis_references.bib -- no .dat/.gplot without --save-gnuplot; the report is always written)"
 pause
 
 
@@ -364,7 +364,7 @@ Nine self-contained folders were generated under output/:
   thermo/          species-pair/    full-report/     trajectory/
 
 Only full-report/ has the persisted .txt report + .dat/.gplot files;
-the rest only ever write references.bib (SIESTA-input runs) or nothing
+the rest only ever write stb_aimdAnalysis_references.bib (SIESTA-input runs) or nothing
 at all (the generic --trajectory run and --list-atoms).
 
 Recap of what this walkthrough covered:

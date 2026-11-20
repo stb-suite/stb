@@ -141,7 +141,7 @@ output — `example_4.4.sh` proves this directly at the end.
   genuinely 1D-periodic, and spglib has no 1D rod-group classification) —
   the opposite contrast from `4.3-stb-slab/`, where it's the *bulk* input
   that lacks one.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_nanotube_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: chirality, mode,
   translation vector, `N_cells`, geometry (diameter/width, axial period),
@@ -175,7 +175,7 @@ output — `example_4.4.sh` proves this directly at the end.
   (`a` = 3.87 Å, 0.22 Å buckling between the 2 basis atoms) — for the
   `corrugated/` case.
 - `example_4.4.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_nanotube_references.bib`, and
   `stb_nanotube_report.txt`.
 
 ## Running the walkthrough
@@ -199,7 +199,7 @@ are skipped, with a hint, if the optional `ml` extra isn't installed):
 | `passivate/`           | A closed tube has 0 dangling bonds; a ribbon's two edges genuinely do  |
 | `ml-relax/`            | MACE pre-relaxation measurably releasing curvature strain               |
 | `corrugated/`          | A buckled (silicene-like) sheet rolls into a genuinely corrugated tube |
-| `full-report/`         | the report + the validation checklist + `references.bib`          |
+| `full-report/`         | the report + the validation checklist + `stb_nanotube_references.bib`          |
 
 ## Try it yourself
 

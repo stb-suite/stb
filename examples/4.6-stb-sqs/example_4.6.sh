@@ -277,11 +277,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_sqs_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_sqs_report.txt) includes the structure-validation checklist for the input
-and the SQS output, and a references.bib -- SIESTA plus icet, the library
+and the SQS output, and a stb_sqs_references.bib -- SIESTA plus icet, the library
 behind the SQS search itself:
 EOF
 mkdir -p "$OUT/full-report"
@@ -296,8 +296,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib -- SIESTA plus icet:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_sqs_references.bib -- SIESTA plus icet:"
+grep "^@" "$OUT/full-report/stb_sqs_references.bib"
 pause
 
 echo "=================================================================="
@@ -330,8 +330,8 @@ skipped if the optional 'ml' extra isn't installed):
   cluster-cutoffs/   instances/          sublattice-mgo/
   ml-relax/          full-report/
 
-Each has references.bib (SIESTA + icet, always); full-report/ additionally
-has stb_sqs_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_sqs_references.bib (SIESTA + icet, always); full-report/ additionally
+has stb_sqs_report.txt; ml-relax/'s stb_sqs_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -351,7 +351,7 @@ Recap of what this walkthrough covered:
     coordination geometry survives even though icet rebuilds the cell
   - --ml-relax pre-optimizing an SQS cell's inherently irregular local
     environment
-  - the structure-validation checklist, references.bib (now including
+  - the structure-validation checklist, stb_sqs_references.bib (now including
     icet), and
   - CLI and the interactive stb-suite menu building the same command
   - stb_sqs_report.txt is no longer written unless you ask for it

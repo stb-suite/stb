@@ -173,7 +173,7 @@ B -- interactive stb-suite menu:
   Select an option (0-7, or a tool code like 5.1.2): 3.1
 
 Every run always writes bands_gnuplot.dat + bands.gplot (the actual
-plot data -- run gnuplot on the .gplot for a PDF) and references.bib
+plot data -- run gnuplot on the .gplot for a PDF) and stb_bands_references.bib
 (SIESTA). The report is always saved to stb_bands_report.txt in the current folder.
 EOF
 mkdir -p "$OUT/full-report"
@@ -185,8 +185,8 @@ echo "\$ stb-bands --file semiconductor.bands --shift fermi --no-intro"
 echo "Report sections written to stb_bands_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_bands_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-bands run is post-processing a SIESTA output):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_bands_references.bib -- SIESTA (every stb-bands run is post-processing a SIESTA output):"
+grep "^@" "$OUT/full-report/stb_bands_references.bib"
 pause
 
 echo "=================================================================="
@@ -218,7 +218,7 @@ Five self-contained folders were generated under output/:
   gap-analysis/       metallic-threshold/   half-metallic/
   mesh-vs-line/       full-report/
 
-Each has bands_gnuplot.dat/bands.gplot/references.bib; full-report/
+Each has bands_gnuplot.dat/bands.gplot/stb_bands_references.bib; full-report/
 additionally has stb_bands_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
@@ -230,7 +230,7 @@ Recap of what this walkthrough covered:
     without, on a purpose-built synthetic fixture
   - --eig-file/--kp-file: why a k-mesh can catch a true VBM/CBM a 1-D
     k-path misses, and why the comparison can only go one direction
-  - bands_gnuplot.dat/bands.gplot/references.bib always written;
+  - bands_gnuplot.dat/bands.gplot/stb_bands_references.bib always written;
     the full numbered text report, always saved to stb_<tool>_report.txt
   - CLI and the interactive stb-suite menu building the same command
 

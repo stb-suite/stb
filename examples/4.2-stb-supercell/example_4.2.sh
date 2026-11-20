@@ -59,7 +59,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [9] SUMMARY
 & FILES -- [4] ML PRE-RELAXATION only appears with --ml-relax), a
 structure-validation checklist (atom proximity/lattice handedness/atomic
 density) both before and after the transformation, a before/after symmetry
-comparison table, and references.bib (SIESTA, plus MACE if --ml-relax was
+comparison table, and stb_supercell_references.bib (SIESTA, plus MACE if --ml-relax was
 used). A full text report (always written), MACE pre-relaxation
 (--ml-relax), and an interactive 3D view (--view) are all off by default.
 EOF
@@ -206,11 +206,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_supercell_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_supercell_report.txt) includes the structure-validation checklist for both the
-input structure and the final supercell, and a references.bib with SIESTA
+input structure and the final supercell, and a stb_supercell_references.bib with SIESTA
 (the output is a .fdf).
 EOF
 mkdir -p "$OUT/full-report"
@@ -224,8 +224,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_supercell_references.bib always written -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_supercell_references.bib"
 pause
 
 echo "=================================================================="
@@ -257,8 +257,8 @@ skipped if the optional 'ml' extra isn't installed):
   basic/         nonuniform/    reconstruction/
   mirrored/      ml-relax/      full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_supercell_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_supercell_references.bib; full-report/ additionally has
+stb_supercell_report.txt; ml-relax/'s stb_supercell_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -273,7 +273,7 @@ Recap of what this walkthrough covered:
   - a negative-determinant mirrored cell, and why it's physically identical
     here (Si is centrosymmetric) but wouldn't be for a chiral crystal
   - --ml-relax/--ml-relax-cell -- MACE pre-relaxation of the built supercell
-  - the structure-validation checklist (before AND after), references.bib,
+  - the structure-validation checklist (before AND after), stb_supercell_references.bib,
     and
   - CLI and the interactive stb-suite menu building the same command
 

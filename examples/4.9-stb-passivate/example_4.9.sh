@@ -208,11 +208,11 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_passivate_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_passivate_report.txt) includes the structure-validation checklist and a
-references.bib with SIESTA:
+stb_passivate_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
 cp "$OUT/_setup/term_term0.fdf" "$OUT/full-report/slab.fdf"
@@ -222,8 +222,8 @@ echo
 echo "Report sections written to stb_passivate_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_passivate_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_passivate_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_passivate_references.bib"
 pause
 
 echo "=================================================================="
@@ -255,8 +255,8 @@ skipped if the optional 'ml' extra isn't installed):
   good-termination/       bad-termination/       bond-length-override/
   symmetry-preserved/     ml-relax/              full-report/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_passivate_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_passivate_references.bib (SIESTA, always); full-report/ additionally has
+stb_passivate_report.txt; ml-relax/'s stb_passivate_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -272,7 +272,7 @@ Recap of what this walkthrough covered:
     preserves the crystal's full symmetry in the clean case
   - --ml-relax correcting the geometric heuristic, with the vacuum axis
     provably unchanged
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_passivate_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

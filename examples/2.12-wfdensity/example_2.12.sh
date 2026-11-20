@@ -217,7 +217,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_wfdensity_report.txt; --save-gnuplot writes the slice .dat + a real .gplot script -- both off
-by default, so a plain run only ever writes the .cube file + references.bib:
+by default, so a plain run only ever writes the .cube file + stb_wfdensity_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp siesta.bands.WFSX calc.fdf structure.fdf calc.out Cr.ion Cr.ion.xml S.ion S.ion.xml "$OUT/full-report/"
@@ -230,8 +230,8 @@ echo "      --spacing 0.2 --save-gnuplot --no-intro"
 echo "Report sections written to stb_wfdensity_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_wfdensity_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_wfdensity_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_wfdensity_references.bib"
 if command -v gnuplot > /dev/null; then
     (cd "$OUT/full-report" && gnuplot wfdensity_k139_b22_slice.gplot)
     echo "(rendered wfdensity_k139_b22_slice.pdf with the real, installed gnuplot)"
@@ -278,7 +278,7 @@ Six self-contained folders were generated under output/:
   basic-run/            label-plus-geometry/   vbm-cbm/
   slice-position/       grid-resolution/       full-report/
 
-Each has references.bib and a .cube file; the --save-gnuplot runs
+Each has stb_wfdensity_references.bib and a .cube file; the --save-gnuplot runs
 additionally have the slice .dat/.gplot, and full-report/ has
 stb_wfdensity_report.txt (every run writes one).
 
@@ -302,7 +302,7 @@ Recap of what this walkthrough covered:
     manual override
   - --spacing vs. the normalization warning, demonstrated flipping live
   - the numbered [0]...[6] report (always saved), --save-gnuplot (now
-    with a REAL .gplot script, previously missing entirely), references.bib
+    with a REAL .gplot script, previously missing entirely), stb_wfdensity_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA calculation:

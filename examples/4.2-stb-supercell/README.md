@@ -128,9 +128,9 @@ output — `example_4.2.sh` proves this directly at the end.
   `core.symmetry.layer_group_label` `stb-fetch`/`stb-2dstacking` already
   use), point group, and Hall symbol, for the input structure vs. the final
   supercell.
-- **`references.bib`** — SIESTA always (the output is a `.fdf`), plus the
-  MACE papers if `--ml-relax` was used. Merges with whatever
-  `references.bib` is already in the working directory.
+- **`stb_supercell_references.bib`** — SIESTA always (the output is a `.fdf`), plus the
+  MACE papers if `--ml-relax` was used. One file per run, never
+  overwritten; it also lists every library the run loaded.
 - **A provenance header** written into the output `.fdf` itself: the input
   file, the transformation matrix and its determinant, the atom-count
   change, and (with `--ml-relax`) the MACE model used plus its convergence
@@ -165,7 +165,7 @@ output — `example_4.2.sh` proves this directly at the end.
   (`a` = 2.46 Å, vacuum along `c`) for the non-orthogonal reconstruction
   case.
 - `example_4.2.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_supercell_references.bib`, and
   `stb_supercell_report.txt`.
 
 ## Running the walkthrough
@@ -187,7 +187,7 @@ installed):
 | `reconstruction/`    | Full row-major 3×3 matrix — graphene's √3×√3 R30° reconstruction cell |
 | `mirrored/`          | A negative-determinant (mirrored) cell — still valid, and physically identical here since Si is centrosymmetric |
 | `ml-relax/`          | `--ml-relax`/`--ml-relax-cell` — MACE pre-relaxation of the built supercell |
-| `full-report/`       | the report + the validation checklist + `references.bib`        |
+| `full-report/`       | the report + the validation checklist + `stb_supercell_references.bib`        |
 
 ## Try it yourself
 

@@ -173,7 +173,7 @@ output — `example_4.6.sh` proves this directly at the end.
 - **A before/after symmetry comparison table** — crystal system, 3D space
   group, layer group, point group, Hall symbol — comparing the ordered
   input structure against the final (disordered) SQS structure.
-- **`references.bib`** — SIESTA always, plus icet (the SQS search
+- **`stb_sqs_references.bib`** — SIESTA always, plus icet (the SQS search
   library itself), plus the MACE papers if `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: the disordered
   sublattice/composition, the scaling used, the SQS search method and
@@ -208,7 +208,7 @@ output — `example_4.6.sh` proves this directly at the end.
   with `fcc_ni.fdf`) — already has two species, used to show
   `--sublattice` disordering only one of them.
 - `example_4.6.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_sqs_references.bib`, and
   `stb_sqs_report.txt`.
 
 ## Running the walkthrough
@@ -231,7 +231,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `instances/`           | Parallel independent searches, a second global-optimum cross-check     |
 | `sublattice-mgo/`      | (Mg,Ni)O: disordering only Mg, verifying O's bonding geometry survives |
 | `ml-relax/`            | Generic MACE pre-relaxation of the found SQS structure                 |
-| `full-report/`         | the report + the validation checklist + `references.bib`          |
+| `full-report/`         | the report + the validation checklist + `stb_sqs_references.bib`          |
 
 ## Try it yourself
 

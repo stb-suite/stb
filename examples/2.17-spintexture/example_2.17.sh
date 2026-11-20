@@ -141,7 +141,7 @@ cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_spintexture_report.txt; --save-gnuplot writes spintexture_S{x,y,z}.dat + a real .gplot
 script -- both off by default, so a plain run only ever writes
-references.bib:
+stb_spintexture_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp IsolatedO.HSX IsolatedO.selected.WFSX "$OUT/full-report/"
@@ -149,7 +149,7 @@ echo "\$ stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX
 (cd "$OUT/full-report" && stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX \
     --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only references.bib -- no spintexture_S{x,y,z}.dat/.gplot, no stb_spintexture_report.txt)"
+echo "(only stb_spintexture_references.bib -- no spintexture_S{x,y,z}.dat/.gplot, no stb_spintexture_report.txt)"
 echo
 echo "\$ stb-spintexture --wfsx IsolatedO.selected.WFSX --hsx-file IsolatedO.HSX \\"
 echo "      --save-gnuplot --no-intro"
@@ -209,7 +209,7 @@ Five self-contained folders were generated under output/:
   basic-run/       accuracy/       label-plus-hsx/
   fermi-shift/     full-report/
 
-Each has references.bib; full-report/ additionally has
+Each has stb_spintexture_references.bib; full-report/ additionally has
 spintexture_S{x,y,z}.dat/.gplot/.pdf and stb_spintexture_report.txt.
 
 Recap of what this walkthrough covered:

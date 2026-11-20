@@ -270,7 +270,7 @@ output — `example_2.4.sh` proves this directly at the end.
 - **A numbered report** (`[0] RUN METADATA` … `[11] SUMMARY & FILES`)
   printed to the console.
 - **`rdf.dat`** — the full g(r) curve, unless `--no-rdf` is given.
-- **`references.bib`** — SIESTA (every structure file analyzed here is
+- **`stb_structural_references.bib`** — SIESTA (every structure file analyzed here is
   SIESTA input/output).
 
 ## Optional (off by default)
@@ -310,7 +310,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `mode-mean/`          | Full-structure analysis: ECN (4 methods) per species, bond distances/angles, distortion, connectivity |
 | `mode-list/`          | `--mode list --list 1,7`: ECN/distortion scoped to 2 atoms, same-species distance/connectivity still whole-structure |
 | `rdf/`                | g(r), and hand-integrating its first O-Sn peak to independently recover the ECN section's coordination number |
-| `full-report/`        | The report file (`stb_structural_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_structural_report.txt`), `stb_structural_references.bib` |
 
 ## Try it yourself
 
@@ -330,7 +330,7 @@ stb-structural --file my_calc.fdf --format fdf --mode list --list 12,45
 | `--format`         | `fdf` (SIESTA input) or `struct_out` (post-relaxation `.STRUCT_OUT`).  |
 | `--mode`           | `mean` (whole structure, per species) or `list` (specific atoms).      |
 | `--list`           | Comma-separated 1-based atom indices. Required with `--mode list`.     |
-| `-o/--output-dir`  | Where to write `rdf.dat`/`references.bib`. |
+| `-o/--output-dir`  | Where to write `rdf.dat`/`stb_structural_references.bib`. |
 | `--no-rdf`         | Skip the radial distribution function (`rdf.dat` not written).         |
 | `--rdf-rmax`       | g(r) cutoff radius, Å (default `10.0`).                                |
 

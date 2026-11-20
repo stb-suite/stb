@@ -110,7 +110,7 @@ Every run prints a numbered report to the console:
 | `[1] CHARGE DENSITY` | integrated total charge (sanity check), mode-specific details, files written |
 | `[2] SPIN DENSITY` | (conditional — auto-detected, or `--spin`) integrated net moment, mode-specific details, files written |
 | `[3] CUBE FILE` | (conditional, `--cube`) |
-| `[4] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[4] REFERENCES` | writes `stb_density_references.bib` (SIESTA) |
 | `[5] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_density_report.txt` in the current folder (`_1`, `_2`, ... when
@@ -160,7 +160,7 @@ output — `example_2.8.sh` proves this directly at the end.
 - `example_2.8.sh` — the guided walkthrough (**not** an automated test —
   see `test/2-analysis/8-density/test.sh` for that).
 - `.gitignore` — excludes generated `.dat`/`.gplot`/`.cube` files,
-  `references.bib`, the report, and `output/`.
+  `stb_density_references.bib`, the report, and `output/`.
 
 ## Running the walkthrough
 
@@ -177,7 +177,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `basic-slice/`        | A 2D slice of Sn₃O₄'s total charge density |
 | `spin-auto/`          | The O₂ spin-polarization auto-detection: correct total (12 e) and net moment (2 e) |
 | `rho2-diff/`          | `--rho2`: an (admittedly trivial, self-subtracted) charge-transfer difference, symmetric colorbar |
-| `full-report/`        | `--save-gnuplot`, the report, `references.bib` |
+| `full-report/`        | `--save-gnuplot`, the report, `stb_density_references.bib` |
 
 ## Try it yourself
 
@@ -200,7 +200,7 @@ stb-density --label my_calc --cube
 | Flag                | Meaning                                                                |
 |-----------------------|-------------------------------------------------------------------------|
 | `-l/--label`        | SystemLabel (looks for `<label>.RHO`).                                  |
-| `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                  |
+| `-o/--output-dir`   | Where all generated files (and `stb_density_references.bib`) land.                  |
 | `--3d`/`--profile`  | 3D point cloud / 1D planar-averaged profile (default: 2D slice).       |
 | `-a/--axis`         | Axis normal to the cut plane, or the profile axis (0/1/2).             |
 | `-p/--pos`          | Slice position in Å (default: cell center).                            |

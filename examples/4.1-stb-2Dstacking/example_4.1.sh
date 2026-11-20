@@ -81,7 +81,7 @@ Every run always writes a numbered report ([0] RUN METADATA ... [6] SUMMARY
 structure-validation checklist (atom proximity/lattice handedness/atomic
 density) for every heterostructure it builds, a symmetry table that
 includes the physically correct LAYER GROUP (not just the 3D space group
-of the vacuum-padded cell), and references.bib (SIESTA + the ZSL algorithm
+of the vacuum-padded cell), and stb_2Dstacking_references.bib (SIESTA + the ZSL algorithm
 paper). A full text report (always written), MACE pre-relaxation
 (--ml-relax), and an interactive 3D view of the final structure(s)
 (--view) are all off by default.
@@ -260,12 +260,12 @@ grep "Layer Group" "$OUT/custom-shift/console.log"
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_2Dstacking_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_2Dstacking_report.txt) includes the structure-validation checklist -- atom
 proximity, lattice handedness, atomic density -- for every heterostructure
-built, and a references.bib with SIESTA plus the ZSL algorithm paper
+built, and a stb_2Dstacking_references.bib with SIESTA plus the ZSL algorithm paper
 (Zur & McGill, 1984), the citation this tool's method itself is built on.
 EOF
 mkdir -p "$OUT/full-report"
@@ -279,8 +279,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA + the ZSL algorithm paper:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_2Dstacking_references.bib always written -- SIESTA + the ZSL algorithm paper:"
+grep "^@" "$OUT/full-report/stb_2Dstacking_references.bib"
 pause
 
 echo "=================================================================="
@@ -354,8 +354,8 @@ skipped if the optional 'ml' extra isn't installed):
   basic/       batch-sym/     gap-range/     strain-modes/
   twist/       custom-shift/  full-report/   ml-relax/
 
-Each has references.bib; full-report/ additionally has
-stb_2Dstacking_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_2Dstacking_references.bib; full-report/ additionally has
+stb_2Dstacking_report.txt; ml-relax/'s stb_2Dstacking_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -376,7 +376,7 @@ Recap of what this walkthrough covered:
     -symmetry Moire cell
   - -tx/-ty for an arbitrary fractional shift and --vacuum to override the
     inherited vacuum thickness
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_2Dstacking_references.bib, and
   - the Layer Group row in the symmetry table -- the physically correct
     classification for a 2D-periodic structure, alongside the 3D space
     group of the vacuum-padded cell

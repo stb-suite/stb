@@ -294,7 +294,7 @@ relax it first), a **fragment split** and your **template** (`--calc`, default `
     chargediff_manifest.json          the split, read by Stage 2
     chargediff_fragments.png          with --png: the system projected on xy/xz/yz, atoms coloured by fragment
     (stb_chargediffPrep_report.txt goes to the folder you run it from)
-    references.bib
+    (its references, stb_chargediffPrep_references.bib, too)
 ```
 
 Three ways to split:

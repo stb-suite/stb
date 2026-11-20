@@ -155,7 +155,7 @@ one extra first choice (single file vs. a whole folder) before the usual
   printed to the console.
 - **The filtered `.dat` file(s)** — one for `--file`, a mirrored tree for
   `--dir`.
-- **`references.bib`** — SIESTA (every DOS file processed here, directly
+- **`stb_convdos_references.bib`** — SIESTA (every DOS file processed here, directly
   or via `stb-dos`, is ultimately derived from a SIESTA calculation).
 
 ## Optional (off by default)
@@ -201,7 +201,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `basic-broadening/`    | Sharp spikes -> smooth peaks, the numbered report, the conservation check |
 | `sigma-vs-fwhm/`       | `--sigma 50` and the equivalent `--fwhm 117.741` give the identical broadening |
 | `dir-mode/`            | A real `stb-dos` output tree broadened in one `--dir` command, mirrored structure, one skipped-file example |
-| `full-report/`         | The report file (`stb_convdos_report.txt`), `references.bib` |
+| `full-report/`         | The report file (`stb_convdos_report.txt`), `stb_convdos_references.bib` |
 
 ## Try it yourself
 

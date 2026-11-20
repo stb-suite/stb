@@ -187,7 +187,7 @@ Every run always prints the numbered [0]...[5] report to the console.
 It is always saved to stb_dos_report.txt; --save-gnuplot writes ONE .gplot script per output category (total,
 atom, species) -- one overlay plot per category instead of one file per
 individual atom/species -- both off by default, so a plain run only ever
-writes the .dat files and references.bib:
+writes the .dat files and stb_dos_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp example.PDOS.xml "$OUT/full-report/"
@@ -203,8 +203,8 @@ echo "orbital column; dos_per_atom/species.gplot overlay one curve per (atom/spe
 echo "pair -- orbitals are never summed together, even when grouped into one script):"
 find "$OUT/full-report" -name "*.gplot" | sed "s#$OUT/##" | sort
 echo
-echo "references.bib -- SIESTA (every stb-dos run is post-processing a SIESTA output):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_dos_references.bib -- SIESTA (every stb-dos run is post-processing a SIESTA output):"
+grep "^@" "$OUT/full-report/stb_dos_references.bib"
 pause
 
 echo "=================================================================="
@@ -311,7 +311,7 @@ Recap of what this walkthrough covered:
   - why the DOS-estimate fallback needs an explicit --estimate-from-dos
     opt-in, and prints an explicit approximation warning
   - --label as shorthand for the PDOS.xml AND its .bands/.EIG lookup
-  - the numbered [0]...[5] report (always saved), and references.bib
+  - the numbered [0]...[5] report (always saved), and stb_dos_references.bib
   - --save-gnuplot/--view are PER OUTPUT CATEGORY (total/atom/species),
     not per individual .dat file, but NEVER sum orbitals together: on a
     3-atom/2-species/2-orbital fixture, ONE script/figure per category

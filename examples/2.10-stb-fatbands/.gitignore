@@ -3,5 +3,5 @@ fatbands_*.dat
 fatbands*.gplot
 fatbands*.pdf
 stb_fatbands_report.txt
-references.bib
+stb_*_references*.bib
 stb_*_report*.txt

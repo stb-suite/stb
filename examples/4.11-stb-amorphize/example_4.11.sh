@@ -303,7 +303,7 @@ PYEOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, symmetry, references.bib"
+echo " output/full-report/  --  the report, symmetry, stb_amorphize_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_amorphize_report.txt) includes a [6] SYMMETRY ANALYSIS BEFORE/AFTER table.
@@ -332,8 +332,8 @@ echo
 echo "Provenance header written into the output .fdf:"
 head -4 "$OUT/full-report/amorphous.fdf"
 echo
-echo "references.bib -- SIESTA + MACE + MACE-MP (foundation model was used):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_amorphize_references.bib -- SIESTA + MACE + MACE-MP (foundation model was used):"
+grep "^@" "$OUT/full-report/stb_amorphize_references.bib"
 pause
 
 echo "=================================================================="
@@ -366,7 +366,7 @@ Seven self-contained folders were generated under output/:
   vacuum-rejected/               save-data/
   save-traj/                     full-report/
 
-Each has references.bib; full-report/ additionally has
+Each has stb_amorphize_references.bib; full-report/ additionally has
 stb_amorphize_report.txt; save-data/ additionally has the .dat/.gplot
 (and .pdf, if gnuplot is installed) diagnostics pair.
 
@@ -385,7 +385,7 @@ Recap of what this walkthrough covered:
     axis across melt and quench via gnuplot 'index' blocks
   - --save-traj: a multi-frame trajectory (xsf/pdb/xyz) of the whole MD
     run, for viewing in OVITO/VMD
-  - the symmetry-collapses-to-a-low-symmetry-group diagnostic, references.bib,
+  - the symmetry-collapses-to-a-low-symmetry-group diagnostic, stb_amorphize_references.bib,
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the input

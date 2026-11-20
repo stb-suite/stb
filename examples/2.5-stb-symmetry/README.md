@@ -105,7 +105,7 @@ symmetry, same reduction `stb-unitcell --mode refined` performs. Refines
 against whichever classification is physically meaningful for the
 structure's dimensionality (3D space group / layer group / point group).
 The file is written **inside `--output-dir`** (a plain filename, not a
-path of its own) alongside `references.bib`/the report, and carries a
+path of its own) alongside `stb_symmetry_references.bib`/the report, and carries a
 header documenting exactly how it was generated — source file/format,
 `--symprec`/`--angle-tolerance`, and which group (space/layer/point) it
 was refined against — so the file is self-describing even opened on its
@@ -157,7 +157,7 @@ Every run prints a numbered report to the console:
 | `[7] ATOMIC SITES` | per-atom fractional coordinates + distortion |
 | `[8] SYMMETRY OPERATIONS` | (conditional, on unless `--no-operations`) the full x,y,z-notation list |
 | `[9] SYMMETRY COMPARISON` | (conditional, `--compare-to`) space/layer/point group comparison between two structures |
-| `[10] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[10] REFERENCES` | writes `stb_symmetry_references.bib` (SIESTA) |
 | `[11] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_symmetry_report.txt` in the current folder (`_1`, `_2`, ... when
@@ -225,7 +225,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `layer-group/`        | Why a 2D slab needs LAYER GROUP instead of (or in addition to) SPACE GROUP |
 | `point-group/`        | An isolated water molecule's POINT GROUP (C2v) |
 | `limitation-wire/`    | The documented "no rod group" limitation for a 1D wire |
-| `full-report/`        | The report file (`stb_symmetry_report.txt`), `references.bib` |
+| `full-report/`        | The report file (`stb_symmetry_report.txt`), `stb_symmetry_references.bib` |
 
 ## Try it yourself
 
@@ -253,7 +253,7 @@ stb-symmetry --file my_relaxed.STRUCT_OUT --format struct_out --scan-symprec
 | `--compare-to`       | Also analyze a second structure and compare symmetry.                  |
 | `--compare-format`   | File format of `--compare-to` (required if given).                     |
 | `--write-refined`    | Write the symmetry-refined structure as this filename, inside `--output-dir`, with a provenance header. |
-| `-o/--output-dir`    | Where to write `references.bib`. |
+| `-o/--output-dir`    | Where to write `stb_symmetry_references.bib`. |
 | `--view`             | Open an interactive 3D view (via ASE) after the report is written.     |
 
 ## What's next

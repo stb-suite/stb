@@ -279,11 +279,11 @@ PYEOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_nanotube_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (always written to stb_nanotube_report.txt) includes the structure-validation checklist for the input
-monolayer and the output tube/ribbon, and a references.bib with SIESTA.
+monolayer and the output tube/ribbon, and a stb_nanotube_references.bib with SIESTA.
 EOF
 mkdir -p "$OUT/full-report"
 cp graphene.fdf "$OUT/full-report/"
@@ -296,8 +296,8 @@ echo
 echo "Validation checklist (one row shown):"
 grep -m1 "Atom proximity" "$OUT/full-report/console.log"
 echo
-echo "references.bib always written -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_nanotube_references.bib always written -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_nanotube_references.bib"
 pause
 
 echo "=================================================================="
@@ -330,8 +330,8 @@ skipped if the optional 'ml' extra isn't installed):
   curvature-trend/  ribbon/            passivate/
   ml-relax/         corrugated/        full-report/
 
-Each has references.bib; full-report/ additionally has
-stb_nanotube_report.txt; ml-relax/'s references.bib also cites the MACE
+Each has stb_nanotube_references.bib; full-report/ additionally has
+stb_nanotube_report.txt; ml-relax/'s stb_nanotube_references.bib also cites the MACE
 architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:

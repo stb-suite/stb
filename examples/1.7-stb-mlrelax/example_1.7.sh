@@ -133,7 +133,7 @@ B -- interactive stb-suite menu:
 
 Every run always writes a structure-validation section (atom-proximity,
 left-handed-cell, density, space-group checks -- the same ones
-stb-inputfile/stb-fetch already run), references.bib and the full text report
+stb-inputfile/stb-fetch already run), stb_mlrelax_references.bib and the full text report
 (stb_mlrelax_report.txt). The raw convergence trace (--save-data) and an
 interactive before/after 3D view (--view) are off by default.
 EOF
@@ -305,7 +305,7 @@ EOF
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, --save-data, references.bib"
+echo " output/full-report/  --  the report, --save-data, stb_mlrelax_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 Two extra physical quantities show up in [5] BEFORE/AFTER COMPARISON that
@@ -338,9 +338,9 @@ echo
 echo "Report sections written to stb_mlrelax_report.txt:"
 grep -E "^\[[0-9]\]" "$OUT/full-report/stb_mlrelax_report.txt"
 echo
-echo "references.bib always written -- SIESTA (output is a .fdf) + the MACE"
+echo "stb_mlrelax_references.bib always written -- SIESTA (output is a .fdf) + the MACE"
 echo "architecture/foundation-model papers (this run used the foundation model):"
-grep "^@" "$OUT/full-report/references.bib"
+grep "^@" "$OUT/full-report/stb_mlrelax_references.bib"
 echo
 echo "Convergence trace files:"
 ls "$OUT/full-report/"*.dat "$OUT/full-report/"*.png
@@ -375,7 +375,7 @@ Six self-contained folders were generated under output/:
   positions-only/   relax-cell/   bad-structure/
   model-comparison/   optimizer-comparison/   full-report/
 
-Each has references.bib; full-report/ additionally has stb_mlrelax_report.txt
+Each has stb_mlrelax_references.bib; full-report/ additionally has stb_mlrelax_report.txt
 and the *_relax_convergence.dat/.png convergence trace.
 
 Recap of what this walkthrough covered:
@@ -389,7 +389,7 @@ Recap of what this walkthrough covered:
     malformed input, and why the repulsive energy there is so large
   - the small/medium/large speed-vs-accuracy tradeoff, with real numbers
   - space group and stress as extra physical diagnostics in the report
-  - references.bib, the report file and --save-data
+  - stb_mlrelax_references.bib, the report file and --save-data
   - CLI and the interactive stb-suite menu producing identical results
 
 Not exercised by this script (needs a display): --view opens an interactive

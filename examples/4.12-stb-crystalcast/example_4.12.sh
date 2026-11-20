@@ -132,7 +132,7 @@ B -- interactive stb-suite menu:
 
 Every run always writes a numbered report ([0] RUN METADATA ... [8]
 SUMMARY & FILES), structure validation, a symmetry table, and
-references.bib (SIESTA + PyXtal always; + MACE/MACE-MP with --ml-rank). The
+stb_crystalcast_references.bib (SIESTA + PyXtal always; + MACE/MACE-MP with --ml-rank). The
 full text report is always written (stb_crystalcast_report.txt); an
 interactive 3D view (--view) is off by default.
 EOF
@@ -145,7 +145,7 @@ cat <<'EOF'
 --group 225 (Fm-3m, rock salt) + 4 Ni + 8 O -- pyxtal finds a Wyckoff
 combination compatible with that group and composition, and draws the
 free coordinates randomly. The report also proves the standardized
-report/provenance-header/references.bib conventions from here on:
+report/provenance-header/stb_crystalcast_references.bib conventions from here on:
 EOF
 mkdir -p "$OUT/generate"
 echo
@@ -158,8 +158,8 @@ echo
 echo "Provenance header written into nio.fdf:"
 head -3 "$OUT/generate/nio.fdf"
 echo
-echo "references.bib (SIESTA + PyXtal, no MACE -- --ml-rank wasn't used):"
-grep "^@" "$OUT/generate/references.bib"
+echo "stb_crystalcast_references.bib (SIESTA + PyXtal, no MACE -- --ml-rank wasn't used):"
+grep "^@" "$OUT/generate/stb_crystalcast_references.bib"
 pause
 
 echo "=================================================================="
@@ -324,7 +324,7 @@ Seven or eight self-contained folders were generated under output/
   substitute/               subgroup-supergroup/
   ml-rank/
 
-Each has references.bib; generate/ additionally has stb_crystalcast_report.txt.
+Each has stb_crystalcast_references.bib; generate/ additionally has stb_crystalcast_report.txt.
 
 Recap of what this walkthrough covered:
   - generate mode vs. stb-crystalbuilder, built live: the exact same real
@@ -336,7 +336,7 @@ Recap of what this walkthrough covered:
   - --subgroup/--supergroup: the only symmetry-breaking/-restoring search
     in the suite, verified as genuine inverses on the same structure
   - --ml-rank + --model/--custom-model: MACE-based relaxed-energy screening
-  - the provenance header, references.bib (SIESTA + PyXtal, + MACE with
+  - the provenance header, stb_crystalcast_references.bib (SIESTA + PyXtal, + MACE with
     --ml-rank), and
   - CLI and the interactive stb-suite menu building the same command
 

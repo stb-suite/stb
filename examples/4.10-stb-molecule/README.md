@@ -117,7 +117,7 @@ output — `example_4.10.sh` proves this directly at the end.
 - **Point-group symmetry detection**, before and after, in a dedicated
   `[5] SYMMETRY ANALYSIS` table (see the theory above for why this is a
   point group, not a space group).
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_molecule_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: the molecule
   name, vacuum padding, detected point group, and MACE convergence/energy
@@ -144,7 +144,7 @@ output — `example_4.10.sh` proves this directly at the end.
 - `example_4.10.sh` — the guided walkthrough (see below). No input
   fixtures needed — like `4.8-stb-crystalbuilder/`, everything is built
   from `--name`/`--vacuum` flags, not read from a structure file.
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_molecule_references.bib`, and
   `stb_molecule_report.txt`.
 
 ## Running the walkthrough
@@ -164,7 +164,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `unknown-name-suggestions/`    | `--list`, a case-insensitive "did you mean", and a genuine typo suggestion |
 | `vacuum-and-dimensionality/`   | The real pitfall: `--vacuum` below the detection threshold fools the dimensionality check |
 | `ml-relax-symmetry-preserved/` | MACE pre-relaxation of methane, with `Td` proven unchanged before/after |
-| `full-report/`                 | the report + `references.bib`                                     |
+| `full-report/`                 | the report + `stb_molecule_references.bib`                                     |
 
 ## Try it yourself
 

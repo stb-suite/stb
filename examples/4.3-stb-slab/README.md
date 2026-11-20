@@ -113,9 +113,8 @@ output — `example_4.3.sh` proves this directly at the end.
   bulk structure vs. that slab. The bulk always reports `Layer Group: N/A
   (not 2D-periodic)`; the slab (always genuinely 2D-periodic by
   construction) always gets a real one — see `basic/` below.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
-  `--ml-relax` was used. Merges with whatever `references.bib` is already
-  in the working directory.
+- **`stb_slab_references.bib`** — SIESTA always, plus the MACE papers if
+  `--ml-relax` was used. One file per run, never overwritten; it also lists every library the run loaded.
 - **A provenance header** written into every output `.fdf`: the input file,
   Miller index, termination index (polar/non-polar, symmetric/asymmetric),
   passivation detail if used, and MACE convergence/energy if `--ml-relax`
@@ -157,7 +156,7 @@ output — `example_4.3.sh` proves this directly at the end.
   lattice, 2-atom basis), conventional 8-atom cubic cell (`a` = 5.64 Å,
   space group Fm-3m No. 225) — ionic, for the polar-surface caveat.
 - `example_4.3.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_slab_references.bib`, and
   `stb_slab_report.txt`.
 
 ## Running the walkthrough
@@ -179,7 +178,7 @@ installed):
 | `polar-caveat/`      | NaCl(100)/(111) both report `Polar: No` through stb-slab — the oxidation-state gotcha, proven live |
 | `passivate/`         | Si(111), `--passivate` — 8/8 dangling bonds genuinely resolved with H  |
 | `ml-relax/`          | Si(111), `--ml-relax` — measured surface relaxation                    |
-| `full-report/`       | the report + the validation checklist + `references.bib`         |
+| `full-report/`       | the report + the validation checklist + `stb_slab_references.bib`         |
 
 ## Try it yourself
 

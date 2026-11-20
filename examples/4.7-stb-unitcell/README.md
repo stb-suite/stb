@@ -137,7 +137,7 @@ output — `example_4.7.sh` proves this directly at the end.
 - **A before/after symmetry comparison table** — crystal system, 3D space
   group, layer group, point group, Hall symbol — expected (and verified)
   to match exactly, since cell reduction doesn't change the crystal.
-- **`references.bib`** — SIESTA always, plus the MACE papers if
+- **`stb_unitcell_references.bib`** — SIESTA always, plus the MACE papers if
   `--ml-relax` was used.
 - **A provenance header** written into the output `.fdf`: the mode used,
   the detected space group, the reduction factor, and MACE
@@ -173,7 +173,7 @@ output — `example_4.7.sh` proves this directly at the end.
 - `graphene.fdf` — 2D monolayer graphene (vacuum along `c`), for the
   `vacuum-warning/` case.
 - `example_4.7.sh` — the guided walkthrough (see below).
-- `.gitignore` — excludes `output/`, `references.bib`, and
+- `.gitignore` — excludes `output/`, `stb_unitcell_references.bib`, and
   `stb_unitcell_report.txt`.
 
 ## Running the walkthrough
@@ -196,7 +196,7 @@ is skipped, with a hint, if the optional `ml` extra isn't installed):
 | `symprec-sensitivity/`      | The same noisy structure at two tolerances: Fm-3m vs. P1           |
 | `vacuum-warning/`           | The vacuum-axis caveat and the origin/relabeling caveat on graphene |
 | `ml-relax/`                 | Generic MACE pre-relaxation of the reduced cell                    |
-| `full-report/`              | the report + the validation checklist + `references.bib`      |
+| `full-report/`              | the report + the validation checklist + `stb_unitcell_references.bib`      |
 
 ## Try it yourself
 

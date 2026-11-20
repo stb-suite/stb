@@ -245,12 +245,12 @@ fi
 pause
 
 echo "=================================================================="
-echo " output/full-report/  --  the report, validation, references.bib"
+echo " output/full-report/  --  the report, validation, stb_crystalbuilder_references.bib"
 echo "=================================================================="
 cat <<'EOF'
 The full numbered report (also written to stb_crystalbuilder_report.txt
 with) includes the structure-validation checklist and a
-references.bib with SIESTA:
+stb_crystalbuilder_references.bib with SIESTA:
 EOF
 mkdir -p "$OUT/full-report"
 echo "\$ stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 --no-intro"
@@ -260,8 +260,8 @@ echo
 echo "Report sections written to stb_crystalbuilder_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_crystalbuilder_report.txt"
 echo
-echo "references.bib -- SIESTA:"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_crystalbuilder_references.bib -- SIESTA:"
+grep "^@" "$OUT/full-report/stb_crystalbuilder_references.bib"
 pause
 
 echo "=================================================================="
@@ -333,8 +333,8 @@ skipped if the optional 'ml' extra isn't installed):
   reduce-to-primitive/       out-of-range-error/     ml-relax/
   full-report/               bulk-graphite-to-slab/
 
-Each has references.bib (SIESTA, always); full-report/ additionally has
-stb_crystalbuilder_report.txt; ml-relax/'s references.bib also cites the
+Each has stb_crystalbuilder_references.bib (SIESTA, always); full-report/ additionally has
+stb_crystalbuilder_report.txt; ml-relax/'s stb_crystalbuilder_references.bib also cites the
 MACE architecture/foundation-model papers.
 
 Recap of what this walkthrough covered:
@@ -355,7 +355,7 @@ Recap of what this walkthrough covered:
   - the fixed "Bad international symbol" bug: out-of-range space group
     numbers now give a clear, direct error message
   - --ml-relax pre-optimizing the final structure
-  - the structure-validation checklist, references.bib, and
+  - the structure-validation checklist, stb_crystalbuilder_references.bib, and
   - CLI and the interactive stb-suite menu building the same command
 
 Not exercised by this script (needs a display): --view opens the built

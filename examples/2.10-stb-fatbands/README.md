@@ -165,7 +165,7 @@ tool in this suite uses:
 | `[2] BAND GAP ANALYSIS (k-path)` | VBM/CBM, direct/indirect gap, gap type — spin-resolved (+ half-metallic flag) for `nspin=2` |
 | `[3] ORBITAL PROJECTION` | categories found/used, `l > 3` exclusions (if any), spin-split note, and a per-category table (orbital count, mean/max weight) |
 | `[4] WRITING OUTPUT FILES` | whether `fatbands_<category>.dat`/`.gplot` were written |
-| `[5] REFERENCES` | writes `references.bib` (SIESTA) |
+| `[5] REFERENCES` | writes `stb_fatbands_references.bib` (SIESTA) |
 | `[6] SUMMARY & FILES` | status and a recap of every file written |
 
 - **Report** — always saved to `stb_fatbands_report.txt` in the current folder (`_1`, `_2`, ... when
@@ -258,7 +258,7 @@ by wiping its own `output/`. Self-contained cases are generated:
 | `category-filter/`         | `--category` restricting the output to specific species/orbital combinations |
 | `accuracy-fallback/`       | No `.HSX` available: the approximate (`\|c\|^2`) fallback, via `--geometry-file` |
 | `spin-polarized/`          | The real spin-polarized fixture: spin-resolved gap analysis AND `<category>_up`/`<category>_down` splitting |
-| `full-report/`             | `--save-gnuplot`, the report, `references.bib` |
+| `full-report/`             | `--save-gnuplot`, the report, `stb_fatbands_references.bib` |
 
 ## Try it yourself
 
@@ -287,7 +287,7 @@ stb-fatbands --label my_magnetic_calc --shift fermi --view
 | `--projection`      | `l` / `ml` / `atom` / `species` / `species_l` (default).               |
 | `--category`        | Restrict output to specific category values (default: all found).      |
 | `--k-tol`           | `.bands`/`.WFSX` eigenvalue cross-check tolerance, eV (default `0.001`).|
-| `-o/--output-dir`   | Where all generated files (and `references.bib`) land.                 |
+| `-o/--output-dir`   | Where all generated files (and `stb_fatbands_references.bib`) land.                 |
 | `--save-gnuplot`    | Also write `fatbands_<category>.dat`/`fatbands.gplot`.                 |
 | `--view`            | Show an interactive matplotlib preview.                                |
 

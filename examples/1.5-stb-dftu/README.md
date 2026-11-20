@@ -41,7 +41,7 @@ pseudopotential, and the basis set (screening, hybridization with
 neighboring ligands all shift it). `stb-dftu` bundles one literature table
 — **Wang, Maxisch & Ceder, Phys. Rev. B 73, 195107 (2006)**, the Materials
 Project's own GGA+U oxide calibration, and the exact reference this tool
-writes to `references.bib` — purely as a starting-point *sanity check*,
+writes to `stb_dftu_references.bib` — purely as a starting-point *sanity check*,
 never a validated value. You always have to pass `--u` explicitly, or opt
 in with `--use-reference`.
 
@@ -94,7 +94,7 @@ prompts. `example_1.5.sh` proves the CLI and the menu agree.
 ```
 
 Every case is generated each into its own folder
-under `output/` — `stb_dftu_report.txt` + `references.bib`:
+under `output/` — `stb_dftu_report.txt` + `stb_dftu_references.bib`:
 
 | Folder                    | Command (conceptually)                                          |
 |----------------------------|-------------------------------------------------------------------|
@@ -119,7 +119,7 @@ reference), **Fe** (a metal *with* one), and **O** (a non-metal).
 
 ### `list-reference/`/`suggest/` — lookups only
 
-Neither generates a block, so neither's `references.bib` gets a SIESTA
+Neither generates a block, so neither's `stb_dftu_references.bib` gets a SIESTA
 citation (nothing SIESTA-bound was produced) — just the Wang/Maxisch/Ceder
 reference-table citation.
 
@@ -157,7 +157,7 @@ stb-dftu (--species <label>... --u <eV>... | --fdf <path> [--use-reference])
 - **Report** — always saved to `stb_dftu_report.txt` in the current folder (`_1`, `_2`, ... when
   that name is taken); there is no option for it.
 
-`references.bib` is always written — there's no flag for it.
+`stb_dftu_references.bib` is always written — there's no flag for it.
 
 Run `stb-dftu --help` for the full list of options.
 

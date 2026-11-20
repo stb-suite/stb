@@ -3,6 +3,6 @@ sts.dat
 sts.gplot
 sts.pdf
 stb_sts_report.txt
-references.bib
+stb_*_references*.bib
 calc.out
 stb_*_report*.txt

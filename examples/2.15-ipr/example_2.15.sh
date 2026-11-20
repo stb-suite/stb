@@ -194,7 +194,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
 It is always saved to stb_ipr_report.txt; --save-gnuplot writes ipr.dat + a real .gplot script -- both off by
-default, so a plain run only ever writes references.bib:
+default, so a plain run only ever writes stb_ipr_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp Sn3O4.bands Sn3O4.bands.WFSX Sn3O4.HSX "$OUT/full-report/"
@@ -202,7 +202,7 @@ echo "\$ stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX
 (cd "$OUT/full-report" && stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
     --shift fermi --no-intro > console_default.log 2>&1)
 (cd "$OUT/full-report" && ls)
-echo "(only references.bib -- no ipr.dat/.gplot, no stb_ipr_report.txt)"
+echo "(only stb_ipr_references.bib -- no ipr.dat/.gplot, no stb_ipr_report.txt)"
 echo
 echo "\$ stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX --shift fermi \\"
 echo "      --save-gnuplot --no-intro"
@@ -263,7 +263,7 @@ Seven self-contained folders were generated under output/:
   basic-run/       q-sweep/          accuracy/       label-plus-hsx/
   q-validation/    nspin-fix/        full-report/
 
-Each has references.bib; full-report/ additionally has ipr.dat/ipr.gplot/
+Each has stb_ipr_references.bib; full-report/ additionally has ipr.dat/ipr.gplot/
 ipr.pdf and stb_ipr_report.txt (the plot files only from its --save-gnuplot run).
 
 Recap of what this walkthrough covered:

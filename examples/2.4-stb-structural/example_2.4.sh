@@ -53,7 +53,7 @@ formula and limitation of every single method/metric below.
 Every run prints a numbered [0]...[11] report, the same style every
 newer tool in this suite uses. additionally persists that
 report to stb_structural_report.txt -- off by default, so a plain run
-only ever writes rdf.dat (unless --no-rdf) and references.bib, no text
+only ever writes rdf.dat (unless --no-rdf) and stb_structural_references.bib, no text
 report file. The tool used to always write structural_information.dat
 unconditionally; that's gone now (a stale one from an older run is
 cleaned up automatically instead).
@@ -151,7 +151,7 @@ echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[11] report to the console.
 It is always saved to stb_structural_report.txt in the current folder; a plain run also
-writes rdf.dat and references.bib:
+writes rdf.dat and stb_structural_references.bib:
 EOF
 mkdir -p "$OUT/full-report"
 cp structure.fdf "$OUT/full-report/"
@@ -162,8 +162,8 @@ echo "\$ stb-structural --file structure.fdf --format fdf --mode mean --no-intro
 echo "Report sections written to stb_structural_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_structural_report.txt"
 echo
-echo "references.bib -- SIESTA (every stb-structural run analyzes a SIESTA structure file):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_structural_references.bib -- SIESTA (every stb-structural run analyzes a SIESTA structure file):"
+grep "^@" "$OUT/full-report/stb_structural_references.bib"
 pause
 
 echo "=================================================================="
@@ -203,7 +203,7 @@ Four self-contained folders were generated under output/:
   mode-mean/   mode-list/
   rdf/         full-report/
 
-Each has rdf.dat/references.bib; full-report/ additionally has
+Each has rdf.dat/stb_structural_references.bib; full-report/ additionally has
 stb_structural_report.txt (every run writes one).
 
 Recap of what this walkthrough covered:
@@ -218,7 +218,7 @@ Recap of what this walkthrough covered:
   - g(r) and its first-peak integral independently recovering the same
     coordination number the ECN section reports, a real physics
     cross-check, not just a plausibility check
-  - the numbered [0]...[11] report (always saved), references.bib
+  - the numbered [0]...[11] report (always saved), stb_structural_references.bib
   - CLI and the interactive stb-suite menu building the same command
 
 As a next step, try on your own with a real SIESTA structure:

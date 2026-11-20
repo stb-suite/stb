@@ -233,7 +233,7 @@ echo " output/full-report/  --  the report file"
 echo "=================================================================="
 cat <<'EOF'
 Every run always prints the numbered [0]...[6] report to the console.
-It is always saved to stb_xrd_report.txt in the current folder, so a plain run only ever writes references.bib, no text report
+It is always saved to stb_xrd_report.txt in the current folder, so a plain run only ever writes stb_xrd_references.bib, no text report
 file (and no data/gnuplot files either, without --save-gnuplot):
 EOF
 mkdir -p "$OUT/full-report"
@@ -245,8 +245,8 @@ echo "\$ stb-xrd --file crs_structure.fdf --format fdf --no-intro"
 echo "Report sections written to stb_xrd_report.txt:"
 grep -E "^\[[0-9]+\]" "$OUT/full-report/stb_xrd_report.txt"
 echo
-echo "references.bib -- SIESTA + pyxtal (the diffraction simulation engine):"
-grep "^@" "$OUT/full-report/references.bib"
+echo "stb_xrd_references.bib -- SIESTA + pyxtal (the diffraction simulation engine):"
+grep "^@" "$OUT/full-report/stb_xrd_references.bib"
 pause
 
 echo "=================================================================="
@@ -301,7 +301,7 @@ cat <<EOF
 Five self-contained folders were generated under output/:
   basic/          save-gnuplot/   compare/        self-check/     full-report/
 
-Each has references.bib; save-gnuplot/ and self-check/ additionally have
+Each has stb_xrd_references.bib; save-gnuplot/ and self-check/ additionally have
 xrd_pattern.dat/xrd_pattern.gplot, and full-report/ has
 stb_xrd_report.txt (every run writes one).
 
@@ -327,7 +327,7 @@ Recap of what this walkthrough covered:
   - the fixed --view: a real, verified bug (the plot window disappearing
     immediately) traced to pyxtal's own plot_pxrd(), not just this tool's
     code, and fixed by building the preview independently
-  - the numbered [0]...[6] report (always saved), references.bib
+  - the numbered [0]...[6] report (always saved), stb_xrd_references.bib
     (now including pyxtal's own citation, not just SIESTA's)
   - CLI and the interactive stb-suite menu building the same command
 

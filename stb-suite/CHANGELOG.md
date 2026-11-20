@@ -344,6 +344,16 @@ version before) and **Added** (new options and tools).
   it, else `Ag.psml`); with no `-p`, the pseudopotentials of the `--initial` endpoint's folder are
   used when it has any.
 
+- `stb-neb`: an atom that relaxed across a cell face between the endpoints crossed the whole cell in
+  the interpolation, with no error: both endpoints are wrapped into [0, 1) and interpolated literally
+  (`pbc=False`), so top-layer Ag atoms at y = 0.0021 (initial) and 0.9987 (final), 0.03 Ang apart,
+  were moved by 8.8 Ang ("Endpoint displacement: max 8.828 Ang", a 34.5 Ang path for a 1.8 Ang
+  one). After the atoms are matched, every atom of the final endpoint now goes to the periodic image
+  nearest to its initial position before the interpolation (reported as "Periodic images", the same
+  rule `stb-mlneb` already applied), image folders are written wrapped into the cell, and the
+  endpoint displacement, the path length, the spectator atoms frozen in the MACE stage and the path
+  length of `stb-nebAnalysis` are measured through the nearest image.
+
 ### Changed
 
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,

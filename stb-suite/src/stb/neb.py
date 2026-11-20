@@ -134,7 +134,17 @@ def wrap_into_cell(pmg_structure):
     of a static point once both were wrapped first.
     """
     return Structure(pmg_structure.lattice, pmg_structure.species,
-                      pmg_structure.frac_coords % 1.0, coords_are_cartesian=False)
+                      pmg_structure.frac_coords % 1.0, coords_are_cartesian=False,
+                      labels=[site.label for site in pmg_structure])
+
+
+def min_image_displacements(start, end):
+    """Cartesian displacement of every atom from `start` to `end` (same lattice, same atom
+    order) through the nearest periodic image: an atom at frac y 0.002 in one and 0.9987
+    in the other moved 0.03 Ang, not a whole cell."""
+    delta = end.frac_coords - start.frac_coords
+    delta -= np.round(delta)
+    return delta @ start.lattice.matrix
 
 
 def require_lattice_match(initial_pmg, final_pmg, f_out, tol=1e-3):
@@ -180,7 +190,27 @@ def require_lattice_match(initial_pmg, final_pmg, f_out, tol=1e-3):
                       coords_are_cartesian=False)
 
 
-def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort_tol=0.5):
+def nearest_image_final(initial_pmg, final_pmg_matched, autosort_tol=0.5):
+    """(final endpoint, number of atoms moved): the final endpoint with its atoms in
+    --initial's order (pymatgen's distance matching at `autosort_tol`, none at 0) and every
+    atom moved by whole lattice vectors to the periodic image nearest to its initial
+    position. Raises ValueError when the matching fails."""
+    if autosort_tol:
+        final_sorted = initial_pmg.interpolate(final_pmg_matched, nimages=1, interpolate_lattices=False,
+                                               pbc=False, autosort_tol=autosort_tol)[-1]
+    else:
+        final_sorted = final_pmg_matched
+    shift = np.round(final_sorted.frac_coords - initial_pmg.frac_coords)
+    moved = int(np.any(shift != 0, axis=1).sum())
+    if moved:
+        final_sorted = Structure(final_sorted.lattice, final_sorted.species,
+                                 final_sorted.frac_coords - shift, coords_are_cartesian=False,
+                                 labels=[site.label for site in final_sorted])
+    return final_sorted, moved
+
+
+def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort_tol=0.5,
+                              return_crossed=False):
     """Linearly interpolates `n_images` pymatgen Structures (endpoints
     included) between the two endpoints. `autosort_tol` fixes atom-index
     correspondence between the two endpoint .fdf files (a classic NEB
@@ -206,10 +236,18 @@ def linear_interpolate_images(initial_pmg, final_pmg_matched, n_images, autosort
     represent the same physical position via different (unwrapped)
     conventions would otherwise interpolate a spuriously huge path instead
     of a near-zero-length one.
+
+    Wrapping both into [0, 1) is not enough by itself: an atom relaxed across a cell face
+    (frac 0.002 in one endpoint, 0.9987 in the other) would then cross the whole cell
+    (8.8 Ang instead of 0.03 Ang for a top-layer Ag atom). So, AFTER the atoms are matched,
+    every atom of the final endpoint is moved to the periodic image nearest to its initial
+    position (nearest_image_final) and only then interpolated literally. With
+    `return_crossed`, returns (images, number of atoms so moved).
     """
-    return initial_pmg.interpolate(final_pmg_matched, nimages=n_images - 1,
-                                    interpolate_lattices=False, pbc=False,
-                                    autosort_tol=autosort_tol)
+    final_near, crossed = nearest_image_final(initial_pmg, final_pmg_matched, autosort_tol)
+    images = initial_pmg.interpolate(final_near, nimages=n_images - 1,
+                                     interpolate_lattices=False, pbc=False, autosort_tol=0)
+    return (images, crossed) if return_crossed else images
 
 
 def idpp_refine_images(pmg_images, fmax=0.1, steps=100, fixed_atoms=None):
@@ -248,7 +286,8 @@ def cumulative_reaction_coordinates(pmg_images):
     """
     coords = [0.0]
     for prev, curr in zip(pmg_images[:-1], pmg_images[1:]):
-        delta = curr.cart_coords - prev.cart_coords
+        # Nearest periodic image: images written to disk are wrapped into the cell.
+        delta = min_image_displacements(prev, curr)
         coords.append(coords[-1] + float(np.linalg.norm(delta)))
     return coords
 
@@ -268,12 +307,8 @@ def compute_frozen_indices(pmg_images, threshold=0.3):
     "substrate"), the returned list is simply empty and nothing is frozen.
     """
     initial, final = pmg_images[0], pmg_images[-1]
-    frozen = []
-    for i in range(len(initial)):
-        delta = final.cart_coords[i] - initial.cart_coords[i]
-        if np.linalg.norm(delta) < threshold:
-            frozen.append(i)
-    return frozen
+    moved = np.linalg.norm(min_image_displacements(initial, final), axis=1)
+    return [i for i, d in enumerate(moved) if d < threshold]
 
 
 def check_endpoint_displacement(initial_pmg, final_pmg, f_out, threshold, idpp_used):
@@ -295,7 +330,7 @@ def check_endpoint_displacement(initial_pmg, final_pmg, f_out, threshold, idpp_u
     -PROVEN correct). `threshold` reuses --ml-freeze-threshold's own
     already-documented default (0.3 Ang) rather than inventing a new flag.
     """
-    deltas = np.linalg.norm(final_pmg.cart_coords - initial_pmg.cart_coords, axis=1)
+    deltas = np.linalg.norm(min_image_displacements(initial_pmg, final_pmg), axis=1)
     n_moved = int(np.sum(deltas > threshold))
     print_dual(f"  Endpoint displacement: max {deltas.max():.3f} Ang, mean {deltas.mean():.3f} Ang, "
                 f"{n_moved}/{len(deltas)} atom(s) moved > {threshold} Ang.", f_out)
@@ -385,6 +420,7 @@ def write_image_folder(out_dir, pmg_structure, calc_text, species_meta, pp_path,
     under its label ('Ag_slab.psml' when the folder has it, else 'Ag.psml').
     """
     os.makedirs(out_dir, exist_ok=True)
+    pmg_structure = wrap_into_cell(pmg_structure)
     fdf_structure = structure_io.from_pymatgen(pmg_structure, species_meta=species_meta,
                                                 coord_format="fractional", labels=atom_labels)
     structure_io.write_fdf(fdf_structure, os.path.join(out_dir, "structure.fdf"))
@@ -990,9 +1026,11 @@ def main():
                     "double-check these really are the intended endpoint pair).", 'yellow'), f_out)
 
         print_section('[3] PATH INTERPOLATION', f_out)
+        crossed = 0
         try:
-            pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
-                                                    autosort_tol=args.autosort_tol)
+            pmg_images, crossed = linear_interpolate_images(initial_pmg, final_pmg_matched, args.n_images,
+                                                             autosort_tol=args.autosort_tol,
+                                                             return_crossed=True)
         except ValueError as e:
             if args.autosort_tol != 0:
                 # Distance-based matching failed at the requested tolerance. Rather than making
@@ -1015,8 +1053,9 @@ def main():
                     "large per-image displacement -- that would be the sign this fallback guessed "
                     "wrong, not this warning alone.", 'yellow'), f_out)
                 try:
-                    pmg_images = linear_interpolate_images(initial_pmg, final_pmg_matched,
-                                                            args.n_images, autosort_tol=0)
+                    pmg_images, crossed = linear_interpolate_images(
+                        initial_pmg, final_pmg_matched, args.n_images, autosort_tol=0,
+                        return_crossed=True)
                 except ValueError:
                     pmg_images = None
             else:
@@ -1050,6 +1089,10 @@ def main():
                 sys.exit(1)
         print_dual(f"  [OK] Linear interpolation: {len(pmg_images)} images "
                     f"(image_00 .. image_{len(pmg_images) - 1:02d}).", f_out)
+        print_dual(f"  Periodic images   : {crossed} atom(s) of --final sit across a cell face from their "
+                    "--initial position; each is interpolated through the nearest periodic image, "
+                    "not across the cell" if crossed else
+                    "  Periodic images   : no atom crosses a cell face between the endpoints", f_out)
 
         if args.idpp:
             print_dual(f"  Refining interior images with ASE's IDPP method "

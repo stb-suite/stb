@@ -24,7 +24,7 @@ from stb.core import structure_io
 from stb.core.siesta_log import check_scf_and_force
 from stb.core.cli import color_text, show_intro, print_dual, print_section, capture_library_noise
 from stb.core.ase_view import view_structure_interactive
-from stb.neb import MODE_DESCRIPTIONS, write_path_trajectory
+from stb.neb import MODE_DESCRIPTIONS, write_path_trajectory, min_image_displacements
 
 REPORT_FILE = "neb_report.txt"
 SETUP_REPORT_FILE = "neb_setup.txt"
@@ -329,7 +329,7 @@ def print_consistency_checks(f_out, image_rows, band_structures, use_reaction_co
     if len(valid_structures) >= 2:
         total_length = 0.0
         for (_l0, s0), (_l1, s1) in zip(valid_structures[:-1], valid_structures[1:]):
-            total_length += float(np.linalg.norm(s1.cart_coords - s0.cart_coords))
+            total_length += float(np.linalg.norm(min_image_displacements(s0, s1)))
         declared_length = None
         if setup_report_path and os.path.isfile(setup_report_path):
             with open(setup_report_path) as f:

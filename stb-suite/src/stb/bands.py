@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -201,11 +202,13 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write bands_gnuplot.dat and bands.gplot into "
-                             "(and stb_bands_report.txt/references.bib, with --save-report) "
+                             "(and references.bib, with --save-report; the report itself goes to the current folder) "
                              "(default: current directory). Created if it doesn't exist.")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_bands_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
 
     parser.add_argument("-v", "--version", action="version", version=f"stb-bands {VERSION}")
 
@@ -261,7 +264,7 @@ def main():
     result = cbm_vbm(fermi_energy, dic_bands, nspin, args.gap_tol)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("bands") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-BANDS REPORT =====", 'magenta'), f_out)

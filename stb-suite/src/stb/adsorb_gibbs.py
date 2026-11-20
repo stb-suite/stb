@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -26,7 +27,7 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.phonon_workflow import load_phonon_with_force_constants
 from stb.adsorb_analysis import read_site_table, read_bsse_energy, GIBBS_LOCAL_META_FILE
 
-REPORT_FILE = "adsorption_gibbs_report.txt"
+REPORT_FILE = "stb_adsorbGibbs_report.txt"
 PLOT_FILE = "adsorption_gibbs.png"
 MODE_SPECTRUM_PLOT_FILE = "adsorption_mode_spectrum.png"
 DESORPTION_PLOT_FILE = "adsorption_desorption_kinetics.png"
@@ -543,7 +544,9 @@ entropy that depends on those soft frequencies (see the mode list in the report)
                          help="Residual atomic force in eV/Ang (default: 0.05) above which a "
                               "folder is flagged as possibly not converged/relaxed. Advisory only.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_adsorbGibbs_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view-plots", action="store_true",
                          help="Also show the DG-vs-T plot on screen, instead of only saving it "
                               "as a PNG. Off by default.")
@@ -560,7 +563,7 @@ entropy that depends on those soft frequencies (see the mode list in the report)
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("adsorbGibbs") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     print_dual(color_text("===== ADSORPTION GIBBS FREE ENERGY REPORT (STAGE 4) =====", 'magenta'), f_out)
 

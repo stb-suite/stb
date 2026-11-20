@@ -65,6 +65,7 @@ rather than left silently broken.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -77,7 +78,7 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import read_md_state, prepend_include
 
-REPORT_FILE = "convergence_stage1.txt"
+REPORT_FILE = "stb_convergence_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 # NOTE: substitute_numeric_tag/substitute_kgrid_tag/build_values/
@@ -240,7 +241,7 @@ def run_basis_mode(args, parser):
                     f"Version {VERSION} | University of Brasilia - 2026", "Developed by Dr. Carlos M. O. Bastos"])
     base = os.path.join(args.output_dir, "basis")
     os.makedirs(base, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("convergence") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):
@@ -481,7 +482,9 @@ def main():
                              "into its own '<output-dir>/<parameter>/convergence_<parameter>_"
                              "<value>/' subfolder, one tree per swept parameter.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_convergence_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-convergence {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -570,7 +573,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("convergence") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

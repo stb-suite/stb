@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -45,7 +46,7 @@ POSITIONS_SUBDIR = "positions"
 # of whether a narrative report was requested -- same split as stb-adsorb's
 # always-on site table vs. its own --save-report-gated narrative, and
 # stb-hubbardu's always-on run_manifest.json.
-REPORT_FILE = "stackingfault_setup.txt"
+REPORT_FILE = "stb_stackingfault_report.txt"
 MANIFEST_FILE = "sf_manifest.json"
 
 
@@ -444,10 +445,9 @@ def main():
                               f"'{RUN_SUBDIR}/' -- same self-contained-run-folder convention as "
                               "stb-adsorb's 'sites/' and stb-neb's 'neb_run/'.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full run narrative to <output-dir>/{RUN_SUBDIR}/"
-                              f"{REPORT_FILE}. Off by default -- the machine-readable "
-                              f"{MANIFEST_FILE} that stb-stackingfaultAnalysis actually reads is "
-                              "always written regardless of this flag.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_stackingfault_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-stackingfault {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -512,7 +512,7 @@ def main():
     run_root = os.path.join(output_root, RUN_SUBDIR)
     positions_root = os.path.join(run_root, POSITIONS_SUBDIR)
     os.makedirs(positions_root, exist_ok=True)
-    report_path = os.path.join(run_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("stackingfault") if args.save_report else None
 
     f_out = open(report_path, 'w') if report_path else None
 

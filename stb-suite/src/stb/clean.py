@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -33,6 +34,7 @@ from stb.core.cli import color_text, show_intro, print_dual, print_table, Sectio
 REPORT_FILE = "stb_clean_report.txt"
 DEFAULT_KEEP = ['.psml', '.psf', '.fdf', '.sh']
 BACKUP_RE = re.compile(r"_backup_\d{8}_\d{6}(_\d+)?\.tar\.gz$")
+STB_REPORT_RE = re.compile(r"^stb_\w+_report(_\d+)?\.txt$")
 RECENT_SECONDS = 120          # an unfinished .out written this recently may belong to a running job
 
 from stb.core.run_files import (  # noqa: F401  (shared with stb-archive)
@@ -54,6 +56,8 @@ def plan_folder(path, allowed_exts, recursive):
             keep[f] = "hidden file (never removed)"
         elif BACKUP_RE.search(name):
             keep[f] = "earlier stb-clean backup (never removed)"
+        elif STB_REPORT_RE.match(name):
+            keep[f] = "STB report (never removed)"
         elif ext in allowed_exts:
             keep[f] = {".fdf": "SIESTA input (.fdf)", ".psf": "pseudopotential", ".psml": "pseudopotential",
                        ".sh": "job script" if looks_like_job_script(f) else "script"}.get(ext, f"kept by --keep ({ext})")
@@ -346,7 +350,7 @@ def build_parser():
         description="Clean a SIESTA calc folder to restart a fresh run: removes every file except the extensions "
                     "in --keep (pseudopotentials, .fdf input, submission script by default) -- outputs/results too "
                     "(.out, .XV, .DM, .bands, ...): it prepares a re-run, it does not archive results (that is "
-                    "stb-archive). Never removed: hidden files, earlier stb-clean backups and every file a kept .fdf "
+                    "stb-archive). Never removed: hidden files, earlier stb-clean backups, STB reports (stb_*_report*.txt) and every file a kept .fdf "
                     "reads (%include, '< file'). Every removed file is archived (tar.gz, next to the folder) and "
                     "the archive is checked before anything is deleted, unless --no-archive. The report says what "
                     "the previous run was, what stays and why, what goes by kind, and what the next run will start "
@@ -371,8 +375,9 @@ def build_parser():
     parser.add_argument('--no-confirm', '-n', action='store_true',
                         help="Don't ask for confirmation before deleting.")
     parser.add_argument('--save-report', action='store_true',
-                        help=f"Also persist the report to {REPORT_FILE} (in --path; in the current directory for a "
-                             f"glob). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_clean_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-clean {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     return parser
@@ -403,9 +408,9 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = os.path.join(matches[0] if not batch else ".", REPORT_FILE) if args.save_report else None
-    # Buffered in memory and written only after every folder is cleaned: the report sits inside a folder this run
-    # cleans, and a .txt is not kept by default -- the tool would delete its own report.
+    report_path = REPORT_FILE if args.save_report else None   # name reserved after the cleaning (new_report_path)
+    # Buffered in memory and written only after every folder is cleaned: the report goes into the current folder,
+    # which may be one this run cleans, and a .txt is not kept by default -- the tool would delete its own report.
     f_out = io.StringIO() if report_path else None
     warns = []
     sections = Sections(f_out)
@@ -423,7 +428,7 @@ def main():
         print_dual(f"Target            : {os.path.abspath(matches[0])}", f_out)
     print_dual(f"Keep extensions   : {' '.join(sorted(allowed_exts))}"
                f"{' (default)' if sorted(allowed_exts) == sorted(DEFAULT_KEEP) else ''}", f_out)
-    print_dual("Always kept       : hidden files, earlier stb-clean backups, files a kept .fdf reads", f_out)
+    print_dual("Always kept       : hidden files, earlier stb-clean backups, STB reports (stb_*_report*.txt), files a kept .fdf reads", f_out)
     print_dual(f"Recursive         : {'yes (hidden directories skipped)' if args.recursive else 'no'}", f_out)
     mode = "dry run (nothing touched)" if args.dry_run else \
         ("delete without backup (--no-archive)" if args.no_archive else "archive (tar.gz, checked), then delete")
@@ -453,6 +458,7 @@ def main():
             if r["archive"]:
                 print_dual(f"Archive           : {r['archive']}", f_out)
     if report_path:
+        report_path = new_report_path("clean")
         print_dual(f"Report            : {report_path}", f_out)
     sections("WARNINGS")
     if warns:

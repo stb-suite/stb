@@ -34,6 +34,51 @@ from stb.core.pseudopotentials import copy_pseudo
 SLAB_LABEL_SUFFIX = "_slab"
 ADSORBATE_LABEL_SUFFIX = "_ads"
 FRAGMENT_MANIFEST_FILE = "fragment_manifest.json"
+SITE_TABLE_FILE = "adsorption_sites.json"          # in <run>/sites/, written by stb-adsorb
+LEGACY_SITE_TABLE_FILE = "adsorption_sites.txt"     # its '# SITE_TABLE' block, up to 2.1.0.dev
+
+
+def write_site_table(path, rows):
+    """<run>/sites/adsorption_sites.json: one entry per site folder written by stb-adsorb --
+    label, adsorbate name, height (Ang) and folder -- the record the later stages read to know
+    which adsorbate/<name>/ reference and which height a site belongs to. `rows` are
+    (label, adsorbate, height, dir) tuples."""
+    data = {"schema": "stb_adsorption_sites_v1",
+            "sites": [{"label": label, "adsorbate": ads, "height": round(float(h), 4), "dir": d}
+                      for label, ads, h, d in rows]}
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def read_site_table(sites_root):
+    """{label: (adsorbate name, height)} from <sites_root>/adsorption_sites.json, else from the
+    '# SITE_TABLE' block of the adsorption_sites.txt older versions wrote there; None when
+    neither exists (folders assembled by hand)."""
+    path = os.path.join(sites_root, SITE_TABLE_FILE)
+    if os.path.isfile(path):
+        with open(path) as f:
+            data = json.load(f)
+        table = {e["label"]: (e["adsorbate"], float(e["height"])) for e in data.get("sites", [])}
+        return table or None
+    path = os.path.join(sites_root, LEGACY_SITE_TABLE_FILE)
+    if not os.path.isfile(path):
+        return None
+    table, in_table = {}, False
+    with open(path) as f:
+        for line in f:
+            if line.startswith("# SITE_TABLE"):
+                in_table = True
+                continue
+            if not in_table or line.startswith("#") or not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                table[parts[0]] = (parts[1], float(parts[2]))
+            except ValueError:
+                continue
+    return table or None
 
 # Every folder written via write_reference_folder() gets this via a
 # %include sidecar (same prepend_include convention as hubbardu.py/

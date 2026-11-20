@@ -85,6 +85,7 @@ via read_data() -- there is no decoupling to do.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -161,10 +162,12 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write ipr.dat/ipr.gplot (with --save-gnuplot) and "
-                             "stb_ipr_report.txt/references.bib into (default: current "
+                             "references.bib into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_ipr_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write ipr.dat (or ipr_up.dat/ipr_down.dat for a spin-"
                              "polarized run) + ipr.gplot. Off by default -- this tool used to "
@@ -319,7 +322,7 @@ def main():
 
     # --- From here on: the numbered, save-able report --------------------
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("ipr") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-IPR REPORT =====", 'magenta'), f_out)

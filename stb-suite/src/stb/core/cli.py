@@ -101,6 +101,39 @@ def get_int_input(prompt: str, default: int | None = None) -> int:
             print(color_text("Please enter a valid integer", 'red'))
 
 
+REPORT_NAME_TEMPLATE = "stb_{tool}_report.txt"
+REPORT_LOCATION_HELP = ("in the folder you run the command from, as stb_<tool>_report.txt (_1, _2, ... "
+                        "when that name is taken, so no report is ever overwritten)")
+
+
+def report_name(tool: str) -> str:
+    """Base file name of the report of a tool, e.g. 'stb_adsorbAnalysis_report.txt' for
+    'adsorbAnalysis' (the console command without its 'stb-' prefix)."""
+    tool = tool[4:] if tool.startswith("stb-") else tool
+    return REPORT_NAME_TEMPLATE.format(tool=tool)
+
+
+def new_report_path(tool: str) -> str:
+    """Where a tool writes its report: ALWAYS the current working folder, under the tool's own
+    name, never overwriting -- 'stb_<tool>_report.txt', else '_1', '_2', ... The file is
+    created empty here (exclusive create), so two runs started together never share a name.
+
+    Suite rule: a report is for the user to read. Nothing a later stage needs is ever read
+    back from a report: data that flows between stages goes into a JSON file of the run
+    folder, written and read by the tools."""
+    base = report_name(tool)
+    stem, ext = os.path.splitext(base)
+    n = 0
+    while True:
+        candidate = base if n == 0 else f"{stem}_{n}{ext}"
+        try:
+            with open(candidate, "x"):
+                pass
+            return candidate
+        except FileExistsError:
+            n += 1
+
+
 def print_dual(text: str, file_handle=None) -> None:
     """Prints to stdout with color, writes to file without color."""
     print(text)

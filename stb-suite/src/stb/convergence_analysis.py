@@ -58,6 +58,7 @@ and -o/--output-dir.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -75,7 +76,7 @@ _RELAX_STEPS_RE = re.compile(r'MD\.(?:NumCGsteps|Steps)\s+(\d+)', re.IGNORECASE)
 _STRESS_TOL_RE = re.compile(r'^\s*MD\.MaxStressTol\s+([0-9.eE+-]+)\s*([A-Za-z/*0-9]+)?', re.IGNORECASE | re.MULTILINE)
 SIESTA_DEFAULT_STRESS_TOL_GPA = 1.0
 EV_PER_ANG3_TO_GPA = 160.21766
-REPORT_FILE = "convergence_report.txt"
+REPORT_FILE = "stb_convergenceAnalysis_report.txt"
 
 
 def read_declared_stress_tol_gpa(folder):
@@ -747,7 +748,7 @@ def main():
                              "relaxation may not have reached a genuine minimum.")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write <parameter>_convergence.dat/.gplot into with "
-                             "--save-gnuplot, and the report into with --save-report (default: "
+                             "--save-gnuplot (the report goes to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--apply", type=str, default=None, metavar="CALC_FDF",
                         help="Writes every parameter's converged (recommended) value into this "
@@ -757,7 +758,9 @@ def main():
                         help="--apply with a kgrid sweep only: vacuum-axis detection threshold in "
                              "Angstrom, same meaning as stb-kgrid's --vacuum-gap (default: 10.0).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_convergenceAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write, per discovered parameter, curve data + a companion "
                              ".gplot script (2-panel: energy + relaxed volume). Off by default.")
@@ -778,7 +781,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("convergenceAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

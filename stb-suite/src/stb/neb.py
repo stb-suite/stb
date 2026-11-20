@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -27,8 +28,66 @@ from stb.core.cli import (color_text, show_intro, print_dual, print_section,
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo, pseudo_source_name
 from stb.core.deps import require_mace
 
-REPORT_FILE = "neb_setup.txt"
+REPORT_FILE = "stb_neb_report.txt"       # the report, in the current folder (new_report_path)
+SETUP_FILE = "neb_setup.json"            # <run>/neb_run/: what stb-nebCycle/stb-nebAnalysis read
+LEGACY_SETUP_FILE = "neb_setup.txt"      # the report-with-tables older versions wrote there
 RUN_SUBDIR = "neb_run"
+
+
+def write_neb_setup(run_root, mode, ml_neb_used, rows, total_path_length, fixed_atoms):
+    """<run_root>/neb_setup.json: the band as stb-neb wrote it -- mode, whether MACE shaped it,
+    one entry per image (label, index, reaction coordinate in Ang, folder), the total path
+    length and the fixed atoms (0-based)."""
+    import json
+    data = {"schema": "stb_neb_setup_v1", "mode": int(mode), "ml_neb_used": bool(ml_neb_used),
+            "total_path_length_ang": round(float(total_path_length), 6),
+            "fixed_atoms": [int(i) for i in fixed_atoms],
+            "images": [{"label": label, "index": int(index), "reaction_coord": round(float(rc), 6), "dir": d}
+                       for label, index, rc, d in rows]}
+    with open(os.path.join(run_root, SETUP_FILE), "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def read_neb_setup(run_root):
+    """The neb_setup.json of a run folder as a dict, or the same fields read from the
+    neb_setup.txt of older versions ('# MODE:', '# ML_NEB_USED:', '# IMAGE_TABLE', 'Total path
+    length'); None when the folder has neither."""
+    import json
+    import re as _re
+    path = os.path.join(run_root, SETUP_FILE)
+    if os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    path = os.path.join(run_root, LEGACY_SETUP_FILE)
+    if not os.path.isfile(path):
+        return None
+    data = {"schema": "legacy neb_setup.txt", "mode": 1, "ml_neb_used": False, "images": [],
+            "total_path_length_ang": None, "fixed_atoms": []}
+    in_table = False
+    with open(path) as f:
+        for line in f:
+            if line.startswith("# MODE:"):
+                try:
+                    data["mode"] = int(line.split(":", 1)[1].strip())
+                except ValueError:
+                    pass
+            elif line.startswith("# ML_NEB_USED:"):
+                data["ml_neb_used"] = line.split(":", 1)[1].strip().lower() == "yes"
+            elif line.startswith("# IMAGE_TABLE"):
+                in_table = True
+            elif in_table and line.strip() and not line.startswith("#"):
+                parts = line.split()
+                try:
+                    data["images"].append({"label": parts[0], "index": int(parts[1]),
+                                           "reaction_coord": float(parts[2]),
+                                           "dir": parts[3] if len(parts) > 3 else ""})
+                except (IndexError, ValueError):
+                    continue
+            else:
+                m = _re.search(r"Total path length\s*:\s*([0-9.]+)\s*Ang", line)
+                if m and data["total_path_length_ang"] is None:
+                    data["total_path_length_ang"] = float(m.group(1))
+    return data
 
 MODE_DESCRIPTIONS = {
     1: "100% MACE-MP-0, then 1 single-point SIESTA per image",
@@ -637,13 +696,7 @@ def write_ml_preview_plot(ase_images, out_path):
 
 
 def _print_library_warnings_section(f_out, library_warnings):
-    """Prints the shared '[9] LIBRARY WARNINGS' section. Must be called
-    BEFORE any '# MODE:'/'# IMAGE_TABLE' marker lines are written to f_out
-    -- stb-nebAnalysis's read_image_table() treats every non-blank,
-    non-'#'-prefixed line after '# IMAGE_TABLE' as a table row, with no
-    explicit end-of-table marker, so the marker block must stay the very
-    last thing written to the report file.
-    """
+    """Prints the shared '[9] LIBRARY WARNINGS' section."""
     print_section('[9] LIBRARY WARNINGS', f_out)
     if library_warnings:
         print_dual(color_text(
@@ -965,7 +1018,7 @@ def main():
     output_root = args.output_dir
     run_root = os.path.join(output_root, RUN_SUBDIR)
     os.makedirs(run_root, exist_ok=True)
-    report_path = os.path.join(run_root, REPORT_FILE)
+    report_path = new_report_path("neb")
 
     run_start = time.monotonic()
     library_warnings = []
@@ -1298,12 +1351,9 @@ def main():
 
         _print_library_warnings_section(f_out, library_warnings)
 
-        f_out.write(f"\n# MODE: {args.mode}\n")
-        f_out.write(f"# ML_NEB_USED: {'yes' if ml_neb_used else 'no'}\n")
-        f_out.write("# IMAGE_TABLE -- parsed by stb-nebAnalysis, do not reorder the columns\n")
-        f_out.write(f"# {'label':<14}{'index':<8}{'reaction_coord':<18}{'dir'}\n")
-        for label, index, reaction_coord, image_dir in report_rows:
-            f_out.write(f"{label:<16}{index:<8}{reaction_coord:<18.6f}{image_dir}\n")
+        write_neb_setup(run_root, args.mode, ml_neb_used, report_rows, reaction_coords[-1], fixed_atoms)
+        print_dual(f"\n  Band record (read by stb-nebCycle/stb-nebAnalysis): "
+                   f"{os.path.join(run_root, SETUP_FILE)}", f_out)
 
     print(f"\n{color_text('Success:', 'green')} {len(pmg_images)} image folder(s) written "
           f"under '{images_root}'.")

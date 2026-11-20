@@ -51,6 +51,7 @@ case for a real relaxation template.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -62,7 +63,7 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.pseudopotentials import BANK_HELP, resolve_pseudo_source, get_required_pseudos, copy_pseudo
 from stb.core.structure_io import read_md_state, is_siesta_true, prepend_include
 
-REPORT_FILE = "elastic_stage1.txt"
+REPORT_FILE = "stb_elasticInputs_report.txt"
 SCAN_FILE = "elastic_scan.json"
 EXTRA_FDF_FILE = "config_extra.fdf"
 REFERENCE_FILE = "reference_structure.fdf"
@@ -283,7 +284,9 @@ def main():
                         help="Symmetry angle tolerance in degrees (default: 5.0, pymatgen's own "
                              "default), same use as --symprec.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_elasticInputs_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticInputs {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -325,7 +328,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("elasticInputs") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -106,7 +107,9 @@ that distribution.""",
     parser.add_argument("-o", "--output", type=str, default="relaxed.fdf",
                         help="Output .fdf file name (default: relaxed.fdf).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_mlrelax_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-data", action="store_true",
                         help="Also write the raw per-step relaxation convergence trace "
                              "(<stem>_relax_convergence.dat). Off by default.")
@@ -128,7 +131,7 @@ that distribution.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("mlrelax") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

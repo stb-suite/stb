@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -41,7 +42,7 @@ RELEVANT_DIRECTIONS = {
     "2d": {'xx', 'yy', 'xy'},
     "1d": {'zz'},
 }
-REPORT_FILE = "elastic_stage2.txt"
+REPORT_FILE = "stb_elasticAnalysis_report.txt"
 # The fitted tensor of a run directory, written next to its strain folders so
 # that the analysis of the other series of 'stb-elasticInputs --ions both'
 # (../relaxed or ../clamped) can tabulate the internal-relaxation contribution.
@@ -1773,7 +1774,9 @@ def main():
                              "pattern overlaid with its own fit) before finishing. Never saved to "
                              "disk -- pass --save-gnuplot for that. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_elasticAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-elasticAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -1961,7 +1964,7 @@ def main():
               "group and reference volume/area -- none was found.")
         sys.exit(1)
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("elasticAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== ELASTIC PROPERTIES REPORT =====', 'magenta')}", f_out)

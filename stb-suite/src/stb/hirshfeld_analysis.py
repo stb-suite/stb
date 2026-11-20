@@ -40,6 +40,7 @@ per-iteration charges, extended XYZ with the charges), --png/--show (a
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -60,7 +61,7 @@ from stb.core.rho_io import find_one_rho, read_total
 sisl = require_sisl()
 
 HIRSHFELD_IONS_MANIFEST_FILE = "hirshfeld_ions_manifest.json"
-REPORT_FILE = "hirshfeld_analysis_report.txt"
+REPORT_FILE = "stb_hirshfeldAnalysis_report.txt"
 DATA_FILE = "hirshfeld_charges.dat"
 HISTORY_FILE = "hirshfeld_iterations.dat"
 XYZ_FILE = "hirshfeld_charges.xyz"
@@ -339,7 +340,9 @@ def main():
                               "(which assumes that log was left with a .out extension; use "
                               "--ref if yours wasn't).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_hirshfeldAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-data", action="store_true",
                          help=f"Write {DATA_FILE} (per-atom charges by every method, populations, "
                               f"reference used), {HISTORY_FILE} (every atom's charge per iteration) "
@@ -367,7 +370,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("hirshfeldAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 

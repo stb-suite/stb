@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -24,7 +25,7 @@ from stb.core.spectrum import (
     find_spectrum_peaks, match_peaks,
 )
 
-REPORT_FILE = "raman_stage3.txt"
+REPORT_FILE = "stb_ramanAnalysis_report.txt"
 # 1 THz = 33.35641 cm^-1 -- the conventional Raman-spectroscopy frequency
 # unit, used for the report table and spectrum plot even though Phonopy's
 # own native unit (and Stage 2's MODE_TABLE) is THz throughout the rest of
@@ -475,7 +476,9 @@ spectrum (.dat/.gplot).""",
                              "intensity, for --experimental's peak-finding (default: 0.01 -- "
                              "filters out sub-1%% noise bumps in both spectra).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_ramanAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also save the spectrum (and, with --experimental, the overlaid "
                              "measured spectrum) as gnuplot .dat + .gplot scripts, under "
@@ -501,9 +504,10 @@ spectrum (.dat/.gplot).""",
     print("\n" + color_text("RAMAN SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS", 'bold'))
     print("-" * 60)
 
-    stage2_report = os.path.join(args.directory, "raman_stage2.txt")
-    if not os.path.isfile(stage2_report):
-        print(color_text(f"[ERROR] '{stage2_report}' not found -- run stb-ramanModes (Stage 2) first.", 'red'))
+    stage2_json = os.path.join(args.directory, "raman_modes.json")
+    stage2_report = os.path.join(args.directory, "raman_stage2.txt")   # older versions: tables in the report
+    if not os.path.isfile(stage2_json) and not os.path.isfile(stage2_report):
+        print(color_text(f"[ERROR] '{stage2_json}' not found -- run stb-ramanModes (Stage 2) first.", 'red'))
         sys.exit(1)
 
     if args.experimental is not None and not os.path.isfile(args.experimental):
@@ -522,27 +526,35 @@ spectrum (.dat/.gplot).""",
     # doesn't either (the displacement is baked into structure.fdf, not
     # recorded as a number) -- reconstructed here isn't possible, so read
     # it back from Stage 2's own report text instead of re-deriving it.
-    stage2_delta = None
-    with open(stage2_report) as f:
-        for line in f:
-            if line.startswith("Displacement      :"):
-                try:
-                    stage2_delta = float(line.split(":")[1].split()[0])
-                except (IndexError, ValueError):
-                    pass
-                break
+    if os.path.isfile(stage2_json):
+        import json
+        with open(stage2_json) as f:
+            stage2 = json.load(f)
+        stage2_delta = stage2.get("displacement_ang")
+        rows = stage2.get("modes") or []
+        stage2_source = stage2_json
+    else:
+        stage2_delta = None
+        with open(stage2_report) as f:
+            for line in f:
+                if line.startswith("Displacement      :"):
+                    try:
+                        stage2_delta = float(line.split(":")[1].split()[0])
+                    except (IndexError, ValueError):
+                        pass
+                    break
+        rows = read_mode_table(stage2_report)
+        stage2_source = stage2_report
     if stage2_delta is None:
         print(color_text(
-            f"[ERROR] Could not recover the Stage 2 displacement value from '{stage2_report}'.", 'red'))
+            f"[ERROR] Could not recover the Stage 2 displacement value from '{stage2_source}'.", 'red'))
         sys.exit(1)
-
-    rows = read_mode_table(stage2_report)
     if not rows:
-        print(color_text(f"[ERROR] No # MODE_TABLE rows found in '{stage2_report}'.", 'red'))
+        print(color_text(f"[ERROR] No mode rows found in '{stage2_source}'.", 'red'))
         sys.exit(1)
     modes = group_by_mode(rows)
 
-    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("ramanAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== RAMAN STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)

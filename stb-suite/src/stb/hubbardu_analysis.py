@@ -14,6 +14,7 @@
 # (numpy's own RankWarning on a poorly-conditioned polyfit is a real, relevant
 # signal for this tool's own core fit -- now captured there instead of leaking).
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -26,7 +27,7 @@ from stb.core.cli import (COLORS, color_text, show_intro, print_dual, print_sect
                           print_table, capture_library_noise)
 from stb.core.dftu_data import REFERENCE_U, ldau_proj_block, load_manifest
 
-REPORT_FILE = "hubbardu_stage3.txt"
+REPORT_FILE = "stb_hubbarduAnalysis_report.txt"
 
 _OCC_RE = re.compile(r'Occupations:\s*([0-9eE+.\-\s]+)')
 
@@ -244,7 +245,9 @@ visually instead of trusting R^2 alone.""",
                         help="Show an interactive matplotlib preview of the response curve "
                              "(both branches + fitted lines) before finishing. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_hubbarduAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -274,7 +277,7 @@ visually instead of trusting R^2 alone.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbarduAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

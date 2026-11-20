@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -31,8 +32,7 @@ from stb.core.adsorption_sites import (
 )
 from stb.core.phonon_workflow import build_phonon_displacements, write_displacement_folders
 
-REPORT_FILE = "adsorption_report.txt"
-SITES_REPORT_FILE = "adsorption_sites.txt"
+REPORT_FILE = "stb_adsorbAnalysis_report.txt"
 RANKING_PLOT_FILE = "adsorption_ranking.png"
 GIBBS_LOCAL_META_FILE = "gibbs_local_meta.json"
 _HEIGHT_SUFFIX_RE = re.compile(r'_h[\d.]+$')
@@ -63,40 +63,11 @@ _LOCAL_DISPLACEMENTS = [(0, 1.0), (0, -1.0), (1, 1.0), (1, -1.0), (2, 1.0), (2, 
 
 
 def read_site_table(sites_root):
-    """Parses the '# SITE_TABLE' section stb-adsorb writes in
-    sites/adsorption_sites.txt into {label: (adsorbate_name, height)} --
-    the source of truth for which adsorbate/<name>/ reference and which
-    height each site belongs to (more robust than re-guessing either from
-    the folder name by regex). Returns None if the report (or its table
-    section) isn't found, so the caller can fall back to treating every
-    site as belonging to a single, unnamed adsorbate -- e.g. a report the
-    user deleted, or folders assembled by hand rather than via stb-adsorb.
-    """
-    report_path = os.path.join(sites_root, SITES_REPORT_FILE)
-    if not os.path.isfile(report_path):
-        return None
-    table = {}
-    in_table = False
-    with open(report_path) as f:
-        for line in f:
-            if line.startswith("# SITE_TABLE"):
-                in_table = True
-                continue
-            if not in_table:
-                continue
-            if line.startswith("#") or not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            label, ads_name = parts[0], parts[1]
-            try:
-                height = float(parts[2])
-            except ValueError:
-                continue
-            table[label] = (ads_name, height)
-    return table or None
-
+    """Which adsorbate and height each site folder holds: see
+    core.adsorption_sites.read_site_table (sites/adsorption_sites.json, or the text table of
+    older runs). Kept here because stb-adsorbBsse/stb-adsorbGibbs import it from this module."""
+    from stb.core.adsorption_sites import read_site_table as _read
+    return _read(sites_root)
 
 def read_bsse_energy(bsse_dir, file_name):
     """Reads the two ghost-fragment reference energies stb-adsorb's
@@ -644,7 +615,9 @@ def main():
                               "equilibrium geometry rather than the true adsorption minimum. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <--dir>/{REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_adsorbAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view", action="store_true",
                          help="Open clean_slab, every adsorbate reference and every site "
                               "(preferring each folder's own <label>.XV -- the actual relaxed "
@@ -715,7 +688,7 @@ def main():
 
     # Every file of this stage goes into --dir (as stb-adsorbGibbs does), so two analyses
     # of different runs called from the same folder never overwrite each other.
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("adsorbAnalysis") if args.save_report else None
     if args.output is None:
         args.output = os.path.join(args.dir, "adsorption_curve.dat")
     f_out = open(report_path, "w") if report_path else None
@@ -728,9 +701,9 @@ def main():
     print_dual(f"Output file: {args.file}", f_out)
     if site_table is None:
         print_dual(color_text(
-            "[NOTE] No 'sites/adsorption_sites.txt' site table found -- treating every site "
-            "as a single unnamed adsorbate (pre-multi-adsorbate/height-sweep layout, or the "
-            "report was deleted).", 'yellow'), f_out)
+            "[NOTE] No site table (sites/adsorption_sites.json, or the adsorption_sites.txt of "
+            "older runs) found -- treating every site as a single unnamed adsorbate (folders "
+            "assembled by hand, or the table was deleted).", 'yellow'), f_out)
 
     print_section('[1] REFERENCE ENERGIES', f_out)
     e_clean_slab = siesta_log.get_free_energy(clean_slab_out)

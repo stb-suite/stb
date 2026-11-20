@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -30,7 +31,7 @@ from stb.core import kspace
 from stb.core.phonon_workflow import (
     detect_system_label, load_phonon_with_force_constants, IMAGINARY_MODE_TOL_THZ)
 
-REPORT_FILE = "phonon_properties.txt"
+REPORT_FILE = "stb_phononsPos_report.txt"
 # Same palette as elastic_analysis.py's PLOT_COLORS (first 3 entries), kept
 # here as its own short list since the thermal-properties plot always has
 # exactly these 3 series.
@@ -528,7 +529,9 @@ def main():
                              "fail to reconstruct force constants -- loosen, don't tighten, "
                              "if in doubt.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_phononsPos_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a .dat + .gplot pair for every computed quantity "
                              "(thermal properties, bands, group velocity, DOS, PDOS, thermal "
@@ -588,7 +591,7 @@ def main():
 
     # Report writing is opt-in (--save-report); print_dual still prints
     # to stdout unconditionally either way.
-    report_path = os.path.join(phonon_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("phononsPos") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== PHONON PROPERTIES REPORT =====', 'magenta')}", f_out)

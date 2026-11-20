@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -1083,7 +1084,9 @@ def main():
                              "loadable by LAMMPS's 'pair_style mace' (via mace_create_lammps_model, "
                              "part of mace-torch) -- '<model>-lammps.pt'. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE} (in the round directory). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_mlffAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlffAnalysis {VERSION}")
 
@@ -1186,7 +1189,7 @@ def main():
             fail(f"--init-from: '{args.init_from}' is neither foundation/previous nor a model file.")
         init_models = [args.init_from] * len(seeds)
     os.makedirs(work_dir, exist_ok=True)
-    report_path = os.path.join(work_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlffAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     device = args.device or ("cuda" if _cuda_available() else "cpu")
     t_start = time.monotonic()

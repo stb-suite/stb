@@ -375,6 +375,26 @@ version before) and **Added** (new options and tools).
 
 ### Changed
 
+- **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`
+  (`<tool>` is the command without `stb-`: `stb_adsorbAnalysis_report.txt`, `stb_neb_report.txt`),
+  and never overwrites one: when the name is taken the report becomes `_1`, `_2`, ... Before, the
+  name and place differed from tool to tool (`adsorption_report.txt` in the current folder,
+  `elastic_stage2.txt` in the current folder, `neb_setup.txt` inside `neb_run/`,
+  `gqca_stage1.txt` inside the output folder, `stb_bands_report.txt` inside `--output-dir`, ...), so
+  a second run, of the same tool on another folder or of a tool with the same file name, silently
+  replaced the first report. Tools that write their report only with `--save-report` still do; the
+  ones that always wrote one (`stb-neb`, `stb-gqca`, `stb-irModes`, `stb-ramanModes`) still do.
+  `stb-clean` never removes an `stb_*_report*.txt`.
+- **No stage reads a report any more.** A report is only for you to read; what a later stage needs
+  goes into a JSON file of the run folder: `sites/adsorption_sites.json` (stb-adsorb, read by
+  stb-adsorbBsse/Analysis/Gibbs, was the `# SITE_TABLE` of `sites/adsorption_sites.txt`),
+  `neb_run/neb_setup.json` (stb-neb, read by stb-nebAnalysis, was the `# MODE`/`# IMAGE_TABLE`/path
+  length of `neb_setup.txt`), `gqca_setup.json` (stb-gqca -> stb-gqcaAnalysis, was the last lines of
+  `gqca_stage1.txt`), `ir_modes.json` and `raman_modes.json` (stb-irModes/stb-ramanModes ->
+  stb-irAnalysis/stb-ramanAnalysis, were the `# MODE_TABLE`, displacement, vacuum axes and lattice of
+  `ir_stage2.txt`/`raman_stage2.txt`). Folders written by earlier versions are still read from their
+  old text files.
+
 - `stb-convergence --parameter energyshift`: the default sweep is the geometric set 0.02, 0.01, 0.005,
   0.002, 0.001, 0.0005 Ry (`--energyshift-values` for another). The old linear default, 0.001 to 0.05 in
   steps of 0.01, had no point between 0.001 and 0.011 Ry, the range in use, while the parameter acts

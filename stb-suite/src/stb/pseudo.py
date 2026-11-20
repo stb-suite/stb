@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -112,7 +113,9 @@ The table's functional must match the calculation's XC.Functional/XC.Authors."""
                          help="Only run the availability check and report -- do not copy any "
                               "files.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_pseudo_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-pseudo {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false",
                          help="Do not show the introduction")
@@ -127,7 +130,7 @@ The table's functional must match the calculation's XC.Functional/XC.Authors."""
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("pseudo") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-PSEUDO REPORT =====", 'magenta'), f_out)

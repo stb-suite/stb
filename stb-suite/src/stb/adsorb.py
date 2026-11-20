@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -37,14 +38,11 @@ from stb.core.adsorption_sites import (
 from stb.core.layers import LAYER_TOL_ANG
 from stb.neb import wrap_into_cell
 
-# REPORT_FILE is always written -- it carries the machine-readable
-# "# SITE_TABLE" block stb-adsorbAnalysis::read_site_table depends on, so
-# it is never gated behind --save-report (same split as stb-hubbardu's
-# always-on run_manifest.json vs. its own --save-report-gated narrative).
-# PREP_REPORT_FILE is the optional, human narrative counterpart ([0]-[6]),
-# written only with --save-report, matching every other tool's convention.
-REPORT_FILE = "adsorption_sites.txt"
-PREP_REPORT_FILE = "adsorption_prep_report.txt"
+# SITE_TABLE_FILE (sites/adsorption_sites.json) is always written: the later stages read which
+# adsorbate and height each site folder holds from it. The report (--save-report) is only for
+# the user and goes to the current folder (core.cli.new_report_path).
+from stb.core.adsorption_sites import SITE_TABLE_FILE, write_site_table
+REPORT_FILE = "stb_adsorb_report.txt"
 _KGRID_RE = re.compile(r'kgrid\.MonkhorstPack\s+\[.*?\]', re.IGNORECASE)
 _SPIN_RE = re.compile(r'(Spin\s+)(\S+)', re.IGNORECASE)
 
@@ -450,9 +448,9 @@ def main():
                               "'adsorbate' and 'sites' -- everything this study needs lives under "
                               "one folder, same convention as stb-hubbardu's hubbardu_runs.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the full report narrative to {PREP_REPORT_FILE} (under "
-                              "--output-dir). Off by default. 'sites/adsorption_sites.txt' (the "
-                              "SITE_TABLE stb-adsorbAnalysis reads) is always written regardless.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_adsorb_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view", action="store_true",
                          help="Open every generated structure (clean_slab, isolated adsorbate(s), "
                               "and every written site) in ASE's interactive 3D viewer as a multi-"
@@ -583,8 +581,8 @@ def main():
     clean_slab_dir = os.path.join(output_root, "clean_slab")
     sites_root = os.path.join(output_root, "sites")
     os.makedirs(sites_root, exist_ok=True)
-    site_table_path = os.path.join(sites_root, REPORT_FILE)
-    report_path = os.path.join(output_root, PREP_REPORT_FILE) if args.save_report else None
+    site_table_path = os.path.join(sites_root, SITE_TABLE_FILE)
+    report_path = new_report_path("adsorb") if args.save_report else None
     f_out = open(report_path, 'w') if report_path else None
 
     library_warnings = []  # collected via capture_library_noise, reported in [6]
@@ -1396,18 +1394,9 @@ def main():
     if f_out:
         f_out.close()
 
-    # Machine-readable site table -- always written, independent of
-    # --save-report, since stb-adsorbAnalysis::read_site_table depends on it
-    # (it skips everything before the "# SITE_TABLE" marker, so the exact
-    # format below is unchanged from before this report restructuring).
-    with open(site_table_path, 'w') as f_table:
-        f_table.write("# Machine-readable site table written by stb-adsorb -- see "
-                       f"{PREP_REPORT_FILE if report_path else '--save-report'} (or the console "
-                       "log) for the full human-readable report.\n")
-        f_table.write("\n# SITE_TABLE -- parsed by stb-adsorbAnalysis, do not reorder the columns\n")
-        f_table.write(f"# {'label':<30}{'adsorbate':<14}{'height':<10}{'dir'}\n")
-        for label, ads_name, height, site_dir in report_rows:
-            f_table.write(f"{label:<32}{ads_name:<14}{height:<10.4f}{site_dir}\n")
+    # Site table -- always written, independent of --save-report: stb-adsorbAnalysis,
+    # stb-adsorbBsse and stb-adsorbGibbs read it (adsorption_sites.write_site_table).
+    write_site_table(site_table_path, report_rows)
 
     print(f"\n{color_text('Success:', 'green')} {len(site_records)} site folder(s) written under "
           f"'{sites_root}'.")

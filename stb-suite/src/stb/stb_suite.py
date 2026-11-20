@@ -1765,7 +1765,7 @@ def run_grid_to_cube() -> None:
                       else f"{stem}_{selected_type}_{selected_spin}.cube")
     output = get_input(f"Output filename (default: {default_output}): ").strip()
     dry_run = get_input("Report only, write no cube (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_cube_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_cube_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--type", selected_type, "--spin", selected_spin, "--no-intro"]
     if label:
@@ -1815,7 +1815,7 @@ def run_ani2traj_converter() -> None:
     default_output = f"{label or '<label>'}_traj{ext_map[selected_format]}"
     output = get_input(f"Output filename (default: {default_output}): ").strip()
     dry_run = get_input("Report only, write no file (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_ani2traj_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_ani2traj_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--out-format", selected_format, "--stride", str(stride), "--skip", str(skip), "--no-intro"]
     if label:
@@ -1946,7 +1946,7 @@ def run_status_checker() -> None:
         recursive = get_input("Also every run folder below it (recursive)? (y/N): ").strip().lower() == 'y'
     label = get_input("SystemLabel override (leave blank to auto-detect): ").strip()
     csv_file = get_input("Save the summary table as CSV (file name, blank = no): ").strip()
-    save_report = get_input("Save the report to stb_status_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_status_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--no-intro"]
     if recursive:
@@ -1984,7 +1984,7 @@ def run_native_charges_checker() -> None:
     if is_glob:
         details = get_input("Also the full report of each folder? (y/N): ").strip().lower() == 'y'
     csv_file = get_input("Save every atom's charges as CSV (file name, blank = no): ").strip()
-    save_report = get_input("Save the report to stb_nativecharges_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_nativecharges_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--no-intro"]
     if label:
@@ -2028,7 +2028,7 @@ def run_archive_packager() -> None:
     extra_exclude = get_input(
         "Suffixes to leave out, space-separated, or Enter to skip: ").strip()
     dry_run = get_input("Report only, write no archive (dry run)? (y/N): ").strip().lower() == 'y'
-    save_report = get_input("Save the report to stb_archive_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_archive_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--path", path, "--mode", mode, "--no-intro"]
     if recursive:
@@ -5783,7 +5783,7 @@ def run_gqca_analysis() -> None:
                             "[default: none]: ").strip().lower()
     if export_fmt in ("cif", "xsf", "xyz", "vasp"):
         args.extend(["--export-relaxed", export_fmt])
-    if get_input("  Save the text report to <dir>/gqca_stage2.txt? [y/N]: ").strip().lower() == 'y':
+    if get_input("  Save the text report (stb_gqcaAnalysis_report.txt, current folder)? [y/N]: ").strip().lower() == 'y':
         args.append("--save-report")
 
     show_advanced = get_input(
@@ -6448,7 +6448,7 @@ def run_eos_inputs_generator() -> None:
                 args.extend(["--kgrid", *kgrid_vals])
             else:
                 print(color_text("Expected 3 integers -- keeping the template's grid.", 'yellow'))
-    save_report = get_input("\nSave the report to <output>/stb_eosInputs_report.txt? [y/N]: ").strip().lower()
+    save_report = get_input("\nSave the report to stb_eosInputs_report.txt (current folder)? [y/N]: ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
 
@@ -6488,7 +6488,7 @@ def run_eos_analysis_generator() -> None:
     data = get_input("Write the data files (CSV + JSON)? [y/N]: ").strip().lower()
     if data == 'y':
         args.append("--save-data")
-    save_report = get_input("Save the report to stb_eosAnalysis_report.txt? [y/N]: ").strip().lower()
+    save_report = get_input("Save the report to stb_eosAnalysis_report.txt (current folder)? [y/N]: ").strip().lower()
     if save_report == 'y':
         args.append("--save-report")
 
@@ -6863,7 +6863,7 @@ def run_mlmd_generator() -> None:
         args.append("--save-gnuplot")
     elif get_input("Write the data files only (.dat: time series, g(r), MSD)? (y/N): ").strip().lower() == 'y':
         args.append("--save-data")
-    if get_input("Save the report to stb_mlmd_report.txt? (y/N): ").strip().lower() == 'y':
+    if get_input("Save the report to stb_mlmd_report.txt (current folder)? (y/N): ").strip().lower() == 'y':
         args.append("--save-report")
 
     run_tool("stb-mlmd", args)
@@ -8604,7 +8604,7 @@ def run_wantibexos_interface() -> None:
     check = True
     if not dry_run:
         check = get_input("Check the written file by rebuilding the bands from it? (Y/n): ").strip().lower() != 'n'
-    save_report = get_input("Save the report to stb_wtb_report.txt? (y/N): ").strip().lower() == 'y'
+    save_report = get_input("Save the report to stb_siesta2wtb_report.txt (current folder)? (y/N): ").strip().lower() == 'y'
 
     args = ["--input", input_file]
     if output_file:

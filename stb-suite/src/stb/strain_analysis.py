@@ -32,6 +32,7 @@ persisted-plot mechanism here, matching the rest of this convention), and
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -670,10 +671,12 @@ def main():
     parser.add_argument("-o", "--output-dir", default=".",
                         help="Directory to write <direction>_curve.dat/.gplot (single direction) or "
                              "comparison_curve.dat/.gplot (multiple directions) into with "
-                             f"--save-gnuplot, and {REPORT_FILE} into with --save-report (default: "
+                             "--save-gnuplot (the report goes to the current folder) (default: "
                              "current directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_strainAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the curve data + a companion .gplot script (single "
                              "direction: <direction>_curve.dat/.gplot; multiple directions: "
@@ -699,7 +702,7 @@ def main():
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("strainAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

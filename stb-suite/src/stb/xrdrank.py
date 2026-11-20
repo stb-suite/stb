@@ -15,6 +15,7 @@
 # one figure) via --view; space group added to the ranking table; final
 # dedicated LIBRARY WARNINGS section.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -29,7 +30,7 @@ from stb.core.cli import (color_text, show_intro, run_with_spinner, print_dual, 
                           print_table, capture_library_noise)
 from stb.core.deps import require_pyxtal
 
-REPORT_FILE = "xrd_rank_report.txt"
+REPORT_FILE = "stb_xrdrank_report.txt"
 
 
 def find_candidates(input_dir):
@@ -242,8 +243,8 @@ no faster mode), so this can take a while for a large --input-dir.""",
                              "all). The full ranking is always written to --output regardless.")
     parser.add_argument("-o", "--output", type=str, default="xrd_rank.txt",
                         help="Output ranking table file name (default: xrd_rank.txt). Always "
-                             "lists every candidate, regardless of --top. Gnuplot/report files "
-                             "(--save-gnuplot/--save-report) are written alongside it, in the "
+                             "lists every candidate, regardless of --top. Gnuplot files "
+                             "(--save-gnuplot) are written alongside it (the report goes to the current folder), in the "
                              "same directory.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write the ranking as a gnuplot bar chart (xrd_rank.dat + "
@@ -256,8 +257,9 @@ no faster mode), so this can take a while for a large --input-dir.""",
                              "candidate's simulated-vs-experimental overlay, one figure) before "
                              "finishing. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full numbered run report to {REPORT_FILE} "
-                             "(written alongside --output). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_xrdrank_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-xrdrank {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -284,7 +286,7 @@ no faster mode), so this can take a while for a large --input-dir.""",
 
     output_dir = os.path.dirname(args.output) or "."
     os.makedirs(output_dir, exist_ok=True)
-    report_path = os.path.join(output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("xrdrank") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

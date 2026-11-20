@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -29,7 +30,7 @@ from stb.core.phonon_workflow import (
 )
 from stb.core.ase_view import view_structure_interactive
 
-REPORT_FILE = "ir_stage3.txt"
+REPORT_FILE = "stb_irAnalysis_report.txt"
 # Same conventional spectroscopy unit Raman's Stage 3 uses -- Phonopy's own
 # native unit (and Stage 2's MODE_TABLE) is THz throughout the rest of this
 # workflow.
@@ -58,6 +59,40 @@ def detect_ir_label(directory):
     except OSError:
         return None
     return match.group(1) if match else None
+
+
+def read_legacy_stage2_settings(report_path):
+    """(displacement, vacuum axes, lattice) from the ir_stage2.txt report of an older stb-irModes,
+    which kept them only in its text; the current version writes ir_modes.json."""
+    stage2_delta = None
+    vacuum_axes = None
+    lattice_ang = []
+    in_lattice_block = False
+    with open(report_path) as f:
+        for line in f:
+            if line.startswith("Displacement      :"):
+                try:
+                    stage2_delta = float(line.split(":")[1].split()[0])
+                except (IndexError, ValueError):
+                    pass
+            elif line.startswith("Vacuum axes (abc) :"):
+                try:
+                    parts = line.split(":")[1].split()
+                    vacuum_axes = [p == "True" for p in parts[:3]]
+                except (IndexError, ValueError):
+                    pass
+            elif line.startswith("Lattice vectors (Ang"):
+                in_lattice_block = True
+            elif in_lattice_block:
+                parts = line.split()
+                if len(parts) == 4 and parts[0] in ("a", "b", "c"):
+                    try:
+                        lattice_ang.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                    except ValueError:
+                        pass
+                if len(lattice_ang) >= 3:
+                    in_lattice_block = False
+    return stage2_delta, vacuum_axes, lattice_ang
 
 
 def read_mode_table(report_path):
@@ -243,7 +278,9 @@ alongside their individual (basis-dependent) values.""",
                              "through the MODE_TABLE's 6-decimal text format, comfortably below "
                              "any real frequency splitting between genuinely distinct modes).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_irAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also save the spectrum (and, with --experimental, the overlaid "
                              "measured spectrum) as gnuplot .dat + .gplot scripts, under "
@@ -285,9 +322,10 @@ alongside their individual (basis-dependent) values.""",
     print("\n" + color_text("IR SPECTRUM WORKFLOW -- STAGE 3: ANALYSIS", 'bold'))
     print("-" * 60)
 
-    stage2_report = os.path.join(args.directory, "ir_stage2.txt")
-    if not os.path.isfile(stage2_report):
-        print(color_text(f"[ERROR] '{stage2_report}' not found -- run stb-irModes (Stage 2) first.", 'red'))
+    stage2_json = os.path.join(args.directory, "ir_modes.json")
+    stage2_report = os.path.join(args.directory, "ir_stage2.txt")   # older versions: tables in the report
+    if not os.path.isfile(stage2_json) and not os.path.isfile(stage2_report):
+        print(color_text(f"[ERROR] '{stage2_json}' not found -- run stb-irModes (Stage 2) first.", 'red'))
         sys.exit(1)
 
     if args.experimental is not None and not os.path.isfile(args.experimental):
@@ -306,51 +344,35 @@ alongside their individual (basis-dependent) values.""",
     # vacuum-axis booleans, and the lattice matrix (both needed for the
     # non-bulk path's dipole-axis alignment check -- see
     # dipole_axis_mask's own docstring).
-    stage2_delta = None
-    vacuum_axes = None
-    lattice_ang = []
-    in_lattice_block = False
-    with open(stage2_report) as f:
-        for line in f:
-            if line.startswith("Displacement      :"):
-                try:
-                    stage2_delta = float(line.split(":")[1].split()[0])
-                except (IndexError, ValueError):
-                    pass
-            elif line.startswith("Vacuum axes (abc) :"):
-                try:
-                    parts = line.split(":")[1].split()
-                    vacuum_axes = [p == "True" for p in parts[:3]]
-                except (IndexError, ValueError):
-                    pass
-            elif line.startswith("Lattice vectors (Ang"):
-                in_lattice_block = True
-            elif in_lattice_block:
-                parts = line.split()
-                if len(parts) == 4 and parts[0] in ("a", "b", "c"):
-                    try:
-                        lattice_ang.append([float(parts[1]), float(parts[2]), float(parts[3])])
-                    except ValueError:
-                        pass
-                if len(lattice_ang) >= 3:
-                    in_lattice_block = False
+    if os.path.isfile(stage2_json):
+        import json
+        with open(stage2_json) as f:
+            stage2 = json.load(f)
+        stage2_delta = stage2.get("displacement_ang")
+        vacuum_axes = stage2.get("vacuum_axes")
+        lattice_ang = stage2.get("lattice_ang") or []
+        rows = stage2.get("modes") or []
+        stage2_source = stage2_json
+    else:
+        stage2_delta, vacuum_axes, lattice_ang = read_legacy_stage2_settings(stage2_report)
+        rows = read_mode_table(stage2_report)
+        stage2_source = stage2_report
     if stage2_delta is None:
         print(color_text(
-            f"[ERROR] Could not recover the Stage 2 displacement value from '{stage2_report}'.", 'red'))
+            f"[ERROR] Could not recover the Stage 2 displacement value from '{stage2_source}'.", 'red'))
         sys.exit(1)
 
     axis_mask = dipole_axis_mask(vacuum_axes, lattice_ang)
 
-    rows = read_mode_table(stage2_report)
     if not rows:
-        print(color_text(f"[ERROR] No # MODE_TABLE rows found in '{stage2_report}'.", 'red'))
+        print(color_text(f"[ERROR] No mode rows found in '{stage2_source}'.", 'red'))
         sys.exit(1)
     modes = group_by_mode(rows)
 
     born_charge_root = os.path.join(args.directory, "born_charge_disp")
     born_charges_cache = None  # (atom_labels, Z_star), read once, shared by every BULK mode
 
-    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("irAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     print_dual(f"{color_text('===== IR STAGE 3 REPORT (ANALYSIS) =====', 'magenta')}", f_out)
 

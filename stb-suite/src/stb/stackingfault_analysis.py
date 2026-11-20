@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -28,7 +29,7 @@ from stb.core.ase_view import view_structure_interactive
 # also RUN_SUBDIR's default value for --dir (see _default_analysis_dir()).
 RUN_SUBDIR = "sf_run"
 MANIFEST_FILE = "sf_manifest.json"
-REPORT_FILE = "stackingfault_report.txt"
+REPORT_FILE = "stb_stackingfaultAnalysis_report.txt"
 _SHIFT_DIR_RE = re.compile(r'^shift_(\d+)_(\d+)$')
 
 
@@ -387,7 +388,9 @@ def main():
                               "calc.out is flagged as possibly not single-point-converged. "
                               "Advisory only, never blocks the result.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_stackingfaultAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                          help="Also save the gamma-surface (or line-scan) data as gnuplot .dat "
                               "+ .gplot scripts, under '<dir>/plot/'. Off by default.")
@@ -435,7 +438,7 @@ def main():
         scan, scan_points = "surface", None
         mode, n_layer1_atoms = 3, None
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("stackingfaultAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== STACKING-FAULT (GAMMA-SURFACE) REPORT =====', 'magenta')}", f_out)

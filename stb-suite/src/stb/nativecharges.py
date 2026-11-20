@@ -14,6 +14,7 @@ is computed: for the iterative Hirshfeld-I see stb-hirshfeldPrep/Ions/Analysis (
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import io
 import os
@@ -280,7 +281,9 @@ def main():
                         help="With several folders, also print the full report of each one.")
     parser.add_argument("--csv", default=None, help="Also write every atom's charges (all folders, all methods) as CSV.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (current folder). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_nativecharges_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-nativecharges {VERSION}")
     args = parser.parse_args()
@@ -302,6 +305,8 @@ def main():
     batch = len(matches) > 1
 
     buf = io.StringIO() if args.save_report else None
+
+    report_file = new_report_path("nativecharges") if args.save_report else None
     sec = Sections(buf)
 
     def out(text=""):
@@ -363,7 +368,7 @@ def main():
     if args.csv:
         out(f"CSV               : {args.csv}")
     if args.save_report:
-        out(f"Report            : {REPORT_FILE}")
+        out(f"Report            : {report_file}")
 
     sec("WARNINGS")
     allw = [w for r in results for w in r["warnings"]]
@@ -373,7 +378,7 @@ def main():
     else:
         out("  none")
     if buf is not None:
-        with open(REPORT_FILE, "w") as fh:
+        with open(report_file, "w") as fh:
             fh.write(buf.getvalue())
 
     print("\n" + "-" * 60)

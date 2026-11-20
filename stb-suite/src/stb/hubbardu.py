@@ -16,6 +16,7 @@
 # elastic_inputs.py/phonons_create.py already use, instead of being embedded
 # directly inline in calc.fdf.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -32,7 +33,7 @@ from stb.core.symmetry import find_inequivalent_sites
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 _EXISTING_LDAU_RE = re.compile(r'LDAU\.proj|LDAU\.PotentialShift|DFTU\.proj|DFTU\.PotentialShift', re.IGNORECASE)
 
-REPORT_FILE = "hubbardu_stage1.txt"
+REPORT_FILE = "stb_hubbardu_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 TEMPLATE_STRUCTURE_NAME = "_template_structure.fdf"
 TEMPLATE_CALC_NAME = "_template_calc.fdf"
@@ -322,7 +323,9 @@ REFERENCE_U sanity check, ...).""",
     parser.add_argument("-o", "--output-dir", type=str, default="hubbardu_runs",
                         help="Output directory for the run folders (default: hubbardu_runs).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_hubbardu_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbardu {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -356,7 +359,7 @@ REFERENCE_U sanity check, ...).""",
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbardu") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

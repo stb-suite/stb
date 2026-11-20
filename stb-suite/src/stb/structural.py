@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -620,8 +621,8 @@ def main():
     parser.add_argument("--mode", choices=["list", "mean"], required=True, help="Calculation mode: list or mean")
     parser.add_argument("--list", type=str, help="List of atom indices (comma-separated, 1-based). Example: 1,4,5,7 - Required for 'list' mode")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write rdf.dat and references.bib into (and "
-                             f"{REPORT_FILE}, with --save-report) (default: current "
+                        help="Directory to write rdf.dat and references.bib into ("
+                             "the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--no-rdf", dest="rdf", action="store_false",
                         help="Skip the radial distribution function g(r) (rdf.dat is not written).")
@@ -629,7 +630,9 @@ def main():
                         help="Cutoff radius for g(r), in Å (default: 10.0). Larger values capture "
                              "more coordination shells but take longer for large structures.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_structural_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version",
                         version=f"stb-structural {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
@@ -705,7 +708,7 @@ def main():
         if os.path.exists(stale_rdf):
             os.remove(stale_rdf)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("structural") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_report(results, args.file, args.format, args, rdf_summary, report_path, f_out)

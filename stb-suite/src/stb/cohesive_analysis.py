@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -16,7 +17,7 @@ import argparse
 from stb.core import siesta_log, structure_io
 from stb.core.cli import color_text, print_dual, print_section, print_table, show_intro
 
-REPORT_FILE = "cohesive_results.dat"
+REPORT_FILE = "stb_cohesiveAnalysis_report.txt"
 PLOT_FILE = "cohesive_correction.png"
 PLOT_COLORS = ['#2255cc', '#cc5522', '#22aa55']
 
@@ -303,7 +304,9 @@ def main():
                              "'zero': (E_KS + FreeEng)/2, the T -> 0 extrapolation used for smeared metals.\n"
                              "Section [2b] lists E_KS, FreeEng and -T*S of every run in any case.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_cohesiveAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
 
     parser.add_argument("--view", action="store_true",
                         help="Show an interactive matplotlib preview of the BSSE-correction "
@@ -341,7 +344,7 @@ def main():
     scan_points = discover_scan_points(root_dir)
     scan_available = len(scan_points) > 0
 
-    report_path = os.path.join(root_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("cohesiveAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-COHESIVEANALYSIS REPORT (COHESIVE ENERGY) =====", 'magenta'), f_out)

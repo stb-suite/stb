@@ -26,6 +26,7 @@ only counted (same report style as stb-mlmd/stb-mlphonons).
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -1007,7 +1008,9 @@ def build_parser():
                         help="Write the data behind the report: stress_strain.dat (every strained cell's stress), "
                              "elastic_tensor.dat (C, its projection, S), directional.dat. Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_mlelastic_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-mlelastic {VERSION}")
     return parser
@@ -1037,7 +1040,7 @@ def main():
                     "Developed by Dr. Carlos M. O. Bastos"])
 
     os.makedirs(args.output_dir, exist_ok=True)
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlelastic") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     warns, noise, figures, files = [], [], [], []
     t_start = time.monotonic()

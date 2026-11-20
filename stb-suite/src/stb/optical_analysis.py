@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -28,7 +29,7 @@ from stb.core.optical_setup import reciprocal_spacings, spacing_band, symmetry_a
 from stb.core.siesta_log import get_scf_convergence, get_optical_info, read_eig_gap
 from stb.core.spectrum import read_experimental_spectrum, find_spectrum_peaks, match_peaks
 
-REPORT_FILE = "optical_stage2.txt"
+REPORT_FILE = "stb_opticalAnalysis_report.txt"
 RY_TO_EV = 13.605693122994
 HC_EV_NM = 1239.841984  # photon energy (eV) * wavelength (nm)
 
@@ -792,7 +793,9 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
                          help="Base filename (no extension) for the .csv/.dat/.gplot outputs "
                               "(default: optical_results).")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_opticalAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-opticalAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -850,7 +853,7 @@ check of the tensor; optical constants at chosen energies; a plain-language inte
             f"'{args.directory}' -- run stb-optical first.", 'red'))
         sys.exit(1)
 
-    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("opticalAnalysis") if args.save_report else None
     f_out = open(report_path, 'w') if report_path else None
 
     warnings = []                       # collected, repeated together at the end

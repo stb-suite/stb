@@ -7,6 +7,7 @@
 #################################################
     
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -1465,7 +1466,9 @@ def build_parser():
     parser.add_argument("--dry-run", action="store_true",
                         help="Read and report only (structure, symmetry, checks); write nothing.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to --out-file, or in --out-dir).")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_translate_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-cf", "--coord-format", choices=['direct', 'cartesian'], default=None,
                         help="Coordinates of the output: direct (fractional) or cartesian. Default: the input's, or the "
                              "output format's own.")
@@ -1538,8 +1541,7 @@ def main():
 
     report_path = None
     if not args.dry_run and args.save_report:
-        report_dir = args.out_dir if batch else (os.path.dirname(args.out_file) or ".")
-        report_path = os.path.join(report_dir, REPORT_FILE)
+        report_path = new_report_path("translate")
     f_out = open(report_path, "w") if report_path else None
     warns = []
     sections = Sections(f_out)

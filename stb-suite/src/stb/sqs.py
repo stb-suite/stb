@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import os
@@ -237,8 +238,9 @@ ideal random alloy (via icet's Monte Carlo or enumeration SQS search).""",
                         help="Device to run the MACE model on (default: cpu).")
 
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry "
-                             f"analysis) to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_sqs_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view (via ASE) comparing the input "
                              "structure and the final SQS structure (page through frames in "
@@ -272,7 +274,7 @@ ideal random alloy (via icet's Monte Carlo or enumeration SQS search).""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("sqs") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-SQS REPORT =====", 'magenta'), f_out)

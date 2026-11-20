@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import io
@@ -306,7 +307,9 @@ def main():
                              "(atomic units). Densities are always e/Bohr^3.")
     parser.add_argument("--dry-run", action="store_true", help="Report only; write no cube.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to the input). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_cube_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-cube {VERSION}")
     args = parser.parse_args()
@@ -343,7 +346,7 @@ def main():
     default_output = (f"{label}_{gtype}.cube" if args.spin == "total" else f"{label}_{gtype}_{args.spin}.cube")
     output_file = args.output or default_output
 
-    report_path = os.path.join(folder, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("cube") if args.save_report else None
     buf = io.StringIO() if report_path else None
     sec = Sections(buf)
 

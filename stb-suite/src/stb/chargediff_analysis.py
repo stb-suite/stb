@@ -25,6 +25,7 @@ e/Ang^3 grid is converted here).
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -45,7 +46,7 @@ from stb.core.rho_io import read_total, try_read_net_spin, find_one_rho, compute
 from stb.core.grid_export import (write_data_file, write_profile_data_file, write_gnuplot_script,
                                   check_planar_orthogonality, NON_ORTHOGONAL_WARN_DEG)
 
-REPORT_FILE = "chargediff_analysis_report.txt"
+REPORT_FILE = "stb_chargediffAnalysis_report.txt"
 BOHR_TO_ANG = 0.529177210903
 BIB_FILE = "references.bib"
 CHARGEDIFF_MANIFEST_FILE = "chargediff_manifest.json"
@@ -421,7 +422,7 @@ combined system and every fragment are spin-polarized).""",
                               "subfolders it lists, each already run in SIESTA. Default: "
                               "chargediff_run (stb-chargediffPrep's own default --output-dir).")
     parser.add_argument("-o", "--output-dir", type=str, default=".",
-                        help="Directory to write the data/gnuplot/cube/report files and "
+                        help="Directory to write the data/gnuplot/cube files (the report goes to the current folder) and "
                              "references.bib into (default: current directory). Created if "
                              "it doesn't exist.")
     mode_group = parser.add_mutually_exclusive_group()
@@ -471,7 +472,9 @@ combined system and every fragment are spin-polarized).""",
                         help="Also write <name>_atoms.csv (charge change per atom) and <name>_results.json (every number "
                              "of the report). Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_chargediffAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-chargediffAnalysis {VERSION}")
 
@@ -562,7 +565,7 @@ combined system and every fragment are spin-polarized).""",
     stem = f"{os.path.basename(os.path.abspath(args.dir)) or 'chargediff'}_chargediff"
     base = os.path.join(args.output_dir, stem)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("chargediffAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 

@@ -13,6 +13,7 @@ and stacks them into a van der Waals heterostructure.
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -35,7 +36,7 @@ warnings.filterwarnings("ignore")
 # ANSI Colors for terminal
 from stb.core.cli import COLORS, color_text, print_dual, print_section, print_table, show_intro
 
-REPORT_FILE = "stb_2dstacking_report.txt"
+REPORT_FILE = "stb_2Dstacking_report.txt"
 BIB_FILE = "references.bib"
 
 # Same default vacuum-gap threshold as stb-fetch/stb-kgrid (core/kspace.py's
@@ -179,8 +180,9 @@ def main():
     parser.add_argument("-o", "--output", default="stacked_structure.fdf", help="Output .fdf base file name")
     parser.add_argument("-sp", "--symprec", type=float, default=0.01, help="Symmetry tolerance in Angstroms (default: 0.01)")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report (including the symmetry analysis) "
-                             f"to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_2Dstacking_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view of the final heterostructure(s) (via ASE) "
                              "after writing the output file(s). Needs a display. Off by default.")
@@ -224,7 +226,7 @@ def main():
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("2Dstacking") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-2DSTACKING REPORT =====", 'magenta'), f_out)

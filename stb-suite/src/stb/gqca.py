@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -20,7 +21,8 @@ from stb.core.cli import color_text, show_intro, print_dual, print_section, prin
 from stb.core.deps import require_icet
 from stb.core.pseudopotentials import resolve_pseudo_source, copy_pseudo
 
-REPORT_FILE = "gqca_stage1.txt"
+REPORT_FILE = "stb_gqca_report.txt"
+SETUP_FILE = "gqca_setup.json"    # <output-dir>/: what stb-gqcaAnalysis reads
 
 _RUNTYPE_RE = re.compile(r'MD\.TypeOfRun\s+\S+', re.IGNORECASE)
 _VARIABLECELL_RE = re.compile(r'MD\.VariableCell\s+\S+', re.IGNORECASE)
@@ -606,7 +608,7 @@ surface, not a coarse sample of it.""",
 
     output_root = args.output_dir
     os.makedirs(output_root, exist_ok=True)
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = new_report_path("gqca")
 
     n_sub_input = len(site_indices)
     in_formula, ia, ib, ic, ial, ibe, iga, ivol = _cell_summary(structure)
@@ -795,9 +797,12 @@ surface, not a coarse sample of it.""",
             "Note: the 3 cells differ in size; Stage 2 normalizes each FreeEng to a per-"
             "sublattice-site energy, so keep the default calc.out name (or pass --file).", 'cyan'), f_out)
 
-        f_out.write("\nSublattice     : " + args.sublattice + "\n")
-        f_out.write("Species B      : " + args.species_b + "\n")
-        f_out.write(f"AB deviation   : {ab_deviation:.6f}\n")
+        import json
+        with open(os.path.join(output_root, SETUP_FILE), "w") as f_json:
+            json.dump({"schema": "stb_gqca_setup_v1", "sublattice": args.sublattice,
+                       "species_b": args.species_b, "ab_deviation": round(float(ab_deviation), 6)},
+                      f_json, indent=2)
+        print_dual(f"Stage-2 record       : {os.path.join(output_root, SETUP_FILE)}", f_out)
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

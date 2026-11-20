@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -17,7 +18,7 @@ import numpy as np
 from stb.core import siesta_log, structure_io, gqca_solver, fdf_directives
 from stb.core.cli import color_text, show_intro, print_dual, print_section, print_table
 
-REPORT_FILE = "gqca_stage2.txt"
+REPORT_FILE = "stb_gqcaAnalysis_report.txt"
 
 KB_EV_PER_K = 8.617333262e-5
 EV_TO_KJ_MOL = 96.485332
@@ -30,17 +31,17 @@ _AB_DEVIATION_RE = re.compile(r"^AB deviation\s*:\s*(\S+)\s*$", re.MULTILINE)
 
 
 def read_stage1_metadata(directory):
-    """Reads back --sublattice/--species-b/the achieved AB pair-correlation
-    deviation from Stage 1's own persisted report (gqca.py::main appends
-    these lines at the very end of gqca_stage1.txt) -- same "each stage
-    re-reads/re-derives, never imports a sibling stage's module"
-    convention as every other WORKFLOW_TOOLS pair/trio in this suite.
-    Returns (sublattice, species_b, ab_deviation) or (None, None, None)
-    if the report is missing/unparsable. `ab_deviation` is 0.0 (not None)
-    for reports predating this field (backward-compatible silent
-    default), since a missing value here is far more likely an older
-    report than a real deviation.
+    """--sublattice/--species-b and the achieved AB pair-correlation deviation of Stage 1, from
+    the gqca_setup.json it writes into its output folder -- or, for a folder written by an older
+    version, from the last lines of its gqca_stage1.txt report. Returns (sublattice, species_b,
+    ab_deviation) or (None, None, None). `ab_deviation` is 0.0 for old reports without it.
     """
+    import json
+    json_path = os.path.join(directory, "gqca_setup.json")
+    if os.path.isfile(json_path):
+        with open(json_path) as f:
+            data = json.load(f)
+        return data.get("sublattice"), data.get("species_b"), float(data.get("ab_deviation") or 0.0)
     report_path = os.path.join(directory, "gqca_stage1.txt")
     if not os.path.isfile(report_path):
         return None, None, None
@@ -414,7 +415,9 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
                          help="Write the 3 relaxed structures (positions + relaxed cell) to "
                               "<directory>/relaxed/ as cif (default), xsf, xyz or vasp.")
     parser.add_argument("--save-report", action="store_true",
-                         help=f"Also persist the report to <directory>/{REPORT_FILE}. Off by default.")
+                         help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_gqcaAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-gqcaAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -456,13 +459,13 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
     if sublattice is None:
         print(color_text(
             f"[ERROR] Could not read Sublattice/Species B from "
-            f"'{os.path.join(args.directory, 'gqca_stage1.txt')}' -- run stb-gqca first.", 'red'))
+            f"'{os.path.join(args.directory, 'gqca_setup.json')}' -- run stb-gqca first.", 'red'))
         sys.exit(1)
 
     N = 2
     g = gqca_solver.degeneracies(N)
 
-    report_path = os.path.join(args.directory, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("gqcaAnalysis") if args.save_report else None
     f_out = open(report_path, 'w') if report_path else None
 
     def abort(msg):
@@ -615,7 +618,7 @@ core/gqca_solver.py::common_tangent_gaps' own docstring for the full argument.""
     if ab_deviation >= 1e-6:
         print_dual(color_text(
             f"\n[NOTE] cluster_n1's pair correlation deviated by {ab_deviation:.4f} from the "
-            "ideal -1.0 (every-pair-unlike) AB ordering at Stage 1 (see gqca_stage1.txt) -- "
+            "ideal -1.0 (every-pair-unlike) AB ordering at Stage 1 (see the stb-gqca report) -- "
             "the sublattice is geometrically frustrated (e.g. FCC/HCP/triangular), so this "
             "reference structure's local environment is not purely n_j=1. Delta_1 (and every "
             "downstream x_1/H_mix/S_mix/G_mix/SRO value derived from it) is therefore a less "

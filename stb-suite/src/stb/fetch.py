@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import sys
 import argparse
@@ -303,7 +304,9 @@ Look it up by exact id, or search by formula and pick a candidate.""",
     parser.add_argument("-o", "--output", type=str, default="fetched.fdf",
                         help="Output .fdf file name (default: fetched.fdf).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_fetch_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--view", action="store_true",
                         help="Open an interactive 3D view of the structure (via ASE) "
                              "after writing the .fdf. Needs a display. Off by default.")
@@ -363,7 +366,7 @@ Look it up by exact id, or search by formula and pick a candidate.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("fetch") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("===== STB-FETCH REPORT =====", 'magenta'), f_out)

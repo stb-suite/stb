@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import io
@@ -207,7 +208,9 @@ def main():
                         help="SIESTA output log. Default: <label>.out, else the only *.out next to the .ANI.")
     parser.add_argument("--dry-run", action="store_true", help="Report only; write no trajectory.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also write the report to {REPORT_FILE} (next to the .ANI). Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_ani2traj_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
     parser.add_argument("-v", "--version", action="version", version=f"stb-ani2traj {VERSION}")
     args = parser.parse_args()
@@ -234,7 +237,7 @@ def main():
     ani_file = f"{label}.ANI"
     output_file = args.output if args.output else f"{label}_traj{default_ext}"
 
-    report_path = os.path.join(folder, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("ani2traj") if args.save_report else None
     buf = io.StringIO() if report_path else None
     sec = Sections(buf)
     warnings = []

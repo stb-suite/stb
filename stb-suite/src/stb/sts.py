@@ -96,6 +96,7 @@ same code:
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import argparse
 import os
@@ -187,10 +188,12 @@ def main():
 
     parser.add_argument("-o", "--output-dir", type=str, default=".",
                         help="Directory to write sts.dat (and, with --save-gnuplot/--save-report, "
-                             "the .gplot script/report/references.bib) into (default: current "
+                             "the .gplot script/references.bib) into (the report goes to the current folder) (default: current "
                              "directory). Created if it doesn't exist.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the full run report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_sts_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--save-gnuplot", action="store_true",
                         help="Also write a real .gplot script alongside sts.dat. Off by default -- "
                              "this tool used to write the .dat file unconditionally but never wrote "
@@ -395,7 +398,7 @@ def main():
             f.writelines(lines)
 
     # --- From here on: the numbered, save-able report --------------------
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("sts") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(color_text("\n===== STB-STS REPORT =====", 'magenta'), f_out)

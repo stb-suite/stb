@@ -37,6 +37,7 @@ the gnuplot .dat + .gplot pair (the convention of the workflow analysis stages);
 """
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -410,7 +411,9 @@ def main():
                         help="Also write <output>_table.csv (one row per volume) and <output>_results.json "
                              "(every fit, check and number of the report). Off by default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to {REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_eosAnalysis_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-eosAnalysis {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -445,7 +448,7 @@ def main():
                                                       "fixed_extent": None}
     n_periodic = dims["n_periodic"]
 
-    report_path = REPORT_FILE if args.save_report else None
+    report_path = new_report_path("eosAnalysis") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
     warnings = []
 

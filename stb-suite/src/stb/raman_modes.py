@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -50,7 +51,8 @@ from stb.core.ase_view import view_structure_interactive
 # pure numerical-noise constant.
 _DEFAULT_ROTATIONAL_MODE_TOL_THZ = 2.0
 
-REPORT_FILE = "raman_stage2.txt"
+REPORT_FILE = "stb_ramanModes_report.txt"
+MODES_FILE = "raman_modes.json"     # <directory>/: what stb-ramanAnalysis reads
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 # 1 THz = 1e12 Hz -> wavenumber (cm^-1) = freq_Hz / c(cm/s) = freq_THz * 1e12 / 2.99792458e10
@@ -295,7 +297,7 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
 
     output_root = args.directory
     optical_root = os.path.join(output_root, "optical_disp")
-    report_path = os.path.join(output_root, REPORT_FILE)
+    report_path = new_report_path("ramanModes")
 
     with open(report_path, "w") as f_out:
         print_dual(f"{color_text('===== RAMAN STAGE 2 REPORT (MODES & OPTICAL DISPLACEMENTS) =====', 'magenta')}", f_out)
@@ -704,14 +706,17 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 "being Raman-active (see [1b]/[3] above). Nothing further to do for this "
                 "structure's Raman spectrum.", 'yellow'), f_out)
 
-        f_out.write("\n# MODE_TABLE -- parsed by stb-ramanAnalysis, do not reorder the "
-                     "first 6 columns\n")
-        f_out.write(f"# {'label':<22}{'mode_index':<12}{'band_index':<12}{'frequency_thz':<16}"
-                     f"{'sign':<8}{'axis':<6}{'dir':<24}{'derived_from'}\n")
-        for label, k, band_idx, freq, sign_name, axis_name, mode_dir, derived_from in report_rows:
-            derived_str = "-" if derived_from is None else str(derived_from)
-            f_out.write(f"{label:<24}{k:<12}{band_idx:<12}{freq:<16.6f}{sign_name:<8}{axis_name:<6}"
-                         f"{mode_dir}  {derived_str}\n")
+        import json
+        with open(os.path.join(output_root, MODES_FILE), "w") as f_json:
+            json.dump({
+                "schema": "stb_raman_modes_v1",
+                "displacement_ang": float(args.displacement),
+                "modes": [{"label": label, "mode_index": int(k), "band_index": int(band_idx),
+                           "frequency_thz": float(freq), "sign": sign_name, "axis": axis_name,
+                           "dir": mode_dir, "derived_from": derived_from}
+                          for label, k, band_idx, freq, sign_name, axis_name, mode_dir, derived_from
+                          in report_rows]}, f_json, indent=2)
+        print_dual(f"Stage-3 record       : {os.path.join(output_root, MODES_FILE)}", f_out)
 
     print("\n[INFO] Complete job!")
     print("\n" + "-" * 60)

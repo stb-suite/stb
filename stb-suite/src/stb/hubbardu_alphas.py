@@ -13,6 +13,7 @@
 # extra flag before this change either -- unchanged, just confirmed/reported
 # explicitly now in [0] RUN METADATA.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -26,7 +27,7 @@ from stb.hubbardu import (
     TEMPLATE_STRUCTURE_NAME, TEMPLATE_CALC_NAME, PSEUDO_SNAPSHOT_DIRNAME,
 )
 
-REPORT_FILE = "hubbardu_stage2.txt"
+REPORT_FILE = "stb_hubbarduAlphas_report.txt"
 
 # Default perturbation strengths (eV) for the linear-response fit -- symmetric
 # around zero so the fit isn't skewed by an accidental asymmetry in the
@@ -81,7 +82,9 @@ stb-hubbarduAnalysis.""",
                              f"{DEFAULT_FROZEN_ITERATIONS}; raise this only if "
                              "stb-hubbarduAnalysis finds nothing to parse in those folders).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_hubbarduAlphas_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-hubbarduAlphas {VERSION}")
     parser.add_argument("--no-intro", dest="intro", action="store_false", help="Do not show the introduction")
 
@@ -121,7 +124,7 @@ stb-hubbarduAnalysis.""",
             "Developed by Dr. Carlos M. O. Bastos"
         ])
 
-    report_path = os.path.join(args.dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("hubbarduAlphas") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

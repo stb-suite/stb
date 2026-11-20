@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import glob
@@ -692,7 +693,9 @@ def main():
                              "systems (layers, molecular crystals, physisorption). Default: whatever the "
                              "template says (off if nothing).")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <run folder>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_mlff_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("--ml-screen", action="store_true",
                         help="Before any SIESTA run, evaluate every config with a MACE-MP foundation "
                              "model (needs the 'ml' extra): its max force and energy above the "
@@ -735,7 +738,7 @@ def main():
     print("\n" + color_text("CUSTOM ML FORCE FIELD -- PREP:", 'bold'))
     print("-" * 60)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("mlff") if args.save_report else None
     if report_path:
         os.makedirs(args.output_dir, exist_ok=True)   # the report lives in the run folder, like Stages 2-4'
     f_out = open(report_path, "w") if report_path else None

@@ -12,6 +12,7 @@
 # emitted during the run instead of letting it leak into the terminal interleaved
 # with the report.
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import re
@@ -37,7 +38,7 @@ from stb.core import structure_io, kspace, mace_relax
 # flood this tool's own report.
 from stb.inputfile import generate_calculation
 
-REPORT_FILE = "xrdsearch_stage1.txt"
+REPORT_FILE = "stb_xrdsearch_report.txt"
 MACE_VACUUM_GAP_ANG = 10.0  # matches stb-kgrid/stb-mlrelax's own default
 
 
@@ -211,8 +212,9 @@ or later, on your relaxed .STRUCT_OUT results).""",
                              "through every candidate structure. Needs a display. Off by "
                              "default.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by "
-                             "default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_xrdsearch_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-o", "--output-dir", type=str, default="xrd_search",
                         help="Folder to write candidate structures into (default: xrd_search); "
                              "each candidate gets its own '<output-dir>/<name>/'. Created if it "
@@ -292,7 +294,7 @@ or later, on your relaxed .STRUCT_OUT results).""",
             "different -o to avoid mixing batches.", 'red'))
         sys.exit(1)
 
-    report_path = os.path.join(args.output_dir, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("xrdsearch") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     def fail(message):

@@ -7,6 +7,7 @@
 #################################################
 
 from stb import __version__ as VERSION
+from stb.core.cli import new_report_path
 
 import os
 import sys
@@ -26,7 +27,7 @@ from stb.core.phonon_workflow import (build_phonon_displacements, write_displace
                                      write_perfect_supercell, PERFECT_DIR)
 from stb.core.structure_io import read_md_state, prepend_include
 
-REPORT_FILE = "phonon_prep_properties.txt"
+REPORT_FILE = "stb_phononsCreate_report.txt"
 EXTRA_FDF_FILE = "config_extra.fdf"
 
 
@@ -135,7 +136,9 @@ def main():
                              "residual forces -- from every displacement's, which a small relaxation residual "
                              "otherwise turns into errors of several THz at Gamma.")
     parser.add_argument("--save-report", action="store_true",
-                        help=f"Also persist the report to <output-dir>/{REPORT_FILE}. Off by default.")
+                        help="Also write the report (for you to read; the later stages never read it) to "
+                             "stb_phononsCreate_report.txt in the current folder (_1, _2, ... when that name is "
+                             "taken, so no report is overwritten). Off by default.")
     parser.add_argument("-v", "--version", action="version", version=f"stb-phononsCreate {VERSION}")
 
     parser.add_argument("--no-intro", dest="intro", action="store_false",
@@ -197,7 +200,7 @@ def main():
         sys.exit(1)
     os.makedirs(output_root, exist_ok=True)
 
-    report_path = os.path.join(output_root, REPORT_FILE) if args.save_report else None
+    report_path = new_report_path("phononsCreate") if args.save_report else None
     f_out = open(report_path, "w") if report_path else None
 
     print_dual(f"{color_text('===== PHONON PREP REPORT =====', 'magenta')}", f_out)

@@ -36,6 +36,16 @@ check_missing() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -209,31 +219,31 @@ check_contains "pp-path" log_help.txt
 check_contains "fallback-dir" log_help.txt
 check_contains "list-elements" log_help.txt
 check_contains "dry-run" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
-# --- 7. --save-report and references.bib ---
-echo -e "\n--- Testing --save-report and references.bib ---"
+# --- 7. --save-report and stb_pseudo_references.bib ---
+echo -e "\n--- Testing --save-report and stb_pseudo_references.bib ---"
 
 echo "Testing: --save-report writes stb_pseudo_report.txt matching the console output"
-rm -f stb_pseudo_report.txt
+rm -f stb_pseudo_report*.txt stb_pseudo_references*.bib
 stb-pseudo -f sic.fdf -p dojo -o out_sic --save-report --no-intro > log_save_report_console.txt 2>&1
 check_success stb_pseudo_report.txt
 check_contains "Resolved : 2/2" stb_pseudo_report.txt
 check_contains "Report" log_save_report_console.txt
 
-echo "Testing: references.bib always written, with SIESTA + bank citations"
-rm -f references.bib
+echo "Testing: stb_pseudo_references.bib always written, with SIESTA + bank citations"
+rm -f stb_pseudo_report*.txt stb_pseudo_references*.bib
 stb-pseudo --species Si -p dojo -o out_bib --no-intro > /dev/null 2>&1
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
-check_contains "@article{Garcia2020," references.bib
-check_contains "@article{vanSetten2018," references.bib
+check_success stb_pseudo_references.bib
+check_contains "@article{Soler2002," stb_pseudo_references.bib
+check_contains "@article{Garcia2020," stb_pseudo_references.bib
+check_contains "@article{vanSetten2018," stb_pseudo_references.bib
 
 echo "Testing: fallback bank's citation is also written when a fallback resolves an element"
-rm -f references.bib
+rm -f stb_pseudo_report*.txt stb_pseudo_references*.bib
 stb-pseudo --species At -p dojo --fallback-dir virtual_vault -o out_bib2 --no-intro > /dev/null 2>&1
-check_contains "@misc{VirtualVault," references.bib
+check_contains "@misc{VirtualVault," stb_pseudo_references.bib
 
 
 # --- 7b. Level of theory: the copied files vs the folder's own calc.fdf (warnings only) ---
@@ -297,7 +307,7 @@ check_contains "gives Li a polarization orbital by SIESTA's default perturbative
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.2) ---"
 
 echo "Testing: navigate 1.2 -> option 1 (structure file) -> invalid then valid file -> dojo -> defaults -> save report -> quit"
-rm -f stb_pseudo_report.txt
+rm -f stb_pseudo_report*.txt stb_pseudo_references*.bib
 printf '1.2\n1\ndoes_not_exist.fdf\nsic.fdf\n1\n\n\n\n\n\n\ny\n\n0\n' | timeout 20 stb-suite > log_menu_file.txt 2>&1
 check_exit_code $? 0
 check_contains "Species found in structure : Si, C" log_menu_file.txt

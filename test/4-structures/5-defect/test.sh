@@ -182,14 +182,14 @@ fi
 
 # --- 5d. Numbered report, before/after symmetry table, --save-report ---
 echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
-rm -f stb_defect_report.txt vac.fdf
+rm -f stb_defect_report*.txt stb_defect_references*.bib vac.fdf
 stb-defect -f structure.fdf --type vacancy --index 1 --save-report --no-intro > log_report.txt 2>&1
 check_success stb_defect_report.txt
 check_contains "===== STB-DEFECT REPORT =====" stb_defect_report.txt
 check_contains "\[5\] STRUCTURE VALIDATION, SYMMETRY & WRITING OUTPUT FILE" stb_defect_report.txt
 check_contains "Property.*Before.*After" stb_defect_report.txt
 check_contains "Report         : stb_defect_report.txt" log_report.txt
-rm -f stb_defect_report.txt vac.fdf
+rm -f stb_defect_report*.txt stb_defect_references*.bib vac.fdf
 
 
 # --- 5e. --ml-relax (needs the optional 'ml' extra): single defect and multi-site paths ---
@@ -197,14 +197,14 @@ echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is 
 
 if python3 -c "import mace" 2>/dev/null; then
     echo "Testing: single defect, --ml-relax --ml-relax-cell"
-    rm -f vacrelax.fdf stb_defect_report.txt
+    rm -f vacrelax.fdf stb_defect_report*.txt stb_defect_references*.bib
     stb-defect -f structure.fdf --type vacancy --index 1 --ml-relax --ml-relax-cell --save-report \
         -o vacrelax.fdf --no-intro > log_ml_relax.txt 2>&1
     check_exit_code $? 0
     check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_defect_report.txt
     check_success vacrelax.fdf
     check_contains "ML pre-relaxed with MACE-MP-0" vacrelax.fdf
-    rm -f vacrelax.fdf stb_defect_report.txt
+    rm -f vacrelax.fdf stb_defect_report*.txt stb_defect_references*.bib
 
     echo "Testing: --all-inequivalent-sites, --ml-relax (no ranking table)"
     rm -f magrelax_site*.fdf

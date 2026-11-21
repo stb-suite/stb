@@ -272,24 +272,24 @@ fi
 rm -f my_kpath.fdf
 
 
-# --- 5c. --save-report and references.bib ---
-echo -e "\n--- Testing --save-report and references.bib ---"
+# --- 5c. --save-report and stb_kpath_references.bib ---
+echo -e "\n--- Testing --save-report and stb_kpath_references.bib ---"
 
 echo "Testing: --save-report writes stb_kpath_report.txt matching the console output"
-rm -f kpath_bs.fdf stb_kpath_report.txt
+rm -f kpath_bs.fdf stb_kpath_report*.txt stb_kpath_references*.bib
 stb-kpath --file example_2D_graphene.fdf --save-report --no-intro > log_save_report_console.txt 2>&1
 check_success stb_kpath_report.txt
 check_contains "Path : .*Gamma-M-K-.Gamma" stb_kpath_report.txt
 check_contains "Report" log_save_report_console.txt
 rm -f kpath_bs.fdf
 
-echo "Testing: references.bib always written (SIESTA + Setyawan-Curtarolo citations)"
-rm -f references.bib kpath_bs.fdf
+echo "Testing: stb_kpath_references.bib always written (SIESTA + Setyawan-Curtarolo citations)"
+rm -f stb_kpath_report*.txt stb_kpath_references*.bib kpath_bs.fdf
 stb-kpath --file example_2D_graphene.fdf --no-intro > /dev/null 2>&1
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
-check_contains "@article{Garcia2020," references.bib
-check_contains "@article{SetyawanCurtarolo2010," references.bib
+check_success stb_kpath_references.bib
+check_contains "@article{Soler2002," stb_kpath_references.bib
+check_contains "@article{Garcia2020," stb_kpath_references.bib
+check_contains "@article{SetyawanCurtarolo2010," stb_kpath_references.bib
 rm -f kpath_bs.fdf
 
 

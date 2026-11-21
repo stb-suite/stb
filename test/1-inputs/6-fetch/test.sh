@@ -69,9 +69,9 @@ pushd "$TEST_DIR" > /dev/null
 echo -e "\n--- Testing COD --cod-id (magnetite, COD 1010369) ---"
 rm -f mag_cod.fdf
 stb-fetch --source cod --cod-id 1010369 -o mag_cod.fdf --no-intro > log_cod_id.txt 2>&1
-check_contains "Formula:.*Fe3O4" log_cod_id.txt
-check_contains "Atoms:.*56" log_cod_id.txt
-check_contains "Space group:.*Fd-3m" log_cod_id.txt
+check_contains "Formula *:.*Fe3O4" log_cod_id.txt
+check_contains "Atoms *:.*56" log_cod_id.txt
+check_contains "Space group *:.*Fd-3m" log_cod_id.txt
 check_contains "oxidation-state-only disorder" log_cod_id.txt
 check_success mag_cod.fdf
 check_contains "NumberofAtoms      56" mag_cod.fdf
@@ -83,16 +83,16 @@ echo -e "\n--- Testing --unitcell primitive/conventional on the fetched magnetit
 echo "Testing: --unitcell primitive (56 -> 14 atoms, matches stb-unitcell/stb-defect's fixture)"
 rm -f mag_prim.fdf
 stb-fetch --source cod --cod-id 1010369 --unitcell primitive -o mag_prim.fdf --no-intro > log_unitcell_prim.txt 2>&1
-check_contains "Atoms:.*56" log_unitcell_prim.txt
-check_contains "Unit cell mode:.*primitive" log_unitcell_prim.txt
-check_contains "Output atoms:.*14" log_unitcell_prim.txt
+check_contains "Atoms *:.*56" log_unitcell_prim.txt
+check_contains "Unit cell mode *:.*primitive" log_unitcell_prim.txt
+check_contains "Output atoms *:.*14" log_unitcell_prim.txt
 check_success mag_prim.fdf
 check_contains "NumberofAtoms      14" mag_prim.fdf
 
 echo "Testing: --unitcell conventional (56 -> 56, no-op note)"
 rm -f mag_conv.fdf
 stb-fetch --source cod --cod-id 1010369 --unitcell conventional -o mag_conv.fdf --no-intro > log_unitcell_conv.txt 2>&1
-check_contains "Output atoms:.*56" log_unitcell_conv.txt
+check_contains "Output atoms *:.*56" log_unitcell_conv.txt
 check_contains "already the conventional cell" log_unitcell_conv.txt
 check_success mag_conv.fdf
 
@@ -122,9 +122,9 @@ echo "Testing: --optimade-id exact fetch (2dm-2127, MoS monolayer)"
 rm -f mos.fdf
 stb-fetch --source optimade --provider twodmatpedia --optimade-id 2dm-2127 \
     -o mos.fdf --no-intro > log_optimade_id.txt 2>&1
-check_contains "Fetched:.*optimade 2dm-2127" log_optimade_id.txt
-check_contains "Formula:.*MoS" log_optimade_id.txt
-check_contains "Atoms:.*4" log_optimade_id.txt
+check_contains "Fetched *:.*optimade 2dm-2127" log_optimade_id.txt
+check_contains "Formula *:.*MoS" log_optimade_id.txt
+check_contains "Atoms *:.*4" log_optimade_id.txt
 check_success mos.fdf
 check_contains "NumberofAtoms      4" mos.fdf
 
@@ -226,7 +226,7 @@ if [ -n "$PMG_MAPI_KEY" ]; then
     echo "PMG_MAPI_KEY is set -- running live materials-project fetches"
     rm -f mag_mp.fdf
     stb-fetch --source materials-project --material-id mp-19306 -o mag_mp.fdf --no-intro > log_mp.txt 2>&1
-    check_contains "Formula:.*Fe3O4" log_mp.txt
+    check_contains "Formula *:.*Fe3O4" log_mp.txt
     check_success mag_mp.fdf
 
     echo "Testing: --formula --most-stable ranks over ALL matches, not just the displayed --limit"
@@ -262,14 +262,14 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 1.6) ---"
 echo "Testing: navigate 1.6 -> COD [default] -> by id [default] -> cod-id 1010369 -> default output -> quit"
 rm -f fetched.fdf
 printf '1.6\n\n\n1010369\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
-check_contains "Formula:.*Fe3O4" log_menu.txt
+check_contains "Formula *:.*Fe3O4" log_menu.txt
 check_success fetched.fdf
 
 echo "Testing: navigate 1.6 -> OPTIMADE -> twodmatpedia [default] -> by id -> 2dm-2127 -> default output -> quit"
 rm -f fetched.fdf
 printf '1.6\n3\n1\n1\n2dm-2127\n\n\n0\n' | stb-suite > log_menu_optimade.txt 2>&1
-check_contains "Fetched:.*optimade 2dm-2127" log_menu_optimade.txt
-check_contains "Formula:.*MoS" log_menu_optimade.txt
+check_contains "Fetched *:.*optimade 2dm-2127" log_menu_optimade.txt
+check_contains "Formula *:.*MoS" log_menu_optimade.txt
 check_success fetched.fdf
 
 

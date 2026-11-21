@@ -178,6 +178,8 @@ check_removed batch_a/calc.out
 check_exists batch_b/calc.fdf
 check_removed batch_b/calc.out
 rm -rf "$FIXTURE_DIR/batch_a" "$FIXTURE_DIR/batch_b"
+# the batch run's report went to the fixture folder (the current folder of that run): move it along
+mv stb_clean_report*.txt stb_clean_references*.bib "$TEST_DIR"/ 2>/dev/null
 popd > /dev/null
 pushd "$TEST_DIR" > /dev/null
 

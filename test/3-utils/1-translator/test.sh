@@ -5,7 +5,9 @@
 SCRIPT_NAME="stb-translate"
 # Comando para executar o Python (pode ser "python" ou "python3")
 PYTHON_CMD=""
-# Diretório para guardar os ficheiros de teste
+# Diretório para guardar os ficheiros de teste (dentro da pasta deste script, de onde o teste roda:
+# o relatório de cada execução vai para a pasta atual e é movido para test_files/ no fim)
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 TEST_DIR="test_files"
 
 # Cores para o output
@@ -382,6 +384,10 @@ echo -e "Novos testes: ${GREEN}$NPASS ok${NC}, ${RED}$NFAIL falhas${NC}"
 
 # --- 4. Limpeza ---
 echo -e "\n--- Testes Concluídos ---"
+# Every run writes stb_translate_report*.txt / stb_translate_references*.bib in the current folder
+# (this script's folder): move them into the test folder, so they go with it.
+mv stb_translate_report*.txt stb_translate_references*.bib "$TEST_DIR"/ 2>/dev/null
+
 read -p "Deseja remover o diretório '$TEST_DIR' e todos os ficheiros de teste? (s/n) " -n 1 -r
 echo # Mover para a próxima linha
 if [[ $REPLY =~ ^[Ss]$ ]]; then

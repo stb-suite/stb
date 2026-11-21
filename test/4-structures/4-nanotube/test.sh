@@ -190,7 +190,7 @@ check_contains "only valid with --passivate" log_passivant_bad.txt
 
 # --- 5. Numbered report, before/after symmetry table, --save-report ---
 echo -e "\n--- Testing the numbered report, before/after symmetry table, and --save-report ---"
-rm -f stb_nanotube_report.txt nanotube.fdf
+rm -f stb_nanotube_report*.txt stb_nanotube_references*.bib nanotube.fdf
 stb-nanotube -f graphene.fdf --chirality 6 0 --save-report --no-intro > log_report.txt 2>&1
 check_success stb_nanotube_report.txt
 check_contains "===== STB-NANOTUBE REPORT =====" stb_nanotube_report.txt
@@ -199,21 +199,21 @@ check_contains "Property.*Monolayer (before).*Tube/Ribbon (after)" stb_nanotube_
 check_contains "Layer Group.*p6/mmm" stb_nanotube_report.txt
 check_contains "Layer Group.*N/A (not 2D-periodic)" stb_nanotube_report.txt
 check_contains "Report         : stb_nanotube_report.txt" log_report.txt
-rm -f stb_nanotube_report.txt nanotube.fdf
+rm -f stb_nanotube_report*.txt stb_nanotube_references*.bib nanotube.fdf
 
 
 # --- 6. --ml-relax (needs the optional 'ml' extra) ---
 echo -e "\n--- Testing --ml-relax (MACE pre-optimization), if the 'ml' extra is available ---"
 
 if python3 -c "import mace" 2>/dev/null; then
-    rm -f nanotube.fdf stb_nanotube_report.txt
+    rm -f nanotube.fdf stb_nanotube_report*.txt stb_nanotube_references*.bib
     stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax --ml-relax-cell --save-report --no-intro \
         > log_ml_relax.txt 2>&1
     check_exit_code $? 0
     check_contains "\[4\] ML PRE-RELAXATION (MACE)" stb_nanotube_report.txt
     check_success nanotube.fdf
     check_contains "ML pre-relaxed with MACE-MP-0" nanotube.fdf
-    rm -f nanotube.fdf stb_nanotube_report.txt
+    rm -f nanotube.fdf stb_nanotube_report*.txt stb_nanotube_references*.bib
 
     echo "Testing: --ml-relax-cell without --ml-relax is rejected"
     stb-nanotube -f graphene.fdf --chirality 6 0 --ml-relax-cell --no-intro > log_ml_relax_cell_only.txt 2>&1

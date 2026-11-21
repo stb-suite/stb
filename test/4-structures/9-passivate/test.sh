@@ -150,7 +150,7 @@ check_contains "bond-length" log_help.txt
 echo -e "\n--- Testing the standardized report (full symmetry, --save-report, provenance header) ---"
 
 echo "Testing: --save-report writes the full symmetry report to file"
-rm -f stb_passivate_report.txt
+rm -f stb_passivate_report*.txt stb_passivate_references*.bib
 stb-passivate -f si111_slab.fdf --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
 check_success stb_passivate_report.txt
 check_contains "\[6\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_passivate_report.txt

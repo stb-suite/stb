@@ -26,6 +26,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -233,37 +243,37 @@ check_contains "species" log_help.txt
 check_contains "list-reference" log_help.txt
 check_contains "suggest" log_help.txt
 check_contains "linear-response" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
-# --- 5b. --save-report and references.bib ---
-echo -e "\n--- Testing --save-report and references.bib ---"
+# --- 5b. --save-report and stb_dftu_references.bib ---
+echo -e "\n--- Testing --save-report and stb_dftu_references.bib ---"
 
 echo "Testing: --save-report writes stb_dftu_report.txt matching the console output"
-rm -f stb_dftu_report.txt
+rm -f stb_dftu_report*.txt stb_dftu_references*.bib
 stb-dftu --species Mn --u 3.9 --save-report --no-intro > log_save_report_console.txt 2>&1
 check_success stb_dftu_report.txt
 check_contains "U=3.900 eV, J=0.000 eV" stb_dftu_report.txt
 check_contains "Report" log_save_report_console.txt
 
-echo "Testing: references.bib always written, with SIESTA citations"
-rm -f references.bib
+echo "Testing: stb_dftu_references.bib always written, with SIESTA citations"
+rm -f stb_dftu_report*.txt stb_dftu_references*.bib
 stb-dftu --species Si --u 2.0 --shell 3d --no-intro > /dev/null 2>&1
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
-check_contains "@article{Garcia2020," references.bib
+check_success stb_dftu_references.bib
+check_contains "@article{Soler2002," stb_dftu_references.bib
+check_contains "@article{Garcia2020," stb_dftu_references.bib
 
-echo "Testing: references.bib also gets the Wang/Maxisch/Ceder citation when the reference table is touched (Mn is tabulated)"
-rm -f references.bib
+echo "Testing: stb_dftu_references.bib also gets the Wang/Maxisch/Ceder citation when the reference table is touched (Mn is tabulated)"
+rm -f stb_dftu_report*.txt stb_dftu_references*.bib
 stb-dftu --species Mn --u 3.9 --no-intro > /dev/null 2>&1
-check_contains "@article{WangMaxischCeder2006," references.bib
+check_contains "@article{WangMaxischCeder2006," stb_dftu_references.bib
 
-echo "Testing: --list-reference and --suggest also write references.bib (Wang/Maxisch/Ceder only)"
-rm -f references.bib
+echo "Testing: --list-reference and --suggest also write stb_dftu_references.bib (Wang/Maxisch/Ceder only)"
+rm -f stb_dftu_report*.txt stb_dftu_references*.bib
 stb-dftu --list-reference --no-intro > /dev/null 2>&1
-check_success references.bib
-check_contains "@article{WangMaxischCeder2006," references.bib
-if grep -q "@article{Soler2002," references.bib; then
+check_success stb_dftu_references.bib
+check_contains "@article{WangMaxischCeder2006," stb_dftu_references.bib
+if grep -q "@article{Soler2002," stb_dftu_references.bib; then
     echo -e "   -> ${RED}Failed:${NC} SIESTA citation should not appear for a pure reference-table lookup"
     FAIL=$((FAIL+1))
 else

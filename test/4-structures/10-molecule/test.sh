@@ -139,7 +139,7 @@ check_contains "vacuum" log_help.txt
 echo -e "\n--- Testing the standardized report (point-group symmetry, --save-report, provenance header) ---"
 
 echo "Testing: --save-report writes the full symmetry report to file"
-rm -f stb_molecule_report.txt
+rm -f stb_molecule_report*.txt stb_molecule_references*.bib
 stb-molecule --name H2O --save-report -o report_test.fdf --no-intro > log_save_report.txt 2>&1
 check_success stb_molecule_report.txt
 check_contains "\[5\] SYMMETRY ANALYSIS (BEFORE / AFTER)" stb_molecule_report.txt

@@ -316,23 +316,23 @@ check_contains "vacuum-gap" log_help.txt
 check_contains "Default: 10.0" log_help.txt
 
 
-# --- 5b. --save-report and references.bib ---
-echo -e "\n--- Testing --save-report and references.bib ---"
+# --- 5b. --save-report and stb_kgrid_references.bib ---
+echo -e "\n--- Testing --save-report and stb_kgrid_references.bib ---"
 
 echo "Testing: --save-report writes stb_kgrid_report.txt matching the console output"
-rm -f stb_kgrid_report.txt
+rm -f stb_kgrid_report*.txt stb_kgrid_references*.bib
 stb-kgrid --file cubic.fdf --density 0.2 --save-report --no-intro > log_save_report_console.txt 2>&1
 check_success stb_kgrid_report.txt
 check_contains "Suggested Monkhorst-Pack grid : 6 6 6" stb_kgrid_report.txt
 check_contains "Report" log_save_report_console.txt
 
-echo "Testing: references.bib always written, with SIESTA + Monkhorst-Pack citations"
-rm -f references.bib
+echo "Testing: stb_kgrid_references.bib always written, with SIESTA + Monkhorst-Pack citations"
+rm -f stb_kgrid_report*.txt stb_kgrid_references*.bib
 stb-kgrid --file cubic.fdf --density 0.2 --no-intro > /dev/null 2>&1
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
-check_contains "@article{Garcia2020," references.bib
-check_contains "@article{MonkhorstPack1976," references.bib
+check_success stb_kgrid_references.bib
+check_contains "@article{Soler2002," stb_kgrid_references.bib
+check_contains "@article{Garcia2020," stb_kgrid_references.bib
+check_contains "@article{MonkhorstPack1976," stb_kgrid_references.bib
 
 
 # --- 6. Interactive path (stb-suite, shortcut 1.3) ---

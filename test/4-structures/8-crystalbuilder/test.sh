@@ -198,7 +198,7 @@ check_contains "spacegroup" log_help.txt
 echo -e "\n--- Testing --reduce/--ml-relax/--save-report ---"
 
 echo "Testing: --save-report writes the full symmetry report to file"
-rm -f stb_crystalbuilder_report.txt
+rm -f stb_crystalbuilder_report*.txt stb_crystalbuilder_references*.bib
 stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 \
     --save-report -o fcc_ni_report.fdf --no-intro > log_save_report.txt 2>&1
 check_success stb_crystalbuilder_report.txt

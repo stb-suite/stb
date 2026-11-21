@@ -28,6 +28,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -83,10 +93,10 @@ check_contains "NumberofAtoms      12" nio.fdf
 
 
 # --- 2b. stb-standard report: numbered sections, --save-report, provenance ---
-#     header in the output .fdf, and references.bib (SIESTA + PyXtal always) ---
-echo -e "\n--- Testing the standardized report (--save-report, provenance header, references.bib) ---"
+#     header in the output .fdf, and stb_crystalcast_references.bib (SIESTA + PyXtal always) ---
+echo -e "\n--- Testing the standardized report (--save-report, provenance header, stb_crystalcast_references.bib) ---"
 
-rm -f stb_crystalcast_report.txt report_test.fdf references.bib
+rm -f stb_crystalcast_report*.txt stb_crystalcast_references*.bib report_test.fdf stb_crystalcast_report*.txt stb_crystalcast_references*.bib
 stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --save-report \
     -o report_test.fdf --no-intro > log_save_report.txt 2>&1
 check_exit_code $? 0
@@ -105,11 +115,11 @@ check_contains "# Structure cast by stb-crystalcast (mode: generate)" report_tes
 check_contains "# Composition: Ni x 4, O x 8." report_test.fdf
 check_contains "# Detected space group:" report_test.fdf
 
-echo "Testing: references.bib always has SIESTA + PyXtal, even without --ml-rank"
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
-check_contains "@article{Fredericks2021pyxtal," references.bib
-if grep -q "Batatia2022mace" references.bib; then
+echo "Testing: stb_crystalcast_references.bib always has SIESTA + PyXtal, even without --ml-rank"
+check_success stb_crystalcast_references.bib
+check_contains "@article{Soler2002," stb_crystalcast_references.bib
+check_contains "@article{Fredericks2021pyxtal," stb_crystalcast_references.bib
+if grep -q "Batatia2022mace" stb_crystalcast_references.bib; then
     echo -e "   -> ${RED}Failed:${NC} MACE citation should NOT appear without --ml-rank"
     FAIL=$((FAIL+1))
 else
@@ -425,12 +435,12 @@ else
     check_contains "MACE-MP-0 (medium)" log_mlrank_medium.txt
     check_success mltest_medium.fdf
 
-    echo "Testing: references.bib gains MACE + MACE-MP entries when --ml-rank is used"
-    rm -f references.bib
+    echo "Testing: stb_crystalcast_references.bib gains MACE + MACE-MP entries when --ml-rank is used"
+    rm -f stb_crystalcast_report*.txt stb_crystalcast_references*.bib
     stb-crystalcast --group 225 --species Ni O --num-ions 4 8 --ml-rank \
         -o mltest2.fdf --no-intro > /dev/null 2>&1
-    check_contains "@inproceedings{Batatia2022mace," references.bib
-    check_contains "@misc{Batatia2023foundation," references.bib
+    check_contains "@inproceedings{Batatia2022mace," stb_crystalcast_references.bib
+    check_contains "@misc{Batatia2023foundation," stb_crystalcast_references.bib
     check_contains "ML-ranked with MACE-MP-0" mltest2.fdf
 fi
 
@@ -520,7 +530,7 @@ check_contains "supergroup" log_help.txt
 check_contains "ml-rank" log_help.txt
 check_contains "custom-model" log_help.txt
 check_contains "custom-model-card" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "view" log_help.txt
 if grep -q -- "--analyze" log_help.txt; then
     echo -e "   -> ${RED}Failed:${NC} --analyze should have been removed from --help"
@@ -537,7 +547,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 4.12) ---"
 echo "Testing: navigate 4.12 -> generate (default) -> dim 3 (default) -> molecular? n -> group 225 -> species 'Ni 4', 'O 8', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> no save-report/view -> default output -> quit"
 rm -f crystalcast.fdf
 menu_inputs=(
-    "4.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "n" "" "" "" ""
+    "4.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "n" "" "" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu.txt 2>&1
@@ -548,7 +558,7 @@ check_success crystalcast.fdf
 echo "Testing: navigate 4.12 -> generate (default) -> dim 3 (default) -> molecular? y -> group 19 -> species 'H2O 4', blank to finish -> no lattice/sites -> defaults -> ml-rank? n -> no save-report/view -> default output -> quit"
 rm -f crystalcast.fdf
 menu_inputs=(
-    "4.12" "" "" "y" "19" "H2O 4" "" "" "" "" "" "" "n" "" "" "" ""
+    "4.12" "" "" "y" "19" "H2O 4" "" "" "" "" "" "" "n" "" "" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_molecular.txt 2>&1
@@ -560,7 +570,7 @@ check_success crystalcast.fdf
 echo "Testing: navigate 4.12 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Na 4', 'Cl 4' -> lattice '5.64 5.64 5.64 90 90 90' -> sites '4a 4b' -> defaults -> ml-rank? n -> no save-report/view -> output -> quit"
 rm -f menu_lattice.fdf
 menu_inputs=(
-    "4.12" "" "" "n" "225" "Na 4" "Cl 4" "" "5.64 5.64 5.64 90 90 90" "4a 4b" "" "" "" "n" "" "" "menu_lattice.fdf" ""
+    "4.12" "" "" "n" "225" "Na 4" "Cl 4" "" "5.64 5.64 5.64 90 90 90" "4a 4b" "" "" "" "n" "" "menu_lattice.fdf" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_lattice.txt 2>&1
@@ -572,7 +582,7 @@ check_success menu_lattice.fdf
 
 echo "Testing: navigate 4.12 -> substitute -> nio.fdf -> 'Ni:Co', blank to finish -> no save-report/view -> output -> quit"
 menu_inputs=(
-    "4.12" "substitute" "nio.fdf" "Ni:Co" "" "" "" "menu_sub.fdf" ""
+    "4.12" "substitute" "nio.fdf" "Ni:Co" "" "" "menu_sub.fdf" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_substitute.txt 2>&1
@@ -583,7 +593,7 @@ check_success menu_sub.fdf
 echo "Testing: navigate 4.12 -> subgroup -> nacl_lattice.fdf -> auto target -> eps default -> count 2 -> no save-report/view -> output -> quit"
 rm -f menu_subgroup.fdf menu_subgroup_*.fdf
 menu_inputs=(
-    "4.12" "subgroup" "nacl_lattice.fdf" "" "" "2" "" "" "menu_subgroup.fdf" ""
+    "4.12" "subgroup" "nacl_lattice.fdf" "" "" "2" "" "menu_subgroup.fdf" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_subgroup.txt 2>&1
@@ -593,7 +603,7 @@ check_success menu_subgroup_1.fdf
 
 echo "Testing: navigate 4.12 -> supergroup -> distorted_1.fdf -> target 225 -> d-tol default -> count 1 -> no save-report/view -> output -> quit (no candidates is still a clean exit from the menu wrapper)"
 menu_inputs=(
-    "4.12" "supergroup" "distorted_1.fdf" "225" "" "1" "" "" "menu_super.fdf" ""
+    "4.12" "supergroup" "distorted_1.fdf" "225" "" "1" "" "menu_super.fdf" ""
     "0"
 )
 printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_supergroup.txt 2>&1
@@ -605,7 +615,7 @@ if [ "$HAS_MACE" -eq 1 ]; then
     echo "Testing: navigate 4.12 -> generate -> dim 3 -> molecular? n -> group 225 -> species 'Ni 4', 'O 8' -> defaults -> ml-rank? y -> foundation model (blank custom) -> model small -> device cpu (default) -> no save-report/view -> output -> quit"
     rm -f menu_mlrank.fdf
     menu_inputs=(
-        "4.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "y" "" "small" "" "" "" "menu_mlrank.fdf" ""
+        "4.12" "" "" "n" "225" "Ni 4" "O 8" "" "" "" "" "" "" "y" "" "small" "" "" "menu_mlrank.fdf" ""
         "0"
     )
     printf '%s\n' "${menu_inputs[@]}" | stb-suite > log_menu_mlrank.txt 2>&1

@@ -27,7 +27,7 @@ import argparse
 from stb.core import structure_io
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section, print_table
 from stb.core.dftu_data import SHELL_NAMES, DEFAULT_SHELL, ldau_proj_block as _base_ldau_proj_block
-from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, resolve_pseudo_source
+from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, resolve_pseudo_source, refuse_unusable_pseudo
 from stb.core.symmetry import find_inequivalent_sites
 
 _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
@@ -228,6 +228,7 @@ def copy_pseudopotentials(src_dir, dest_dir, species=None):
                 continue
         src = os.path.join(src_dir, name)
         if os.path.isfile(src):
+            refuse_unusable_pseudo(src)             # ekb = 0 projectors: [ERROR], nothing copied
             shutil.copy(src, os.path.join(dest_dir, name))
             copied.append(name)
     if copied:

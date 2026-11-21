@@ -152,13 +152,25 @@ written `lda`. `stb-pseudo --list-banks` prints the whole list:
   z = 14 to z = 22). For Hf and Ta, stringent adds the 4f shell (z 12 → 26
   and 13 → 27). More electrons and more orbitals make the calculation more
   expensive. The report shows each file's valence (`z=`).
-- **`fr`** tables are required for `Spin spin-orbit`. They also run
-  without SOC, but do not compare absolute energies from `fr` and `sr`
-  files. PseudoDojo has no full-relativistic LDA table.
+- **`fr`** tables are required for `Spin spin-orbit`. Without SOC the
+  `fr-pbe` files also run (do not compare absolute energies from `fr` and
+  `sr` files), but of the `fr-pbesol` files only Ge, Sb and Te do: the other
+  68 have no scalar-relativistic part and SIESTA 5.4.2 stops. The tools refuse
+  that combination with an `[ERROR]`. PseudoDojo has no full-relativistic LDA
+  table.
 - **`sr3plus`** holds the lanthanides Ce–Lu with the 4f electrons frozen in
   the core. Use it only for Ln3+ compounds: it does not describe f physics
   (magnetism, 4f states). Give the other elements a fallback, for example
-  `-p dojo-sr3plus --fallback-dir dojo`.
+  `-p dojo-sr3plus --fallback-dir dojo`. SIESTA builds the basis from its own
+  configuration, with 4f, and stops ('Total charge in occupied basis states
+  different from valence charge') unless the input has a `%block
+  synthetic-atoms` entry (`6 6 5 5` / `2.0 0.0 1.0 0.0`) at each lanthanide's
+  species index. Every tool that writes run folders adds it, keyed by each
+  folder's own species (ghosts too); a folder made by hand without it gets an
+  `[ERROR]`.
+- **Li and Be** get `PAO.PolarizationScheme` `non-perturbative` in every
+  `calc.fdf` the tools write (ghosts too): SIESTA cannot build their
+  perturbative polarization orbital with these pseudopotentials.
 - `dojo` (`dojo-sr-pbe-standard`) and `dojo-stringent` are the PseudoDojo nc-sr-04 PBE tables. Up to
   2.0.0 they were nc-sr-05, which is nc-sr-04 with 11 files regenerated (Ba, Bi, I, Pb, Po, Rb, Rn,
   S, Te, Tl, Xe). Those 11 have KB projectors with `ekb="0"`: with SIESTA 5.4.2 they give wrong

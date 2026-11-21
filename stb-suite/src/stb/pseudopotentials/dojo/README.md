@@ -60,6 +60,20 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
   `%block PAO.PolarizationScheme` with `<label> non-perturbative` for them, ghosts included. No other
   element of these tables failed (SIESTA 5.4.2, DZP, `PAO.EnergyShift 0.02 Ry`).
 - **sr3plus_*:** lanthanides Ce–Lu (no La) with the 4f electrons frozen in the core. Use them only for Ln3+ compounds. They do not describe f physics (magnetism, 4f states).
+  - SIESTA builds the basis from its internal configuration (Ce: 6s2 5d0 4f2, with 4f), not from the
+    file's (5s2 5p6 5d1 6s2, z = 11), and stops with 'Total charge in occupied basis states different
+    from valence charge'. The SIESTA 5.4.2 manual (SyntheticAtoms) gives the fix for this very table:
+    ```
+    %block synthetic-atoms
+      <species index>
+        6 6 5 5
+        2.0 0.0 1.0 0.0
+    %endblock synthetic-atoms
+    ```
+    one entry per lanthanide species, at ITS index in `ChemicalSpeciesLabel`, ghosts included (a
+    ghost without it runs, but with another basis: 23 instead of 19 orbitals for Ce). At a wrong index
+    SIESTA stops with 'nsemx too small'. Every tool that writes run folders adds the block at exit,
+    keyed by each folder's own species; a folder made by hand without it gets an `[ERROR]`.
 - Usage in stb: `-p dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]` (words in any order,
   defaults sr, pbe, standard); `stb-pseudo --list-banks` lists them. Every tool that copies these files into
   a run folder warns when the folder's .fdf asks for another functional or for spin-orbit with `sr` files.

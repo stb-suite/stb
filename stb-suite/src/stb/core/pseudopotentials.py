@@ -16,8 +16,13 @@ missing word taking its default (sr, pbe, standard): `dojo` is
 every tool's existing -p option working with no new flag.
 
 `check_pseudo_level` / `warn_pseudo_level` compare the pseudopotentials copied
-into a run folder with that folder's own .fdf (functional, spin-orbit). They
-only WARN -- a mismatch never stops a tool.
+into a run folder with that folder's own .fdf (functional, spin-orbit, polarization
+orbitals, the synthetic-atoms block of the sr3plus lanthanides). A mismatch never
+stops a tool there: a warning is yellow, a combination SIESTA cannot run (or runs
+wrongly) a red [ERROR]. A file that can never be used (ekb = 0 projectors) is refused
+earlier, before it is copied (`refuse_unusable_pseudo`). At exit, every folder that
+received pseudopotentials gets the synthetic-atoms block it needs
+(`ensure_species_blocks`), keyed by that folder's own species indices.
 
 Pseudopotentials are always COPIED (shutil.copy2), never symlinked -- a
 symlink into a bundled bank or an external --pseudo-dir points at an
@@ -681,6 +686,157 @@ def add_nonperturbative_block(calc_text, species_z):
     return "".join(lines), labels
 
 
+# PseudoDojo nc-sr-04-3plus: the lanthanides Ce-Lu with 4f frozen in the core, valence
+# 5s2 5p6 5d1 6s2 (z = 11). SIESTA builds the basis from its own internal configuration (with 4f),
+# whose occupied charge differs from z ('Total charge in occupied basis states different from valence
+# charge'); the SIESTA 5.4.2 manual (SyntheticAtoms) gives the block below for exactly this table.
+# Verified: 14 lanthanides x 1-16 ranks, ghosts, two lanthanide species in one input, LnN relaxations.
+SR3PLUS_Z = range(58, 72)
+SR3PLUS_VALENCE = {(5, "s", 2.0), (5, "p", 6.0), (5, "d", 1.0), (6, "s", 2.0)}
+SR3PLUS_SYNTHETIC = ("6 6 5 5", "2.0 0.0 1.0 0.0")       # n of s p d f / occupations
+
+
+def _species_entries(text):
+    """[(index, Z, label)] of the first uncommented %block ChemicalSpeciesLabel of an fdf text."""
+    m = re.search(r"^[ \t]*%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)^[ \t]*%endblock", text,
+                  re.I | re.S | re.M)
+    out = []
+    if m:
+        for line in m.group(1).splitlines():
+            parts = line.split("#", 1)[0].split()
+            if len(parts) >= 3 and parts[0].isdigit() and parts[1].lstrip("+-").isdigit():
+                out.append((int(parts[0]), int(parts[1]), parts[2]))
+    return out
+
+
+def _synthetic_block_entries(text):
+    """{index: (n line, occupation line)} of the first uncommented %block synthetic-atoms, or None."""
+    m = re.search(r"^[ \t]*%block\s+synthetic[._-]?atoms\s*\n(.*?)^[ \t]*%endblock", text, re.I | re.S | re.M)
+    if not m:
+        return None
+    lines = [ln.split("#", 1)[0].strip() for ln in m.group(1).splitlines()]
+    lines = [ln for ln in lines if ln]
+    out = {}
+    for k in range(0, len(lines) - 2, 3):
+        if lines[k].isdigit():
+            out[int(lines[k])] = (" ".join(lines[k + 1].split()), " ".join(lines[k + 2].split()))
+    return out
+
+
+def _pseudo_file(folder, label):
+    for ext in (".psml", ".psf"):
+        path = os.path.join(folder, label + ext)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def synthetic_atoms_needs(text, folder):
+    """(needed, unknown) for an fdf text whose pseudopotentials are in `folder`: needed is
+    {species index: label} of every species (ghosts too, |Z| 58-71) whose .psml is an sr3plus file
+    (valence 5s2 5p6 5d1 6s2, no 4f), which needs a synthetic-atoms entry at ITS index in
+    ChemicalSpeciesLabel; unknown lists lanthanide labels whose .psml has no 4f in the valence but
+    another configuration (the block is not guessed for them)."""
+    needed, unknown = {}, []
+    for index, z, label in _species_entries(text):
+        if abs(z) not in SR3PLUS_Z:
+            continue
+        path = _pseudo_file(folder, label)
+        info = read_pseudo_header(path) if path and path.endswith(".psml") else None
+        if not info or not info.get("valence"):
+            continue
+        shells = {(n, l, occ) for n, l, occ in info["valence"]}
+        if any(l == "f" for _n, l, _o in shells):
+            continue                                   # 4f in the valence: SIESTA's own configuration fits
+        if shells == SR3PLUS_VALENCE:
+            needed[index] = label
+        else:
+            unknown.append(label)
+    return needed, unknown
+
+
+def synthetic_atoms_block(indices):
+    """%block synthetic-atoms giving every species index of `indices` the sr3plus configuration."""
+    body = "".join(f"  {i}\n    {SR3PLUS_SYNTHETIC[0]}\n    {SR3PLUS_SYNTHETIC[1]}\n" for i in sorted(indices))
+    return ("# sr3plus lanthanides (4f in the core): basis built from 6s2 6p0 5d1 5f0 instead of SIESTA's\n"
+            "# internal configuration with 4f (SIESTA manual, SyntheticAtoms); one entry per species index\n"
+            "# of this folder's ChemicalSpeciesLabel, ghosts included.\n"
+            "%block synthetic-atoms\n" + body + "%endblock synthetic-atoms\n")
+
+
+def synthetic_atoms_problem(text, folder):
+    """'' when the synthetic-atoms block of `text` fits the sr3plus species of `folder`, else the
+    [ERROR] text (block missing, entry at another index, or an index that is not an sr3plus species)."""
+    needed, _unknown = synthetic_atoms_needs(text, folder)
+    have = _synthetic_block_entries(text) or {}
+    if not needed and not have:
+        return ""
+    wrong = sorted(i for i in have if i not in needed)
+    missing = sorted(i for i in needed if have.get(i) != SR3PLUS_SYNTHETIC)
+    if not missing and not wrong:
+        return ""
+    parts = []
+    if missing:
+        parts.append("no synthetic-atoms entry for " + ", ".join(f"{needed[i]} (species {i})" for i in missing))
+    if wrong:
+        parts.append("synthetic-atoms entries at species " + ", ".join(str(i) for i in wrong)
+                     + ", which are not sr3plus lanthanides")
+    return ("; ".join(parts) + ". The sr3plus pseudopotentials (4f in the core) need %block synthetic-atoms "
+            "keyed by each lanthanide's index in ChemicalSpeciesLabel (ghosts too): without it SIESTA stops with "
+            "'Total charge in occupied basis states different from valence charge' (a ghost runs, with another "
+            "basis); at a wrong index, with 'nsemx too small'. Entry: "
+            f"'<index>' / '{SR3PLUS_SYNTHETIC[0]}' / '{SR3PLUS_SYNTHETIC[1]}'.")
+
+
+# Files older than the process start are the user's own: ensure_species_blocks leaves them alone.
+_START_TIME = __import__("time").time()
+
+
+def ensure_species_blocks(folder):
+    """Writes the synthetic-atoms block an sr3plus run folder needs, keyed by ITS species indices --
+    and the non-perturbative PAO.PolarizationScheme of Li/Be labels (ghosts too) when the input has
+    no polarization scheme block at all -- into the folder's own input: config_extra.fdf when the root .fdf %includes it (read first),
+    else at the top of the root .fdf. Only .fdf files written by this process are changed (a
+    user's own folder only gets the end-of-run [ERROR]). Returns the files changed."""
+    changed = []
+    try:
+        roots = _root_fdfs(folder)
+    except OSError:
+        return changed
+    for root in roots:
+        root_path = os.path.join(folder, root)
+        text = _expand_fdf(root_path)
+        needed, _unknown = synthetic_atoms_needs(text, folder)
+        if _synthetic_block_entries(text) is not None:
+            needed = {}                            # a block of its own: the end-of-run check judges it
+        # Li/Be (ghosts too) with no polarization scheme at all: a new block cannot override entries
+        # of an existing one (SIESTA keeps the first block), so only then is it added here
+        nonpert = []
+        if not re.search(r"^[ \t]*%block\s+pao[._-]?polarization[._-]?scheme\b", text, re.I | re.M):
+            nonpert = missing_nonperturbative(text)
+        if not needed and not nonpert:
+            continue
+        root_text = open(root_path, errors="replace").read()
+        m = re.search(r"^\s*%include\s+(config_extra\.fdf)\s*$", root_text, re.I | re.M)
+        target = os.path.join(folder, m.group(1)) if m and os.path.isfile(os.path.join(folder, m.group(1))) \
+            else root_path
+        if os.stat(target).st_ctime < _START_TIME - 1:      # created/changed by this run (copy2 keeps mtime)
+            continue                               # not written by this run: leave the user's file alone
+        block = synthetic_atoms_block(needed) if needed else ""
+        if nonpert:
+            block += ("# Li, Be: SIESTA's perturbative polarization orbital fails to generate (extended 2s);\n"
+                      "# the non-perturbative scheme builds it from a real atomic calculation.\n"
+                      + polarization_scheme_block(nonpert))
+        body = open(target, errors="replace").read()
+        with open(target, "w") as f:
+            if target == root_path:
+                f.write(block + "\n" + body)
+            else:
+                f.write(body + ("" if body.endswith("\n") else "\n") + block)
+        changed.append(target)
+    return changed
+
+
 def _suggest_table(xc, soc):
     """' (-p dojo-...)' for a functional PseudoDojo has a table of, else ''."""
     xc_word = {"PBE": "", "PBEsol": "-pbesol", "LDA": "-pw"}.get(xc)
@@ -721,6 +877,14 @@ def check_pseudo_level(folder):
                 + " with the PseudoDojo pseudopotentials ('Generation of polarization orbital failed'). Add "
                 f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per such "
                 "label, ghosts too) or 'PAO.Polarization.NonPerturbative true'."))
+        synth = synthetic_atoms_problem(text, folder)
+        if synth:
+            warnings.append(("error", f"{root}: {synth}"))
+        _needed, unknown = synthetic_atoms_needs(text, folder)
+        if unknown:
+            warnings.append(("warning", f"{root}: {', '.join(unknown)} use a lanthanide pseudopotential with no 4f "
+                             "in the valence and a configuration other than the PseudoDojo sr3plus one; SIESTA may "
+                             "need a %block synthetic-atoms matching it (not written automatically)."))
         labels = [s for s in species if s in pseudo_files] or sorted(pseudo_files)
         headers = {}
         for label in labels:
@@ -783,6 +947,17 @@ def note_pseudo_folder(folder):
 
 
 def _check_noted_folders():
+    fixed = []
+    for folder in _NOTED_FOLDERS:
+        try:
+            fixed += ensure_species_blocks(folder)
+        except Exception:
+            pass
+    if fixed:
+        where = os.path.relpath(fixed[0]) + (f" and {len(fixed) - 1} more" if len(fixed) > 1 else "")
+        print(color_text(f"[NOTE] Species blocks SIESTA needs written ({where}): %block synthetic-atoms for "
+                         "sr3plus lanthanides, keyed by each folder's own species indices, and/or "
+                         "PAO.PolarizationScheme non-perturbative for Li/Be (ghosts too).", 'yellow'))
     pending = [f for f in _NOTED_FOLDERS if f not in _CHECKED_FOLDERS]
     if pending:
         try:

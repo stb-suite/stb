@@ -33,6 +33,16 @@ version before) and **Added** (new options and tools).
 - Be gets the non-perturbative polarization scheme like Li (`PAO.PolarizationScheme`, ghosts too): its
   perturbative polarization orbital fails in every PseudoDojo table ('Generation of polarization orbital
   failed'). A test of every element of the bundled tables found no other.
+- `-p dojo-sr3plus` (lanthanides with 4f in the core) never ran: SIESTA builds the basis from its
+  internal configuration, with 4f, and stops with 'Total charge in occupied basis states different
+  from valence charge'. Every tool that writes run folders now adds the `%block synthetic-atoms` of the
+  SIESTA manual (`6 6 5 5` / `2.0 0.0 1.0 0.0`) at the end of its run, keyed by each folder's own
+  `ChemicalSpeciesLabel` index, ghosts included (BSSE, charge difference, cohesive references: a ghost
+  without it runs with another basis), in `config_extra.fdf` when the folder has one. The same step
+  adds the non-perturbative polarization scheme for Li/Be labels (ghosts too) when the input has no
+  `PAO.PolarizationScheme` block at all, which a `--calc` template without one used to leave out.
+  Only files written by the run are changed; in a folder made by hand a missing or misplaced entry is
+  an `[ERROR]` of the end-of-run check. `stb-hubbardu` now also refuses `ekb="0"` files.
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

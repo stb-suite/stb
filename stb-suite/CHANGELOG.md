@@ -18,6 +18,10 @@ version before) and **Added** (new options and tools).
   for I (z 17 -> 7 standard, 25 -> 17 stringent) and for stringent Rn (26 -> 18) and Xe (26 -> 8).
   Every bank folder now has a `manifest.json` (source archive and SHA-256, md5, valence and
   projector sets of every file), and `stb-pseudo --list-banks` checks the files against it.
+- A `.psml` with `ekb="0"` KB projectors (nc-sr-05's 11 regenerated elements, for example from a user
+  folder given as `-p <folder>`) is refused: every tool stops with an `[ERROR]` before copying it into
+  a run folder. The check at the end of each tool (pseudopotentials vs the `.fdf`) reports such a file
+  in a folder made by hand as a red `[ERROR]`; its other findings stay warnings.
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

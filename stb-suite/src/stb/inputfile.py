@@ -19,7 +19,7 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import add_nonperturbative_block
+from stb.core.pseudopotentials import add_nonperturbative_block, refuse_unusable_pseudo
 from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, canonical_bank, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
@@ -994,6 +994,8 @@ def copy_pseudopotentials(species_list, pp_path, f_out=None):
         warnings.append(f"[WARNING] PP path '{pp_path}' is not a valid directory -- pseudopotentials not copied.")
         return warnings
 
+    for symbol in species_list:                       # refuse an unusable file before copying any
+        refuse_unusable_pseudo(os.path.join(pp_path, f"{symbol}.psml"))
     copied_files = 0
     note_pseudo_folder(os.getcwd())
     for symbol in species_list:

@@ -39,7 +39,8 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
   | Xe | 8 -> 8 | 26 -> 8 |
 
   Results for I (both tables) and stringent Rn and Xe are therefore not comparable with runs made
-  with 2.0.0.
+  with 2.0.0. Every tool refuses a `.psml` with `ekb="0"` projectors, also one from a user folder
+  (`-p <folder>`): it stops with an `[ERROR]` before the file is copied.
 - The folder's XC must match the calculation's `XC.Functional`/`XC.Authors`.
 - **Standard or stringent:** standard is the default choice.
   - **Groups 13–16 (Ga–Se, In–Te, Tl–Po):** standard **already has the d shell in the valence**; Ge and Sn have z = 14. Stringent adds the semicore s and p of the shell below; Ge and Sn have z = 22.

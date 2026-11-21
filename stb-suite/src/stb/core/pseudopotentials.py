@@ -285,6 +285,28 @@ def list_bank_elements(name):
 
 
 
+def ekb_zero_message(path, count):
+    """The [ERROR] text for a pseudopotential file with KB projectors of ekb = 0."""
+    return (f"{os.path.basename(path)} has {count} KB projector(s) with ekb = 0 (the PseudoDojo nc-sr-05 "
+            "regenerated elements: Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe). With SIESTA 5.4.2 such a file gives "
+            "wrong equilibrium structures with any number of MPI ranks (Pb fcc volume -53 %) and aborts in "
+            "parallel with 'propor: ERROR: IMAX = 0'. Use the nc-sr-04 file (the bundled -p dojo / "
+            "dojo-stringent).")
+
+
+def refuse_unusable_pseudo(path):
+    """Stops the tool ([ERROR], exit 1) when the pseudopotential file `path` cannot be used:
+    KB projectors with ekb = 0. Called before a file is copied or listed for copying, so a run
+    folder never receives one; a no-op for any other file."""
+    if not path or not path.endswith(".psml"):
+        return
+    info = read_pseudo_header(path)
+    if info and info.get("n_ekb_zero"):
+        print(color_text(f"[ERROR] {ekb_zero_message(path, info['n_ekb_zero'])} "
+                         f"(file: {path})", 'red'))
+        raise SystemExit(1)
+
+
 def get_required_pseudos(symbols, pseudo_dir):
     """Checks whether a pseudopotential file (.psf preferred, .psml
     fallback) exists in `pseudo_dir` for every symbol in `symbols`.
@@ -312,6 +334,7 @@ def get_required_pseudos(symbols, pseudo_dir):
         if os.path.exists(psf_path):
             found_pseudos.append(psf_path)
         elif os.path.exists(psml_path):
+            refuse_unusable_pseudo(psml_path)
             found_pseudos.append(psml_path)
         else:
             missing_elements.append(element)
@@ -345,6 +368,7 @@ def copy_pseudo(pp_path, symbol, target_dir, dest_label=None):
     for ext in ("psml", "psf"):
         src = os.path.join(pp_path_abs, f"{symbol}.{ext}")
         if os.path.exists(src):
+            refuse_unusable_pseudo(src)
             dst = os.path.join(target_dir, f"{dest_label}.{ext}")
             if not os.path.exists(dst):
                 shutil.copy2(src, dst)
@@ -644,9 +668,11 @@ def _suggest_table(xc, soc):
 
 
 def check_pseudo_level(folder):
-    """Warnings (plain strings, nothing printed) for one run folder: its pseudopotentials
-    against each other and against its .fdf -- functional, and spin-orbit with files that
-    have no lj projectors. Empty list when the folder has no .fdf or no pseudopotential."""
+    """Problems of one run folder, as (level, message) pairs, nothing printed: its pseudopotentials
+    against each other and against its .fdf -- functional, spin-orbit with files that have no lj
+    projectors, polarization orbitals SIESTA cannot build. level is 'error' when SIESTA cannot run
+    or gives wrong results (a file with ekb = 0 projectors), 'warning' otherwise. Empty list when
+    the folder has no .fdf or no pseudopotential."""
     try:
         names = os.listdir(folder)
     except OSError:
@@ -656,17 +682,23 @@ def check_pseudo_level(folder):
     if not pseudo_files:
         return []
     warnings = []
-    for root in _root_fdfs(folder):
+    roots = _root_fdfs(folder)
+    if roots:
+        for fname in sorted(pseudo_files.values()):
+            info = read_pseudo_header(os.path.join(folder, fname))
+            if info and info.get("n_ekb_zero"):
+                warnings.append(("error", ekb_zero_message(fname, info["n_ekb_zero"])))
+    for root in roots:
         text = _expand_fdf(os.path.join(folder, root))
         xc, how, soc, species = _fdf_level(text)
         nonpert = missing_nonperturbative(text) if how is not None or xc is not None else []
         if nonpert:
-            warnings.append(
+            warnings.append(("warning",
                 f"{root} gives {', '.join(nonpert)} a polarization orbital by SIESTA's default perturbative "
                 "scheme, which fails for Li with the PseudoDojo pseudopotential ('Generation of polarization "
                 "orbital failed ... Rc no bigger than 1.32 Bohr'). Add "
                 f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per Li label, "
-                "ghosts too) or 'PAO.Polarization.NonPerturbative true'.")
+                "ghosts too) or 'PAO.Polarization.NonPerturbative true'."))
         labels = [s for s in species if s in pseudo_files] or sorted(pseudo_files)
         headers = {}
         for label in labels:
@@ -680,31 +712,31 @@ def check_pseudo_level(folder):
             by_xc.setdefault(info["xc"] or "unknown", []).append(fname)
         known = {k: v for k, v in by_xc.items() if k != "unknown"}
         if len(known) > 1:
-            warnings.append("the pseudopotentials were generated with different functionals: "
-                            + "; ".join(f"{k}: {', '.join(v)}" for k, v in sorted(known.items())))
+            warnings.append(("warning", "the pseudopotentials were generated with different functionals: "
+                            + "; ".join(f"{k}: {', '.join(v)}" for k, v in sorted(known.items()))))
         if xc is not None:
             wrong = {k: v for k, v in known.items() if k != xc}
             if wrong:
-                warnings.append(
+                warnings.append(("warning",
                     f"{root} uses {xc} ({how}), but "
                     + "; ".join(f"{', '.join(v)} {'was' if len(v) == 1 else 'were'} generated with {k}"
                                 for k, v in sorted(wrong.items()))
                     + ". SIESTA runs anyway, with an inconsistent level of theory: use pseudopotentials of the "
-                      f"calculation's functional{_suggest_table(xc, soc)} or change XC.Functional/XC.Authors.")
+                      f"calculation's functional{_suggest_table(xc, soc)} or change XC.Functional/XC.Authors."))
         rel = {}
         for fname, info in headers.items():
             rel.setdefault("full" if info["lj"] else "scalar", []).append(fname)
         if soc and "scalar" in rel:
-            warnings.append(
+            warnings.append(("warning",
                 f"{root} asks for spin-orbit, but {', '.join(rel['scalar'])} "
                 f"{'has' if len(rel['scalar']) == 1 else 'have'} no lj (full-relativistic) projectors: SIESTA stops "
                 "with 'The PSML file does not contain lj projs'. Use a full-relativistic table (-p dojo-fr, "
-                "dojo-fr-pbesol).")
+                "dojo-fr-pbesol)."))
         elif len(rel) > 1:
-            warnings.append(
+            warnings.append(("warning",
                 f"full-relativistic ({', '.join(rel['full'])}) and scalar-relativistic "
                 f"({', '.join(rel['scalar'])}) pseudopotentials are mixed: do not compare absolute energies with "
-                "runs made with the other kind.")
+                "runs made with the other kind."))
     return warnings
 
 
@@ -736,8 +768,8 @@ def _check_noted_folders():
 def warn_pseudo_level(paths, recursive=True, max_folders=5000):
     """Runs check_pseudo_level on every folder under `paths` (a folder or a list; walked
     recursively unless `recursive=False`, hidden folders skipped) that holds an .fdf and a pseudopotential, prints
-    each distinct warning once as a yellow [WARNING] naming where it was found, and returns
-    the distinct messages. Never raises: a check that cannot run is skipped silently."""
+    each distinct problem once, naming where it was found -- errors first as a red [ERROR], then
+    warnings as a yellow [WARNING] -- and returns the distinct messages. Never raises: a check that cannot run is skipped silently."""
     if isinstance(paths, str):
         paths = [paths]
     found = {}
@@ -757,10 +789,13 @@ def warn_pseudo_level(paths, recursive=True, max_folders=5000):
                 messages = check_pseudo_level(root)
             except Exception:       # a report check must never break a tool
                 continue
-            for msg in messages:
-                found.setdefault(msg, []).append(root)
-    for msg, where in found.items():
+            for item in messages:
+                found.setdefault(item, []).append(root)
+    for (level, msg), where in sorted(found.items(), key=lambda kv: kv[0][0] != "error"):
         place = os.path.relpath(where[0])
         more = f" and {len(where) - 1} more folder(s)" if len(where) > 1 else ""
-        print(color_text(f"[WARNING] Pseudopotentials vs input ({place}{more}): {msg}", 'yellow'))
-    return list(found)
+        if level == "error":
+            print(color_text(f"[ERROR] Pseudopotentials ({place}{more}): {msg}", 'red'))
+        else:
+            print(color_text(f"[WARNING] Pseudopotentials vs input ({place}{more}): {msg}", 'yellow'))
+    return [msg for _level, msg in found]

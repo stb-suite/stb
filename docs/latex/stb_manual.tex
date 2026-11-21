@@ -1853,7 +1853,7 @@
   {\large\bfseries Carlos M. O. Bastos\par}
   {\normalsize University of Bras\'ilia (UnB), Brazil\par}
   \vspace{1.5em}
-  {\small Version 2.0.0, the first stable release.\\
+  {\small Version 2.1.0, November 2026.\\
   Source, examples and issue tracker: \url{https://github.com/stb-suite/stb}\\
   Documentation site: \url{https://stb-suite.github.io/stb/}\par}
   \vspace{1em}
@@ -1864,8 +1864,8 @@
 \addcontentsline{toc}{chapter}{About this manual}
 \markboth{About this manual}{About this manual}
 
-\begin{warnbox}[Stable version 2.0.0, under testing]
-This is the first stable release, and it is still being tested in real projects. \textbf{Verify every result} before
+\begin{warnbox}[Stable version 2.1.0, under testing]
+This stable release is still being tested in real projects. \textbf{Verify every result} before
 relying on it: check it independently, for example against a reference calculation
 or the literature. Every tool prints the checks it ran and flags what it could not
 verify, but those diagnostics are an aid, not a guarantee.
@@ -2106,7 +2106,7 @@ conda build stb-suite
 
 Every tool is now on your \texttt{PATH}:
 \begin{codeblock}
-stb-kgrid --version          # prints 2.0.0
+stb-kgrid --version          # prints 2.1.0
 stb-kgrid --help             # every option of one tool
 stb-suite                    # the interactive menu
 \end{codeblock}
@@ -2116,8 +2116,8 @@ stb\_suite[ml]} for the MACE tools), instead of failing half-way.
 
 \section{Version numbers}\label{sec-version}
 The suite has a single version for every tool. The \texttt{main} branch holds the stable
-releases (\texttt{2.0.0}; the last number rises for a release with bug fixes only, e.g. \texttt{2.0.1}, the middle one when defaults change or options are added, e.g. \texttt{2.1.0}); the \texttt{dev} branch holds
-the next version and reports it as \texttt{2.1.0.dev<N>}, $N$ being the number of commits since
+releases (\texttt{2.0.0}, \texttt{2.1.0}, \dots; the last number rises for a release with bug fixes only, e.g. \texttt{2.0.1}, the middle one when defaults change or options are added, e.g. \texttt{2.1.0}); the \texttt{dev} branch holds
+the next version and reports it as \texttt{2.2.0.dev<N>}, $N$ being the number of commits since
 the last release tag, so it grows with every commit. An installed copy reports the number baked
 into its metadata when it was built; the environment variable \texttt{STB\_VERSION} overrides
 both. Each tool shows it in its banner and with
@@ -2194,7 +2194,7 @@ Part~\ref{part-tools}:
 \begin{optlist}
   \optitem{-h, -{}-help}{Print the tool's usage, every option with its default, and
     usage examples, then exit.}
-  \optitem{-v, -{}-version}{Print the suite version (for example \texttt{2.0.0}) and exit.}
+  \optitem{-v, -{}-version}{Print the suite version (for example \texttt{2.1.0}) and exit.}
   \optitem{-{}-no-intro}{Skip the animated banner printed when the tool starts --
     useful in scripts and logs. The menu passes it for you.}
 \end{optlist}
@@ -52462,11 +52462,55 @@ commands outside the menu) and the first sentence of its description.
 
 
 \chapter{Changes in version 2.1.0}\label{app-changes-210}
-Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several defaults and adds options, hence a new minor number rather than a bug-fix 2.0.1; at the time of writing it is the content of the \texttt{dev} branch and has not been tagged. This appendix is the 2.1.0 section of \texttt{stb-suite/CHANGELOG.md}: what was fixed, the defaults and behaviours that differ from 2.0.0 (several of them change generated inputs or reported numbers), and the options that are new. The tool chapters describe the tools as they are in 2.1.0.
+Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several defaults and adds options, hence a new minor number rather than a bug-fix 2.0.1. This appendix is the 2.1.0 section of \texttt{stb-suite/CHANGELOG.md}: what was fixed, the defaults and behaviours that differ from 2.0.0 (several of them change generated inputs or reported numbers), and the options that are new. The tool chapters describe the tools as they are in 2.1.0.
 
 \section{Fixed}
 
 \begin{itemize}
+\item
+  Pseudopotential bank: \texttt{dojo} (\texttt{dojo-\allowbreak{}sr-\allowbreak{}pbe-\allowbreak{}standard}) and \texttt{dojo-\allowbreak{}stringent} are now the PseudoDojo
+  nc-sr-04 PBE tables (folders \texttt{sr\_\allowbreak{}pbe\_\allowbreak{}0.4\_\allowbreak{}standard}/\texttt{\_\allowbreak{}stringent}; they were nc-sr-05, \texttt{sr\_\allowbreak{}pbe\_\allowbreak{}0.5\_\allowbreak{}*}).
+  nc-sr-05 is nc-sr-04 with 11 files regenerated (Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe) whose KB
+  projectors include \texttt{ekb="0"}. With SIESTA 5.4.2 those files gave wrong equilibrium structures with
+  any number of MPI ranks and no warning (Pb fcc 14.6 instead of 30.8 Ang\^{}3/atom, S2 1.65 instead of
+  1.92 Ang), and aborted in parallel with \texttt{propor:\ ERROR:\ IMAX\ =\ 0}. The other 61 files of each table
+  are unchanged (byte-identical), so \texttt{-\allowbreak{}p\ dojo} gives the same results for them. The valence changes
+  for I (z 17 -\textgreater{} 7 standard, 25 -\textgreater{} 17 stringent) and for stringent Rn (26 -\textgreater{} 18) and Xe (26 -\textgreater{} 8).
+  Every bank folder now has a \texttt{manifest.json} (source archive and SHA-256, md5, valence and
+  projector sets of every file), and \texttt{stb-\allowbreak{}pseudo\ -\/-\allowbreak{}list-\allowbreak{}banks} checks the files against it.
+\item
+  A \texttt{.psml} with \texttt{ekb="0"} KB projectors (nc-sr-05\textquotesingle s 11 regenerated elements, for example from a user
+  folder given as \texttt{-\allowbreak{}p\ \textless{}folder\textgreater{}}) is refused: every tool stops with an \texttt{{[}ERROR{]}} before copying it into
+  a run folder. The check at the end of each tool (pseudopotentials vs the \texttt{.fdf}) reports such a file
+  in a folder made by hand as a red \texttt{{[}ERROR{]}}; its other findings stay warnings.
+\item
+  Full-relativistic files with no scalar-relativistic part (68 of the 71 nc-fr-04 PBEsol files of
+  \texttt{-\allowbreak{}p\ dojo-\allowbreak{}fr-\allowbreak{}pbesol}, all but Ge, Sb, Te) in an input without spin-orbit: SIESTA 5.4.2 stops with
+  \textquotesingle generation of scalar-relativistic part is not available yet\textquotesingle. \texttt{stb-\allowbreak{}inputfile}, which never writes
+  spin-orbit, refuses them before writing \texttt{calc.fdf}; the end-of-run check reports them as an
+  \texttt{{[}ERROR{]}}. The bank README said the \texttt{fr} files also run without SOC; true only for \texttt{fr\_\allowbreak{}pbe}.
+\item
+  The end-of-run level check (pseudopotentials vs \texttt{.fdf}) took a commented \texttt{\#\ \%block\ XC.mix} for a
+  real one and then skipped the functional comparison. The template of \texttt{stb-\allowbreak{}inputfile} has that
+  comment, so no \texttt{calc.fdf} written by it was ever checked. Commented blocks are now ignored.
+\item
+  Be gets the non-perturbative polarization scheme like Li (\texttt{PAO.PolarizationScheme}, ghosts too): its
+  perturbative polarization orbital fails in every PseudoDojo table (\textquotesingle Generation of polarization orbital
+  failed\textquotesingle). A test of every element of the bundled tables found no other.
+\item
+  \texttt{-\allowbreak{}p\ dojo-\allowbreak{}sr3plus} (lanthanides with 4f in the core) never ran: SIESTA builds the basis from its
+  internal configuration, with 4f, and stops with \textquotesingle Total charge in occupied basis states different
+  from valence charge\textquotesingle. Every tool that writes run folders now adds the \texttt{\%block\ synthetic-\allowbreak{}atoms} of the
+  SIESTA manual (\texttt{6\ 6\ 5\ 5} / \texttt{2.0\ 0.0\ 1.0\ 0.0}) at the end of its run, keyed by each folder\textquotesingle s own
+  \texttt{ChemicalSpeciesLabel} index, ghosts included (BSSE, charge difference, cohesive references: a ghost
+  without it runs with another basis), in \texttt{config\_\allowbreak{}extra.fdf} when the folder has one. The same step
+  adds the non-perturbative polarization scheme for Li/Be labels (ghosts too) when the input has no
+  \texttt{PAO.PolarizationScheme} block at all, which a \texttt{-\/-\allowbreak{}calc} template without one used to leave out.
+  Only files written by the run are changed; in a folder made by hand a missing or misplaced entry is
+  an \texttt{{[}ERROR{]}} of the end-of-run check. \texttt{stb-\allowbreak{}hubbardu} now also refuses \texttt{ekb="0"} files.
+\item
+  The end-of-run check warns about spin-orbit combined with \texttt{FilterCutoff} (NaN in the first SCF
+  iteration for Co and Cu with the \texttt{fr} tables and \texttt{FilterCutoff\ 150\ Ry}; fine without the filter).
 \item
   \texttt{stb-\allowbreak{}bader} did not start on a fresh install ("pybader library not found", also for \texttt{-\/-\allowbreak{}version}):
   pybader 0.3.12 imports \texttt{pkg\_\allowbreak{}resources}, which setuptools 81 and later no longer ship. The suite
@@ -52521,7 +52565,7 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   from the file is 9.99999 Ang. Gaps within 0.01 Ang of the threshold now count, and the error of
   \texttt{stb-\allowbreak{}adsorb} gives the gap measured along each axis and the \texttt{-\/-\allowbreak{}vacuum-\allowbreak{}gap} value to pass.
 \item
-  \texttt{stb-\allowbreak{}adsorb} with a \texttt{-\/-\allowbreak{}calc} that has no \texttt{kgrid.\allowbreak{}MonkhorstPack\ {[}nx\ ny\ nz{]}} line ended in a Python
+  \texttt{stb-\allowbreak{}adsorb} with a \texttt{-\/-\allowbreak{}calc} that has no \texttt{kgrid.MonkhorstPack\ {[}nx\ ny\ nz{]}} line ended in a Python
   traceback; it is a clean error now.
 \item
   DFT-D3 and the stress tensor: SIESTA 5.4.2 writes the D3 contribution to the stress with the wrong
@@ -52551,14 +52595,14 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   \texttt{stb-\allowbreak{}strainAnalysis} said "slope under a clamped transverse cell" and "transverse stress
   (diagnostic, clamped cell)" also for runs made with \texttt{stb-\allowbreak{}strain\ -\/-\allowbreak{}relax-\allowbreak{}mode\ stress-\allowbreak{}constrained},
   where the transverse cell relaxes and the slope is Young\textquotesingle s modulus. It now reads the mode from each
-  folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}, words the report accordingly, and for the relaxed mode gives Poisson\textquotesingle s
-  ratio from the transverse strain of the final cells (\texttt{*.\allowbreak{}STRUCT\_\allowbreak{}OUT}).
+  folder\textquotesingle s \texttt{config\_\allowbreak{}extra.fdf}, words the report accordingly, and for the relaxed mode gives Poisson\textquotesingle s
+  ratio from the transverse strain of the final cells (\texttt{*.STRUCT\_\allowbreak{}OUT}).
 \item
   \texttt{stb-\allowbreak{}cohesive}: the log called the whole \texttt{-\/-\allowbreak{}vacuum} a "buffer beyond the outermost atom" and, lines
   below, half of it; the first line now says what the value is (the vacuum gap between images, box
   side = 2 x cutoff + vacuum) and the buffer per side.
 \item
-  Example 5.3 (cohesive energy): the orbital radius \texttt{rc\ =\ 7.\allowbreak{}12} read from \texttt{calc.\allowbreak{}out} is in Bohr (3.77
+  Example 5.3 (cohesive energy): the orbital radius \texttt{rc\ =\ 7.12} read from \texttt{calc.out} is in Bohr (3.77
   Ang), not Angstrom, so the old box did not let periodic images overlap; the text is corrected. The
   README now shows the ghost-cutoff scan up to 12 Ang: the corrected GaAs value at 6 Ang (-3.1741
   eV/atom) is not converged (-3.0514 at 12 Ang).
@@ -52568,17 +52612,17 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   printed only for a complete 3D tensor. It is printed for every dimensionality now.
 \item
   \texttt{stb-\allowbreak{}opticalAnalysis} called graphene "dielectric (non-metallic)" with an absorption edge at 0.25 eV
-  when the run folder had no \texttt{\textless{}label\textgreater{}.\allowbreak{}EIG} to read the Kohn-Sham gap from: the edge came from the
+  when the run folder had no \texttt{\textless{}label\textgreater{}.EIG} to read the Kohn-Sham gap from: the edge came from the
   finite k-mesh and the 0.1 eV broadening. An onset below 3 x the broadening (at least 0.3 eV), or a
   Kohn-Sham gap below the broadening, is now reported as "gap not resolved": no dielectric
   classification, no Tauc gap, and a warning that the spectrum below about twice the broadening is
-  not reliable. A missing \texttt{.\allowbreak{}EIG} is said.
+  not reliable. A missing \texttt{.EIG} is said.
 \item
   \texttt{stb-\allowbreak{}mlphonons\ -\/-\allowbreak{}qha\ -\/-\allowbreak{}n-\allowbreak{}volumes\ 4} was accepted and failed at the very end, after every volume had
   been computed (\texttt{At\ least\ 5\ volume\ points\ are\ needed\ to\ fit\ S(V)}). The minimum is 5 and the option
   is checked before anything runs.
 \item
-  \texttt{stb-\allowbreak{}eosAnalysis} warned \texttt{B0\textquotesingle{}\ within\ 4.\allowbreak{}5-\allowbreak{}7.\allowbreak{}0} for ordinary fits (Si: 4.25-4.47 with R\^{}2 0.999998), so
+  \texttt{stb-\allowbreak{}eosAnalysis} warned \texttt{B0\textquotesingle{}\ within\ 4.5-\allowbreak{}7.0} for ordinary fits (Si: 4.25-4.47 with R\^{}2 0.999998), so
   the warning appeared in almost every run. The accepted range is 3.0-7.0, and the message says what a
   value outside it means (a scan too narrow or noisy to fix B0\textquotesingle), not that the fit is wrong.
 \item
@@ -52591,10 +52635,10 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   than 0.001 Ang stop the cycle with an \texttt{{[}ERROR{]}} and exit code 1, and no folder is written.
 \item
   \texttt{stb-\allowbreak{}mlneb} with identical endpoints (or two inputs that relax into the same minimum) ended in
-  \texttt{numpy.\allowbreak{}linalg.\allowbreak{}LinAlgError:\ Singular\ matrix}. It now stops with a message: nearly identical states,
+  \texttt{numpy.linalg.LinAlgError:\ Singular\ matrix}. It now stops with a message: nearly identical states,
   no barrier along this band.
 \item
-  \texttt{stb-\allowbreak{}mlneb\ -\/-\allowbreak{}siesta-\allowbreak{}check/\allowbreak{}-\/-\allowbreak{}to-\allowbreak{}mlff\ -\/-\allowbreak{}mlff-\allowbreak{}workflow}: a workflow whose reference structure file is
+  \texttt{stb-\allowbreak{}mlneb\ -\/-\allowbreak{}siesta-\allowbreak{}check/-\/-\allowbreak{}to-\allowbreak{}mlff\ -\/-\allowbreak{}mlff-\allowbreak{}workflow}: a workflow whose reference structure file is
   missing gave a Python \texttt{FileNotFoundError}; it is a clean error naming the file. (In the test suite
   the file was missing because three tests still pointed to fixture folders by their numbers from
   before the 2026-10-31 renumbering; fixed.)
@@ -52602,14 +52646,366 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   \texttt{stb-\allowbreak{}mlmd}: the initial velocities are rescaled to exactly the temperature asked for (a
   Maxwell-Boltzmann draw of 72 atoms gave 263.5 K for 300 K). Trajectories with the same seed
   therefore differ from 2.0.0\textquotesingle s. The lines \texttt{Initial\ state} / \texttt{Final\ state} printed a potential energy
-  as \texttt{E\ =\ .\allowbreak{}.\allowbreak{}.\allowbreak{}}, which read as a 1.27 eV change of the total energy in an NVE run: they now give E\_pot,
+  as \texttt{E\ =\ ...}, which read as a 1.27 eV change of the total energy in an NVE run: they now give E\_pot,
   E\_kin and E\_tot. An NVE run from an equilibrium geometry whose mean temperature ends below 75 \% of
   \texttt{-\/-\allowbreak{}temperature} (equipartition halves it) gets a warning in the final section, with what to do.
+\item
+  \texttt{stb-\allowbreak{}phononsPos} (and every loader of SIESTA phonons: IR, Raman, adsorption Gibbs, \texttt{stb-\allowbreak{}mlffValidate\ -\/-\allowbreak{}phonon-\allowbreak{}ref}): the space group phonopy used to build and check the force constants was not always the
+  one at \texttt{-\/-\allowbreak{}symprec}. On the cluster, a relaxed 5x5 graphene (positions 0.66667844 instead of 2/3) was
+  analysed as Cmmm, the tolerance written in \texttt{phonopy\_\allowbreak{}disp.yaml} (1e-5); the force constants built from
+  the single P6/mmm displacement split the E2g pair (45.55 and 45.96 THz, with or without
+  \texttt{-\/-\allowbreak{}symmetrize-\allowbreak{}fc}) and the force-constant symmetry check reported 0.000 THz.
+
+  \begin{itemize}
+  \tightlist
+  \item
+    The space group is now computed with spglib at \texttt{-\/-\allowbreak{}symprec} and compared with phonopy\textquotesingle s; on a
+    mismatch the phonopy object is rebuilt with the requested tolerance and the force constants are
+    recomputed (with a \texttt{{[}WARNING{]}}; the NAC parameters read from \texttt{BORN} are kept). The report gives the
+    space group used, the tolerance written in \texttt{phonopy\_\allowbreak{}disp.yaml}, and the number of displacements in the
+    folders against the number that group needs, with a warning when there are fewer (the set was reduced
+    with a higher symmetry than the one now used). Same data: E2g 38.575 / 38.576 THz.
+  \item
+    The force-constant symmetry check of \texttt{{[}2{]}} was skipped with phonopy 4.5 (\textquotesingle index 2 is out of
+    bounds\textquotesingle): it needs the full force constants, which are now built for it.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}convergence} (relaxation mode, the default): \texttt{config\_\allowbreak{}extra.fdf} forced a variable-cell relaxation
+  but no stress tolerance, so SIESTA\textquotesingle s default of 1 GPa applied -\/- about 1 \% of the volume of Si (B0 \textasciitilde{}
+  88 GPa), twice the 0.5 \% the analysis judges by. On Si (DZP, 350 Ry) the relaxations from 0.0005 to
+  0.01 Ry stopped at their first step (0.96 GPa left at 0.0005 Ry) and the analysis tabulated the input
+  volume as the relaxed one.
+
+  \begin{itemize}
+  \tightlist
+  \item
+    Every folder now gets \texttt{MD.MaxStressTol} (new \texttt{-\/-\allowbreak{}max-\allowbreak{}stress-\allowbreak{}tol}, default 0.02 GPa) and
+    \texttt{MD.MaxForceTol} (new \texttt{-\/-\allowbreak{}max-\allowbreak{}force-\allowbreak{}tol}, default 0.01 eV/Ang); \texttt{-\/-\allowbreak{}single-\allowbreak{}point} is unchanged.
+  \item
+    \texttt{stb-\allowbreak{}convergenceAnalysis} reads the tolerance back and the final stress from each log, and flags
+    \texttt{P\textgreater{}tol} (stress left above the tolerance), \texttt{Ptol=1GPa} (no tolerance below SIESTA\textquotesingle s default: folders
+    from earlier versions) and \texttt{V=input} (the cell never moved under a loose tolerance). Those runs are
+    left out of the volume verdict, with a \texttt{{[}WARNING{]}}; when every run is one of them there is no verdict.
+    Regenerate such folders and rerun them.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}elasticAnalysis}, folders prepared with \texttt{stb-\allowbreak{}elasticInputs\ -\/-\allowbreak{}symmetry-\allowbreak{}method\ full} and analysed
+  with the default \texttt{-\/-\allowbreak{}symmetry-\allowbreak{}method\ basic}: the constants of the directions \textquotesingle full\textquotesingle{} had left out came
+  out 0 with no error (Si with \texttt{xx} only: C44 = 0; graphene and hBN with \texttt{xx} only: C22 = C66 = 0), and
+  the report ended in "VERDICT: UNSTABLE".
+
+  \begin{itemize}
+  \tightlist
+  \item
+    \texttt{stb-\allowbreak{}elasticInputs} writes \texttt{elastic\_\allowbreak{}scan.json} (symmetry method, directions) into every series
+    folder, always. Without \texttt{-\/-\allowbreak{}symmetry-\allowbreak{}method}, \texttt{stb-\allowbreak{}elasticAnalysis} uses the method found there (or
+    in the \texttt{Symmetry\ method} line of \texttt{elastic\_\allowbreak{}stage1.txt}, for folders of earlier versions); the report
+    says where it was read. With no record the default is still \texttt{basic}.
+  \item
+    With \texttt{basic}, a constant the point group allows that comes out 0 because neither of its directions
+    was run nor reconstructed is now an \texttt{{[}ERROR{]}} (no tensor is reported). It says whether the
+    directions run determine the tensor with \texttt{-\/-\allowbreak{}symmetry-\allowbreak{}method\ full}, or which directions to add.
+  \item
+    The \texttt{{[}ERROR{]}} of \texttt{full} for an undetermined constant proposes the direction \texttt{stb-\allowbreak{}elasticInputs}
+    itself would choose (\texttt{xy} for cubic, was \texttt{yz}).
+  \item
+    The menu (5.2.2) no longer answers \texttt{basic} when Enter is pressed at the symmetry question: Enter keeps
+    the method the folders were prepared with; \texttt{1} / \texttt{2} still choose \texttt{basic} / \texttt{full}.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}cohesive\ -\/-\allowbreak{}calc}: a template that sets its k-points with \texttt{kgrid.Cutoff} (or \texttt{kgrid.File}) was
+  taken as having no k-grid, so the full structure\textquotesingle s \texttt{config\_\allowbreak{}extra.fdf} got a Monkhorst-Pack block from
+  the default density, which SIESTA reads first (E05 template, \texttt{kgrid.Cutoff\ 15.0\ Ang}: a 10x10x10 grid,
+  560 k-points). These count as the template\textquotesingle s own k-grid now, as the help says; \texttt{-\allowbreak{}k} still replaces it.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis}: the orbital filter was not detected in SIESTA 5.4.2 logs
+  (Cu with \texttt{FilterCutoff\ 150\ Ry}: the prep warned, the analysis did not). The log check now also knows
+  5.4.2\textquotesingle s \texttt{Filter:\ Requested\ cutoff} and \texttt{PAO\ Filter:\ Cutoff\ used} lines.
+\item
+  \texttt{stb-\allowbreak{}mlffValidate\ -\/-\allowbreak{}phonon-\allowbreak{}ref} on a 2D material: the default q-mesh was 8x8x8, so the frequencies
+  were also compared at q along the vacuum, where the dispersion is an artefact of the periodic images
+  (graphene 3x3: the largest deviation was at q = (0.3125, 0.3125, 0.0625)). The default \texttt{-\/-\allowbreak{}phonon-\allowbreak{}mesh}
+  now has 1 along every vacuum axis of the reference cell (8x8x1 for a slab or a sheet); the report says
+  so. An explicit \texttt{-\/-\allowbreak{}phonon-\allowbreak{}mesh} is used as given.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis} on a 2D material (or a wire) tabulated V0 in Ang\^{}3 and B0
+  in GPa of the cell with its vacuum, with a note that only their relative change meant something. It now
+  gives what \texttt{stb-\allowbreak{}eosAnalysis} gives for the same kind of scan: the equilibrium area A0 (Ang\^{}2), a0 (the
+  first periodic vector at A0) and the in-plane stiffness A d2E/dA2 in N/m -\/- (C11 + C12)/2 of an
+  isotropic sheet; for a wire the length and the axial stiffness in nN. The criteria are unchanged.
+\item
+  \texttt{stb-\allowbreak{}cohesiveAnalysis}: the warning on the electronic entropy (-T*S above 1 meV) explained every term
+  as an isolated atom\textquotesingle s fractional occupation, also when the only such term was the solid\textquotesingle s (Ag: -1.0 meV,
+  the smearing at the Fermi level of a metal). Atoms and solid now get separate messages: a \texttt{{[}WARNING{]}}
+  for the isolated-atom/BSSE runs as before, a \texttt{{[}NOTE{]}} for the full structure that calls it the usual
+  smearing correction.
+\item
+  \texttt{stb-\allowbreak{}cohesive\ -\/-\allowbreak{}calc} showed \texttt{FilterCutoff} in its level-of-theory line but gave no warning, unlike
+  \texttt{stb-\allowbreak{}eosInputs}, \texttt{stb-\allowbreak{}elasticInputs} and \texttt{stb-\allowbreak{}convergence}; it now gives the same \texttt{{[}WARNING{]}}.
+\item
+  \texttt{stb-\allowbreak{}convergence} (and every tool that puts \texttt{\%include\ config\_\allowbreak{}extra.fdf} on top of a template): a
+  template that already had the line got a second identical one. Harmless, but it read as a mistake; the
+  file now keeps one, at the top.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis}: the command it prints for the next stage had no \texttt{-\allowbreak{}p}, so
+  the folders of that stage would have been written without pseudopotentials. \texttt{stb-\allowbreak{}convergence} now
+  records the pseudopotential source in \texttt{basis\_\allowbreak{}scan\_\allowbreak{}\textless{}stage\textgreater{}.json} (as typed: a bank name stays a bank
+  name) and the command carries it; for a scan written by an earlier version the command shows
+  \texttt{-\allowbreak{}p\ \textless{}pseudopotential\ source\textgreater{}} to fill in.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis}, mesh and range stages: a setting closed when its V0 agreed
+  with the next TWO tighter ones, which accepts a false plateau. On Ge (500 Ry) V0 was 24.517 / 24.426 /
+  24.464 / 25.180 / 25.215 / 25.106 Ang\^{}3/atom from 0.02 to 0.0005 Ry: 0.02 Ry agreed with 0.01 and 0.005
+  within 0.4 \% and was chosen, though V0 jumps +3 \% at 0.002 Ry. A setting now has to agree with EVERY
+  tighter setting of the scan (Ge: 0.002 Ry). On the nine test systems: Si and graphene 0.005 Ry; Ge,
+  NaCl, Al, Cu and hBN 0.002 Ry; GaAs and Ag 0.001 Ry. In 2D the verdict speaks of the area.
+\item
+  \texttt{stb-\allowbreak{}mlmd} (and every tool that prints the model card): the settings line said \texttt{DFTD3\ default} for a
+  model trained without D3, which reads as D3 on. It now says \texttt{DFT-\allowbreak{}D3\ on} or \texttt{DFT-\allowbreak{}D3\ off}, from the
+  card\textquotesingle s own \texttt{dftd3.on}.
+\item
+  \texttt{stb-\allowbreak{}coop\ -\/-\allowbreak{}quantity\ cohp} called every bond "antibonding": the report applied the COOP rule
+  (positive = bonding) to the COHP too, while sisl\textquotesingle s COHP uses the raw H(k), Dronskowski\textquotesingle s convention,
+  in which a bond is NEGATIVE (-ICOHP \textgreater{} 0). On the Sn3O4 example a Sn-O bond (ICOHP -1.44 eV) was
+  labelled antibonding; on the X-C bonds of XC8, ICOHP -1.87 eV. The curve and \texttt{cohp.dat} were right;
+  the label, the sign-convention sentence and the plot title were not. The bond-order cross-check now
+  runs for COHP too, comparing -ICOHP with the bond order.
+\item
+  \texttt{stb-\allowbreak{}bader} stopped with "{[}ERROR{]} Analysis failed: object of type \textquotesingle NoneType\textquotesingle{} has no len()" when
+  the whole density forms a single basin (AlP with a valence-only pseudo-density: the Al has no
+  density maximum of its own). PyBader then finds no basin edge and returns no surface distances.
+  The report is now written, Al 0 and P 8 e- as the Henkelman program gives, with the
+  zero-population warning and no surface-distance column.
+\item
+  \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}ml-\allowbreak{}rank} with orientation sampling kept the same geometry twice when two
+  orientations relaxed to one H2O with its two H swapped ("8 orientation(s) sampled -\textgreater{} 8 unique
+  kept" on Ag(111), 32 SIESTA folders where 24 were distinct): the RMSD compared the atoms in file
+  order, so the swap read as 1.5 Ang. Equal atoms are now matched by the best permutation, and each
+  distance uses the nearest periodic image (an adsorbate atom wrapped to the opposite face of the
+  cell no longer counts as a jump of a lattice vector).
+\item
+  \texttt{stb-\allowbreak{}cohesiveAnalysis}, three report points (no number changes):
+
+  \begin{itemize}
+  \tightlist
+  \item
+    section {[}2{]} said "a positive Delta here is the expected direction", but its \texttt{Delta\ BSSE} column is
+    the atom with ghosts minus the isolated atom, negative in every run (Si -0.239 eV). The text now
+    says negative, and that it makes the cohesive energy less negative in {[}3{]};
+  \item
+    a BSSE reference with zero ghost atoms (\texttt{-\/-\allowbreak{}bsse-\allowbreak{}cutoff} below the first neighbour, e.g. 2 Ang in
+    Ag) was warned about by \texttt{stb-\allowbreak{}cohesive} only; the analysis printed a "BSSE correction +0.0000" as a
+    result. Section {[}3{]} now repeats the warning, and the summary marks the value;
+  \item
+    with a cutoff scan, the summary {[}5{]} now also gives the value at the largest cutoff (Cu: up to
+    0.08 eV/atom from the base value), which appeared only in {[}3b{]}.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}kpath}, two problems on cells from a relaxation:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    fcc crystals whose relaxed cell had angles of 59.91-59.99 deg (Ag, Cu, Pd, Ge, GaAs, NaCl, MgO)
+    got the rhombohedral path (\texttt{\textbackslash{}Gamma-\allowbreak{}L-\allowbreak{}B1\ \textbar{}\ B-\allowbreak{}Z-\allowbreak{}...}) while the same report gave Fm-3m/F-43m: the
+    Bravais lattice came from ASE at \texttt{eps} 2e-4, the space group from spglib at \texttt{symprec} 0.01. When a
+    primitive cell\textquotesingle s lattice is less symmetric than its space group, the smallest larger \texttt{eps} that gives
+    the lattice of the space group is used, with a warning that gives the angles. A genuinely
+    rhombohedral cell (Bi, R-3m), a conventional cell and a lattice more symmetric than the crystal are
+    left as they were;
+  \item
+    at each jump of the path (\texttt{K\ \textbar{}\ U}), \texttt{kpath\_\allowbreak{}bs.fdf} gave the first point of the new segment the full
+    50 points, so SIESTA computed a K -\textgreater{} U line that is not a high-symmetry line and the plot showed it
+    as one. That point now gets 1, which starts a new line in \texttt{BandLines}.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}coop\ -\/-\allowbreak{}pair\ I\ J} summed only the image of J in the same cell: \texttt{geometry.o2a} gives supercell
+  atom indices and they were compared with J without folding. A bond across the cell edge came out
+  \textasciitilde0 (the C-C bridge of XC8, 1.5 Ang: ICOOP 0.00005 instead of 0.22, while the bond order of the same
+  run was 0.88; on Sn3O4, Sn 0 - O 7 at 2.08 Ang: -0.0002 instead of 0.133), and \texttt{-\/-\allowbreak{}pair-\allowbreak{}species} left
+  out every bond between cells. Every image of J within the orbital range is now summed, and the
+  report lists them, one row per image with its distance; the new \texttt{-\/-\allowbreak{}image\ N1\ N2\ N3} selects one
+  (one bond). The bond order uses the same selection. \texttt{-\/-\allowbreak{}pair\ I\ I} stays the on-site term.
+\item
+  \texttt{stb-\allowbreak{}cohesive\ -\/-\allowbreak{}calc}: a per-species block of the template (\texttt{PAO.PolarizationScheme} with
+  \texttt{Li\ non-\allowbreak{}perturbative}, which LiF needs; \texttt{PAO.Basis}, \texttt{PAO.BasisSizes}) was copied unchanged into
+  every folder, although the species differ from folder to folder. SIESTA stopped in the folders with
+  no Li (\texttt{atoms/F}: "WRONG species symbol in PAO.PolarizationScheme: Li"), and a ghost (\texttt{Li\_\allowbreak{}ghost})
+  had no entry, so its polarization orbital failed to generate or it got another basis than the real
+  atom. Each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.fdf} now carries these blocks re-keyed to its own species: absent
+  species dropped, \texttt{X\_\allowbreak{}ghost} given the entry of \texttt{X}. \texttt{stb-\allowbreak{}adsorbBsse} and \texttt{stb-\allowbreak{}chargediffPrep}, which
+  write ghost fragments from a template too, do the same.
+\item
+  \texttt{stb-\allowbreak{}coop}: the bond-order cross-check compared only signs, so it passed a bond across the cell
+  edge with ICOOP \textasciitilde{} 0 and bond order 0.88, and nothing said how the numbers are normalized. sisl\textquotesingle s value
+  is per spin channel and one direction (i -\textgreater{} j), while the Mulliken bond order counts both: bond order
+  = 4 x ICOOP for a spin-unpolarized run (2 for a polarized one), checked on Sn3O4 (3.98, and the sum
+  over every orbital pair is N/2). The report now states the normalization, adds an \texttt{x4} (or \texttt{x2})
+  column, and compares the magnitude, \texttt{x4\ ICOOP\ /\ bond\ order}, judging it (warning beyond 10 \%) when
+  the window runs from the bottom of the bands to E\_F. \texttt{coop.dat}/\texttt{cohp.dat} are unchanged.
+\item
+  Li with the bundled PseudoDojo pseudopotential and a polarized basis (DZP, the default): SIESTA\textquotesingle s
+  perturbative polarization orbital of the Li 2s cannot be generated ("Generation of polarization
+  orbital failed ... Rc no bigger than 1.3195 Bohr"), and nothing said so before the run (LiF: 36/36
+  convergence folders failed). \texttt{stb-\allowbreak{}inputfile} and the built-in template of \texttt{stb-\allowbreak{}cohesive} now write
+  \texttt{\%block\ PAO.PolarizationScheme} with \texttt{Li\ non-\allowbreak{}perturbative} (one line per Li label, ghosts included),
+  and every tool that copies pseudopotentials warns when a folder\textquotesingle s \texttt{.fdf} gives Li a polarization
+  orbital without that scheme (or \texttt{PAO.Polarization.NonPerturbative\ true}). Other alkali metals are not
+  verified.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis}: a variable-cell relaxation of a cubic crystal can end slightly
+  rhombohedral (fcc primitive cells at 59.91-59.99 deg: Cu, NaCl, Ag, GaAs, MgO, Ge, Pd), from the
+  stress noise, with every stop criterion met and no warning; the distorted cell then went into every
+  later step (\texttt{stb-\allowbreak{}kpath} saw another Bravais lattice). The report now warns when a relaxed cell has
+  lost the input symmetry at 0.001 Ang but keeps it at 0.01 Ang (e.g. Fm-3m in, R-3m out), and says to
+  symmetrize the structure before reuse or keep the angles fixed. The volumes are unchanged.
+\item
+  \texttt{stb-\allowbreak{}adsorbGibbs\ -\/-\allowbreak{}help} said the isolated-reference term was vibrational only, with no
+  translational or rotational entropy, while the tool treats the reference as an ideal gas at 1 bar
+  (\texttt{ase.thermochemistry.IdealGasThermo}, as the report says): H2O, C2v, gives Delta S = -127 J/(mol K),
+  a value only the gas\textquotesingle s translation and rotation give. The help now describes what is computed and
+  the real limitation: the adsorbed side is harmonic, with hindered translations and rotations
+  treated as vibrations. The numbers are unchanged.
+\item
+  \texttt{stb-\allowbreak{}adsorbAnalysis\ -\/-\allowbreak{}save-\allowbreak{}report} wrote \texttt{adsorption\_\allowbreak{}report.txt}, and every run wrote
+  \texttt{adsorption\_\allowbreak{}curve.dat}/\texttt{.gplot} and \texttt{adsorption\_\allowbreak{}ranking.png}, into the current folder instead of
+  \texttt{-\/-\allowbreak{}dir}, so a second analysis of another run called from the same place overwrote the first. They
+  now go into \texttt{-\/-\allowbreak{}dir}, as the files of \texttt{stb-\allowbreak{}adsorbGibbs} do; \texttt{-\allowbreak{}o} still names another curve file
+  (the plots follow it).
+\item
+  \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}ml-\allowbreak{}rank} with orientation sampling: the \texttt{\_\allowbreak{}orientN} of a site folder is the rank of
+  that orientation by ML energy within the site, so two runs with different models (fine-tuned,
+  foundation, \texttt{-\/-\allowbreak{}ml-\allowbreak{}steps\ 0}) gave the same folder name to different orientations, and the index in
+  the orientation grid, which is the same in every run, was only in \texttt{orientation\_\allowbreak{}trajectory.xyz}.
+  Each folder\textquotesingle s \texttt{fragment\_\allowbreak{}manifest.json} now has an \texttt{ml\_\allowbreak{}rank} entry (sampling index, rank within the
+  site, ML energy, convergence, model), \texttt{sites/orientation\_\allowbreak{}map.txt} lists every folder, and the
+  ranking table of \texttt{{[}3{]}} has a \texttt{Sampled\ \#} column. Folder names are unchanged.
+\item
+  \texttt{stb-\allowbreak{}chargediffPrep\ -\allowbreak{}p\ \textless{}folder\textgreater{}} looked only for element-named files (\texttt{Ag.psml}), so with \texttt{-\allowbreak{}p}
+  pointing at an \texttt{stb-\allowbreak{}adsorb} site folder, which holds \texttt{Ag\_\allowbreak{}slab.psml}, \texttt{O\_\allowbreak{}ads.psml}, \texttt{H\_\allowbreak{}ads.psml},
+  every folder came out with no pseudopotential (9 warnings, \texttt{combined/Ag\_\allowbreak{}slab} included). For each
+  species label it now copies the file named after the label when the folder has one (a \texttt{\_\allowbreak{}ghost}
+  label uses the label without the suffix, as \texttt{stb-\allowbreak{}adsorbBsse} does), else the element\textquotesingle s. The
+  valence electrons of the report are read from the same files (a semicore Ag pseudopotential
+  counted 11 electrons from the textbook value instead of its own).
+\item
+  NEB in DFT (\texttt{stb-\allowbreak{}neb\ -\/-\allowbreak{}mode\ 2/3} + \texttt{stb-\allowbreak{}nebCycle}):
+
+  \begin{itemize}
+  \tightlist
+  \item
+    Every atom moved: \texttt{stb-\allowbreak{}nebCycle} had no constraint, and the image folders did not inherit the
+    fixed layers the endpoints were relaxed with (\texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}fix-\allowbreak{}layers}). A
+    \texttt{Geometry.Constraints} in \texttt{-\/-\allowbreak{}calc} did not help either: the forces were read from \texttt{.FA}, which
+    SIESTA 5.4.2 writes without the constraints (the constrained ones are in \texttt{.FAC}). \texttt{stb-\allowbreak{}neb} now
+    writes the fixed atoms into every image\textquotesingle s \texttt{config\_\allowbreak{}extra.fdf} (\texttt{-\/-\allowbreak{}fix-\allowbreak{}atoms}, else the
+    \texttt{Geometry.Constraints} next to \texttt{-\/-\allowbreak{}initial}/\texttt{-\/-\allowbreak{}final}, else the one of \texttt{-\/-\allowbreak{}calc}), and
+    \texttt{stb-\allowbreak{}nebCycle} holds them fixed (\texttt{FixAtoms}) and reads \texttt{.FAC} when it exists. The MACE stages
+    and \texttt{-\/-\allowbreak{}idpp} of \texttt{stb-\allowbreak{}neb} keep them fixed too, and the report warns when a fixed atom is not at
+    the same place in both endpoints.
+  \item
+    From \texttt{cycle\_\allowbreak{}01} on, the images lost the directives \texttt{stb-\allowbreak{}neb} forces (Spin polarized, slab dipole
+    correction, DFT-D3; on by default): \texttt{stb-\allowbreak{}nebCycle} rewrote \texttt{config\_\allowbreak{}extra.fdf} with the
+    single-point block only. It now copies the previous cycle\textquotesingle s file verbatim. A band run with
+    2.0.0 ran every cycle after the first one at another level of theory unless \texttt{-\/-\allowbreak{}calc} itself
+    had those settings.
+  \item
+    The two endpoints were written as new folders in every cycle and the printed loop ran SIESTA
+    in them again, although the NEB never moves them (2 single points wasted per cycle). They are
+    now copied with their results; the loop skips finished folders and runs the interior images in
+    parallel (\texttt{PARALLEL=yes}, or \texttt{no} for one at a time). \texttt{stb-\allowbreak{}nebAnalysis} analyzes a cycle only
+    once an interior image has results.
+  \item
+    The reports of \texttt{stb-\allowbreak{}neb}, \texttt{stb-\allowbreak{}nebCycle} and \texttt{stb-\allowbreak{}nebAnalysis} say which energy they use:
+    SIESTA\textquotesingle s \texttt{FreeEng} (the one the forces derive from with electronic smearing), not the \texttt{E\_\allowbreak{}KS}
+    of the adsorption workflow.
+  \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}neb} stopped with \texttt{IndexError:\ list\ index\ out\ of\ range} (inside pymatgen) on endpoints with
+  species labels that are not element symbols, such as the \texttt{Ag\_\allowbreak{}slab}, \texttt{O\_\allowbreak{}ads}, \texttt{H\_\allowbreak{}ads} of the
+  adsorption workflow: \texttt{structure\_\allowbreak{}io.to\_\allowbreak{}pymatgen}, used by most tools that read an \texttt{.fdf}, passed the
+  label as the element. The element now comes from the label\textquotesingle s Z in \texttt{ChemicalSpeciesLabel} (a
+  ghost\textquotesingle s Z \textless{} 0 gives its element) and the label is kept per atom, so \texttt{from\_\allowbreak{}pymatgen} writes it back.
+  \texttt{stb-\allowbreak{}neb} and \texttt{stb-\allowbreak{}nebCycle} keep the labels in every image (also through the MACE and IDPP stages)
+  and copy each species\textquotesingle{} pseudopotential under its label (\texttt{Ag\_\allowbreak{}slab.psml} when the source folder has
+  it, else \texttt{Ag.psml}); with no \texttt{-\allowbreak{}p}, the pseudopotentials of the \texttt{-\/-\allowbreak{}initial} endpoint\textquotesingle s folder are
+  used when it has any.
+\item
+  \texttt{stb-\allowbreak{}neb}: an atom that relaxed across a cell face between the endpoints crossed the whole cell in
+  the interpolation, with no error: both endpoints are wrapped into {[}0, 1) and interpolated literally
+  (\texttt{pbc=False}), so top-layer Ag atoms at y = 0.0021 (initial) and 0.9987 (final), 0.03 Ang apart,
+  were moved by 8.8 Ang ("Endpoint displacement: max 8.828 Ang", a 34.5 Ang path for a 1.8 Ang
+  one). After the atoms are matched, every atom of the final endpoint now goes to the periodic image
+  nearest to its initial position before the interpolation (reported as "Periodic images", the same
+  rule \texttt{stb-\allowbreak{}mlneb} already applied), image folders are written wrapped into the cell, and the
+  endpoint displacement, the path length, the spectator atoms frozen in the MACE stage and the path
+  length of \texttt{stb-\allowbreak{}nebAnalysis} are measured through the nearest image.
+\item
+  \texttt{stb-\allowbreak{}mlneb\ -\/-\allowbreak{}to-\allowbreak{}mlff} (and \texttt{-\/-\allowbreak{}siesta-\allowbreak{}check}) with both \texttt{-\/-\allowbreak{}calc} and \texttt{-\/-\allowbreak{}mlff-\allowbreak{}workflow}: the folders
+  took \texttt{-\/-\allowbreak{}calc}, written under its own name (\texttt{calc\_\allowbreak{}neb.fdf}, not \texttt{calc.fdf} like the rest of the
+  workflow), and in the E16 run without the \texttt{Spin\ polarized} and \texttt{Slab.DipoleCorrection} of the
+  round-1 labels, with no warning -\/- new training labels on another Hamiltonian, although the help
+  promised "the workflow\textquotesingle s level of theory". Now \texttt{-\/-\allowbreak{}to-\allowbreak{}mlff} always uses the workflow\textquotesingle s reference
+  calc.fdf (\texttt{-\/-\allowbreak{}calc} is ignored for it, with a warning listing where they differ); \texttt{-\/-\allowbreak{}siesta-\allowbreak{}check}
+  alone still honours \texttt{-\/-\allowbreak{}calc} but warns the same way; a finished check folder is copied into the
+  training set only when its level of theory matches the workflow\textquotesingle s, else the image gets a new
+  folder; the calc file is written as \texttt{calc.fdf} (the reference\textquotesingle s own name). \texttt{stb-\allowbreak{}mlffAnalysis}\textquotesingle s
+  level-of-theory check across training folders now also compares \texttt{Slab.DipoleCorrection}.
+\item
+  \texttt{stb-\allowbreak{}mlneb}: with the default \texttt{-\/-\allowbreak{}autosort-\allowbreak{}tol\ 0.5}, any atom that moves more than 0.5 Ang between
+  the endpoints (an O hopping 1.24 Ang from bridge to fcc hollow) stopped the run with pymatgen\textquotesingle s
+  "Unable to reliably match structures with autosort\_tol = 0.5", and nothing said that
+  \texttt{-\/-\allowbreak{}autosort-\allowbreak{}tol\ 0} is the answer, though \texttt{stb-\allowbreak{}mladsorb} prints that very option and \texttt{stb-\allowbreak{}neb} gives
+  that advice. The default is now 0 (the files\textquotesingle{} own atom order) when both \texttt{.fdf} list the same
+  species in the same order, 0.5 otherwise (reported as "Atom matching"); a matching failure says
+  which of the two applies.
+\item
+  \texttt{stb-\allowbreak{}archive} left out earlier archives only by their default names (\texttt{\textless{}folder\textgreater{}\_\allowbreak{}archive.tar.gz},
+  stb-clean\textquotesingle s \texttt{\_\allowbreak{}backup\_\allowbreak{}} files): an archive written into the folder with \texttt{-\allowbreak{}o\ NAME.tar.gz} went into
+  the next archive of that folder, although the report says earlier archives never go in. Any
+  \texttt{.tar.gz}/\texttt{.tgz} whose top folder holds \texttt{MANIFEST.txt} and \texttt{SHA256SUMS} is now recognized as one.
 \end{itemize}
 
 \section{Changed}
 
 \begin{itemize}
+\item
+  \textbf{Reports.} Every tool writes its report in the folder you run it from, as \texttt{stb\_\allowbreak{}\textless{}tool\textgreater{}\_\allowbreak{}report.txt}
+  (\texttt{\textless{}tool\textgreater{}} is the command without \texttt{stb-\allowbreak{}}: \texttt{stb\_\allowbreak{}adsorbAnalysis\_\allowbreak{}report.txt}, \texttt{stb\_\allowbreak{}neb\_\allowbreak{}report.txt}),
+  and never overwrites one: when the name is taken the report becomes \texttt{\_\allowbreak{}1}, \texttt{\_\allowbreak{}2}, ... Before, the
+  name and place differed from tool to tool (\texttt{adsorption\_\allowbreak{}report.txt} in the current folder,
+  \texttt{elastic\_\allowbreak{}stage2.txt} in the current folder, \texttt{neb\_\allowbreak{}setup.txt} inside \texttt{neb\_\allowbreak{}run/},
+  \texttt{gqca\_\allowbreak{}stage1.txt} inside the output folder, \texttt{stb\_\allowbreak{}bands\_\allowbreak{}report.txt} inside \texttt{-\/-\allowbreak{}output-\allowbreak{}dir}, ...), so
+  a second run, of the same tool on another folder or of a tool with the same file name, silently
+  replaced the first report. \texttt{stb-\allowbreak{}clean} never removes an \texttt{stb\_\allowbreak{}*\_\allowbreak{}report*.txt}.
+\item
+  \textbf{Every command always writes its report}: \texttt{-\/-\allowbreak{}save-\allowbreak{}report} is gone from the help, the menu no
+  longer asks about it, and the documentation no longer mentions it. The option is still accepted and
+  ignored, so scripts that pass it keep working. Scripts that answer the menu through a pipe must
+  drop the answer they gave to the report question (the examples were updated).
+\item
+  \textbf{References}: every run of every command writes \texttt{stb\_\allowbreak{}\textless{}tool\textgreater{}\_\allowbreak{}references.bib} in the folder it runs
+  from, next to its report and with the same number (\texttt{stb\_\allowbreak{}bands\_\allowbreak{}report\_\allowbreak{}2.txt} and
+  \texttt{stb\_\allowbreak{}bands\_\allowbreak{}references\_\allowbreak{}2.bib} are one run), never overwritten. Before, 39 of the 95 commands wrote a
+  \texttt{references.bib}, in the current folder or in \texttt{-\/-\allowbreak{}output-\allowbreak{}dir}, merged by key with whatever was
+  there, so it could not say which run cited what, and the other commands wrote none. The file now
+  holds the methods the tool relies on (SIESTA, Monkhorst-Pack, CI-NEB/IDPP, Bader, Hirshfeld and
+  Hirshfeld-I, Boys-Bernardi, Cococcioni-de Gironcoli, Birch/Murnaghan, Le Page-Saxe, Hill,
+  Mouhat-Coudert, Porezag-Pederson, the GQCA of Sher et al., ...), what the run itself used (XC
+  functional, pseudopotential bank, D3, MACE-MP-0, the database a structure came from) and every
+  library the run loaded (numpy, SciPy, matplotlib, pymatgen, ASE, spglib, seekpath, sisl, phonopy,
+  pybader, icet, PyXtal, MACE, PyTorch), without duplicates. It is written also when a run stops
+  with an error.
+\item
+  \textbf{No stage reads a report any more.} A report is only for you to read; what a later stage needs
+  goes into a JSON file of the run folder: \texttt{sites/adsorption\_\allowbreak{}sites.json} (stb-adsorb, read by
+  stb-adsorbBsse/Analysis/Gibbs, was the \texttt{\#\ SITE\_\allowbreak{}TABLE} of \texttt{sites/adsorption\_\allowbreak{}sites.txt}),
+  \texttt{neb\_\allowbreak{}run/neb\_\allowbreak{}setup.json} (stb-neb, read by stb-nebAnalysis, was the \texttt{\#\ MODE}/\texttt{\#\ IMAGE\_\allowbreak{}TABLE}/path
+  length of \texttt{neb\_\allowbreak{}setup.txt}), \texttt{gqca\_\allowbreak{}setup.json} (stb-gqca -\textgreater{} stb-gqcaAnalysis, was the last lines of
+  \texttt{gqca\_\allowbreak{}stage1.txt}), \texttt{ir\_\allowbreak{}modes.json} and \texttt{raman\_\allowbreak{}modes.json} (stb-irModes/stb-ramanModes -\textgreater{}
+  stb-irAnalysis/stb-ramanAnalysis, were the \texttt{\#\ MODE\_\allowbreak{}TABLE}, displacement, vacuum axes and lattice of
+  \texttt{ir\_\allowbreak{}stage2.txt}/\texttt{raman\_\allowbreak{}stage2.txt}). Folders written by earlier versions are still read from their
+  old text files.
 \item
   \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}parameter\ energyshift}: the default sweep is the geometric set 0.02, 0.01, 0.005,
   0.002, 0.001, 0.0005 Ry (\texttt{-\/-\allowbreak{}energyshift-\allowbreak{}values} for another). The old linear default, 0.001 to 0.05 in
@@ -52621,12 +53017,12 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   graphene): the verdict was always "not converged" or the smallest value. It uses the relaxed volume,
   says so, and tabulates the smallest and largest orbital cutoff radius of each run.
 \item
-  \textbf{The generated \texttt{calc.\allowbreak{}fdf} no longer turns the orbital filter on.} The templates of \texttt{stb-\allowbreak{}inputfile}
+  \textbf{The generated \texttt{calc.fdf} no longer turns the orbital filter on.} The templates of \texttt{stb-\allowbreak{}inputfile}
   (all four types) and \texttt{stb-\allowbreak{}cohesive} wrote \texttt{FilterCutoff\ 150\ Ry}, which makes SIESTA filter the basis
   orbitals (effective cutoff 73.5 Ry): the basis changes with it, and E(V) gets noisy. Cu and Al (PBE,
   DZP, 9 volumes): fit residual 2.13 and 1.43 meV/atom with the line, 0.11 and 0.07 without; Cu V0
   11.715 -\textgreater{} 11.904 Ang\^{}3 (all-electron 11.951) and B0 128 -\textgreater{} 141 GPa (141.3); Al B0 71 -\textgreater{} 80 GPa (78.1).
-  Doubling \texttt{Mesh.\allowbreak{}Cutoff} or the k-grid did not help. The line is now written commented out.
+  Doubling \texttt{Mesh.Cutoff} or the k-grid did not help. The line is now written commented out.
 
   \begin{itemize}
   \tightlist
@@ -52634,7 +53030,7 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
     \textbf{Numbers change} for every input generated from now on (large for Al and Cu, medium for Ag, none
     for Si, graphene, hBN).
   \item
-    Without the filter \texttt{Mesh.\allowbreak{}Cutoff} has to be converged per system: 350 Ry is enough for Si, NaCl, Al,
+    Without the filter \texttt{Mesh.Cutoff} has to be converged per system: 350 Ry is enough for Si, NaCl, Al,
     Cu, Ag, graphene and hBN, but Ge and GaAs need about 500 Ry (V0 at 350 vs 1000 Ry: GaAs +0.56 \%).
   \item
     A template that still has \texttt{FilterCutoff}/\texttt{FilterTol} gets a warning from \texttt{stb-\allowbreak{}eosInputs},
@@ -52668,7 +53064,13 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   \texttt{stb-\allowbreak{}phononsPos} and \texttt{stb-\allowbreak{}mlphonons} use a Gamma-centred q-mesh. phonopy shifts an even mesh by half
   a step, and on a hexagonal lattice that mesh loses the point group (\texttt{-\allowbreak{}m\ 30\ 30\ 1}:
   \texttt{MeshSymmetryFallbackWarning}, only time reversal used). Thermal properties change in the last
-  digits (graphene, 30x30x1: zero-point energy 170.64 -\textgreater{} 170.63 meV/atom). \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}shifted-\allowbreak{}mesh} gives the old mesh.
+  digits (graphene, 30x30x1: zero-point energy 170.64 -\textgreater{} 170.63 meV/atom). \texttt{stb-\allowbreak{}phononsPos\ -\/-\allowbreak{}shifted-\allowbreak{}mesh} gives the old mesh. The thermal displacements (\texttt{-\/-\allowbreak{}thermal-\allowbreak{}displacements}, ADP
+  tensors) leave out the Gamma acoustic modes -\/- rigid translations, which a Gamma-centred mesh now
+  contains -\/- and modes below 0.01 THz, whose 1/f\^{}2 weight made phonopy stop on an assertion
+  (round-off imaginary parts) next to a soft mode; the report says which modes were summed. When
+  phonopy still refuses the sum (soft/imaginary modes), section {[}3c{]} says so and the rest of the
+  analysis (DOS, PDOS, thermal properties, report) is written -\/- before, the whole run stopped with
+  an AssertionError traceback.
 \item
   Supported Python versions are 3.10 to 3.12 (\texttt{requires-\allowbreak{}python} now says so). 3.9 was listed but never
   worked: phonopy does not build there, so \texttt{pip\ install} failed late with an unrelated-looking build
@@ -52685,9 +53087,9 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   \tightlist
   \item
     \texttt{stb-\allowbreak{}elasticInputs\ -\/-\allowbreak{}ions\ relaxed\textbar{}clamped\textbar{}both} (default \texttt{relaxed}): the cell stays fixed at the
-    imposed strain; \texttt{relaxed} writes a CG relaxation into \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (\texttt{-\/-\allowbreak{}relax-\allowbreak{}steps}, 200;
+    imposed strain; \texttt{relaxed} writes a CG relaxation into \texttt{config\_\allowbreak{}extra.fdf} (\texttt{-\/-\allowbreak{}relax-\allowbreak{}steps}, 200;
     \texttt{-\/-\allowbreak{}fmax}, 0.01 eV/Ang), \texttt{clamped} the single point 2.0.0 wrote, \texttt{both} the two series in
-    \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}relaxed} and \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/\allowbreak{}clamped}. It holds for \texttt{-\/-\allowbreak{}method\ stress} and
+    \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/relaxed} and \texttt{\textless{}output-\allowbreak{}dir\textgreater{}/clamped}. It holds for \texttt{-\/-\allowbreak{}method\ stress} and
     \texttt{-\/-\allowbreak{}method\ energy}. Also asked by the menu (5.2.1).
   \item
     \textbf{To get the inputs 2.0.0 generated, pass \texttt{-\/-\allowbreak{}ions\ clamped}.}
@@ -52698,19 +53100,65 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
     ran with a variable cell, and, for clamped-ion runs, when a strained cell shows a force above
     0.05 eV/Ang (the constants are then not the measured ones). The summary states the kind.
   \item
-    It writes the fitted tensor to \texttt{elastic\_\allowbreak{}constants.\allowbreak{}json} in the run directory and, for the two
+    It writes the fitted tensor to \texttt{elastic\_\allowbreak{}constants.json} in the run directory and, for the two
     series of \texttt{-\/-\allowbreak{}ions\ both} (or \texttt{-\/-\allowbreak{}compare-\allowbreak{}with\ DIR}), prints relaxed minus clamped for every
     reported constant: the internal-relaxation contribution.
   \item
     The stress and the energy were already read from the last geometry of each log, so folders
-    relaxed by hand (a replaced \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf}) give the same numbers as before.
+    relaxed by hand (a replaced \texttt{config\_\allowbreak{}extra.fdf}) give the same numbers as before.
   \end{itemize}
+\item
+  \texttt{stb-\allowbreak{}elasticAnalysis\ -\/-\allowbreak{}symmetry-\allowbreak{}method}: the default is now the method the folders were prepared with
+  (from \texttt{elastic\_\allowbreak{}scan.json} or \texttt{elastic\_\allowbreak{}stage1.txt}), \texttt{basic} only when neither exists. The menu (5.2.2)
+  does the same on Enter.
+\item
+  \texttt{stb-\allowbreak{}mlffValidate\ -\/-\allowbreak{}phonon-\allowbreak{}mesh}: the default is 8 per periodic axis and 1 per vacuum axis (8x8x1 for a
+  slab or a 2D material; was 8x8x8). Phonon RMSEs on the mesh of 2D systems change.
+\item
+  \texttt{stb-\allowbreak{}convergenceAnalysis\ -\/-\allowbreak{}parameter\ basis}: a setting of the mesh or range stage closes only when its V0
+  agrees with every tighter setting of the scan (was: the next two); verdicts can move to tighter values.
 \end{itemize}
 
 \section{Added}
 
 \begin{itemize}
-\tightlist
+\item
+  \texttt{stb-\allowbreak{}neb} and \texttt{stb-\allowbreak{}mlneb} warn when a molecule is distorted along the starting path: a bond or bond
+  angle between non-metal atoms, bonded in both endpoints, that leaves the endpoints\textquotesingle{} range by more
+  than 15 \% or 15 deg in an interior image. IDPP\textquotesingle s default \texttt{-\/-\allowbreak{}idpp-\allowbreak{}fmax\ 0.1} (ASE\textquotesingle s) is loose for a
+  molecular adsorbate: on H2O/Ag(111) it stopped after 7 steps with H-O-H at 169 deg in the middle
+  image (SIESTA: +1.3 eV above the endpoint, 1.37 eV/Ang); \texttt{-\/-\allowbreak{}idpp-\allowbreak{}fmax\ 0.01\ -\/-\allowbreak{}idpp-\allowbreak{}steps\ 2000} gave
+  112.7 deg. The \texttt{-\/-\allowbreak{}help} of both options says so. Defaults are unchanged.
+\item
+  \texttt{stb-\allowbreak{}neb\ -\/-\allowbreak{}fix-\allowbreak{}atoms\ LIST} (1-based, e.g. \texttt{1-\allowbreak{}32}, or \texttt{none}): atoms held fixed along the whole
+  band (see Fixed).
+\item
+  \texttt{stb-\allowbreak{}coop\ -\/-\allowbreak{}image\ N1\ N2\ N3}: with \texttt{-\/-\allowbreak{}pair\ I\ J}, only the periodic image (N1, N2, N3) of J, i.e. one bond
+  (e.g. a bond across the cell edge); the report lists every image of J with its distance and integral.
+\item
+  \textbf{PseudoDojo tables by relativity, functional and accuracy.} The bundled \texttt{dojo} bank now holds
+  eleven PseudoDojo tables (PSML): scalar-relativistic PBE, PBEsol and LDA (PW92), full-relativistic
+  PBE and PBEsol (for spin-orbit), each standard and stringent, plus the lanthanides with 4f in the core
+  (Ce-Lu, PBE standard). Every tool\textquotesingle s \texttt{-\allowbreak{}p}/\texttt{-\/-\allowbreak{}pseudo-\allowbreak{}dir}/\texttt{-\/-\allowbreak{}pp-\allowbreak{}path} picks one by name,
+  \texttt{dojo{[}-\allowbreak{}sr\textbar{}-\allowbreak{}fr\textbar{}-\allowbreak{}sr3plus{]}{[}-\allowbreak{}pbe\textbar{}-\allowbreak{}pbesol\textbar{}-\allowbreak{}pw{]}{[}-\allowbreak{}standard\textbar{}-\allowbreak{}stringent{]}}, words in any order (\texttt{fr} may be
+  written \texttt{soc}, \texttt{pw} \texttt{lda}), a missing word taking its default (sr, pbe, standard): \texttt{-\allowbreak{}p\ dojo-\allowbreak{}pbesol},
+  \texttt{-\allowbreak{}p\ dojo-\allowbreak{}fr}, \texttt{-\allowbreak{}p\ dojo-\allowbreak{}stringent}. A table that does not exist (\texttt{dojo-\allowbreak{}fr-\allowbreak{}pw}: there is no
+  full-relativistic LDA table) is a clean error that lists the ones that do. \texttt{dojo} alone is
+  \texttt{dojo-\allowbreak{}sr-\allowbreak{}pbe-\allowbreak{}standard}, the same files as before, so existing commands, scripts and
+  \texttt{mlff\_\allowbreak{}workflow.json} files give the same result. The menu asks for the relativity, the functional and
+  the accuracy after "PseudoDojo", offering only the combinations that exist (Enter keeps the default).
+  \texttt{stb-\allowbreak{}pseudo\ -\/-\allowbreak{}list-\allowbreak{}banks} lists every table, \texttt{-\/-\allowbreak{}list-\allowbreak{}elements} accepts any table name, and the report
+  gives each file\textquotesingle s functional, relativistic treatment and valence (\texttt{z=}, e.g. Ge 14 standard, 22
+  stringent); \texttt{references.bib} cites PseudoDojo for every table.
+\item
+  \textbf{Pseudopotentials vs the calculation: warnings.} Every tool that copies pseudopotentials into run
+  folders now reads the functional and the relativistic treatment written in each \texttt{.psml}/\texttt{.psf} and
+  compares them, when it finishes, with the folder\textquotesingle s own \texttt{.fdf} (\texttt{\%include} files followed,
+  \texttt{config\_\allowbreak{}extra.fdf} included): a \texttt{{[}WARNING{]}} when the input\textquotesingle s functional (\texttt{XC.Functional}/\texttt{XC.Authors},
+  or SIESTA\textquotesingle s LDA default when none is set) is not the files\textquotesingle{} one, when \texttt{Spin\ spin-\allowbreak{}orbit} meets files
+  with no lj projectors (SIESTA then stops with \textquotesingle The PSML file does not contain lj projs\textquotesingle), and when one
+  folder mixes functionals or full- and scalar-relativistic files. Each warning is printed once, naming
+  the first folder and how many more share it. Nothing is blocked: the files are copied as asked.
 \item
   \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}parameter\ basis} and its report in \texttt{stb-\allowbreak{}convergenceAnalysis}: basis-set convergence
   by equations of state, in three stages (\texttt{-\/-\allowbreak{}basis-\allowbreak{}stage\ mesh\ \textbar{}\ range\ \textbar{}\ size}). Each setting is judged by
@@ -52730,11 +53178,11 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   refused ("bulk only"), and area scans had to be built by hand. Now only the periodic lattice vectors
   are scaled (\texttt{-\/-\allowbreak{}strain-\allowbreak{}range} is an area strain for a 2D material, a length strain for a wire; the
   vacuum vector is not touched), and Stage 2 reports the equilibrium area and in-plane lattice vectors
-  with the in-plane stiffness \texttt{A\ d2E/\allowbreak{}dA2} in N/m (wire: length, axial stiffness in nN). Its pressure
+  with the in-plane stiffness \texttt{A\ d2E/dA2} in N/m (wire: length, axial stiffness in nN). Its pressure
   cross-check uses the stress conjugate to the scan. Bulk structures are handled exactly as before.
 \item
   \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}optimizer\ cg\textbar{}broyden\textbar{}fire}, \texttt{-\/-\allowbreak{}force-\allowbreak{}tol}, \texttt{-\/-\allowbreak{}max-\allowbreak{}displ}: relaxation settings written
-  into every folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} (default: whatever \texttt{-\/-\allowbreak{}calc} sets). A weakly bound molecule on a
+  into every folder\textquotesingle s \texttt{config\_\allowbreak{}extra.fdf} (default: whatever \texttt{-\/-\allowbreak{}calc} sets). A weakly bound molecule on a
   metal is ill-conditioned for SIESTA\textquotesingle s CG: H2O on Ag(111) 3x3 was still at 0.03-1.3 eV/Ang after
   130-146 steps (11 h on 32 cores). With a molecular adsorbate and a CG template the tool now says so.
 \item
@@ -52742,11 +53190,11 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   reaching the force tolerance. SIESTA ends such a job normally (\texttt{0\_\allowbreak{}NORMAL\_\allowbreak{}EXIT}), and the energy was
   used as if it were a minimum.
 \item
-  \texttt{stb-\allowbreak{}cohesive\ -\allowbreak{}c/\allowbreak{}-\/-\allowbreak{}calc\ FILE}: your own \texttt{calc.\allowbreak{}fdf} template for the full structure and every atomic
+  \texttt{stb-\allowbreak{}cohesive\ -\allowbreak{}c/-\/-\allowbreak{}calc\ FILE}: your own \texttt{calc.fdf} template for the full structure and every atomic
   reference, so the whole study runs at one level of theory. Before, the tool wrote a fixed template
-  (\texttt{PAO.\allowbreak{}EnergyShift\ 0.\allowbreak{}02\ Ry}, \texttt{Mesh.\allowbreak{}Cutoff\ 320\ Ry}) and any other choice meant editing every generated
-  \texttt{calc.\allowbreak{}fdf} by hand (127 files for 13 solids in one study), with nothing recorded in the report. The
-  template is copied untouched; what the workflow must impose goes into a \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} included on
+  (\texttt{PAO.EnergyShift\ 0.02\ Ry}, \texttt{Mesh.Cutoff\ 320\ Ry}) and any other choice meant editing every generated
+  \texttt{calc.fdf} by hand (127 files for 13 solids in one study), with nothing recorded in the report. The
+  template is copied untouched; what the workflow must impose goes into a \texttt{config\_\allowbreak{}extra.fdf} included on
   top of it: Spin polarized, a Gamma-only k-grid and a single point for the atomic references; \texttt{-\/-\allowbreak{}spin},
   \texttt{-\/-\allowbreak{}dispersion} and the k-grid (only when the template has none, or \texttt{-\allowbreak{}k} is given) for the full
   structure. The report lists the template\textquotesingle s level of theory. Without \texttt{-\/-\allowbreak{}calc} the generated files are
@@ -52763,7 +53211,7 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   path a band plot shows. The two differ for the same model, and the report did not say which it was.
 \item
   \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}fix-\allowbreak{}layers\ N} (\texttt{-\/-\allowbreak{}layer-\allowbreak{}tol}): holds the N lowest atomic layers of the slab fixed, with
-  the same \texttt{\%block\ Geometry.\allowbreak{}Constraints} in \texttt{clean\_\allowbreak{}slab/\allowbreak{}} and in every site folder. Before, the whole
+  the same \texttt{\%block\ Geometry.Constraints} in \texttt{clean\_\allowbreak{}slab/} and in every site folder. Before, the whole
   slab always relaxed. Also asked by the menu (5.8.1).
 \item
   \texttt{stb-\allowbreak{}adsorb\ -\/-\allowbreak{}anchor-\allowbreak{}atom\ ATOM} (element or atom number): the atom of a molecular adsorbate that
@@ -52779,7 +53227,21 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
 \item
   \texttt{stb-\allowbreak{}slab} reports the number of atomic layers of every slab it writes, the atoms in each and the
   spacing between them.
+\item
+  \texttt{stb-\allowbreak{}adsorbAnalysis}: the orientation of the adsorbate at the start and at the end of each site\textquotesingle s
+  relaxation, in section \texttt{{[}2b{]}} (tilt of the molecular plane, or axis, from the surface plane; lying /
+  tilted / upright; the atom closest to the surface; vertical extent). Sites whose orientation CHANGED are
+  marked, the final orientations reached are listed with the lowest E\_ads of each, and a warning says when
+  more than one was reached. In a 12-point H2O/Ag(111) series, 4 relaxations had ended lying flat, \textasciitilde0.1 eV
+  more bound, and the ranking mixed them with upright ones without saying so.
+\item
+  \texttt{stb-\allowbreak{}convergence\ -\/-\allowbreak{}max-\allowbreak{}stress-\allowbreak{}tol\ GPA} (default 0.02) and \texttt{-\/-\allowbreak{}max-\allowbreak{}force-\allowbreak{}tol\ EV\_\allowbreak{}PER\_\allowbreak{}ANG} (default 0.01):
+  \texttt{MD.MaxStressTol} and \texttt{MD.MaxForceTol} of the relaxation mode (see Fixed).
+\item
+  \texttt{stb-\allowbreak{}elasticInputs} writes \texttt{elastic\_\allowbreak{}scan.json} (symmetry method, directions) into every series folder;
+  \texttt{stb-\allowbreak{}elasticAnalysis} reads the method from it (see Fixed).
 \end{itemize}
+
 
 \chapter{Units and conversion factors}\label{app-units}
 \begin{center}\small

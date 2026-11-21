@@ -2,9 +2,9 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows.**
 
-!!! warning dev-notice "Stable version 2.0.0, under testing"
+!!! warning dev-notice "Stable version 2.1.0, under testing"
 
-    **This is the first stable release, and it is still being tested in real projects.**
+    **This stable release is still being tested in real projects.**
 
     **Verify every result** before relying on it: check it independently, for
     example against a reference calculation or the literature.

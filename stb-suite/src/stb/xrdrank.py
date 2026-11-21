@@ -6,7 +6,7 @@
 #      bastoscmo.github.io                      #
 #################################################
 
-# 2.0.1: numbered-section report (matching the other Stage 2 analysis tools);
+# 2.1.0: numbered-section report (matching the other Stage 2 analysis tools);
 # --input-dir now defaults to 'xrd_search' (stb-xrdsearch's own default output
 # folder); --raw-experimental peak-list auto-broadening fix (same bug already
 # fixed in stb-xrd's own --compare-to); gnuplot .dat+.gplot output (ranking bar

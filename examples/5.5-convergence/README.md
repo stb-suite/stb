@@ -235,7 +235,7 @@ convergence_runs/kgrid/convergence_kgrid_{0.0500,0.1000,0.1500,0.2000,0.2500,0.3
 
 Case 2 of `example_5.5.sh` runs this live.
 
-Since 2.0.1 the `energyshift` sweep is this geometric set (`--energyshift-values` for
+Since 2.1.0 the `energyshift` sweep is this geometric set (`--energyshift-values` for
 another; `--energyshift-range MIN MAX STEP` still gives a linear one). The parameter acts
 logarithmically, and the linear default of 2.0.0 (0.001 to 0.05 in steps of 0.01) had no
 point between 0.001 and 0.011 Ry, the range in use. Stage 2 does **not** judge this

@@ -4,7 +4,7 @@ What changed in each version of STB-SUITE, newest first. Under each version: **F
 result, a crash, a misleading message), **Changed** (a default or a behaviour that differs from the
 version before) and **Added** (new options and tools).
 
-## 2.0.1 (unreleased)
+## 2.1.0 (unreleased)
 
 ### Fixed
 

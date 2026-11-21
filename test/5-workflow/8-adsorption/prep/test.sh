@@ -1075,7 +1075,7 @@ check_success $RUN/sites/orientation_trajectory.xyz
 
 # --- 8b. Orientation duplicates (no MACE needed): H2O with its two H swapped, or shifted by a
 #     lattice vector, is ONE geometry -- deduplicate_orientations must drop it; a genuinely
-#     rotated H2O must stay. Before 2.0.1 the RMSD used the file order (swap = 1.24 Ang). ---
+#     rotated H2O must stay. Before 2.1.0 the RMSD used the file order (swap = 1.24 Ang). ---
 echo -e "\n--- Testing orientation dedup: permutation of equal atoms + minimum image ---"
 python3 - > log_dedup_perm.txt 2>&1 <<'PYEOF'
 import numpy as np

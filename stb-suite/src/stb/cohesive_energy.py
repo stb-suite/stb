@@ -45,7 +45,7 @@ PAO.EnergyShift     0.02 Ry
 ## ===================================================================
 kgrid.MonkhorstPack   [1  1  1]
 Mesh.CutOff           320  Ry
-# FilterCutoff        150  Ry   # off since 2.0.1: it filters the orbitals, i.e. changes the basis (noise in
+# FilterCutoff        150  Ry   # off since 2.1.0: it filters the orbitals, i.e. changes the basis (noise in
 #                                # E(V); Cu: V0 -1.6 %, B0 -9 %). Without it, converge Mesh.CutOff per system
 #                                # (320-350 Ry is not enough for some pseudopotentials: Ge, GaAs need ~500).
 ## ===================================================================

@@ -33,7 +33,7 @@ pre-exists in a real calc.fdf, this tool needs to force a pure
 SINGLE-POINT SCF (no ionic or cell relaxation at all -- there is no
 --relax-mode here, every generated folder is single-point, since the
 imposed strain itself must stay exactly at the sampled geometry) by
-overriding MD.TypeOfRun/MD.Steps/MD.VariableCell (since 2.0.1 the cell is
+overriding MD.TypeOfRun/MD.Steps/MD.VariableCell (since 2.1.0 the cell is
 always fixed and --ions chooses what the atoms do: 'relaxed', the default,
 a CG relaxation at the strained cell; 'clamped', a single point; 'both',
 the two series side by side under <output-dir>/relaxed and /clamped) --

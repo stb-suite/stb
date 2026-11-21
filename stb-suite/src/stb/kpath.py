@@ -69,7 +69,7 @@ def bandlines_rows(path_segments):
     """[(label, n_points)] for SIESTA's %block BandLines: the first point gets 1, every point
     along a segment the line density, and the first point of a segment that does not start
     where the previous one ended (a jump, 'K|U') gets 1 -- SIESTA then starts a new line
-    there instead of computing a K -> U segment that is no high-symmetry line. Before 2.0.1
+    there instead of computing a K -> U segment that is no high-symmetry line. Before 2.1.0
     the jump point got the full count and the bands showed that segment as if it were one."""
     rows = []
     for segment in path_segments:

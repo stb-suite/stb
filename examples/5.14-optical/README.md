@@ -902,7 +902,7 @@ using the numbers:
   near 2.50 Å with the same basis; in a separate test on another layered material
   (MoS2) the PseudoDojo sulfur gave a clearly wrong bond length. That file was the
   nc-sr-05 S, one of 11 files with `ekb="0"` projectors that SIESTA 5.4.2 handles
-  wrongly; since 2.0.1 `-p dojo` is nc-sr-04 and such files are refused (see 1.2).
+  wrongly; since 2.1.0 `-p dojo` is nc-sr-04 and such files are refused (see 1.2).
   The carbon is the same file in both versions. Bank quality is not guaranteed — verify.
 - **`R` is normal-incidence reflectivity of a perfect flat surface**; `α` assumes a
   homogeneous bulk absorber.

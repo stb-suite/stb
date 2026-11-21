@@ -162,7 +162,7 @@ Unlike `stb-strain`, there is **no `--relax-mode`**: the cell of every
 generated folder is fixed at the imposed strain (section 2.2), because the
 stress/energy fit needs the response AT that strain.
 
-**Clamped or relaxed ions (`--ions`, since 2.0.1).** What the atoms do inside
+**Clamped or relaxed ions (`--ions`, since 2.1.0).** What the atoms do inside
 the strained cell is a separate choice:
 
 | `--ions` | Each folder runs | Constants |

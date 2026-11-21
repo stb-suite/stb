@@ -210,7 +210,7 @@ template:
   `-k/--k-density` (default `0.2` 1/Ang), `--spin` and `--dispersion` are then
   the only knobs for the full structure. The numbers of this README were made
   this way.
-- **With `-c mycalc.fdf`** (since 2.0.1) the template is yours: the basis,
+- **With `-c mycalc.fdf`** (since 2.1.0) the template is yours: the basis,
   `PAO.EnergyShift`, `Mesh.Cutoff`, functional and SCF settings of your study.
   It must `%include structure.fdf`. It is copied **untouched** into the full
   structure and into every atomic reference; what the workflow has to impose
@@ -407,7 +407,7 @@ the identical report for identical answers.
 ## 4. Worked example: a real GaAs calculation, end-to-end
 
 > **Energy convention of the numbers in this section.** They were obtained with 2.0.0, which used
-> SIESTA's `FreeEng` (E_KS minus TS of the electronic smearing). Since 2.0.1 `stb-cohesiveAnalysis`
+> SIESTA's `FreeEng` (E_KS minus TS of the electronic smearing). Since 2.1.0 `stb-cohesiveAnalysis`
 > uses the Kohn-Sham energy E_KS by default, because the isolated Ga atom (p1, degenerate orbitals,
 > `ElectronicTemperature 300 K`) carries `-TS = -49.4 meV` that is not physical; As has none. With
 > the default the GaAs values below come out 25 meV/atom more negative; `--energy free` reproduces

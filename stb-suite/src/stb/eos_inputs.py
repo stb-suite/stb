@@ -24,7 +24,7 @@ conventions as stb-optical and the other workflow prep stages.
 volumes, forced directives, level of theory) so that stb-eosAnalysis can compare
 what was planned with what SIESTA actually did.
 
-Bulk, and since 2.0.1 a 2D material or a wire too: with vacuum along one (two)
+Bulk, and since 2.1.0 a 2D material or a wire too: with vacuum along one (two)
 axis, only the periodic lattice vectors are scaled -- the strain is then an AREA
 (length) strain, the vacuum vector(s) stay as given -- and stb-eosAnalysis reports
 the equilibrium area / in-plane lattice parameter and the in-plane stiffness in N/m.

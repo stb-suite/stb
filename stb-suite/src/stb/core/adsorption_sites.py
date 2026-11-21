@@ -791,7 +791,7 @@ def deduplicate_orientations(entries, n_substrate, rmsd_tol=0.3, energy_tol=0.01
     one site (same relaxation, same fixed atoms), so no Kabsch alignment is
     needed -- with `adsorbate_rmsd`: equal atoms matched by the best
     permutation (H2O with H1 and H2 swapped is the same geometry; before
-    2.0.1 the file order was used and such pairs survived as "unique", each
+    2.1.0 the file order was used and such pairs survived as "unique", each
     one an extra SIESTA folder) and distances taken to the nearest periodic
     image (each candidate is wrapped into the cell after its relaxation).
     A candidate is dropped only if it's within BOTH `rmsd_tol` (Ang) of AND

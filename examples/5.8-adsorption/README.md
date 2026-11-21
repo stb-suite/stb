@@ -296,7 +296,7 @@ like this graphene fixture (verified: `site_1_ontop_bothsides/structure.fdf`
 has `NumberofAtoms 4` — 2 substrate + 1 adsorbate per face); `--height-sweep
 <min> <max> <step>` writes an approach curve instead of one fixed height.
 
-Three options for a real slab (since 2.0.1):
+Three options for a real slab (since 2.1.0):
 
 - `--fix-layers N` holds the N lowest atomic layers of the slab at their input
   positions, with the same `%block Geometry.Constraints` in `clean_slab/` and

@@ -112,7 +112,7 @@ PARAMETER_DEFAULTS = {
 PARAMETER_ORDER = ["meshcutoff", "energyshift", "kgrid"]
 # PAO.EnergyShift acts logarithmically: almost all of the change sits between the
 # smallest values, and a linear grid (0.001, 0.011, 0.021 ...) has no point in the
-# range that is actually used. Default since 2.0.1: this geometric set.
+# range that is actually used. Default since 2.1.0: this geometric set.
 ENERGYSHIFT_VALUES = [0.02, 0.01, 0.005, 0.002, 0.001, 0.0005]
 
 

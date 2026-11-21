@@ -2116,7 +2116,7 @@ stb\_suite[ml]} for the MACE tools), instead of failing half-way.
 
 \section{Version numbers}\label{sec-version}
 The suite has a single version for every tool. The \texttt{main} branch holds the stable
-releases (\texttt{2.0.0}, then \texttt{2.0.1}, \dots{} for bug fixes); the \texttt{dev} branch holds
+releases (\texttt{2.0.0}; the last number rises for a release with bug fixes only, e.g. \texttt{2.0.1}, the middle one when defaults change or options are added, e.g. \texttt{2.1.0}); the \texttt{dev} branch holds
 the next version and reports it as \texttt{2.1.0.dev<N>}, $N$ being the number of commits since
 the last release tag, so it grows with every commit. An installed copy reports the number baked
 into its metadata when it was built; the environment variable \texttt{STB\_VERSION} overrides
@@ -2412,7 +2412,7 @@ A PseudoDojo table is chosen by one name,
 \texttt{dojo[-sr|-fr|-sr3plus]\allowbreak{}[-pbe|-pbesol|-pw]\allowbreak{}[-standard|-stringent]}: the words go
 in any order (\texttt{fr} may be written \texttt{soc}, \texttt{pw} \texttt{lda}) and a
 missing word takes its default (\texttt{sr}, \texttt{pbe}, \texttt{standard}), so
-\texttt{dojo} is \texttt{dojo-sr-pbe-standard}, the table this bank held before 2.0.1.
+\texttt{dojo} is \texttt{dojo-sr-pbe-standard}, the table this bank held before 2.1.0.
 \cmd{stb-pseudo} \opt{--list-banks} lists them; in the menu, ``PseudoDojo'' is followed by
 three questions (relativity, functional, accuracy) that offer only the tables that exist.
 
@@ -2464,7 +2464,7 @@ to a second bank for missing elements.
 Check a new pseudopotential against a known property (a lattice constant, a bond
 length) before production. In one test the PseudoDojo sulfur gave a wrong Mo--S bond
 length in MoS$_2$. That file was the nc-sr-05 S, one of 11 files with \texttt{ekb="0"}
-projectors that SIESTA 5.4.2 handles wrongly; since 2.0.1 the bank ships nc-sr-04 for PBE
+projectors that SIESTA 5.4.2 handles wrongly; since 2.1.0 the bank ships nc-sr-04 for PBE
 and refuses such files (\menucode{1.2}). The optical example uses the Virtual Vault carbon
 for graphene, where the PseudoDojo carbon put the minimum 1\,\% too far out.
 \end{warnbox}
@@ -3070,7 +3070,7 @@ output flags), ready to be uncommented.
 \midrule
 \fdf{PAO.BasisSize} & DZP & DZP & SZ & DZP\\
 \fdf{PAO.EnergyShift} & 0.02 Ry & 0.01 Ry & 0.02 Ry & 0.02 Ry\\
-\fdf{Mesh.CutOff} & \multicolumn{4}{c}{320 Ry in all templates; \fdf{FilterCutoff} is written commented out since 2.0.1 (it filters the basis orbitals)}\\
+\fdf{Mesh.CutOff} & \multicolumn{4}{c}{320 Ry in all templates; \fdf{FilterCutoff} is written commented out since 2.1.0 (it filters the basis orbitals)}\\
 \fdf{XC.Functional}/\fdf{XC.Authors} & \multicolumn{4}{c}{GGA / PBE \cite{Perdew1996pbe}}\\
 \fdf{kgrid.MonkhorstPack} & from density & from density & $1\times1\times1$ (kept) & from density\\
 SCF & \multicolumn{4}{c}{\fdf{MaxSCFIterations 300}, \fdf{SCF.Mixer.Weight 0.1}, \fdf{SCF.Mixer.History 6}, 300~K smearing}\\
@@ -4090,7 +4090,7 @@ as \texttt{\textbackslash Gamma}, which SIESTA prints as a label in the
 Standard paths have breaks (\texttt{K|U} in fcc, \texttt{Y-H|M-D}). The point after a
 break is written with count 1, which makes SIESTA start a new line there instead of
 computing the straight stretch between the two ends; the tool prints a note at each break.
-Before 2.0.1 that point had count 50, and the band plot showed a \texttt{K-U} segment that
+Before 2.1.0 that point had count 50, and the band plot showed a \texttt{K-U} segment that
 is no high-symmetry line.
 
 \paragraph{Slightly distorted cells.}
@@ -10810,7 +10810,7 @@ quantities have \textbf{opposite} sign conventions, and this suite keeps sisl\te
 raw values: \textbf{COOP \textgreater{} 0 = bonding} (Hughbanks-Hoffmann), \textbf{COHP \textless{} 0 =
 bonding} (Dronskowski-Blöchl; the literature often plots \texttt{-\allowbreak{}COHP} so that
 positive means bonding). On this fixture the Sn-O bond 0-6 gives ICOOP
-+0.13 and ICOHP -1.44 eV, both labelled \texttt{bonding}. Before 2.0.1 the report
++0.13 and ICOHP -1.44 eV, both labelled \texttt{bonding}. Before 2.1.0 the report
 applied the COOP rule to COHP too and called every COHP bond
 "antibonding".
 
@@ -10972,7 +10972,7 @@ Image & Distance (Å) & Integrated COOP \\
 \end{longtable}
 \endgroup
 
-\texttt{-\allowbreak{}\/-\allowbreak{}image\ N1\ N2\ N3} keeps one image, i.e. one bond. Before 2.0.1 only the
+\texttt{-\allowbreak{}\/-\allowbreak{}image\ N1\ N2\ N3} keeps one image, i.e. one bond. Before 2.1.0 only the
 image \texttt{0\ 0\ 0} was ever summed: a bond across the cell edge came out \textasciitilde0
 while its bond order was \textasciitilde0.5.
 
@@ -24865,7 +24865,7 @@ Unlike \texttt{stb-\allowbreak{}strain}, there is \textbf{no \texttt{-\/-\allowb
 generated folder is fixed at the imposed strain (section 2.2), because the
 stress/energy fit needs the response AT that strain.
 
-\textbf{Clamped or relaxed ions (\texttt{-\/-\allowbreak{}ions}, since 2.0.1).} What the atoms do inside
+\textbf{Clamped or relaxed ions (\texttt{-\/-\allowbreak{}ions}, since 2.1.0).} What the atoms do inside
 the strained cell is a separate choice:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
@@ -25798,7 +25798,7 @@ template:
   the only knobs for the full structure. The numbers of this README were made
   this way.
 \item
-  \textbf{With \texttt{-\allowbreak{}c\ mycalc.\allowbreak{}fdf}} (since 2.0.1) the template is yours: the basis,
+  \textbf{With \texttt{-\allowbreak{}c\ mycalc.\allowbreak{}fdf}} (since 2.1.0) the template is yours: the basis,
   \texttt{PAO.\allowbreak{}EnergyShift}, \texttt{Mesh.\allowbreak{}Cutoff}, functional and SCF settings of your study.
   It must \texttt{\%include\ structure.\allowbreak{}fdf}. It is copied \textbf{untouched} into the full
   structure and into every atomic reference; what the workflow has to impose
@@ -26013,7 +26013,7 @@ the identical report for identical answers.
 
 \begin{quote}
 \textbf{Energy convention of the numbers in this section.} They were obtained with 2.0.0, which used
-SIESTA\textquotesingle s \texttt{FreeEng} (E\_KS minus TS of the electronic smearing). Since 2.0.1 \texttt{stb-\allowbreak{}cohesiveAnalysis}
+SIESTA\textquotesingle s \texttt{FreeEng} (E\_KS minus TS of the electronic smearing). Since 2.1.0 \texttt{stb-\allowbreak{}cohesiveAnalysis}
 uses the Kohn-Sham energy E\_KS by default, because the isolated Ga atom (p1, degenerate orbitals,
 \texttt{ElectronicTemperature\ 300\ K}) carries \texttt{-\allowbreak{}TS\ =\ -\allowbreak{}49.\allowbreak{}4\ meV} that is not physical; As has none. With
 the default the GaAs values below come out 25 meV/atom more negative; \texttt{-\/-\allowbreak{}energy\ free} reproduces
@@ -27689,7 +27689,7 @@ convergence_runs/kgrid/convergence_kgrid_{0.0500,0.1000,0.1500,0.2000,0.2500,0.3
 
 Case 2 of \texttt{example\_\allowbreak{}5.\allowbreak{}5.\allowbreak{}sh} runs this live.
 
-Since 2.0.1 the \texttt{energyshift} sweep is this geometric set (\texttt{-\/-\allowbreak{}energyshift-\allowbreak{}values} for
+Since 2.1.0 the \texttt{energyshift} sweep is this geometric set (\texttt{-\/-\allowbreak{}energyshift-\allowbreak{}values} for
 another; \texttt{-\/-\allowbreak{}energyshift-\allowbreak{}range\ MIN\ MAX\ STEP} still gives a linear one). The parameter acts
 logarithmically, and the linear default of 2.0.0 (0.001 to 0.05 in steps of 0.01) had no
 point between 0.001 and 0.011 Ry, the range in use. Stage 2 does \textbf{not} judge this
@@ -30471,7 +30471,7 @@ each selected site onto the bottom face for a free-standing 2D material
 like this graphene fixture (verified: \texttt{site\_\allowbreak{}1\_\allowbreak{}ontop\_\allowbreak{}bothsides/\allowbreak{}structure.\allowbreak{}fdf}
 has \texttt{NumberofAtoms\ 4} --- 2 substrate + 1 adsorbate per face); \texttt{-\/-\allowbreak{}height-\allowbreak{}sweep\ \textless{}min\textgreater{}\ \textless{}max\textgreater{}\ \textless{}step\textgreater{}} writes an approach curve instead of one fixed height.
 
-Three options for a real slab (since 2.0.1):
+Three options for a real slab (since 2.1.0):
 
 \begin{itemize}
 \tightlist
@@ -38474,7 +38474,7 @@ Printed where they apply and repeated at the end of the report:
 
 \paragraph{\texorpdfstring{3.5 Bulk, 2D materials and wires; the crystal system}{3.5 Bulk, 2D materials and wires; the crystal system}}\label{g5.15-35-bulk-only-and-the-crystal-system}
 
-Since 2.0.1 a structure with vacuum is scanned too, by scaling \textbf{only its periodic lattice vectors}:
+Since 2.1.0 a structure with vacuum is scanned too, by scaling \textbf{only its periodic lattice vectors}:
 
 \begingroup\small\setlength{\LTpre}{0.4em}\setlength{\LTpost}{0.6em}
 \begin{longtable}[]{@{}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2258}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3145}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.1371}}>{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.3226}}@{}}
@@ -49100,7 +49100,7 @@ set & what & runs \\
 \end{longtable}
 \endgroup
 
-These runs were made with 2.0.0, whose \texttt{stb-\allowbreak{}elasticInputs} wrote single points only (\texttt{-\/-\allowbreak{}ions\ clamped} since 2.0.1,
+These runs were made with 2.0.0, whose \texttt{stb-\allowbreak{}elasticInputs} wrote single points only (\texttt{-\/-\allowbreak{}ions\ clamped} since 2.1.0,
 where \texttt{-\/-\allowbreak{}ions\ both\ -\/-\allowbreak{}fmax\ 0.\allowbreak{}001} writes the two series directly); for relaxed ions each folder\textquotesingle s \texttt{config\_\allowbreak{}extra.\allowbreak{}fdf} is replaced by
 \texttt{config\_\allowbreak{}extra\_\allowbreak{}relaxed.\allowbreak{}fdf} (\texttt{MD.\allowbreak{}TypeOfRun\ CG}, \texttt{MD.\allowbreak{}MaxForceTol\ 0.\allowbreak{}001\ eV/\allowbreak{}Ang}, \texttt{MD.\allowbreak{}VariableCell\ false}) --- the
 first-occurrence-wins \texttt{\%include} at the top of \texttt{calc.\allowbreak{}fdf} makes it override everything else.
@@ -52461,8 +52461,8 @@ commands outside the menu) and the first sentence of its description.
 \endgroup
 
 
-\chapter{Changes in version 2.0.1}\label{app-changes-201}
-Version 2.0.1 is the bug-fix release that follows 2.0.0; at the time of writing it is the content of the \texttt{dev} branch and has not been tagged. This appendix is the 2.0.1 section of \texttt{stb-suite/CHANGELOG.md}: what was fixed, the defaults and behaviours that differ from 2.0.0 (several of them change generated inputs or reported numbers), and the options that are new. The tool chapters describe the tools as they are in 2.0.1.
+\chapter{Changes in version 2.1.0}\label{app-changes-210}
+Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several defaults and adds options, hence a new minor number rather than a bug-fix 2.0.1; at the time of writing it is the content of the \texttt{dev} branch and has not been tagged. This appendix is the 2.1.0 section of \texttt{stb-suite/CHANGELOG.md}: what was fixed, the defaults and behaviours that differ from 2.0.0 (several of them change generated inputs or reported numbers), and the options that are new. The tool chapters describe the tools as they are in 2.1.0.
 
 \section{Fixed}
 

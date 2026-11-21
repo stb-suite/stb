@@ -95,7 +95,7 @@ does mean bonding here, not just by convention/assertion.
 
 COHP sign: sisl's COHP() uses the raw H(k), i.e. Dronskowski-Bloechl's convention, in
 which a bonding interaction is NEGATIVE (-ICOHP > 0). The report labels each quantity by
-its own convention (bonding_character); before 2.0.1 the COOP rule was applied to COHP too,
+its own convention (bonding_character); before 2.1.0 the COOP rule was applied to COHP too,
 and every Sn-O/X-C bond came out "antibonding".
 """
 
@@ -170,7 +170,7 @@ def pair_columns(geometry, atoms_j, image=None):
     """Column indices (orbitals of the auxiliary supercell, no * n_s) of atoms_j: all of
     their periodic images (image None) or the one image (n1, n2, n3). geometry.o2a gives
     SUPERCELL atom indices (0 .. na*n_s - 1), so they are folded with asc2uc before the
-    comparison; before 2.0.1 they were not, and only image 0 of J was ever summed -- a bond
+    comparison; before 2.1.0 they were not, and only image 0 of J was ever summed -- a bond
     to a neighbouring cell (the C-C bridge of XC8, 1.5 Ang) came out ICOOP ~ 0 while its
     bond order was 0.88."""
     if image is not None:

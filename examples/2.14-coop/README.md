@@ -36,7 +36,7 @@ quantities have **opposite** sign conventions, and this suite keeps sisl's
 raw values: **COOP > 0 = bonding** (Hughbanks-Hoffmann), **COHP < 0 =
 bonding** (Dronskowski-Blöchl; the literature often plots `-COHP` so that
 positive means bonding). On this fixture the Sn-O bond 0-6 gives ICOOP
-+0.13 and ICOHP -1.44 eV, both labelled `bonding`. Before 2.0.1 the report
++0.13 and ICOHP -1.44 eV, both labelled `bonding`. Before 2.1.0 the report
 applied the COOP rule to COHP too and called every COHP bond
 "antibonding".
 
@@ -158,7 +158,7 @@ On this fixture Sn 0 and O 7 are bonded across the cell edge, image
 | +0 +0 +0 | 4.346 | -0.0003 |
 | +1 -1 +0 | 4.427 | -0.0002 |
 
-`--image N1 N2 N3` keeps one image, i.e. one bond. Before 2.0.1 only the
+`--image N1 N2 N3` keeps one image, i.e. one bond. Before 2.1.0 only the
 image `0 0 0` was ever summed: a bond across the cell edge came out ~0
 while its bond order was ~0.5.
 

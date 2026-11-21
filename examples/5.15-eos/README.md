@@ -501,7 +501,7 @@ Printed where they apply and repeated at the end of the report:
 
 ### 3.5 Bulk, 2D materials and wires; the crystal system
 
-Since 2.0.1 a structure with vacuum is scanned too, by scaling **only its periodic lattice vectors**:
+Since 2.1.0 a structure with vacuum is scanned too, by scaling **only its periodic lattice vectors**:
 
 | Vacuum along | Scaled | `--strain-range` is | Stage 2 reports |
 |---|---|---|---|

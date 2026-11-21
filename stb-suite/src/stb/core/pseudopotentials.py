@@ -877,6 +877,14 @@ def check_pseudo_level(folder):
                 + " with the PseudoDojo pseudopotentials ('Generation of polarization orbital failed'). Add "
                 f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per such "
                 "label, ghosts too) or 'PAO.Polarization.NonPerturbative true'."))
+        if soc:
+            from stb.core.fdf_directives import parse_directives
+            filt = parse_directives(text).get("filtercutoff")
+            if filt:
+                warnings.append(("warning", f"{root} combines spin-orbit with FilterCutoff {filt}: in tests with "
+                                 "the PseudoDojo fr tables (SIESTA 5.4.2, FilterCutoff 150 Ry) Co and Cu gave NaN in "
+                                 "the first SCF iteration, and ran without the filter. If the SCF gives NaN, remove "
+                                 "FilterCutoff."))
         synth = synthetic_atoms_problem(text, folder)
         if synth:
             warnings.append(("error", f"{root}: {synth}"))

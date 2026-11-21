@@ -54,6 +54,9 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
     Of the `fr_pbesol` files only Ge, Sb and Te do; the other 68 have no scalar-relativistic
     projector set, and SIESTA 5.4.2 stops with 'generation of scalar-relativistic part is not
     available yet'. The tools refuse that combination with an `[ERROR]`; use `-p dojo-pbesol`.
+  - With SOC and `FilterCutoff 150 Ry`, Co (all four `fr` tables) and Cu (both stringent) gave NaN
+    in the first SCF iteration; without the filter they ran. The end-of-run check warns about
+    spin-orbit with `FilterCutoff`. No tool of the suite writes `FilterCutoff`.
   - There is no FR table for LDA.
 - **Li and Be:** SIESTA cannot build their perturbative polarization orbital (`Generation of
   polarization orbital failed`, every table, 1-16 ranks). The tools that write `calc.fdf` add

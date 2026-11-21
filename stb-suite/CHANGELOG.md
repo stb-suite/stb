@@ -43,6 +43,8 @@ version before) and **Added** (new options and tools).
   `PAO.PolarizationScheme` block at all, which a `--calc` template without one used to leave out.
   Only files written by the run are changed; in a folder made by hand a missing or misplaced entry is
   an `[ERROR]` of the end-of-run check. `stb-hubbardu` now also refuses `ekb="0"` files.
+- The end-of-run check warns about spin-orbit combined with `FilterCutoff` (NaN in the first SCF
+  iteration for Co and Cu with the `fr` tables and `FilterCutoff 150 Ry`; fine without the filter).
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

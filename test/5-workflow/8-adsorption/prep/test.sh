@@ -69,6 +69,7 @@ RUN=adsorption_run
 
 # --- 2. Single atom, ontop site (default) ---
 echo -e "\n--- Testing a single-atom adsorbate (O), default ontop site ---"
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
 check_contains "Success:.*1 site folder" log_atom.txt
 check_success $RUN/clean_slab/structure.fdf
@@ -78,7 +79,7 @@ check_contains "kgrid.MonkhorstPack   \[1  1  1\]" $RUN/adsorbate/calc.fdf
 check_contains "Spin.*polarized" $RUN/adsorbate/calc.fdf
 check_success $RUN/sites/site_1_ontop/structure.fdf
 check_contains "NumberofAtoms      3" $RUN/sites/site_1_ontop/structure.fdf
-check_success $RUN/sites/adsorption_sites.txt
+check_success stb_adsorb_report.txt
 check_success $RUN/sites/adsorption_sites.png
 
 echo "Testing: dipole correction is forced (via config_extra.fdf, not calc.fdf directly) on"
@@ -150,6 +151,7 @@ fi
 check_contains "Slab.DipoleCorrection      .true." $RUN/sites/site_1_ontop/config_extra.fdf
 check_contains "\[NOTE\].*'O':.*means the COMBINED" log_nospin.txt
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --no-intro > log_atom.txt 2>&1
 
 echo "Testing: stb-adsorb no longer writes 'bsse/' at prep time -- that's stb-adsorbBsse's job, "
@@ -163,9 +165,8 @@ else
 fi
 
 # numbered report ([0]-[6], print_section style): printed to console (captured
-# in log_atom.txt) always; sites/adsorption_sites.txt is now a lean machine-
-# readable file (just the SITE_TABLE), NOT gated behind --save-report -- see
-# the --save-report sub-case further below for the full persisted narrative.
+# in log_atom.txt) and written to stb_adsorb_report.txt, always; the site table
+# the later stages read is sites/adsorption_sites.json.
 check_contains "\[0\] RUN METADATA" log_atom.txt
 check_contains "\[1\] REFERENCE FOLDERS" log_atom.txt
 check_contains "\[2\] ADSORPTION SITES: FINDING & COUNT" log_atom.txt
@@ -176,7 +177,8 @@ check_contains "\[6\] LIBRARY WARNINGS" log_atom.txt
 check_contains "Calc template   : calc.fdf" log_atom.txt
 check_contains "Not requested" log_atom.txt
 check_contains "stb-adsorbBsse next" log_atom.txt
-check_contains "SITE_TABLE" $RUN/sites/adsorption_sites.txt
+check_success $RUN/sites/adsorption_sites.json
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
 
 echo "Testing: everything lands under the default adsorption_run/ folder"
 check_contains "Output dir      : adsorption_run" log_atom.txt
@@ -201,27 +203,23 @@ check_contains "WARNING.*own periodic image in the ab-plane" log_atom.txt
 
 echo "Testing: --view-plots shows the generated plots (headless-safe via MPLBACKEND=Agg) without crashing"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 MPLBACKEND=Agg stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --site-type ontop \
     --view-plots --no-intro > log_view_plots.txt 2>&1
 check_exit_code $? 0
 check_success $RUN/sites/adsorption_sites.png
 check_contains "\[6\] LIBRARY WARNINGS" log_view_plots.txt
 
-echo "Testing: without --save-report, sites/adsorption_sites.txt has no report narrative"
-if grep -q "RUN METADATA" $RUN/sites/adsorption_sites.txt; then
-    echo -e "   -> ${RED}Failed:${NC} adsorption_sites.txt unexpectedly contains the full narrative"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} adsorption_sites.txt has no report narrative (SITE_TABLE only)"
-    PASS=$((PASS+1))
-fi
+echo "Testing: without --save-report, stb_adsorb_report.txt still has the full narrative (always written)"
+check_contains "RUN METADATA" stb_adsorb_report.txt
 
-echo "Testing: --save-report writes adsorption_run/adsorption_prep_report.txt with the full narrative"
+echo "Testing: --save-report writes stb_adsorb_report.txt with the full narrative"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate O --save-report --no-intro > log_save_report.txt 2>&1
-check_success $RUN/adsorption_prep_report.txt
-check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
-check_contains "\[6\] LIBRARY WARNINGS" $RUN/adsorption_prep_report.txt
+check_success stb_adsorb_report.txt
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
+check_contains "\[6\] LIBRARY WARNINGS" stb_adsorb_report.txt
 check_contains "Report          : " log_save_report.txt
 
 echo "Testing: -s/--structure and -c/--calc default to structure.fdf/calc.fdf"
@@ -288,7 +286,7 @@ echo "Testing: the written structure.fdf reflects the RELAXED distance, not the 
 python3 -c "
 import glob
 from stb.core import structure_io
-site_dir = sorted(glob.glob('$RUN/sites/site_*'))[0]
+site_dir = sorted(glob.glob('$RUN/sites/site_*/'))[0]
 s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
 ads_z = s.atoms[-1][1][2]
 slab_z = s.atoms[0][1][2]
@@ -321,7 +319,7 @@ from stb.core import structure_io
 # noise) rounds to the printed string '1.00000000' -- not a real out-of-cell
 # bug, just 8-decimal display rounding at the exact 0/1 boundary.
 bad = []
-for site_dir in sorted(glob.glob('$RUN/sites/site_*')):
+for site_dir in sorted(glob.glob('$RUN/sites/site_*/')):
     s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
     for symbol, frac in s.atoms:
         for c in frac:
@@ -413,7 +411,7 @@ python3 -c "
 import glob
 from stb.core import structure_io
 bad = []
-for site_dir in sorted(glob.glob('wrap_after_relax_run/sites/site_*')):
+for site_dir in sorted(glob.glob('wrap_after_relax_run/sites/site_*/')):
     s = structure_io.read_fdf(f'{site_dir}/structure.fdf')
     for symbol, frac in s.atoms:
         if not all(-1e-6 <= c <= 1.0 + 1e-6 for c in frac):
@@ -617,7 +615,7 @@ check_success $RUN/adsorbate_N/structure.fdf
 check_success $RUN/sites/site_1_ontop_O/structure.fdf
 check_success $RUN/sites/site_1_ontop_N/structure.fdf
 # "Adsorbate:" itself is ANSI-color-wrapped in the raw console log (unlike
-# the old adsorption_sites.txt, print_dual doesn't strip color codes going to
+# the old stb_adsorb_report.txt, print_dual doesn't strip color codes going to
 # stdout), so match the plain text on either side of the color reset instead.
 check_contains "O (1 atom(s))" log_multi_ads.txt
 check_contains "N (1 atom(s))" log_multi_ads.txt
@@ -951,6 +949,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.8.1) ---"
 
 echo "Testing: navigate 5.8.1 -> single ontop site -> quit"
 rm -rf $RUN
+rm -f stb_adsorb_report*.txt stb_adsorb_references*.bib
 {
   echo "5.8.1"
   echo "structure.fdf"  # struct_file
@@ -965,9 +964,10 @@ rm -rf $RUN
   echo "0"               # site_index
   echo ""               # force_spin (default Y)
   echo ""               # orient_grid (blank -> skip orientation sampling)
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo "n"               # both_sides_choice
   echo ""               # show_advanced (default -> skip, so output_dir defaults to adsorption_run)
-  echo "y"               # save_report -> yes
   echo "n"               # view_choice -> no (headless)
   echo "n"               # view_plots_choice -> no (headless)
   echo ""               # press enter to continue
@@ -975,8 +975,8 @@ rm -rf $RUN
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Success:.*1 site folder" log_menu.txt
 check_success $RUN/sites/site_1_ontop/structure.fdf
-check_success $RUN/adsorption_prep_report.txt
-check_contains "\[0\] RUN METADATA" $RUN/adsorption_prep_report.txt
+check_success stb_adsorb_report.txt
+check_contains "\[0\] RUN METADATA" stb_adsorb_report.txt
 
 echo "Testing: navigate 5.8.1 -> two adsorbates + height sweep -> quit"
 rm -rf $RUN
@@ -997,8 +997,9 @@ rm -rf $RUN
   echo "0"               # site_index
   echo ""               # force_spin (default Y)
   echo ""               # orient_grid (blank -> skip orientation sampling)
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced
-  echo "n"               # save_report -> no
   echo "n"               # view_choice -> no
   echo "n"               # view_plots_choice -> no
   echo ""               # press enter
@@ -1028,8 +1029,9 @@ rm -rf $RUN
   echo ""               # top_k (blank = keep all)
   echo "2x2"             # orientation grid (polar x azimuthal), merged prompt
   echo "1"               # orient_top_k -> keep only 1
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced (orient_rmsd_tol default applies unasked)
-  echo ""               # save_report
   echo ""               # view_choice
   echo ""               # view_plots_choice
   echo ""               # press enter
@@ -1058,8 +1060,9 @@ rm -rf $RUN
   echo ""               # force_spin (default Y)
   echo "2x2"             # orientation grid -> also turns --ml-rank on here
   echo "1"               # orient_top_k -> keep only 1
+  echo ""               # anchor atom (blank -> automatic)
+  echo ""               # bottom layers held fixed (default 0)
   echo ""               # show_advanced
-  echo ""               # save_report
   echo ""               # view_choice
   echo ""               # view_plots_choice
   echo ""               # press enter

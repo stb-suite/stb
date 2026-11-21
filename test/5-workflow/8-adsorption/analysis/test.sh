@@ -102,6 +102,7 @@ worst_quality=$(basename "${site_dirs[2]}")
 # bsse_slab/bsse_adsorbate folders exist (fabricated above) but have no
 # calc.out yet -- every site's BSSE correction is "incomplete", so this run
 # should report it as entirely unavailable, not partially available.
+rm -f stb_adsorbAnalysis_report*.txt stb_adsorbAnalysis_references*.bib
 stb-adsorbAnalysis --dir . --save-report --no-intro > log_analysis.txt 2>&1
 check_contains "E_clean_slab : -200.000000 eV" log_analysis.txt
 check_contains "E_adsorbate (H) : -13.500000 eV" log_analysis.txt
@@ -111,8 +112,8 @@ check_contains "exothermic" log_analysis.txt
 check_contains "No BSSE-corrected results found" log_analysis.txt
 check_success adsorption_curve.dat
 check_success adsorption_curve.gplot
-check_success adsorption_report.txt
-check_contains "Most stable site (uncorrected):.*$most_stable" adsorption_report.txt
+check_success stb_adsorbAnalysis_report.txt
+check_contains "Most stable site (uncorrected):.*$most_stable" stb_adsorbAnalysis_report.txt
 
 # --- 2a'. New [2]-[7] report structure: configuration-count breakdown,
 #     BSSE physics-check blurb, matplotlib ranking plot, always-present
@@ -417,12 +418,12 @@ check_contains "file" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.8.3) ---"
 
 echo "Testing: navigate 5.8.3 -> defaults -> quit"
-rm -f adsorption_curve.dat adsorption_report.txt
+rm -f adsorption_curve.dat stb_adsorbAnalysis_report*.txt stb_adsorbAnalysis_references*.bib
 # 5.8.3 (menu code) / . (dir) / "" (out_file default) / "" (force-tolerance
 # default) / "" (apply_target: skip) / "" (save_report: N) / "" (view: N) /
 # "" (view_plots: N) / "" (compute_gibbs: N) / "" (Press Enter to continue) /
 # 0 (quit)
-printf '5.8.3\n.\n\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.8.3\n.\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Most stable site (uncorrected):.*$most_stable" log_menu.txt
 check_contains "Most stable site (BSSE-corrected):.*$bsse_most_stable" log_menu.txt
 check_contains "Force tolerance" log_menu.txt

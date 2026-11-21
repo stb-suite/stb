@@ -36,6 +36,16 @@ check_missing() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -75,18 +85,19 @@ pushd "$TEST_DIR" > /dev/null
 #     this block asserts single-point config_extra.fdf content, independent
 #     of --mode's own default (see the dedicated default-mode test below) ---
 echo -e "\n--- Testing homobilayer grid (graphene/graphene, -nx 3 -ny 3, --save-report) ---"
+rm -f stb_stackingfault_report*.txt stb_stackingfault_references*.bib
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --mode 3 \
     --save-report --no-intro > log_homo.txt 2>&1
 check_exit_code $? 0
-check_success sf_run/shift_00_00/structure.fdf
-check_success sf_run/shift_00_00/calc.fdf
-check_success sf_run/shift_02_02/structure.fdf
-check_success sf_run/shift_01_01/config_extra.fdf
-check_contains "MD.TypeOfRun.*CG" sf_run/shift_01_01/config_extra.fdf
-check_contains "MD.Steps.*0" sf_run/shift_01_01/config_extra.fdf
-check_contains "%include config_extra.fdf" sf_run/shift_01_01/calc.fdf
+check_success sf_run/positions/shift_00_00/structure.fdf
+check_success sf_run/positions/shift_00_00/calc.fdf
+check_success sf_run/positions/shift_02_02/structure.fdf
+check_success sf_run/positions/shift_01_01/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" sf_run/positions/shift_01_01/config_extra.fdf
+check_contains "MD.Steps.*0" sf_run/positions/shift_01_01/config_extra.fdf
+check_contains "%include config_extra.fdf" sf_run/positions/shift_01_01/calc.fdf
 echo "Testing: %include config_extra.fdf is the first line of calc.fdf"
-first_line=$(head -n1 sf_run/shift_01_01/calc.fdf)
+first_line=$(head -n1 sf_run/positions/shift_01_01/calc.fdf)
 if [[ "$first_line" == *"%include config_extra.fdf"* ]]; then
     echo -e "   -> ${GREEN}Verified:${NC} config_extra.fdf is included first (overrides the template)"
     PASS=$((PASS+1))
@@ -96,7 +107,7 @@ else
 fi
 echo "Testing: D3 is ON by default (no --d3/--no-d3 passed) -- config_extra.fdf has DFTD3"
 check_contains "D3 dispersion   : yes" log_homo.txt
-if grep -q "DFTD3" sf_run/shift_01_01/config_extra.fdf; then
+if grep -q "DFTD3" sf_run/positions/shift_01_01/config_extra.fdf; then
     echo -e "   -> ${GREEN}Verified:${NC} DFTD3 tag present in config_extra.fdf by default"
     PASS=$((PASS+1))
 else
@@ -104,15 +115,15 @@ else
     FAIL=$((FAIL+1))
 fi
 
-check_success sf_run/stackingfault_setup.txt
-check_contains "\[0\] RUN METADATA" sf_run/stackingfault_setup.txt
-check_contains "\[1\] ZSL MATCH" sf_run/stackingfault_setup.txt
-check_contains "Each grid point: 4 atoms (2 layer 1 + 2 layer 2)" sf_run/stackingfault_setup.txt
-check_contains "9 grid point(s) total" sf_run/stackingfault_setup.txt
-check_contains "\[2\] GRID FOLDERS" sf_run/stackingfault_setup.txt
-check_contains "\[3\] SUMMARY & NEXT STEPS" sf_run/stackingfault_setup.txt
-check_contains "\[4\] LIBRARY WARNINGS" sf_run/stackingfault_setup.txt
-check_contains "No library warnings\." sf_run/stackingfault_setup.txt
+check_success stb_stackingfault_report.txt
+check_contains "\[0\] RUN METADATA" stb_stackingfault_report.txt
+check_contains "\[1\] ZSL MATCH" stb_stackingfault_report.txt
+check_contains "Each grid point: 4 atoms (2 layer 1 + 2 layer 2)" stb_stackingfault_report.txt
+check_contains "9 grid point(s) total" stb_stackingfault_report.txt
+check_contains "\[2\] GRID FOLDERS" stb_stackingfault_report.txt
+check_contains "\[3\] SUMMARY & NEXT STEPS" stb_stackingfault_report.txt
+check_contains "\[4\] LIBRARY WARNINGS" stb_stackingfault_report.txt
+check_contains "No library warnings\." stb_stackingfault_report.txt
 check_success sf_run/sf_manifest.json
 
 echo "Testing: sf_manifest.json has exactly 9 rows (3x3), correct grid_nx/grid_ny, shift AA registry (0,0) present"
@@ -134,7 +145,7 @@ python3 -c "
 from stb.core import structure_io
 import glob
 counts = set()
-for d in sorted(glob.glob('sf_run/shift_*')):
+for d in sorted(glob.glob('sf_run/positions/shift_*')):
     s = structure_io.read_fdf(f'{d}/structure.fdf')
     counts.add(len(s.atoms))
 assert len(counts) == 1, f'expected identical atom count across all grid points, got {counts}'
@@ -146,8 +157,8 @@ echo "Testing: shift_01_01 layer-2 atoms are shifted by exactly (1/3, 1/3) relat
 python3 -c "
 from stb.core import structure_io
 import numpy as np
-s00 = structure_io.read_fdf('sf_run/shift_00_00/structure.fdf')
-s11 = structure_io.read_fdf('sf_run/shift_01_01/structure.fdf')
+s00 = structure_io.read_fdf('sf_run/positions/shift_00_00/structure.fdf')
+s11 = structure_io.read_fdf('sf_run/positions/shift_01_01/structure.fdf')
 # layer 2 = last 2 atoms (4-atom cell, 2 per layer)
 l2_00 = np.array([pos for _, pos in s00.atoms[2:]])
 l2_11 = np.array([pos for _, pos in s11.atoms[2:]])
@@ -164,7 +175,7 @@ stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 2 -ny 2 --mo
     --no-intro > log_nod3.txt 2>&1
 check_exit_code $? 0
 check_contains "D3 dispersion   : no" log_nod3.txt
-if grep -q "DFTD3" sf_run/shift_00_00/config_extra.fdf; then
+if grep -q "DFTD3" sf_run/positions/shift_00_00/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} unexpected DFTD3 in config_extra.fdf with --no-d3"
     FAIL=$((FAIL+1))
 else
@@ -173,28 +184,30 @@ else
 fi
 
 
-# --- 2b. Without --save-report, the manifest is still written but the
-#     narrative report is not ---
-echo -e "\n--- Testing that the manifest is always written, the report only with --save-report ---"
+# --- 2b. Without --save-report, the manifest and the report are both written
+#     (the flag is hidden and ignored) ---
+echo -e "\n--- Testing that the manifest and the report are always written ---"
 rm -rf sf_run
+rm -f stb_stackingfault_report*.txt stb_stackingfault_references*.bib
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --no-intro \
     > log_noreport.txt 2>&1
 check_exit_code $? 0
 check_success sf_run/sf_manifest.json
-check_missing sf_run/stackingfault_setup.txt
+check_success stb_stackingfault_report.txt
 check_contains "Success:.*9 grid folder" log_noreport.txt
 
 
 # --- 2c. Asymmetric grid (-nx 4 -ny 2) ---
 echo -e "\n--- Testing an asymmetric grid (-nx 4 -ny 2) ---"
 rm -rf sf_run
+rm -f stb_stackingfault_report*.txt stb_stackingfault_references*.bib
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 4 -ny 2 --save-report \
     --no-intro > log_asym.txt 2>&1
 check_exit_code $? 0
-check_contains "Grid            : 4 x 2 (asymmetric)" sf_run/stackingfault_setup.txt
-check_contains "8 grid point(s) total" sf_run/stackingfault_setup.txt
-check_success sf_run/shift_03_01/structure.fdf
-check_missing sf_run/shift_00_02
+check_contains "Grid            : 4 x 2 (surface) (asymmetric)" stb_stackingfault_report.txt
+check_contains "8 grid point(s) total" stb_stackingfault_report.txt
+check_success sf_run/positions/shift_03_01/structure.fdf
+check_missing sf_run/positions/shift_00_02
 python3 -c "
 import json
 with open('sf_run/sf_manifest.json') as f:
@@ -213,11 +226,11 @@ stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --d3
     --save-report --no-intro > log_d3.txt 2>&1
 check_exit_code $? 0
 check_contains "D3 dispersion   : yes" log_d3.txt
-check_contains "MD.TypeOfRun.*CG" sf_run/shift_00_00/config_extra.fdf
-check_contains "MD.Steps.*0" sf_run/shift_00_00/config_extra.fdf
-check_contains "DFTD3.*\.true\." sf_run/shift_00_00/config_extra.fdf
-check_contains "%include config_extra.fdf" sf_run/shift_00_00/calc.fdf
-if grep -q "DFTD3" sf_run/shift_00_00/calc.fdf; then
+check_contains "MD.TypeOfRun.*CG" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "MD.Steps.*0" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "DFTD3.*\.true\." sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "%include config_extra.fdf" sf_run/positions/shift_00_00/calc.fdf
+if grep -q "DFTD3" sf_run/positions/shift_00_00/calc.fdf; then
     echo -e "   -> ${RED}Failed:${NC} DFTD3 should live in config_extra.fdf, not calc.fdf directly"
     FAIL=$((FAIL+1))
 else
@@ -231,10 +244,10 @@ echo -e "\n--- Testing heterostructure grid (graphene/hBN) ---"
 rm -rf sf_run
 stb-stackingfault -l1 graphene.fdf -l2 hbn.fdf -c calc.fdf -nx 3 -ny 3 --no-intro > log_hetero.txt 2>&1
 check_exit_code $? 0
-check_success sf_run/shift_00_00/structure.fdf
-check_contains " 1   6   C" sf_run/shift_00_00/structure.fdf
-check_contains " 2   5   B" sf_run/shift_00_00/structure.fdf
-check_contains " 3   7   N" sf_run/shift_00_00/structure.fdf
+check_success sf_run/positions/shift_00_00/structure.fdf
+check_contains " 1   6   C" sf_run/positions/shift_00_00/structure.fdf
+check_contains " 2   5   B" sf_run/positions/shift_00_00/structure.fdf
+check_contains " 3   7   N" sf_run/positions/shift_00_00/structure.fdf
 
 
 # --- 3b. --ml-prerelax-layers (MACE-MP-0, cached locally) ---
@@ -246,7 +259,7 @@ check_exit_code $? 0
 check_contains "ML pre-relax" log_prerelax.txt
 check_contains "Converged (layer 1)" log_prerelax.txt
 check_contains "Converged (layer 2)" log_prerelax.txt
-check_success sf_run/shift_00_00/structure.fdf
+check_success sf_run/positions/shift_00_00/structure.fdf
 
 # --- 3c. --ml-preview (MACE-MP-0, cached locally) ---
 echo -e "\n--- Testing --ml-preview ---"
@@ -268,8 +281,8 @@ check_exit_code $? 0
 check_contains "Mode            : 2" log_mode2.txt
 check_contains "MACE-relaxed gap ranged" log_mode2.txt
 check_contains "gap:.*Ang (ML-relaxed)" log_mode2.txt
-check_contains "MD.TypeOfRun.*CG" sf_run/shift_00_00/config_extra.fdf
-check_contains "MD.Steps.*0" sf_run/shift_00_00/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "MD.Steps.*0" sf_run/positions/shift_00_00/config_extra.fdf
 check_contains "ML model.*MACE-MP-0.*(no D3 dispersion)" log_mode2.txt
 
 echo "Testing: [4] LIBRARY WARNINGS actually captures MACE/torch noise (not just 'No library warnings.')"
@@ -291,7 +304,7 @@ with open('log_mode2.txt') as f:
 m = re.search(r'shift_00_00.*?gap: ([\d.]+) Ang \(ML-relaxed\)', text)
 assert m, 'could not find shift_00_00 reported gap in log'
 reported_gap = float(m.group(1))
-s = structure_io.read_fdf('sf_run/shift_00_00/structure.fdf')
+s = structure_io.read_fdf('sf_run/positions/shift_00_00/structure.fdf')
 zs = sorted(set(round(p[2], 6) for _, p in s.atoms))
 actual_gap = (zs[1] - zs[0]) * s.lattice[2][2]
 assert abs(actual_gap - reported_gap) < 0.01, f'reported {reported_gap} vs actual {actual_gap}'
@@ -314,12 +327,12 @@ stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 2 -ny 2 --mo
 check_exit_code $? 0
 check_contains "Mode            : 1" log_mode1.txt
 check_contains "NOT verified against a real SIESTA run" log_mode1.txt
-check_contains "MD.TypeOfRun.*CG" sf_run/shift_00_00/config_extra.fdf
-check_contains "MD.Steps.*50" sf_run/shift_00_00/config_extra.fdf
-check_contains "MD.VariableCell        false" sf_run/shift_00_00/config_extra.fdf
-check_contains "position from 1 to .* 1.0 0.0 0.0" sf_run/shift_00_00/config_extra.fdf
-check_contains "position from 1 to .* 0.0 1.0 0.0" sf_run/shift_00_00/config_extra.fdf
-if grep -qE "MD\.Steps\s+0$" sf_run/shift_00_00/config_extra.fdf; then
+check_contains "MD.TypeOfRun.*CG" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "MD.Steps.*50" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "MD.VariableCell        false" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "position from 1 to .* 1.0 0.0 0.0" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "position from 1 to .* 0.0 1.0 0.0" sf_run/positions/shift_00_00/config_extra.fdf
+if grep -qE "MD\.Steps\s+0$" sf_run/positions/shift_00_00/config_extra.fdf; then
     echo -e "   -> ${RED}Failed:${NC} --mode 1 must NOT force MD.Steps to 0 (SIESTA needs to relax)"
     FAIL=$((FAIL+1))
 else
@@ -335,9 +348,9 @@ stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 2 -ny 2 --no
     > log_defaultmode.txt 2>&1
 check_exit_code $? 0
 check_contains "Mode            : 1" log_defaultmode.txt
-check_contains "MD.TypeOfRun.*CG" sf_run/shift_00_00/config_extra.fdf
-check_contains "MD.Steps.*200" sf_run/shift_00_00/config_extra.fdf
-check_contains "position from 1 to .* 1.0 0.0 0.0" sf_run/shift_00_00/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "MD.Steps.*200" sf_run/positions/shift_00_00/config_extra.fdf
+check_contains "position from 1 to .* 1.0 0.0 0.0" sf_run/positions/shift_00_00/config_extra.fdf
 
 
 # --- 4. Grid resolution minimum ---
@@ -382,7 +395,7 @@ check_contains "gap" log_help.txt
 check_contains "\-\-d3" log_help.txt
 check_contains "\-\-mode" log_help.txt
 check_contains "relax-z-steps" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "ml-prerelax-layers" log_help.txt
 check_contains "ml-preview" log_help.txt
 
@@ -392,6 +405,7 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.10.1) ---"
 
 echo "Testing: navigate 5.10.1 -> homobilayer defaults, asymmetric 4x2 grid, save report -> quit"
 rm -rf sf_run
+rm -f stb_stackingfault_report*.txt stb_stackingfault_references*.bib
 {
   echo "5.10.1"
   echo "graphene.fdf"  # layer1_file
@@ -399,6 +413,7 @@ rm -rf sf_run
   echo "calc.fdf"      # calc_file
   echo ""              # mode (default 1)
   echo ""              # relax_z_steps (default 200, mode 1 asks this)
+  echo ""              # sweep shape (default 1: the whole surface)
   echo ""              # pp_path (skip)
   echo "4"             # grid_nx
   echo "2"             # grid_ny
@@ -407,14 +422,13 @@ rm -rf sf_run
   echo ""              # ml_prerelax_choice (default N)
   echo ""              # ml_preview_choice (default N)
   echo ""              # show_advanced (default -> skip)
-  echo "y"             # save_report -> Y
   echo ""              # press enter to continue
   echo "0"             # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Success:.*8 grid folder" log_menu.txt
-check_success sf_run/shift_00_00/structure.fdf
-check_success sf_run/shift_03_01/structure.fdf
-check_success sf_run/stackingfault_setup.txt
+check_success sf_run/positions/shift_00_00/structure.fdf
+check_success sf_run/positions/shift_03_01/structure.fdf
+check_success stb_stackingfault_report.txt
 
 echo "Testing: navigate 5.10.1 -> ML preview on -> quit"
 rm -rf sf_run
@@ -425,6 +439,7 @@ rm -rf sf_run
   echo "calc.fdf"
   echo ""              # mode (default 1)
   echo ""              # relax_z_steps (default 200, mode 1 asks this)
+  echo ""              # sweep shape (default 1: the whole surface)
   echo ""
   echo "3"              # grid_nx
   echo "3"              # grid_ny
@@ -433,7 +448,6 @@ rm -rf sf_run
   echo ""              # ml_prerelax_choice
   echo "y"              # ml_preview_choice -> Y
   echo ""              # show_advanced
-  echo "n"              # save_report -> N
   echo ""              # press enter
   echo "0"
 } | stb-suite > log_menu_preview.txt 2>&1
@@ -449,6 +463,7 @@ rm -rf sf_run
   echo "calc.fdf"
   echo "1"                # mode -> 1
   echo "40"               # relax_z_steps
+  echo ""              # sweep shape (default 1: the whole surface)
   echo ""
   echo "2"              # grid_nx
   echo "2"              # grid_ny
@@ -457,12 +472,11 @@ rm -rf sf_run
   echo ""                # ml_prerelax_choice
   echo ""                # ml_preview_choice
   echo ""                # show_advanced
-  echo "n"                # save_report -> N
   echo ""
   echo "0"
 } | stb-suite > log_menu_mode1.txt 2>&1
 check_contains "Success:.*4 grid folder" log_menu_mode1.txt
-check_contains "MD.Steps.*40" sf_run/shift_00_00/config_extra.fdf
+check_contains "MD.Steps.*40" sf_run/positions/shift_00_00/config_extra.fdf
 
 
 popd > /dev/null

@@ -2463,8 +2463,10 @@ to a second bank for missing elements.
 \begin{warnbox}[A bank is not a guarantee of quality]
 Check a new pseudopotential against a known property (a lattice constant, a bond
 length) before production. In one test the PseudoDojo sulfur gave a wrong Mo--S bond
-length in MoS$_2$; the optical example uses the Virtual Vault carbon for graphene for
-this kind of reason.
+length in MoS$_2$. That file was the nc-sr-05 S, one of 11 files with \texttt{ekb="0"}
+projectors that SIESTA 5.4.2 handles wrongly; since 2.0.1 the bank ships nc-sr-04 for PBE
+and refuses such files (\menucode{1.2}). The optical example uses the Virtual Vault carbon
+for graphene, where the PseudoDojo carbon put the minimum 1\,\% too far out.
 \end{warnbox}
 
 \section{Vacuum and dimensionality}\label{sec-vacuum}

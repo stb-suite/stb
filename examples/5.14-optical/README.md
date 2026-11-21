@@ -899,9 +899,11 @@ using the numbers:
   them. In this example silicon uses the PseudoDojo set, whose relaxed lattice constant
   (5.49 Å, +1.1 %) is in line with PBE, while for graphene the `virtual_vault` PSF
   carbon gives a₀ = 2.48 Å (PBE ≈ 2.47 Å) where the PseudoDojo carbon put the minimum
-  near 2.50 Å with the same basis; in a separate test on another layered material a
-  PseudoDojo pseudopotential gave a clearly wrong bond length in this SIESTA set-up
-  (not investigated further). Bank quality is not guaranteed — verify.
+  near 2.50 Å with the same basis; in a separate test on another layered material
+  (MoS2) the PseudoDojo sulfur gave a clearly wrong bond length. That file was the
+  nc-sr-05 S, one of 11 files with `ekb="0"` projectors that SIESTA 5.4.2 handles
+  wrongly; since 2.0.1 `-p dojo` is nc-sr-04 and such files are refused (see 1.2).
+  The carbon is the same file in both versions. Bank quality is not guaranteed — verify.
 - **`R` is normal-incidence reflectivity of a perfect flat surface**; `α` assumes a
   homogeneous bulk absorber.
 - **2D thickness is yours to choose** and the corrected values scale with it; **1D

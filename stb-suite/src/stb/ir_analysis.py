@@ -343,7 +343,6 @@ alongside their individual (basis-dependent) values.""",
     # non-bulk path's dipole-axis alignment check -- see
     # dipole_axis_mask's own docstring).
     if os.path.isfile(stage2_json):
-        import json
         with open(stage2_json) as f:
             stage2 = json.load(f)
         stage2_delta = stage2.get("displacement_ang")

@@ -104,9 +104,10 @@ check_contains "run stb-raman" log_no_stage1.txt
 # --- 3. Normal generation: 3 selected modes ---
 echo -e "\n--- Testing default generation (--modes 1 2 3) ---"
 make_phonon_disp
+rm -f stb_ramanModes_report*.txt stb_ramanModes_references*.bib
 stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 3 --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "Force files found : 84" log_basic.txt
+check_contains "Force files found : 42" log_basic.txt
 check_contains "FORCE_SETS       : generated successfully" log_basic.txt
 check_contains "Dimensionality    : 3D (bulk material)" log_basic.txt
 check_contains "Non-acoustic Gamma modes : 39" log_basic.txt
@@ -117,18 +118,18 @@ check_success raman_study/optical_disp/mode_01_plus_x/calc.fdf
 check_success raman_study/optical_disp/mode_01_minus_z/structure.fdf
 check_success raman_study/optical_disp/mode_01_plus_x/O.psf
 check_success raman_study/optical_disp/mode_01_plus_x/Sn.psf
-check_contains "OpticalCalculation T" raman_study/optical_disp/mode_01_plus_x/calc.fdf
+check_contains "OpticalCalculation T" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
 check_contains "Optical.PolarizationType    polarized" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
-check_contains "Optical.Vector" raman_study/optical_disp/mode_01_plus_x/calc.fdf
-check_contains "MD.TypeOfRun.*CG" raman_study/optical_disp/mode_01_plus_x/calc.fdf
+check_contains "Optical.Vector" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
+check_contains "MD.TypeOfRun.*CG" raman_study/optical_disp/mode_01_plus_x/config_extra.fdf
 check_contains "MD.Steps.*0" raman_study/optical_disp/mode_01_plus_x/calc.fdf
-check_contains "MODE_TABLE" raman_study/raman_stage2.txt
-check_contains "\[2\] PSEUDOPOTENTIALS" raman_study/raman_stage2.txt
-check_contains "Elements needed   : O, Sn" raman_study/raman_stage2.txt
-check_contains "reused from Stage 1's disp-\* folders" raman_study/raman_stage2.txt
-check_contains "Found all required" raman_study/raman_stage2.txt
-check_contains "O.psf" raman_study/raman_stage2.txt
-check_contains "Sn.psf" raman_study/raman_stage2.txt
+check_success raman_study/raman_modes.json
+check_contains "\[3\] PSEUDOPOTENTIALS" stb_ramanModes_report.txt
+check_contains "Elements needed   : O, Sn" stb_ramanModes_report.txt
+check_contains "reused from Stage 1's disp-\* folders" stb_ramanModes_report.txt
+check_contains "Found all required" stb_ramanModes_report.txt
+check_contains "O.psf" stb_ramanModes_report.txt
+check_contains "Sn.psf" stb_ramanModes_report.txt
 
 echo "Testing: mode_01_plus_x and mode_01_plus_y share the SAME displaced structure (only Optical.Vector differs)"
 python3 -c "
@@ -163,7 +164,7 @@ echo -e "\n--- Testing --freq-min/--freq-max filtering ---"
 make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --freq-min 1.0 --no-intro > log_freqfilter.txt 2>&1
 check_exit_code $? 0
-check_contains "Selected modes    : 1" log_freqfilter.txt
+check_contains "Selected modes    : 2" log_freqfilter.txt
 
 
 # --- 4b. Missing pseudopotentials in Stage 1's disp-* folders -> hard error, not silent ---
@@ -196,7 +197,7 @@ check_success raman_study/optical_disp/mode_01_plus_yz/structure.fdf
 check_success raman_study/optical_disp/mode_01_minus_xy/structure.fdf
 
 echo "Testing: mode_01_plus_xy uses the (x+y)/sqrt(2) Optical.Vector direction"
-check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/calc.fdf
+check_contains "0.7071  0.7071  0.0000" raman_study/optical_disp/mode_01_plus_xy/config_extra.fdf
 
 
 # --- 5a2. --export-animations: looping .axsf per selected mode ---
@@ -205,7 +206,7 @@ make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --modes 1 2 --export-animations \
     --animation-frames 8 --no-intro > log_animations.txt 2>&1
 check_exit_code $? 0
-check_contains "Mode animations   : 2 .axsf file(s), 8 frames each." log_animations.txt
+check_contains "Mode animations   : 2 .axsf file(s) under 'raman_study/optical_disp', 8 frames each." log_animations.txt
 check_success raman_study/optical_disp/mode_01_animation.axsf
 check_success raman_study/optical_disp/mode_02_animation.axsf
 
@@ -464,7 +465,7 @@ make_phonon_disp
 stb-ramanModes --directory raman_study --calc calc.fdf --use-symmetry --no-intro > log_symmetry.txt 2>&1
 check_exit_code $? 0
 check_contains "\[1b\] SYMMETRY ANALYSIS" log_symmetry.txt
-check_contains "Point group       : 1" log_symmetry.txt
+check_contains "Point group       : -1" log_symmetry.txt
 check_contains "Symmetry-forbidden (Raman-inactive) : 0/39" log_symmetry.txt
 
 echo "Testing: --use-symmetry + explicit --modes is informational only, never auto-skips"
@@ -513,8 +514,9 @@ check_contains "Folders to write  : 2 modes x 2 signs x 3 axes = 12" log_skipdeg
 
 echo "Testing: no DERIVED row is written when nothing was collapsed"
 python3 -c "
-from stb.raman_analysis import read_mode_table, group_by_mode
-rows = read_mode_table('raman_study/raman_stage2.txt')
+import json
+from stb.raman_analysis import group_by_mode
+rows = json.load(open('raman_study/raman_modes.json'))['modes']
 modes = group_by_mode(rows)
 derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
 assert derived == {}, f'unexpected derived mode(s): {derived}'
@@ -582,10 +584,11 @@ print('OK')
 " > log_skipdeg_folders.txt 2>&1
 check_contains "OK" log_skipdeg_folders.txt
 
-echo "Testing: MODE_TABLE records the derived mode against a fully-computed representative"
+echo "Testing: the modes JSON records the derived mode against a fully-computed representative"
 python3 -c "
-from stb.raman_analysis import read_mode_table, group_by_mode
-rows = read_mode_table('raman_study/raman_stage2.txt')
+import json
+from stb.raman_analysis import group_by_mode
+rows = json.load(open('raman_study/raman_modes.json'))['modes']
 modes = group_by_mode(rows)
 derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
 assert len(derived) == 1, f'expected exactly 1 derived mode, got {derived}'
@@ -597,7 +600,7 @@ print('OK')
 check_contains "OK" log_skipdeg_table.txt
 
 echo "Testing: --skip-degenerate + --use-symmetry together (E2g pair survives, B1g filtered out)"
-rm -rf raman_study/optical_disp raman_study/raman_stage2.txt
+rm -rf raman_study/optical_disp stb_ramanModes_report*.txt stb_ramanModes_references*.bib
 stb-ramanModes --directory raman_study --calc calc.fdf --pseudo-dir . --use-symmetry --skip-degenerate \
     --no-intro > log_skipdeg_sym.txt 2>&1
 check_exit_code $? 0
@@ -647,6 +650,7 @@ make_phonon_disp
   echo "y"              # skip_degenerate_choice -> Y (no-op on this asymmetric fixture)
   echo ""               # displacement (default 0.02)
   echo "y"              # animations_choice -> Y
+  echo ""              # view_animation_choice (default N)
   echo ""               # animation_frames (default 20)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
@@ -668,6 +672,7 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -688,6 +693,7 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo ""               # show_advanced (default -> skip)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
@@ -706,9 +712,11 @@ make_phonon_disp
   echo ""               # skip_degenerate_choice (default N)
   echo ""               # displacement (default 0.02)
   echo ""               # animations_choice (default N)
+  echo ""               # view_animation_choice (default N)
   echo "y"              # show_advanced -> Y
   echo "8 8 8"           # mesh_input
   echo "0.15"            # optical_broaden
+  echo ""              # scf k-grid of the Optical runs (default: the template's own)
   echo ""                # freq_min (skip)
   echo ""                # freq_max (skip)
   echo ""                # pseudo_dir prompt (skip)

@@ -706,7 +706,6 @@ run each folder's calculation yourself, then use stb-ramanAnalysis.""",
                 "being Raman-active (see [1b]/[3] above). Nothing further to do for this "
                 "structure's Raman spectrum.", 'yellow'), f_out)
 
-        import json
         with open(os.path.join(output_root, MODES_FILE), "w") as f_json:
             json.dump({
                 "schema": "stb_raman_modes_v1",

@@ -794,7 +794,6 @@ Doesn't run SIESTA itself -- run each folder's calculation yourself, then use st
                 "being IR-active (see [1b] above). Nothing further to do for this structure's "
                 "IR spectrum.", 'yellow'), f_out)
 
-        import json
         with open(os.path.join(output_root, MODES_FILE), "w") as f_json:
             json.dump({
                 "schema": "stb_ir_modes_v1",

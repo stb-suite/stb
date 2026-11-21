@@ -69,7 +69,8 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Missing Stage-2 output guard ---
 echo -e "\n--- Testing the missing-Stage-2-output guard ---"
 rm -rf ir_study
-stb-irAnalysis --directory ir_study --no-intro > log_no_stage2.txt 2>&1
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --no-intro > log_no_stage2.txt 2>&1
 check_exit_code $? 1
 check_contains "run stb-irModes" log_no_stage2.txt
 
@@ -167,7 +168,8 @@ with open("ir_study/ir_stage2.txt", "w") as f:
     f.write(f"{'mode_02_born_charge':<24}{2:<12}{4:<12}{12.0:<16.6f}{'BULK':<8}{'-':<8}{eq_dir}  -\n")
 print("fixture ready")
 PYEOF
-stb-irAnalysis --directory ir_study --no-intro > log_bulk_analysis.txt 2>&1
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --no-intro > log_bulk_analysis.txt 2>&1
 check_exit_code $? 0
 check_contains "Modes analyzed      : 2/2" log_bulk_analysis.txt
 
@@ -180,7 +182,7 @@ e1 = np.load('ground_truth_e1.npy')
 e2 = np.load('ground_truth_e2.npy')
 expected1 = np.einsum('atb,at->b', Z, e1)
 expected2 = np.einsum('atb,at->b', Z, e2)
-with open('ir_study/ir_stage3.txt') as f:
+with open('stb_irAnalysis_report.txt') as f:
     text = f.read()
 matches = re.findall(r'dmu/dQ=\(([\-\d.]+), ([\-\d.]+), ([\-\d.]+)\)', text)
 assert len(matches) == 2, f'expected 2 dmu/dQ lines, got {len(matches)}'
@@ -232,7 +234,8 @@ with open("ir_study/ir_stage2.txt", "w") as f:
             f"ir_study/dipole_disp/mode_01_minus  -\n")
 print("fixture ready")
 PYEOF
-stb-irAnalysis --directory ir_study --no-intro > log_nonbulk_analysis.txt 2>&1
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --no-intro > log_nonbulk_analysis.txt 2>&1
 check_exit_code $? 0
 check_contains "Modes analyzed      : 1/1" log_nonbulk_analysis.txt
 
@@ -241,7 +244,7 @@ python3 -c "
 import re
 import numpy as np
 slope = np.load('ground_truth_slope.npy')
-with open('ir_study/ir_stage3.txt') as f:
+with open('stb_irAnalysis_report.txt') as f:
     text = f.read()
 m = re.search(r'dmu/dQ=\(([\-\d.]+), ([\-\d.]+), ([\-\d.]+)\)', text)
 assert m, 'could not find dmu/dQ line'
@@ -295,7 +298,8 @@ with open("ir_study/ir_stage2.txt", "w") as f:
             f"ir_study/dipole_disp/mode_01_minus  -\n")
 print("fixture ready")
 PYEOF
-stb-irAnalysis --directory ir_study --no-intro > log_mask_analysis.txt 2>&1
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --no-intro > log_mask_analysis.txt 2>&1
 check_exit_code $? 0
 check_contains "Non-negligible dipole-derivative component along a periodic direction" log_mask_analysis.txt
 
@@ -304,7 +308,7 @@ python3 -c "
 import re
 import numpy as np
 slope = np.load('ground_truth_slope_2d.npy')
-with open('ir_study/ir_stage3.txt') as f:
+with open('stb_irAnalysis_report.txt') as f:
     text = f.read()
 m = re.search(r'dmu/dQ=\(([\-\d.]+), ([\-\d.]+), ([\-\d.]+)\)', text)
 assert m, 'could not find dmu/dQ line'
@@ -318,11 +322,12 @@ check_contains "OK" log_mask_check.txt
 
 # --- 6. --temperature: Bose-Einstein weighting changes the spectrum ---
 echo -e "\n--- Testing --temperature (Bose-Einstein thermal weighting) ---"
-stb-irAnalysis --directory ir_study --temperature 300 -o ir_spectrum_300k --no-intro \
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --temperature 300 -o ir_spectrum_300k --no-intro \
     > log_temperature.txt 2>&1
 check_exit_code $? 0
 check_contains "Thermal weighting : Bose-Einstein Stokes factor (n+1) at 300.0 K" log_temperature.txt
-check_success ir_study/ir_spectrum_300k.dat
+check_success ir_study/plot/ir_spectrum_300k.dat
 
 
 # --- 7. --experimental: overlay + nearest-neighbor peak match ---
@@ -336,14 +341,16 @@ with open('fake_experimental.dat', 'w') as f:
     for fr, it in zip(freq, inten):
         f.write(f'{fr:.4f} {it:.6f}\n')
 "
-stb-irAnalysis --directory ir_study --experimental fake_experimental.dat --no-intro \
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --experimental fake_experimental.dat --no-intro \
     > log_experimental.txt 2>&1
 check_exit_code $? 0
 check_contains "\[3b\] EXPERIMENTAL COMPARISON" log_experimental.txt
-check_success ir_study/ir_spectrum_experimental.dat
+check_success ir_study/plot/ir_spectrum_experimental.dat
 
 echo "Testing: missing --experimental file is a clear error, not a crash"
-stb-irAnalysis --directory ir_study --experimental does_not_exist.dat --no-intro \
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
+stb-irAnalysis --save-gnuplot --directory ir_study --experimental does_not_exist.dat --no-intro \
     > log_experimental_missing.txt 2>&1
 check_exit_code $? 1
 check_contains "not found" log_experimental_missing.txt
@@ -353,10 +360,12 @@ check_contains "not found" log_experimental_missing.txt
 echo -e "\n--- Testing error cases ---"
 
 echo "Testing: --version"
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
 stb-irAnalysis --version > log_version.txt 2>&1
 check_contains "stb-irAnalysis" log_version.txt
 
 echo "Testing: --help documents --linewidth/--file/--temperature/--experimental"
+rm -f stb_irAnalysis_report*.txt stb_irAnalysis_references*.bib
 stb-irAnalysis --help > log_help.txt 2>&1
 check_contains "linewidth" log_help.txt
 check_contains "file" log_help.txt
@@ -376,11 +385,14 @@ echo "Testing: navigate 5.12.3 -> defaults -> quit"
   echo ""               # linewidth (default 10.0)
   echo ""               # temperature (optional, skip)
   echo ""               # experimental_file (optional, skip)
+  echo "y"              # save the spectrum as .dat + .gplot (under <run_dir>/plot/)
+  echo ""               # view the spectrum with matplotlib (default N)
+  echo ""               # view each mode in ASE (default N)
   echo ""               # press enter to continue
   echo "0"              # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_contains "Modes analyzed      : 1/1" log_menu.txt
-check_success ir_study/ir_spectrum.dat
+check_success ir_study/plot/ir_spectrum.dat
 
 
 popd > /dev/null

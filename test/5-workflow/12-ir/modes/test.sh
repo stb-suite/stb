@@ -116,6 +116,7 @@ check_contains "run stb-ir" log_no_stage1.txt
 # --- 3. Bulk path: default generation (--modes 1 2) ---
 echo -e "\n--- Testing bulk (3D) path: default generation (--modes 1 2) ---"
 make_phonon_disp
+rm -f stb_irModes_report*.txt stb_irModes_references*.bib
 stb-irModes --directory ir_study --calc calc.fdf --modes 1 2 --no-intro > log_bulk_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "\[Path\] Bulk (3D periodic)" log_bulk_basic.txt
@@ -123,19 +124,19 @@ check_success ir_study/born_charge_disp/equilibrium/structure.fdf
 check_success ir_study/born_charge_disp/equilibrium/calc.fdf
 check_success ir_study/born_charge_disp/mode_01_eigendisplacement.json
 check_success ir_study/born_charge_disp/mode_02_eigendisplacement.json
-check_success ir_study/ir_stage2.txt
+check_success stb_irModes_report.txt
 check_contains "MD.TypeOfRun          FC" ir_study/born_charge_disp/equilibrium/calc.fdf
 check_contains "BornCharge            T" ir_study/born_charge_disp/equilibrium/calc.fdf
 check_contains "%block PolarizationGrids" ir_study/born_charge_disp/equilibrium/calc.fdf
 
-echo "Testing: exactly 1 folder written under born_charge_disp/, MODE_TABLE path column is BULK"
+echo "Testing: exactly 1 folder written under born_charge_disp/, the modes JSON path field is BULK"
 python3 -c "
 import glob
 folders = [d for d in glob.glob('ir_study/born_charge_disp/*') if '.' not in d.split('/')[-1]]
 assert folders == ['ir_study/born_charge_disp/equilibrium'], f'expected exactly 1 folder, got {folders}'
-from stb.ir_analysis import read_mode_table
-rows = read_mode_table('ir_study/ir_stage2.txt')
-assert len(rows) == 2, f'expected 2 MODE_TABLE rows, got {len(rows)}'
+import json
+rows = json.load(open('ir_study/ir_modes.json'))['modes']
+assert len(rows) == 2, f'expected 2 mode rows, got {len(rows)}'
 assert all(r['path'] == 'BULK' for r in rows), f'expected all BULK, got {[r[\"path\"] for r in rows]}'
 print('OK')
 " > log_bulk_check.txt 2>&1
@@ -325,7 +326,7 @@ touch H.psf
 
 stb-irModes --directory ir_study --calc calc.fdf --pseudo-dir . --no-intro > log_nonbulk_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "\[Path\] Non-bulk (0D/1D/2D)" log_nonbulk_basic.txt
+check_contains "\[Path\] Non-bulk (0D molecule / 1D wire)" log_nonbulk_basic.txt
 check_contains "Folders to write  : 6 independent single-point SIESTA runs" log_nonbulk_basic.txt
 check_success ir_study/dipole_disp/mode_01_plus/structure.fdf
 check_success ir_study/dipole_disp/mode_01_minus/structure.fdf
@@ -345,10 +346,10 @@ check_contains "MD.TypeOfRun          CG" ir_study/dipole_disp/mode_01_plus/calc
 check_not_contains "Optical" ir_study/dipole_disp/mode_01_plus/calc.fdf
 check_not_contains "BornCharge" ir_study/dipole_disp/mode_01_plus/calc.fdf
 
-echo "Testing: MODE_TABLE path column is NONBULK"
+echo "Testing: the modes JSON path field is NONBULK"
 python3 -c "
-from stb.ir_analysis import read_mode_table
-rows = read_mode_table('ir_study/ir_stage2.txt')
+import json
+rows = json.load(open('ir_study/ir_modes.json'))['modes']
 assert all(r['path'] == 'NONBULK' for r in rows), f'expected all NONBULK, got {[r[\"path\"] for r in rows]}'
 print('OK')
 " > log_nonbulk_table_check.txt 2>&1
@@ -411,8 +412,9 @@ modes_with_folders = sorted(set(int(d.split('/')[-1].split('_')[1]) for d in rea
 assert len(modes_with_folders) == 2, f'expected 2 modes with real folders (B1g + E2g representative), got {modes_with_folders}'
 derived_dirs = glob.glob('ir_study/dipole_disp/mode_*_derived')
 assert derived_dirs == [], f'derived mode must not get a folder: {derived_dirs}'
-from stb.ir_analysis import read_mode_table, group_by_mode
-rows = read_mode_table('ir_study/ir_stage2.txt')
+import json
+from stb.ir_analysis import group_by_mode
+rows = json.load(open('ir_study/ir_modes.json'))['modes']
 modes = group_by_mode(rows)
 derived = {k: v['derived_from'] for k, v in modes.items() if v['derived_from'] is not None}
 assert len(derived) == 1, f'expected exactly 1 derived mode, got {derived}'

@@ -525,7 +525,6 @@ spectrum (.dat/.gplot).""",
     # recorded as a number) -- reconstructed here isn't possible, so read
     # it back from Stage 2's own report text instead of re-deriving it.
     if os.path.isfile(stage2_json):
-        import json
         with open(stage2_json) as f:
             stage2 = json.load(f)
         stage2_delta = stage2.get("displacement_ang")

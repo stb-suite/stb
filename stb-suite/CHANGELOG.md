@@ -415,6 +415,11 @@ version before) and **Added** (new options and tools).
   the next archive of that folder, although the report says earlier archives never go in. Any
   `.tar.gz`/`.tgz` whose top folder holds `MANIFEST.txt` and `SHA256SUMS` is now recognized as one.
 
+- Packaging: the wheel and sdist had no long description and no license file in their metadata,
+  because `pyproject.toml` names `README.md` and `LICENSE`, which existed only at the repository
+  root. `stb-suite/README.md` and `stb-suite/LICENSE` are now links to them. The conda recipe
+  lacked `pyxtal` (stb-xrd, stb-xrdsearch) and pointed `home` to an old account.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

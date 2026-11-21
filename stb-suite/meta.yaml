@@ -1,6 +1,6 @@
 # The version is the release in src/stb/_version.py (RELEASE); STB_VERSION overrides it
 # (for a dev build, for example STB_VERSION=2.1.0.dev5).
-{% set version = environ.get("STB_VERSION", "2.0.0") %}
+{% set version = environ.get("STB_VERSION", "2.1.0") %}
 
 package:
   name: stb_suite
@@ -40,8 +40,9 @@ requirements:
     - scipy==1.13.1
     - pandas
     - icet
+    - pyxtal
 
 about:
-  home: "https://github.com/bastoscmo"
+  home: "https://github.com/stb-suite/stb"
   license: MIT
   summary: "Siesta ToolBox suite with softwares to pre and pos-processing data for Siesta code."

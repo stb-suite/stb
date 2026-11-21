@@ -52964,6 +52964,11 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   stb-clean\textquotesingle s \texttt{\_\allowbreak{}backup\_\allowbreak{}} files): an archive written into the folder with \texttt{-\allowbreak{}o\ NAME.tar.gz} went into
   the next archive of that folder, although the report says earlier archives never go in. Any
   \texttt{.tar.gz}/\texttt{.tgz} whose top folder holds \texttt{MANIFEST.txt} and \texttt{SHA256SUMS} is now recognized as one.
+\item
+  Packaging: the wheel and sdist had no long description and no license file in their metadata,
+  because \texttt{pyproject.toml} names \texttt{README.md} and \texttt{LICENSE}, which existed only at the repository
+  root. \texttt{stb-\allowbreak{}suite/README.md} and \texttt{stb-\allowbreak{}suite/LICENSE} are now links to them. The conda recipe
+  lacked \texttt{pyxtal} (stb-xrd, stb-xrdsearch) and pointed \texttt{home} to an old account.
 \end{itemize}
 
 \section{Changed}

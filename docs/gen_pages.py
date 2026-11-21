@@ -279,6 +279,9 @@ def stub_page(page, helps):
 
 
 def stubs_section(stubs, overview_dest):
+    """The overview's table of stub pages; nothing at all when every item has a guide."""
+    if not stubs:
+        return ""
     lines = ["## Tools without a hands-on guide yet", "",
              "Every tool has a page. These have only a short generated summary and the command "
              "reference, until a guide is written.", "",

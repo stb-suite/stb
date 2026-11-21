@@ -68,10 +68,26 @@ def suffix(name):
     return os.path.splitext(name)[1] or os.path.basename(name)
 
 
+def is_earlier_archive(f):
+    """True for stb-clean/stb-archive archives: their default names, or (any name, e.g. one given with -o) a .tar.gz
+    whose top folder holds MANIFEST.txt and SHA256SUMS, as every archive this tool writes does."""
+    name = os.path.basename(f)
+    if ARCHIVE_RE.search(name):
+        return True
+    if not (name.endswith(".tar.gz") or name.endswith(".tgz")):
+        return False
+    try:
+        with tarfile.open(f, "r:gz") as tar:
+            members = {m.name.split("/", 1)[1] for m in tar.getmembers() if m.name.count("/") == 1}
+    except (OSError, tarfile.TarError, EOFError):
+        return False
+    return {"MANIFEST.txt", "SHA256SUMS"} <= members
+
+
 def plan_archive(path, mode, recursive, include, exclude):
     """Every file of the folder: (relpath, kind, size, why) for what goes in and for what is left out."""
     files = [f for f in collect_files(path, recursive) if not os.path.basename(f).startswith(".")
-             and not ARCHIVE_RE.search(os.path.basename(f))]
+             and not is_earlier_archive(f)]
     # inputs: the .fdf files, everything they read (followed through included files), pseudopotentials, scripts
     fdfs = [f for f in files if f.endswith(".fdf")]
     refs, labels, species = read_fdf_settings(fdfs)

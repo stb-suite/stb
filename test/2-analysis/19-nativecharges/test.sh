@@ -66,44 +66,62 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Both sections present (auto-detects SystemLabel=siesta) ---
 echo -e "\n--- Testing folder with both Hirshfeld and Voronoi sections ---"
+rm -f stb_nativecharges_report*.txt stb_nativecharges_references*.bib
 stb-nativecharges --no-intro --path both > log_both.txt 2>&1
-check_contains "SystemLabel : siesta" log_both.txt
-check_contains "HIRSHFELD POPULATIONS" log_both.txt
-check_contains "VORONOI POPULATIONS" log_both.txt
-check_contains "73  | Te   | +0.3939    | 5.6061" log_both.txt
-check_contains "73  | Te   | +0.4002    | 5.5998" log_both.txt
-check_contains "Folders with Hirshfeld data  : 1" log_both.txt
-check_contains "Folders with Voronoi data    : 1" log_both.txt
+check_exit_code $? 0
+check_contains "Log               : both/calc.out (SIESTA 5.4.2)" log_both.txt
+check_contains "Hirshfeld         : found" log_both.txt
+check_contains "Voronoi           : found" log_both.txt
+check_contains "Mulliken          : not in the log (add WriteMullikenPop 1)" log_both.txt
+echo "Testing: [2] CHARGES PER ATOM puts every method side by side (Te 73: Hirshfeld +0.3939, Voronoi +0.4002)"
+check_contains "\[2\] CHARGES PER ATOM" log_both.txt
+check_contains "73 | Te | 6     | +0.3939     | +0.4002   | 0.0063" log_both.txt
+check_contains "\[3\] PER SPECIES" log_both.txt
+check_contains "Te      | 9     | +0.2918 +-0.0361 | +0.2907 +-0.0387" log_both.txt
+echo "Testing: [4] CHECKS (sum of q vs -NetCharge, population + q = Z_val, sum of Sz)"
+check_contains "\[4\] CHECKS" log_both.txt
+check_contains "Hirshfeld | -0.000084    | 4.4e-16" log_both.txt
+check_contains "Method dependence : up to 0.027 e (N82)" log_both.txt
+check_contains "Hirshfeld         : in 1 of 1 folder(s)" log_both.txt
+echo "Testing: the report is always written, in the current folder, with its references file"
+check_success stb_nativecharges_report.txt
+check_contains "STB-NATIVECHARGES REPORT" stb_nativecharges_report.txt
+check_success stb_nativecharges_references.bib
 
 
 # --- 3. Neither section present (graceful degradation) ---
 echo -e "\n--- Testing folder with neither section (graceful [WARNING]) ---"
 stb-nativecharges --no-intro --path neither > log_neither.txt 2>&1
-check_contains "add 'Charge.Hirshfeld end' and/or 'Charge.Voronoi end'" log_neither.txt
-check_contains "Folders with Hirshfeld data  : 0" log_neither.txt
-check_contains "Folders with Voronoi data    : 0" log_neither.txt
+check_exit_code $? 0
+check_contains "Hirshfeld         : not in the log (add Charge.Hirshfeld end)" log_neither.txt
+check_contains "no Mulliken, Hirshfeld or Voronoi block in the log" log_neither.txt
+check_contains "Hirshfeld         : in 0 of 1 folder(s)" log_neither.txt
+echo "Testing: a second run never overwrites the first report (numbered _1)"
+check_success stb_nativecharges_report_1.txt
+check_contains "Target            : neither" stb_nativecharges_report_1.txt
 
 
 # --- 4. --label override ---
 echo -e "\n--- Testing --label override ---"
 stb-nativecharges --no-intro --path both --label siesta > log_labelover.txt 2>&1
-check_contains "SystemLabel : siesta" log_labelover.txt
+check_exit_code $? 0
+check_contains "73 | Te | 6     | +0.3939" log_labelover.txt
 
 
 # --- 5. Batch mode (glob matching both folders) ---
 echo -e "\n--- Testing batch mode (--path matching both folders) ---"
 stb-nativecharges --no-intro --path "*" > log_batch.txt 2>&1
-check_contains "2 director" log_batch.txt
-check_contains "Folders inspected           : 2" log_batch.txt
+check_contains "Target            : \* (2 folders)" log_batch.txt
+check_contains "\[1\] CHARGES PER SPECIES" log_batch.txt
+check_contains "both    | DZP   | Te      | 9     | -               | +0.2918          | +0.2907" log_batch.txt
+check_contains "Hirshfeld         : in 1 of 2 folder(s)" log_batch.txt
 
 
-# --- 6. --save-report ---
-echo -e "\n--- Testing --save-report ---"
-rm -f stb_nativecharges_report.txt
+# --- 6. --save-report is a hidden, ignored option (old scripts keep working) ---
+echo -e "\n--- Testing the old --save-report flag ---"
 stb-nativecharges --no-intro --path both --save-report > log_savereport.txt 2>&1
-check_success stb_nativecharges_report.txt
-check_contains "STB-NATIVECHARGES REPORT" stb_nativecharges_report.txt
-rm -f stb_nativecharges_report.txt
+check_exit_code $? 0
+check_contains "Native charges report complete" log_savereport.txt
 
 
 # --- 7. Missing directory ---
@@ -115,8 +133,8 @@ check_contains "is not a directory" log_missing.txt
 
 # --- 8. Interactive path (stb-suite, shortcut 2.19) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.19) ---"
-printf '2.19\nboth\n\n0\n' | stb-suite > log_interactive.txt 2>&1
-check_contains "HIRSHFELD POPULATIONS" log_interactive.txt
+printf '2.19\nboth\n\n\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+check_contains "\[2\] CHARGES PER ATOM" log_interactive.txt
 check_contains "Native charges report complete" log_interactive.txt
 
 

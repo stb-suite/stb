@@ -4,12 +4,14 @@
 # Smoke test for stb-archive (Archive Packager, item 3.7).
 #
 # Fixtures are real files from a completed single-point Sn3O4 calculation
-# (shared with the other 5-utils fixtures): calc.fdf/calc.out (SystemLabel
+# (shared with the other 3-utils fixtures): calc.fdf/calc.out (SystemLabel
 # Sn3O4, even though the log isn't named Sn3O4.out -- exercises
 # core.siesta_log.find_out_file's generic-filename fallback), O.psf/Sn.psf,
-# Sn3O4.bands/.DOS/.XV (expected to be archived by default), plus Sn3O4.RHO
-# and MESSAGES (expected to be EXCLUDED by default -- a large regenerable
-# intermediate and a no-extension log file, respectively).
+# Sn3O4.bands/.DOS/.XV and MESSAGES (SIESTA's own log; expected to be archived by
+# default), plus Sn3O4.RHO (EXCLUDED by default: a real-space grid). calc.fdf
+# %includes a structure.fdf that is not there, so the report must say the archive
+# cannot rerun the calculation (true for this fixture). An archive holds ONE top
+# folder (the archived folder's name) with MANIFEST.txt and SHA256SUMS.
 FIXTURE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$FIXTURE_DIR/test_files"
 
@@ -41,8 +43,18 @@ check_contains() {
     fi
 }
 
+check_equal() {
+    if [ "$1" = "$2" ]; then
+        echo -e "   -> ${GREEN}Verified:${NC} $3 ($1)"
+        PASS=$((PASS+1))
+    else
+        echo -e "   -> ${RED}Failed:${NC} $3 (got '$1', expected '$2')"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 check_archive_contains() {
-    if tar tzf "$1" 2>/dev/null | grep -qx "$2"; then
+    if tar tzf "$1" 2>/dev/null | grep -qx "[^/]*/$2"; then
         echo -e "   -> ${GREEN}Verified:${NC} '$2' present in '$1'"
         PASS=$((PASS+1))
     else
@@ -52,7 +64,7 @@ check_archive_contains() {
 }
 
 check_archive_not_contains() {
-    if tar tzf "$1" 2>/dev/null | grep -qx "$2"; then
+    if tar tzf "$1" 2>/dev/null | grep -qx "[^/]*/$2"; then
         echo -e "   -> ${RED}Failed:${NC} '$2' unexpectedly present in '$1'"
         FAIL=$((FAIL+1))
     else
@@ -83,29 +95,53 @@ echo "Test directory '$TEST_DIR' prepared."
 pushd "$TEST_DIR" > /dev/null
 
 
-# --- 2. Default archive: includes inputs+essentials, excludes .RHO/MESSAGES ---
-echo -e "\n--- Testing default --include set ---"
+# --- 2. Default archive (results mode): inputs + logs + small outputs, no grid ---
+echo -e "\n--- Testing the default (results) mode ---"
+rm -f stb_archive_report*.txt stb_archive_references*.bib
 stb-archive --no-intro --path . -o default.tar.gz > log_default.txt 2>&1
+check_exit_code $? 0
 check_success default.tar.gz
+echo "Testing: one top folder in the archive, named after the archived folder"
+top=$(tar tzf default.tar.gz | cut -d/ -f1 | sort -u)
+check_equal "$top" "test_files" "top folders in default.tar.gz"
 check_archive_contains default.tar.gz calc.fdf
 check_archive_contains default.tar.gz calc.out
 check_archive_contains default.tar.gz O.psf
+check_archive_contains default.tar.gz Sn.psf
 check_archive_contains default.tar.gz Sn3O4.bands
 check_archive_contains default.tar.gz Sn3O4.XV
+check_archive_contains default.tar.gz MESSAGES
 check_archive_contains default.tar.gz MANIFEST.txt
+check_archive_contains default.tar.gz SHA256SUMS
 check_archive_not_contains default.tar.gz Sn3O4.RHO
-check_archive_not_contains default.tar.gz MESSAGES
-echo "Testing: manifest picked up SystemLabel/run type/energy despite calc.out's generic name"
-tar xzOf default.tar.gz MANIFEST.txt > manifest_default.txt
+check_contains "Verification      : read back, every file's size and SHA-256 compared -- ok" log_default.txt
+check_contains "Add back with     : --include .RHO" log_default.txt
+echo "Testing: the fixture's calc.fdf reads a structure.fdf that is not there -> not rerunnable, warned"
+check_contains "Rerunnable        : NO" log_default.txt
+check_contains "an .fdf reads structure.fdf, which is not in the folder" log_default.txt
+echo "Testing: SHA256SUMS verifies with sha256sum -c after extraction"
+mkdir -p extract && tar xzf default.tar.gz -C extract
+(cd extract/test_files && sha256sum -c --quiet SHA256SUMS) > log_sha.txt 2>&1
+check_exit_code $? 0
+echo "Testing: the manifest picked up the run (via stb-status) despite calc.out's generic name"
+cp extract/test_files/MANIFEST.txt manifest_default.txt
+rm -rf extract
 check_contains "SystemLabel       : Sn3O4" manifest_default.txt
-check_contains "Run type          : single-point" manifest_default.txt
-check_contains "Free energy (eV)  : -4054.427104" manifest_default.txt
+check_contains "State             : FINISHED" manifest_default.txt
+check_contains "Total energy      : -4054.427104 eV" manifest_default.txt
+check_contains "FILES IN THIS ARCHIVE" manifest_default.txt
+echo "Testing: the report is always written, in the current folder, with its references file"
+check_success stb_archive_report.txt
+check_contains "STB-ARCHIVE REPORT" stb_archive_report.txt
+check_success stb_archive_references.bib
 
 
-# --- 3. --include adds .RHO back ---
+# --- 3. --include adds .RHO back; the earlier archive (named with -o) stays out ---
 echo -e "\n--- Testing --include .RHO ---"
 stb-archive --no-intro --path . --include .RHO -o with_rho.tar.gz > log_include.txt 2>&1
 check_archive_contains with_rho.tar.gz Sn3O4.RHO
+echo "Testing: an earlier archive of any name (default.tar.gz, written with -o) never goes in"
+check_archive_not_contains with_rho.tar.gz default.tar.gz
 
 
 # --- 4. --exclude removes .bands ---
@@ -113,6 +149,23 @@ echo -e "\n--- Testing --exclude .bands ---"
 stb-archive --no-intro --path . --exclude .bands -o no_bands.tar.gz > log_exclude.txt 2>&1
 check_archive_not_contains no_bands.tar.gz Sn3O4.bands
 check_archive_contains no_bands.tar.gz Sn3O4.XV
+check_archive_not_contains no_bands.tar.gz with_rho.tar.gz
+
+
+# --- 4b. --mode inputs: only what the run needs; inputs are in every mode ---
+echo -e "\n--- Testing --mode inputs ---"
+stb-archive --no-intro --path . --mode inputs -o inputs.tar.gz > log_inputs.txt 2>&1
+check_archive_contains inputs.tar.gz calc.fdf
+check_archive_contains inputs.tar.gz O.psf
+check_archive_not_contains inputs.tar.gz calc.out
+check_archive_not_contains inputs.tar.gz Sn3O4.bands
+
+
+# --- 4c. Never overwrites: an existing -o needs --force ---
+echo -e "\n--- Testing that an existing archive is not overwritten ---"
+stb-archive --no-intro --path . -o default.tar.gz > log_exists.txt 2>&1
+check_exit_code $? 1
+check_contains "exists (pass --force to overwrite)" log_exists.txt
 
 
 # --- 5. --include/--exclude validation (must start with '.') ---
@@ -128,37 +181,42 @@ mkdir -p batchA batchB
 cp calc.fdf calc.out batchA/
 cp calc.fdf calc.out batchB/
 stb-archive --no-intro --path "batch*" > log_batch.txt 2>&1
-check_contains "2 director" log_batch.txt
+check_contains "batch\* (2 folders, one archive each)" log_batch.txt
+check_contains "Archived          : 2 of 2 folder(s)" log_batch.txt
 check_success batchA_archive.tar.gz
 check_success batchB_archive.tar.gz
-rm -rf batchA batchB batchA_archive.tar.gz batchB_archive.tar.gz
+echo "Testing: a second run writes _1 next to the first archive (never overwritten)"
+stb-archive --no-intro --path batchA > log_batch2.txt 2>&1
+check_success batchA_archive_1.tar.gz
+rm -rf batchA batchB batchA_archive*.tar.gz batchB_archive*.tar.gz
 
 
-# --- 7. --save-report ---
-echo -e "\n--- Testing --save-report ---"
-rm -f stb_archive_report.txt
+# --- 7. --save-report is a hidden, ignored option (old scripts keep working) ---
+echo -e "\n--- Testing the old --save-report flag ---"
 stb-archive --no-intro --path . -o report_test.tar.gz --save-report > log_savereport.txt 2>&1
-check_success stb_archive_report.txt
-check_contains "STB-ARCHIVE REPORT" stb_archive_report.txt
-rm -f stb_archive_report.txt report_test.tar.gz
+check_exit_code $? 0
+check_success report_test.tar.gz
+rm -f report_test.tar.gz
 
 
 # --- 8. Nothing to archive (empty directory) ---
-echo -e "\n--- Testing an empty directory (nothing matches --include) ---"
+echo -e "\n--- Testing an empty directory ---"
 mkdir -p empty_dir
 stb-archive --no-intro --path empty_dir > log_empty.txt 2>&1
 check_exit_code $? 1
-check_contains "nothing to archive" log_empty.txt
+check_contains "no file to archive" log_empty.txt
+check_contains "Archived          : 0 of 1 folder(s)" log_empty.txt
 rm -rf empty_dir
 
 
 # --- 9. Interactive path (stb-suite, shortcut 3.7) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.7) ---"
-rm -f "$TEST_DIR"_archive.tar.gz
-printf '3.7\n%s\n\n\n\n0\n' "$TEST_DIR" | stb-suite > log_interactive.txt 2>&1
+rm -f "$TEST_DIR"_archive*.tar.gz
+# Prompts in order: folder, mode, recursive, extra suffixes, suffixes to leave out, dry run
+printf '3.7\n%s\n1\nn\n\n\nn\n\n0\n' "$TEST_DIR" | stb-suite > log_interactive.txt 2>&1
 check_success "$TEST_DIR"_archive.tar.gz
-check_contains "Archived" log_interactive.txt
-rm -f "$TEST_DIR"_archive.tar.gz
+check_contains "Archived          : 1 of 1 folder(s)" log_interactive.txt
+rm -f "$TEST_DIR"_archive*.tar.gz
 
 
 popd > /dev/null

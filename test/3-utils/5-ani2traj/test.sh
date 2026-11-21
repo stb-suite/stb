@@ -78,13 +78,20 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. XSF (default format), per-frame lattice from .out (preferred over .XV/.fdf) ---
 echo -e "\n--- Testing --out-format xsf (default), per-frame lattice from .out ---"
 stb-ani2traj --no-intro --label aimd > log_xsf.txt 2>&1
-check_contains "Lattice read per-frame from aimd.out (5 MD step(s) found)" log_xsf.txt
-check_contains "Read 5 frame(s)" log_xsf.txt
+check_contains "Source            : per frame, from the log's 'outcell' block of each frame's MD step" log_xsf.txt
+check_contains "Trajectory        : aimd.ANI (445 B, 5 frames x 2 atoms)" log_xsf.txt
+check_contains "MD steps in log   : 5 (steps 1-5)" log_xsf.txt
+echo "Testing: frame k is the geometry AFTER MD step k, checked on every run (first frame vs the input geometry)"
+check_contains "frame k is the geometry AFTER MD step k" log_xsf.txt
+check_contains "Last frame vs .XV : 3.9e-07 Ang apart (same geometry)" log_xsf.txt
+check_contains "Read-back check   : read again with ASE -- ok" log_xsf.txt
+check_success stb_ani2traj_report.txt
+check_success stb_ani2traj_references.bib
 check_success aimd_traj.xsf
 check_contains "ANIMSTEPS 5" aimd_traj.xsf
 check_contains "PRIMVEC" aimd_traj.xsf
-echo "Testing: energy/temperature enrichment is skipped (not embeddable) for xsf"
-check_contains "only embedded for --out-format xyz" log_xsf.txt
+echo "Testing: energy/temperature per frame is not embeddable in xsf (only xyz carries scalars)"
+check_contains "no scalars (only xyz carries them)" log_xsf.txt
 
 
 # --- 3. PDB ---
@@ -96,31 +103,34 @@ check_contains "MODEL" aimd_traj.pdb
 
 
 # --- 4. Extended XYZ, with real per-frame E_KS/Temp_ion/Time enrichment ---
-# SIESTA itself reports (aimd.out): step 1 E_KS=-856.3116 eV, Temp_ion=300.000 K;
-# step 5 E_KS=-857.5875 eV, Temp_ion=9917.825 K. MD.LengthTimeStep is 1.0 fs
-# (aimd.fdf), so step N's Time should be N*1.0 fs.
+# SIESTA itself reports (aimd.out): step 2 E_KS=-856.4574 eV, Temp_ion=1380.612 K;
+# step 5 E_KS=-857.5875 eV, Temp_ion=9917.825 K. Frame k of the .ANI is the
+# geometry AFTER step k, i.e. that of step k+1, so frame 1 carries step 2's values
+# and t = k * MD.LengthTimeStep (1.0 fs, aimd.fdf); the last frame (after step 5)
+# has no step of its own in the log and carries no scalars.
 echo -e "\n--- Testing --out-format xyz with real per-frame E_KS/Temp_ion/Time ---"
 stb-ani2traj --no-intro --label aimd --out-format xyz > log_xyz.txt 2>&1
 check_success aimd_traj.xyz
 check_contains "Lattice=" aimd_traj.xyz
-check_contains "E_KS=-856.3116 Temp_ion=300.0 Time=1.0" aimd_traj.xyz
-check_contains "E_KS=-857.5875 Temp_ion=9917.825 Time=5.0" aimd_traj.xyz
+check_contains "E_KS=-856.4574 Temp_ion=1380.612 MD_step=2 Time=1.0" aimd_traj.xyz
+check_contains "E_KS=-857.5875 Temp_ion=9917.825 MD_step=5 Time=4.0" aimd_traj.xyz
+check_not_contains "E_KS=-856.3116" aimd_traj.xyz
 
 
 # --- 5. --stride, staying aligned with the per-frame .out data ---
-echo -e "\n--- Testing --stride 2 (5 frames -> 3, keeping steps 1/3/5) ---"
+echo -e "\n--- Testing --stride 2 (5 frames -> 3: frames 1/3/5 = after steps 1/3/5) ---"
 stb-ani2traj --no-intro --label aimd --out-format xyz --stride 2 -o strided.xyz > log_stride.txt 2>&1
-check_contains "Read 3 frame(s)" log_stride.txt
-check_contains "E_KS=-856.3116" strided.xyz
-check_contains "E_KS=-856.8561" strided.xyz
-check_contains "E_KS=-857.5875" strided.xyz
-check_not_contains "E_KS=-856.4574" strided.xyz
+check_contains "Kept              : 3 frames (indices 1..5 of 5, every 2)" log_stride.txt
+check_contains "E_KS=-856.4574 Temp_ion=1380.612 MD_step=2 Time=1.0" strided.xyz
+check_contains "E_KS=-857.2911 Temp_ion=7641.661 MD_step=4 Time=3.0" strided.xyz
+check_not_contains "E_KS=-856.8561" strided.xyz
 
 
 # --- 6. --unwrap ---
 echo -e "\n--- Testing --unwrap ---"
 stb-ani2traj --no-intro --label aimd --out-format xyz --unwrap -o unwrapped.xyz > log_unwrap.txt 2>&1
-check_contains "Unwrapped periodic-boundary jumps" log_unwrap.txt
+check_contains "Unwrap PBC        : yes" log_unwrap.txt
+check_contains "Read-back check   : read again with ASE -- ok" log_unwrap.txt
 check_success unwrapped.xyz
 
 
@@ -135,6 +145,7 @@ echo -e "\n--- Testing fallback to .XV when .out is absent ---"
 mv aimd.out aimd.out.bak
 stb-ani2traj --no-intro --label aimd --out-format xsf -o xv_fallback.xsf > log_xv_fallback.txt 2>&1
 check_contains "Lattice read from aimd.XV" log_xv_fallback.txt
+check_contains "one static cell (log has no usable per-step cell) -- aimd.XV" log_xv_fallback.txt
 check_success xv_fallback.xsf
 
 
@@ -142,7 +153,7 @@ check_success xv_fallback.xsf
 echo -e "\n--- Testing fallback to .fdf when .out and .XV are both absent ---"
 mv aimd.XV aimd.XV.bak
 stb-ani2traj --no-intro --label aimd --out-format xsf -o fdf_fallback.xsf > log_fdf_fallback.txt 2>&1
-check_contains "Lattice read from aimd.fdf" log_fdf_fallback.txt
+check_contains "Lattice read from ./aimd.fdf" log_fdf_fallback.txt
 check_success fdf_fallback.xsf
 mv aimd.XV.bak aimd.XV
 mv aimd.out.bak aimd.out
@@ -161,17 +172,18 @@ mkdir -p no_lattice
 cp aimd.ANI no_lattice/
 (cd no_lattice && stb-ani2traj --no-intro --label aimd --out-format xsf > ../log_nolattice.txt 2>&1)
 check_exit_code $? 1
-check_contains "a lattice is required" log_nolattice.txt
+check_contains "No lattice: no usable 'aimd.out', 'aimd.XV' or input .fdf" log_nolattice.txt
 rm -rf no_lattice
 
 
 # --- 12. Interactive path (stb-suite, shortcut 3.5) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 3.5) ---"
 rm -f aimd_traj.xsf interactive_traj.xsf
-# Prompts in order: label, format choice, stride, output filename
-printf '3.5\naimd\n1\n1\ninteractive_traj.xsf\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+# Prompts in order: label, format choice, frames to drop, stride, unwrap, output filename, dry run
+printf '3.5\naimd\n1\n0\n1\nn\ninteractive_traj.xsf\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_success interactive_traj.xsf
-check_contains "Converting AIMD trajectory" log_interactive.txt
+check_contains "Trajectory converted" log_interactive.txt
+check_not_contains "Traceback" log_interactive.txt
 
 
 popd > /dev/null

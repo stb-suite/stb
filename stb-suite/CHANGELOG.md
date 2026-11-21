@@ -410,6 +410,11 @@ version before) and **Added** (new options and tools).
   species in the same order, 0.5 otherwise (reported as "Atom matching"); a matching failure says
   which of the two applies.
 
+- `stb-archive` left out earlier archives only by their default names (`<folder>_archive.tar.gz`,
+  stb-clean's `_backup_` files): an archive written into the folder with `-o NAME.tar.gz` went into
+  the next archive of that folder, although the report says earlier archives never go in. Any
+  `.tar.gz`/`.tgz` whose top folder holds `MANIFEST.txt` and `SHA256SUMS` is now recognized as one.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

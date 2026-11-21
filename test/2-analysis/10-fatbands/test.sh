@@ -5,7 +5,7 @@
 #
 # Fixture note: Sn3O4.bands/.bands.WFSX here are a SHORT band path
 # (Gamma-X-Y-Gamma, 16 k-points) re-run from the same converged Sn3O4.DM
-# used by test/5-utils/4-wantibexos/'s full run, purely so the .WFSX stays
+# used by test/3-utils/4-wantibexos/'s full run, purely so the .WFSX stays
 # a few MB instead of the >100MB a full ~500-k-point path produces (SIESTA
 # writes full wavefunction coefficients per k, not just eigenvalues).
 # Sn3O4.HSX is reused as-is (its size doesn't depend on the band path).
@@ -31,6 +31,16 @@ check_success() {
     else
         echo -e " ... ${RED}FAIL${NC} (file '$1' was not created)"
         FAIL=$((FAIL+1))
+    fi
+}
+
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
     fi
 }
 
@@ -97,27 +107,20 @@ else
 fi
 check_contains "Not written (off by default" log_basic.txt
 
-echo "Testing: no text report without --save-report"
-if [ -e stb_fatbands_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_fatbands_report.txt should not have been written)"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_fatbands_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
-
-echo "Testing: references.bib is always written (SIESTA)"
-check_success references.bib
+echo "Testing: the report and its references file are always written, in the current folder"
+check_success stb_fatbands_report.txt
+check_contains "\[0\] RUN METADATA" stb_fatbands_report.txt
+check_success stb_fatbands_references.bib
 
 
-# --- 2b. --save-report / --save-gnuplot (explicit --projection l, the pre-2.1.0 default) ---
-echo -e "\n--- Testing --save-report / --save-gnuplot (--projection l) ---"
+# --- 2b. --save-gnuplot (explicit --projection l); --save-report is a hidden, ignored option ---
+echo -e "\n--- Testing --save-gnuplot (--projection l) with the old --save-report flag ---"
 
 timeout 120 stb-fatbands --label Sn3O4 --shift fermi --projection l \
     --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
-check_success stb_fatbands_report.txt
-check_contains "\[0\] RUN METADATA" stb_fatbands_report.txt
+echo "Testing: a second run never overwrites the first report (numbered _1)"
+check_success stb_fatbands_report_1.txt
 check_success fatbands_s.dat
 check_success fatbands_p.dat
 check_success fatbands_d.dat
@@ -300,14 +303,14 @@ mv Sn3O4.HSX.bak Sn3O4.HSX
 # --- 8. k-point count mismatch is a hard error, not a silent wrong plot ---
 echo -e "\n--- Testing the k-point/.WFSX count-mismatch guard ---"
 
-WANTIBEXOS_BANDS="$FIXTURE_DIR/../../5-utils/4-wantibexos/Sn3O4.bands"
+WANTIBEXOS_BANDS="$FIXTURE_DIR/../../3-utils/4-wantibexos/Sn3O4.bands"
 if [ -f "$WANTIBEXOS_BANDS" ]; then
     timeout 120 stb-fatbands --file "$WANTIBEXOS_BANDS" --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
         --shift fermi --no-intro > log_mismatch.txt 2>&1
     check_exit_code $? 2
     check_contains "k-point count mismatch" log_mismatch.txt
 else
-    echo -e " ... ${YELLOW}SKIPPED${NC} (test/5-utils/4-wantibexos/Sn3O4.bands not found)"
+    echo -e " ... ${YELLOW}SKIPPED${NC} (test/3-utils/4-wantibexos/Sn3O4.bands not found)"
 fi
 
 
@@ -343,7 +346,7 @@ check_contains "projection" log_help.txt
 check_contains "species_l" log_help.txt
 check_contains "category" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -352,27 +355,21 @@ check_contains "\-\-view" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.10) ---"
 
 echo "Testing: navigate 2.10 -> label Sn3O4 -> shift left blank (defaults to fermi) -> projection"
-echo "left blank (defaults to species_l) -> default output -> no save-report -> save-gnuplot=y -> no view"
+echo "left blank (defaults to species_l) -> default output -> save-gnuplot=y -> no view"
 rm -f fatbands_Sn-s.dat fatbands_Sn-p.dat fatbands_Sn-d.dat \
-      fatbands_O-s.dat fatbands_O-p.dat fatbands_O-d.dat fatbands.gplot stb_fatbands_report.txt
-printf '2.10\nSn3O4\n\n\n\nn\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+      fatbands_O-s.dat fatbands_O-p.dat fatbands_O-d.dat fatbands.gplot
+printf '2.10\nSn3O4\n\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Shift mode      : fermi" log_menu.txt
 check_contains "Projection      : species_l" log_menu.txt
 check_success fatbands_Sn-s.dat
 check_success fatbands_O-p.dat
 check_success fatbands.gplot
-if [ -e stb_fatbands_report.txt ]; then
-    echo -e " ... ${RED}FAIL${NC} (stb_fatbands_report.txt should not have been written -- save-report was 'n')"
-    FAIL=$((FAIL+1))
-else
-    echo -e " ... ${GREEN}OK${NC} (stb_fatbands_report.txt correctly absent)"
-    PASS=$((PASS+1))
-fi
+check_contains "Report          : stb_fatbands_report" log_menu.txt
 
 echo "Testing: navigate 2.10 -> projection l (option 1, non-default choice)"
 rm -f fatbands_s.dat
-printf '2.10\nSn3O4\n1\n1\n\nn\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu_l.txt 2>&1
+printf '2.10\nSn3O4\n1\n1\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu_l.txt 2>&1
 check_exit_code $? 0
 check_success fatbands_s.dat
 

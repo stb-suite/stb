@@ -58,8 +58,8 @@ BANKS = {
 
 # (relativity, xc, accuracy) -> (folder under pseudopotentials/dojo/, PseudoDojo table)
 DOJO_TABLES = {
-    ("sr", "pbe", "standard"): ("sr_pbe_0.5_standard", "nc-sr-05 pbe standard"),
-    ("sr", "pbe", "stringent"): ("sr_pbe_0.5_stringent", "nc-sr-05 pbe stringent"),
+    ("sr", "pbe", "standard"): ("sr_pbe_0.4_standard", "nc-sr-04 pbe standard"),
+    ("sr", "pbe", "stringent"): ("sr_pbe_0.4_stringent", "nc-sr-04 pbe stringent"),
     ("sr", "pbesol", "standard"): ("sr_pbesol_0.4_standard", "nc-sr-04 pbesol standard"),
     ("sr", "pbesol", "stringent"): ("sr_pbesol_0.4_stringent", "nc-sr-04 pbesol stringent"),
     ("sr", "pw", "standard"): ("sr_pw_0.4_standard", "nc-sr-04 pw standard"),
@@ -71,6 +71,11 @@ DOJO_TABLES = {
     ("sr3plus", "pbe", "standard"): ("sr3plus_pbe_0.4_standard", "nc-sr-04-3plus pbe standard"),
 }
 DOJO_DEFAULT = ("sr", "pbe", "standard")
+
+# Every bundled dojo folder holds this file: the PseudoDojo table and archive it came from, and
+# per file its md5, valence, relativity, lj / scalar-relativistic sets and ekb = 0 count
+# (written by test/pseudo_bank/make_manifest.py; read by bank_manifest / stb-pseudo --list-banks).
+BANK_MANIFEST = "manifest.json"
 
 RELATIVITY_WORDS = {"sr": "sr", "scalar": "sr", "fr": "fr", "soc": "fr", "full": "fr",
                     "sr3plus": "sr3plus", "3plus": "sr3plus"}
@@ -229,6 +234,41 @@ def detect_pseudo_bank(pp_path):
     return None
 
 
+def bank_manifest(name):
+    """The manifest.json of a bundled dojo bank (any accepted spelling) as a dict, or None
+    (virtual_vault, or a missing/unreadable file)."""
+    import json
+    path = os.path.join(bank_path(name), BANK_MANIFEST)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def verify_bank(name):
+    """Problems (list of str) of a bundled dojo bank against its manifest: missing manifest, files
+    missing or not listed, md5 mismatches, KB projectors with ekb = 0. [] when everything matches."""
+    import hashlib
+    manifest = bank_manifest(name)
+    if manifest is None:
+        return [] if canonical_bank(name) == "virtual_vault" else [f"{BANK_MANIFEST} missing"]
+    folder = bank_path(name)
+    present = sorted(n for n in os.listdir(folder) if n.endswith(".psml"))
+    listed = manifest.get("files", {})
+    problems = [f"{n}: not in {BANK_MANIFEST}" for n in present if n not in listed]
+    problems += [f"{n}: listed but missing" for n in listed if n not in present]
+    for n in present:
+        if n not in listed:
+            continue
+        with open(os.path.join(folder, n), "rb") as f:
+            if hashlib.md5(f.read()).hexdigest() != listed[n].get("md5"):
+                problems.append(f"{n}: md5 differs from {BANK_MANIFEST}")
+        if listed[n].get("ekb_zero"):
+            problems.append(f"{n}: {listed[n]['ekb_zero']} KB projector(s) with ekb = 0")
+    return problems
+
+
 def list_bank_elements(name):
     """Element symbols available in bundled bank `name` (any accepted spelling),
     sorted -- derived from the .psf/.psml filenames actually present, so it
@@ -384,10 +424,19 @@ _FDF_AUTHORS = {"ca": "LDA", "pz": "LDA", "pw92": "LDA", "pbe": "PBE", "pbesol":
 
 _PSEUDO_CACHE = {}
 
+# A KB projector with ekb exactly zero (PseudoDojo nc-sr-05's 11 regenerated elements).
+_EKB_ZERO_RE = re.compile(r'\bekb="[-+]?(?:0+(?:\.0*)?|\.0+)(?:[eEdD][-+]?\d+)?"')
+
 
 def read_pseudo_header(path):
-    """{'xc': functional or None, 'relativity': 'full'|'scalar'|'non-relativistic'|None,
-    'lj': True/False/None (spin-orbit projectors present)} of a .psml or .psf file."""
+    """Header facts of a .psml or .psf file:
+    'xc': functional or None; 'relativity': 'full'|'scalar'|'non-relativistic'|None;
+    'lj': True/False/None (spin-orbit projectors present);
+    'sr_part': True/False/None (a .psml's scalar-relativistic projector set: without it, SIESTA
+    5.4.2 cannot run the file without spin-orbit; a .psf: None);
+    'n_ekb_zero': number of KB projectors with ekb = 0 (.psml; 0 for a .psf);
+    'z_valence': z-pseudo (float) or None;
+    'valence': [(n, l, occupation), ...] of a .psml's <valence-configuration>, else []."""
     try:
         st = os.stat(path)
     except OSError:
@@ -395,7 +444,8 @@ def read_pseudo_header(path):
     key = (os.path.basename(path), st.st_size, int(st.st_mtime))
     if key in _PSEUDO_CACHE:
         return _PSEUDO_CACHE[key]
-    info = {"xc": None, "relativity": None, "lj": None}
+    info = {"xc": None, "relativity": None, "lj": None, "sr_part": None, "n_ekb_zero": 0,
+            "z_valence": None, "valence": []}
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
@@ -420,6 +470,15 @@ def read_pseudo_header(path):
             info["relativity"] = {"dirac": "full", "scalar": "scalar", "no": "non-relativistic"}.get(
                 m.group(1), m.group(1))
         info["lj"] = 'set="lj"' in text
+        info["sr_part"] = 'set="scalar_relativistic"' in text
+        info["n_ekb_zero"] = len(_EKB_ZERO_RE.findall(text))
+        m = _PSML_ZVAL_RE.search(head)
+        if m:
+            info["z_valence"] = float(m.group(1))
+        m = re.search(r"<valence-configuration\b.*?</valence-configuration>", head, re.S)
+        if m:
+            info["valence"] = [(int(n), l, float(occ)) for n, l, occ in re.findall(
+                r'<shell\s+n="(\d+)"\s+l="([spdf])"\s+occupation="([0-9.eE+-]+)"', m.group(0))]
     else:
         first = text.splitlines()[0].split() if text.strip() else []
         if len(first) >= 3:

@@ -8,6 +8,16 @@ version before) and **Added** (new options and tools).
 
 ### Fixed
 
+- Pseudopotential bank: `dojo` (`dojo-sr-pbe-standard`) and `dojo-stringent` are now the PseudoDojo
+  nc-sr-04 PBE tables (folders `sr_pbe_0.4_standard`/`_stringent`; they were nc-sr-05, `sr_pbe_0.5_*`).
+  nc-sr-05 is nc-sr-04 with 11 files regenerated (Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe) whose KB
+  projectors include `ekb="0"`. With SIESTA 5.4.2 those files gave wrong equilibrium structures with
+  any number of MPI ranks and no warning (Pb fcc 14.6 instead of 30.8 Ang^3/atom, S2 1.65 instead of
+  1.92 Ang), and aborted in parallel with `propor: ERROR: IMAX = 0`. The other 61 files of each table
+  are unchanged (byte-identical), so `-p dojo` gives the same results for them. The valence changes
+  for I (z 17 -> 7 standard, 25 -> 17 stringent) and for stringent Rn (26 -> 18) and Xe (26 -> 8).
+  Every bank folder now has a `manifest.json` (source archive and SHA-256, md5, valence and
+  projector sets of every file), and `stb-pseudo --list-banks` checks the files against it.
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

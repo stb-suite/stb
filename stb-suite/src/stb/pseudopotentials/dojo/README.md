@@ -1,13 +1,17 @@
 # PseudoDojo: norm-conserving (ONCVPSP), PSML format (for SIESTA)
 
-Downloaded from www.pseudo-dojo.org and organized on 17/11/2026.
+Downloaded from www.pseudo-dojo.org (the `<table>_psml.tgz` archives) and organized on 17/11/2026;
+the two PBE tables were replaced by nc-sr-04 on 20/11/2026 (see below). Every folder has a
+`manifest.json`: source archive and its SHA-256, and per file the md5, valence (`z-pseudo`),
+relativity, and whether it has lj and scalar-relativistic projectors. On 20/11/2026 every file was
+checked byte by byte against its official archive. `stb-pseudo --list-banks` re-checks the md5s.
 Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names each table
 `dojo-<relativity>-<xc>-<accuracy>` (see `core/pseudopotentials.py`).
 
 | Folder | `-p` name | Source table | Relativity | XC | Elements |
 |---|---|---|---|---|---|
-| `sr_pbe_0.5_standard` | `dojo` (= `dojo-sr-pbe-standard`) | nc-sr-05 pbe standard        | scalar | PBE        | 72 |
-| `sr_pbe_0.5_stringent` | `dojo-stringent` | nc-sr-05 pbe stringent       | scalar | PBE        | 72 |
+| `sr_pbe_0.4_standard` | `dojo` (= `dojo-sr-pbe-standard`) | nc-sr-04 pbe standard        | scalar | PBE        | 72 |
+| `sr_pbe_0.4_stringent` | `dojo-stringent` | nc-sr-04 pbe stringent       | scalar | PBE        | 72 |
 | `sr_pbesol_0.4_standard` | `dojo-pbesol` | nc-sr-04 pbesol standard     | scalar | PBEsol     | 72 |
 | `sr_pbesol_0.4_stringent` | `dojo-pbesol-stringent` | nc-sr-04 pbesol stringent    | scalar | PBEsol     | 72 |
 | `sr_pw_0.4_standard` | `dojo-pw` | nc-sr-04 pw standard         | scalar | LDA (PW92) | 70 |
@@ -18,6 +22,24 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
 | `fr_pbesol_0.4_stringent` | `dojo-fr-pbesol-stringent` | nc-fr-04 pbesol stringent    | full (SOC) | PBEsol | 71 (no Lu) |
 | `sr3plus_pbe_0.4_standard` | `dojo-sr3plus` | nc-sr-04-3plus pbe standard  | scalar | PBE        | 14 lanthanides |
 
+- **Why nc-sr-04 and not nc-sr-05 for PBE.** Up to 2.0.0, `dojo` and `dojo-stringent` were
+  nc-sr-05, which is nc-sr-04 with 11 files regenerated: Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe.
+  Those 11 have KB projectors with `ekb="0"`. With SIESTA 5.4.2 they
+  - give wrong equilibrium structures with any number of MPI ranks, with no warning (Pb fcc
+    standard 14.6 against 30.8 Ang^3/atom, S2 1.65 against 1.92 Ang);
+  - abort in parallel with `propor: ERROR: IMAX = 0` (from 4 ranks for some elements).
+
+  The other 61 files of each table are byte-identical in both versions, so only these 11 changed.
+  The change moves the valence of three elements:
+
+  | Element | standard nc-sr-05 -> nc-sr-04 | stringent nc-sr-05 -> nc-sr-04 |
+  |---|---|---|
+  | I  | 17 -> 7 | 25 -> 17 |
+  | Rn | 18 -> 18 | 26 -> 18 |
+  | Xe | 8 -> 8 | 26 -> 8 |
+
+  Results for I (both tables) and stringent Rn and Xe are therefore not comparable with runs made
+  with 2.0.0.
 - The folder's XC must match the calculation's `XC.Functional`/`XC.Authors`.
 - **Standard or stringent:** standard is the default choice.
   - **Groups 13–16 (Ga–Se, In–Te, Tl–Po):** standard **already has the d shell in the valence**; Ge and Sn have z = 14. Stringent adds the semicore s and p of the shell below; Ge and Sn have z = 22.

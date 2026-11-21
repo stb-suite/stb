@@ -2421,7 +2421,7 @@ three questions (relativity, functional, accuracy) that offer only the tables th
 \toprule
 \textbf{Name} & \textbf{Relativity} & \textbf{Functional} & \textbf{Elements}\\
 \midrule
-\texttt{dojo}, \texttt{dojo-stringent} & scalar & PBE (nc-sr-05) & 72\\
+\texttt{dojo}, \texttt{dojo-stringent} & scalar & PBE (nc-sr-04) & 72\\
 \texttt{dojo-pbesol}, \texttt{dojo-pbesol-stringent} & scalar & PBEsol (nc-sr-04) & 72\\
 \texttt{dojo-pw}, \texttt{dojo-pw-stringent} & scalar & LDA, PW92 (nc-sr-04) & 70\\
 \texttt{dojo-fr}, \texttt{dojo-fr-stringent} & full (spin-orbit) & PBE (nc-fr-04) & 70 (no La, Lu) / 72\\
@@ -3322,8 +3322,8 @@ written \texttt{lda}. \texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbr
 \endhead
 \bottomrule\noalign{}
 \endlastfoot
-\texttt{dojo} = \texttt{dojo-\allowbreak{}sr-\allowbreak{}pbe-\allowbreak{}standard} & nc-sr-05 pbe standard & scalar & PBE & 72 \\
-\texttt{dojo-\allowbreak{}stringent} & nc-sr-05 pbe stringent & scalar & PBE & 72 \\
+\texttt{dojo} = \texttt{dojo-\allowbreak{}sr-\allowbreak{}pbe-\allowbreak{}standard} & nc-sr-04 pbe standard & scalar & PBE & 72 \\
+\texttt{dojo-\allowbreak{}stringent} & nc-sr-04 pbe stringent & scalar & PBE & 72 \\
 \texttt{dojo-\allowbreak{}pbesol}, \texttt{dojo-\allowbreak{}pbesol-\allowbreak{}stringent} & nc-sr-04 pbesol & scalar & PBEsol & 72 \\
 \texttt{dojo-\allowbreak{}pw}, \texttt{dojo-\allowbreak{}pw-\allowbreak{}stringent} & nc-sr-04 pw & scalar & LDA (PW92) & 70 \\
 \texttt{dojo-\allowbreak{}fr} & nc-fr-04 pbe standard & full (SOC) & PBE & 70 (no La, Lu) \\
@@ -3353,9 +3353,12 @@ written \texttt{lda}. \texttt{stb-\allowbreak{}pseudo\ -\allowbreak{}\/-\allowbr
   (magnetism, 4f states). Give the other elements a fallback, for example
   \texttt{-\allowbreak{}p\ dojo-\allowbreak{}sr3plus\ -\allowbreak{}\/-\allowbreak{}fallback-\allowbreak{}dir\ dojo}.
 \item
-  \texttt{dojo} names exactly the files this bank held before it was split into
-  tables (PseudoDojo v0.5, PBE, standard), so old commands, scripts and
-  \texttt{mlff\_\allowbreak{}workflow.\allowbreak{}json} files that say \texttt{dojo} give the same result.
+  \texttt{dojo} and \texttt{dojo-stringent} are the PseudoDojo nc-sr-04 PBE tables. Up to 2.0.0 they
+  were nc-sr-05, which is nc-sr-04 with 11 files regenerated (Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe).
+  Those 11 have KB projectors with \texttt{ekb="0"}: with SIESTA 5.4.2 they give wrong equilibrium
+  structures with any number of MPI ranks (Pb fcc volume $-53$\,\%) and abort in parallel with
+  \texttt{propor: ERROR: IMAX = 0}. The other 61 files are byte-identical. With nc-sr-04, I has
+  $z = 7$ (standard) and 17 (stringent), and stringent Rn and Xe have $z = 18$ and 8.
 \end{itemize}
 
 In the interactive menu, every question about the pseudopotential source

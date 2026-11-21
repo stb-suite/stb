@@ -136,8 +136,8 @@ written `lda`. `stb-pseudo --list-banks` prints the whole list:
 
 | `-p` name | PseudoDojo table | Relativity | Functional | Elements |
 |---|---|---|---|---|
-| `dojo` = `dojo-sr-pbe-standard` | nc-sr-05 pbe standard | scalar | PBE | 72 |
-| `dojo-stringent` | nc-sr-05 pbe stringent | scalar | PBE | 72 |
+| `dojo` = `dojo-sr-pbe-standard` | nc-sr-04 pbe standard | scalar | PBE | 72 |
+| `dojo-stringent` | nc-sr-04 pbe stringent | scalar | PBE | 72 |
 | `dojo-pbesol`, `dojo-pbesol-stringent` | nc-sr-04 pbesol | scalar | PBEsol | 72 |
 | `dojo-pw`, `dojo-pw-stringent` | nc-sr-04 pw | scalar | LDA (PW92) | 70 |
 | `dojo-fr` | nc-fr-04 pbe standard | full (SOC) | PBE | 70 (no La, Lu) |
@@ -159,9 +159,13 @@ written `lda`. `stb-pseudo --list-banks` prints the whole list:
   the core. Use it only for Ln3+ compounds: it does not describe f physics
   (magnetism, 4f states). Give the other elements a fallback, for example
   `-p dojo-sr3plus --fallback-dir dojo`.
-- `dojo` names exactly the files this bank held before it was split into
-  tables (PseudoDojo v0.5, PBE, standard), so old commands, scripts and
-  `mlff_workflow.json` files that say `dojo` give the same result.
+- `dojo` (`dojo-sr-pbe-standard`) and `dojo-stringent` are the PseudoDojo nc-sr-04 PBE tables. Up to
+  2.0.0 they were nc-sr-05, which is nc-sr-04 with 11 files regenerated (Ba, Bi, I, Pb, Po, Rb, Rn,
+  S, Te, Tl, Xe). Those 11 have KB projectors with `ekb="0"`: with SIESTA 5.4.2 they give wrong
+  equilibrium structures with any number of MPI ranks (Pb fcc volume -53 %) and abort in parallel
+  with `propor: ERROR: IMAX = 0`. The other 61 files are byte-identical, so `dojo` still gives the
+  same result for them. With nc-sr-04, I has z = 7 (standard) and 17 (stringent), and stringent Rn
+  and Xe have z = 18 and 8 (nc-sr-05: 17/25, 26, 26).
 
 In the interactive menu, every question about the pseudopotential source
 offers *PseudoDojo* and then asks for the relativity, the functional and the

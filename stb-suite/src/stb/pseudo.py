@@ -15,7 +15,7 @@ import argparse
 from stb.core.cli import color_text, show_intro, print_dual, print_section
 from stb.core.structure_io import read_fdf, species_list
 from stb.core.pseudopotentials import (
-    BANK_HELP, bank_names, bank_info, resolve_pseudo_source,
+    BANK_HELP, bank_names, bank_info, bank_manifest, verify_bank, resolve_pseudo_source,
     detect_pseudo_bank, list_bank_elements, get_required_pseudos, copy_pseudo, pseudo_valence,
     read_pseudo_header, warn_pseudo_level,
 )
@@ -136,11 +136,28 @@ The table's functional must match the calculation's XC.Functional/XC.Authors."""
     if args.list_banks:
         print_section("[0] BUNDLED BANKS", f_out)
         print_dual(f"  {'name (-p)':<27} {'table':<29} {'format':<6} {'elements':>8}", f_out)
+        bank_problems = {}
         for name in bank_names():
             info = bank_info(name)
             n = len(list_bank_elements(name))
             fmt = "PSF" if name == "virtual_vault" else "PSML"
+            problems = verify_bank(name)
+            if problems:
+                bank_problems[name] = problems
             print_dual(f"  {name:<27} {info['table'] or '-':<29} {fmt:<6} {n:>8}", f_out)
+        print_dual("", f_out)
+        print_dual("Origin (manifest.json of each folder; every file checked against its md5):", f_out)
+        for name in bank_names():
+            manifest = bank_manifest(name)
+            if manifest is None:
+                continue
+            src = manifest.get("source", {})
+            state = "OK" if name not in bank_problems else f"{len(bank_problems[name])} problem(s)"
+            print_dual(f"  {name:<27} {src.get('archive', '?')}, taken {src.get('taken', '?')}"
+                       f"{', verified ' + src['verified'] if src.get('verified') else ''}: {state}", f_out)
+        for name, problems in bank_problems.items():
+            for problem in problems:
+                print_dual(color_text(f"[WARNING] Bank {name}: {problem}", 'yellow'), f_out)
         print_dual("", f_out)
         print_dual("Short names: words in any order, a missing word takes its default (sr, pbe, standard):", f_out)
         print_dual("  dojo = dojo-sr-pbe-standard, dojo-fr = dojo-fr-pbe-standard, dojo-lda = dojo-sr-pw-standard,", f_out)
@@ -149,8 +166,9 @@ The table's functional must match the calculation's XC.Functional/XC.Authors."""
         print_dual("  - The functional must match XC.Functional/XC.Authors of the calculation.", f_out)
         print_dual("  - stringent: groups 13-16 (Ga-Se, In-Te, Tl-Po) add the s,p shell below the d (Ge/Sn z 14 -> 22);", f_out)
         print_dual("    Hf/Ta add the 4f shell (z 12 -> 26, 13 -> 27). More electrons and orbitals: more expensive.", f_out)
-        print_dual("  - fr (full-relativistic): required for 'Spin spin-orbit'; also runs without SOC, but do not mix", f_out)
-        print_dual("    absolute energies of fr and sr files. No full-relativistic LDA table exists.", f_out)
+        print_dual("  - fr (full-relativistic): required for 'Spin spin-orbit'. Without SOC, the fr-pbe files run (do not", f_out)
+        print_dual("    mix absolute energies of fr and sr files); of the fr-pbesol files only Ge, Sb and Te do -- the", f_out)
+        print_dual("    others have no scalar-relativistic part. No full-relativistic LDA table exists.", f_out)
         print_dual("  - sr3plus: lanthanides Ce-Lu with 4f frozen in the core, for Ln3+ compounds only (no 4f physics);", f_out)
         print_dual("    use --fallback-dir dojo for the other elements.", f_out)
         print_dual(f"Reference: {bank_info('dojo')['citation']}", f_out)

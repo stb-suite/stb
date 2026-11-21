@@ -72,7 +72,7 @@ echo "=================================================================="
 DOJO_N=$(stb-pseudo --list-elements dojo --no-intro | grep "element(s) available" | sed 's/ element.*//')
 VV_N=$(stb-pseudo --list-elements virtual_vault --no-intro | grep "element(s) available" | sed 's/ element.*//')
 cat <<EOF
-  dojo           -- PseudoDojo v0.5, PBE, .psml format, $DOJO_N elements
+  dojo           -- PseudoDojo nc-sr-04, PBE, .psml format, $DOJO_N elements
   virtual_vault  -- SIESTA Virtual Vault, PBE, .psf format, $VV_N elements
 
 Neither bank covers everything -- an overlapping but not identical set.

@@ -83,20 +83,20 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. --format fdf on a P1 (no symmetry) structure ---
 echo -e "\n--- Testing --format fdf on the P1 Sn3O4 structure ---"
-rm -f stb_symmetry_report.txt references.bib symmetry.dat
+rm -f stb_symmetry_report*.txt stb_symmetry_references*.bib stb_symmetry_report*.txt stb_symmetry_references*.bib symmetry.dat
 stb-symmetry --file structure.fdf --format fdf --symprec 1e-4 --no-intro > log_p1.txt 2>&1
 check_exit_code $? 0
 
-echo "Verifying the old symmetry.dat is no longer written unconditionally, and no report file without --save-report"
-if [ -e symmetry.dat ] || [ -e stb_symmetry_report.txt ]; then
+echo "Verifying the old symmetry.dat is no longer written unconditionally (the report is always written)"
+if [ -e symmetry.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} a report file exists without --save-report"
     FAIL=$((FAIL+1))
 else
     echo -e "   -> ${GREEN}Verified:${NC} no symmetry.dat, no stb_symmetry_report.txt"
     PASS=$((PASS+1))
 fi
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
+check_success stb_symmetry_references.bib
+check_contains "@article{Soler2002," stb_symmetry_references.bib
 
 echo "Verifying the report has the numbered section headers, run metadata, and no vacuum note for a genuine 3D bulk structure"
 check_contains "===== STB-SYMMETRY REPORT =====" log_p1.txt
@@ -459,13 +459,15 @@ check_contains "1    | O   | 0.0000" log_molecule.txt
 check_contains "2    | H   | 0.0000" log_molecule.txt
 check_contains "3    | H   | 0.0000" log_molecule.txt
 
-echo "Verifying nonzero, non-trivial distortion on a deliberately asymmetric water (one H displaced, breaking the C2 axis -> detected as Cs, not C2v)"
+echo "Verifying a deliberately asymmetric water (one H displaced, breaking the C2 axis) is detected as Cs, not C2v,"
+echo "  and sits exactly on its Cs operations (the mirror is the molecular plane, so the distortion is 0)"
 stb-symmetry --file water_distorted.fdf --format fdf --no-intro > log_water_distorted.txt 2>&1
 check_exit_code $? 0
 check_contains "Point group                | Cs" log_water_distorted.txt
-check_contains "1    | O   | 0.0079" log_water_distorted.txt
-check_contains "2    | H   | 0.0628" log_water_distorted.txt
-check_contains "3    | H   | 0.0628" log_water_distorted.txt
+check_contains "Symmetry operations        | 2" log_water_distorted.txt
+check_contains "1    | O   | 0.0000" log_water_distorted.txt
+check_contains "2    | H   | 0.0000" log_water_distorted.txt
+check_contains "3    | H   | 0.0000" log_water_distorted.txt
 
 echo "Verifying a wire (2 vacuum axes) gets neither LAYER GROUP nor POINT GROUP (no rod-group equivalent exists)"
 stb-symmetry --file wire.fdf --format fdf --no-intro > log_wire.txt 2>&1
@@ -521,13 +523,13 @@ check_not_contains "Layer-group symprec scan:" log_scan_mol.txt
 #     symmetry.dat left by an older version of this tool is cleaned up
 #     automatically. ---
 echo -e "\n--- Testing --save-report, and stale symmetry.dat cleanup ---"
-rm -f stb_symmetry_report.txt
+rm -f stb_symmetry_report*.txt stb_symmetry_references*.bib
 stb-symmetry --file structure.fdf --format fdf --symprec 1e-4 --save-report --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
 check_success stb_symmetry_report.txt
 check_contains "\[0\] RUN METADATA" stb_symmetry_report.txt
 check_contains "\[11\] SUMMARY & FILES" stb_symmetry_report.txt
-check_contains "Report         : ./stb_symmetry_report.txt" stb_symmetry_report.txt
+check_contains "Report         : stb_symmetry_report.txt" stb_symmetry_report.txt
 check_contains "Space group         | P1 (No. 1)" stb_symmetry_report.txt
 
 echo "Testing a stale symmetry.dat from a previous (older) version is removed"
@@ -546,10 +548,11 @@ fi
 # --- 5. --output-dir: writes into (and creates) a chosen directory ---
 echo -e "\n--- Testing --output-dir ---"
 rm -rf out_dir
+rm -f stb_symmetry_report*.txt stb_symmetry_references*.bib
 stb-symmetry --file structure.fdf --format fdf --output-dir out_dir --symprec 1e-4 --save-report --no-intro > log_outdir.txt 2>&1
 check_exit_code $? 0
-check_success out_dir/references.bib
-check_success out_dir/stb_symmetry_report.txt
+check_success stb_symmetry_references.bib
+check_success stb_symmetry_report.txt
 if [ -e out_dir/symmetry.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} out_dir/symmetry.dat was written (should not be)"
     FAIL=$((FAIL+1))
@@ -600,14 +603,14 @@ check_contains "stb-symmetry" log_version.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.5) ---"
 
 echo "Testing: navigate 2.5 -> nacl.fdf -> format=1(fdf) -> default output dir -> scan=y -> operations=n -> compare=skip -> write-refined=skip -> save-report=skip -> view=skip"
-printf '2.5\nnacl.fdf\n1\n\ny\nn\n\n\n\n\n' | stb-suite > log_menu.txt 2>&1
+printf '2.5\nnacl.fdf\n1\n\ny\nn\n\n\n\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Fm-3m" log_menu.txt
 check_contains "\[5\] TOLERANCE SENSITIVITY SCAN" log_menu.txt
 check_not_contains "SYMMETRY OPERATIONS" log_menu.txt
 
 echo "Testing: navigate 2.5 -> structure.fdf -> format=1(fdf) -> default output dir -> scan=n -> operations=y -> compare=siesta.STRUCT_OUT(format 2) -> write-refined=refined_menu.fdf -> save-report=y -> view=skip"
-rm -f refined_menu.fdf stb_symmetry_report.txt
-printf '2.5\nstructure.fdf\n1\n\nn\ny\nsiesta.STRUCT_OUT\n2\nrefined_menu.fdf\ny\nn\n' | stb-suite > log_menu_compare.txt 2>&1
+rm -f refined_menu.fdf stb_symmetry_report*.txt stb_symmetry_references*.bib
+printf '2.5\nstructure.fdf\n1\n\nn\ny\nsiesta.STRUCT_OUT\n2\nrefined_menu.fdf\nn\n' | stb-suite > log_menu_compare.txt 2>&1
 check_contains "\[9\] SYMMETRY COMPARISON" log_menu_compare.txt
 check_contains "Symmetry PRESERVED between the two structures: both P-1 (No. 2, 2 ops)." log_menu_compare.txt
 check_success refined_menu.fdf

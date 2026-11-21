@@ -346,7 +346,7 @@ if command -v mace_run_train &> /dev/null && ls -d "$MLFF_FIX"/mlff_config_* > /
     CM="--custom-model ft/model/ft_compiled.model --custom-model-card ft/model/mlff_model_card.json"
 
     echo "Testing: the report shows the card section by section and checks the run against the trained range"
-    rm -f stb_mlmd_report.txt
+    rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
     stb-mlmd --file ft/mlff_config_001/calc.fdf $CM --n-steps 60 --stride 10 --seed 1 --save-report \
         -o ft_traj.xsf --output-structure ft_final.fdf --no-intro > log_ft.txt 2>&1
     check_exit_code $? 0
@@ -425,11 +425,11 @@ fi
 
 # --- 7. --save-report ---
 echo -e "\n--- Testing --save-report ---"
-rm -f stb_mlmd_report.txt
+rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
 stb-mlmd --file si_bulk.fdf --n-steps 10 --save-report --no-intro > log_savereport.txt 2>&1
 check_success stb_mlmd_report.txt
 check_contains "STB-MLMD REPORT" stb_mlmd_report.txt
-rm -f stb_mlmd_report.txt
+rm -f stb_mlmd_report*.txt stb_mlmd_references*.bib
 
 
 # --- 8. Robustness / errors ---

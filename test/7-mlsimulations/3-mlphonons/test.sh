@@ -419,11 +419,12 @@ check_contains "custom-model-card" log_custommodel_nocard.txt
 
 # --- 3. --save-report ---
 echo -e "\n--- Testing --save-report ---"
+rm -f stb_mlphonons_report*.txt stb_mlphonons_references*.bib
 stb-mlphonons --file si_bulk.fdf --dim 1 1 1 --mesh 8 8 8 --band-points 11 \
     -o report_test --save-report --no-intro > log_savereport.txt 2>&1
 check_exit_code $? 0
-check_success report_test/stb_mlphonons_report.txt
-check_contains "STB-MLPHONONS REPORT" report_test/stb_mlphonons_report.txt
+check_success stb_mlphonons_report.txt
+check_contains "STB-MLPHONONS REPORT" stb_mlphonons_report.txt
 rm -rf report_test
 
 
@@ -473,7 +474,7 @@ check_contains "convergence-tol" log_help.txt
 # --- 5. Interactive path (stb-suite, shortcut 7.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 7.3) ---"
 rm -rf interactive_out
-printf '7.3\nsi_bulk.fdf\n\nsmall\n\n1 1 1\ninteractive_out\n\nn\nn\nn\ny\nn\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
+printf '7.3\nsi_bulk.fdf\n\nsmall\n\n1 1 1\ninteractive_out\n\nn\nn\nn\ny\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success interactive_out/bands.png
 check_success interactive_out/dos.png
@@ -484,7 +485,7 @@ check_success interactive_out/plot/bands.gplot
 if [ -n "$QUICK_MODEL" ]; then
     echo "Testing: the 7.3 menu asks for the device with a custom model too"
     rm -rf interactive_custom_out
-    printf '7.3\nsi8.fdf\n%s\n%s\ncpu\n1 1 1\ninteractive_custom_out\n\nn\nn\nn\nn\nn\nn\nn\n\n0\n' \
+    printf '7.3\nsi8.fdf\n%s\n%s\ncpu\n1 1 1\ninteractive_custom_out\n\nn\nn\nn\nn\nn\nn\n\n0\n' \
         "$QUICK_MODEL" "$QUICK_CARD" | MPLBACKEND=Agg stb-suite > log_menu_custom.txt 2>&1
     check_exit_code $? 0
     check_contains "Device \[cpu/cuda" log_menu_custom.txt

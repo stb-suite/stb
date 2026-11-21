@@ -22,6 +22,14 @@ version before) and **Added** (new options and tools).
   folder given as `-p <folder>`) is refused: every tool stops with an `[ERROR]` before copying it into
   a run folder. The check at the end of each tool (pseudopotentials vs the `.fdf`) reports such a file
   in a folder made by hand as a red `[ERROR]`; its other findings stay warnings.
+- Full-relativistic files with no scalar-relativistic part (68 of the 71 nc-fr-04 PBEsol files of
+  `-p dojo-fr-pbesol`, all but Ge, Sb, Te) in an input without spin-orbit: SIESTA 5.4.2 stops with
+  'generation of scalar-relativistic part is not available yet'. `stb-inputfile`, which never writes
+  spin-orbit, refuses them before writing `calc.fdf`; the end-of-run check reports them as an
+  `[ERROR]`. The bank README said the `fr` files also run without SOC; true only for `fr_pbe`.
+- The end-of-run level check (pseudopotentials vs `.fdf`) took a commented `# %block XC.mix` for a
+  real one and then skipped the functional comparison. The template of `stb-inputfile` has that
+  comment, so no `calc.fdf` written by it was ever checked. Commented blocks are now ignored.
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

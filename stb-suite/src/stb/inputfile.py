@@ -19,7 +19,8 @@ from stb.core import structure_io, kspace, structure_checks
 from stb.core import symmetry as core_symmetry
 from stb.core import citations
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
-from stb.core.pseudopotentials import add_nonperturbative_block, refuse_unusable_pseudo
+from stb.core.pseudopotentials import (add_nonperturbative_block, refuse_unusable_pseudo,
+                                       files_without_scalar_part, scalar_part_missing_message)
 from stb.core.pseudopotentials import note_pseudo_folder, BANK_HELP, is_bank, canonical_bank, resolve_pseudo_source, detect_pseudo_bank
 from stb.core.ase_view import view_structure_interactive
 
@@ -1202,6 +1203,22 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             print_dual(color_text(
                 "[NOTE] Vacuum-padded axis detected: MD.VariableCell set to false (the template's "
                 "true would shrink the vacuum). Set it back by hand for a bulk-like relaxation.", 'yellow'), f_out)
+
+        # Refuse, before writing anything, a pseudopotential SIESTA cannot use in this input: ekb = 0
+        # projectors, or full-relativistic files with no scalar-relativistic part (this tool never
+        # writes spin-orbit; most nc-fr-04 PBEsol files)
+        if pp_path and os.path.isdir(pp_path):
+            chosen = []
+            for lb in structure_io.species_dict(fdf_structure):
+                psml = os.path.join(pp_path, f"{lb}.psml")
+                if os.path.exists(psml):                 # .psml first, as copy_pseudopotentials does
+                    chosen.append(psml)
+            for psml in chosen:
+                refuse_unusable_pseudo(psml)
+            no_scalar = files_without_scalar_part(chosen)
+            if no_scalar:
+                print_dual(color_text(f"[ERROR] {scalar_part_missing_message(no_scalar)}", 'red'), f_out)
+                raise SystemExit(1)
 
         # Write the output file
         with open(output_file, 'w') as f_output:

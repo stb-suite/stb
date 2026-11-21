@@ -50,7 +50,10 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
   - *Correction note, 18/11/2026: an earlier version of this item said stringent adds d semicore states. That was wrong.*
 - **fr_*:**
   - Required for `Spin spin-orbit`. The `sr_*` files abort with `The PSML file does not contain lj projs`.
-  - They also run without SOC, but do not mix absolute energies from `fr` and `sr` files.
+  - Without SOC: the `fr_pbe` files run (do not mix absolute energies from `fr` and `sr` files).
+    Of the `fr_pbesol` files only Ge, Sb and Te do; the other 68 have no scalar-relativistic
+    projector set, and SIESTA 5.4.2 stops with 'generation of scalar-relativistic part is not
+    available yet'. The tools refuse that combination with an `[ERROR]`; use `-p dojo-pbesol`.
   - There is no FR table for LDA.
 - **sr3plus_*:** lanthanides Ce–Lu (no La) with the 4f electrons frozen in the core. Use them only for Ln3+ compounds. They do not describe f physics (magnetism, 4f states).
 - Usage in stb: `-p dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]` (words in any order,

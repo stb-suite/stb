@@ -307,6 +307,27 @@ def refuse_unusable_pseudo(path):
         raise SystemExit(1)
 
 
+def scalar_part_missing_message(names):
+    """The [ERROR] text for full-relativistic .psml files with no scalar-relativistic part used
+    without spin-orbit."""
+    return (f"{', '.join(names)} {'has' if len(names) == 1 else 'have'} only lj projectors (no scalar-relativistic "
+            "part, like 68 of the 71 PseudoDojo nc-fr-04 PBEsol files): without 'Spin spin-orbit' SIESTA 5.4.2 "
+            "stops with 'generation of scalar-relativistic part is not available yet'. Use -p dojo-pbesol for "
+            "a calculation without spin-orbit, or ask for spin-orbit.")
+
+
+def files_without_scalar_part(paths):
+    """Base names of the .psml files in `paths` that have lj projectors and no scalar-relativistic
+    set: SIESTA can use them only with spin-orbit."""
+    out = []
+    for path in paths:
+        if path and path.endswith(".psml"):
+            info = read_pseudo_header(path)
+            if info and info.get("lj") and info.get("sr_part") is False:
+                out.append(os.path.basename(path))
+    return out
+
+
 def get_required_pseudos(symbols, pseudo_dir):
     """Checks whether a pseudopotential file (.psf preferred, .psml
     fallback) exists in `pseudo_dir` for every symbol in `symbols`.
@@ -558,7 +579,7 @@ def _fdf_level(text):
     from stb.core.fdf_directives import parse_directives, normalize_label
     d = parse_directives(text)
     species = []
-    m = re.search(r"%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)%endblock", text, re.I | re.S)
+    m = re.search(r"^[ \t]*%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)^[ \t]*%endblock", text, re.I | re.S | re.M)
     if m:
         for line in m.group(1).splitlines():
             parts = line.split("#", 1)[0].split()
@@ -572,7 +593,7 @@ def _fdf_level(text):
     auth = (d.get("xcauthors") or "").split()
     func = func[0] if func else ""
     auth = auth[0] if auth else ""
-    if re.search(r"%block\s+xc[._-]?mix", text, re.I) or func.upper() in ("VDW", "LIBXC"):
+    if re.search(r"^[ \t]*%block\s+xc[._-]?mix", text, re.I | re.M) or func.upper() in ("VDW", "LIBXC"):
         xc, how = None, None
     elif not func and not auth:
         xc, how = "LDA", "no XC.Functional/XC.Authors: SIESTA's default, LDA"
@@ -606,7 +627,7 @@ def missing_nonperturbative(text):
     by the perturbative scheme, which fails for them. [] for a structure-only file."""
     from stb.core.fdf_directives import parse_directives, normalize_label
     d = parse_directives(text)
-    m = re.search(r"%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)%endblock", text, re.I | re.S)
+    m = re.search(r"^[ \t]*%block\s+chemical[._-]?species[._-]?label\s*\n(.*?)^[ \t]*%endblock", text, re.I | re.S | re.M)
     if not m:
         return []
     labels = []
@@ -623,7 +644,7 @@ def missing_nonperturbative(text):
     if flag and flag[0].lower().strip(".") in ("true", "t", "yes"):
         return []
     blocks = {}
-    for blk in re.finditer(r"%block\s+(\S+)\s*\n(.*?)%endblock", text, re.I | re.S):
+    for blk in re.finditer(r"^[ \t]*%block\s+(\S+)\s*\n(.*?)^[ \t]*%endblock", text, re.I | re.S | re.M):
         blocks.setdefault(normalize_label(blk.group(1)), blk.group(2))   # SIESTA keeps the FIRST block
     scheme = blocks.get("paopolarizationscheme", "")
     explicit = blocks.get("paobasis", "")
@@ -723,6 +744,10 @@ def check_pseudo_level(folder):
                                 for k, v in sorted(wrong.items()))
                     + ". SIESTA runs anyway, with an inconsistent level of theory: use pseudopotentials of the "
                       f"calculation's functional{_suggest_table(xc, soc)} or change XC.Functional/XC.Authors."))
+        no_scalar = [f for f, info in headers.items() if info.get("lj") and info.get("sr_part") is False]
+        if no_scalar and not soc and (how is not None or xc is not None):
+            warnings.append(("error", f"{root} does not ask for spin-orbit, but "
+                             + scalar_part_missing_message(no_scalar)))
         rel = {}
         for fname, info in headers.items():
             rel.setdefault("full" if info["lj"] else "scalar", []).append(fname)

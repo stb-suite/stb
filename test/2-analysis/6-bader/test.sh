@@ -39,6 +39,16 @@ check_absent() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -74,51 +84,54 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Basic run ---
 echo -e "\n--- Testing a basic run (--label Sn3O4) ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --output-dir out1 --save-report > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "Z_vals detected" log_basic.txt
-check_success out1/stb_bader_report.txt
-check_contains "===== STB-BADER REPORT =====" out1/stb_bader_report.txt
-check_contains "\[0\] RUN METADATA" out1/stb_bader_report.txt
-check_contains "\[1\] VALENCE (Z_val) SETUP" out1/stb_bader_report.txt
-check_contains "\[2\] PYBADER CONFIGURATION" out1/stb_bader_report.txt
-check_contains "\[3\] PER-ATOM BADER POPULATIONS" out1/stb_bader_report.txt
-check_contains "\[4\] PER-SPECIES SUMMARY" out1/stb_bader_report.txt
-check_contains "\[5\] DIAGNOSTICS & WARNINGS" out1/stb_bader_report.txt
-check_contains "\[6\] REFERENCES" out1/stb_bader_report.txt
-check_contains "\[7\] SUMMARY & FILES" out1/stb_bader_report.txt
-check_contains "Refine method    | neargrid" out1/stb_bader_report.txt
-check_contains "Total Integrated:" out1/stb_bader_report.txt
+check_success stb_bader_report.txt
+check_contains "===== STB-BADER REPORT =====" stb_bader_report.txt
+check_contains "\[0\] RUN METADATA" stb_bader_report.txt
+check_contains "\[1\] VALENCE (Z_val) SETUP" stb_bader_report.txt
+check_contains "\[2\] PYBADER CONFIGURATION" stb_bader_report.txt
+check_contains "\[3\] PER-ATOM BADER POPULATIONS" stb_bader_report.txt
+check_contains "\[4\] PER-SPECIES SUMMARY" stb_bader_report.txt
+check_contains "\[5\] DIAGNOSTICS & WARNINGS" stb_bader_report.txt
+check_contains "\[6\] REFERENCES" stb_bader_report.txt
+check_contains "\[7\] SUMMARY & FILES" stb_bader_report.txt
+check_contains "Refine method    | neargrid" stb_bader_report.txt
+check_contains "Total Integrated:" stb_bader_report.txt
 check_success out1/Sn3O4.cube
-check_success out1/references.bib
-check_contains "@article{Soler2002," out1/references.bib
+check_success stb_bader_references.bib
+check_contains "@article{Soler2002," stb_bader_references.bib
 
 echo "Testing: essentially-zero-population atoms are flagged (this fixture genuinely has some)"
 check_contains "WARN\] Atom(s).*essentially zero Bader population" log_basic.txt
-check_contains "WARNING\] Atom(s).*essentially zero Bader population" out1/stb_bader_report.txt
+check_contains "WARNING\] Atom(s).*essentially zero Bader population" stb_bader_report.txt
 
 echo "Testing: Volume/SurfDist columns and per-species summary are reported"
 check_contains "Vol(Å³)" log_basic.txt
 check_contains "SurfD(Å)" log_basic.txt
-check_contains "Vol(Å³)" out1/stb_bader_report.txt
-check_contains "Elem | N | Mean(e-) | Std(e-)" out1/stb_bader_report.txt
+check_contains "Vol(Å³)" stb_bader_report.txt
+check_contains "Elem | N | Mean(e-) | Std(e-)" stb_bader_report.txt
 
 
 # --- 3. --speed fast uses PyBader's own on-grid profile ---
 echo -e "\n--- Testing --speed fast ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --speed fast --output-dir out2 --save-report > log_fast.txt 2>&1
 check_exit_code $? 0
 check_contains "CAUTION.*--speed fast trades" log_fast.txt
-check_contains "Method           | ongrid" out2/stb_bader_report.txt
+check_contains "Method           | ongrid" stb_bader_report.txt
 
 
 # --- 4. --threads ---
 echo -e "\n--- Testing --threads 2 ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --threads 2 --output-dir out3 --save-report > log_threads.txt 2>&1
 check_exit_code $? 0
-check_contains "Threads          | 2" out3/stb_bader_report.txt
+check_contains "Threads          | 2" stb_bader_report.txt
 
 echo "Testing: --threads 0 is rejected"
 stb-bader --label Sn3O4 --no-intro --threads 0 > log_threads0.txt 2>&1
@@ -129,18 +142,20 @@ check_contains "must be at least 1" log_threads0.txt
 # --- 5. --vacuum-tol ---
 echo -e "\n--- Testing --vacuum-tol ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --vacuum-tol 0.001 --output-dir out4 --save-report > log_vac.txt 2>&1
 check_exit_code $? 0
-check_contains "Vacuum tolerance | 0.001" out4/stb_bader_report.txt
+check_contains "Vacuum tolerance | 0.001" stb_bader_report.txt
 
 
 # --- 6. --no-cube removes the intermediate .cube file(s) ---
 echo -e "\n--- Testing --no-cube ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --no-cube --output-dir out5 --save-report > log_nocube.txt 2>&1
 check_exit_code $? 0
 check_absent out5/Sn3O4.cube
-check_contains "Cube file(s)   : deleted (--no-cube)" out5/stb_bader_report.txt
+check_contains "Cube file(s)   : deleted (--no-cube)" stb_bader_report.txt
 
 
 # --- 6b. --export-volumes writes one .cube per atom inside --output-dir,
@@ -160,10 +175,11 @@ check_absent Bader-atoms-0.cube
 # --- 7. --ref pointing at a missing file falls back to hardcoded defaults ---
 echo -e "\n--- Testing --ref with a missing file (falls back, doesn't abort) ---"
 
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --ref does_not_exist.out --output-dir out7 --save-report > log_fallback.txt 2>&1
 check_exit_code $? 0
 check_contains "USING DEFAULT VALUES" log_fallback.txt
-check_contains "Hardcoded Defaults (FALLBACK)" out7/stb_bader_report.txt
+check_contains "Hardcoded Defaults (FALLBACK)" stb_bader_report.txt
 
 
 # --- 8. Missing .RHO aborts with a non-zero exit code ---
@@ -174,17 +190,18 @@ check_exit_code $? 1
 check_contains "Grid file 'does_not_exist.RHO' not found" log_missing_rho.txt
 
 
-# --- 9. --output-dir / --save-report: a plain run writes references.bib
+# --- 9. --output-dir / --save-report: a plain run writes stb_bader_references.bib
 #     only; the old <label>_BADER.txt is no longer written unconditionally
 #     (and a stale one from an older version is cleaned up automatically) ---
 echo -e "\n--- Testing default output (no --save-report) and stale <label>_BADER.txt cleanup ---"
 
 rm -rf out8
 echo "stale content from an older version" > Sn3O4_BADER.txt
+rm -f stb_bader_report*.txt stb_bader_references*.bib
 timeout 120 stb-bader --label Sn3O4 --no-intro --output-dir out8 > log_default.txt 2>&1
 check_exit_code $? 0
-check_success out8/references.bib
-if [ -e out8/stb_bader_report.txt ] || [ -e Sn3O4_BADER.txt ]; then
+check_success stb_bader_references.bib
+if [ -e Sn3O4_BADER.txt ]; then
     echo -e "   -> ${RED}Failed:${NC} a report file exists without --save-report, or the stale file wasn't cleaned up"
     FAIL=$((FAIL+1))
 else
@@ -283,7 +300,7 @@ echo "Testing: --help documents --label, --output-dir, --save-report, --speed, -
 stb-bader --help > log_help.txt 2>&1
 check_contains "label" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "speed" log_help.txt
 check_contains "threads" log_help.txt
 check_contains "vacuum-tol" log_help.txt
@@ -295,10 +312,11 @@ check_contains "export-volumes" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.6) ---"
 
 echo "Testing: navigate 2.6 -> label Sn3O4 -> default output dir -> default ref -> speed 1 -> no vacuum-tol -> no threads -> keep cube -> no export -> save-report=y -> quit"
-printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\ny\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+rm -f stb_bader_report*.txt stb_bader_references*.bib
+printf '2.6\nSn3O4\n\n\n1\n\n\ny\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success stb_bader_report.txt
-check_success references.bib
+check_success stb_bader_references.bib
 
 
 popd > /dev/null

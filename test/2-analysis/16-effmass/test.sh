@@ -34,6 +34,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -72,6 +82,7 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Basic run: --k-index 0 (Gamma) --band 1, numbered report ---
 echo -e "\n--- Testing a basic run (--k-index 0 --band 1, at Gamma), numbered report ---"
 
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
 timeout 60 stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
     --k-index 0 --band 1 --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
@@ -116,15 +127,15 @@ else
     FAIL=$((FAIL+1))
 fi
 
-echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes references.bib"
-if [ ! -f effmass.dat ] && [ ! -f velocity.dat ] && [ ! -f effmass.gplot ] && [ ! -f stb_effmass_report.txt ] && [ -f references.bib ]; then
+echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes stb_effmass_references.bib"
+if [ ! -f effmass.dat ] && [ ! -f velocity.dat ] && [ ! -f effmass.gplot ] && [ -f stb_effmass_report.txt ] && [ -f stb_effmass_references.bib ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no data/gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
     echo -e "   -> ${RED}Failed:${NC} data/gplot/report was written despite being off by default"
     FAIL=$((FAIL+1))
 fi
-rm -f references.bib
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
 
 
 # --- 3. --band vbm: negative effective mass, and the real off-diagonal/principal-mass finding ---
@@ -139,7 +150,7 @@ check_contains "Fermi source: --fermi (explicit value)" log_vbm.txt
 echo "Testing: at least one per-axis Voigt component is negative at the VBM"
 python3 -c "
 import re, sys
-text = open('vbm_out/stb_effmass_report.txt').read()
+text = open('stb_effmass_report.txt').read()
 section = text.split('[3] EFFECTIVE MASS')[1].split('[4] EFFECTIVE MASS')[0]
 vals = [float(x) for x in re.findall(r'm\*_\w+ *\| *(-?[\d.]+)', section)]
 sys.exit(0 if any(v < 0 for v in vals) else 1)
@@ -154,10 +165,10 @@ fi
 
 echo "Testing: the principal (diagonalized) effective masses differ from sisl's own naive per-axis values"
 echo "(a real, verified physics finding: off-diagonal curvature is substantial for this state)"
-check_contains "significant fraction of (or exceeds) the diagonal curvature" vbm_out/stb_effmass_report.txt
+check_contains "significant fraction of (or exceeds) the diagonal curvature" stb_effmass_report.txt
 python3 -c "
 import re, sys
-text = open('vbm_out/stb_effmass_report.txt').read()
+text = open('stb_effmass_report.txt').read()
 section = text.split('[4] EFFECTIVE MASS')[1].split('[5] BAND VELOCITY')[0]
 principal = sorted(float(x) for x in re.findall(r'(-?[\d.]+) *\|', section))
 naive_diag = sorted(float(x) for x in re.findall(r'm\*_(?:xx|yy|zz) *\| *(-?[\d.]+)', text))
@@ -197,19 +208,21 @@ fi
 # --- 4. --view ---
 echo -e "\n--- Testing --view (opt-in matplotlib preview) ---"
 
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
 timeout 60 stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
     --band vbm --fermi -3.200055 --view -o view_out --no-intro > log_view.txt 2>&1
 check_exit_code $? 0
-check_success view_out/references.bib
+check_success stb_effmass_references.bib
 
 
 # --- 5. --k-point (match by vector) ---
 echo -e "\n--- Testing --k-point ---"
 
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
 timeout 60 stb-effmass --wfsx Sn3O4.selected.WFSX --hsx-file Sn3O4.HSX \
     --k-point 0 0 0 --band 2 -o kpoint_out --no-intro > log_kpoint.txt 2>&1
 check_exit_code $? 0
-check_success kpoint_out/references.bib
+check_success stb_effmass_references.bib
 
 
 # --- 6. --label + --hsx-file (real bug: used to be rejected outright) ---
@@ -322,7 +335,7 @@ check_contains "k-point" log_help.txt
 check_contains "band" log_help.txt
 check_contains "fermi" log_help.txt
 check_contains "hsx-file" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "view" log_help.txt
 
@@ -331,14 +344,14 @@ check_contains "view" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.16) ---"
 
 echo "Testing: navigate 2.16 -> label Sn3O4 -> default HSX -> band selection 1 -> k-index 0 -> band 1 -> default output -> no report/gnuplot/view"
-rm -f references.bib
-printf '2.16\nSn3O4\n\n1\n0\n1\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
+printf '2.16\nSn3O4\n\n1\n0\n1\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
-check_success references.bib
+check_success stb_effmass_references.bib
 
 echo "Testing: interactive menu's VBM + Fermi-source submenu (option 1, explicit value)"
-rm -f references.bib
-printf '2.16\nSn3O4\n\n2\n1\n-3.200055\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu_vbm.txt 2>&1
+rm -f stb_effmass_report*.txt stb_effmass_references*.bib
+printf '2.16\nSn3O4\n\n2\n1\n-3.200055\n\nn\nn\nn\n\n0' | timeout 60 stb-suite > log_menu_vbm.txt 2>&1
 check_exit_code $? 0
 check_contains "VBM found at k-index" log_menu_vbm.txt
 

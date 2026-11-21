@@ -93,7 +93,7 @@ pushd "$TEST_DIR" > /dev/null
 #     energy grid spacing 0.01 eV) -- --sigma is in meV and --size is
 #     auto-computed (not given here) ---
 echo -e "\n--- Testing default run (real fixture, --sigma in meV, auto --size, --no-plot) ---"
-rm -f filtered.dat references.bib
+rm -f filtered.dat stb_convdos_report*.txt stb_convdos_references*.bib
 stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 check_success filtered.dat
@@ -130,30 +130,24 @@ check_contains "s      | 8.0246  | 8.0226" log_default.txt
 echo "Verifying no non-uniform-grid warning on the real (uniformly sampled) fixture"
 check_not_contains "energy grid spacing varies" log_default.txt
 
-echo "Verifying references.bib is written with the SIESTA citation"
-check_success references.bib
-check_contains "@article{Soler2002," references.bib
+echo "Verifying stb_convdos_references.bib is written with the SIESTA citation"
+check_success stb_convdos_references.bib
+check_contains "@article{Soler2002," stb_convdos_references.bib
 
 
 # --- 2a. --save-report persists the exact same report to disk ---
 echo -e "\n--- Testing --save-report ---"
-rm -f stb_convdos_report.txt
+rm -f stb_convdos_report*.txt stb_convdos_references*.bib
 stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --save-report --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
 check_success stb_convdos_report.txt
 check_contains "\[6\] SUMMARY & FILES" stb_convdos_report.txt
-check_contains "Report         : ./stb_convdos_report.txt" stb_convdos_report.txt
+check_contains "Report         : stb_convdos_report.txt" stb_convdos_report.txt
 
-echo "Verifying no report file without --save-report"
-rm -f stb_convdos_report.txt
+echo "Verifying the report is always written"
+rm -f stb_convdos_report*.txt stb_convdos_references*.bib
 stb-convdos --file dos_total.dat --sigma 50 --out filtered.dat --no-plot --no-intro > /dev/null 2>&1
-if [ -e stb_convdos_report.txt ]; then
-    echo -e "   -> ${RED}Failed:${NC} stb_convdos_report.txt exists without --save-report"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} no stb_convdos_report.txt without --save-report"
-    PASS=$((PASS+1))
-fi
+check_success stb_convdos_report.txt
 
 
 # --- 2b. Explicit --size overrides the auto-computed default ---
@@ -373,10 +367,11 @@ rm -f dos_output/bad_single_col.dat
 
 echo "Testing: --dir with --save-report"
 rm -rf dos_output_filtered
+rm -f stb_convdos_report*.txt stb_convdos_references*.bib
 stb-convdos --dir dos_output --sigma 50 --no-plot --save-report --no-intro > log_dir_report.txt 2>&1
 check_exit_code $? 0
-check_success dos_output_filtered/stb_convdos_report.txt
-check_contains "\[6\] SUMMARY & FILES" dos_output_filtered/stb_convdos_report.txt
+check_success stb_convdos_report.txt
+check_contains "\[6\] SUMMARY & FILES" stb_convdos_report.txt
 
 echo "Testing: --dir with --out is rejected"
 stb-convdos --dir dos_output --out f.dat --sigma 50 --no-intro > log_dir_bad1.txt 2>&1
@@ -393,6 +388,7 @@ check_contains "Directory not found" log_dir_missing.txt
 
 echo "Testing: --dir pointing to a folder with no .dat files"
 mkdir -p empty_dir
+rm -f stb_convdos_report*.txt stb_convdos_references*.bib
 stb-convdos --dir empty_dir --sigma 50 --no-intro > log_dir_empty.txt 2>&1
 check_exit_code $? 1
 check_contains "No .dat files found" log_dir_empty.txt
@@ -402,31 +398,26 @@ check_contains "No .dat files found" log_dir_empty.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.3) ---"
 
 echo "Testing: navigate 2.3 -> single file -> dos_total.dat -> default output -> sigma 50 meV -> auto size -> no plot -> save-report=N"
-rm -f dos_filtered.dat stb_convdos_report.txt
-printf '2.3\n1\ndos_total.dat\n\n\n50\n\nn\nn\n' | stb-suite > log_menu.txt 2>&1
+rm -f dos_filtered.dat stb_convdos_report*.txt stb_convdos_references*.bib
+printf '2.3\n1\ndos_total.dat\n\n\n50\n\nn\n' | stb-suite > log_menu.txt 2>&1
 check_success dos_filtered.dat
 check_contains "# Energy(eV) s_filtered p_filtered d_filtered f_filtered" dos_filtered.dat
-if [ -e stb_convdos_report.txt ]; then
-    echo -e "   -> ${RED}Failed:${NC} a report file was created despite the default (N) save-report answer"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} no report file created (default save-report answer is N)"
-    PASS=$((PASS+1))
-fi
+check_success stb_convdos_report.txt
 
 echo "Testing: navigate 2.3 -> single file -> dos_total.dat -> default output -> FWHM 117.741 meV -> auto size -> no plot"
 rm -f dos_filtered.dat
-printf '2.3\n1\ndos_total.dat\n\n2\n117.741\n\nn\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
+printf '2.3\n1\ndos_total.dat\n\n2\n117.741\n\nn\n' | stb-suite > log_menu_fwhm.txt 2>&1
 check_success dos_filtered.dat
 check_contains "Sigma       | 50.000 meV" log_menu_fwhm.txt
 
 echo "Testing: navigate 2.3 -> folder -> dos_output -> default output dir -> sigma 50 meV -> auto size -> no plot -> save-report=y"
 rm -rf dos_output_filtered
+rm -f stb_convdos_report*.txt stb_convdos_references*.bib
 printf '2.3\n2\ndos_output\n\n\n50\n\nn\ny\n' | stb-suite > log_menu_dir.txt 2>&1
 check_success dos_output_filtered/dos_total.dat
-check_success dos_output_filtered/stb_convdos_report.txt
+check_success stb_convdos_report.txt
 check_contains "Process:" log_menu_dir.txt
-check_contains "Mode           : directory (recursive)" dos_output_filtered/stb_convdos_report.txt
+check_contains "Mode           : directory (recursive)" stb_convdos_report.txt
 
 
 popd > /dev/null

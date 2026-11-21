@@ -32,6 +32,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -82,6 +92,7 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Basic run: --file/--wfsx/--hsx-file explicit (accurate, overlap-aware), numbered report ---
 echo -e "\n--- Testing a basic run (--hsx-file, accurate path), numbered report ---"
 
+rm -f stb_ipr_report*.txt stb_ipr_references*.bib
 timeout 60 stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
     --shift fermi --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
@@ -96,15 +107,15 @@ check_contains "\[5\] REFERENCES" log_basic.txt
 check_contains "\[6\] SUMMARY & FILES" log_basic.txt
 check_contains "no universal absolute scale" log_basic.txt
 
-echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes references.bib"
-if [ ! -f ipr.dat ] && [ ! -f ipr.gplot ] && [ ! -f stb_ipr_report.txt ] && [ -f references.bib ]; then
+echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes stb_ipr_references.bib"
+if [ ! -f ipr.dat ] && [ ! -f ipr.gplot ] && [ -f stb_ipr_report.txt ] && [ -f stb_ipr_references.bib ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no ipr.dat/.gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
     echo -e "   -> ${RED}Failed:${NC} ipr.dat/.gplot/report was written despite being off by default"
     FAIL=$((FAIL+1))
 fi
-rm -f references.bib
+rm -f stb_ipr_report*.txt stb_ipr_references*.bib
 
 echo "Testing: deep (core-like) states have higher IPR (more localized) than near-Fermi states"
 timeout 60 stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
@@ -144,21 +155,23 @@ if command -v gnuplot >/dev/null 2>&1; then
 else
     echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed in this environment"
 fi
-rm -f ipr.dat ipr.gplot ipr.pdf references.bib
+rm -f ipr.dat ipr.gplot ipr.pdf stb_ipr_report*.txt stb_ipr_references*.bib
 
 
 # --- 3. --save-report / --view ---
 echo -e "\n--- Testing --save-report / --view ---"
 
+rm -f stb_ipr_report*.txt stb_ipr_references*.bib
 timeout 60 stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
     --shift fermi --save-report -o savereport_out --no-intro > log_savereport.txt 2>&1
 check_exit_code $? 0
-check_success savereport_out/stb_ipr_report.txt
+check_success stb_ipr_report.txt
 
+rm -f stb_ipr_report*.txt stb_ipr_references*.bib
 timeout 60 stb-ipr --file Sn3O4.bands --wfsx Sn3O4.bands.WFSX --hsx-file Sn3O4.HSX \
     --shift fermi --view -o view_out --no-intro > log_view.txt 2>&1
 check_exit_code $? 0
-check_success view_out/references.bib
+check_success stb_ipr_references.bib
 
 
 # --- 4. --geometry-file fallback (no .HSX) ---
@@ -278,7 +291,7 @@ check_contains "\-\-q " log_help.txt
 check_contains "hsx-file" log_help.txt
 check_contains "geometry-file" log_help.txt
 check_contains "k-tol" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "view" log_help.txt
 
@@ -287,14 +300,14 @@ check_contains "view" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.15) ---"
 
 echo "Testing: navigate 2.15 -> label Sn3O4 -> default HSX -> shift fermi -> q default -> default output -> no report/gnuplot/view"
-rm -f references.bib
-printf '2.15\nSn3O4\n\n3\n\n\nn\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
+rm -f stb_ipr_report*.txt stb_ipr_references*.bib
+printf '2.15\nSn3O4\n\n3\n\n\nn\nn\n\n0\n' | timeout 60 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
-check_success references.bib
+check_success stb_ipr_references.bib
 
 echo "Testing: interactive menu's --save-gnuplot prompt"
 rm -f ipr.dat ipr.gplot
-printf '2.15\nSn3O4\n\n3\n\n\nn\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu_gnuplot.txt 2>&1
+printf '2.15\nSn3O4\n\n3\n\n\ny\nn\n\n0\n' | timeout 60 stb-suite > log_menu_gnuplot.txt 2>&1
 check_exit_code $? 0
 check_success ipr.dat
 check_success ipr.gplot

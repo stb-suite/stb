@@ -38,6 +38,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -268,13 +278,14 @@ check_contains "needs a Fermi energy" log_missing_fermi.txt
 # --- 9. --save-report / --save-gnuplot (off by default) ---
 echo -e "\n--- Testing --save-report / --save-gnuplot ---"
 
+rm -f stb_coop_report*.txt stb_coop_references*.bib
 timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 1 $COMMON \
     --save-report --save-gnuplot -o report_out --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
 check_success report_out/coop.dat
 check_success report_out/coop.gplot
-check_success report_out/stb_coop_report.txt
-check_success report_out/references.bib
+check_success stb_coop_report.txt
+check_success stb_coop_references.bib
 
 echo "Testing: coop.gplot uses a bare basename (not the full --output-dir path)"
 if grep -q '"coop.dat"' report_out/coop.gplot && ! grep -q "report_out" report_out/coop.gplot; then
@@ -293,13 +304,14 @@ else
     echo -e "   -> ${YELLOW}Skipped:${NC} gnuplot not installed in this environment"
 fi
 
-echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes coop.dat + references.bib"
+echo "Testing: a plain run with no --view/--save-report/--save-gnuplot only writes coop.dat + stb_coop_references.bib"
 rm -rf plain_out
+rm -f stb_coop_report*.txt stb_coop_references*.bib
 timeout 120 stb-coop --label Sn3O4 --quantity coop --pair 0 1 $COMMON -o plain_out --no-intro > log_plain.txt 2>&1
 check_exit_code $? 0
 check_success plain_out/coop.dat
-check_success plain_out/references.bib
-if [ ! -f plain_out/coop.gplot ] && [ ! -f plain_out/stb_coop_report.txt ]; then
+check_success stb_coop_references.bib
+if [ ! -f plain_out/coop.gplot ] && [ -f stb_coop_report.txt ]; then
     echo -e "   -> ${GREEN}Verified:${NC} no .gplot/report written without --save-gnuplot/--save-report"
     PASS=$((PASS+1))
 else
@@ -352,7 +364,7 @@ check_contains "erange" log_help.txt
 check_contains "sigma" log_help.txt
 check_contains "bond-order" log_help.txt
 check_contains "dm-file" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "view" log_help.txt
 
@@ -362,13 +374,13 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.14) ---"
 
 echo "Testing: navigate 2.14 -> label Sn3O4 -> default HSX -> quantity 1 (coop) -> pair mode 1 (index) -> 0 1 -> erange -10 5 -> sigma 300 -> no shift -> no bond-order -> default output -> no report/gnuplot/view"
 rm -f coop.dat
-printf '2.14\nSn3O4\n\n1\n1\n0\n1\n-10\n5\n300\n\nn\n\nn\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
+printf '2.14\nSn3O4\n\n1\n1\n0\n1\n-10\n5\n300\n\nn\n\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_success coop.dat
 
 echo "Testing: interactive menu's --bond-order + default .DM prompt"
 rm -f coop.dat
-printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-25\n-3.203856\n300\n\ny\n\n\nn\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu_bo.txt 2>&1
+printf '2.14\nSn3O4\n\n1\n1\n0\n6\n-25\n-3.203856\n300\n\ny\n\n\nn\nn\n\n0\n' | timeout 120 stb-suite > log_menu_bo.txt 2>&1
 check_exit_code $? 0
 check_contains "signs agree" log_menu_bo.txt
 

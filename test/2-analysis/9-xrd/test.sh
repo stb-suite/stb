@@ -47,6 +47,16 @@ check_absent() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -86,7 +96,7 @@ stb-crystalcast --group 225 --species Na Cl --num-ions 4 4 \
 # --- 2. Basic run: numbered report, no unconditional data file ---
 echo -e "\n--- Testing a basic run (--file nacl.fdf --format fdf) ---"
 
-rm -f xrd_pattern.dat xrd_pattern.gplot references.bib
+rm -f xrd_pattern.dat xrd_pattern.gplot stb_xrd_report*.txt stb_xrd_references*.bib
 stb-xrd --file nacl.fdf --format fdf --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_contains "\[0\] RUN METADATA" log_basic.txt
@@ -106,20 +116,20 @@ echo "Testing: without --save-gnuplot, no .dat/.gplot is written (used to be unc
 check_absent xrd_pattern.dat
 check_absent xrd_pattern.gplot
 
-echo "Testing: references.bib is always written (SIESTA + pyxtal)"
-check_success references.bib
-check_contains "Soler2002" references.bib
-check_contains "Garcia2020" references.bib
-check_contains "Fredericks2021pyxtal" references.bib
+echo "Testing: stb_xrd_references.bib is always written (SIESTA + pyxtal)"
+check_success stb_xrd_references.bib
+check_contains "Soler2002" stb_xrd_references.bib
+check_contains "Garcia2020" stb_xrd_references.bib
+check_contains "Fredericks2021pyxtal" stb_xrd_references.bib
 
-echo "Testing: no text report without --save-report"
-check_absent stb_xrd_report.txt
+echo "Testing: the report is always written"
+check_success stb_xrd_report.txt
 
 
 # --- 3. --save-report / --save-gnuplot ---
 echo -e "\n--- Testing --save-report / --save-gnuplot ---"
 
-rm -f xrd_pattern.dat xrd_pattern.gplot stb_xrd_report.txt
+rm -f xrd_pattern.dat xrd_pattern.gplot stb_xrd_report*.txt stb_xrd_references*.bib
 stb-xrd --file nacl.fdf --format fdf --save-report --save-gnuplot --no-intro > log_saved.txt 2>&1
 check_exit_code $? 0
 check_success stb_xrd_report.txt
@@ -137,11 +147,12 @@ check_contains "\[OK\] Gnuplot script written to" log_saved.txt
 echo -e "\n--- Testing -o/--output-dir ---"
 
 rm -rf out_subdir
+rm -f stb_xrd_report*.txt stb_xrd_references*.bib
 stb-xrd --file nacl.fdf --format fdf --output-dir out_subdir --save-report --save-gnuplot \
     --no-intro > log_outdir.txt 2>&1
 check_exit_code $? 0
-check_success out_subdir/references.bib
-check_success out_subdir/stb_xrd_report.txt
+check_success stb_xrd_references.bib
+check_success stb_xrd_report.txt
 check_success out_subdir/xrd_pattern.dat
 check_success out_subdir/xrd_pattern.gplot
 
@@ -215,7 +226,7 @@ check_exit_code $? 0
 
 
 # --- 10. --compare-to ---
-echo -e "\n--- Testing --compare-to (pyxtal's Similarity() is genuinely slow, ~20-30s -- generous timeouts below) ---"
+echo -e "\n--- Testing --compare-to (pyxtal's Similarity() is genuinely slow, ~50 s of CPU per comparison on a desktop -- generous 180 s timeouts below) ---"
 
 rm -f xrd_pattern.dat
 stb-xrd --file nacl.fdf --format fdf --save-gnuplot --no-intro > /dev/null 2>&1
@@ -227,7 +238,7 @@ stb-xrd --file nacl.fdf --format fdf --save-gnuplot --no-intro > /dev/null 2>&1
 # complete header, not just a single comment line).
 awk '!/^#/ {print $1, $6}' xrd_pattern.dat > experimental.dat
 
-timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat \
+timeout 180 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat \
     --no-intro > log_compare.txt 2>&1
 check_exit_code $? 0
 check_contains "\[3\] EXPERIMENTAL COMPARISON" log_compare.txt
@@ -246,19 +257,19 @@ echo " auto-broadening peak-list-shaped experimental input before comparing)"
 check_contains "Similarity score   : 1.0000" log_compare.txt
 
 echo "Testing: --compare-to combined with --view (overlay branch, headless)"
-timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat --view \
+timeout 180 stb-xrd --file nacl.fdf --format fdf --compare-to experimental.dat --view \
     --no-intro > log_compare_view.txt 2>&1
 check_exit_code $? 0
 
 echo "Testing: stb-xrd's own multi-column xrd_pattern.dat is directly usable as --compare-to"
-timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to xrd_pattern.dat \
+timeout 180 stb-xrd --file nacl.fdf --format fdf --compare-to xrd_pattern.dat \
     --no-intro > log_compare_owndat.txt 2>&1
 check_exit_code $? 0
 check_contains "Peak-list detected : yes -- auto-broadened" log_compare_owndat.txt
 check_contains "Similarity score   : 1.0000" log_compare_owndat.txt
 
 echo "Testing: --raw-experimental disables auto-broadening (score drops back down)"
-timeout 60 stb-xrd --file nacl.fdf --format fdf --compare-to xrd_pattern.dat --raw-experimental \
+timeout 180 stb-xrd --file nacl.fdf --format fdf --compare-to xrd_pattern.dat --raw-experimental \
     --no-intro > log_compare_raw.txt 2>&1
 check_exit_code $? 0
 check_contains "but --raw-experimental was given" log_compare_raw.txt
@@ -266,7 +277,7 @@ check_contains "but --raw-experimental was given" log_compare_raw.txt
 echo "Testing: a genuinely different structure's pattern still scores well below 1.0"
 stb-crystalcast --group 225 --species K Br --num-ions 4 4 \
     --lattice 6.60 6.60 6.60 90 90 90 -o kbr.fdf --no-intro > /dev/null 2>&1
-timeout 60 stb-xrd --file kbr.fdf --format fdf --compare-to xrd_pattern.dat \
+timeout 180 stb-xrd --file kbr.fdf --format fdf --compare-to xrd_pattern.dat \
     --no-intro > log_compare_different.txt 2>&1
 check_exit_code $? 0
 if grep -q "Similarity score   : 0\.[0-8]" log_compare_different.txt; then
@@ -286,7 +297,7 @@ echo "Testing: --compare-to with a malformed file"
 printf "not a number here\n1.0 2.0\n" > bad_experimental.dat
 stb-xrd --file nacl.fdf --format fdf --compare-to bad_experimental.dat --no-intro > log_compare_bad.txt 2>&1
 check_exit_code $? 1
-check_contains "expected two numbers" log_compare_bad.txt
+check_contains "expected numbers, got" log_compare_bad.txt
 
 echo "Testing: --compare-to with too few points (pyxtal's cubic interpolation needs >= 4)"
 printf "10.0 1.0\n20.0 2.0\n30.0 1.5\n" > sparse_experimental.dat
@@ -324,7 +335,7 @@ check_contains "two-theta-range" log_help.txt
 check_contains "top" log_help.txt
 check_contains "compare-to" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -335,10 +346,11 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 2.9) ---"
 echo "Testing: navigate 2.9 -> nacl.fdf -> format fdf (1) -> default wavelength -> default range -> no top -> no compare-to -> no save-report -> no save-gnuplot -> no view -> quit"
 rm -rf menu_test && mkdir menu_test && cp nacl.fdf menu_test/
 pushd menu_test > /dev/null
+rm -f stb_xrd_report*.txt stb_xrd_references*.bib
 printf '2.9\nnacl.fdf\n1\n\n\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Formula.*NaCl" log_menu.txt
-check_success references.bib
+check_success stb_xrd_references.bib
 check_absent xrd_pattern.dat
 popd > /dev/null
 

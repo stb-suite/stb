@@ -62,6 +62,7 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Default run (dim 1 1 1, small enough to be fast) ---
 echo -e "\n--- Testing default generation (-dim 1 1 1) ---"
+rm -f stb_raman_report*.txt stb_raman_references*.bib
 stb-raman -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --save-report --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
 check_success raman_study/phonon_disp/disp-001/structure.fdf
@@ -73,13 +74,13 @@ check_success raman_study/phonon_disp/disp-001/calc.fdf
 check_success raman_study/phonon_disp/disp-001/O.psf
 check_success raman_study/phonon_disp/disp-001/Sn.psf
 check_success raman_study/phonon_disp/phonopy_disp.yaml
-check_success raman_study/raman_stage1.txt
-check_contains "\[0\] RUN METADATA" raman_study/raman_stage1.txt
-check_contains "\[3\] PSEUDOPOTENTIALS" raman_study/raman_stage1.txt
-check_contains "\[4\] PHONON DISPLACEMENTS" raman_study/raman_stage1.txt
-check_contains "\[5\] SUMMARY & NEXT STEPS" raman_study/raman_stage1.txt
+check_success stb_raman_report.txt
+check_contains "\[0\] RUN METADATA" stb_raman_report.txt
+check_contains "\[3\] PSEUDOPOTENTIALS" stb_raman_report.txt
+check_contains "\[4\] PHONON DISPLACEMENTS" stb_raman_report.txt
+check_contains "\[5\] SUMMARY & NEXT STEPS" stb_raman_report.txt
 check_contains "Displacement folders : 42" log_basic.txt
-check_contains "stb-ramanModes --directory raman_study" raman_study/raman_stage1.txt
+check_contains "stb-ramanModes --directory raman_study" stb_raman_report.txt
 
 
 # --- 3. Refuses to overwrite an existing phonon_disp/ ---

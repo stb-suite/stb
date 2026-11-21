@@ -26,6 +26,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -303,9 +313,15 @@ check_contains "Atomic coordinates in this file are Cartesian" log_cartesian.txt
 #     silently keep the base template's real relaxation settings instead). ---
 echo -e "\n--- Testing calc.fdf copy + config_extra.fdf + forced single-point precedence ---"
 rm -rf elastic_runs
-stb-elasticInputs -s si_cubic.fdf -c calc_relaxation.fdf --dirs xx --max 1.0 --steps 3 --no-intro > log_singlepoint.txt 2>&1
+echo "Testing: the default is relaxed ions (CG inside each strained cell)"
+stb-elasticInputs -s si_cubic.fdf -c calc_relaxation.fdf --dirs xx --max 1.0 --steps 3 --no-intro > log_relaxed_ions.txt 2>&1
 check_exit_code $? 0
-check_contains "SINGLE-POINT SCF ENFORCEMENT" log_singlepoint.txt
+check_contains "Ions              : relaxed (CG" log_relaxed_ions.txt
+rm -rf elastic_runs
+echo "Testing: --ions clamped forces a single point over the template's relaxation"
+stb-elasticInputs -s si_cubic.fdf -c calc_relaxation.fdf --dirs xx --max 1.0 --steps 3 --ions clamped --no-intro > log_singlepoint.txt 2>&1
+check_exit_code $? 0
+check_contains "FIXED CELL, IONS: CLAMPED" log_singlepoint.txt
 check_contains "MD.TypeOfRun=CG  Steps: MD.Steps=100  MD.VariableCell=true" log_singlepoint.txt
 check_success elastic_runs/xx/strain_xx_1.00/si_cubic.fdf
 check_success elastic_runs/xx/strain_xx_1.00/calc_relaxation.fdf
@@ -337,11 +353,11 @@ check_exit_code $? 0
 check_contains "Using bundled pseudopotential bank 'dojo'" log_pseudo.txt
 check_contains "\[OK\] All required pseudopotentials found" log_pseudo.txt
 check_success elastic_runs/xx/strain_xx_1.00/Si.psml
-if [ -L elastic_runs/xx/strain_xx_1.00/Si.psml ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} Si.psml is a symlink (not a copy)"
+if [ -f elastic_runs/xx/strain_xx_1.00/Si.psml ] && [ ! -L elastic_runs/xx/strain_xx_1.00/Si.psml ]; then
+    echo -e "   -> ${GREEN}Verified:${NC} Si.psml is a copy (pseudopotentials are copied, never symlinked)"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} Si.psml is not a symlink"
+    echo -e "   -> ${RED}Failed:${NC} Si.psml is missing or a symlink"
     FAIL=$((FAIL+1))
 fi
 
@@ -369,9 +385,10 @@ check_contains "not a recognized pseudopotential bank" log_bad_pseudo.txt
 # --- 10. New feature: --output-dir + --save-report ---
 echo -e "\n--- Testing --save-report + a custom --output-dir ---"
 rm -rf my_elastic_out
+rm -f stb_elasticInputs_report*.txt stb_elasticInputs_references*.bib
 stb-elasticInputs -s si_cubic.fdf -c calc_cubic.fdf --dirs xx --output-dir my_elastic_out --save-report --no-intro > log_savereport.txt 2>&1
 check_exit_code $? 0
-check_success my_elastic_out/elastic_stage1.txt
+check_success stb_elasticInputs_report.txt
 check_success my_elastic_out/reference_structure.fdf
 check_success my_elastic_out/xx/strain_xx_2.00/si_cubic.fdf
 rm -rf my_elastic_out
@@ -410,7 +427,7 @@ check_contains "angle-tolerance" log_help.txt
 check_contains "symmetry-method" log_help.txt
 check_contains "method" log_help.txt
 check_contains "output-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
 # --- 12. Interactive path (stb-suite, shortcut 5.2.1) ---
@@ -423,7 +440,7 @@ rm -rf elastic_runs
 # pseudo source (blank -> skip), max strain (blank), steps (blank), method (blank
 # -> stress), mode (1 -> basic), advanced settings (n -> skip), save report (blank
 # -> no), "Press Enter to continue", quit.
-printf '5.2.1\ndoes_not_exist.fdf\nstructure.fdf\n\n\n\n\n\n1\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.2.1\ndoes_not_exist.fdf\nstructure.fdf\n\n\n\n\n\n\n1\nn\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "File not found" log_menu.txt
 check_contains "Modes: \['xx', 'yy', 'xy'\]" log_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
@@ -440,10 +457,10 @@ fi
 echo "Testing: navigate 5.2.1 -> energy method never asks a symmetry-method question"
 rm -rf elastic_runs
 # Prompts in order: structure file, calc.fdf (blank -> default), pseudo (blank ->
-# skip), max strain (blank), steps (blank), method (2 -> energy, no direction/
+# skip), max strain (blank), steps (blank), ions (blank -> relaxed), method (2 -> energy, no direction/
 # symmetry-method menu at all), advanced settings (n -> skip), save report (blank
 # -> no), "Press Enter to continue", quit.
-printf '5.2.1\nstructure.fdf\n\n\n\n\n2\nn\n\n\n0\n' | stb-suite > log_energy_menu.txt 2>&1
+printf '5.2.1\nstructure.fdf\n\n\n\n\n\n2\nn\n\n\n0\n' | stb-suite > log_energy_menu.txt 2>&1
 check_contains "auto-selects its own pure+combined strain patterns" log_energy_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_energy_menu.txt
 if grep -q "Symmetry reduction" log_energy_menu.txt 2>/dev/null; then

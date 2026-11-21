@@ -315,6 +315,7 @@ check_contains "UNVERIFIED" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.13.2) ---"
 
 echo "Testing: navigate 5.13.2 -> gqca_study -> fixed T -> quit"
+rm -f stb_gqcaAnalysis_report*.txt stb_gqcaAnalysis_references*.bib
 {
   echo "5.13.2"
   echo "gqca_study"     # directory
@@ -326,13 +327,12 @@ echo "Testing: navigate 5.13.2 -> gqca_study -> fixed T -> quit"
   echo ""                     # save PNG (default N)
   echo ""                     # 3D viewer (default N)
   echo ""                     # export relaxed structures (default none)
-  echo "y"                    # save the text report
   echo ""                     # advanced settings (default N)
   echo ""                      # press enter to continue
   echo "0"                      # quit stage submenu
 } | stb-suite > log_menu.txt 2>&1
 check_success gqca_study/gqca_results.csv
-check_success gqca_study/gqca_stage2.txt
+check_success stb_gqcaAnalysis_report.txt
 
 
 popd > /dev/null

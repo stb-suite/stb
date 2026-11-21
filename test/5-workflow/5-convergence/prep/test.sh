@@ -28,6 +28,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -144,13 +154,14 @@ check_contains "8 8 8" log_kgrid_crosscheck.txt
 # --- 6. --parameter all -- 3 independent per-parameter subfolders, all default ranges ---
 echo -e "\n--- Testing --parameter all (default ranges, all 3 parameters) ---"
 rm -rf convergence_runs
+rm -f stb_convergence_report*.txt stb_convergence_references*.bib
 stb-convergence -s structure.fdf -c calc.fdf -p dojo --parameter all --save-report --no-intro > log_all.txt 2>&1
 check_contains "Parameter(s)      : meshcutoff, energyshift, kgrid" log_all.txt
 check_contains "19 folder(s) written under 'convergence_runs' (3 parameter(s))" log_all.txt
 check_success convergence_runs/meshcutoff/convergence_meshcutoff_100.0000/calc.fdf
 check_success convergence_runs/energyshift/convergence_energyshift_0.0010/calc.fdf
 check_success convergence_runs/kgrid/convergence_kgrid_0.0500/calc.fdf
-check_success convergence_runs/convergence_stage1.txt
+check_success stb_convergence_report.txt
 check_contains "stb-convergenceAnalysis (Stage 2) doesn't yet support this per-parameter layout" log_all.txt
 
 
@@ -217,7 +228,7 @@ check_contains "meshcutoff-range" log_help.txt
 check_contains "energyshift-range" log_help.txt
 check_contains "kgrid-range" log_help.txt
 check_contains "pseudo-dir" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "relax-steps" log_help.txt
 check_contains "default: structure.fdf" log_help.txt
 check_contains "default: calc.fdf" log_help.txt
@@ -228,22 +239,23 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.5.1) ---"
 
 echo "Testing: navigate 5.5.1 -> dojo bank -> 'all' shortcut -> no customization for any parameter -> default relax-steps -> single combined run -> save report (y) -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\nn\nn\nn\n\n\n\ny\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+rm -f stb_convergence_report*.txt stb_convergence_references*.bib
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\nn\nn\nn\n\n\n\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
 check_contains "Selected: meshcutoff, energyshift, kgrid" log_menu_all.txt
 check_contains "full relaxation, positions + cell, up to 100 steps" log_menu_all.txt
 check_contains "19 folder(s) written under 'convergence_runs' (3 parameter(s))" log_menu_all.txt
-check_success convergence_runs/convergence_stage1.txt
+check_success stb_convergence_report.txt
 
 echo "Testing: navigate 5.5.1 -> single parameter (meshcutoff) -> customize range -> default relax-steps -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\n1\ny\n150\n300\n50\n\n\n\n\n0\n' | stb-suite > log_menu_single.txt 2>&1
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\n1\ny\n150\n300\n50\n\n\n\n0\n' | stb-suite > log_menu_single.txt 2>&1
 check_contains "Selected: meshcutoff" log_menu_single.txt
 check_contains "4 folder(s) written under 'convergence_runs' (1 parameter(s))" log_menu_single.txt
 check_contains "custom (--meshcutoff-range)" log_menu_single.txt
 
 echo "Testing: navigate 5.5.1 -> 'all' shortcut -> customize ONLY meshcutoff, defaults for the other two -> ONE combined run, ALL 3 shown together -> quit"
 rm -rf convergence_runs
-printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\ny\n120\n280\n40\nn\nn\n\n\n\n\n\n0\n' | stb-suite > log_menu_mixed.txt 2>&1
+printf '5.5.1\nstructure.fdf\ncalc.fdf\n1\n\n\n\nall\ny\n120\n280\n40\nn\nn\n\n\n\n\n0\n' | stb-suite > log_menu_mixed.txt 2>&1
 check_contains "Parameter(s)      : meshcutoff, energyshift, kgrid" log_menu_mixed.txt
 check_contains "custom (--meshcutoff-range)" log_menu_mixed.txt
 check_contains "energyshift | suggested default" log_menu_mixed.txt
@@ -255,7 +267,7 @@ check_success convergence_runs/kgrid/convergence_kgrid_0.0500/calc.fdf
 
 echo "Testing: blank structure/calc default to structure.fdf/calc.fdf; an unrecognized token in the parameter list is flagged, falls back to meshcutoff"
 rm -rf convergence_runs
-printf '5.5.1\n\n\n\nbogus\nn\n\n\n\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
+printf '5.5.1\n\n\n\nbogus\nn\n\n\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
 check_contains "Structure file    : structure.fdf" log_menu_typo.txt
 check_contains "Calc template     : calc.fdf" log_menu_typo.txt
 check_contains "Ignored unrecognized option(s): bogus" log_menu_typo.txt

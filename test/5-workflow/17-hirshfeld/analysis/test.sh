@@ -208,7 +208,7 @@ check_contains "\[8\] DIPOLE CHECK" log_default.txt
 check_contains "\[10\] WARNINGS" log_default.txt
 echo "Testing: the synthetic Gaussians do not hold Z_val electrons -> flagged, in WARNINGS"
 check_contains "\[WARNING 1\]" log_default.txt
-check_contains "Files written   : none" log_default.txt
+check_contains "Files written   : stb_hirshfeldAnalysis_report" log_default.txt
 
 
 # --- 4. --tol / --max-iter flags ---
@@ -270,11 +270,11 @@ check_contains "Files written   : hirshfeld_charges.dat" log_data.txt
 
 # --- 5. --save-report ---
 echo -e "\n--- Testing --save-report ---"
-rm -f hirshfeld_analysis_report.txt
+rm -f stb_hirshfeldAnalysis_report*.txt stb_hirshfeldAnalysis_references*.bib
 stb-hirshfeldAnalysis -O hirshfeld_study --save-report --no-intro > log_savereport.txt 2>&1
-check_success hirshfeld_analysis_report.txt
-check_contains "STB-HIRSHFELDANALYSIS REPORT" hirshfeld_analysis_report.txt
-rm -f hirshfeld_analysis_report.txt
+check_success stb_hirshfeldAnalysis_report.txt
+check_contains "STB-HIRSHFELDANALYSIS REPORT" stb_hirshfeldAnalysis_report.txt
+rm -f stb_hirshfeldAnalysis_report*.txt stb_hirshfeldAnalysis_references*.bib
 
 
 # --- 6. End-to-end proof: atoms of the SAME species converge to OPPOSITE ion
@@ -536,7 +536,7 @@ check_contains "OK periodic images (small cell)" log_core.txt
 # --- 7. Interactive path (stb-suite, shortcut 5.17.3) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.17.3) ---"
 rm -f hirshfeld_analysis.png
-printf '5.17.3\nhirshfeld_study\n\n\n\nn\nn\ny\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
+printf '5.17.3\nhirshfeld_study\n\n\n\nn\ny\nn\n\n0\n' | stb-suite > log_interactive.txt 2>&1
 check_contains "Hirshfeld-I Analysis (Stage 3) complete" log_interactive.txt
 check_contains "Optional outputs:" log_interactive.txt
 check_success hirshfeld_analysis.png

@@ -26,6 +26,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q -- "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -105,15 +115,8 @@ echo "Testing: the frozen branch gets its OWN alpha=0.0000 folder (not a reuse o
 check_success hubbardu_runs/frozen_alpha_0.0000/calc.fdf
 check_contains "0.000    0.000" hubbardu_runs/frozen_alpha_0.0000/config_extra.fdf
 
-echo "Testing: frozen folders use MaxSCFIterations 2 (not the old buggy 1)"
-check_contains "MaxSCFIterations 2" hubbardu_runs/frozen_alpha_0.1000/config_extra.fdf
-if grep -q "MaxSCFIterations 1$" hubbardu_runs/frozen_alpha_0.1000/config_extra.fdf; then
-    echo -e "   -> ${RED}Failed:${NC} should not use MaxSCFIterations 1"
-    FAIL=$((FAIL+1))
-else
-    echo -e "   -> ${GREEN}Verified:${NC} no stray MaxSCFIterations 1"
-    PASS=$((PASS+1))
-fi
+echo "Testing: frozen folders use MaxSCFIterations 1 by default (one iteration from the reference .DM is enough: verified on SIESTA 5.4.2)"
+check_contains "MaxSCFIterations 1$" hubbardu_runs/frozen_alpha_0.1000/config_extra.fdf
 
 echo "Testing: the reference .DM was auto-copied into every scf/frozen folder (no manual step)"
 check_success hubbardu_runs/scf_alpha_0.1000/siesta.DM
@@ -158,12 +161,12 @@ stb-hubbarduAlphas --dir hubbardu_runs5 --alphas 0.1 --frozen-iterations 3 --no-
 check_exit_code $? 0
 check_contains "MaxSCFIterations 3" hubbardu_runs5/frozen_alpha_0.1000/config_extra.fdf
 
-echo "Testing: --frozen-iterations below the empirical minimum warns but still runs"
+echo "Testing: --frozen-iterations 1 given explicitly (the default) runs without a warning"
 rm -rf hubbardu_runs6
 make_reference hubbardu_runs6
 stb-hubbarduAlphas --dir hubbardu_runs6 --alphas 0.1 --frozen-iterations 1 --no-intro > log_frozen_iter_low.txt 2>&1
 check_exit_code $? 0
-check_contains "below the empirically-needed minimum" log_frozen_iter_low.txt
+check_not_contains "WARNING" log_frozen_iter_low.txt
 check_contains "MaxSCFIterations 1" hubbardu_runs6/frozen_alpha_0.1000/config_extra.fdf
 
 echo "Testing: --frozen-iterations 0 is rejected"
@@ -289,19 +292,21 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.7.2) ---"
 echo "Testing: navigate 5.7.2 -> default dir -> default alphas -> default frozen-iterations ->"
 echo "  save-report=N -> quit"
 make_reference hubbardu_runs4
-printf '5.7.2\nhubbardu_runs4\n\n\nn\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
+rm -f stb_hubbarduAlphas_report*.txt stb_hubbarduAlphas_references*.bib
+printf '5.7.2\nhubbardu_runs4\n\n\n\n0\n' | timeout 20 stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
 check_contains "Generated 9 run(s)" log_menu.txt
 check_success hubbardu_runs4/frozen_alpha_0.0000/calc.fdf
-check_absent hubbardu_runs4/hubbardu_stage2.txt
+check_success stb_hubbarduAlphas_report.txt
 
 echo "Testing: navigate 5.7.2 again -> save-report=Y -> quit"
 rm -rf hubbardu_runs4b
 make_reference hubbardu_runs4b
-printf '5.7.2\nhubbardu_runs4b\n\n\ny\n\n0\n' | timeout 20 stb-suite > log_menu_report.txt 2>&1
+rm -f stb_hubbarduAlphas_report*.txt stb_hubbarduAlphas_references*.bib
+printf '5.7.2\nhubbardu_runs4b\n\n\n\n0\n' | timeout 20 stb-suite > log_menu_report.txt 2>&1
 check_exit_code $? 0
 check_contains "Generated 9 run(s)" log_menu_report.txt
-check_success hubbardu_runs4b/hubbardu_stage2.txt
+check_success stb_hubbarduAlphas_report.txt
 
 
 popd > /dev/null

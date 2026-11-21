@@ -144,6 +144,7 @@ for i, (axis, sign) in enumerate(order, start=1):
     write_fa(f'gibbs/site_1_ontop/disp_{i:03d}/gibbs_site.FA', 3, 3, force)
     write_fa(f'gibbs/O_isolated/disp_{i:03d}/gibbs_isolated.FA', 1, 1, force)
 "
+rm -f stb_adsorbGibbs_report*.txt stb_adsorbGibbs_references*.bib
 stb-adsorbGibbs --dir . --tmin 300 --tmax 300 --tstep 25 --save-report --no-intro \
     > log_gibbs.txt 2>&1
 check_exit_code $? 0
@@ -163,7 +164,7 @@ check_contains "D0 = +0.0084 eV" log_gibbs.txt
 check_contains "FINAL RESULT" log_gibbs.txt
 check_contains "DG(adsorption) = +0.4358 eV" log_gibbs.txt
 check_success adsorption_gibbs.png
-check_success adsorption_gibbs_report.txt
+check_success stb_adsorbGibbs_report.txt
 
 echo -e "\n--- Testing [3c] rough desorption-kinetics section + its 2 plot outputs ---"
 check_contains "\[3c\] DESORPTION KINETICS -- ROUGH ESTIMATE (Eyring-TST)" log_gibbs.txt
@@ -171,7 +172,7 @@ check_contains "\[APPROXIMATION\]" log_gibbs.txt
 check_contains "LOWER BOUND" log_gibbs.txt
 check_contains "k_desorb = " log_gibbs.txt
 check_contains "tau_desorb = " log_gibbs.txt
-check_contains "\[APPROXIMATION\]" adsorption_gibbs_report.txt
+check_contains "\[APPROXIMATION\]" stb_adsorbGibbs_report.txt
 check_success adsorption_desorption_kinetics.png
 check_success plot/desorption_kinetics.dat
 check_success plot/desorption_kinetics.gplot
@@ -360,11 +361,11 @@ check_contains "tmax" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.8.4) ---"
 
 echo "Testing: navigate 5.8.4 -> defaults -> quit"
-rm -f adsorption_gibbs_report.txt adsorption_gibbs.png
+rm -f stb_adsorbGibbs_report*.txt stb_adsorbGibbs_references*.bib adsorption_gibbs.png
 # 5.8.4 (menu code) / . (dir) / "" (out_file default) / "" (tmin default) /
 # "" (tmax default) / "" (tstep default) / "" (save_report: N) /
 # "" (view_plots: N) / "" (Press Enter to continue) / 0 (quit)
-printf '5.8.4\n.\n\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.8.4\n.\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "FINAL RESULT" log_menu.txt
 check_success adsorption_gibbs.png
 

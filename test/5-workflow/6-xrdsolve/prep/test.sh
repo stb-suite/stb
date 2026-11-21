@@ -62,8 +62,8 @@ echo -e "\n--- Testing a basic run (--species Na Cl --num-ions 4 4 --groups 225,
 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 225,221,62 --seed 1 \
     -o candidates --no-intro > log_basic.txt 2>&1
 check_exit_code $? 0
-check_contains "Space groups:.*225, 221, 62" log_basic.txt
-check_contains "3 candidate folder(s) written" log_basic.txt
+check_contains "Space groups *:.*225, 221, 62" log_basic.txt
+check_contains "Candidate folders written : 3" log_basic.txt
 check_success candidates/group_225/structure.fdf
 check_success candidates/group_221/structure.fdf
 check_success candidates/group_62/structure.fdf
@@ -91,7 +91,7 @@ check_success spaced/group_62/structure.fdf
 echo "Testing: duplicate --groups entries are deduped (not silently overwritten)"
 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 225,227,225 -o dup --no-intro > log_dup.txt 2>&1
 check_contains "Warning:.*--groups had duplicate entries" log_dup.txt
-check_contains "Space groups:.*225, 227" log_dup.txt
+check_contains "Space groups *:.*225, 227" log_dup.txt
 
 
 # --- 5. --ml-rank / --keep-top-per-group ---
@@ -139,7 +139,7 @@ check_contains "must be a list of space group numbers" log_badgroups.txt
 echo "Testing: every requested group fails (invalid space group number)"
 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 99999 -o err4 --no-intro > log_allfail.txt 2>&1
 check_exit_code $? 1
-check_contains "no candidates were generated" log_allfail.txt
+check_contains "No candidates were generated" log_allfail.txt
 
 echo "Testing: --species omitted (required)"
 stb-xrdsearch --num-ions 4 4 --groups 225 --no-intro > log_missing_species.txt 2>&1
@@ -165,9 +165,9 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.6.1) ---"
 
 echo "Testing: navigate 5.6.1 -> species 'Na 4', 'Cl 4', blank to finish -> groups '225,139' -> count 1 -> output -> quit"
 rm -rf menu_candidates
-printf '5.6.1\nNa 4\nCl 4\n\n225,139\n\nmenu_candidates\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.6.1\nNa 4\nCl 4\n\n225,139\n\nn\n\n\n\nmenu_candidates\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_exit_code $? 0
-check_contains "2 candidate folder(s) written" log_menu.txt
+check_contains "Candidate folders written : 2" log_menu.txt
 check_success menu_candidates/group_225/structure.fdf
 check_success menu_candidates/group_139/structure.fdf
 

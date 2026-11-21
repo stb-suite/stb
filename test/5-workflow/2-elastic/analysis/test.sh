@@ -26,6 +26,16 @@ check_success() {
     fi
 }
 
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -62,11 +72,12 @@ pushd "$TEST_DIR" > /dev/null
 
 # --- 2. Baseline: existing xx-only fixtures (regression, still works) ---
 echo -e "\n--- Testing baseline analysis (xx-only, existing checked-in fixtures) ---"
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 stb-elasticAnalysis --dir . --save-report --no-intro > log_baseline.txt 2>&1
 check_exit_code $? 0
-check_success elastic_stage2.txt
-check_contains "C11:    16.0 GPa" elastic_stage2.txt
-check_contains "coupling" elastic_stage2.txt
+check_success stb_elasticAnalysis_report.txt
+check_contains "C11:    16.0 GPa" stb_elasticAnalysis_report.txt
+check_contains "coupling" stb_elasticAnalysis_report.txt
 
 
 # --- 3. Physics: corrected 2D Poisson's ratio on an anisotropic fixture
@@ -1561,16 +1572,16 @@ popd > /dev/null
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.2.2) ---"
 
 echo "Testing: navigate 5.2.2 -> dir '.' -> calc.out -> all defaults (stress, auto dimensionality, symmetry as prepared, skip advanced) -> save report -> quit"
-rm -f elastic_stage2.txt
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (blank -> auto),
 # symmetry-method (blank -> as the folders were prepared; none recorded here -> basic), advanced settings (n -> skip, CLI
 # defaults apply), save report (y), save gnuplot (n), view (n), then the
 # "Press Enter to continue" pause, then quit.
-printf '5.2.2\n.\ncalc.out\n\n\n\n\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.2.2\n.\ncalc.out\n\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "STABILITY AND PROPERTIES" log_menu.txt
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
-check_success elastic_stage2.txt
+check_success stb_elasticAnalysis_report.txt
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then
     echo -e "   -> ${RED}Failed:${NC} unexpected traceback in interactive session"
     FAIL=$((FAIL+1))
@@ -1580,13 +1591,13 @@ else
 fi
 
 echo "Testing: navigate 5.2.2 -> manual dimensionality override -> 1D"
-rm -f elastic_stage2.txt
+rm -f stb_elasticAnalysis_report*.txt stb_elasticAnalysis_references*.bib
 # Prompts in order: dir (. -> current dir), file, method (blank -> stress),
 # reference-structure (blank -> default), dimensionality (1d -> manual
 # override), symmetry-method (blank -> as prepared), advanced settings (n ->
 # skip), save report (n), save gnuplot (n), view (n), then the "Press
 # Enter to continue" pause, then quit.
-printf '5.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
+printf '5.2.2\n.\ncalc.out\n\n\n1d\n\nn\nn\nn\n\n0\n' | stb-suite > log_1d_menu.txt 2>&1
 check_contains "Dimensionality: .*1D.*(manual override" log_1d_menu.txt
 check_contains "1D (manual override)" log_1d_menu.txt
 if grep -q "Traceback" log_1d_menu.txt 2>/dev/null; then

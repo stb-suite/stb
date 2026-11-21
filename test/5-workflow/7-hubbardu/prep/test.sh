@@ -400,24 +400,26 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.7.1) ---"
 echo "Testing: navigate 5.7.1 -> blank structure/calc (defaults to structure.fdf/calc.fdf in cwd) ->"
 echo "  Mn -> no atom-index -> auto shell -> default J -> no pseudo -> default output -> save-report=N -> quit"
 rm -rf hubbardu_runs
-printf '5.7.1\n\n\nMn\n\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+rm -f stb_hubbardu_report*.txt stb_hubbardu_references*.bib
+printf '5.7.1\n\n\nMn\n\n\n\n\n\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Generated 'reference/'" log_menu.txt
 check_success hubbardu_runs/run_manifest.json
-check_absent hubbardu_runs/hubbardu_stage1.txt
+check_success stb_hubbardu_report.txt
 
 echo "Testing: navigate 5.7.1 -> structure_2mn.fdf -> calc.fdf -> Mn -> atom-index 1 -> auto shell ->"
 echo "  default J -> no pseudo -> default output -> save-report=Y -> quit"
 rm -rf hubbardu_runs
-printf '5.7.1\nstructure_2mn.fdf\ncalc.fdf\nMn\n1\n\n\n\n\ny\n\n0\n' | stb-suite > log_menu_atom_index.txt 2>&1
+rm -f stb_hubbardu_report*.txt stb_hubbardu_references*.bib
+printf '5.7.1\nstructure_2mn.fdf\ncalc.fdf\nMn\n1\n\n\n\n\n\n0\n' | stb-suite > log_menu_atom_index.txt 2>&1
 check_contains "Perturbed atom" log_menu_atom_index.txt
 check_contains "Generated 'reference/'" log_menu_atom_index.txt
 check_contains "Mn_pert   1" hubbardu_runs/reference/config_extra.fdf
-check_success hubbardu_runs/hubbardu_stage1.txt
+check_success stb_hubbardu_report.txt
 
 echo "Testing: navigate 5.7.1 with a genuinely missing structure file -> the CLI itself (not the"
 echo "  interactive wrapper) reports the error, since the wrapper no longer pre-validates paths"
 rm -rf hubbardu_runs
-printf '5.7.1\ndoes_not_exist.fdf\ncalc.fdf\nMn\n\n\n\n\n\nn\n\n0\n' | stb-suite > log_menu_missing.txt 2>&1
+printf '5.7.1\ndoes_not_exist.fdf\ncalc.fdf\nMn\n\n\n\n\n\n\n0\n' | stb-suite > log_menu_missing.txt 2>&1
 check_contains "does_not_exist.fdf' not found" log_menu_missing.txt
 
 

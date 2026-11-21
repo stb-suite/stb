@@ -198,14 +198,15 @@ check_contains "Energy converged at:.*kgrid = 0.1000" log_multi.txt
 # --- 7. --save-report / --save-gnuplot / --output-dir ---
 echo -e "\n--- Testing --save-report/--save-gnuplot/--output-dir ---"
 rm -rf saved_out
+rm -f stb_convergenceAnalysis_report*.txt stb_convergenceAnalysis_references*.bib
 stb-convergenceAnalysis --dir convergence_runs --no-intro --save-report --save-gnuplot \
     --output-dir saved_out > log_saved.txt 2>&1
-check_success saved_out/convergence_report.txt
+check_success stb_convergenceAnalysis_report.txt
 check_success saved_out/meshcutoff_convergence.dat
 check_success saved_out/meshcutoff_convergence.gplot
 check_success saved_out/energyshift_convergence.dat
 check_success saved_out/kgrid_convergence.dat
-check_contains "Energy converged at: meshcutoff = 250.0000" saved_out/convergence_report.txt
+check_contains "Energy converged at: meshcutoff = 250.0000" stb_convergenceAnalysis_report.txt
 
 echo "Testing: the .gplot script actually renders with gnuplot"
 if command -v gnuplot > /dev/null 2>&1; then
@@ -278,17 +279,18 @@ check_contains "apply" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.5.2) ---"
 
 echo "Testing: navigate 5.5.2 -> all defaults (no advanced settings, no save/view/apply) -> quit"
-printf '5.5.2\n\n\n\nn\n\nn\nn\nn\n\n\n0\n' | stb-suite > log_menu_defaults.txt 2>&1
+printf '5.5.2\n\n\n\nn\n\nn\nn\n\n\n0\n' | stb-suite > log_menu_defaults.txt 2>&1
 check_contains "Energy converged at:.*meshcutoff = 250.0000" log_menu_defaults.txt
 
 echo "Testing: navigate 5.5.2 -> advanced settings + save-report/gnuplot + apply -> quit"
 rm -rf menu_out
 printf 'Mesh.CutOff   150.0000 Ry\n' > menu_apply_target.fdf
-printf '5.5.2\n\n\n\ny\n2.0\n0.05\nmenu_out\ny\ny\nn\nmenu_apply_target.fdf\n\n\n0\n' \
+rm -f stb_convergenceAnalysis_report*.txt stb_convergenceAnalysis_references*.bib
+printf '5.5.2\n\n\n\ny\n2.0\n0.05\nmenu_out\ny\nn\nmenu_apply_target.fdf\n\n\n0\n' \
     | stb-suite > log_menu_advanced.txt 2>&1
 check_contains "Volume tolerance  : 2.0 %" log_menu_advanced.txt
 check_contains "Energy and structure agree on the same converged value." log_menu_advanced.txt
-check_success menu_out/convergence_report.txt
+check_success stb_convergenceAnalysis_report.txt
 check_success menu_out/meshcutoff_convergence.dat
 check_contains "Applied.*meshcutoff = 250.0000" log_menu_advanced.txt
 check_contains "Mesh.CutOff   250.0000 Ry" menu_apply_target.fdf

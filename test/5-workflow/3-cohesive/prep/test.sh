@@ -296,14 +296,14 @@ check_contains "1   6   C" atoms_bsse/C/structure.fdf
 check_contains "2   -6   C_ghost" atoms_bsse/C/structure.fdf
 check_contains "NumberOfSpecies    2" atoms_bsse/C/structure.fdf
 
-echo "Verifying the ghost pseudopotential is symlinked from the real element's file"
+echo "Verifying the ghost pseudopotential is a copy of the real element's file"
 stb-cohesive -s phantom.fdf -O . -p pp --no-intro > log_bsse_pp.txt 2>&1
 check_success atoms_bsse/C/C_ghost.psf
-if [ "$(readlink -f atoms_bsse/C/C_ghost.psf)" = "$(readlink -f atoms_bsse/C/C.psf)" ]; then
-    echo -e "   -> ${GREEN}Verified:${NC} C_ghost.psf resolves to the same file as the real C.psf"
+if [ ! -L atoms_bsse/C/C_ghost.psf ] && cmp -s atoms_bsse/C/C_ghost.psf atoms_bsse/C/C.psf; then
+    echo -e "   -> ${GREEN}Verified:${NC} C_ghost.psf is a copy of the real C.psf (same bytes, not a symlink)"
     PASS=$((PASS+1))
 else
-    echo -e "   -> ${RED}Failed:${NC} C_ghost.psf does not resolve to the real C.psf"
+    echo -e "   -> ${RED}Failed:${NC} C_ghost.psf is not a byte copy of the real C.psf"
     FAIL=$((FAIL+1))
 fi
 
@@ -453,7 +453,7 @@ check_contains "bsse-multi-site" log_help.txt
 check_contains "bsse-convergence-check" log_help.txt
 check_contains "dispersion" log_help.txt
 check_contains "symprec" log_help.txt
-check_contains "save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 
 
 # --- 14. Interactive path (stb-suite, shortcut 5.3.1) ---
@@ -466,7 +466,7 @@ rm -rf structure atoms atoms_bsse cohesive_runs
 # (blank -> Y, default), multi-site choice (blank -> Y, default),
 # convergence-check choice (n), advanced settings (n -> skip), save report
 # (n), then the "Press Enter to continue" pause, then quit.
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\n\n\nn\n\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_success cohesive_runs/structure/calc.fdf
 check_success cohesive_runs/atoms/C/calc.fdf
@@ -476,7 +476,7 @@ check_success cohesive_runs/atoms_bsse/C/site_k_x6/calc.fdf
 
 echo "Testing: navigate 5.3.1 -> decline BSSE -> no atoms_bsse/ created (multi-site/conv-check prompts skipped entirely)"
 rm -rf structure atoms atoms_bsse cohesive_runs
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\nn\n\nn\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\nn\n\nn\n\n0\n' | stb-suite > log_menu_nobsse.txt 2>&1
 check_contains "BSSE correction.*OFF" log_menu_nobsse.txt
 check_success cohesive_runs/structure/calc.fdf
 if [ -d cohesive_runs/atoms_bsse ]; then
@@ -495,7 +495,7 @@ rm -rf structure atoms atoms_bsse atoms_bsse_check atoms_bsse_check_6.0 atoms_bs
 # vacuum-gap (blank), output dir (blank), bsse-cutoff (blank), symprec
 # (blank), convergence increment(s) ('2 4 6' -- the new multi-value scan),
 # save report (n), then "Press Enter to continue", then quit.
-printf '5.3.1\nstructure.fdf\n\n\nn\nn\n\n\n\ny\ny\n\n\n\n\n2 4 6\nn\n\n0\n' | stb-suite > log_menu_scan.txt 2>&1
+printf '5.3.1\nstructure.fdf\n\n\n\nn\nn\n\n\n\ny\ny\n\n\n\n\n2 4 6\nn\n\n0\n' | stb-suite > log_menu_scan.txt 2>&1
 check_contains "BSSE convergence check.*ON .+2, +4, +6 Ang." log_menu_scan.txt
 check_contains "Also generated 3 BSSE convergence-check references" log_menu_scan.txt
 check_success cohesive_runs/atoms_bsse_check_6.0/C/site_k_x6/calc.fdf

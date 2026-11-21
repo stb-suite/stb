@@ -495,7 +495,13 @@ version before) and **Added** (new options and tools).
   a step, and on a hexagonal lattice that mesh loses the point group (`-m 30 30 1`:
   `MeshSymmetryFallbackWarning`, only time reversal used). Thermal properties change in the last
   digits (graphene, 30x30x1: zero-point energy 170.64 -> 170.63 meV/atom). `stb-phononsPos
-  --shifted-mesh` gives the old mesh.
+  --shifted-mesh` gives the old mesh. The thermal displacements (`--thermal-displacements`, ADP
+  tensors) leave out the Gamma acoustic modes -- rigid translations, which a Gamma-centred mesh now
+  contains -- and modes below 0.01 THz, whose 1/f^2 weight made phonopy stop on an assertion
+  (round-off imaginary parts) next to a soft mode; the report says which modes were summed. When
+  phonopy still refuses the sum (soft/imaginary modes), section [3c] says so and the rest of the
+  analysis (DOS, PDOS, thermal properties, report) is written -- before, the whole run stopped with
+  an AssertionError traceback.
 
 - Supported Python versions are 3.10 to 3.12 (`requires-python` now says so). 3.9 was listed but never
   worked: phonopy does not build there, so `pip install` failed late with an unrelated-looking build

@@ -75,15 +75,15 @@ pushd "$TEST_DIR" > /dev/null
 # --- 2. Real fixture: single-atom-in-cell synthetic FreeEng values (no
 #     atoms_bsse/ here -- uncorrected-only path) ---
 echo -e "\n--- Testing default run (synthetic 1-atom fixture, no BSSE data) ---"
-rm -f cohesive_results.dat cohesive_correction.png
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib cohesive_correction.png
 stb-cohesiveAnalysis -o calc.out -d . --save-report --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
-check_success cohesive_results.dat
+check_success stb_cohesiveAnalysis_report.txt
 
 echo "Verifying the cohesive energy arithmetic (E_bulk - E_isolated) / N_atoms"
 check_contains "Total atoms | 1" log_default.txt
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_default.txt
-check_contains "Uncorrected.*-450.1111.*-450.1111" cohesive_results.dat
+check_contains "Uncorrected.*-450.1111.*-450.1111" stb_cohesiveAnalysis_report.txt
 
 echo "Verifying the BSSE caveat note appears when atoms_bsse/ isn't present"
 check_contains "NOTE. This result is NOT corrected for BSSE" log_default.txt
@@ -142,7 +142,7 @@ check_contains "Residual force.*0.6893 eV/Ang .within --force-tolerance 1.0" log
 echo -e "\n--- Testing with atoms_bsse/ present and complete ---"
 mkdir -p atoms_bsse/C
 echo "siesta: FreeEng =     -50.512345" > atoms_bsse/C/calc.out
-rm -f cohesive_results.dat cohesive_correction.png
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib cohesive_correction.png
 stb-cohesiveAnalysis -o calc.out -d . --save-report --no-intro > log_bsse.txt 2>&1
 check_exit_code $? 0
 check_contains "BSSE reference.*found" log_bsse.txt
@@ -152,7 +152,7 @@ echo "Verifying the BSSE-corrected cohesive energy (E_bulk - E_atom_BSSE) is les
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_bsse.txt
 check_contains "BSSE-corrected.*-449.6111.*-449.6111" log_bsse.txt
 check_contains "BSSE correction per atom: +0.5000 eV/atom" log_bsse.txt
-check_contains "BSSE-corrected" cohesive_results.dat
+check_contains "BSSE-corrected" stb_cohesiveAnalysis_report.txt
 
 echo "Verifying [4] CORRECTION PLOT is built and saved when BSSE data is complete"
 check_contains "OK. Saved:.*cohesive_correction.png" log_bsse.txt
@@ -169,7 +169,7 @@ check_contains "shown interactively via --view" log_view.txt
 #     with a warning -- never blocks the (still valid) uncorrected result. ---
 echo -e "\n--- Testing with atoms_bsse/ present but incomplete ---"
 rm -f atoms_bsse/C/calc.out
-rm -f cohesive_results.dat
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib
 stb-cohesiveAnalysis -o calc.out -d . --no-intro > log_bsse_incomplete.txt 2>&1
 check_exit_code $? 0
 check_contains "WARNING. Could not find 'calc.out' or results for the BSSE-corrected isolated atom: C" log_bsse_incomplete.txt
@@ -377,17 +377,17 @@ check_contains "force-tolerance" log_help.txt
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.3.2) ---"
 
 echo "Testing: navigate 5.3.2 -> calc.out -> dir '.' -> default force-tolerance -> save report (y) -> view (n)"
-rm -f cohesive_results.dat
+rm -f stb_cohesiveAnalysis_report*.txt stb_cohesiveAnalysis_references*.bib
 # Prompts in order: out_file, dir_path ('.', since the CLI's own new default
 # 'cohesive_runs' doesn't exist in this flat fixture), force-tolerance (blank
 # -> default 0.05), save report (y), view (n), then the "Press Enter to
 # continue" pause, then quit.
-printf '5.3.2\ncalc.out\n.\n\ny\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
+printf '5.3.2\ncalc.out\n.\n\nn\n\n0\n' | MPLBACKEND=Agg stb-suite > log_menu.txt 2>&1
 check_contains "CONFIGURATION SUMMARY" log_menu.txt
 check_contains "Force tolerance.*0.05 eV/Ang" log_menu.txt
-check_contains "Save report.*yes" log_menu.txt
+check_not_contains "Save report" log_menu.txt
 check_contains "Uncorrected.*-450.1111.*-450.1111" log_menu.txt
-check_success cohesive_results.dat
+check_success stb_cohesiveAnalysis_report.txt
 
 
 # --- N8: the solid's -T*S (metal smearing) is not reported as an isolated-atom artefact ---

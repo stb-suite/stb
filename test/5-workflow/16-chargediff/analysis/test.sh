@@ -52,6 +52,7 @@ check_success run/fragment2/calc.out
 
 # --- 1. Default run: slice, report, only the opt-out outputs ---
 echo -e "\n--- Default run (slice) ---"
+rm -f stb_chargediffAnalysis_report*.txt stb_chargediffAnalysis_references*.bib
 stb-chargediffAnalysis --dir run -o out_default --no-intro > log_default.txt 2>&1
 check_exit_code $? 0
 for s in "\[0\] RUN METADATA" "\[1\] SYSTEM" "\[2\] CONSISTENCY CHECKS" "\[3\] COUNTERPOISE" "\[4\] DELTA CHARGE DENSITY" \
@@ -62,7 +63,7 @@ check_contains "checks 8 ok, 0 warn" log_default.txt
 check_contains "E_int (CP)     : -0.1500 eV" log_default.txt
 check_success out_default/run_chargediff_slice.dat
 check_success out_default/run_chargediff.cube
-check_success out_default/references.bib
+check_success stb_chargediffAnalysis_references.bib
 echo "Testing: plots and data tables are opt-in"
 check_absent out_default/run_chargediff_summary.png
 check_absent out_default/run_chargediff_slice.gplot
@@ -129,10 +130,11 @@ check_success out_axis/run_chargediff_slice.gplot
 check_absent out_axis/run_chargediff.cube
 
 echo -e "\n--- --save-report ---"
+rm -f stb_chargediffAnalysis_report*.txt stb_chargediffAnalysis_references*.bib
 stb-chargediffAnalysis --dir run -o out_report --save-report --no-intro > log_report.txt 2>&1
 check_exit_code $? 0
-check_success out_report/chargediff_analysis_report.txt
-check_contains "COUNTERPOISE" out_report/chargediff_analysis_report.txt
+check_success stb_chargediffAnalysis_report.txt
+check_contains "COUNTERPOISE" stb_chargediffAnalysis_report.txt
 
 echo -e "\n--- --show without a display falls back to saving ---"
 env -u DISPLAY -u WAYLAND_DISPLAY stb-chargediffAnalysis --dir run -o out_show --show --no-intro > log_show.txt 2>&1

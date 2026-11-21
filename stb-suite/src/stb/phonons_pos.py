@@ -42,6 +42,10 @@ SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaa
                   '#cc2266', '#66cc22', '#2266cc', '#cc6622', '#8822cc', '#22cc88']
 
 
+
+# Lowest frequency (THz) that enters the thermal displacement (ADP) sums -- see run_thermal_displacement_matrices.
+TDM_FREQ_MIN_THZ = 0.01
+
 def _pbc_atomic_shift(positions_new, positions_ref, cell):
     """Per-atom displacement magnitude between two position arrays of the
     same periodic cell, using the minimum-image convention -- NOT a plain
@@ -877,6 +881,7 @@ def main():
     cif_filename = None
     disp_dat_filename = None
     tdm = None
+    tdm_failed = False
     if args.pdos or args.thermal_displacements:
         print(f"[INFO] Re-running a denser, symmetry-unreduced mesh with eigenvectors "
               f"for {'PDOS' if args.pdos else ''}"
@@ -887,8 +892,17 @@ def main():
         if args.pdos:
             phonon.run_projected_dos()
         if args.thermal_displacements:
-            phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
-            tdm = phonon.thermal_displacement_matrices
+            # The acoustic modes at Gamma are rigid translations (a Gamma-centred mesh contains Gamma),
+            # and a mode at ~0 THz carries a ~1/f^2 weight that blows up round-off: both are left out,
+            # as are imaginary modes (phonopy's own default already drops f <= 0).
+            try:
+                phonon.run_thermal_displacement_matrices(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                                         freq_min=TDM_FREQ_MIN_THZ, exclude_gamma_acoustic=True)
+                tdm = phonon.thermal_displacement_matrices
+            except AssertionError:
+                # phonopy checks that the summed ADP tensors are real; with soft/imaginary modes the
+                # q / -q partners can enter the sum differently and it stops. Report it, keep the rest.
+                tdm_failed = True
 
     symbols = phonon.primitive.symbols
     species = list(dict.fromkeys(symbols))
@@ -931,7 +945,7 @@ def main():
             if args.view:
                 phonon.plot_projected_dos(pdos_indices=species_indices, legend=species)
 
-    if args.thermal_displacements:
+    if args.thermal_displacements and tdm is not None:
         matrices = tdm.thermal_displacement_matrices  # (n_temps, n_atoms, 3, 3)
         u_iso = np.trace(matrices, axis1=2, axis2=3) / 3  # (n_temps, n_atoms)
         atom_labels = []
@@ -977,6 +991,8 @@ def main():
             species_uiso[sp] = u_iso[:, idx].mean(axis=1)
 
         print_section('[3c] THERMAL DISPLACEMENTS', f_out)
+        print_dual(f"Modes summed        : f > {TDM_FREQ_MIN_THZ} THz on the {' x '.join(map(str, args.mesh))} mesh; "
+                   "Gamma acoustic (rigid translations) and imaginary modes left out", f_out)
         print_dual(f"ADP CIF (@ {tdm.temperatures[-1]:.1f} K) : {cif_filename}", f_out)
         for sp in species:
             print_dual(f"  {sp} U_iso @ {tdm.temperatures[-1]:.1f} K : {species_uiso[sp][-1]:.6f} Ang^2", f_out)
@@ -990,6 +1006,12 @@ def main():
         # tool never makes -- it uses run_thermal_displacement_matrices()
         # (full ADP tensors) instead, and there's no matrices-plotting
         # equivalent in phonopy's API.
+    elif args.thermal_displacements and tdm_failed:
+        print_section('[3c] THERMAL DISPLACEMENTS', f_out)
+        print_dual(color_text("[WARNING] Thermal displacements not computed: phonopy found imaginary parts in "
+                              "the summed ADP tensors, which happens next to soft/imaginary modes (see [2]). "
+                              "Relax the structure (or freeze the unstable mode, --freeze-unstable-mode) and "
+                              "rerun; the rest of this analysis is unaffected.", 'yellow'), f_out)
 
     os.chdir(original_dir)
 

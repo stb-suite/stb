@@ -122,6 +122,7 @@ for i, d in enumerate(sorted(glob.glob("phonon_runs/disp-*")), start=1):
             vals = [float(v) * scale for v in parts[1:]]
             out.write(f"{idx:>6}  {vals[0]: .9E}  {vals[1]: .9E}  {vals[2]: .9E}\n")
 PYEOF
+rm -f stb_phononsPos_report*.txt stb_phononsPos_references*.bib
 stb-phononsPos -dir phonon_runs -m 4 4 4 --bands --dos --pdos --thermal-displacements \
     --freeze-unstable-mode --save-gnuplot --save-report --no-intro > log_pos_siesta.txt 2>&1
 check_contains "Force files found : 42" log_pos_siesta.txt
@@ -132,7 +133,7 @@ check_contains "BAND STRUCTURE" log_pos_siesta.txt
 check_contains "Bravais lattice" log_pos_siesta.txt
 check_contains "DENSITY OF STATES" log_pos_siesta.txt
 check_contains "MODE FREEZE" log_pos_siesta.txt
-check_success phonon_runs/phonon_properties.txt
+check_success stb_phononsPos_report.txt
 check_success phonon_runs/phonon_bands.png
 check_success phonon_runs/band.yaml
 check_success phonon_runs/thermal_properties.dat
@@ -301,25 +302,25 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.4.2) ---"
 
 echo "Testing: select '1' from the numbered list -> bands actually runs"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
 check_contains "Selected: bands" log_menu_bands.txt
 check_contains "BAND STRUCTURE" log_menu_bands.txt
 check_success phonon_ml_runs/phonon_bands.png
 
 echo "Testing: an unrecognized token (old y/n habit) is now flagged instead of silently ignored"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\n\n0\n' | stb-suite > log_menu_typo.txt 2>&1
 check_contains "Ignored unrecognized option(s): y" log_menu_typo.txt
 check_not_contains "BAND STRUCTURE" log_menu_typo.txt
 
 echo "Testing: 'all' shortcut selects bands+dos+pdos+thermal but not freeze, and --save-report writes the report"
-rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml phonon_ml_runs/phonon_properties.txt
-printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\ny\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
+rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml stb_phononsPos_report*.txt stb_phononsPos_references*.bib
+printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
 check_contains "Selected: bands, dos, pdos, thermal" log_menu_all.txt
 check_contains "BAND STRUCTURE" log_menu_all.txt
 check_contains "DENSITY OF STATES" log_menu_all.txt
 check_not_contains "MODE FREEZE" log_menu_all.txt
-check_success phonon_ml_runs/phonon_properties.txt
+check_success stb_phononsPos_report.txt
 
 
 popd > /dev/null

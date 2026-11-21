@@ -28,6 +28,16 @@ check_success() {
 }
 
 # Checks that file $2 contains (grep -q) pattern $1
+check_not_contains() {
+    if grep -q -- "$1" "$2" 2>/dev/null; then
+        echo -e "   -> ${RED}Failed:${NC} '$1' found in '$2' but should not be"
+        FAIL=$((FAIL+1))
+    else
+        echo -e "   -> ${GREEN}Verified:${NC} '$1' not found in '$2' (as expected)"
+        PASS=$((PASS+1))
+    fi
+}
+
 check_contains() {
     if grep -q "$1" "$2" 2>/dev/null; then
         echo -e "   -> ${GREEN}Verified:${NC} '$1' found in '$2'"
@@ -69,6 +79,7 @@ pushd "$TEST_DIR" > /dev/null
 #     found, fall back to 3D" auto-detection path (the common/expected case
 #     for a hand-built/legacy folder). ---
 echo -e "\n--- Testing analysis of a uniaxial (xx) strain sweep ---"
+rm -f stb_strainAnalysis_report*.txt stb_strainAnalysis_references*.bib
 stb-strainAnalysis --file calc.out --dir . --save-report --save-gnuplot --no-intro > log_uniaxial.txt 2>&1
 check_success stb_strainAnalysis_report.txt
 check_contains "No parseable .fdf structure file found" stb_strainAnalysis_report.txt
@@ -187,10 +198,10 @@ else
 fi
 
 echo "Testing: without --save-report/--save-gnuplot, nothing is written"
-rm -f x_curve.dat x_curve.gplot stb_strainAnalysis_report.txt
+rm -f x_curve.dat x_curve.gplot stb_strainAnalysis_report*.txt stb_strainAnalysis_references*.bib
 stb-strainAnalysis --file calc.out --dir . --no-intro > log_nosave.txt 2>&1
 check_contains "Not written (off by default" log_nosave.txt
-if [ -s x_curve.dat ] || [ -s stb_strainAnalysis_report.txt ]; then
+if [ -s x_curve.dat ]; then
     echo -e "   -> ${RED}Failed:${NC} a file was written despite no --save-* flag"
     FAIL=$((FAIL+1))
 else
@@ -220,6 +231,7 @@ outcell: Unit cell vectors (Ang):
 siesta: Stress tensor Voigt (kbar):     ${xx}.00      ${xx}.00      0.00      0.00      0.00      0.00
 EOF
 done
+rm -f stb_strainAnalysis_report*.txt stb_strainAnalysis_references*.bib
 stb-strainAnalysis --file calc.out --dir . --save-report --save-gnuplot --no-intro > log_biaxial.txt 2>&1
 check_contains "WARNING" log_biaxial.txt
 check_contains "Biaxial direction 'xy' detected" log_biaxial.txt
@@ -275,6 +287,7 @@ EOF
 done
 
 echo "Testing: 2 directions found under --dir -> compared automatically, no flag needed"
+rm -f stb_strainAnalysis_report*.txt stb_strainAnalysis_references*.bib
 stb-strainAnalysis --file calc.out --dir . --save-report --save-gnuplot --no-intro > log_compare.txt 2>&1
 check_exit_code $? 0
 check_contains "2 direction(s) found -- comparing automatically" log_compare.txt
@@ -601,7 +614,7 @@ check_contains "auto,3d,2d,1d" log_help.txt
 check_contains "cross-section" log_help.txt
 check_contains "yield" log_help.txt
 check_contains "strain_runs" log_help.txt
-check_contains "\-\-save-report" log_help.txt
+check_not_contains "save-report" log_help.txt
 check_contains "\-\-save-gnuplot" log_help.txt
 check_contains "\-\-view" log_help.txt
 
@@ -611,12 +624,12 @@ echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.1.2) ---"
 
 echo "Testing: navigate 5.1.2 -> dir '.' -> calc.out -> dimensionality auto -> skip advanced ->"
 echo "         no yield -> default output-dir -> no report -> save gnuplot -> no view -> quit"
-rm -f x_curve.dat x_curve.gplot stb_strainAnalysis_report.txt
+rm -f x_curve.dat x_curve.gplot stb_strainAnalysis_report*.txt stb_strainAnalysis_references*.bib
 # Prompts in order: dir ('.'), file ('calc.out'), dimensionality (blank ->
 # auto), advanced settings (n -> skip), yield (n), output-dir (blank ->
 # '.'), save-report (n), save-gnuplot (y -- so a real file is produced for
 # check_success below), view (n), "Press Enter to continue", quit.
-printf '5.1.2\n.\ncalc.out\n\nn\nn\n\nn\ny\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
+printf '5.1.2\n.\ncalc.out\n\nn\nn\n\ny\nn\n\n0\n' | stb-suite > log_menu.txt 2>&1
 check_contains "Initial Slope" log_menu.txt
 check_success x_curve.dat
 if grep -q "Traceback" log_menu.txt 2>/dev/null; then

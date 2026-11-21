@@ -1197,7 +1197,7 @@ def generate_calculation(struct_file, chosen_mode, d3_enabled, spin_polarized, p
             output_lines = new_text.splitlines(keepends=True)
             print_dual(color_text(
                 f"[NOTE] {', '.join(np_labels)}: PAO.PolarizationScheme non-perturbative written (the default "
-                "perturbative polarization orbital fails for Li).", 'yellow'), f_out)
+                "perturbative polarization orbital fails for Li and Be).", 'yellow'), f_out)
 
         if cell_fixed_for_vacuum:
             print_dual(color_text(

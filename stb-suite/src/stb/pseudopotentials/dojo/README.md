@@ -55,6 +55,10 @@ Folder names follow `<relativity>_<xc>_<version>_<accuracy>`. The suite names ea
     projector set, and SIESTA 5.4.2 stops with 'generation of scalar-relativistic part is not
     available yet'. The tools refuse that combination with an `[ERROR]`; use `-p dojo-pbesol`.
   - There is no FR table for LDA.
+- **Li and Be:** SIESTA cannot build their perturbative polarization orbital (`Generation of
+  polarization orbital failed`, every table, 1-16 ranks). The tools that write `calc.fdf` add
+  `%block PAO.PolarizationScheme` with `<label> non-perturbative` for them, ghosts included. No other
+  element of these tables failed (SIESTA 5.4.2, DZP, `PAO.EnergyShift 0.02 Ry`).
 - **sr3plus_*:** lanthanides Ce–Lu (no La) with the 4f electrons frozen in the core. Use them only for Ln3+ compounds. They do not describe f physics (magnetism, 4f states).
 - Usage in stb: `-p dojo[-sr|-fr|-sr3plus][-pbe|-pbesol|-pw][-standard|-stringent]` (words in any order,
   defaults sr, pbe, standard); `stb-pseudo --list-banks` lists them. Every tool that copies these files into

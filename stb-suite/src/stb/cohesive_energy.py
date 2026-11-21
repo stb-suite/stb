@@ -637,7 +637,7 @@ def main():
         if np_labels:
             print_dual(color_text(
                 f"[NOTE] {', '.join(np_labels)}: PAO.PolarizationScheme non-perturbative written in every "
-                "calc.fdf (the default perturbative polarization orbital fails for Li).", 'yellow'), f_out)
+                "calc.fdf (the default perturbative polarization orbital fails for Li and Be).", 'yellow'), f_out)
     with open(os.path.join(struct_dir, "calc.fdf"), 'w') as f:
         f.write(struct_calc)
     for sym in species.keys():

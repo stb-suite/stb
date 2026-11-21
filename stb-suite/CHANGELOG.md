@@ -30,6 +30,9 @@ version before) and **Added** (new options and tools).
 - The end-of-run level check (pseudopotentials vs `.fdf`) took a commented `# %block XC.mix` for a
   real one and then skipped the functional comparison. The template of `stb-inputfile` has that
   comment, so no `calc.fdf` written by it was ever checked. Commented blocks are now ignored.
+- Be gets the non-perturbative polarization scheme like Li (`PAO.PolarizationScheme`, ghosts too): its
+  perturbative polarization orbital fails in every PseudoDojo table ('Generation of polarization orbital
+  failed'). A test of every element of the bundled tables found no other.
 - `stb-bader` did not start on a fresh install ("pybader library not found", also for `--version`):
   pybader 0.3.12 imports `pkg_resources`, which setuptools 81 and later no longer ship. The suite
   now gives pybader what it needs from the standard library, so any setuptools version works. When

@@ -609,10 +609,11 @@ def _fdf_level(text):
 
 
 # Elements whose perturbative polarization orbital SIESTA fails to generate with the bundled
-# pseudopotentials ("Generation of polarization orbital failed ... Rc no bigger than 1.32 Bohr":
-# the Li 2s shell, rc ~11 Bohr, with the PseudoDojo Li; seen in LiF and in Li on graphene).
-# Others (Na, K, ...) are not verified.
-NONPERTURBATIVE_POLARIZATION_Z = {3: "Li"}
+# pseudopotentials ("Generation of polarization orbital failed": the very extended 2s shell of Li
+# and Be, rc ~11 Bohr for Li; seen in LiF and in Li on graphene). Verified for every element of the
+# bundled PseudoDojo tables (SIESTA 5.4.2, DZP, PAO.EnergyShift 0.02 Ry, 1-16 MPI ranks): only Li
+# and Be fail, and the non-perturbative scheme fixes both, ghosts included.
+NONPERTURBATIVE_POLARIZATION_Z = {3: "Li", 4: "Be"}
 
 
 def polarization_scheme_block(labels):
@@ -668,7 +669,7 @@ def add_nonperturbative_block(calc_text, species_z):
     labels = missing_nonperturbative(calc_text + species_block)
     if not labels:
         return calc_text, []
-    block = ("# Li: SIESTA's perturbative polarization orbital fails to generate (2s, rc ~11 Bohr);\n"
+    block = ("# Li, Be: SIESTA's perturbative polarization orbital fails to generate (extended 2s);\n"
              "# the non-perturbative scheme builds it from a real atomic calculation.\n"
              + polarization_scheme_block(labels))
     lines = calc_text.splitlines(keepends=True)
@@ -716,10 +717,10 @@ def check_pseudo_level(folder):
         if nonpert:
             warnings.append(("warning",
                 f"{root} gives {', '.join(nonpert)} a polarization orbital by SIESTA's default perturbative "
-                "scheme, which fails for Li with the PseudoDojo pseudopotential ('Generation of polarization "
-                "orbital failed ... Rc no bigger than 1.32 Bohr'). Add "
-                f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per Li label, "
-                "ghosts too) or 'PAO.Polarization.NonPerturbative true'."))
+                "scheme, which fails for " + "/".join(sorted(set(NONPERTURBATIVE_POLARIZATION_Z.values())))
+                + " with the PseudoDojo pseudopotentials ('Generation of polarization orbital failed'). Add "
+                f"'%block PAO.PolarizationScheme' with '{nonpert[0]} non-perturbative' (one line per such "
+                "label, ghosts too) or 'PAO.Polarization.NonPerturbative true'."))
         labels = [s for s in species if s in pseudo_files] or sorted(pseudo_files)
         headers = {}
         for label in labels:

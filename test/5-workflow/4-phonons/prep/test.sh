@@ -115,7 +115,7 @@ else
 fi
 echo "Testing: --no-perfect-supercell skips it and says so"
 mkdir -p noperf && cp structure.fdf calc.fdf Sn.psf O.psf noperf/
-rm -f stb_phononsCreate_report*.txt stb_phononsCreate_references*.bib
+rm -f noperf/stb_phononsCreate_report*.txt noperf/stb_phononsCreate_references*.bib
 (cd noperf && stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --no-perfect-supercell --no-intro > ../log_noperf.txt 2>&1)
 check_contains "not written (--no-perfect-supercell)" log_noperf.txt
 if [ ! -e noperf/phonon_runs/perfect_supercell ]; then

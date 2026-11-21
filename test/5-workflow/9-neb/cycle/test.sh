@@ -240,8 +240,8 @@ for label in ('image_00', 'image_01', 'image_02', 'image_03'):
 "
 stb-nebCycle --dir degen/neb_run --fmax 0.001 --no-intro > log_degen_step.txt 2>&1
 check_exit_code $? 1
-check_contains "non-finite (NaN/Inf)" log_degen_step.txt
-check_contains "path has collapsed" log_degen_step.txt
+check_contains "Degenerate band: every image has the same geometry" log_degen_step.txt
+check_contains "No cycle folder is written" log_degen_step.txt
 echo "Testing: no corrupted cycle_01/ was written after the guard fired"
 if [ -d degen/neb_run/cycle_01 ]; then
     echo -e "   -> ${RED}Failed:${NC} cycle_01 unexpectedly written despite the NaN guard"

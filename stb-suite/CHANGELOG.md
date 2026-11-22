@@ -418,7 +418,8 @@ version before) and **Added** (new options and tools).
 - Packaging: the wheel and sdist had no long description and no license file in their metadata,
   because `pyproject.toml` names `README.md` and `LICENSE`, which existed only at the repository
   root. `stb-suite/README.md` and `stb-suite/LICENSE` are now links to them. The conda recipe
-  lacked `pyxtal` (stb-xrd, stb-xrdsearch) and pointed `home` to an old account.
+  lacked `pyxtal` (stb-xrd, stb-xrdsearch), pinned `scipy==1.13.1` where `pyproject.toml` does not
+  (the suite is tested with scipy 1.18), and pointed `home` to an old account.
 
 ### Changed
 

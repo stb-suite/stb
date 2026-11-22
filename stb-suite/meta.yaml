@@ -37,7 +37,7 @@ requirements:
     - pybader
     - phonopy
     - setuptools
-    - scipy==1.13.1
+    - scipy
     - pandas
     - icet
     - pyxtal

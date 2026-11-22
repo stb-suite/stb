@@ -52991,7 +52991,8 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   Packaging: the wheel and sdist had no long description and no license file in their metadata,
   because \texttt{pyproject.toml} names \texttt{README.md} and \texttt{LICENSE}, which existed only at the repository
   root. \texttt{stb-\allowbreak{}suite/README.md} and \texttt{stb-\allowbreak{}suite/LICENSE} are now links to them. The conda recipe
-  lacked \texttt{pyxtal} (stb-xrd, stb-xrdsearch) and pointed \texttt{home} to an old account.
+  lacked \texttt{pyxtal} (stb-xrd, stb-xrdsearch), pinned \texttt{scipy==1.13.1} where \texttt{pyproject.toml} does not
+  (the suite is tested with scipy 1.18), and pointed \texttt{home} to an old account.
 \end{itemize}
 
 \section{Changed}

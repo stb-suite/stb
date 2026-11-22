@@ -2073,9 +2073,15 @@ their examples were exercised with SIESTA 5.x).
 \end{tabularx}
 \end{table}
 
-\section{Installing from source}
+\section{Installing}
 
-There is no PyPI package; install from a clone of the repository:
+From PyPI:
+
+\begin{codeblock}
+pip install stb-suite
+\end{codeblock}
+
+From a clone of the repository (\texttt{git clone -b dev ...} for the development version):
 
 \begin{codeblock}
 git clone https://github.com/stb-suite/stb.git
@@ -2088,8 +2094,8 @@ The machine-learning tools additionally need PyTorch and \texttt{mace-torch},
 installed by the optional \texttt{ml} extra:
 
 \begin{codeblock}
-pip install ".[ml]"                 # from stb/stb-suite, instead of the plain install
-pip install "stb_suite[ml]"         # or, to add it to an existing install
+pip install "stb-suite[ml]"         # from PyPI, or to add it to an existing install
+pip install ".[ml]"                 # from stb/stb-suite, instead of the plain source install
 \end{codeblock}
 
 For a GPU, install a CUDA-enabled PyTorch build first (see the PyTorch
@@ -53274,7 +53280,8 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
   author, keywords, classifiers, project URLs, SPDX license \texttt{MIT}; setuptools 77 or later to build),
   a hand-run GitHub workflow that builds, checks (\texttt{twine\ check}) and uploads to TestPyPI or PyPI from a
   release tag only (\texttt{.github/workflows/publish.yml}, trusted publishing, no stored token), and a
-  conda-forge recipe for staged-recipes (\texttt{packaging/conda-\allowbreak{}forge/meta.yaml}).
+  conda-forge recipe for staged-recipes (\texttt{packaging/conda-\allowbreak{}forge/meta.yaml}). The README, the site and
+  the manual give \texttt{pip\ install\ stb-\allowbreak{}suite} (with the source install for the \texttt{dev} branch).
 \end{itemize}
 
 \section{Known issues}

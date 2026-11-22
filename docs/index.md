@@ -26,7 +26,13 @@ all of them.
 
 ## Install
 
-From source:
+From PyPI:
+
+```bash
+pip install stb-suite
+```
+
+From source (`git clone -b dev ...` for the development version):
 
 ```bash
 git clone https://github.com/stb-suite/stb.git
@@ -38,11 +44,9 @@ Python 3.10 to 3.12. The ML Simulations tools additionally need PyTorch and `mac
 which the optional `ml` extra installs:
 
 ```bash
-pip install ".[ml]"                 # from stb/stb-suite, instead of the plain install
-pip install "stb_suite[ml]"         # or, to add it to an existing install
+pip install "stb-suite[ml]"         # from PyPI, or to add it to an existing install
+pip install ".[ml]"                 # from stb/stb-suite, instead of the plain source install
 ```
-
-There is no PyPI package: install from source as above.
 
 ## Recommended input layout
 

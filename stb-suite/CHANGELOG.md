@@ -649,7 +649,8 @@ version before) and **Added** (new options and tools).
   author, keywords, classifiers, project URLs, SPDX license `MIT`; setuptools 77 or later to build),
   a hand-run GitHub workflow that builds, checks (`twine check`) and uploads to TestPyPI or PyPI from a
   release tag only (`.github/workflows/publish.yml`, trusted publishing, no stored token), and a
-  conda-forge recipe for staged-recipes (`packaging/conda-forge/meta.yaml`).
+  conda-forge recipe for staged-recipes (`packaging/conda-forge/meta.yaml`). The README, the site and
+  the manual give `pip install stb-suite` (with the source install for the `dev` branch).
 
 ### Known issues
 

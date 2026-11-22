@@ -53,21 +53,20 @@ A workflow is several commands used in order (for example `stb-strain` then `stb
 
 ## 📦 Installation
 
+From PyPI:
+
+```bash
+pip install stb-suite              # the suite
+pip install "stb-suite[ml]"        # with the optional ML tools (PyTorch, mace-torch)
+```
+
+From source (`git clone -b dev ...` for the development version):
+
 ```bash
 git clone https://github.com/stb-suite/stb.git
 cd stb/stb-suite
-pip install .
+pip install .                      # or ".[ml]"
 ```
-
-With the optional ML tools:
-
-```bash
-pip install ".[ml]"
-```
-
-If the suite is already installed, `pip install "stb_suite[ml]"` adds the ML extra to it.
-
-There is no PyPI package: install from source as above.
 
 ---
 

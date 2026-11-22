@@ -646,6 +646,23 @@ version before) and **Added** (new options and tools).
 - `stb-elasticInputs` writes `elastic_scan.json` (symmetry method, directions) into every series folder;
   `stb-elasticAnalysis` reads the method from it (see Fixed).
 
+### Known issues
+
+- GQCA (5.13): AlGaAs, an alloy known to be close to ideal, gives `Delta_1` = 29 meV (TZP) to
+  43 meV (DZP, 450 Ry) instead of a value near zero. k-points, cell shape, mesh and strain have been
+  ruled out, the basis only in part (`examples/5.13-gqca`, Section 5.3). Check `Delta_1` independently
+  before relying on it for a near-ideal alloy.
+- GQCA: beyond the random limit, the cluster entropy is the standard gas-of-independent-clusters
+  form and has not been checked against an independent reference. At the random limit it gives the
+  exact ideal entropy, which the tests check.
+- Spin-orbit with `FilterCutoff`: SIESTA 5.4.2 gives NaN in the first SCF iteration for Co and Cu with
+  the `fr` tables. The end-of-run check warns; leave the filter off in a spin-orbit run.
+- `-p dojo-fr-pbesol` without spin-orbit: only Ge, Sb and Te run; the other files have no
+  scalar-relativistic part and are refused. Use `dojo-fr-pbe`, or the `sr` tables, for a run without
+  spin-orbit.
+- `stb-phononsPos --thermal-displacements` next to soft or imaginary modes: phonopy can refuse the
+  sum; section [3c] says so and the rest of the analysis is written. Relax the structure first.
+
 ## 2.0.0 (2026-10-31) -- first stable release
 
 - Every tool is version 2.0.0. The `main` branch holds the stable releases (2.0.1, ... for bug

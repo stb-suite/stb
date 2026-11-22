@@ -186,7 +186,7 @@ def write_nav(dest, lines):
 # --- Changelog -------------------------------------------------------------------
 
 VERSION_HEADING = re.compile(r"^## (\d+\.\d+\.\d+) \(([^)]*)\)(?:\s*--\s*(.*))?$", re.M)
-CHANGE_KINDS = ("Fixed", "Changed", "Added")
+CHANGE_KINDS = ("Fixed", "Changed", "Added", "Known issues")
 
 
 def changelog_versions(text):
@@ -208,9 +208,9 @@ def changelog_versions(text):
 
 
 def count_entries(body):
-    """Top-level entries ('- ' at the start of a line) per Fixed/Changed/Added section; a version without
-    those sections counts all its entries under 'Changes'."""
-    sections = re.split(r"^### (" + "|".join(CHANGE_KINDS) + r")\s*$", body, flags=re.M)
+    """Top-level entries ('- ' at the start of a line) per subsection (Fixed, Changed, Added, Known
+    issues, ...); a version without subsections counts all its entries under 'Changes'."""
+    sections = re.split(r"^### (.+?)\s*$", body, flags=re.M)      # every subsection (Known issues too)
     if len(sections) == 1:
         return {"Changes": len(re.findall(r"^- ", body, re.M))}
     return {sections[k]: len(re.findall(r"^- ", sections[k + 1], re.M)) for k in range(1, len(sections), 2)}
@@ -234,7 +234,7 @@ def changelog_index(intro, versions):
         counts = count_entries(v["body"])
         cells = [str(counts.get(kind, "")) for kind in CHANGE_KINDS]
         if "Changes" in counts:
-            cells = [f"{counts['Changes']} entries", "", ""]
+            cells = [f"{counts['Changes']} entries"] + [""] * (len(CHANGE_KINDS) - 1)
         when = "unreleased (`dev`)" if v["when"] == "unreleased" else v["when"]
         lines.append(f"| [{v['version']}]({v['version']}.md) | {when} | " + " | ".join(cells) + " |")
     lines += ["", "## Before 2.0.0", "",

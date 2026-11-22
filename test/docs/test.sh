@@ -255,6 +255,24 @@ PYEOF
 check_exit_code $? 0
 
 
+# --- 3b. Changelog: an overview table and one page per version of stb-suite/CHANGELOG.md ---
+echo -e "\n--- Testing the changelog section ---"
+check_success "$SITE_DIR/changelog/index.html"
+check_absent "$SITE_DIR/changelog.html"
+check_contains 'href="2.1.0/"' "$SITE_DIR/changelog/index.html"
+check_contains 'href="2.0.0/"' "$SITE_DIR/changelog/index.html"
+check_contains "Before 2.0.0" "$SITE_DIR/changelog/index.html"
+check_success "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="fixed"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="changed"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_contains 'id="added"' "$SITE_DIR/changelog/2.1.0/index.html"
+check_success "$SITE_DIR/changelog/2.0.0/index.html"
+echo "Testing: the per-tool history before 2.0.0 is not published, and the home page links the version's changelog"
+check_not_contains "Last per-tool version of every command" "$SITE_DIR/changelog/2.0.0/index.html"
+check_contains 'href="changelog/2.1.0/"' "$SITE_DIR/index.html"
+check_absent "$SITE_DIR/changelog/SUMMARY"
+
+
 # --- 4. Links between guides and back to GitHub ---
 echo -e "\n--- Testing link rewriting and the GitHub footer ---"
 check_contains 'href="../5.3-cohesive/"' "$SITE_DIR/guides/5-workflows/5.1-strain/index.html"

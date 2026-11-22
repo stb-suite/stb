@@ -461,6 +461,24 @@ ADP CIF (@ 1000.0 K) : tdispmat.cif
 reused for `--pdos` too when both are requested together — one extra pass,
 not two.)
 
+Which modes enter the sum, since 2.1.0 (the section prints it as its first line,
+`Modes summed : f > 0.01 THz on the ... mesh; Gamma acoustic (rigid translations) and
+imaginary modes left out`):
+
+- the mesh is Gamma-centred, so it contains Gamma, and the three **acoustic modes at
+  Gamma** are rigid translations of the whole crystal — they are left out;
+- each mode carries a weight that grows as 1/f², so a mode at ~0 THz would dominate
+  through round-off alone — modes **below 0.01 THz** are left out, and so are imaginary
+  ones (Phonopy never sums f ≤ 0);
+- next to soft or imaginary modes Phonopy can still refuse the sum (its check that the
+  tensors come out real fails). Then `[3c]` says so in a `[WARNING]` instead of printing
+  values, and the rest of the analysis (DOS, PDOS, thermal properties, the report) is
+  written as usual — before 2.1.0 the whole run stopped there with a traceback. Relax the
+  structure, or freeze the unstable mode, and rerun.
+
+The `U_iso` values above come from a 2.0.0 run (shifted mesh, no Gamma point); rerun the
+command to see this version's numbers.
+
 ### 4.6 `--symprec` at Stage 2 — two effects, and a real interaction to respect
 
 `--symprec` here controls **two independent things**: the tolerance

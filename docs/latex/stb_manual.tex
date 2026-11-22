@@ -26919,6 +26919,29 @@ ADP CIF (@ 1000.0 K) : tdispmat.cif
 reused for \texttt{-\/-\allowbreak{}pdos} too when both are requested together --- one extra pass,
 not two.)
 
+Which modes enter the sum, since 2.1.0 (the section prints it as its first line,
+\texttt{Modes\ summed\ :\ f\ \textgreater{}\ 0.01\ THz\ on\ the\ ...\ mesh;\ Gamma\ acoustic\ (rigid\ translations)\ and\ imaginary\ modes\ left\ out}):
+
+\begin{itemize}
+\tightlist
+\item
+  the mesh is Gamma-centred, so it contains Gamma, and the three \textbf{acoustic modes at
+  Gamma} are rigid translations of the whole crystal --- they are left out;
+\item
+  each mode carries a weight that grows as 1/$f^2$, so a mode at \textasciitilde0 THz would dominate
+  through round-off alone --- modes \textbf{below 0.01 THz} are left out, and so are imaginary
+  ones (Phonopy never sums $f \le 0$);
+\item
+  next to soft or imaginary modes Phonopy can still refuse the sum (its check that the
+  tensors come out real fails). Then \texttt{{[}3c{]}} says so in a \texttt{{[}WARNING{]}} instead of printing
+  values, and the rest of the analysis (DOS, PDOS, thermal properties, the report) is
+  written as usual --- before 2.1.0 the whole run stopped there with a traceback. Relax the
+  structure, or freeze the unstable mode, and rerun.
+\end{itemize}
+
+The \texttt{U\_\allowbreak{}iso} values above come from a 2.0.0 run (shifted mesh, no Gamma point); rerun the
+command to see this version\textquotesingle s numbers.
+
 \paragraph{\texorpdfstring{4.6 \texttt{-\/-\allowbreak{}symprec} at Stage 2 --- two effects, and a real interaction to respect}{4.6 -\/-symprec at Stage 2 --- two effects, and a real interaction to respect}}\label{g5.4-46---symprec-at-stage-2--two-effects-and-a-real-interaction-to-respect}
 
 \texttt{-\/-\allowbreak{}symprec} here controls \textbf{two independent things}: the tolerance

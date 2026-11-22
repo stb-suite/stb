@@ -9,6 +9,8 @@
     **Verify every result** before relying on it: check it independently, for
     example against a reference calculation or the literature.
 
+    What changed in this version: [Changelog 2.1.0](changelog/2.1.0.md).
+
 [:material-file-pdf-box: Download the manual (PDF)](assets/stb_manual.pdf){ .md-button .md-button--primary }
 &nbsp; every tool, workflow and option in one document, with the guides of this site.
 

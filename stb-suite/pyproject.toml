@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "wheel"]   # >=77: SPDX license expression below
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,9 +7,26 @@ name = "stb_suite"
 # One version for the whole suite (2.0.0 on main, <next>.dev<N> on dev), computed by
 # src/stb/_version.py (see its docstring); STB_VERSION overrides it.
 dynamic = ["version"]
-description = "Siesta ToolBox (STB) suite with softwares pre and pos processing for Siesta code."
+description = "Command-line tools for every stage of a SIESTA DFT project: inputs, structures, post-processing and property workflows."
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Carlos M. O. Bastos"}]
+keywords = ["SIESTA", "DFT", "density functional theory", "materials science", "computational chemistry",
+            "phonons", "elastic constants", "adsorption", "NEB", "machine-learning potentials", "MACE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 # 3.9 is out: phonopy does not build there (pip failed late, inside its build).
 requires-python = ">=3.10,<3.13"
 dependencies = [
@@ -27,6 +44,13 @@ dependencies = [
     "icet",
     "pyxtal"
 ]
+
+[project.urls]
+Homepage = "https://stb-suite.github.io/stb/"
+Documentation = "https://stb-suite.github.io/stb/"
+Source = "https://github.com/stb-suite/stb"
+Changelog = "https://stb-suite.github.io/stb/changelog/"
+Issues = "https://github.com/stb-suite/stb/issues"
 
 [project.optional-dependencies]
 # Heavy (PyTorch-based) stack for stb-mlrelax's ML pre-relaxation, kept out

@@ -53269,6 +53269,12 @@ Version 2.1.0 is the release that follows 2.0.0: it fixes bugs, changes several 
 \item
   \texttt{stb-\allowbreak{}elasticInputs} writes \texttt{elastic\_\allowbreak{}scan.json} (symmetry method, directions) into every series folder;
   \texttt{stb-\allowbreak{}elasticAnalysis} reads the method from it (see Fixed).
+\item
+  Ready for PyPI and conda-forge (nothing published yet): package metadata for the index (summary,
+  author, keywords, classifiers, project URLs, SPDX license \texttt{MIT}; setuptools 77 or later to build),
+  a hand-run GitHub workflow that builds, checks (\texttt{twine\ check}) and uploads to TestPyPI or PyPI from a
+  release tag only (\texttt{.github/workflows/publish.yml}, trusted publishing, no stored token), and a
+  conda-forge recipe for staged-recipes (\texttt{packaging/conda-\allowbreak{}forge/meta.yaml}).
 \end{itemize}
 
 \section{Known issues}

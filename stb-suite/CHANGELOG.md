@@ -645,6 +645,11 @@ version before) and **Added** (new options and tools).
   `MD.MaxStressTol` and `MD.MaxForceTol` of the relaxation mode (see Fixed).
 - `stb-elasticInputs` writes `elastic_scan.json` (symmetry method, directions) into every series folder;
   `stb-elasticAnalysis` reads the method from it (see Fixed).
+- Ready for PyPI and conda-forge (nothing published yet): package metadata for the index (summary,
+  author, keywords, classifiers, project URLs, SPDX license `MIT`; setuptools 77 or later to build),
+  a hand-run GitHub workflow that builds, checks (`twine check`) and uploads to TestPyPI or PyPI from a
+  release tag only (`.github/workflows/publish.yml`, trusted publishing, no stored token), and a
+  conda-forge recipe for staged-recipes (`packaging/conda-forge/meta.yaml`).
 
 ### Known issues
 

@@ -2,7 +2,7 @@
 
 **A unified command-line toolkit for SIESTA DFT workflows**
 
-![Status](https://img.shields.io/badge/status-under%20development-orange.svg)
+![Status](https://img.shields.io/badge/status-stable%2C%20under%20testing-yellowgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10%20to%203.12-blue.svg)
 ![Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)
@@ -27,7 +27,7 @@ SIESTA itself is not bundled: the Inputs and Workflow tools write ready-to-run c
 
 ## 🚀 What's inside
 
-The menu groups the tools into seven categories. Each tool has a guide with a runnable example in [`examples/`](examples/) (published on the [documentation site](https://stb-suite.github.io/stb/)).
+The menu groups the tools into seven categories. Each tool has a guide with a runnable example in [`examples/`](https://github.com/stb-suite/stb/tree/main/examples) (published on the [documentation site](https://stb-suite.github.io/stb/)).
 
 | # | Category | What it's for | Tools |
 |---|----------|---------------|-------|

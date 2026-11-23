@@ -424,6 +424,10 @@ version before) and **Added** (new options and tools).
 - `stb-2Dstacking`: `-i -id 0` is refused on every Python. Up to Python 3.11, argparse let an option
   through when its value equalled its default, so the run entered the interactive mode despite `-id 0`.
 
+- `stb-suite` and `stb-2Dstacking -i` no longer end in a traceback when the input runs out (a script or
+  a job). At a menu or at "Press Enter" this is a normal exit; in the middle of a tool's questions it is
+  a one-line `[ERROR]` with exit code 1, so a script with outdated answers still fails.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

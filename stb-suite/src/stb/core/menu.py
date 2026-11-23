@@ -120,4 +120,7 @@ def run_tool(tool_name: str, args: List[str], pause: bool = True) -> None:
         print(color_text(f"\nTool {tool_name} not found!", 'red'))
         print(color_text(f"Make sure {tool_name} is in your system's PATH.", 'yellow'))
     if pause:
-        input("\nPress Enter to continue...")
+        try:
+            input("\nPress Enter to continue...")
+        except EOFError:     # stdin ended (a script or a job): nothing to wait for
+            print()

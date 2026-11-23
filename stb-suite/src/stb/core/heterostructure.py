@@ -111,6 +111,10 @@ def find_zsl_match(layer1, layer2, max_area=150.0, max_strain=0.05, match_id=0,
                     break
             except ValueError:
                 pass
+            except EOFError:
+                print(color_text("\n[ERROR] Interactive mode needs a terminal: the input ended before a Match ID "
+                                 "was chosen. Use -id N instead.", 'red'))
+                sys.exit(1)
     else:
         if match_id >= len(evaluated_matches) or match_id < 0:
             print(color_text(f"[ERROR] Selected match_id {match_id} is out of range.", 'red'))

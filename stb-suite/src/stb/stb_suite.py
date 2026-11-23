@@ -8,6 +8,7 @@
     
 from stb import __version__ as VERSION
 
+import sys
 import os
 import subprocess
 from time import sleep
@@ -8941,7 +8942,11 @@ def run_sub_menu(title: str, tools_dict: Dict) -> None:
     while True:
         show_sub_menu(title, tools_dict)
         try:
-            choice_str = get_input(f"\nSelect an option (0-{len(tools_dict)}): ")
+            try:
+                choice_str = get_input(f"\nSelect an option (0-{len(tools_dict)}): ")
+            except EOFError:     # stdin ended at a menu: same as going back
+                print()
+                break
 
             if choice_str == '0':
                 break # Go back to the main menu
@@ -8991,7 +8996,11 @@ def main():
         show_main_menu()
         
         try:
-            choice = get_input(f"\nSelect an option (0-{len(CATEGORIES)}, or a tool code like 5.1.2): ")
+            try:
+                choice = get_input(f"\nSelect an option (0-{len(CATEGORIES)}, or a tool code like 5.1.2): ")
+            except EOFError:     # stdin ended at the main menu: same as 0
+                print(color_text("\nThank you for using STB-SUITE!", 'cyan'))
+                break
 
             by_number = {str(number): (title, table) for number, title, table, _ in CATEGORIES}
             if choice in TOOL_CODES:
@@ -9017,6 +9026,10 @@ def main():
         except KeyboardInterrupt:
             print(color_text("\n\nOperation cancelled by user.", 'yellow'))
             break
+        except EOFError:     # stdin ended in the middle of a tool's questions: the tool did not run
+            print(color_text("\n[ERROR] The input ended before all of this tool's questions were answered; "
+                             "nothing was run.", 'red'))
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

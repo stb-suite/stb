@@ -428,12 +428,13 @@ version before) and **Added** (new options and tools).
   a job). At a menu or at "Press Enter" this is a normal exit; in the middle of a tool's questions it is
   a one-line `[ERROR]` with exit code 1, so a script with outdated answers still fails.
 
-- `stb-mlphonons --qha`: the equation-of-state fit at each temperature stopped before converging (phonopy's
-  fit, unscaled parameters on absolute energies), so V(T) of bulk Si jumped by 0.1 Ang^3 at one temperature,
-  a different one in each run, and the thermal expansion around it was wrong; the report then said "Negative
-  expansion: below 420 K" for a region that is 10-60 K. The fit is now converged (the three `--eos` forms agree
-  on V(300 K) within 0.002 Ang^3), so **alpha(T) changes by a few percent**. The summary names the low-temperature
-  region, and any other temperature with alpha < 0 is a warning.
+- Phonon free energy, entropy and heat capacity (`stb-mlphonons`, `--qha` too, `stb-phononsPos`, `stb-adsorbGibbs`):
+  on a Gamma-centred mesh the three acoustic modes at Gamma come out as +-1e-7 THz, and the positive ones entered
+  ln(1 - exp(-hf/kT)). F moved by an amount that changed at random from one volume to the next, and was -inf at some
+  temperatures, which stopped `--qha`. Modes below 0.01 THz are now left out. **Thermal values and the QHA expansion
+  change**: for MACE-MP-0 Si, V(T) no longer jumps and alpha_L(300 K) is 9.46e-6 1/K.
+- `stb-mlphonons --qha`: the summary said "Negative expansion: below 420 K" because of one such point, for a region
+  that is 10-60 K. It now names the low-temperature region, and any other temperature with alpha < 0 is a warning.
 
 - `stb-mlmd`: the `Empty space` line is written for every cell with vacuum. It was missing when one gap
   reached `--vacuum-gap`, so an O2 molecule in a 10 Ang box was described only as "2D (slab)".

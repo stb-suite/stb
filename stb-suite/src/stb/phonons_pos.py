@@ -29,6 +29,7 @@ except ImportError:
 from stb.core.cli import COLORS, color_text, show_intro, print_dual, print_section
 from stb.core import kspace
 from stb.core.phonon_workflow import (
+    THERMAL_FREQ_MIN_THZ,
     detect_system_label, load_phonon_with_force_constants, IMAGINARY_MODE_TOL_THZ)
 
 REPORT_FILE = "stb_phononsPos_report.txt"
@@ -44,7 +45,7 @@ SPECIES_COLORS = ['#2255cc', '#cc5522', '#22aa55', '#aa22aa', '#aaaa22', '#22aaa
 
 
 # Lowest frequency (THz) that enters the thermal displacement (ADP) sums -- see run_thermal_displacement_matrices.
-TDM_FREQ_MIN_THZ = 0.01
+TDM_FREQ_MIN_THZ = THERMAL_FREQ_MIN_THZ
 
 def _pbc_atomic_shift(positions_new, positions_ref, cell):
     """Per-atom displacement magnitude between two position arrays of the
@@ -829,7 +830,8 @@ def main():
             print(color_text(f" -> Saved distorted structure as "
                               f"'{os.path.join(phonon_dir, frozen_mode_filename)}'", 'cyan'))
 
-    phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+    phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                  cutoff_frequency=THERMAL_FREQ_MIN_THZ)
 
     print("[INFO] Exporting results ...")
 

@@ -43,6 +43,10 @@ _LABEL_RE = re.compile(r'^\s*SystemLabel\s+(\S+)', re.IGNORECASE | re.MULTILINE)
 # at least ~0.1 THz. Shared by stb-mlphonons and stb-phononsPos, extracted
 # here once the latter became a second consumer.
 IMAGINARY_MODE_TOL_THZ = -0.01
+# Lowest frequency that enters F, S and Cv. The acoustic modes at Gamma (on every Gamma-centred mesh) come out as
+# +-1e-7 THz: phonopy keeps the positive ones, and their ln(1 - exp(-hf/kT)) moves F by an amount that changes at random
+# from one volume to the next (and is -inf once exp(-hf/kT) rounds to 1).
+THERMAL_FREQ_MIN_THZ = 0.01
 
 
 def detect_system_label(phonon_dir):

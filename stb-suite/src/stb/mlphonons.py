@@ -32,7 +32,6 @@ import copy
 import time
 import argparse
 from datetime import datetime
-from unittest import mock
 
 import numpy as np
 from ase import Atoms
@@ -42,7 +41,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from stb.core import structure_io, kspace, model_card
 from stb.core.cli import (color_text, show_intro, print_dual, print_table,
                           capture_library_noise, display_available, Sections, run_gnuplot)
-from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ
+from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ, THERMAL_FREQ_MIN_THZ
 
 _QHA_LOW_T_K = 150.0   # a negative-expansion region that starts above this is not the low-temperature one
 
@@ -180,7 +179,8 @@ def run_phonon_pipeline(atoms_ref, calc, args, f_out, tag, noise, quiet=False):
         dos = phonon.get_total_dos_dict()
         phonon.run_projected_dos()
         proj = phonon.get_projected_dos_dict()['projected_dos']
-        phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep)
+        phonon.run_thermal_properties(t_min=args.tmin, t_max=args.tmax, t_step=args.tstep,
+                                      cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp = phonon.get_thermal_properties_dict()
     res["mesh_freqs"] = np.array(phonon.mesh.frequencies)
     res["mesh_q"] = np.array(phonon.mesh.qpoints)
@@ -934,27 +934,6 @@ def report_comparison(main, found, f_out):
 
 # ---- QHA ----------------------------------------------------------------------------
 
-def _fit_eos_converged(volumes, free_energies, eos):
-    """[E, B, B', V] of one F(V), the drop-in for phonopy.qha.eos.fit_to_eos. phonopy starts from B = 1 eV/Ang^3 with
-    unscaled parameters on absolute energies and stops early: V(T) of bulk Si then jumped by 0.1 Ang^3 at one
-    temperature, a different one in each run, and alpha(T) inherited it. Here the energies are taken from their minimum,
-    the start comes from a parabola and the parameters are scaled."""
-    from scipy.optimize import least_squares
-    v = np.asarray(volumes, dtype=float)
-    offset = float(np.min(free_energies))
-    y = np.asarray(free_energies, dtype=float) - offset
-    c = np.polyfit(v, y, 2)
-    v_start = -c[1] / (2 * c[0]) if c[0] > 0 else v[np.argmin(y)]
-    if not v.min() <= v_start <= v.max():
-        v_start = v[np.argmin(y)]
-    b_start = 2 * c[0] * v_start if c[0] > 0 else 0.5
-    fit = least_squares(lambda p: eos(v, p) - y, [y.min(), b_start, 4.0, v_start], method="trf", jac="3-point",
-                        x_scale=[1e-2, 1e-2, 0.1, 0.1], ftol=1e-15, xtol=1e-15, gtol=1e-15, max_nfev=5000)
-    params = fit.x.copy()
-    params[0] += offset
-    return params
-
-
 def _negative_expansion_blocks(T, alpha_V):
     """(low, others): the contiguous runs of alpha_V < 0 as index lists; `low` is the first if it starts at or below
     _QHA_LOW_T_K (the transverse-acoustic region), else None, and `others` the runs that are not."""
@@ -1007,7 +986,8 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
             e_i = relaxed.get_potential_energy()
             v_i = relaxed.get_volume()
             phonon.run_mesh(args.mesh, is_gamma_center=True)
-            phonon.run_thermal_properties(t_min=args.tmin, t_max=t_max_grid, t_step=args.tstep)
+            phonon.run_thermal_properties(t_min=args.tmin, t_max=t_max_grid, t_step=args.tstep,
+                                          cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp = phonon.thermal_properties
         if factor is None:
             factor = mace_phonons.cell_factor(phonon)
@@ -1056,11 +1036,9 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
              "(stb-mlrelax --relax-cell) or widen --strain-range.")
 
     with capture_library_noise(noise, "QHA fit"):
-        import phonopy.qha.core as qha_core
-        with mock.patch.object(qha_core, "fit_to_eos", _fit_eos_converged):
-            qha = PhonopyQHA(volumes=volumes, electronic_energies=energies, temperatures=temps,
-                             free_energy=np.array(F).T, cv=np.array(C).T, entropy=np.array(S).T,
-                             eos=args.eos, t_max=args.tmax)
+        qha = PhonopyQHA(volumes=volumes, electronic_energies=energies, temperatures=temps,
+                         free_energy=np.array(F).T, cv=np.array(C).T, entropy=np.array(S).T,
+                         eos=args.eos, t_max=args.tmax)
         e0, b0, b0p, v0 = qha.get_bulk_modulus_parameters()
         V_T = np.asarray(qha.volume_temperature)
         n_t = min(len(V_T), len(qha.thermal_expansion), len(qha.bulk_modulus_temperature),

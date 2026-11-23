@@ -24,7 +24,7 @@ from stb.core import structure_io
 from stb.core.siesta_log import get_free_energy, get_spin_moment, report_quality_diagnostics
 from stb.core.symmetry import point_group_details
 from stb.core.cli import color_text, show_intro, print_dual, print_section
-from stb.core.phonon_workflow import load_phonon_with_force_constants
+from stb.core.phonon_workflow import load_phonon_with_force_constants, THERMAL_FREQ_MIN_THZ
 from stb.adsorb_analysis import read_site_table, read_bsse_energy, GIBBS_LOCAL_META_FILE
 
 REPORT_FILE = "stb_adsorbGibbs_report.txt"
@@ -392,7 +392,8 @@ def compute_full_phonon_thermo(phonon_dir, system_label, temperature_k, f_out, l
         return None, None
     try:
         phonon.run_mesh([1, 1, 1])
-        phonon.run_thermal_properties(t_step=10, t_max=temperature_k + 10, t_min=temperature_k)
+        phonon.run_thermal_properties(t_step=10, t_max=temperature_k + 10, t_min=temperature_k,
+                                      cutoff_frequency=THERMAL_FREQ_MIN_THZ)
         tp_dict = phonon.get_thermal_properties_dict()
         temps = np.array(tp_dict['temperatures'])
         idx = int(np.abs(temps - temperature_k).argmin())

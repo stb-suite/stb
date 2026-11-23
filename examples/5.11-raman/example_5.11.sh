@@ -132,11 +132,11 @@ run "$OUT/case4/stage2.txt" "$OUT/case4" stb-ramanModes --directory raman_study 
     --use-symmetry --skip-degenerate --optical-mesh 32 32 32 --optical-broaden 0.1 --optical-nbands 16
 for f in "$OUT"/case4/raman_study/optical_disp/mode_01_*; do
     src="$OUT/case3/raman_study/optical_disp/$(basename "$f")"
-    # same geometry and same optical settings (runs/ predates the forced Diag.ParallelOverK line)
-    cmp -s "$f/structure.fdf" "$src/structure.fdf" \
-        && diff -q <(grep -v ParallelOverK "$f/config_extra.fdf") <(grep -v ParallelOverK "$src/config_extra.fdf") > /dev/null \
+    # same optical settings (runs/ predates the forced Diag.ParallelOverK line). The geometry comes from case 3 with
+    # its results: inside the triply degenerate mode, each machine's eigensolver may return another orthogonal basis
+    diff -q <(grep -v ParallelOverK "$f/config_extra.fdf") <(grep -v ParallelOverK "$src/config_extra.fdf") > /dev/null \
         || { echo "  [unexpected] $(basename "$f") differs from case 3"; exit 1; }
-    cp "$src/calc.out" "$src/siesta.EPSIMG" "$f/"
+    cp "$src/structure.fdf" "$src/calc.out" "$src/siesta.EPSIMG" "$f/"
 done
 run "$OUT/case4/stage3.txt" "$OUT/case4" stb-ramanAnalysis --directory raman_study
 grep -E "activity~" "$OUT/case4/stage3.txt" | head -1 | sed 's/^/  /'

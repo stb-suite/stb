@@ -367,8 +367,8 @@ echo "direct-CLI case from output/stage1/ above."
 TMP="$(mktemp -d)"
 cp structure.fdf calc.fdf "$TMP/"
 echo
-echo "\$ printf '5.8.1\\nstructure.fdf\\ncalc.fdf\\n\\nO\\n\\n1\\n\\n\\nn\\n0\\nn\\n\\ny\\nn\\nn\\n' | stb-suite"
-(cd "$TMP" && printf '5.8.1\nstructure.fdf\ncalc.fdf\n\nO\n\n1\n\n\nn\n0\nn\n\ny\nn\nn\n\n0\n' \
+echo "\$ printf '5.8.1\\nstructure.fdf\\ncalc.fdf\\n\\nO\\n\\n1\\n\\n\\nn\\n0\\nn\\n\\n\\n\\n\\n\\n\\n\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '5.8.1\nstructure.fdf\ncalc.fdf\n\nO\n\n1\n\n\nn\n0\nn\n\n\n\n\n\n\n\n\n0\n' \
     | stb-suite > menu1.log 2>&1)
 MENU_ONTOP="$TMP/adsorption_run/sites/site_1_ontop/structure.fdf"
 CLI_ONTOP="$OUT/stage1/sites/site_1_ontop/structure.fdf"

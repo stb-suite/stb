@@ -205,7 +205,7 @@ config_extra.fdf files against Case 1's proves the two paths equal.
 EOF
 mkdir -p "$OUT/case7-menu"
 cp structure.fdf calc.fdf "$OUT/case7-menu/"
-(cd "$OUT/case7-menu" && printf '5.14.1\nstructure.fdf\n\n1\nxx yy zz xy xz yz\noptical_study\ny\n11 11 11\n32 32 32\n0.1\n16\n\n0\n' \
+(cd "$OUT/case7-menu" && printf '5.14.1\nstructure.fdf\n\n1\n\n\n\nxx yy zz xy xz yz\noptical_study\ny\n11 11 11\n32 32 32\n0.1\n16\n\n0\n' \
     | stb-suite > menu.log 2>&1)
 if diff -rq -x '*.psml' "$OUT/case1-si/optical_study" "$OUT/case7-menu/optical_study" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.14.1) produced identical direction folders."

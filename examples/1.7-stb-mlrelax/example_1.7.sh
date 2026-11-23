@@ -354,8 +354,8 @@ echo "manual entry mode and diffing the energy/displacement lines."
 TMP="$(mktemp -d)"
 cp si_defect.fdf "$TMP/"
 echo
-echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
-(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
+echo "\$ printf '1.7\\nsi_defect.fdf\\nn\\n\\n\\n\\n\\n\\n\\nn\\n\\n0\\n' | stb-suite"
+(cd "$TMP" && printf '1.7\nsi_defect.fdf\nn\n\n\n\n\n\n\nn\n\n0\n' | stb-suite > session.log 2>&1)
 CLI_LINE=$(grep "^Energy" "$OUT/positions-only/console.log")
 MENU_LINE=$(grep "^Energy" "$TMP/session.log")
 if [ "$CLI_LINE" = "$MENU_LINE" ]; then

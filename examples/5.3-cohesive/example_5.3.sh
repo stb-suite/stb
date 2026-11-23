@@ -231,14 +231,14 @@ diffing against it proves the 2 paths are equivalent.
 EOF
 mkdir -p "$OUT/case6-interactive"
 cp structure.fdf "$OUT/case6-interactive/"
-# Prompts in order: structure.fdf (no default, must type it), k-density
-# (blank -> 0.2), pseudopotential source (1 -> dojo, the suite's 1st
-# bundled bank), spin (n), dispersion (n), vacuum (blank -> 20.0), BSSE
-# choice (blank -> Y, default), multi-site choice (blank -> Y, default),
-# convergence-check choice (n), advanced settings (n -> skip), save report
-# (n), then the "Press Enter to continue" pause, then quit.
+# Prompts in order: structure.fdf (no default, must type it), calc.fdf template
+# (blank -> built-in), k-density (blank -> 0.2), pseudopotential source (1 ->
+# PseudoDojo, then relativity, functional and accuracy, blank -> dojo), spin (n),
+# dispersion (n), vacuum (blank -> 20.0), BSSE choice (blank -> Y), multi-site
+# choice (blank -> Y), convergence-check choice (n), advanced settings (n), then
+# the "Press Enter to continue" pause, then quit.
 (cd "$OUT/case6-interactive" && \
-    printf '5.3.1\nstructure.fdf\n\n1\nn\nn\n\n\n\nn\nn\nn\n\n0\n' | stb-suite > menu.log 2>&1)
+    printf '5.3.1\nstructure.fdf\n\n\n1\n\n\n\nn\nn\n\n\n\nn\nn\n\n0\n' | stb-suite > menu.log 2>&1)
 if diff -rq "$OUT/case1-default/cohesive_runs" "$OUT/case6-interactive/cohesive_runs" > /dev/null 2>&1; then
     echo "CLI (Case 1) and interactive menu (5.3.1) produced byte-identical folders."
 else

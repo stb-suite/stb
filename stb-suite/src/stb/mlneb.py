@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Climbing-image NEB (nudged elastic band) driven entirely by a MACE potential: the barrier of a
@@ -1037,7 +1037,7 @@ def main():
     if args.intro:
         show_intro(["Siesta ToolBox Suite - ML NEB",
                     "Climbing-image nudged elastic band, driven entirely by a MACE potential",
-                    f"Version {VERSION} | University of Brasilia - 2026",
+                    f"Version {VERSION} | 2026",
                     "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)

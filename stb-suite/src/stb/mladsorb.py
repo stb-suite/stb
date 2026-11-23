@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """stb-mladsorb (7.6): adsorption-site screening driven entirely by a MACE potential -- the
@@ -1401,7 +1401,7 @@ def main():
     if args.intro:
         show_intro(["Siesta ToolBox Suite - ML Adsorption Screening",
                     "Adsorption sites and minima with a MACE potential",
-                    f"Version {VERSION} | University of Brasilia - 2026",
+                    f"Version {VERSION} | 2026",
                     "Developed by the STB-SUITE team"])
 
     os.makedirs(args.output_dir, exist_ok=True)

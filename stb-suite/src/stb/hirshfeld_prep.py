@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 1 of the Hirshfeld-I (iterative) charge-partitioning workflow.
@@ -287,7 +287,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Hirshfeld-I Prep (Stage 1/3)",
             "Combined system + isolated NEUTRAL atom references, ready to run",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

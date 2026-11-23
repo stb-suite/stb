@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Stage 2 of the Charge Density Difference workflow: Delta rho = rho_combined - sum_i rho_fragment_i.
@@ -481,7 +481,7 @@ combined system and every fragment are spin-polarized).""",
         show_intro([
             "Siesta ToolBox Suite - Charge Density Difference (Analysis)",
             "Delta rho = rho_combined - sum(rho_fragment_i)",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

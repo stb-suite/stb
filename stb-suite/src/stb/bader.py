@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 from stb import __version__ as VERSION
@@ -868,7 +868,7 @@ low (near-zero) population.""",
         parser.error("--threads must be at least 1.")
 
     if args.intro:
-        show_intro(["Siesta ToolBox Suite - Bader Analysis", f"Version {VERSION} | University of Brasilia"])
+        show_intro(["Siesta ToolBox Suite - Bader Analysis", f"Version {VERSION}"])
 
     os.makedirs(args.output_dir, exist_ok=True)
 

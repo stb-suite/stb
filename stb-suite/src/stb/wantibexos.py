@@ -400,7 +400,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite",
             "SIESTA-to-Wantibexos Hamiltonian Interface",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             ""
         ])
         print("\n" + color_text("SIESTA-WANTIBEXOS Interface:", 'bold'))

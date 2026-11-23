@@ -3,7 +3,7 @@
 #################################################
 #     Siesta Tool Box - Suite                   #
 # Developed by the STB-SUITE team               #
-#      bastoscmo.github.io                      #
+#      stb-suite.github.io/stb                  #
 #################################################
 
 """Reads and compares the atomic charges SIESTA itself prints at the end of a run -- Mulliken (WriteMullikenPop),
@@ -290,7 +290,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Native Charges",
             "Read and compare SIESTA's own Mulliken/Hirshfeld/Voronoi charges",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
             "Developed by the STB-SUITE team"
         ])
 

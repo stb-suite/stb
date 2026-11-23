@@ -322,7 +322,7 @@ def main():
         show_intro([
             "Siesta ToolBox Suite - Elastic Generator",
             "Strain Structure Generator (Batch Mode)",
-            f"Version {VERSION} | University of Brasilia - 2026",
+            f"Version {VERSION} | 2026",
         ])
 
     os.makedirs(args.output_dir, exist_ok=True)

@@ -1,11 +1,10 @@
 # Authors
 
-STB-SUITE is developed at the Laboratory for Computational Materials Science
-([LCCMat](https://lccmat.unb.br/)), University of Brasília (UnB), Brazil.
+STB-SUITE is developed at the University of Brasília (UnB), Brazil.
 
 ## Project lead
 
-**Carlos Maciel de Oliveira Bastos**, LCCMat, University of Brasília (UnB) —
+**Carlos Maciel de Oliveira Bastos**, University of Brasília (UnB) —
 [ORCID](https://orcid.org/0000-0002-9988-5202)
 
 ## Collaborators

@@ -636,10 +636,11 @@ def main():
                f"alpha {cp[3]:.2f}, beta {cp[4]:.2f}, gamma {cp[5]:.2f} deg", f_out)
     print_dual(f"Volume            : {v0:.3f} Ang^3 ({v0 / n_atoms:.4f} Ang^3/atom)"
                + (f", density {mass / v0 * AMU_A3_TO_G_CM3:.4f} g/cm^3" if condensed else " (includes vacuum)"), f_out)
-    if bulk and not condensed:
-        print_dual(f"Empty space       : gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes (below "
-                   f"--vacuum-gap {args.vacuum_gap:g}) -- treated as a molecule/slab in a box: no density, pressure, "
-                   "g(r), heat capacity or Lindemann ratio", f_out)
+    if not condensed:
+        below = f" (below --vacuum-gap {args.vacuum_gap:g})" if bulk else ""
+        print_dual(f"Empty space       : gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes{below} -- "
+                   "treated as a molecule/slab in a box: no density, pressure, g(r), heat capacity or Lindemann ratio",
+                   f_out)
         if args.ensemble == "npt":
             warn(f"NPT: the cell has empty gaps >= {model_card.VACUUM_GAP:g} Ang along {sum(gaps5)} axis/axes -- a "
                  "barostat on a molecule or slab in a box squeezes the vacuum, not the material.")

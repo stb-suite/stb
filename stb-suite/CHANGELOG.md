@@ -435,6 +435,9 @@ version before) and **Added** (new options and tools).
   on V(300 K) within 0.002 Ang^3), so **alpha(T) changes by a few percent**. The summary names the low-temperature
   region, and any other temperature with alpha < 0 is a warning.
 
+- `stb-mlmd`: the `Empty space` line is written for every cell with vacuum. It was missing when one gap
+  reached `--vacuum-gap`, so an O2 molecule in a 10 Ang box was described only as "2D (slab)".
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

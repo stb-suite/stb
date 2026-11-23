@@ -1,0 +1,79 @@
+name: Publish to PyPI
+
+# Builds the sdist and the wheel of stb-suite/ and uploads them to TestPyPI or PyPI.
+# It runs ONLY by hand (Actions > Publish to PyPI > "Run workflow"), from a release tag
+# (vX.Y.Z on main): a push or a tag never publishes anything by itself. A version
+# already on the index can never be replaced, only followed by a new one.
+#
+# Authentication is PyPI's "trusted publishing" (no token stored here). One-time setup,
+# on pypi.org and on test.pypi.org: Your account > Publishing > "Add a new pending
+# publisher" with owner stb-suite, repository stb, workflow publish.yml, and the
+# environment named below (pypi / testpypi). Then create the same two environments in
+# this repository: Settings > Environments (optionally with a required reviewer).
+
+on:
+  workflow_dispatch:
+    inputs:
+      index:
+        description: "Where to upload"
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the sdist and the wheel
+        working-directory: stb-suite
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build --outdir ../dist .
+          twine check --strict ../dist/*
+
+      - name: Refuse anything but a release version from a release tag
+        run: |
+          version=$(ls dist/*.tar.gz | sed -E 's#dist/stb_suite-(.+)\.tar\.gz#\1#')
+          echo "version: $version   ref: $GITHUB_REF"
+          case "$version" in
+            *dev*|*+*) echo "::error::$version is a development build (dev branch): publish only from a release tag on main"; exit 1 ;;
+          esac
+          if [ "$GITHUB_REF" != "refs/tags/v$version" ]; then
+            echo "::error::run this workflow from the tag v$version (it was run from $GITHUB_REF)"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.index }}
+    permissions:
+      id-token: write          # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Upload to TestPyPI
+        if: inputs.index == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Upload to PyPI
+        if: inputs.index == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1

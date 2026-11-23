@@ -181,7 +181,7 @@ pause
 banner "Case 4 -- SIESTA's results go into the folders"
 cat <<'EOF'
 Here you would run SIESTA in each folder (about 3 minutes per image on 6 cores, 63 atoms):
-    for d in output/case3/siesta_check/image_*/; do (cd $d && mpirun -np 6 siesta < calc.fdf > siesta.out); done
+    for d in output/case3/siesta_check/image_*/; do (cd $d && mpirun -np 6 siesta calc.fdf < /dev/null > siesta.out); done
 They were run once, in the real loop (README section 6.4), and are kept in reference_results/loop_round2/. The band of
 Case 3 is the same band (same model, same endpoints, same settings), so their output belongs in these folders -- the
 script checks the stamps first, as stb-mlneb itself will:

@@ -30,7 +30,7 @@ case_() {
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M:%S))"
     (cd "$WORK/$name" && stb-mlphonons --file "$file" --device "$DEVICE" -o . --save-data \
-        --no-intro "$@" < /dev/null > log.txt 2>&1) || echo "$name: FAILED (see $WORK/$name/log.txt)"
+        --no-intro "$@" < /dev/null > log.txt 2>&1) || { echo "$name: FAILED (see $WORK/$name/log.txt)"; FAILURES=$((FAILURES + 1)); }
 }
 
 run_all() {
@@ -52,7 +52,7 @@ run_all() {
     case_ qha_foundation si8.fdf --model medium --qha --n-volumes 7 --strain-range 4 --tmax 1500
     if [ ! -s "$WORK/si8_mp0.fdf" ]; then
         (cd "$WORK" && stb-mlrelax -f "$HERE/si8.fdf" --relax-cell --model medium --fmax 0.001 --device "$DEVICE" \
-            -o si8_mp0.fdf --no-intro < /dev/null > mlrelax_mp0.log 2>&1) || echo "stb-mlrelax: FAILED"
+            -o si8_mp0.fdf --no-intro < /dev/null > mlrelax_mp0.log 2>&1) || { echo "stb-mlrelax: FAILED"; FAILURES=$((FAILURES + 1)); }
     fi
     case_ qha_foundation_v0 "$WORK/si8_mp0.fdf" --model medium --qha --n-volumes 7 --strain-range 4 --tmax 1500
     # 6. displacement amplitude
@@ -68,7 +68,7 @@ run_all() {
         mkdir -p "$WORK/elastic"
         echo "elastic: running ($(date +%H:%M:%S))"
         (cd "$WORK/elastic" && stb-mlelastic --file "$HERE/si8.fdf" $FT --device "$DEVICE" -o . \
-            --no-intro < /dev/null > log.txt 2>&1) || echo "elastic: FAILED (see $WORK/elastic/log.txt)"
+            --no-intro < /dev/null > log.txt 2>&1) || { echo "elastic: FAILED (see $WORK/elastic/log.txt)"; FAILURES=$((FAILURES + 1)); }
     else
         echo "elastic: done"
     fi
@@ -76,7 +76,7 @@ run_all() {
     if [ ! -s "$HERE/reference_results/siesta_compare.json" ]; then
         echo "siesta_compare: running ($(date +%H:%M:%S))"
         python3 "$HERE/siesta_compare.py" --device "$DEVICE" > "$WORK/siesta_compare.log" 2>&1 \
-            || echo "siesta_compare: FAILED (see $WORK/siesta_compare.log)"
+            || { echo "siesta_compare: FAILED (see $WORK/siesta_compare.log)"; FAILURES=$((FAILURES + 1)); }
     else
         echo "siesta_compare: done"
     fi
@@ -103,7 +103,11 @@ collect() {
     echo "reference_results/ written"
 }
 
+check_failures() {
+    [ "${FAILURES:-0}" -eq 0 ] || { echo "$FAILURES case(s) FAILED: reference_results/ not updated"; exit 1; }
+}
+
 case "$STEP" in
     collect) collect ;;
-    *) run_all; collect ;;
+    *) run_all; check_failures; collect ;;
 esac

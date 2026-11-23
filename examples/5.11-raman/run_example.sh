@@ -20,7 +20,7 @@ siesta_in() {     # siesta_in <folder>...: runs SIESTA in every folder, then kee
     for d in "$@"; do
         [ -f "$d/calc.fdf" ] || continue
         echo "[siesta] ${d#$R/}"
-        (cd "$d" && OMP_NUM_THREADS=1 mpirun -np "$NP" siesta < calc.fdf > calc.out 2> siesta.err)
+        (cd "$d" && OMP_NUM_THREADS=1 mpirun -np "$NP" siesta calc.fdf < /dev/null > calc.out 2> siesta.err)
         rm -f "$d/siesta.contrib.EPSIMG"
     done
 }

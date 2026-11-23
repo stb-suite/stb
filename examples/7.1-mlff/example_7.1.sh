@@ -115,8 +115,8 @@ echo "      --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n
 stb-mlff -s structure.fdf -c calc.fdf --pseudo-dir virtual_vault --n-configs 16 \
     --stdev 0.015 0.03 0.045 0.06 --volume-strains -3 -1.5 1.5 3 4.5 --n-test 9 \
     --no-intro > stage1.log 2>&1
-section mlff_runs/stb_mlff_report.txt 2 | grep -E "k-grid|Run type|Dispersion"
-section mlff_runs/stb_mlff_report.txt 3
+section stb_mlff_report.txt 2 | grep -E "k-grid|Run type|Dispersion"
+section stb_mlff_report.txt 3
 cat <<'EOF'
 
 The reference run added --ml-screen (a MACE-MP evaluation of every config before SIESTA; it
@@ -149,7 +149,7 @@ EOF
 cat mlff_runs/configs_round_01/mlff_config_001/config_extra.fdf
 echo
 echo "\$ for d in mlff_runs/configs_round_01/mlff_config_* mlff_runs/mlff_test/test_*; do"
-echo "      (cd \$d && mpirun -np 2 siesta < calc.fdf > siesta.out); done"
+echo "      (cd \$d && mpirun -np 2 siesta calc.fdf < /dev/null > siesta.out); done"
 label_from_reference mlff_runs "$G3"
 pause
 

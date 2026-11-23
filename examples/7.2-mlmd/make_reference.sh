@@ -38,7 +38,7 @@ case_() {
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M))"
     (cd "$WORK/$name" && stb-mlmd --file "$WORK/$file" --device cuda --save-gnuplot --png \
-        -o traj.xsf --no-intro "$@" < /dev/null > mlmd.log 2>&1) || echo "$name: FAILED (see $WORK/$name/mlmd.log)"
+        -o traj.xsf --no-intro "$@" < /dev/null > mlmd.log 2>&1) || { echo "$name: FAILED (see $WORK/$name/mlmd.log)"; FAILURES=$((FAILURES + 1)); }
 }
 
 lane_A() {
@@ -118,10 +118,14 @@ siesta_checks() {
 }
 
 structures
+check_failures() {
+    [ "${FAILURES:-0}" -eq 0 ] || { echo "$FAILURES case(s) FAILED: reference_results/ not updated"; exit 1; }
+}
+
 case "$LANE" in
     siesta) siesta_checks ;;
-    A) lane_A ;;
-    B) lane_B ;;
+    A) lane_A; check_failures ;;
+    B) lane_B; check_failures ;;
     collect) collect ;;
-    *) lane_A; lane_B; collect ;;
+    *) lane_A; lane_B; check_failures; collect ;;
 esac

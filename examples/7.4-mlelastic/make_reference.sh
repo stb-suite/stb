@@ -30,7 +30,7 @@ case_() {
     mkdir -p "$WORK/$name"
     echo "$name: running ($(date +%H:%M:%S))"
     (cd "$WORK/$name" && stb-mlelastic --file "$file" --device "$DEVICE" -o . --save-data \
-        --no-intro "$@" < /dev/null > log.txt 2>&1) || echo "$name: FAILED (see $WORK/$name/log.txt)"
+        --no-intro "$@" < /dev/null > log.txt 2>&1) || { echo "$name: FAILED (see $WORK/$name/log.txt)"; FAILURES=$((FAILURES + 1)); }
 }
 
 run_all() {
@@ -83,7 +83,11 @@ collect() {
     echo "reference_results/ written"
 }
 
+check_failures() {
+    [ "${FAILURES:-0}" -eq 0 ] || { echo "$FAILURES case(s) FAILED: reference_results/ not updated"; exit 1; }
+}
+
 case "$STEP" in
     collect) collect ;;
-    *) run_all; collect ;;
+    *) run_all; check_failures; collect ;;
 esac

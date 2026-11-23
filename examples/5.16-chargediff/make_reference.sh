@@ -42,7 +42,7 @@ relax() {   # $1 = name, $2 = start structure, $3 = template, $4.. = species; ex
 cdd() {   # $1 = set name, $2 = structure, $3 = fragment sizes, $4 = template, $5 = MeshCutoff (Ry), $6.. = prep flags
     local d="$WORK/$1"
     if [ ! -f "$d/chargediff_manifest.json" ]; then
-        rm -f stb_chargediffPrep_report*.txt     # the report goes to the current folder: moved into the set
+        rm -f stb_chargediffPrep_report*.txt stb_chargediffPrep_references*.bib     # the report goes to the current folder: moved into the set
         stb-chargediffPrep -s "$2" --fragment-sizes "$3" --calc "$4" --mesh-cutoff "$5" -p dojo -o "$d" \
             "${@:6}" --no-intro < /dev/null > /dev/null
         mv stb_chargediffPrep_report.txt "$d/"

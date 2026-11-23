@@ -5,7 +5,7 @@
 Date/time         : 2026-10-30 11:31:33
 Software          : stb 1.9.308, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Slab              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Slab              : /path/to/stb/examples/7.6-mladsorb/si111_2x2.fdf
 Adsorbate(s)      : Si
 Sites             : ontop, bridge, hollow; start at 2 Ang
 Substrate         : top 4 Ang relaxed, deeper atoms fixed
@@ -20,7 +20,7 @@ Loaded in         : 0.2 s
 
 [2] CLEAN SLAB
 ------------------------------------------------------------
-File              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+File              : /path/to/stb/examples/7.6-mladsorb/si111_2x2.fdf
 Atoms             : 24 (Si24)
 Surface cell      : a = 7.7502, b = 7.7502 Ang, gamma = 60.00 deg, area 52.019 Ang^2 (13.005 Ang^2 per top-layer atom)
 Thickness         : 7.111 Ang in 6 layers; vacuum 15.01 Ang (c along the normal 22.119 Ang)
@@ -44,7 +44,7 @@ Si        | 1     | 0.00         | 20.0      | -1.264034 | 0
 Bulk reference (positions and cell relaxed with the model; mu = E/N):
 element | file                                                            | atoms | volume/atom (Ang^3) | mu (eV/atom) | steps
 ------------------------------------------------------------------------------------------------------------------------------
-Si      | /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.628    | -5.365664    | 7    
+Si      | /path/to/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.628    | -5.365664    | 7    
 E_form = E(slab+adsorbate) - E(slab) - sum mu: the energy to take the adsorbate's atoms from their bulk phases (an adatom formation energy).
 
 [4] CANDIDATE SITES

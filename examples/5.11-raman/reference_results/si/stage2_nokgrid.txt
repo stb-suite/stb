@@ -63,7 +63,7 @@ config_extra.fdf (written into every generated folder; MD-forcing part shown bel
 [3] PSEUDOPOTENTIALS
 ------------------------------------------------------------
 Elements needed   : Si
-Source            : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo (-p/--pseudo-dir override)
+Source            : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo (-p/--pseudo-dir override)
 Found all required : Si.psml
 
 [4] OPTICAL DISPLACEMENT FOLDERS

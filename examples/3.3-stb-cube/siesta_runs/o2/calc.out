@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/examples/3.3-stb-cube/siesta_runs/o2
+* Directory : /path/to/stb/examples/3.3-stb-cube/siesta_runs/o2
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  16:55:33
 

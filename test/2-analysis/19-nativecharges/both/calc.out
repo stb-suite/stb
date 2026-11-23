@@ -1,8 +1,8 @@
-Executable      : /home/carlos/softwares/siesta-5.4.2/bin/siesta
+Executable      : /path/to/softwares/siesta-5.4.2/bin/siesta
 Version         : 5.4.2
 Architecture    : x86_64
 Compiler version: GNU-14.3.0
-Compiler flags  : -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/carlos/.anaconda3/envs/compile/include -I/home/carlos/.anaconda3/envs/compile/include -fallow-argument-mismatch -O3 -march=native
+Compiler flags  : -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /path/to/.anaconda3/envs/compile/include -I/path/to/.anaconda3/envs/compile/include -fallow-argument-mismatch -O3 -march=native
 Parallelisations: MPI
 NetCDF support
 NetCDF-4 support
@@ -13,7 +13,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /STORAGE02/carlos/run/calcogenides-GY-adsorption/test/siesta_native_charges_TeNO2_r2
+* Directory : /path/to/run/calcogenides-GY-adsorption/test/siesta_native_charges_TeNO2_r2
 * Running on 16 nodes in parallel.
 >> Start of run:  17-SEP-2026   1:23:36
 

@@ -9,7 +9,7 @@ Formula         : C2  (2 atom(s), 1 species: C)
 Cell volume     : 106.5280 Ang^3
 Calc template   : calc_optical.fdf
 Directions      : xx zz
-Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
+Pseudo source   : /path/to/stb/stb-suite/src/stb/pseudopotentials/virtual_vault
 Output root     : optical_study
 
 [1] INPUT STRUCTURE

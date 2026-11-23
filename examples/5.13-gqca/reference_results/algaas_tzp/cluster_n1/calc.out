@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/gqca_example/algaas_tzp/cluster_n1
+* Directory : /path/to/run/gqca_example/algaas_tzp/cluster_n1
 * Running on 2 nodes in parallel.
 >> Start of run:  15-OCT-2026  20:53:48
 

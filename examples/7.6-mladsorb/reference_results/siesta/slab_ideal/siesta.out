@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/5.10/siesta/slab_ideal
+* Directory : /path/to/run/stb/5.10/siesta/slab_ideal
 * Running on 6 nodes in parallel.
 >> Start of run:  30-OCT-2026  12:02:30
 

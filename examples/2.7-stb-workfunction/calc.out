@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/test/2-analysis/7-workfunction/out
+* Directory : /path/to/stb/test/2-analysis/7-workfunction/out
 * Running on 8 nodes in parallel.
 >> Start of run:  27-JUL-2026  18:54:51
 

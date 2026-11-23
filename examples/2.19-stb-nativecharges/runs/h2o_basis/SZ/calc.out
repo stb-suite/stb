@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/examples/2.19-stb-nativecharges/runs/h2o_basis/SZ
+* Directory : /path/to/stb/examples/2.19-stb-nativecharges/runs/h2o_basis/SZ
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  21:44:59
 

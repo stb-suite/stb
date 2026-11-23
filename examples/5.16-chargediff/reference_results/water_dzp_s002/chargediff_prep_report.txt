@@ -4,11 +4,11 @@
 ------------------------------------------------------------
   Tool            : stb-chargediffPrep 1.9.289
   Date            : 2026-10-23 12:48
-  Structure file  : /home/carlos/run/cdd_ref/relax/water_dimer/relaxed.fdf
-  Calc template   : /home/carlos/run/cdd_ref/calc_water_dzp_s002.fdf
-  Output dir      : /home/carlos/run/cdd_ref/water_dzp_s002
+  Structure file  : /path/to/run/cdd_ref/relax/water_dimer/relaxed.fdf
+  Calc template   : /path/to/run/cdd_ref/calc_water_dzp_s002.fdf
+  Output dir      : /path/to/run/cdd_ref/water_dzp_s002
   View fragments  : no
-  Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
+  Pseudo source   : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo (from --pseudo-dir 'dojo')
 
 [1] COMBINED STRUCTURE
 ------------------------------------------------------------
@@ -33,7 +33,7 @@ fragment2/ | H2O     | 3     | 4-6          | H_frag2, O_frag2      | 8
 [3] LEVEL OF THEORY AND FORCED SETTINGS
 ------------------------------------------------------------
   Read from the template (identical in every folder):
-Setting                | Value in /home/carlos/run/cdd_ref/calc_water_dzp_s002.fdf
+Setting                | Value in /path/to/run/cdd_ref/calc_water_dzp_s002.fdf
 ----------------------------------------------------------------------------------
 XC functional          | GGA                                                      
 XC authors             | PBE                                                      
@@ -64,22 +64,22 @@ combined/  | all 6 real | none        | O, H                                    
 fragment1/ | 3 real     | 3 ghost     | O_frag1, H_frag1, O_frag2_ghost, H_frag2_ghost | 7    
 fragment2/ | 3 real     | 3 ghost     | O_frag1_ghost, H_frag1_ghost, O_frag2, H_frag2 | 7    
   Each folder holds: structure.fdf, calc.fdf, config_extra.fdf and one pseudopotential per species label (a ghost label reuses its element's pseudopotential, with the electrons switched off).
-  Fragment manifest: /home/carlos/run/cdd_ref/water_dzp_s002/chargediff_manifest.json (read by stb-chargediffAnalysis)
+  Fragment manifest: /path/to/run/cdd_ref/water_dzp_s002/chargediff_manifest.json (read by stb-chargediffAnalysis)
 
 [6] REFERENCES
 ------------------------------------------------------------
-[OK] Citations written to '/home/carlos/run/cdd_ref/water_dzp_s002/references.bib'.
+[OK] Citations written to '/path/to/run/cdd_ref/water_dzp_s002/references.bib'.
 
 [7] SUMMARY & NEXT STEPS
 ------------------------------------------------------------
-  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/home/carlos/run/cdd_ref/water_dzp_s002'
+  Folder(s) written: 3 (1 combined + 2 fragment(s)) under '/path/to/run/cdd_ref/water_dzp_s002'
   Cost             : 3 independent single-point SCF runs; the combined one is the slowest (the fragments have the same basis, so about the same cost).
   Settings         : identical cell, MeshCutoff (320 Ry) and level of theory in all of them.
-  Report           : /home/carlos/run/cdd_ref/water_dzp_s002/chargediff_prep_report.txt
+  Report           : /path/to/run/cdd_ref/water_dzp_s002/chargediff_prep_report.txt
 
   Next steps:
     1. Run SIESTA in every folder, e.g.:
-         for d in /home/carlos/run/cdd_ref/water_dzp_s002/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
+         for d in /path/to/run/cdd_ref/water_dzp_s002/*/; do (cd $d && mpirun -np 4 siesta calc.fdf > calc.out); done
     2. Check that each run converged, then:
-         stb-chargediffAnalysis --dir /home/carlos/run/cdd_ref/water_dzp_s002 --png --save-data
+         stb-chargediffAnalysis --dir /path/to/run/cdd_ref/water_dzp_s002 --png --save-data
        (add --profile --axis N for a planar average, --3d --iso-min X for a point cloud, --show to open the dashboard; the report also gives the counterpoise interaction energy.)

@@ -5,11 +5,11 @@
 Date/time         : 2026-10-29 14:13:20
 Software          : stb 1.9.304, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Endpoints         : /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_initial.fdf -> /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/vac_final.fdf
+Endpoints         : /path/to/stb/examples/7.5-mlneb/vac_initial.fdf -> /path/to/stb/examples/7.5-mlneb/vac_final.fdf
 Band              : 7 images (endpoints included), linear interpolation + IDPP, atoms matched within --autosort-tol 0.5 Ang
 NEB               : improved tangent, spring k 0.1 eV/Ang^2, FIRE; shaping to 0.1 then climbing image to --fmax 0.05 eV/Ang, --max-steps 200 in total
 Endpoints relaxed : yes, positions only, to --fmax
-Model             : custom (/home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model)
+Model             : custom (/path/to/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model)
 Report file       : round2/stb_mlneb_report.txt
 
 [1] STRUCTURES
@@ -26,8 +26,8 @@ atom (fdf order) | species | displacement (Ang)
 ------------------------------------------------------------
 
 Model card -- identity
-Card file         : /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
-Model             : round_02_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model
+Card file         : /path/to/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-24T08:46:42, updated 2026-10-24T11:00:18, stb 1.9.292)
+Model             : round_02_seed_125 -- /path/to/stb/examples/7.5-mlneb/../7.2-mlmd/model/mlff_model_compiled.model
 SHA-256           : d7b4819cda6d9dce... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
 Committee         : member 3 of 3 (seed 125), round 2; committee force spread mean 19.8 meV/Ang
 Selected as best  : by stb-mlffValidate on 2026-10-24T11:00:18 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
@@ -159,7 +159,7 @@ Not evaluated     : --no-committee.
 
 [10] SIESTA CHECK
 ------------------------------------------------------------
-Template          : --calc /home/carlos/Dropbox/dev/stb/examples/7.5-mlneb/calc.fdf, pseudopotentials dojo; k-grid --kgrid
+Template          : --calc /path/to/stb/examples/7.5-mlneb/calc.fdf, pseudopotentials dojo; k-grid --kgrid
 SIESTA single points on the fine-tuned band (E - E of image 0; SIESTA max|F| tells how far the geometry is from a SIESTA stationary point):
 image | model (eV) | SIESTA (eV) | model - SIESTA | SIESTA max|F| | status
 --------------------------------------------------------------------------

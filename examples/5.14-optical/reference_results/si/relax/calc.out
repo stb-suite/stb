@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/optical_ex/si/relax
+* Directory : /path/to/run/optical_ex/si/relax
 * Running on 2 nodes in parallel.
 >> Start of run:  16-OCT-2026  10:28:42
 

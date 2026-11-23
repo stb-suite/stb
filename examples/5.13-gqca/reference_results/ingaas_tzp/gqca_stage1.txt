@@ -8,7 +8,7 @@ Structure       : structure.fdf
 Sublattice      : Ga (4 site(s))
 Species B       : In
 Calc template   : calc.fdf  (default)
-Pseudopotentials: dojo -> /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+Pseudopotentials: dojo -> /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo
 k-point density : 0.2 (stb-kgrid convention, recomputed per folder)
 Vacuum gap      : 10.0 Ang (vacuum-axis detection threshold)
 Output root     : ingaas

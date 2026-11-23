@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/6.2/cont
+* Directory : /path/to/run/stb/6.2/cont
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  14:27:16
 

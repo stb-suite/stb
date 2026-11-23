@@ -9,7 +9,7 @@ Formula         : Si2  (2 atom(s), 1 species: Si)
 Cell volume     : 41.3921 Ang^3
 Calc template   : calc.fdf  (default)
 Directions      : xx yy zz xy xz yz
-Pseudo source   : /home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo
+Pseudo source   : /path/to/stb/stb-suite/src/stb/pseudopotentials/dojo
 Output root     : optical_study
 
 [1] INPUT STRUCTURE

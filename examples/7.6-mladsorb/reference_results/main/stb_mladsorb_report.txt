@@ -5,7 +5,7 @@
 Date/time         : 2026-10-30 12:18:15
 Software          : stb 1.9.308, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Slab              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+Slab              : /path/to/stb/examples/7.6-mladsorb/si111_2x2.fdf
 Adsorbate(s)      : Si
 Sites             : ontop, bridge, hollow; start at 2 Ang
 Substrate         : top 4 Ang relaxed, deeper atoms fixed
@@ -17,8 +17,8 @@ Temperature       : 300 K (site populations)
 ------------------------------------------------------------
 
 Model card -- identity
-Card file         : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-29T10:08:12, updated 2026-10-29T10:09:15, stb 1.9.303)
-Model             : round_03_seed_125 -- /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model
+Card file         : /path/to/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json (format stb-mlff-model-card v1, written 2026-10-29T10:08:12, updated 2026-10-29T10:09:15, stb 1.9.303)
+Model             : round_03_seed_125 -- /path/to/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model
 SHA-256           : 9766c9cf4228bb87... = card's 'mlff_model_compiled.model' (compiled (TorchScript)) [verified]
 Committee         : member 3 of 3 (seed 125), round 3; committee force spread mean 16.1 meV/Ang
 Selected as best  : by stb-mlffValidate on 2026-10-29T10:09:15 -- force RMSE pooled over the test set and the MD-check frames (every held-out SIESTA force component weighted alike)
@@ -78,7 +78,7 @@ Loaded in         : 0.4 s
 
 [2] CLEAN SLAB
 ------------------------------------------------------------
-File              : /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si111_2x2.fdf
+File              : /path/to/stb/examples/7.6-mladsorb/si111_2x2.fdf
 Atoms             : 24 (Si24)
 Surface cell      : a = 7.7502, b = 7.7502 Ang, gamma = 60.00 deg, area 52.019 Ang^2 (13.005 Ang^2 per top-layer atom)
 Thickness         : 7.536 Ang in 6 layers; vacuum 14.58 Ang (c along the normal 22.119 Ang)
@@ -103,7 +103,7 @@ Note              : an atom or molecule in vacuum is far outside a model fine-tu
 Bulk reference (positions and cell relaxed with the model; mu = E/N):
 element | file                                                            | atoms | volume/atom (Ang^3) | mu (eV/atom) | steps
 ------------------------------------------------------------------------------------------------------------------------------
-Si      | /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.594    | -115.008421  | 5    
+Si      | /path/to/stb/examples/7.6-mladsorb/si_bulk.fdf | 8     | 20.574 -> 20.594    | -115.008421  | 5    
 E_form = E(slab+adsorbate) - E(slab) - sum mu: the energy to take the adsorbate's atoms from their bulk phases (an adatom formation energy).
 
 [4] CANDIDATE SITES
@@ -152,13 +152,13 @@ rank | site      | what is below         | dE (eV) | nearest copy of the site (A
 3    | #3 bridge | above L4 Si10         | +1.4669 | 2.237                          | 2.082            
 4    | #1 ontop  | above L1 Si21         | +2.2466 | 2.237                          | 2.237            
 Diffusion barrier : a climbing-image NEB with stb-mlneb (5.7) between two of these minima -- with its committee, SIESTA check (--siesta-check) and export to training (--to-mlff):
-  stb-mlneb --initial main/rank01_ontop_site2_Si.fdf --final main/rank03_bridge_site3_Si.fdf --autosort-tol 0 --custom-model /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model --custom-model-card /home/carlos/Dropbox/dev/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json
+  stb-mlneb --initial main/rank01_ontop_site2_Si.fdf --final main/rank03_bridge_site3_Si.fdf --autosort-tol 0 --custom-model /path/to/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_compiled.model --custom-model-card /path/to/stb/examples/7.6-mladsorb/../7.5-mlneb/model_round3/mlff_model_card.json
   (--autosort-tol 0: the .fdf files list the same atoms in the same order, and an adsorbate that hops farther than the default 0.5 Ang cannot be matched by distance. The minimum nearest to minimum 1 as written in its .fdf, 2.08 Ang. A minimum whose nearest site copy is closer than its .fdf sits at another copy; such a short hop is real only if the adsorbate stays there when relaxed next to minimum 1 -- not checked here)
 [NOTE] ML-level energies from a fast surrogate potential: use them to choose which site(s) to compute with SIESTA (stb-adsorb, 4.8), not as the final answer.
 
 [7] COMMITTEE
 ------------------------------------------------------------
-Members           : 3 members of round 3 from /home/carlos/run/stb/5.7/mlff_si/mlff_runs
+Members           : 3 members of round 3 from /path/to/run/stb/5.7/mlff_si/mlff_runs
 3 committee members on the main model's geometries -- E_ads against each member's own slab and isolated adsorbate (it carries each member's E0s), dE against each member's own minimum 1, E_form against each member's own bulk:
 rank | ads | site      | main E_ads | members E_ads (eV)   | std   | members dE (eV)      | std   | members E_form (eV)  | std   | F spread (meV/Ang) | est. F error
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------

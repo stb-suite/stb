@@ -6,7 +6,7 @@ Tool            : stb-eosInputs 1.9.286
 Date            : 2026-10-22 22:28
 Structure       : structure.fdf
 Calc template   : calc_template.fdf
-Pseudo source   : dojo  (/home/carlos/Dropbox/dev/stb/stb-suite/src/stb/pseudopotentials/dojo)
+Pseudo source   : dojo  (/path/to/stb/stb-suite/src/stb/pseudopotentials/dojo)
 Scan            : 11 volumes, +/-8 % in volume
 Ions            : fixed (single point)
 Output          : ./

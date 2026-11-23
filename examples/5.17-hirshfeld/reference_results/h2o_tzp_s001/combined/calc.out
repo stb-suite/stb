@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/4.20/reference_run/h2o_tzp_s001/combined
+* Directory : /path/to/run/stb/4.20/reference_run/h2o_tzp_s001/combined
 * Running on 4 nodes in parallel.
 >> Start of run:  23-OCT-2026  19:26:40
 

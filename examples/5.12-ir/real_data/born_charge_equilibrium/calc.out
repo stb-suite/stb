@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/4.12/nacl/ir_study/born_charge_disp/equilibrium
+* Directory : /path/to/run/stb/4.12/nacl/ir_study/born_charge_disp/equilibrium
 * Running in serial mode (only 1 MPI rank).
 >> Start of run:   2-SEP-2026  13:56:39
 

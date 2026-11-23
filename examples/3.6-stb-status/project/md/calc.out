@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/examples/3.6-stb-status/project/md
+* Directory : /path/to/stb/examples/3.6-stb-status/project/md
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  20:43:10
 

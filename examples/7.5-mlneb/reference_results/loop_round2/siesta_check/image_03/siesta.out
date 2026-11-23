@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/run/stb/5.7/neb_r2/siesta_check/image_03
+* Directory : /path/to/run/stb/5.7/neb_r2/siesta_check/image_03
 * Running on 6 nodes in parallel.
 >> Start of run:  29-OCT-2026   9:02:02
 

@@ -5,7 +5,7 @@
 Date/time         : 2026-10-24 18:33:05
 Software          : stb 1.9.295, mace-torch 0.3.16, torch 2.13.0+cu130, ase 3.29.0
 Device            : cuda (NVIDIA GeForce RTX 3060)
-Input file        : /home/carlos/run/stb/5.1/example_ref/si216.fdf
+Input file        : /path/to/run/stb/5.1/example_ref/si216.fdf
 Ensemble          : NPT
 Temperature       : 2500.0 K
 Pressure          : 0.000 GPa

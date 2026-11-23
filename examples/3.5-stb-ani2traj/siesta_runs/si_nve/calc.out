@@ -15,7 +15,7 @@ ELSI support. Solvers:
 DFT-D3 support
 
 Runtime information:
-* Directory : /home/carlos/Dropbox/dev/stb/examples/3.5-stb-ani2traj/siesta_runs/si_nve
+* Directory : /path/to/stb/examples/3.5-stb-ani2traj/siesta_runs/si_nve
 * Running on 4 nodes in parallel.
 >> Start of run:  30-OCT-2026  20:15:37
 

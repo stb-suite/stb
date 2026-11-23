@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 # TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
 timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
 
@@ -98,6 +101,7 @@ check_contains "Space groups *:.*225, 227" log_dup.txt
 
 
 # --- 5. --ml-rank / --keep-top-per-group ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-rank --keep-top-per-group 1 (slow: MACE relaxes each candidate) ---"
 
 timeout 180 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 225 --count-per-group 3 \
@@ -105,6 +109,9 @@ timeout 180 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 225 --count-pe
 check_exit_code $? 0
 check_contains "1 folder(s) (2 of 3 skipped/dropped) (group_225_rank1)" log_mlrank.txt
 check_success ranked/group_225_rank1/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: --keep-top-per-group without --ml-rank is rejected"
 stb-xrdsearch --species Na Cl --num-ions 4 4 --groups 225 --keep-top-per-group 1 \

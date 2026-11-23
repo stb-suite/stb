@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-ramanModes (Raman Spectrum, Stage 2: Modes & Optical
@@ -229,6 +232,7 @@ check_contains "OK" log_animations_check.txt
 # degenerate optical mode is T2g (Si's actual, experimentally known Raman
 # mode) -- this is the mandatory correctness gate for --use-symmetry's group
 # theory (see core/raman_symmetry.py's own docstring for the derivation).
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known silicon (Oh) result ---"
 python3 - <<'PYEOF' > log_symmetry_gate.txt 2>&1
 import numpy as np
@@ -270,6 +274,9 @@ assert len(optical) == 1 and optical[0].label == "T2g" and optical[0].is_raman_a
 print("SYMMETRY_GATE_OK")
 PYEOF
 check_contains "SYMMETRY_GATE_OK" log_symmetry_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-2. core.raman_symmetry correctness gate: graphene (2D, point group D6h) ---
@@ -281,6 +288,7 @@ check_contains "SYMMETRY_GATE_OK" log_symmetry_gate.txt
 # Raman-SILENT (not in D6h's quadratic basis) -- neither is a centrosymmetric
 # g/u-only shortcut result, so this also exercises the general (non-g/u)
 # path of the reduction formula on a real, physically meaningful case.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.classify_modes() against known graphene (D6h) result ---"
 python3 - <<'PYEOF' > log_symmetry_gate_2d.txt 2>&1
 import numpy as np
@@ -322,6 +330,9 @@ assert len(e2g) == 1 and e2g[0].is_raman_active is True, f"E2g (G-band) must be 
 print("SYMMETRY_GATE_2D_OK")
 PYEOF
 check_contains "SYMMETRY_GATE_2D_OK" log_symmetry_gate_2d.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-3. get_gamma_modes 0D fix: H2O molecule (3 translations + 3 rotations) ---
@@ -331,6 +342,7 @@ check_contains "SYMMETRY_GATE_2D_OK" log_symmetry_gate_2d.txt
 # (rotation) are both far below the genuine vibrational bending/stretching
 # modes (~44.5/111.6/115.2 THz for water). get_gamma_modes must return
 # exactly 3 non-acoustic modes here (the real vibrations), not 6.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing get_gamma_modes 0D trivial-mode exclusion (H2O molecule) ---"
 python3 - <<'PYEOF' > log_0d_gate.txt 2>&1
 import numpy as np
@@ -381,6 +393,9 @@ assert all(f > 5.0 for f in freqs_after), f"leftover modes must be real vibratio
 print("ZERO_D_FIX_OK")
 PYEOF
 check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5b-4. core.raman_symmetry.tensor_form() correctness gate: water (C2v/mm2) ---
@@ -395,6 +410,7 @@ check_contains "ZERO_D_FIX_OK" log_0d_gate.txt
 # the diagonal-only x/y/z probe set, so there's nothing to reduce to
 # without it -- correctly declining is just as important a check here as
 # succeeding).
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing core.raman_symmetry.tensor_form() against known water (C2v) result ---"
 python3 - <<'PYEOF' > log_tensor_form_gate.txt 2>&1
 import numpy as np
@@ -451,6 +467,9 @@ assert abs(t0[1, 2]) > 1e-3 and abs(t0[0, 1]) < 1e-6 and abs(t0[0, 2]) < 1e-6, \
 print("TENSOR_FORM_GATE_OK")
 PYEOF
 check_contains "TENSOR_FORM_GATE_OK" log_tensor_form_gate.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 5c. --use-symmetry CLI wiring (Sn3O4 fixture) ---
@@ -531,6 +550,7 @@ check_contains "OK" log_skipdeg_noop_check.txt
 # directly as an ML-sourced (embedded force_constants) phonopy_disp.yaml,
 # same has_embedded_fc path stb-mlphonons produces, so no SIESTA .FA/
 # FORCE_SETS extraction or real stb-raman Stage 1 run is needed.
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --skip-degenerate against a real doubly-degenerate mode (graphene E2g) ---"
 rm -rf raman_study
 python3 - <<'PYEOF' > log_skipdeg_fixture.txt 2>&1
@@ -607,6 +627,9 @@ check_exit_code $? 0
 check_contains "Selected modes    : 2" log_skipdeg_sym.txt
 check_contains "E2g" log_skipdeg_sym.txt
 check_contains "Degenerate groups : 1 mode(s) skipped" log_skipdeg_sym.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 6. Error cases ---

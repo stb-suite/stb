@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-nebAnalysis (NEB Analysis, item 5.9.2). Uses stb-neb
@@ -169,6 +172,7 @@ check_contains "with linespoints" tiny/neb_run/plot/neb_curve.gplot
 
 
 # --- 2b. Mode 1 (MACE-MP-0) -sourced band gets the stronger caveat wording ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --mode 1 caveat wording ---"
 mkdir -p mode1
 cp initial.fdf final.fdf calc.fdf mode1/
@@ -184,11 +188,22 @@ cp initial.fdf final.fdf calc.fdf mode1/
     stb-nebAnalysis --dir neb_run --save-path-xyz --no-intro > log_mode1_analysis.txt 2>&1
 )
 check_contains "already converged a real climbing-image band on MACE-MP-0" mode1/log_mode1_analysis.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: mode 1's images live directly under the root (no cycle_NN/ nesting)"
 check_success mode1/neb_run/image_02/calc.out
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --save-path-xyz on mode 1 (single-point on Stage 1's MACE-MP-0 path)"
 check_contains "single-point on Stage 1's MACE-MP-0 path" mode1/log_mode1_analysis.txt
 check_success mode1/neb_run/neb_path_current.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 2d. Mode 2: multi-cycle auto-discovery + convergence-history plot ---
@@ -205,6 +220,7 @@ cp initial.fdf final.fdf calc.fdf mode2/
     printf 'siesta: FreeEng =    -299.300000\nSCF cycle converged after 12 iterations\n' > neb_run/cycle_00/image_03/calc.out
     printf 'siesta: FreeEng =    -299.900000\nSCF cycle converged after 12 iterations\n' > neb_run/cycle_00/image_04/calc.out
 )
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: only cycle_00 exists -> analyzed, correctly flagged NOT YET CONVERGED"
 (cd mode2 && stb-nebAnalysis --dir neb_run --no-intro > log_mode2_analysis1.txt 2>&1)
 check_contains "\[NOTE\] Analyzing 'cycle_00' -- NOT YET CONVERGED" mode2/log_mode2_analysis1.txt
@@ -230,6 +246,9 @@ check_contains "cycle_01: forward barrier" mode2/stb_nebAnalysis_report.txt
 
 echo "Testing: cycle_01 (not cycle_00) reports path-length drift as informational, not a warning"
 check_contains "Path length has evolved by" mode2/stb_nebAnalysis_report.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 # --- Regression: stb-nebCycle writes cycle_{N+1}/ (structure.fdf/calc.fdf
 #     only, no calc.out yet -- the NEXT geometry to run SIESTA on) as soon
@@ -237,6 +256,7 @@ check_contains "Path length has evolved by" mode2/stb_nebAnalysis_report.txt
 #     before SIESTA has run in the new folder, must still pick cycle_01
 #     (the latest cycle WITH results), not fail on the freshly-written,
 #     still-empty cycle_02. Live bug, reported against a real 30+-cycle run. ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: a freshly-written NEXT cycle with no calc.out yet doesn't break analysis"
 mkdir -p mode2/neb_run/cycle_02
 for img in image_00 image_01 image_02 image_03 image_04; do
@@ -277,6 +297,9 @@ cycle1 = structure_io.to_pymatgen(structure_io.read_fdf('mode2/neb_run/cycle_01/
 sys.exit(0 if np.allclose(applied.cart_coords, cycle1.cart_coords) else 1)
 "
 check_exit_code $? 0
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 2e. --apply copies the highest-energy image's structure.fdf (mode 3, root case) ---

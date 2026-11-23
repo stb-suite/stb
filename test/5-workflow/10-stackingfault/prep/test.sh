@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-stackingfault (Stacking Fault Prep, item 5.10.1)
@@ -251,6 +254,7 @@ check_contains " 3   7   N" sf_run/positions/shift_00_00/structure.fdf
 
 
 # --- 3b. --ml-prerelax-layers (MACE-MP-0, cached locally) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax-layers ---"
 rm -rf sf_run
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --ml-prerelax-layers \
@@ -270,9 +274,13 @@ check_exit_code $? 0
 check_success sf_run/stackingfault_ml_preview.png
 check_contains "ML preview: predicted equilibrium at shift_" log_preview.txt
 check_contains "predicted corrugation" log_preview.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 # --- 3d. --mode 2 (MACE-MP-0 relaxes z, then SIESTA single-point; MACE-MP-0
 #     cached locally) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --mode 2 (MACE relaxes z, then single-point SIESTA) ---"
 rm -rf sf_run
 stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 3 -ny 3 --mode 2 --no-d3 \
@@ -318,6 +326,9 @@ stb-stackingfault -l1 graphene.fdf -l2 graphene.fdf -c calc.fdf -nx 2 -ny 2 --mo
     --no-intro > log_mode2_d3.txt 2>&1
 check_exit_code $? 0
 check_contains "ML model.*MACE-MP-0.*D3(BJ) dispersion (matches --d3)" log_mode2_d3.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 # --- 3e. --mode 1 (SIESTA relaxes z for real -- restricted CG, x/y frozen) ---
 echo -e "\n--- Testing --mode 1 (restricted SIESTA z-relaxation) ---"
@@ -430,6 +441,7 @@ check_success sf_run/positions/shift_00_00/structure.fdf
 check_success sf_run/positions/shift_03_01/structure.fdf
 check_success stb_stackingfault_report.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: navigate 5.10.1 -> ML preview on -> quit"
 rm -rf sf_run
 {
@@ -453,6 +465,9 @@ rm -rf sf_run
 } | stb-suite > log_menu_preview.txt 2>&1
 check_contains "Success:.*9 grid folder" log_menu_preview.txt
 check_success sf_run/stackingfault_ml_preview.png
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: navigate 5.10.1 -> mode 1 (SIESTA relaxes z), custom relax-z-steps -> quit"
 rm -rf sf_run

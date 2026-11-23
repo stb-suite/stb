@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-phononsCreate (Phonons Prep, item 5.4.1)
@@ -195,6 +198,7 @@ rm -rf phonon_runs
 
 # --- 3. --ml-prerelax pre-flight check (MACE-MP-0 already cached locally --
 #     fast, no network needed) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax ---"
 rm -rf phonon_runs
 stb-phononsCreate -s structure.fdf -c calc.fdf -p . -dim 1 1 1 --ml-prerelax --no-intro > log_ml_prerelax.txt 2>&1
@@ -209,6 +213,9 @@ check_not_contains "cuequivariance" ml_section_only.txt
 check_contains "\[6\] LIBRARY WARNINGS" log_ml_prerelax.txt
 check_contains "\[MACE import\]" log_ml_prerelax.txt
 check_contains "cuequivariance" log_ml_prerelax.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4. Error and robustness cases ---

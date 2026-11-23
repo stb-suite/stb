@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-passivate (Surface Passivator, item 4.9)
@@ -162,6 +165,7 @@ echo "Testing: provenance header written into the output .fdf"
 check_contains "# Dangling bonds passivated by stb-passivate" report_test.fdf
 check_contains "# Passivant: H. Dangling bonds found: 8, auto-passivated: 8, unresolved (2+ missing bonds): 0." report_test.fdf
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --ml-relax pre-relaxes the passivated structure with MACE-MP-0, vacuum axis fixed"
 stb-passivate -f si111_slab.fdf --ml-relax --ml-relax-cell -o ml_relaxed.fdf --no-intro > log_ml_relax.txt 2>&1
 check_exit_code $? 0
@@ -182,6 +186,9 @@ if [ $? -eq 0 ]; then
 else
     echo -e "   -> ${RED}Failed:${NC} vacuum axis changed under --ml-relax-cell"
     FAIL=$((FAIL+1))
+fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
 fi
 
 

@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-crystalbuilder (Crystal Builder, item 4.8)
@@ -206,6 +209,7 @@ check_contains "\[3\] SYMMETRY DETECTION" stb_crystalbuilder_report.txt
 check_contains "Point group    : m-3m" stb_crystalbuilder_report.txt
 check_contains "Hall symbol    : -F 4 2 3" stb_crystalbuilder_report.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --ml-relax pre-relaxes the built structure with MACE-MP-0"
 stb-crystalbuilder --spacegroup Fm-3m --a 3.52 --site Ni 0 0 0 --reduce primitive \
     --ml-relax --ml-relax-cell -o fcc_ni_ml.fdf --no-intro > log_ml_relax.txt 2>&1
@@ -213,6 +217,9 @@ check_exit_code $? 0
 check_contains "\[5\] ML PRE-RELAXATION (MACE)" log_ml_relax.txt
 check_success fcc_ni_ml.fdf
 check_contains "ML pre-relaxed with" fcc_ni_ml.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 6. Interactive path (stb-suite, shortcut 4.8) ---

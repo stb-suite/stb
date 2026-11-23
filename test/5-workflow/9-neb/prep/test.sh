@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-neb (NEB Prep, item 5.9.1 -- this is now Stage 1 of the
@@ -578,6 +581,7 @@ rm -rf xv_species_swap_test
 
 
 # --- 7. Mode 1 (MACE-MP-0, cached locally, then 1 single-point per image) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --mode 1 ---"
 rm -rf neb_run
 rm -f stb_neb_report*.txt stb_neb_references*.bib
@@ -594,6 +598,9 @@ check_contains '"mode": 1' neb_run/neb_setup.json
 check_contains '"ml_neb_used": true' neb_run/neb_setup.json
 check_contains "ML-NEB freeze substrate: yes" stb_neb_report.txt
 check_contains "Freezing 8/9 atom" log_mode1.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 echo "Testing: mode 1 writes directly under the output root, NOT under neb_run/cycle_00/ (single-shot, no refinement loop)"
 if [ -d neb_run/cycle_00 ]; then
     echo -e "   -> ${RED}Failed:${NC} unexpected neb_run/cycle_00/ written for --mode 1"
@@ -605,6 +612,7 @@ fi
 
 
 # --- 7b. --no-ml-freeze-substrate (freeze-substrate is default ON) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --no-ml-freeze-substrate ---"
 rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 1 --ml-max-steps 10 \
@@ -618,6 +626,9 @@ else
     echo -e "   -> ${GREEN}Verified:${NC} no atoms frozen with --no-ml-freeze-substrate"
     PASS=$((PASS+1))
 fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 7c. Path-quality warning (deliberately dense -n triggers "nearly identical") ---
@@ -629,6 +640,7 @@ check_contains "WARNING.*nearly identical" log_dense.txt
 
 
 # --- 8. --ml-prerelax-endpoints, independent of --mode ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax-endpoints with --mode 3 (no climbing-image NEB) ---"
 rm -rf neb_run
 stb-neb -i initial.fdf -f final.fdf -c calc.fdf -n 5 --mode 3 --ml-prerelax-endpoints \
@@ -642,6 +654,9 @@ if grep -q "running a real climbing-image NEB" log_prerelax_endpoints.txt; then
 else
     echo -e "   -> ${GREEN}Verified:${NC} no climbing-image NEB run with --mode 3 (--ml-prerelax-endpoints is independent)"
     PASS=$((PASS+1))
+fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
 fi
 
 
@@ -673,6 +688,7 @@ fi
 
 
 # --- 11. Mode 2 (MACE + neb_run/cycle_00/, --climb-after 0 suggested) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --mode 2 (default) ---"
 rm -rf neb_run
 rm -f stb_neb_report*.txt stb_neb_references*.bib
@@ -683,6 +699,9 @@ check_contains '"mode": 2' neb_run/neb_setup.json
 check_success neb_run/cycle_00/image_00/structure.fdf
 check_contains "\[7\] CLUSTER SUBMISSION" log_mode2.txt
 check_contains "stb-nebCycle --dir . --fmax 0.05 --climb-after 0 --no-intro" log_mode2.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 echo "Testing: --mode is not required (default is 2)"
 check_exit_code $? 0
 
@@ -717,6 +736,7 @@ check_contains "cycle-fmax" log_help.txt
 # --- 14. Interactive path (stb-suite, shortcut 5.9.1) ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.9.1) ---"
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: navigate 5.9.1 -> defaults (mode 2) -> quit"
 rm -rf neb_run
 {
@@ -776,6 +796,9 @@ rm -rf neb_run
 } | stb-suite > log_menu_idpp.txt 2>&1
 check_contains "Success:.*5 image folder" log_menu_idpp.txt
 check_success neb_run/image_02/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: navigate 5.9.1 -> mode 3 (100% real-DFT, no MACE) -> quit"
 rm -rf neb_run

@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 # TIMEOUT_SCALE=3 multiplies the time limits below, for a slow or busy node
 timeout() { local s=$1; shift; command timeout "$(awk -v s="$s" -v f="${TIMEOUT_SCALE:-1}" 'BEGIN { print int(s * f + 0.5) }')" "$@"; }
 
@@ -257,6 +260,7 @@ sys.exit(0 if 'Bohr' in open('phonon_runs/perfect_supercell/structure.fdf').read
 #     the exact pipeline that surfaced the "bands didn't do anything" menu
 #     bug (typing "y" at the old free-text prompt silently dropped --bands);
 #     covered again in the interactive section below ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing the ML-computed (stb-mlphonons) path with --bands ---"
 rm -rf phonon_ml_runs
 stb-mlphonons --file structure.fdf --dim 1 1 1 --mesh 4 4 4 --band-points 5 \
@@ -268,6 +272,9 @@ check_contains "Force constants already embedded" log_pos_ml.txt
 check_contains "BAND STRUCTURE" log_pos_ml.txt
 check_success phonon_ml_runs/phonon_bands.png
 check_success phonon_ml_runs/band.yaml
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4. Error and robustness cases ---
@@ -303,12 +310,16 @@ check_contains "view" log_help.txt
 #     prompts ---
 echo -e "\n--- Testing the interactive path via stb-suite (shortcut 5.4.2) ---"
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: select '1' from the numbered list -> bands actually runs"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
 printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\n1\nn\nn\nn\n\n0\n' | stb-suite > log_menu_bands.txt 2>&1
 check_contains "Selected: bands" log_menu_bands.txt
 check_contains "BAND STRUCTURE" log_menu_bands.txt
 check_success phonon_ml_runs/phonon_bands.png
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: an unrecognized token (old y/n habit) is now flagged instead of silently ignored"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml
@@ -316,6 +327,7 @@ printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\ny\nn\nn\nn\n\n0\n' | stb-suite > l
 check_contains "Ignored unrecognized option(s): y" log_menu_typo.txt
 check_not_contains "BAND STRUCTURE" log_menu_typo.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: 'all' shortcut selects bands+dos+pdos+thermal but not freeze, and --save-report writes the report"
 rm -f phonon_ml_runs/phonon_bands.png phonon_ml_runs/band.yaml stb_phononsPos_report*.txt stb_phononsPos_references*.bib
 printf '5.4.2\nphonon_ml_runs\n\n4 4 4\n\n\n\nall\nn\nn\nn\n\n0\n' | stb-suite > log_menu_all.txt 2>&1
@@ -324,6 +336,9 @@ check_contains "BAND STRUCTURE" log_menu_all.txt
 check_contains "DENSITY OF STATES" log_menu_all.txt
 check_not_contains "MODE FREEZE" log_menu_all.txt
 check_success stb_phononsPos_report.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 popd > /dev/null

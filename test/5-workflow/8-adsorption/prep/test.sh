@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-adsorb (Adsorption Prep, item 5.8.1)
@@ -261,6 +264,7 @@ check_contains "Configuration count :" log_molecule.txt
 
 
 # --- 4. --ml-rank --top-k (MACE-MP-0 already cached locally) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-rank --top-k 2 ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type all --all-sites \
@@ -307,6 +311,9 @@ else
     echo -e "   -> ${RED}Failed:${NC} expected exactly 2 site folders, found $n_kept"
     FAIL=$((FAIL+1))
 fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: every written site's fractional coordinates are wrapped into [0, 1)"
 echo "  (AdsorbateSiteFinder places the adsorbate via a raw Cartesian offset with no"
@@ -332,6 +339,7 @@ else:
 " > log_frac_wrap_check.txt 2>&1
 check_contains "OK" log_frac_wrap_check.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: a MACE relax that legitimately drifts the adsorbate outside the cell"
 echo "  (e.g. an unstable orientation sliding across a periodic in-plane boundary) is"
 echo "  wrapped back into [0, 1) right after relaxing -- BEFORE the site folder is"
@@ -405,6 +413,9 @@ for atoms in frames:
 print('OK')
 " > log_wrap_xyz_check.txt 2>&1
 check_contains "OK" log_wrap_xyz_check.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: the same wrapped positions are what's actually written to the site folders"
 python3 -c "
@@ -476,6 +487,7 @@ check_contains "OK" log_orientation_unit_check.txt
 # --ml-rank, with a real (multi-atom) H2O adsorbate on the ontop site (MACE
 # -MP-0 already cached locally from section 4 above). Kept small (2x2=4) for
 # test runtime. ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --n-orientations-polar/--n-orientations-azimuthal (live, H2O) ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
@@ -521,6 +533,9 @@ check_exit_code $? 0
 check_contains "site 1/1" log_orientations_singlesite.txt
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_success $RUN/sites/orientation_trajectory.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: --ml-rank without --all-sites and without orientation sampling is still rejected"
 rm -rf $RUN
@@ -529,6 +544,7 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --site
 check_exit_code $? 2
 check_contains "UNLESS orientation sampling" log_mlrank_singlesite_rejected.txt
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: --orientation-top-k caps the number of kept orientations"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --all-sites \
@@ -543,6 +559,9 @@ else
     echo -e "   -> ${RED}Failed:${NC} expected exactly 1 orientation folder, found $n_kept"
     FAIL=$((FAIL+1))
 fi
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: orientation flags without --ml-rank are rejected"
 rm -rf $RUN
@@ -555,6 +574,7 @@ check_contains "only valid with --ml-rank" log_orientations_no_mlrank.txt
 # --- 4b. --ml-device cuda without a usable GPU: warn and fall back to CPU,
 # not abort (this machine has no GPU, so this exercises the real fallback
 # path rather than a mocked one). ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-device cuda falls back to CPU with a warning (no GPU here) ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --all-sites \
@@ -562,6 +582,9 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H --site-type ontop --all-si
 check_exit_code $? 0
 check_contains "\[WARNING\] --ml-device cuda requested, but .* -- falling back to CPU\." log_ml_device_fallback.txt
 check_success $RUN/sites/site_1_ontop/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 4c. A --height large enough to push the adsorbate's fractional z
@@ -663,6 +686,7 @@ check_exit_code $? 2
 
 
 # --- 6d. --ml-prerelax (isolated adsorbate) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-prerelax ---"
 rm -rf $RUN
 stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --ml-prerelax \
@@ -670,6 +694,9 @@ stb-adsorb -s structure.fdf -c calc.fdf --adsorbate H2O --site-type ontop --ml-p
 check_contains "ML pre-relax" log_prerelax.txt
 check_contains "Converged" log_prerelax.txt
 check_success $RUN/adsorbate/structure.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 6e. Overlap/clash warning: --height too small places the adsorbate
@@ -1011,6 +1038,7 @@ check_success $RUN/sites/site_1_ontop_N_h2.50/structure.fdf
 check_success $RUN/adsorbate_O/structure.fdf
 check_success $RUN/adsorbate_N/structure.fdf
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: navigate 5.8.1 -> --ml-rank + orientation sampling (H2O) -> quit"
 rm -rf $RUN
 {
@@ -1042,6 +1070,9 @@ check_contains "2x2, top 1" log_menu_orient.txt
 check_contains "4 orientation(s) sampled -> 1 unique kept" log_menu_orient.txt
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_contains "DFTD3                   .true." $RUN/sites/site_1_ontop_orient1/config_extra.fdf
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 echo "Testing: navigate 5.8.1 -> single site + orientation sampling (H2O) -> quit"
 rm -rf $RUN
@@ -1072,8 +1103,12 @@ check_contains "ML pre-screen" log_menu_orient_singlesite.txt
 check_contains "ON (single site)" log_menu_orient_singlesite.txt
 check_contains "Orientation sampling" log_menu_orient_singlesite.txt
 check_contains "2x2, top 1" log_menu_orient_singlesite.txt
+if [ "$STB_HAS_ML" = 1 ]; then
 check_success $RUN/sites/site_1_ontop_orient1/structure.fdf
 check_success $RUN/sites/orientation_trajectory.xyz
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 8b. Orientation duplicates (no MACE needed): H2O with its two H swapped, or shifted by a

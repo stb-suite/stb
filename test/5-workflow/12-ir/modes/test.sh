@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-irModes (IR Spectrum, Stage 2: Modes & Displacements,
@@ -188,6 +191,7 @@ check_contains "Missing pseudopotential" log_missing_pseudo.txt
 # --- 7. IR symmetry correctness gates (real MACE-MP-0 phonons) ---
 echo -e "\n--- Testing core.ir_symmetry.classify_ir_modes() against known results ---"
 
+if [ "$STB_HAS_ML" = 1 ]; then
 echo "Testing: silicon (m-3m) mutual-exclusion gate -- T2g is Raman-active AND IR-inactive"
 python3 - <<'PYEOF' > log_ir_symmetry_si.txt 2>&1
 from ase.build import bulk
@@ -285,9 +289,13 @@ assert sorted(raman_labels.values()) == ["A1", "A1", "B2"], f"expected 2xA1+1xB2
 print("LABEL_CONSISTENCY_GATE_OK")
 PYEOF
 check_contains "LABEL_CONSISTENCY_GATE_OK" log_ir_symmetry_h2o.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 8. Non-bulk path: CLI wiring (H2O, real MACE-MP-0 phonons) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing non-bulk (0D) path: CLI wiring (H2O) ---"
 rm -rf ir_study
 python3 - <<'PYEOF' > log_nonbulk_fixture.txt 2>&1
@@ -354,9 +362,13 @@ assert all(r['path'] == 'NONBULK' for r in rows), f'expected all NONBULK, got {[
 print('OK')
 " > log_nonbulk_table_check.txt 2>&1
 check_contains "OK" log_nonbulk_table_check.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 9. --skip-degenerate on the non-bulk path ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --skip-degenerate CLI wiring on H2O (non-bulk, no real degeneracy -> no-op) ---"
 stb-irModes --directory ir_study --calc calc.fdf --pseudo-dir . --skip-degenerate --no-intro \
     > log_skipdeg_h2o.txt 2>&1
@@ -421,6 +433,9 @@ assert len(derived) == 1, f'expected exactly 1 derived mode, got {derived}'
 print('OK')
 " > log_graphene_check.txt 2>&1
 check_contains "OK" log_graphene_check.txt
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 10. Error cases ---

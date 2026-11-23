@@ -1,4 +1,7 @@
 #!/bin/bash
+# the optional 'ml' extra: blocks that need MACE are skipped without it
+STB_HAS_ML=0; python3 -c "import mace" 2>/dev/null && STB_HAS_ML=1
+
 
 # --- Setup ---
 # Smoke test for stb-mlff (Custom ML Force Field Prep, item 7.1.1)
@@ -256,6 +259,7 @@ rm -rf extras
 
 
 # --- 2e. Foundation-model screen (one shared 'unphysical' threshold) ---
+if [ "$STB_HAS_ML" = 1 ]; then
 echo -e "\n--- Testing --ml-screen (MACE-MP small) ---"
 stb-mlff -o mlscreen --file calc.fdf --n-configs 2 --stdev 0.05 0.6 --pseudo-dir . --ml-screen --ml-model small \
     --no-plots --no-intro > log_mlscreen.txt 2>&1
@@ -276,6 +280,9 @@ from stb.core import mlff_workflow as w
 sys.exit(0 if (mlff.ML_FORCE_WARN, mlff.ML_ENERGY_WARN) == (w.UNPHYSICAL_FMAX, w.UNPHYSICAL_DE) == (15.0, 1000.0) else 1)
 "
 rm -rf mlscreen
+else
+    echo "Skipped (needs the ml extra): this block runs MACE or uses its output."
+fi
 
 
 # --- 3. --n-configs 0 with no --from-aimd (expects failure) ---

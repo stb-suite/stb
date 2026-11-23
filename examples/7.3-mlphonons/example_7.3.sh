@@ -20,6 +20,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 export MPLBACKEND=Agg           # headless-safe; the PNG figures are written either way
 DEVICE="${DEVICE:-cpu}"
 MODEL="$DIR/../7.2-mlmd/model/mlff_model_compiled.model"

@@ -29,6 +29,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+if ! python3 -c "import mace" 2>/dev/null; then
+    echo "This example needs the optional 'ml' extra: pip install stb_suite[ml]"
+    exit 0
+fi
+
 # Stage 2's --view calls plt.show() -- MPLBACKEND=Agg makes that a no-op
 # instead of blocking on a GUI window, same convention test.sh itself uses.
 export MPLBACKEND=Agg

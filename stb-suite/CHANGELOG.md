@@ -428,6 +428,13 @@ version before) and **Added** (new options and tools).
   a job). At a menu or at "Press Enter" this is a normal exit; in the middle of a tool's questions it is
   a one-line `[ERROR]` with exit code 1, so a script with outdated answers still fails.
 
+- `stb-mlphonons --qha`: the equation-of-state fit at each temperature stopped before converging (phonopy's
+  fit, unscaled parameters on absolute energies), so V(T) of bulk Si jumped by 0.1 Ang^3 at one temperature,
+  a different one in each run, and the thermal expansion around it was wrong; the report then said "Negative
+  expansion: below 420 K" for a region that is 10-60 K. The fit is now converged (the three `--eos` forms agree
+  on V(300 K) within 0.002 Ang^3), so **alpha(T) changes by a few percent**. The summary names the low-temperature
+  region, and any other temperature with alpha < 0 is a warning.
+
 ### Changed
 
 - **Reports.** Every tool writes its report in the folder you run it from, as `stb_<tool>_report.txt`

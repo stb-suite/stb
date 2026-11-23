@@ -32,6 +32,7 @@ import copy
 import time
 import argparse
 from datetime import datetime
+from unittest import mock
 
 import numpy as np
 from ase import Atoms
@@ -42,6 +43,8 @@ from stb.core import structure_io, kspace, model_card
 from stb.core.cli import (color_text, show_intro, print_dual, print_table,
                           capture_library_noise, display_available, Sections, run_gnuplot)
 from stb.core.phonon_workflow import IMAGINARY_MODE_TOL_THZ as _IMAGINARY_MODE_TOL_THZ
+
+_QHA_LOW_T_K = 150.0   # a negative-expansion region that starts above this is not the low-temperature one
 
 REPORT_FILE = "stb_mlphonons_report.txt"
 PLOT_DIR = "plot"
@@ -931,6 +934,44 @@ def report_comparison(main, found, f_out):
 
 # ---- QHA ----------------------------------------------------------------------------
 
+def _fit_eos_converged(volumes, free_energies, eos):
+    """[E, B, B', V] of one F(V), the drop-in for phonopy.qha.eos.fit_to_eos. phonopy starts from B = 1 eV/Ang^3 with
+    unscaled parameters on absolute energies and stops early: V(T) of bulk Si then jumped by 0.1 Ang^3 at one
+    temperature, a different one in each run, and alpha(T) inherited it. Here the energies are taken from their minimum,
+    the start comes from a parabola and the parameters are scaled."""
+    from scipy.optimize import least_squares
+    v = np.asarray(volumes, dtype=float)
+    offset = float(np.min(free_energies))
+    y = np.asarray(free_energies, dtype=float) - offset
+    c = np.polyfit(v, y, 2)
+    v_start = -c[1] / (2 * c[0]) if c[0] > 0 else v[np.argmin(y)]
+    if not v.min() <= v_start <= v.max():
+        v_start = v[np.argmin(y)]
+    b_start = 2 * c[0] * v_start if c[0] > 0 else 0.5
+    fit = least_squares(lambda p: eos(v, p) - y, [y.min(), b_start, 4.0, v_start], method="trf", jac="3-point",
+                        x_scale=[1e-2, 1e-2, 0.1, 0.1], ftol=1e-15, xtol=1e-15, gtol=1e-15, max_nfev=5000)
+    params = fit.x.copy()
+    params[0] += offset
+    return params
+
+
+def _negative_expansion_blocks(T, alpha_V):
+    """(low, others): the contiguous runs of alpha_V < 0 as index lists; `low` is the first if it starts at or below
+    _QHA_LOW_T_K (the transverse-acoustic region), else None, and `others` the runs that are not."""
+    blocks, current = [], []
+    for i, a in enumerate(alpha_V):
+        if a < 0:
+            current.append(i)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    if blocks and T[blocks[0][0]] <= _QHA_LOW_T_K:
+        return blocks[0], blocks[1:]
+    return None, blocks
+
+
 def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
     """Quasi-harmonic approximation: the single-volume pipeline (no bands, no PDOS) at --n-volumes
     isotropically scaled volumes, then phonopy's PhonopyQHA on the INPUT cell: per-primitive-cell
@@ -1015,9 +1056,11 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
              "(stb-mlrelax --relax-cell) or widen --strain-range.")
 
     with capture_library_noise(noise, "QHA fit"):
-        qha = PhonopyQHA(volumes=volumes, electronic_energies=energies, temperatures=temps,
-                         free_energy=np.array(F).T, cv=np.array(C).T, entropy=np.array(S).T,
-                         eos=args.eos, t_max=args.tmax)
+        import phonopy.qha.core as qha_core
+        with mock.patch.object(qha_core, "fit_to_eos", _fit_eos_converged):
+            qha = PhonopyQHA(volumes=volumes, electronic_energies=energies, temperatures=temps,
+                             free_energy=np.array(F).T, cv=np.array(C).T, entropy=np.array(S).T,
+                             eos=args.eos, t_max=args.tmax)
         e0, b0, b0p, v0 = qha.get_bulk_modulus_parameters()
         V_T = np.asarray(qha.volume_temperature)
         n_t = min(len(V_T), len(qha.thermal_expansion), len(qha.bulk_modulus_temperature),
@@ -1073,11 +1116,15 @@ def run_qha(atoms_ref, calc, args, f_out, noise, warn, sections):
         print_dual(f"  Thermal expansion : {q['alpha_V'][k]:.4e} 1/K volumetric, {q['alpha_L'][k]:.4e} 1/K linear", f_out)
         print_dual(f"  Bulk modulus      : {q['B_T'][k]:.2f} GPa", f_out)
         print_dual(f"  Gibbs free energy : {q['G_T'][k]:.6f} eV per cell", f_out)
-    neg = T[q["alpha_V"] < 0]
-    if len(neg):
-        print_dual(f"Negative expansion: below {neg.max():.0f} K (minimum alpha_L {q['alpha_L'].min() * 1e6:.3f} 1e-6/K at "
-                   f"{T[np.argmin(q['alpha_L'])]:.0f} K) -- modes that soften under compression (gamma < 0, e.g. transverse "
+    low, others = _negative_expansion_blocks(T, q["alpha_V"])
+    if low:
+        k_min = low[int(np.argmin(q["alpha_L"][low]))]
+        print_dual(f"Negative expansion: {T[low[0]]:.0f}-{T[low[-1]]:.0f} K (minimum alpha_L {q['alpha_L'][k_min] * 1e6:.3f} "
+                   f"1e-6/K at {T[k_min]:.0f} K) -- modes that soften under compression (gamma < 0, e.g. transverse "
                    "acoustic) win at low temperature", f_out)
+    for b in others:
+        warn(f"QHA: alpha_V < 0 at {T[b[0]]:.0f}-{T[b[-1]]:.0f} K, away from the low-temperature region: check V(T) in "
+             "qha_thermal_expansion.dat before trusting the expansion there (a noisy scan: try more volumes).")
     v_lo, v_hi = min(volumes), max(volumes)
     out = T[(q["V_T"] < v_lo) | (q["V_T"] > v_hi)]
     if len(out):

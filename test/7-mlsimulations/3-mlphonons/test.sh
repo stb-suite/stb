@@ -257,7 +257,7 @@ check_python "F_vib in vol_*/phonopy_disp.yaml x cell factor reproduces the repo
 import glob, re, sys, warnings, numpy as np, phonopy
 warnings.filterwarnings('ignore')
 p = phonopy.load(sorted(glob.glob('mlphonons_qha/vol_*'))[0] + '/phonopy_disp.yaml', log_level=0)
-p.run_mesh([8, 8, 8]); p.run_thermal_properties(temperatures=[300])
+p.run_mesh([8, 8, 8], is_gamma_center=True); p.run_thermal_properties(temperatures=[300], cutoff_frequency=0.01)
 f_prim = p.get_thermal_properties_dict()['free_energy'][0]          # kJ/mol per 2-atom cell
 expect = f_prim * 4 / 8 * 10.3642688                                 # meV/atom
 t = re.sub(r'\x1b\[[0-9;]*m', '', open('log_qha.txt').read())
